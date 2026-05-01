@@ -42,7 +42,7 @@ export default [
     clean: false,
     shims: true,
     outDir: "lib/cli",
-    dts: true,
+    dts: { build: true },
     sourcemap: true,
     // external: ["react-devtools-core"],
     outputOptions: {

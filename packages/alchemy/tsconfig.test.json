@@ -30,7 +30,7 @@
   },
   "references": [
     {
-      "path": "./tsconfig.lib.json"
+      "path": "./tsconfig.json"
     },
     {
       "path": "./tsconfig.bin.json"
