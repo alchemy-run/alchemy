@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -8,19 +8,20 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const { test } = Test.make({ providers: Cloudflare.providers() });
+
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-test(
-  "create and delete ai gateway with default props",
+test.provider("create and delete ai gateway with default props", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
 
-    yield* destroy();
+    yield* stack.destroy();
 
-    const gateway = yield* test.deploy(
+    const gateway = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.AiGateway("DefaultGateway", {
           id: "alchemy-test-ai-gateway-default",
@@ -42,20 +43,19 @@ test(
     });
     expect(actualGateway.id).toEqual(gateway.gatewayId);
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(logLevel),
 );
 
-test(
-  "create, update, delete ai gateway",
+test.provider("create, update, delete ai gateway", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
 
-    yield* destroy();
+    yield* stack.destroy();
 
-    const gateway = yield* test.deploy(
+    const gateway = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.AiGateway("TestGateway", {
           id: "alchemy-test-ai-gateway",
@@ -76,7 +76,7 @@ test(
     expect(actualGateway.cacheTtl).toEqual(60);
     expect(actualGateway.rateLimitingLimit).toEqual(100);
 
-    const updatedGateway = yield* test.deploy(
+    const updatedGateway = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.AiGateway("TestGateway", {
           id: "alchemy-test-ai-gateway",
@@ -98,10 +98,10 @@ test(
     expect(actualUpdatedGateway.rateLimitingLimit).toEqual(200);
     expect(actualUpdatedGateway.rateLimitingTechnique).toEqual("sliding");
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(logLevel),
 );
 
 const waitForGatewayToBeDeleted = Effect.fn(function* (

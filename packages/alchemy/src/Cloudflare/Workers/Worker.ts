@@ -688,53 +688,51 @@ export const Worker: Platform<
               type: "assets",
               name: bindingName,
             }
-          : "Type" in binding && binding.Type === "Cloudflare.AiGateway"
-            ? {
-                type: "ai",
+          : isArtifactsBinding(binding)
+            ? ({
+                type: "artifacts",
                 name: bindingName,
-              }
-            : isArtifactsBinding(binding)
-              ? ({
-                  type: "artifacts",
+                namespace: binding.namespace,
+              } as any)
+            : isDurableObjectNamespaceLike(binding)
+              ? {
+                  type: "durable_object_namespace",
                   name: bindingName,
-                  namespace: binding.namespace,
-                } as any)
-              : isDurableObjectNamespaceLike(binding)
+                  className: binding.className ?? binding.name,
+                }
+              : binding.Type === "Cloudflare.D1Database"
                 ? {
-                    type: "durable_object_namespace",
+                    type: "d1",
+                    id: binding.databaseId,
                     name: bindingName,
-                    className: binding.className ?? binding.name,
                   }
-                : binding.Type === "Cloudflare.D1Database"
+                : binding.Type === "Cloudflare.R2Bucket"
                   ? {
-                      type: "d1",
-                      id: binding.databaseId,
+                      type: "r2_bucket",
                       name: bindingName,
-                    }
-                  : binding.Type === "Cloudflare.R2Bucket"
-                    ? {
-                        type: "r2_bucket",
-                        name: bindingName,
-                        bucketName: binding.bucketName,
-                        jurisdiction: binding.jurisdiction.pipe(
-                          Output.map((jurisdiction) =>
-                            jurisdiction === "default"
-                              ? undefined
-                              : jurisdiction,
-                          ),
+                      bucketName: binding.bucketName,
+                      jurisdiction: binding.jurisdiction.pipe(
+                        Output.map((jurisdiction) =>
+                          jurisdiction === "default" ? undefined : jurisdiction,
                         ),
+                      ),
+                    }
+                  : binding.Type === "Cloudflare.KVNamespace"
+                    ? {
+                        type: "kv_namespace",
+                        name: bindingName,
+                        namespaceId: binding.namespaceId,
                       }
-                    : binding.Type === "Cloudflare.KVNamespace"
+                    : binding.Type === "Cloudflare.Queue"
                       ? {
-                          type: "kv_namespace",
+                          type: "queue",
                           name: bindingName,
-                          namespaceId: binding.namespaceId,
+                          queueName: binding.queueName,
                         }
-                      : binding.Type === "Cloudflare.Queue"
+                      : binding.Type === "Cloudflare.AiGateway"
                         ? {
-                            type: "queue",
+                            type: "ai",
                             name: bindingName,
-                            queueName: binding.queueName,
                           }
                         : // TODO(sam): handle others
                           undefined;

@@ -9,11 +9,27 @@ import type { ResourceLike } from "../../Resource.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { AiGateway as AiGatewayResource } from "./AiGateway.ts";
 
+/**
+ * Error raised by AI Gateway runtime operations.
+ */
 export class AiGatewayError extends Data.TaggedError("AiGatewayError")<{
+  /**
+   * Human-readable runtime error message.
+   */
   message: string;
+  /**
+   * Original error thrown by the Cloudflare runtime binding.
+   */
   cause: unknown;
 }> {}
 
+/**
+ * Effect-native client for a Cloudflare AI Gateway Worker binding.
+ *
+ * Wraps the runtime {@link AiGateway} binding so each operation returns an
+ * Effect tagged with {@link AiGatewayError}. Use
+ * `Cloudflare.AiGatewayBinding.bind(gateway)` inside a Worker's init phase.
+ */
 export interface AiGatewayClient {
   /**
    * Effect resolving to the raw Workers AI binding.
@@ -23,27 +39,69 @@ export interface AiGatewayClient {
    * Effect resolving to the raw AI Gateway runtime binding.
    */
   gateway: Effect.Effect<AiGateway, never, WorkerEnvironment>;
+  /**
+   * Update metadata on an existing AI Gateway log entry.
+   */
   patchLog(
     logId: string,
     data: Parameters<AiGateway["patchLog"]>[1],
   ): Effect.Effect<void, AiGatewayError, WorkerEnvironment>;
+  /**
+   * Read an AI Gateway log entry by ID.
+   */
   getLog(
     logId: string,
   ): Effect.Effect<AiGatewayLog, AiGatewayError, WorkerEnvironment>;
+  /**
+   * Build a provider URL routed through this gateway.
+   */
   getUrl(
     provider?: Parameters<AiGateway["getUrl"]>[0],
   ): Effect.Effect<string, AiGatewayError, WorkerEnvironment>;
+  /**
+   * Run an AI Gateway request through the Cloudflare runtime binding.
+   */
   run(
     data: Parameters<AiGateway["run"]>[0],
     options?: Parameters<AiGateway["run"]>[1],
   ): Effect.Effect<Response, AiGatewayError, WorkerEnvironment>;
 }
 
+/**
+ * Binding service that turns an {@link AiGatewayResource} resource into a typed
+ * {@link AiGatewayClient} for Worker runtime code.
+ *
+ * @section Calling AI Gateway
+ * Bind the gateway during the Worker's init phase, then use `run` or `getUrl`
+ * from request handlers.
+ *
+ * @example Run through a gateway
+ * ```typescript
+ * const aiGateway = yield* Cloudflare.AiGatewayBinding.bind(gateway);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     return yield* aiGateway.run({
+ *       provider: "workers-ai",
+ *       endpoint: "@cf/meta/llama-3.1-8b-instruct",
+ *       headers: { "content-type": "application/json" },
+ *       query: { prompt: "Write a concise status update" },
+ *     });
+ *   }),
+ * };
+ * ```
+ *
+ * Provide {@link AiGatewayBindingLive} in the worker's runtime layer to
+ * resolve the underlying Cloudflare AI binding at request time.
+ */
 export class AiGatewayBinding extends Binding.Service<
   AiGatewayBinding,
   (gateway: AiGatewayResource) => Effect.Effect<AiGatewayClient>
 >()("Cloudflare.AiGateway.Binding") {}
 
+/**
+ * Runtime layer for {@link AiGatewayBinding}.
+ */
 export const AiGatewayBindingLive = Layer.effect(
   AiGatewayBinding,
   Effect.gen(function* () {
@@ -83,11 +141,17 @@ export const AiGatewayBindingLive = Layer.effect(
   }),
 );
 
+/**
+ * Deploy-time policy service that attaches an AI binding to Workers.
+ */
 export class AiGatewayBindingPolicy extends Binding.Policy<
   AiGatewayBindingPolicy,
   (gateway: AiGatewayResource) => Effect.Effect<void>
 >()("Cloudflare.AiGateway.Binding") {}
 
+/**
+ * Live deploy-time policy layer for {@link AiGatewayBindingPolicy}.
+ */
 export const AiGatewayBindingPolicyLive = AiGatewayBindingPolicy.layer.succeed(
   Effect.fn(function* (host: ResourceLike, gateway: AiGatewayResource) {
     if (isWorker(host)) {
