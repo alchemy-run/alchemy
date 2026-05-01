@@ -14,18 +14,18 @@ import type { HttpClient } from "effect/unstable/http/HttpClient";
 import {
   bootstrap as bootstrapAws,
   destroyBootstrap as destroyBootstrapAws,
-} from "../../src/AWS/Bootstrap.ts";
-import * as AWSCredentials from "../../src/AWS/Credentials.ts";
-import * as AWSEnvironment from "../../src/AWS/Environment.ts";
-import * as AWSRegion from "../../src/AWS/Region.ts";
-import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
-import { withProfileOverride } from "../../src/Auth/Profile.ts";
-import { CloudflareAuth } from "../../src/Cloudflare/Auth/AuthProvider.ts";
-import * as CloudflareCredentials from "../../src/Cloudflare/Credentials.ts";
-import * as CloudflareEnvironment from "../../src/Cloudflare/CloudflareEnvironment.ts";
-import { bootstrap as bootstrapCloudflare } from "../../src/Cloudflare/StateStore/State.ts";
-import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
-import { fileLogger } from "../../src/Util/FileLogger.ts";
+} from "alchemy/AWS/Bootstrap";
+import * as AWSCredentials from "alchemy/AWS/Credentials";
+import * as AWSEnvironment from "alchemy/AWS/Environment";
+import * as AWSRegion from "alchemy/AWS/Region";
+import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { withProfileOverride } from "alchemy/Auth/Profile";
+import { CloudflareAuth } from "alchemy/Cloudflare/Auth/AuthProvider";
+import * as CloudflareCredentials from "alchemy/Cloudflare/Credentials";
+import * as CloudflareEnvironment from "alchemy/Cloudflare/CloudflareEnvironment";
+import { bootstrap as bootstrapCloudflare } from "alchemy/Cloudflare/StateStore/State";
+import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
+import { fileLogger } from "alchemy/Util/FileLogger";
 
 import { envFile, instrumentCommand, profile } from "./_shared.ts";
 

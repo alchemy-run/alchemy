@@ -5,10 +5,10 @@ import * as Command from "effect/unstable/cli/Command";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import packageJson from "../package.json" with { type: "json" };
-import { AlchemyContextLive } from "../src/AlchemyContext.ts";
-import { inkCLI } from "../src/Cli/InkCLI.tsx";
-import { TelemetryLive } from "../src/Telemetry/Layer.ts";
-import { PlatformServices, runMain } from "../src/Util/PlatformServices.ts";
+import { AlchemyContextLive } from "alchemy/AlchemyContext";
+import { inkCLI } from "alchemy/Cli/InkCLI";
+import { TelemetryLive } from "alchemy/Telemetry/Layer";
+import { PlatformServices, runMain } from "alchemy/Util/PlatformServices";
 
 import { handleCancellation } from "./commands/_shared.ts";
 import { bootstrapCommand } from "./commands/bootstrap.ts";

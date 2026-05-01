@@ -8,17 +8,17 @@ import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
 
-import { AdoptPolicy } from "../../src/AdoptPolicy.ts";
-import { AlchemyContext } from "../../src/AlchemyContext.ts";
-import { apply } from "../../src/Apply.ts";
-import { ArtifactStore, createArtifactStore } from "../../src/Artifacts.ts";
-import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
-import { withProfileOverride } from "../../src/Auth/Profile.ts";
-import * as CLI from "../../src/Cli/index.ts";
-import * as Plan from "../../src/Plan.ts";
-import { Stage } from "../../src/Stage.ts";
-import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
-import { fileLogger } from "../../src/Util/FileLogger.ts";
+import { AdoptPolicy } from "alchemy/AdoptPolicy";
+import { AlchemyContext } from "alchemy/AlchemyContext";
+import { apply } from "alchemy/Apply";
+import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
+import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { withProfileOverride } from "alchemy/Auth/Profile";
+import * as CLI from "alchemy/Cli/index";
+import * as Plan from "alchemy/Plan";
+import { Stage } from "alchemy/Stage";
+import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
+import { fileLogger } from "alchemy/Util/FileLogger";
 
 import {
   dryRun as dryRunFlag,

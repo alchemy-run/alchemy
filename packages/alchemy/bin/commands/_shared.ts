@@ -9,10 +9,10 @@ import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
 
-import { AuthError } from "../../src/Auth/AuthProvider.ts";
-import type * as Stack from "../../src/Stack.ts";
-import { recordCli } from "../../src/Telemetry/Metrics.ts";
-import { PromptCancelled } from "../../src/Util/Clank.ts";
+import { AuthError } from "alchemy/Auth/AuthProvider";
+import type * as Stack from "alchemy/Stack";
+import { recordCli } from "alchemy/Telemetry/Metrics";
+import { PromptCancelled } from "alchemy/Util/Clank";
 
 export const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),

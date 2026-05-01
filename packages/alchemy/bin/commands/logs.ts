@@ -6,14 +6,14 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { findProviderByType, type LogLine } from "../../src/Provider.ts";
-import { Stage } from "../../src/Stage.ts";
-import * as State from "../../src/State/index.ts";
-import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
-import { fileLogger } from "../../src/Util/FileLogger.ts";
+import { findProviderByType, type LogLine } from "alchemy/Provider";
+import { Stage } from "alchemy/Stage";
+import * as State from "alchemy/State/index";
+import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
+import { fileLogger } from "alchemy/Util/FileLogger";
 
-import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
-import { withProfileOverride } from "../../src/Auth/Profile.ts";
+import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { withProfileOverride } from "alchemy/Auth/Profile";
 import {
   envFile,
   formatLocalTimestamp,

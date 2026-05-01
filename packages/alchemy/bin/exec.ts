@@ -3,9 +3,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { AlchemyContextLive } from "../src/AlchemyContext.ts";
-import { inkCLI } from "../src/Cli/InkCLI.tsx";
-import { PlatformServices, runMain } from "../src/Util/PlatformServices.ts";
+import { AlchemyContextLive } from "alchemy/AlchemyContext";
+import { inkCLI } from "alchemy/Cli/InkCLI";
+import { PlatformServices, runMain } from "alchemy/Util/PlatformServices";
 import { execStack, ExecStackOptions } from "./commands/deploy.ts";
 
 const services = Layer.mergeAll(

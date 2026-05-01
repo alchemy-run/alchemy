@@ -2,15 +2,15 @@
   "extends": "../../tsconfig.base.json",
   "include": [
     "package.json",
-    "src",
-    "src/**/*.json",
-    "test"
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.json"
   ],
   "compilerOptions": {
     "composite": true,
-    "noEmit": true,
+    "noEmit": false,
     "outDir": "./lib",
-    "rootDir": ".",
+    "rootDir": "./src",
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "target": "ESNext",
@@ -27,13 +27,5 @@
       "DOM.Iterable",
       "ES2023"
     ]
-  },
-  "references": [
-    {
-      "path": "./tsconfig.lib.json"
-    },
-    {
-      "path": "./tsconfig.bin.json"
-    },
-  ]
+  }
 }

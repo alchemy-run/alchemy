@@ -6,14 +6,14 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
-import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
-import { withProfileOverride } from "../../src/Auth/Profile.ts";
-import { Stage } from "../../src/Stage.ts";
-import * as State from "../../src/State/index.ts";
-import { encodeState } from "../../src/State/StateEncoding.ts";
-import * as Clank from "../../src/Util/Clank.ts";
-import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
-import { fileLogger } from "../../src/Util/FileLogger.ts";
+import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { withProfileOverride } from "alchemy/Auth/Profile";
+import { Stage } from "alchemy/Stage";
+import * as State from "alchemy/State/index";
+import { encodeState } from "alchemy/State/StateEncoding";
+import * as Clank from "alchemy/Util/Clank";
+import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
+import { fileLogger } from "alchemy/Util/FileLogger";
 
 import {
   envFile,
