@@ -15,11 +15,9 @@ const services = Layer.mergeAll(
   inkCLI(),
 );
 
-const options = Schema.decodeSync(ExecStackOptions)(
-  JSON.parse(process.env.ALCHEMY_EXEC_OPTIONS!),
-);
-
-export const exec = execStack(options).pipe(
-  Effect.provide(services),
-  Effect.scoped,
-);
+export const exec = () =>
+  execStack(
+    Schema.decodeSync(ExecStackOptions)(
+      JSON.parse(process.env.ALCHEMY_EXEC_OPTIONS!),
+    ),
+  ).pipe(Effect.provide(services), Effect.scoped);
