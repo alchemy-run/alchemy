@@ -1,3 +1,14 @@
+## v2.0.0-beta.27
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**: Don't bundle CLI with tsdown because it messes with import.meta.path &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/135 [<samp>(2796c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/2796c33)
+- **pr-package**: Use `bun add <name>@<url>` to dodge bun DependencyLoop bug &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/132 [<samp>(989e2)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/989e254)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.26...HEAD)
+
+---
+
 ## v2.0.0-beta.26
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
