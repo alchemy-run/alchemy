@@ -238,6 +238,12 @@
       "worker": "./src/Util/Clank.ts",
       "import": "./lib/Util/Clank.js"
     },
+    "./Util/PlatformServices": {
+      "types": "./lib/Util/PlatformServices.d.ts",
+      "bun": "./src/Util/PlatformServices.ts",
+      "worker": "./src/Util/PlatformServices.ts",
+      "import": "./lib/Util/PlatformServices.js"
+    },
     "./bin/alchemy.js": "./bin/alchemy.js",
     "./bin/exec.ts": "./bin/exec.ts",
     "./bin/exec.js": "./bin/exec.js"
