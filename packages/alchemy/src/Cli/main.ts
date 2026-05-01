@@ -5,20 +5,24 @@ import * as Command from "effect/unstable/cli/Command";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
-import { inkCLI } from "alchemy/Cli/InkCLI";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
-import packageJson from "../../../package.json" with { type: "json" };
+import packageJson from "../../package.json" with { type: "json" };
 
-import { handleCancellation } from "./_shared.ts";
-import { bootstrapCommand } from "./bootstrap.ts";
-import { deployCommand, destroyCommand, planCommand } from "./deploy.ts";
-import { devCommand } from "./dev.ts";
-import { loginCommand } from "./login.ts";
-import { logsCommand } from "./logs.ts";
-import { profileCommand } from "./profile.ts";
-import { stateCommand } from "./state.ts";
-import { tailCommand } from "./tail.ts";
+import { handleCancellation } from "./commands/_shared.ts";
+import { bootstrapCommand } from "./commands/bootstrap.ts";
+import {
+  deployCommand,
+  destroyCommand,
+  planCommand,
+} from "./commands/deploy.ts";
+import { devCommand } from "./commands/dev.ts";
+import { loginCommand } from "./commands/login.ts";
+import { logsCommand } from "./commands/logs.ts";
+import { profileCommand } from "./commands/profile.ts";
+import { stateCommand } from "./commands/state.ts";
+import { tailCommand } from "./commands/tail.ts";
+import { inkCLI } from "./tui/InkCLI.tsx";
 
 const root = Command.make("alchemy", {}).pipe(
   Command.withSubcommands([

@@ -34,20 +34,4 @@ export default [
     },
     tsconfig: "tsconfig.bundle.json",
   }),
-  // bundlde the cli entrypoint so that react does not end up in our dependencies
-  // problem‼️ this means react is bundled twice in our tar.gz. Should we have bin/alchemy.ts import the cli entrypoint instead?
-  defineConfig({
-    entry: ["src/Cli/index.ts"],
-    format: ["esm"],
-    clean: false,
-    shims: true,
-    outDir: "lib/cli",
-    dts: { build: true },
-    sourcemap: true,
-    // external: ["react-devtools-core"],
-    outputOptions: {
-      inlineDynamicImports: true,
-      banner: "#!/usr/bin/env node",
-    },
-  }),
 ];

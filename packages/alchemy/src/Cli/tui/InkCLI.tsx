@@ -2,9 +2,9 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { render } from "ink";
-import type { Plan } from "../Plan.ts";
-import { type PlanStatusSession, Cli } from "./Cli.ts";
-import type { ApplyEvent } from "./Event.ts";
+import type { Plan } from "../../Plan.ts";
+import { type PlanStatusSession, Cli } from "../Cli.ts";
+import type { ApplyEvent } from "../Event.ts";
 import { ApprovePlan } from "./components/ApprovePlan.tsx";
 import { Plan as PlanComponent } from "./components/Plan.tsx";
 import { PlanProgress } from "./components/PlanProgress.tsx";

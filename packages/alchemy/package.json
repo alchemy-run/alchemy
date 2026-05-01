@@ -118,11 +118,11 @@
       "worker": "./src/ContentType.ts",
       "import": "./lib/ContentType.js"
     },
-    "./Cli/Commands": {
-      "types": "./lib/Cli/commands/index.d.ts",
-      "bun": "./src/Cli/commands/index.ts",
-      "worker": "./src/Cli/commands/index.ts",
-      "import": "./lib/Cli/commands/index.js"
+    "./Cli": {
+      "types": "./lib/Cli/index.d.ts",
+      "bun": "./src/Cli/index.ts",
+      "worker": "./src/Cli/index.ts",
+      "import": "./lib/Cli/index.js"
     },
     "./Cli/InkCLI": {
       "types": "./lib/Cli/InkCLI.d.ts",

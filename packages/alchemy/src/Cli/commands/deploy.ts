@@ -14,7 +14,7 @@ import { apply } from "../../Apply";
 import { ArtifactStore, createArtifactStore } from "../../Artifacts";
 import { AuthProviders } from "../../Auth/AuthProvider";
 import { withProfileOverride } from "../../Auth/Profile";
-import * as CLI from "../../Cli/index";
+import * as CLI from "../../Cli/Cli.ts";
 import * as Plan from "../../Plan";
 import { Stage } from "../../Stage";
 import { loadConfigProvider } from "../../Util/ConfigProvider";
