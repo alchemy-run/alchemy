@@ -260,6 +260,7 @@ const executePlan = Effect.fnUntraced(function* (
         stage,
         getOutputs,
         waitForDeps,
+        plan.cycleMembers.has(fqn),
       ),
     ),
     { concurrency: "unbounded" },
@@ -292,6 +293,7 @@ const executeNode = (
   stage: string,
   getOutputs: () => Record<string, any>,
   waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
+  inCycle: boolean,
 ): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
     const logicalId = node.resource.LogicalId;
@@ -548,14 +550,26 @@ const executeNode = (
 
       // ── update ──
       if (node.action === "update") {
-        // Updates always begin by exposing the currently live output so downstream
-        // resources can continue to resolve references during the update pass.
-        yield* storeAndSignal({
-          output: node.state.attr,
-          props: node.state.props,
-          bindings: node.state.bindings ?? [],
-          instanceId,
-        });
+        // Cycle members publish their previous live attr *before* waiting on
+        // upstreams so the SCC can converge — peers in the cycle would
+        // otherwise deadlock waiting on each other. Phase 3 (`converge`)
+        // re-runs each peer's update against fresh outputs once everyone
+        // has settled.
+        //
+        // Linear (DAG) update nodes skip this entirely and simply wait for
+        // fresh upstream outputs, mirroring the create flow. This is the
+        // important property: a downstream of a non-cycle update never
+        // observes the upstream's stale attr, which prevents wasted/
+        // destructive intermediate updates (e.g. a Worker deploying with
+        // stale Build assets).
+        if (inCycle) {
+          yield* storeAndSignal({
+            output: node.state.attr,
+            props: node.state.props,
+            bindings: node.state.bindings ?? [],
+            instanceId,
+          });
+        }
 
         yield* waitForDeps(allUpstreamFqns());
         const outputs = getOutputs();
@@ -657,6 +671,10 @@ const executeNode = (
           bindings: bindingOutputs,
           instanceId,
         };
+        // Signal here for the linear (non-cycle) path. For in-cycle updates
+        // the deferred has already been resolved by the early `storeAndSignal`
+        // above and `signalReady` is a no-op the second time.
+        yield* signalReady;
 
         yield* markTerminal("updated");
         return;

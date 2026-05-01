@@ -1499,7 +1499,7 @@ ${[
           getCompatibility(props);
 
         yield* Effect.promise(async () => {
-          const vite = await loadVite();
+          const vite = await loadVite(props.vite?.rootDir);
           const builder = await vite.createBuilder(
             {
               root: props.vite?.rootDir,
@@ -1579,7 +1579,20 @@ ${[
         Effect.gen(function* () {
           if (props.vite) {
             const [{ assets, bundle }, input] = yield* Effect.all(
-              [viteBuild(props), hashDirectory(props.vite)],
+              [
+                viteBuild(props),
+                // hashDirectory expects `{ cwd, memo }`. The vite props
+                // store the project root under `rootDir`, so map it
+                // here. Without this, `cwd` falls back to
+                // `process.cwd()` and the input hash is computed over
+                // the wrong directory tree (often the entire monorepo
+                // root), making it both slow and unable to detect
+                // changes scoped to the actual Vite project.
+                hashDirectory({
+                  cwd: props.vite.rootDir,
+                  memo: props.vite.memo,
+                }),
+              ],
               { concurrency: "unbounded" },
             );
             return { assets, bundle, input };
@@ -1944,19 +1957,18 @@ ${[
         output: Worker["Attributes"],
       ) {
         if (props.vite) {
-          const input = yield* hashDirectory(props.vite);
+          const input = yield* hashDirectory({
+            cwd: props.vite.rootDir,
+            memo: props.vite.memo,
+          });
           return input !== output.hash?.input;
         }
-        // Always recompute both hashes by walking `dist/` (assets) and
-        // re-bundling the worker. The previous short-circuit
-        // (`Effect.succeed(output.hash.assets)`) compared the cached
-        // hash to itself and could never detect drift, and the
-        // `props.assets.hash` form is the *input* (source) hash which
-        // misses non-deterministic build output (e.g. Astro/Vite
-        // shuffling content-hashed filenames between builds). The
-        // result of either shortcut was deploying a new bundle on top
-        // of stale assets and 404'ing in production. Re-walking is the
-        // only correct comparison.
+        // The asset hash comes from walking the actual `outdir` —
+        // whatever bytes are on disk are what we'd be deploying, so
+        // that's what we diff against. Non-deterministic build outputs
+        // (e.g. Astro/Vite shuffling content-hashed chunk filenames)
+        // are a property of the build, not something we should paper
+        // over here. The bundle hash is similarly recomputed.
         const [assetsHash, bundleHash] = yield* Effect.all(
           [
             prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash)),
@@ -2432,31 +2444,23 @@ const contentTypeFromExtension = (extension: string) => {
 };
 
 type ViteModule = typeof import("vite");
-let _viteModule: ViteModule | null = null;
 
 /**
  * Dynamically load Vite from the project root. Falls back to the bundled
  * copy if the project doesn't have its own Vite installation.
  */
-async function loadVite(): Promise<ViteModule> {
-  if (_viteModule) return _viteModule;
-
-  const projectRoot = process.cwd();
-  let vitePath: string;
-
+async function loadVite(
+  projectRoot: string = process.cwd(),
+): Promise<ViteModule> {
   try {
-    // Resolve "vite" from the project root, not from vinext's location
     const require = createRequire(path.join(projectRoot, "package.json"));
-    vitePath = require.resolve("vite");
+    const vitePath = require.resolve("vite");
+    // On Windows, absolute paths must be file:// URLs for ESM import().
+    const viteUrl = pathToFileURL(vitePath);
+    return await import(/* @vite-ignore */ viteUrl.href);
   } catch {
-    // Fallback: use the Vite that ships with vinext (works for non-linked installs)
-    vitePath = "vite";
+    // Fallback: try to import vite from the global node_modules (works for non-linked installs)
+    // The fallback is a bare specifier and works as-is.
+    return await import("vite");
   }
-
-  // On Windows, absolute paths must be file:// URLs for ESM import().
-  // The fallback ("vite") is a bare specifier and works as-is.
-  const viteUrl = vitePath === "vite" ? vitePath : pathToFileURL(vitePath).href;
-  const vite = (await import(/* @vite-ignore */ viteUrl)) as ViteModule;
-  _viteModule = vite;
-  return vite;
 }

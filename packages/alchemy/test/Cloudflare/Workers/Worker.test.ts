@@ -5,11 +5,14 @@ import { Stack } from "@/Stack";
 import * as Test from "@/Test/Vitest";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "@effect/vitest";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import {
+  findWorker,
+  getWorkerTags,
+  waitForWorkerToBeDeleted,
+} from "../Utils/Worker.ts";
 import InternalWorker from "./internal-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -216,43 +219,3 @@ test.provider("create, update, delete internal worker", (stack) =>
     yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
   }).pipe(logLevel),
 );
-
-const findWorker = Effect.fn(function* (workerName: string, accountId: string) {
-  const matches = yield* workers.searchScript({
-    accountId,
-    name: workerName,
-  });
-  return matches.find((worker) => worker.scriptName === workerName);
-});
-
-const getWorkerTags = Effect.fn(function* (
-  workerName: string,
-  accountId: string,
-) {
-  const settings = yield* workers.getScriptScriptAndVersionSetting({
-    accountId,
-    scriptName: workerName,
-  });
-  return settings.tags ?? [];
-});
-
-const waitForWorkerToBeDeleted = Effect.fn(function* (
-  workerName: string,
-  accountId: string,
-) {
-  yield* workers
-    .getScript({
-      accountId,
-      scriptName: workerName,
-    })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new WorkerStillExists())),
-      Effect.retry({
-        while: (e): e is WorkerStillExists => e instanceof WorkerStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("WorkerNotFound", () => Effect.void),
-    );
-});
-
-class WorkerStillExists extends Data.TaggedError("WorkerStillExists") {}

@@ -346,6 +346,55 @@ describe("basic operations", () => {
   );
 });
 
+describe("linear update propagation", () => {
+  // Regression: in a linear chain (A -> B with no cycle), an update to A
+  // followed by an update to B must let B see A's *post-update* attr, never
+  // the stale prior attr. Before the cycle-gating change, A would publish
+  // its prior attr early and B's update would race against the live value,
+  // sometimes deploying with stale data (e.g. a Worker reading a Build's
+  // outdir/hash before the build finished).
+  test.provider(
+    "downstream update receives upstream's post-update attr",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const A = yield* TestResource("A", { string: "v1" });
+            const B = yield* TestResource("B", { string: A.string });
+            return { A, B };
+          }),
+        );
+
+        const sawByB: string[] = [];
+        const captureBHooks = {
+          create: () => Effect.succeed(undefined),
+          update: (id: string, props: TestResourceProps) =>
+            Effect.sync(() => {
+              if (id === "B" && typeof props.string === "string") {
+                sawByB.push(props.string);
+              }
+            }),
+          delete: () => Effect.succeed(undefined),
+          read: () => Effect.succeed(undefined),
+        };
+
+        const output = yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "v2" });
+          const B = yield* TestResource("B", { string: A.string });
+          return { A, B };
+        }).pipe(stack.deploy, hook(captureBHooks));
+
+        expect(output.A.string).toEqual("v2");
+        expect(output.B.string).toEqual("v2");
+        // B.update must have observed the fresh upstream value, never the
+        // stale "v1". A single fresh-only call is the ideal; we accept any
+        // sequence as long as no stale value leaked through.
+        expect(sawByB.length).toBeGreaterThan(0);
+        expect(sawByB.every((v) => v === "v2")).toBe(true);
+      }),
+  );
+});
+
 describe("circularity via bindings", () => {
   const selfBoundStack = (props: {
     string: string;
