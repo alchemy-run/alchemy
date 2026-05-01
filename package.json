@@ -47,6 +47,7 @@
     "setup": "effect-language-service patch && bun run download:external",
     "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",
     "test:benchmark": "bun run --filter alchemy test:benchmark",
+    "test:examples": "bun run --filter ./examples/cloudflare-worker --filter ./examples/cloudflare-worker-async --filter ./examples/cloudflare-tanstack --filter ./examples/aws-lambda test",
     "test:fast": "FAST=1 bun run test:live",
     "test:live": "bun ./scripts/test.ts",
     "test:local": "LOCAL=1 bun ./scripts/test.ts",

@@ -5,6 +5,7 @@ import { Resource } from "@/Resource";
 import * as State from "@/State/index";
 import { isUnknown } from "@/Util/unknown";
 import * as Context from "effect/Context";
+import { Data } from "effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -740,3 +741,90 @@ export const TestLayers = () =>
 
 export const InMemoryTestLayers = () =>
   Layer.mergeAll(TestLayers(), State.inMemoryState());
+
+// ── Failure injection helpers ──────────────────────────────────────────────
+//
+// These helpers produce TestResourceHooks records that can be passed to the
+// `hook(...)` test combinator to inject failures or defects into specific
+// resource lifecycle methods. `failOn` produces typed failures, while
+// `dieOn` and `throwOn` produce defects (uncaught/thrown errors).
+
+export class ResourceFailure extends Data.TaggedError("ResourceFailure")<{
+  message: string;
+}> {
+  constructor(message = "Failed to create") {
+    super({ message });
+  }
+}
+
+type LifecycleHook = "create" | "update" | "delete";
+
+export type LifecycleHooks = {
+  create?: (
+    id: string,
+    props: TestResourceProps,
+  ) => Effect.Effect<void, any>;
+  update?: (
+    id: string,
+    props: TestResourceProps,
+  ) => Effect.Effect<void, any>;
+  delete?: (id: string) => Effect.Effect<void, any>;
+};
+
+export const failOn = (
+  resourceId: string,
+  hook: LifecycleHook,
+): LifecycleHooks => ({
+  [hook]: (id: string) =>
+    id === resourceId
+      ? Effect.fail(new ResourceFailure())
+      : Effect.succeed(undefined),
+});
+
+export const failOnMultiple = (
+  failures: Array<{ id: string; hook: LifecycleHook }>,
+): LifecycleHooks => {
+  const idsFor = (hook: LifecycleHook) =>
+    failures.filter((f) => f.hook === hook).map((f) => f.id);
+  const createFailures = idsFor("create");
+  const updateFailures = idsFor("update");
+  const deleteFailures = idsFor("delete");
+  return {
+    create: (id: string) =>
+      createFailures.includes(id)
+        ? Effect.fail(new ResourceFailure())
+        : Effect.succeed(undefined),
+    update: (id: string) =>
+      updateFailures.includes(id)
+        ? Effect.fail(new ResourceFailure())
+        : Effect.succeed(undefined),
+    delete: (id: string) =>
+      deleteFailures.includes(id)
+        ? Effect.fail(new ResourceFailure())
+        : Effect.succeed(undefined),
+  };
+};
+
+export const dieOn = (
+  resourceId: string,
+  hook: LifecycleHook,
+  message = `dieOn:${resourceId}:${hook}`,
+): LifecycleHooks => ({
+  [hook]: (id: string) =>
+    id === resourceId
+      ? Effect.die(new Error(message))
+      : Effect.succeed(undefined),
+});
+
+export const throwOn = (
+  resourceId: string,
+  hook: LifecycleHook,
+  message = `throwOn:${resourceId}:${hook}`,
+): LifecycleHooks => ({
+  [hook]: (id: string) =>
+    Effect.sync(() => {
+      if (id === resourceId) {
+        throw new Error(message);
+      }
+    }),
+});

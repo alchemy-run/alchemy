@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -246,6 +247,8 @@ const executePlan = Effect.fnUntraced(function* (
       { concurrency: "unbounded" },
     );
 
+  const failures: LifecycleFailure[] = [];
+
   yield* Effect.all(
     Object.entries(plan.resources).map(([fqn, node]) =>
       executeNode(
@@ -260,12 +263,29 @@ const executePlan = Effect.fnUntraced(function* (
         stage,
         getOutputs,
         waitForDeps,
+        failures,
         plan.cycleMembers.has(fqn),
       ),
     ),
     { concurrency: "unbounded" },
   );
+
+  if (failures.length > 0) {
+    // Aggregate every collected lifecycle failure into a single parallel Cause
+    // so the apply ends with one combined error containing every distinct
+    // failure / defect that occurred across the concurrent fibers.
+    yield* Effect.failCause(
+      failures.map((f) => f.cause).reduce(Cause.combine),
+    );
+  }
 });
+
+interface LifecycleFailure {
+  fqn: string;
+  logicalId: string;
+  type: string;
+  cause: Cause.Cause<unknown>;
+}
 
 const executeNode = (
   fqn: string,
@@ -293,6 +313,7 @@ const executeNode = (
   stage: string,
   getOutputs: () => Record<string, any>,
   waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
+  failures: LifecycleFailure[],
   inCycle: boolean,
 ): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
@@ -848,6 +869,31 @@ const executeNode = (
       return yield* Effect.die(`Unknown action: ${node.action}`);
     });
   }).pipe(
+    Effect.catchCause((cause) =>
+      // Record the failure, propagate it to any downstream resources waiting on
+      // our Deferred (so their waitForDeps short-circuits instead of deadlocking),
+      // emit a "fail" status to the session, and resolve to void so Effect.all
+      // does not interrupt sibling fibers. The aggregated cause is raised at
+      // the end of executePlan.
+      Effect.gen(function* () {
+        failures.push({
+          fqn,
+          logicalId: node.resource.LogicalId,
+          type: node.resource.Type,
+          cause,
+        });
+        yield* Deferred.failCause(
+          ready[fqn],
+          cause as Cause.Cause<never>,
+        );
+        yield* session.emit({
+          kind: "status-change",
+          id: node.resource.LogicalId,
+          type: node.resource.Type,
+          status: "fail",
+        });
+      }),
+    ),
     Effect.withSpan("apply.resource", {
       attributes: {
         "alchemy.resource.fqn": fqn,

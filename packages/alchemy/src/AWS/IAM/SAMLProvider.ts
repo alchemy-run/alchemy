@@ -1,11 +1,12 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { AWSEnvironment } from "../Environment.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { diffTags } from "../../Tags.ts";
+import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
 import { toTagRecord, unwrapRedactedString } from "./common.ts";
 
 export interface SAMLProviderProps {
@@ -100,19 +101,44 @@ export const SAMLProviderProvider = () =>
         tags: toTagRecord(tags.Tags),
       };
     }),
-    create: Effect.fn(function* ({ news, session }) {
-      const response = yield* iam.createSAMLProvider({
-        Name: news.name,
-        SAMLMetadataDocument: news.samlMetadataDocument,
-        AssertionEncryptionMode: news.assertionEncryptionMode,
-        AddPrivateKey: news.addPrivateKey
-          ? unwrapRedactedString(news.addPrivateKey)
-          : undefined,
-        Tags: Object.entries(news.tags ?? {}).map(([Key, Value]) => ({
-          Key,
-          Value,
-        })),
-      });
+    create: Effect.fn(function* ({ id, news, session }) {
+      const internalTags = yield* createInternalTags(id);
+      const tags = {
+        ...internalTags,
+        ...news.tags,
+      };
+      const response = yield* iam
+        .createSAMLProvider({
+          Name: news.name,
+          SAMLMetadataDocument: news.samlMetadataDocument,
+          AssertionEncryptionMode: news.assertionEncryptionMode,
+          AddPrivateKey: news.addPrivateKey
+            ? unwrapRedactedString(news.addPrivateKey)
+            : undefined,
+          Tags: Object.entries(tags).map(([Key, Value]) => ({
+            Key,
+            Value,
+          })),
+        })
+        .pipe(
+          Effect.catchTag("EntityAlreadyExistsException", () =>
+            Effect.gen(function* () {
+              const accountId = (yield* AWSEnvironment).accountId;
+              const existingArn = `arn:aws:iam::${accountId}:saml-provider/${news.name}`;
+              const existingTags = yield* iam.listSAMLProviderTags({
+                SAMLProviderArn: existingArn,
+              });
+              if (!hasTags(internalTags, existingTags.Tags)) {
+                return yield* Effect.fail(
+                  new Error(
+                    `SAML provider '${news.name}' already exists and is not managed by alchemy`,
+                  ),
+                );
+              }
+              return { SAMLProviderArn: existingArn };
+            }),
+          ),
+        );
       const samlProviderArn = response.SAMLProviderArn ?? news.name;
       yield* session.note(samlProviderArn);
       return {
@@ -121,10 +147,10 @@ export const SAMLProviderProvider = () =>
         samlProviderUUID: undefined,
         samlMetadataDocument: news.samlMetadataDocument,
         assertionEncryptionMode: news.assertionEncryptionMode,
-        tags: news.tags ?? {},
+        tags,
       };
     }),
-    update: Effect.fn(function* ({ news, olds, output, session }) {
+    update: Effect.fn(function* ({ id, news, olds, output, session }) {
       yield* iam.updateSAMLProvider({
         SAMLProviderArn: output.samlProviderArn,
         SAMLMetadataDocument:
@@ -136,7 +162,10 @@ export const SAMLProviderProvider = () =>
           ? unwrapRedactedString(news.addPrivateKey)
           : undefined,
       });
-      const { removed, upsert } = diffTags(olds.tags ?? {}, news.tags ?? {});
+      const internalTags = yield* createInternalTags(id);
+      const oldTags = { ...internalTags, ...(olds.tags ?? {}) };
+      const newTags = { ...internalTags, ...(news.tags ?? {}) };
+      const { removed, upsert } = diffTags(oldTags, newTags);
       if (upsert.length > 0) {
         yield* iam.tagSAMLProvider({
           SAMLProviderArn: output.samlProviderArn,
@@ -156,7 +185,7 @@ export const SAMLProviderProvider = () =>
         samlProviderUUID: output.samlProviderUUID,
         samlMetadataDocument: news.samlMetadataDocument,
         assertionEncryptionMode: news.assertionEncryptionMode,
-        tags: news.tags ?? {},
+        tags: newTags,
       };
     }),
     delete: Effect.fn(function* ({ output }) {
