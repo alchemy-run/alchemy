@@ -2444,51 +2444,23 @@ const contentTypeFromExtension = (extension: string) => {
 };
 
 type ViteModule = typeof import("vite");
-let _viteModule: ViteModule | null = null;
 
 /**
  * Dynamically load Vite from the project root. Falls back to the bundled
  * copy if the project doesn't have its own Vite installation.
  */
-async function loadVite(projectRoot?: string): Promise<ViteModule> {
-  if (_viteModule) return _viteModule;
-
-  let vitePath: string;
-
+async function loadVite(
+  projectRoot: string = process.cwd(),
+): Promise<ViteModule> {
   try {
-    // Resolve `vite` starting from the user's Vite project root, then
-    // fall back to `process.cwd()`. The project-root candidate matters
-    // in monorepos where the Vite project is nested under a workspace
-    // root that doesn't itself depend on vite — without it, Node's
-    // resolution walks past the project's pinned vite and into the
-    // user's home node_modules, which often holds an older copy.
-    const candidates = [projectRoot, process.cwd()].filter(
-      (p): p is string => !!p,
-    );
-    const seen = new Set<string>();
-    let resolved: string | undefined;
-    for (const root of candidates) {
-      if (seen.has(root)) continue;
-      seen.add(root);
-      try {
-        const require = createRequire(path.join(root, "package.json"));
-        resolved = require.resolve("vite");
-        break;
-      } catch {
-        // try next candidate
-      }
-    }
-    if (!resolved) throw new Error("vite not resolvable");
-    vitePath = resolved;
+    const require = createRequire(path.join(projectRoot, "package.json"));
+    const vitePath = require.resolve("vite");
+    // On Windows, absolute paths must be file:// URLs for ESM import().
+    const viteUrl = pathToFileURL(vitePath);
+    return await import(/* @vite-ignore */ viteUrl.href);
   } catch {
-    // Fallback: use the Vite that ships with vinext (works for non-linked installs)
-    vitePath = "vite";
+    // Fallback: try to import vite from the global node_modules (works for non-linked installs)
+    // The fallback is a bare specifier and works as-is.
+    return await import("vite");
   }
-
-  // On Windows, absolute paths must be file:// URLs for ESM import().
-  // The fallback ("vite") is a bare specifier and works as-is.
-  const viteUrl = vitePath === "vite" ? vitePath : pathToFileURL(vitePath).href;
-  const vite = (await import(/* @vite-ignore */ viteUrl)) as ViteModule;
-  _viteModule = vite;
-  return vite;
 }
