@@ -10,19 +10,15 @@ import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import packageJson from "../../../package.json" with { type: "json" };
 
-import {
-  bootstrapCommand,
-  deployCommand,
-  destroyCommand,
-  devCommand,
-  handleCancellation,
-  loginCommand,
-  logsCommand,
-  planCommand,
-  profileCommand,
-  stateCommand,
-  tailCommand,
-} from "alchemy/Cli/Commands";
+import { handleCancellation } from "./_shared.ts";
+import { bootstrapCommand } from "./bootstrap.ts";
+import { deployCommand, destroyCommand, planCommand } from "./deploy.ts";
+import { devCommand } from "./dev.ts";
+import { loginCommand } from "./login.ts";
+import { logsCommand } from "./logs.ts";
+import { profileCommand } from "./profile.ts";
+import { stateCommand } from "./state.ts";
+import { tailCommand } from "./tail.ts";
 
 const root = Command.make("alchemy", {}).pipe(
   Command.withSubcommands([
