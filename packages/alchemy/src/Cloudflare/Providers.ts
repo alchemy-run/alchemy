@@ -14,6 +14,10 @@ import * as KV from "./KV/index.ts";
 import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
 import * as SecretsStore from "./SecretsStore/index.ts";
+import {
+  OpenNextBundle,
+  OpenNextBundleProvider,
+} from "./Website/OpenNextBundle.ts";
 import * as Workers from "./Workers/index.ts";
 import * as Workflows from "./Workers/Workflow.ts";
 
@@ -41,6 +45,7 @@ export const providers = () =>
       D1.D1Database,
       KV.KVNamespace,
       KV.KVNamespaceBindingPolicy,
+      OpenNextBundle,
       Queue.Queue,
       Queue.QueueBindingPolicy,
       Queue.QueueConsumer,
@@ -66,6 +71,7 @@ export const providers = () =>
         D1.DatabaseProvider(),
         KV.KVNamespaceBindingPolicyLive,
         KV.KVNamespaceProvider(),
+        OpenNextBundleProvider(),
         Queue.QueueBindingPolicyLive,
         Queue.QueueProvider(),
         Queue.QueueConsumerProvider(),

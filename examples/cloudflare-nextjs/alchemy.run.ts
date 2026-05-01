@@ -2,22 +2,18 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-// Deploy a Next.js app via OpenNext + Cloudflare Workers, exercising
-// the `bundle: false` code path on `Cloudflare.Worker`.
+// Deploy a Next.js app via OpenNext + Cloudflare Workers using the
+// in-process bundler (`Cloudflare.OpenNext`).
 //
-// `.open-next/worker.js` is a complete, runtime-ready ESM bundle
-// produced by `@opennextjs/cloudflare`. Re-running it through
-// alchemy's rolldown step rewrites the dynamic `import()` calls that
-// OpenNext relies on, which makes the deploy fail Cloudflare's
-// validation step with:
+// `Cloudflare.OpenNext` runs `next build && opennextjs-cloudflare build`
+// to produce `.open-next/`, then bundles the worker entry in-process
+// with esbuild + `@cloudflare/unenv-preset` + the vendored
+// `nodejsHybridPlugin` (the same building blocks wrangler uses
+// internally), and uploads the result via `Cloudflare.Worker` with
+// `bundle: false`. No `wrangler` subprocess is involved.
 //
-//   UnknownCloudflareError: Uncaught TypeError: Cannot destructure
-//   property 'name' of '(intermediate value)' as it is undefined.
-//   at worker.js:1:23445 in createGenericHandler
-//
-// `bundle: false` short-circuits the rolldown step and uploads the
-// OpenNext output byte-for-byte, which is what the upstream tool
-// expects.
+// To compare against the wrangler-subprocess variant, swap `OpenNext`
+// for `OpenNextWranglerSubprocess` below — the contract is identical.
 export default Alchemy.Stack(
   "CloudflareNextjsExample",
   {
@@ -25,22 +21,12 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const worker = yield* Cloudflare.Worker("NextjsWorker", {
-      main: ".open-next/worker.js",
-      bundle: false,
-      assets: {
-        directory: ".open-next/assets",
-        config: {
-          notFoundHandling: "none",
-          htmlHandling: "auto-trailing-slash",
-          runWorkerFirst: false,
-        },
-      },
+    const app = yield* Cloudflare.OpenNextWranglerSubprocess("NextjsApp", {
       compatibility: {
-        // OpenNext (via Next.js's edge runtime) imports `node:perf_hooks`
-        // transitively. Cloudflare started providing it natively on
-        // 2026-03-17; earlier dates throw "No such module" at request
-        // time and would mask the bundling behavior we want to exercise.
+        // OpenNext (via Next.js's edge runtime) imports
+        // `node:perf_hooks` transitively. Cloudflare started providing
+        // it natively on 2026-03-17; earlier dates throw "No such
+        // module" at request time.
         date: "2026-03-17",
         flags: [
           "nodejs_compat",
@@ -52,7 +38,7 @@ export default Alchemy.Stack(
     });
 
     return {
-      url: worker.url,
+      url: app.url,
     };
   }),
 );
