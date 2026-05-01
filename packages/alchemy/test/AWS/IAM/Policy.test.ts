@@ -1,16 +1,17 @@
 import * as AWS from "@/AWS";
 import { Policy } from "@/AWS/IAM";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as IAM from "@distilled.cloud/aws/iam";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
-test(
-  "create, update, and delete managed policy",
-  Effect.gen(function* () {
-    yield* destroy();
+const { test } = Test.make({ providers: AWS.providers() });
 
-    const policy = yield* test.deploy(
+test.provider("create, update, and delete managed policy", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const policy = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Policy("IamPolicy", {
           policyDocument: {
@@ -35,7 +36,7 @@ test(
     });
     expect(created.Policy?.PolicyName).toBe(policy.policyName);
 
-    yield* test.deploy(
+    yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Policy("IamPolicy", {
           policyDocument: {
@@ -66,11 +67,11 @@ test(
       env: "prod",
     });
 
-    yield* destroy();
+    yield* stack.destroy();
 
     const deleted = yield* IAM.getPolicy({
       PolicyArn: policy.policyArn,
     }).pipe(Effect.option);
     expect(deleted._tag).toBe("None");
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );

@@ -536,6 +536,49 @@ describe("Output.upstream / hasOutputs / resolveUpstream", () => {
     expect(Output.upstream(Output.literal(1))).toEqual({});
   });
 
+  it("treats a raw Resource passed directly as an upstream dependency", () => {
+    const src = fakeResource("Test.A", "RawA");
+    expect(Object.keys(Output.upstream(src as any))).toEqual(["RawA"]);
+  });
+
+  it("upstreamAny detects a raw Resource passed directly as a prop value", () => {
+    const a = fakeResource("Test.A", "FQN-A");
+    const b = fakeResource("Test.B", "FQN-B");
+    const props = { image: a, network: b };
+    expect(Object.keys(Output.upstreamAny(props)).sort()).toEqual([
+      "FQN-A",
+      "FQN-B",
+    ]);
+  });
+
+  it("upstreamAny detects raw Resources nested in arrays/objects", () => {
+    const a = fakeResource("Test.A", "FQN-A");
+    const b = fakeResource("Test.B", "FQN-B");
+    const props = {
+      volumes: [{ source: a }],
+      env: { ref: b },
+    };
+    expect(Object.keys(Output.upstreamAny(props)).sort()).toEqual([
+      "FQN-A",
+      "FQN-B",
+    ]);
+  });
+
+  it("upstreamAny detects raw Resource at the top level", () => {
+    const a = fakeResource("Test.A", "Top");
+    expect(Object.keys(Output.upstreamAny(a))).toEqual(["Top"]);
+  });
+
+  it("resolveUpstream picks up raw Resources alongside Output expressions", () => {
+    const a = fakeResource("Test.A", "A1");
+    const b = fakeResource("Test.B", "B1");
+    const result = Output.resolveUpstream({
+      raw: a,
+      via: Output.of(b),
+    });
+    expect(Object.keys(result).sort()).toEqual(["A1", "B1"]);
+  });
+
   it("hasOutputs is true when an object contains an Output referencing a resource", () => {
     const src = fakeResource("Test.A", "X");
     expect(Output.hasOutputs({ k: Output.of(src) })).toBe(true);

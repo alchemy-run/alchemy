@@ -1,10 +1,54 @@
 ---
 import Logo from "./Logo.astro";
 
-const cols = [
-  { h: "Product", links: ["Docs", "Tutorial", "Examples", "Providers", "Changelog"] },
-  { h: "Community", links: ["Discord", "GitHub", "X / Twitter", "Blog"] },
-  { h: "Compare", links: ["vs Pulumi", "vs SST", "vs Terraform", "vs CDK"] },
+interface FooterLink {
+  label: string;
+  href: string;
+}
+interface FooterCol {
+  h: string;
+  links: FooterLink[];
+}
+
+const cols: FooterCol[] = [
+  {
+    h: "Product",
+    links: [
+      { label: "Docs", href: "/getting-started" },
+      { label: "Tutorial", href: "/tutorial/part-1" },
+      // todo(sam): create an /examples landing page (or sidebar entry)
+      // and re-enable: { label: "Examples", href: "/examples" }
+      // todo(sam): create /providers/index.md that lists every provider
+      // (Starlight currently autogenerates the sidebar from the
+      // providers/ folder but there's no overview page to link to).
+      // Re-enable: { label: "Providers", href: "/providers" }
+      // todo(sam): wire a /changelog page that mirrors the GitHub
+      // releases / CHANGELOG.md (either fetch at build time or add a
+      // generator that drops a markdown file under content/docs).
+      // Re-enable: { label: "Changelog", href: "/changelog" }
+    ],
+  },
+  {
+    h: "Community",
+    links: [
+      { label: "Discord", href: "https://discord.gg/jwKw8dBJdN" },
+      { label: "GitHub", href: "https://github.com/alchemy-run/alchemy-effect" },
+      { label: "X / Twitter", href: "https://x.com/alchemy_run" },
+      { label: "Blog", href: "/blog" },
+    ],
+  },
+  // todo(sam): write the comparison pages and re-enable this whole
+  // column. Suggested locations: /compare/pulumi, /compare/sst,
+  // /compare/terraform, /compare/cdk.
+  // {
+  //   h: "Compare",
+  //   links: [
+  //     { label: "vs Pulumi",    href: "/compare/pulumi" },
+  //     { label: "vs SST",       href: "/compare/sst" },
+  //     { label: "vs Terraform", href: "/compare/terraform" },
+  //     { label: "vs CDK",       href: "/compare/cdk" },
+  //   ],
+  // },
 ];
 ---
 
@@ -22,7 +66,7 @@ const cols = [
         <div class="alc-footer__heading">{col.h}</div>
         <ul class="alc-footer__list">
           {col.links.map((l) => (
-            <li><a href="#" class="alc-footer__link">{l}</a></li>
+            <li><a href={l.href} class="alc-footer__link">{l.label}</a></li>
           ))}
         </ul>
       </div>

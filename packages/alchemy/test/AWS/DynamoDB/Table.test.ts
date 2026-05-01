@@ -1,25 +1,26 @@
 import * as AWS from "@/AWS";
 import { Table } from "@/AWS/DynamoDB";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import { describe, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
+const { test } = Test.make({ providers: AWS.providers() });
+
 describe("AWS.DynamoDB.Table", () => {
   const longGlobalSecondaryIndexStabilization = Schedule.fixed(
     "10 seconds",
   ).pipe(Schedule.both(Schedule.recurs(180)));
 
-  test(
-    "create, update, delete table",
+  test.provider("create, update, delete table", (stack) =>
     Effect.gen(function* () {
       yield* logTestStep("starting create/update/delete table");
-      yield* destroy();
+      yield* stack.destroy();
 
       yield* logTestStep("deploying base table");
-      const table = yield* test.deploy(
+      const table = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Table("TestTable", {
             partitionKey: "id",
@@ -34,516 +35,527 @@ describe("AWS.DynamoDB.Table", () => {
       expect(actualTable.Table?.TableArn).toEqual(table.tableArn);
 
       yield* logTestStep("destroying base table");
-      yield* destroy();
+      yield* stack.destroy();
 
       yield* assertTableIsDeleted(table.tableName);
-    }).pipe(Effect.provide(AWS.providers())),
+    }),
   );
 
-  test(
+  test.provider(
     "create, update, and disable table stream configuration through bindings",
-    Effect.gen(function* () {
-      yield* logTestStep("starting stream configuration test");
-      yield* destroy();
+    (stack) =>
+      Effect.gen(function* () {
+        yield* logTestStep("starting stream configuration test");
+        yield* stack.destroy();
 
-      yield* logTestStep("deploying table with binding-owned stream");
-      const table = yield* test.deploy(
-        Effect.gen(function* () {
-          const table = yield* Table("StreamTable", {
-            partitionKey: "id",
-            attributes: { id: "S" },
-          });
-          yield* table.bind("TestTableStreamBinding", {
-            streamSpecification: {
-              StreamEnabled: true,
-              StreamViewType: "NEW_AND_OLD_IMAGES",
-            },
-          });
-          return table;
-        }),
-      );
-
-      const created = yield* waitForTableStreamSpecification(table.tableName, {
-        StreamEnabled: true,
-        StreamViewType: "NEW_AND_OLD_IMAGES",
-      });
-      expect(created.Table?.StreamSpecification).toEqual({
-        StreamEnabled: true,
-        StreamViewType: "NEW_AND_OLD_IMAGES",
-      });
-      expect(created.Table?.LatestStreamArn).toBeDefined();
-
-      yield* logTestStep("updating stream view type to KEYS_ONLY");
-      yield* test.deploy(
-        Effect.gen(function* () {
-          const table = yield* Table("StreamTable", {
-            partitionKey: "id",
-            attributes: { id: "S" },
-          });
-          yield* table.bind("TestTableStreamBinding", {
-            streamSpecification: {
-              StreamEnabled: true,
-              StreamViewType: "KEYS_ONLY",
-            },
-          });
-          return table;
-        }),
-      );
-
-      const updated = yield* waitForTableStreamSpecification(table.tableName, {
-        StreamEnabled: true,
-        StreamViewType: "KEYS_ONLY",
-      });
-      expect(updated.Table?.StreamSpecification).toEqual({
-        StreamEnabled: true,
-        StreamViewType: "KEYS_ONLY",
-      });
-
-      yield* logTestStep("removing stream binding");
-      yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("StreamTable", {
-            partitionKey: "id",
-            attributes: { id: "S" },
-          });
-        }),
-      );
-
-      const disabled = yield* waitForTableStreamSpecification(
-        table.tableName,
-        undefined,
-      );
-      expect(disabled.Table?.StreamSpecification).toBeUndefined();
-
-      yield* logTestStep("destroying stream table");
-      yield* destroy();
-
-      yield* assertTableIsDeleted(table.tableName);
-    }).pipe(Effect.provide(AWS.providers())),
-  );
-
-  test(
-    "create and update table tags and point-in-time recovery",
-    { timeout: 240_000 },
-    Effect.gen(function* () {
-      yield* logTestStep("starting tags and point-in-time recovery test");
-      yield* destroy();
-
-      yield* logTestStep("deploying tagged table with PITR enabled");
-      const table = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("TaggedTable", {
-            partitionKey: "id",
-            attributes: { id: "S" },
-            tags: { Environment: "test" },
-            pointInTimeRecoverySpecification: {
-              PointInTimeRecoveryEnabled: true,
-              RecoveryPeriodInDays: 7,
-            },
-          });
-        }),
-      );
-
-      const createdTags = yield* waitForTableTags(table.tableArn, {
-        Environment: "test",
-      });
-      expect(createdTags["Environment"]).toEqual("test");
-      expect(table.tags?.["Environment"]).toEqual("test");
-
-      const createdBackups = yield* waitForPointInTimeRecovery(
-        table.tableName,
-        true,
-      );
-      expect(
-        createdBackups.PointInTimeRecoveryDescription
-          ?.PointInTimeRecoveryStatus,
-      ).toEqual("ENABLED");
-      expect(
-        createdBackups.PointInTimeRecoveryDescription?.RecoveryPeriodInDays,
-      ).toEqual(7);
-
-      yield* logTestStep("updating tags and disabling PITR");
-      const updated = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("TaggedTable", {
-            partitionKey: "id",
-            attributes: { id: "S" },
-            tags: { Environment: "prod", Team: "platform" },
-            pointInTimeRecoverySpecification: {
-              PointInTimeRecoveryEnabled: false,
-            },
-          });
-        }),
-      );
-
-      const updatedTags = yield* waitForTableTags(updated.tableArn, {
-        Environment: "prod",
-        Team: "platform",
-      });
-      expect(updatedTags["Environment"]).toEqual("prod");
-      expect(updatedTags["Team"]).toEqual("platform");
-      expect(updated.tags?.["Environment"]).toEqual("prod");
-      expect(updated.tags?.["Team"]).toEqual("platform");
-
-      const updatedBackups = yield* waitForPointInTimeRecovery(
-        updated.tableName,
-        false,
-      );
-      expect(
-        updatedBackups.PointInTimeRecoveryDescription
-          ?.PointInTimeRecoveryStatus,
-      ).toEqual("DISABLED");
-
-      yield* logTestStep("destroying tagged table");
-      yield* destroy();
-
-      yield* assertTableIsDeleted(table.tableName);
-    }).pipe(Effect.provide(AWS.providers())),
-  );
-
-  test(
-    "create table with folded local and global secondary indexes",
-    { timeout: 180_000 },
-    Effect.gen(function* () {
-      yield* logTestStep("starting folded index create test");
-      yield* destroy();
-
-      yield* logTestStep("deploying table with LSI and GSI");
-      const table = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("IndexedTable", {
-            partitionKey: "pk",
-            sortKey: "sk",
-            attributes: {
-              pk: "S",
-              sk: "S",
-              gsi1pk: "S",
-            },
-            localSecondaryIndexes: [
-              {
-                IndexName: "lsi-by-sk",
-                KeySchema: [
-                  { AttributeName: "pk", KeyType: "HASH" },
-                  { AttributeName: "sk", KeyType: "RANGE" },
-                ],
-                Projection: {
-                  ProjectionType: "ALL",
-                },
+        yield* logTestStep("deploying table with binding-owned stream");
+        const table = yield* stack.deploy(
+          Effect.gen(function* () {
+            const table = yield* Table("StreamTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+            });
+            yield* table.bind("TestTableStreamBinding", {
+              streamSpecification: {
+                StreamEnabled: true,
+                StreamViewType: "NEW_AND_OLD_IMAGES",
               },
-            ],
-            globalSecondaryIndexes: [
-              {
-                IndexName: "gsi-by-lookup",
-                KeySchema: [{ AttributeName: "gsi1pk", KeyType: "HASH" }],
-                Projection: {
-                  ProjectionType: "ALL",
-                },
-              },
-            ],
-          });
-        }),
-      );
+            });
+            return table;
+          }),
+        );
 
-      const actualTable = yield* Effect.gen(function* () {
-        const current = yield* DynamoDB.describeTable({
-          TableName: table.tableName,
+        const created = yield* waitForTableStreamSpecification(
+          table.tableName,
+          {
+            StreamEnabled: true,
+            StreamViewType: "NEW_AND_OLD_IMAGES",
+          },
+        );
+        expect(created.Table?.StreamSpecification).toEqual({
+          StreamEnabled: true,
+          StreamViewType: "NEW_AND_OLD_IMAGES",
         });
-        if (
-          current.Table?.GlobalSecondaryIndexes?.some(
-            (index) => index.IndexStatus !== "ACTIVE",
-          )
-        ) {
-          return yield* Effect.fail(new GlobalSecondaryIndexNotActive());
-        }
-        return current.Table;
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "GlobalSecondaryIndexNotActive",
-          schedule: Schedule.fixed("2 seconds").pipe(
-            Schedule.both(Schedule.recurs(30)),
-          ),
-        }),
-      );
+        expect(created.Table?.LatestStreamArn).toBeDefined();
 
-      expect(
-        actualTable?.LocalSecondaryIndexes?.map((index) => index.IndexName),
-      ).toContain("lsi-by-sk");
-      expect(
-        actualTable?.GlobalSecondaryIndexes?.map((index) => index.IndexName),
-      ).toContain("gsi-by-lookup");
-      expect(
-        table.localSecondaryIndexes?.map((index) => index.IndexName),
-      ).toContain("lsi-by-sk");
-      expect(
-        table.globalSecondaryIndexes?.map((index) => index.IndexName),
-      ).toContain("gsi-by-lookup");
+        yield* logTestStep("updating stream view type to KEYS_ONLY");
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const table = yield* Table("StreamTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+            });
+            yield* table.bind("TestTableStreamBinding", {
+              streamSpecification: {
+                StreamEnabled: true,
+                StreamViewType: "KEYS_ONLY",
+              },
+            });
+            return table;
+          }),
+        );
 
-      yield* logTestStep("destroying indexed table");
-      yield* destroy();
+        const updated = yield* waitForTableStreamSpecification(
+          table.tableName,
+          {
+            StreamEnabled: true,
+            StreamViewType: "KEYS_ONLY",
+          },
+        );
+        expect(updated.Table?.StreamSpecification).toEqual({
+          StreamEnabled: true,
+          StreamViewType: "KEYS_ONLY",
+        });
 
-      yield* assertTableIsDeleted(table.tableName);
-    }).pipe(Effect.provide(AWS.providers())),
+        yield* logTestStep("removing stream binding");
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("StreamTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+            });
+          }),
+        );
+
+        const disabled = yield* waitForTableStreamSpecification(
+          table.tableName,
+          undefined,
+        );
+        expect(disabled.Table?.StreamSpecification).toBeUndefined();
+
+        yield* logTestStep("destroying stream table");
+        yield* stack.destroy();
+
+        yield* assertTableIsDeleted(table.tableName);
+      }),
+  );
+
+  test.provider(
+    "create and update table tags and point-in-time recovery",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* logTestStep("starting tags and point-in-time recovery test");
+        yield* stack.destroy();
+
+        yield* logTestStep("deploying tagged table with PITR enabled");
+        const table = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("TaggedTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+              tags: { Environment: "test" },
+              pointInTimeRecoverySpecification: {
+                PointInTimeRecoveryEnabled: true,
+                RecoveryPeriodInDays: 7,
+              },
+            });
+          }),
+        );
+
+        const createdTags = yield* waitForTableTags(table.tableArn, {
+          Environment: "test",
+        });
+        expect(createdTags["Environment"]).toEqual("test");
+        expect(table.tags?.["Environment"]).toEqual("test");
+
+        const createdBackups = yield* waitForPointInTimeRecovery(
+          table.tableName,
+          true,
+        );
+        expect(
+          createdBackups.PointInTimeRecoveryDescription
+            ?.PointInTimeRecoveryStatus,
+        ).toEqual("ENABLED");
+        expect(
+          createdBackups.PointInTimeRecoveryDescription?.RecoveryPeriodInDays,
+        ).toEqual(7);
+
+        yield* logTestStep("updating tags and disabling PITR");
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("TaggedTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+              tags: { Environment: "prod", Team: "platform" },
+              pointInTimeRecoverySpecification: {
+                PointInTimeRecoveryEnabled: false,
+              },
+            });
+          }),
+        );
+
+        const updatedTags = yield* waitForTableTags(updated.tableArn, {
+          Environment: "prod",
+          Team: "platform",
+        });
+        expect(updatedTags["Environment"]).toEqual("prod");
+        expect(updatedTags["Team"]).toEqual("platform");
+        expect(updated.tags?.["Environment"]).toEqual("prod");
+        expect(updated.tags?.["Team"]).toEqual("platform");
+
+        const updatedBackups = yield* waitForPointInTimeRecovery(
+          updated.tableName,
+          false,
+        );
+        expect(
+          updatedBackups.PointInTimeRecoveryDescription
+            ?.PointInTimeRecoveryStatus,
+        ).toEqual("DISABLED");
+
+        yield* logTestStep("destroying tagged table");
+        yield* stack.destroy();
+
+        yield* assertTableIsDeleted(table.tableName);
+      }),
+    { timeout: 240_000 },
+  );
+
+  test.provider(
+    "create table with folded local and global secondary indexes",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* logTestStep("starting folded index create test");
+        yield* stack.destroy();
+
+        yield* logTestStep("deploying table with LSI and GSI");
+        const table = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("IndexedTable", {
+              partitionKey: "pk",
+              sortKey: "sk",
+              attributes: {
+                pk: "S",
+                sk: "S",
+                gsi1pk: "S",
+              },
+              localSecondaryIndexes: [
+                {
+                  IndexName: "lsi-by-sk",
+                  KeySchema: [
+                    { AttributeName: "pk", KeyType: "HASH" },
+                    { AttributeName: "sk", KeyType: "RANGE" },
+                  ],
+                  Projection: {
+                    ProjectionType: "ALL",
+                  },
+                },
+              ],
+              globalSecondaryIndexes: [
+                {
+                  IndexName: "gsi-by-lookup",
+                  KeySchema: [{ AttributeName: "gsi1pk", KeyType: "HASH" }],
+                  Projection: {
+                    ProjectionType: "ALL",
+                  },
+                },
+              ],
+            });
+          }),
+        );
+
+        const actualTable = yield* Effect.gen(function* () {
+          const current = yield* DynamoDB.describeTable({
+            TableName: table.tableName,
+          });
+          if (
+            current.Table?.GlobalSecondaryIndexes?.some(
+              (index) => index.IndexStatus !== "ACTIVE",
+            )
+          ) {
+            return yield* Effect.fail(new GlobalSecondaryIndexNotActive());
+          }
+          return current.Table;
+        }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "GlobalSecondaryIndexNotActive",
+            schedule: Schedule.fixed("2 seconds").pipe(
+              Schedule.both(Schedule.recurs(30)),
+            ),
+          }),
+        );
+
+        expect(
+          actualTable?.LocalSecondaryIndexes?.map((index) => index.IndexName),
+        ).toContain("lsi-by-sk");
+        expect(
+          actualTable?.GlobalSecondaryIndexes?.map((index) => index.IndexName),
+        ).toContain("gsi-by-lookup");
+        expect(
+          table.localSecondaryIndexes?.map((index) => index.IndexName),
+        ).toContain("lsi-by-sk");
+        expect(
+          table.globalSecondaryIndexes?.map((index) => index.IndexName),
+        ).toContain("gsi-by-lookup");
+
+        yield* logTestStep("destroying indexed table");
+        yield* stack.destroy();
+
+        yield* assertTableIsDeleted(table.tableName);
+      }),
+    { timeout: 180_000 },
   );
 
   // it's super slow because GSIs are awfully slow to create
-  test.skip(
+  test.provider.skip(
     "update global secondary indexes across multiple deploys",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* logTestStep(
+          "starting multi-stage global secondary index update test",
+        );
+        yield* stack.destroy();
+
+        yield* logTestStep("deploying table without GSIs");
+        const table = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("UpdatingIndexedTable", {
+              partitionKey: "pk",
+              sortKey: "sk",
+              attributes: {
+                pk: "S",
+                sk: "S",
+              },
+            });
+          }),
+        );
+
+        yield* expectTableIndexes(table.tableName, {
+          local: [],
+          global: [],
+        });
+
+        yield* logTestStep("adding first GSI");
+        const oneAdded = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("UpdatingIndexedTable", {
+              partitionKey: "pk",
+              sortKey: "sk",
+              attributes: {
+                pk: "S",
+                sk: "S",
+                gsi1pk: "S",
+              },
+              globalSecondaryIndexes: [
+                {
+                  IndexName: "gsi-by-lookup-1",
+                  KeySchema: [{ AttributeName: "gsi1pk", KeyType: "HASH" }],
+                  Projection: {
+                    ProjectionType: "ALL",
+                  },
+                },
+              ],
+            });
+          }),
+        );
+        expect(oneAdded.tableName).toEqual(table.tableName);
+        yield* expectTableIndexes(oneAdded.tableName, {
+          local: [],
+          global: ["gsi-by-lookup-1"],
+        });
+
+        yield* logTestStep("removing first GSI");
+        const oneRemoved = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("UpdatingIndexedTable", {
+              partitionKey: "pk",
+              sortKey: "sk",
+              attributes: {
+                pk: "S",
+                sk: "S",
+                gsi1pk: "S",
+                gsi2pk: "S",
+              },
+            });
+          }),
+        );
+        expect(oneRemoved.tableName).toEqual(table.tableName);
+        yield* expectTableIndexes(oneRemoved.tableName, {
+          local: [],
+          global: [],
+        });
+
+        yield* logTestStep("adding two GSIs sequentially through one deploy");
+        const twoAdded = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("UpdatingIndexedTable", {
+              partitionKey: "pk",
+              sortKey: "sk",
+              attributes: {
+                pk: "S",
+                sk: "S",
+                gsi1pk: "S",
+                gsi2pk: "S",
+              },
+              globalSecondaryIndexes: [
+                {
+                  IndexName: "gsi-by-lookup-1",
+                  KeySchema: [{ AttributeName: "gsi1pk", KeyType: "HASH" }],
+                  Projection: {
+                    ProjectionType: "ALL",
+                  },
+                },
+                {
+                  IndexName: "gsi-by-lookup-2",
+                  KeySchema: [{ AttributeName: "gsi2pk", KeyType: "HASH" }],
+                  Projection: {
+                    ProjectionType: "ALL",
+                  },
+                },
+              ],
+            });
+          }),
+        );
+        expect(twoAdded.tableName).toEqual(table.tableName);
+        yield* expectTableIndexes(twoAdded.tableName, {
+          local: [],
+          global: ["gsi-by-lookup-1", "gsi-by-lookup-2"],
+        });
+
+        yield* logTestStep("removing one of two GSIs");
+        const oneOfTwoRemoved = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("UpdatingIndexedTable", {
+              partitionKey: "pk",
+              sortKey: "sk",
+              attributes: {
+                pk: "S",
+                sk: "S",
+                gsi1pk: "S",
+                gsi2pk: "S",
+              },
+              globalSecondaryIndexes: [
+                {
+                  IndexName: "gsi-by-lookup-2",
+                  KeySchema: [{ AttributeName: "gsi2pk", KeyType: "HASH" }],
+                  Projection: {
+                    ProjectionType: "ALL",
+                  },
+                },
+              ],
+            });
+          }),
+        );
+        expect(oneOfTwoRemoved.tableName).toEqual(table.tableName);
+        yield* expectTableIndexes(oneOfTwoRemoved.tableName, {
+          local: [],
+          global: ["gsi-by-lookup-2"],
+        });
+
+        yield* logTestStep("removing remaining GSI");
+        const twoRemoved = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("UpdatingIndexedTable", {
+              partitionKey: "pk",
+              sortKey: "sk",
+              attributes: {
+                pk: "S",
+                sk: "S",
+                gsi1pk: "S",
+                gsi2pk: "S",
+              },
+            });
+          }),
+        );
+        expect(twoRemoved.tableName).toEqual(table.tableName);
+        yield* expectTableIndexes(twoRemoved.tableName, {
+          local: [],
+          global: [],
+        });
+
+        yield* logTestStep("destroying GSI update test table");
+        yield* stack.destroy();
+
+        yield* assertTableIsDeleted(table.tableName);
+      }),
     { timeout: 2_400_000 },
-    Effect.gen(function* () {
-      yield* logTestStep(
-        "starting multi-stage global secondary index update test",
-      );
-      yield* destroy();
-
-      yield* logTestStep("deploying table without GSIs");
-      const table = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("UpdatingIndexedTable", {
-            partitionKey: "pk",
-            sortKey: "sk",
-            attributes: {
-              pk: "S",
-              sk: "S",
-            },
-          });
-        }),
-      );
-
-      yield* expectTableIndexes(table.tableName, {
-        local: [],
-        global: [],
-      });
-
-      yield* logTestStep("adding first GSI");
-      const oneAdded = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("UpdatingIndexedTable", {
-            partitionKey: "pk",
-            sortKey: "sk",
-            attributes: {
-              pk: "S",
-              sk: "S",
-              gsi1pk: "S",
-            },
-            globalSecondaryIndexes: [
-              {
-                IndexName: "gsi-by-lookup-1",
-                KeySchema: [{ AttributeName: "gsi1pk", KeyType: "HASH" }],
-                Projection: {
-                  ProjectionType: "ALL",
-                },
-              },
-            ],
-          });
-        }),
-      );
-      expect(oneAdded.tableName).toEqual(table.tableName);
-      yield* expectTableIndexes(oneAdded.tableName, {
-        local: [],
-        global: ["gsi-by-lookup-1"],
-      });
-
-      yield* logTestStep("removing first GSI");
-      const oneRemoved = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("UpdatingIndexedTable", {
-            partitionKey: "pk",
-            sortKey: "sk",
-            attributes: {
-              pk: "S",
-              sk: "S",
-              gsi1pk: "S",
-              gsi2pk: "S",
-            },
-          });
-        }),
-      );
-      expect(oneRemoved.tableName).toEqual(table.tableName);
-      yield* expectTableIndexes(oneRemoved.tableName, {
-        local: [],
-        global: [],
-      });
-
-      yield* logTestStep("adding two GSIs sequentially through one deploy");
-      const twoAdded = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("UpdatingIndexedTable", {
-            partitionKey: "pk",
-            sortKey: "sk",
-            attributes: {
-              pk: "S",
-              sk: "S",
-              gsi1pk: "S",
-              gsi2pk: "S",
-            },
-            globalSecondaryIndexes: [
-              {
-                IndexName: "gsi-by-lookup-1",
-                KeySchema: [{ AttributeName: "gsi1pk", KeyType: "HASH" }],
-                Projection: {
-                  ProjectionType: "ALL",
-                },
-              },
-              {
-                IndexName: "gsi-by-lookup-2",
-                KeySchema: [{ AttributeName: "gsi2pk", KeyType: "HASH" }],
-                Projection: {
-                  ProjectionType: "ALL",
-                },
-              },
-            ],
-          });
-        }),
-      );
-      expect(twoAdded.tableName).toEqual(table.tableName);
-      yield* expectTableIndexes(twoAdded.tableName, {
-        local: [],
-        global: ["gsi-by-lookup-1", "gsi-by-lookup-2"],
-      });
-
-      yield* logTestStep("removing one of two GSIs");
-      const oneOfTwoRemoved = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("UpdatingIndexedTable", {
-            partitionKey: "pk",
-            sortKey: "sk",
-            attributes: {
-              pk: "S",
-              sk: "S",
-              gsi1pk: "S",
-              gsi2pk: "S",
-            },
-            globalSecondaryIndexes: [
-              {
-                IndexName: "gsi-by-lookup-2",
-                KeySchema: [{ AttributeName: "gsi2pk", KeyType: "HASH" }],
-                Projection: {
-                  ProjectionType: "ALL",
-                },
-              },
-            ],
-          });
-        }),
-      );
-      expect(oneOfTwoRemoved.tableName).toEqual(table.tableName);
-      yield* expectTableIndexes(oneOfTwoRemoved.tableName, {
-        local: [],
-        global: ["gsi-by-lookup-2"],
-      });
-
-      yield* logTestStep("removing remaining GSI");
-      const twoRemoved = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("UpdatingIndexedTable", {
-            partitionKey: "pk",
-            sortKey: "sk",
-            attributes: {
-              pk: "S",
-              sk: "S",
-              gsi1pk: "S",
-              gsi2pk: "S",
-            },
-          });
-        }),
-      );
-      expect(twoRemoved.tableName).toEqual(table.tableName);
-      yield* expectTableIndexes(twoRemoved.tableName, {
-        local: [],
-        global: [],
-      });
-
-      yield* logTestStep("destroying GSI update test table");
-      yield* destroy();
-
-      yield* assertTableIsDeleted(table.tableName);
-    }).pipe(Effect.provide(AWS.providers())),
   );
 
-  test(
+  test.provider(
     "changing local secondary indexes replaces the table",
-    { timeout: 240_000 },
-    Effect.gen(function* () {
-      yield* logTestStep("starting local secondary index replacement test");
-      yield* destroy();
+    (stack) =>
+      Effect.gen(function* () {
+        yield* logTestStep("starting local secondary index replacement test");
+        yield* stack.destroy();
 
-      yield* logTestStep("deploying baseline table without LSIs");
-      const original = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("ReplacingIndexedTable", {
-            partitionKey: "pk",
-            sortKey: "sk",
-            attributes: {
-              pk: "S",
-              sk: "S",
-            },
-          });
-        }),
-      );
-
-      yield* expectTableIndexes(original.tableName, {
-        local: [],
-        global: [],
-      });
-
-      yield* logTestStep("deploying replacement with LSI");
-      const withLsi = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("ReplacingIndexedTable", {
-            partitionKey: "pk",
-            sortKey: "sk",
-            attributes: {
-              pk: "S",
-              sk: "S",
-            },
-            localSecondaryIndexes: [
-              {
-                IndexName: "lsi-by-sk",
-                KeySchema: [
-                  { AttributeName: "pk", KeyType: "HASH" },
-                  { AttributeName: "sk", KeyType: "RANGE" },
-                ],
-                Projection: {
-                  ProjectionType: "ALL",
-                },
+        yield* logTestStep("deploying baseline table without LSIs");
+        const original = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("ReplacingIndexedTable", {
+              partitionKey: "pk",
+              sortKey: "sk",
+              attributes: {
+                pk: "S",
+                sk: "S",
               },
-            ],
-          });
-        }),
-      );
+            });
+          }),
+        );
 
-      expect(withLsi.tableName).not.toEqual(original.tableName);
-      yield* assertTableIsDeleted(original.tableName);
-      yield* expectTableIndexes(withLsi.tableName, {
-        local: ["lsi-by-sk"],
-        global: [],
-      });
+        yield* expectTableIndexes(original.tableName, {
+          local: [],
+          global: [],
+        });
 
-      yield* logTestStep("deploying replacement without LSI again");
-      const withoutLsiAgain = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* Table("ReplacingIndexedTable", {
-            partitionKey: "pk",
-            sortKey: "sk",
-            attributes: {
-              pk: "S",
-              sk: "S",
-            },
-          });
-        }),
-      );
+        yield* logTestStep("deploying replacement with LSI");
+        const withLsi = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("ReplacingIndexedTable", {
+              partitionKey: "pk",
+              sortKey: "sk",
+              attributes: {
+                pk: "S",
+                sk: "S",
+              },
+              localSecondaryIndexes: [
+                {
+                  IndexName: "lsi-by-sk",
+                  KeySchema: [
+                    { AttributeName: "pk", KeyType: "HASH" },
+                    { AttributeName: "sk", KeyType: "RANGE" },
+                  ],
+                  Projection: {
+                    ProjectionType: "ALL",
+                  },
+                },
+              ],
+            });
+          }),
+        );
 
-      expect(withoutLsiAgain.tableName).not.toEqual(withLsi.tableName);
-      yield* assertTableIsDeleted(withLsi.tableName);
-      yield* expectTableIndexes(withoutLsiAgain.tableName, {
-        local: [],
-        global: [],
-      });
+        expect(withLsi.tableName).not.toEqual(original.tableName);
+        yield* assertTableIsDeleted(original.tableName);
+        yield* expectTableIndexes(withLsi.tableName, {
+          local: ["lsi-by-sk"],
+          global: [],
+        });
 
-      yield* logTestStep("destroying replacement test table");
-      yield* destroy();
+        yield* logTestStep("deploying replacement without LSI again");
+        const withoutLsiAgain = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("ReplacingIndexedTable", {
+              partitionKey: "pk",
+              sortKey: "sk",
+              attributes: {
+                pk: "S",
+                sk: "S",
+              },
+            });
+          }),
+        );
 
-      yield* assertTableIsDeleted(withoutLsiAgain.tableName);
-    }).pipe(Effect.provide(AWS.providers())),
+        expect(withoutLsiAgain.tableName).not.toEqual(withLsi.tableName);
+        yield* assertTableIsDeleted(withLsi.tableName);
+        yield* expectTableIndexes(withoutLsiAgain.tableName, {
+          local: [],
+          global: [],
+        });
+
+        yield* logTestStep("destroying replacement test table");
+        yield* stack.destroy();
+
+        yield* assertTableIsDeleted(withoutLsiAgain.tableName);
+      }),
+    { timeout: 240_000 },
   );
 
   const assertTableIsDeleted = Effect.fn(function* (tableName: string) {

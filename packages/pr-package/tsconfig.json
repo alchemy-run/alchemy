@@ -9,7 +9,7 @@
   },
   "references": [
     {
-      "path": "../../packages/alchemy/tsconfig.json"
+      "path": "../alchemy/tsconfig.json"
     }
   ]
 }

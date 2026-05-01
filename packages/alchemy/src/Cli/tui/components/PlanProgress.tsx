@@ -2,14 +2,18 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 
 import { Box, Text } from "ink";
-import type { CRUD, Plan } from "../../Plan.ts";
+import type { CRUD, Plan } from "../../../Plan.ts";
 
-import type { ApplyEvent, ApplyStatus, StatusChangeEvent } from "../Event.ts";
+import type {
+  ApplyEvent,
+  ApplyStatus,
+  StatusChangeEvent,
+} from "../../Event.ts";
 import {
   buildNamespaceTree,
   flattenTree,
   type FlattenedItem,
-} from "../NamespaceTree.ts";
+} from "../../NamespaceTree.ts";
 
 interface ProgressEventSource {
   subscribe(listener: (event: ApplyEvent) => void): () => void;

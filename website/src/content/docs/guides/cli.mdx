@@ -67,13 +67,15 @@ Proceed?
 [s2]url: "https://myapp-worker-dev-you-abc123.workers.dev",
 }`} />
 
-| Option              | Description                                             |
-| ------------------- | ------------------------------------------------------- |
-| `--stage <name>`    | Stage to deploy to (defaults to `dev_$USER`)            |
-| `--yes`             | Skip the approval prompt                                |
-| `--dry-run`         | Show the plan without applying (same as `alchemy plan`) |
-| `--force`           | Force updates for resources that would otherwise no-op  |
-| `--env-file <path>` | Load environment variables from a file                  |
+| Option              | Description                                                                                                                |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `--stage <name>`    | Stage to deploy to (defaults to `dev_$USER`)                                                                               |
+| `--yes`             | Skip the approval prompt                                                                                                   |
+| `--dry-run`         | Show the plan without applying (same as `alchemy plan`)                                                                    |
+| `--force`           | Force updates for resources that would otherwise no-op                                                                     |
+| `--adopt`           | Adopt pre-existing cloud resources that conflict with this stack instead of failing. Useful for re-importing into a fresh state store. |
+| `--profile <name>`  | Auth profile to use (defaults to `default` or `$ALCHEMY_PROFILE`)                                                          |
+| `--env-file <path>` | Load environment variables from a file                                                                                     |
 
 ```sh
 # Deploy to production, skip the prompt
@@ -84,7 +86,26 @@ alchemy deploy stacks/github.ts
 
 # Preview what would change
 alchemy deploy --dry-run
+
+# Re-import existing cloud resources into a fresh state store
+alchemy deploy --adopt
 ```
+
+### Adoption
+
+`--adopt` provides an `AdoptPolicy = true` to the entire deploy.
+Resource providers that opt in to adoption (e.g. `Cloudflare.Worker`
+custom domains, `Cloudflare.SecretsStore`, `Cloudflare.SecretsStore.Secret`)
+will reconcile against pre-existing cloud resources instead of failing
+with "already exists" errors.
+
+This is the right escape hatch when you've **lost or wiped your state
+store** but the underlying cloud infrastructure is still in place. Run
+`alchemy deploy --adopt` once to re-import everything; subsequent
+deploys can drop the flag.
+
+Without `--adopt`, conflicts surface loudly so an unintentional
+collision with a production resource is never silently taken over.
 
 ## `plan`
 
@@ -228,11 +249,24 @@ alchemy logs --stage prod --since 2026-04-01T00:00:00Z
 
 ## `bootstrap`
 
+Set up the per-cloud infrastructure that Alchemy itself relies on —
+the AWS assets bucket used for Lambda artifacts, or the Cloudflare
+state-store worker that holds your remote stack state.
+
+```sh
+alchemy bootstrap <provider> [options]
+```
+
+The `bootstrap` command is split into provider-specific subcommands.
+Run `alchemy bootstrap <provider> --help` to see the flags for each.
+
+### `bootstrap aws`
+
 Set up the AWS assets bucket required for deploying Lambda functions
 and other AWS resources that need artifact storage.
 
 ```sh
-alchemy bootstrap [options]
+alchemy bootstrap aws [options]
 ```
 
 | Option              | Description                                                |
@@ -244,13 +278,64 @@ alchemy bootstrap [options]
 
 ```sh
 # Bootstrap with the default profile
-alchemy bootstrap
+alchemy bootstrap aws
 
 # Bootstrap a specific region and profile
-alchemy bootstrap --profile prod --region us-west-2
+alchemy bootstrap aws --profile prod --region us-west-2
 
 # Remove bootstrap resources
-alchemy bootstrap --destroy
+alchemy bootstrap aws --destroy
+```
+
+### `bootstrap cloudflare`
+
+Manually deploy (or repair) the Cloudflare-hosted HTTP State Store —
+the worker + Secrets Store + auth-token secret that back the
+remote-state layer used by `Cloudflare.state(...)`.
+
+You normally don't need to run this: the very first stack deploy
+that uses `Cloudflare.state(...)` will prompt you to bootstrap
+automatically. Use this command to re-run that flow on demand —
+typically to recover from a previous deploy that was interrupted
+mid-bootstrap.
+
+```sh
+alchemy bootstrap cloudflare [options]
+```
+
+| Option                  | Description                                                                                                                       |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `--profile <name>`      | Alchemy auth profile (defaults to `default` or `$ALCHEMY_PROFILE`). Determines which `~/.alchemy/profiles.json` entry is used.    |
+| `--force`               | Force a full redeploy even if the worker already exists. Without this flag, an existing worker is **adopted** and only its credentials are refreshed. |
+| `--worker-name <name>`  | Override the default state-store worker name. Advanced; only needed if you run multiple state stores per Cloudflare account.      |
+| `--env-file <path>`     | Load environment variables from a file                                                                                            |
+
+The bootstrap is idempotent and self-healing:
+
+- If the worker already exists in your Cloudflare account, it is
+  **adopted**: the auth token is re-fetched live via a short-lived
+  edge-preview probe (the only way to read a Secrets Store value),
+  and `~/.alchemy/credentials/<profile>/cloudflare-state-store.json`
+  is rewritten with the current token.
+- If a previous run failed mid-flight (e.g. the worker got created
+  but credentials never landed on disk), the leftover local state
+  stack is detected and the deploy resumes where it left off. The
+  bootstrap is only considered complete once the local stack has
+  been hoisted into the remote store and removed.
+- With `--force`, the deploy runs again unconditionally. Existing
+  Cloudflare resources (worker, Secrets Store, secret) are still
+  reconciled in place rather than replaced — adoption is enabled
+  automatically for the bootstrap stack.
+
+```sh
+# First-time bootstrap (or repair after a failed deploy)
+alchemy bootstrap cloudflare
+
+# Bootstrap a separate profile
+alchemy bootstrap cloudflare --profile staging
+
+# Force a full redeploy (e.g. to roll out an updated state-store worker)
+alchemy bootstrap cloudflare --force
 ```
 
 ## `login`

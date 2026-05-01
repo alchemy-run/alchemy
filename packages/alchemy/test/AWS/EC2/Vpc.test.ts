@@ -1,6 +1,6 @@
 import * as AWS from "@/AWS";
 import { Vpc } from "@/AWS/EC2";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -8,15 +8,16 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const { test } = Test.make({ providers: AWS.providers() });
+
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-test.skip(
-  "create, update, delete vpc",
+test.provider.skip("create, update, delete vpc", (stack) =>
   Effect.gen(function* () {
-    const vpc = yield* test.deploy(
+    const vpc = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Vpc("TestVpc", {
           cidrBlock: "10.0.0.0/16",
@@ -46,7 +47,7 @@ test.skip(
     });
 
     // Update VPC attributes
-    const updatedVpc = yield* test.deploy(
+    const updatedVpc = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Vpc("TestVpc", {
           cidrBlock: "10.0.0.0/16",
@@ -68,10 +69,10 @@ test.skip(
       Value: false,
     });
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* assertVpcDeleted(vpc.vpcId);
-  }).pipe(Effect.provide(AWS.providers()), logLevel),
+  }).pipe(logLevel),
 );
 
 const expectVpcAttribute = Effect.fn(function* (props: {

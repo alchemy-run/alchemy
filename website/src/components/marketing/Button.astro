@@ -61,10 +61,14 @@ const { variant = "primary", icon, href = "#", class: className } = Astro.props;
   .alc-btn--primary:hover {
     background: var(--alc-accent-deep);
   }
+  /* Secondary: transparent surface with a hairline border. Slimmer
+     padding than the primary so it doesn't feel oversized when sitting
+     next to a borderless ghost button. */
   .alc-btn--secondary {
     background: transparent;
     border-color: var(--alc-hairline-3);
     color: var(--alc-fg-1);
+    padding: 7px 14px;
   }
   .alc-btn--secondary:hover {
     border-color: var(--alc-accent);
@@ -80,5 +84,13 @@ const { variant = "primary", icon, href = "#", class: className } = Astro.props;
   .alc-btn--accent {
     background: var(--alc-terracotta);
     color: var(--alc-fg-on-accent);
+  }
+  /* MDX wraps the button's slot text in a <p>, which inherits the UA
+     stylesheet's 1em block margin (~14px) and bloats the button
+     vertically. Flatten any <p> inside the button. `display: inline`
+     keeps the icon + label on one row inside the inline-flex anchor. */
+  .alc-btn :global(p) {
+    margin: 0;
+    display: inline;
   }
 </style>

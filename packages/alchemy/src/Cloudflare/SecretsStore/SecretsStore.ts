@@ -1,5 +1,7 @@
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { AdoptPolicy } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -55,29 +57,62 @@ export const SecretsStoreProvider = () =>
       return {
         stables: ["storeId", "storeName", "accountId"],
         create: Effect.fn(function* () {
-          const stores = yield* listStores({ accountId });
-          if (stores.result.length > 0) {
-            // No name specified — adopt the first (and likely only) store.
-            const first = stores.result[0]!;
+          const adoptEnabled = yield* Effect.serviceOption(AdoptPolicy).pipe(
+            Effect.map(Option.getOrElse(() => false)),
+          );
+
+          const adoptExisting = Effect.gen(function* () {
+            const stores = yield* listStores({ accountId });
+            const first = stores.result[0];
+            if (!first) return undefined;
             return {
               storeId: first.id,
               storeName: first.name,
               accountId,
             };
+          });
+
+          // Cloudflare allows exactly one Secrets Store per account, so
+          // any account that's been touched before may already have one.
+          // Only adopt it if the caller opted in via `AdoptPolicy`,
+          // otherwise let `createStore` surface MaximumStoresExceeded.
+          if (adoptEnabled) {
+            const adopted = yield* adoptExisting;
+            if (adopted) return adopted;
           }
 
-          // No store exists yet — create one.
-          const response = yield* createStore({
+          const create = createStore({
             accountId,
-            //`default_secrets_store` is the name cloudflare uses to create a secret store
-            body: [{ name: "default_secrets_store" }],
+            // `default_secrets_store` is the name Cloudflare uses for an
+            // account's default Secrets Store.
+            name: "default_secrets_store",
           });
-          const store = response.result[0]!;
-          return {
-            storeId: store.id,
-            storeName: store.name,
-            accountId,
-          };
+          const response = adoptEnabled
+            ? yield* create.pipe(
+                // A concurrent process (or a previous partially-failed
+                // deploy) may have raced us between list and create.
+                Effect.catchTag("MaximumStoresExceeded", () =>
+                  Effect.succeed(undefined),
+                ),
+              )
+            : yield* create;
+
+          if (response) {
+            return {
+              storeId: response.id,
+              storeName: response.name,
+              accountId,
+            };
+          }
+
+          const recovered = yield* adoptExisting;
+          if (recovered) return recovered;
+
+          return yield* Effect.die(
+            new Error(
+              `Cloudflare reported MaximumStoresExceeded for account ${accountId} but no store could be listed.`,
+            ),
+          );
         }),
         update: Effect.fn(function* ({ output }) {
           return output;

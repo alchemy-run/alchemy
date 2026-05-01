@@ -138,6 +138,17 @@ because state is persisted before the cloud operation completes. If
 the process crashes mid-operation, Alchemy uses the intermediate
 state to recover on the next deploy.
 
+## Writing your own state store
+
+A state store is just an Effect `Layer` that provides the `State`
+service. If the built-in stores don't fit, you can back one with
+Postgres, S3, Redis, DynamoDB, or any other backend.
+
+See [Writing a Custom State Store](/guides/custom-state-store) for
+a walkthrough of the `StateService` interface, an end-to-end
+implementation, and references to the built-in stores you can copy
+from.
+
 ## In-memory state (testing)
 
 For tests, Alchemy provides an in-memory state store so tests don't

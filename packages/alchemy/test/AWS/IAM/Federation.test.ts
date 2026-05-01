@@ -1,6 +1,6 @@
 import * as AWS from "@/AWS";
 import { OpenIDConnectProvider, SAMLProvider } from "@/AWS/IAM";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as IAM from "@distilled.cloud/aws/iam";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -13,76 +13,78 @@ import {
   testSamlProviderName,
 } from "./fixtures.ts";
 
+const { test } = Test.make({ providers: AWS.providers() });
+
 describe("AWS.IAM federation resources", () => {
-  test(
+  test.provider(
     "create, update, and delete an OpenID Connect provider",
-    Effect.gen(function* () {
-      yield* destroy();
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
 
-      const provider = yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* OpenIDConnectProvider("OidcProvider", {
-            url: testOidcUrl,
-            clientIDList: ["sts.amazonaws.com"],
-            thumbprintList: [testOidcThumbprintA],
-            tags: {
-              env: "test",
-            },
-          });
-        }),
-      );
+        const provider = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* OpenIDConnectProvider("OidcProvider", {
+              url: testOidcUrl,
+              clientIDList: ["sts.amazonaws.com"],
+              thumbprintList: [testOidcThumbprintA],
+              tags: {
+                env: "test",
+              },
+            });
+          }),
+        );
 
-      const created = yield* IAM.getOpenIDConnectProvider({
-        OpenIDConnectProviderArn: provider.openIDConnectProviderArn,
-      });
-      expect(created.Url).toBe(testOidcUrl.replace(/^https?:\/\//, ""));
-      expect(created.ClientIDList ?? []).toContain("sts.amazonaws.com");
+        const created = yield* IAM.getOpenIDConnectProvider({
+          OpenIDConnectProviderArn: provider.openIDConnectProviderArn,
+        });
+        expect(created.Url).toBe(testOidcUrl.replace(/^https?:\/\//, ""));
+        expect(created.ClientIDList ?? []).toContain("sts.amazonaws.com");
 
-      yield* test.deploy(
-        Effect.gen(function* () {
-          return yield* OpenIDConnectProvider("OidcProvider", {
-            url: testOidcUrl,
-            clientIDList: ["sts.amazonaws.com", "alchemy-client"],
-            thumbprintList: [testOidcThumbprintB],
-            tags: {
-              env: "prod",
-            },
-          });
-        }),
-      );
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* OpenIDConnectProvider("OidcProvider", {
+              url: testOidcUrl,
+              clientIDList: ["sts.amazonaws.com", "alchemy-client"],
+              thumbprintList: [testOidcThumbprintB],
+              tags: {
+                env: "prod",
+              },
+            });
+          }),
+        );
 
-      const updated = yield* IAM.getOpenIDConnectProvider({
-        OpenIDConnectProviderArn: provider.openIDConnectProviderArn,
-      });
-      expect(updated.ClientIDList ?? []).toContain("alchemy-client");
-      expect(updated.ThumbprintList).toEqual([testOidcThumbprintB]);
+        const updated = yield* IAM.getOpenIDConnectProvider({
+          OpenIDConnectProviderArn: provider.openIDConnectProviderArn,
+        });
+        expect(updated.ClientIDList ?? []).toContain("alchemy-client");
+        expect(updated.ThumbprintList).toEqual([testOidcThumbprintB]);
 
-      const tags = yield* IAM.listOpenIDConnectProviderTags({
-        OpenIDConnectProviderArn: provider.openIDConnectProviderArn,
-      });
-      expect(
-        Object.fromEntries(
-          (tags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
-        ),
-      ).toMatchObject({
-        env: "prod",
-      });
+        const tags = yield* IAM.listOpenIDConnectProviderTags({
+          OpenIDConnectProviderArn: provider.openIDConnectProviderArn,
+        });
+        expect(
+          Object.fromEntries(
+            (tags.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
+          ),
+        ).toMatchObject({
+          env: "prod",
+        });
 
-      yield* destroy();
+        yield* stack.destroy();
 
-      const deleted = yield* IAM.getOpenIDConnectProvider({
-        OpenIDConnectProviderArn: provider.openIDConnectProviderArn,
-      }).pipe(Effect.option);
-      expect(deleted._tag).toBe("None");
-    }).pipe(Effect.provide(AWS.providers())),
+        const deleted = yield* IAM.getOpenIDConnectProvider({
+          OpenIDConnectProviderArn: provider.openIDConnectProviderArn,
+        }).pipe(Effect.option);
+        expect(deleted._tag).toBe("None");
+      }),
   );
 
-  test(
-    "create, update, and delete a SAML provider",
+  test.provider("create, update, and delete a SAML provider", (stack) =>
     Effect.gen(function* () {
-      yield* destroy();
+      yield* stack.destroy();
 
-      const provider = yield* test.deploy(
+      const provider = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* SAMLProvider("SamlProvider", {
             name: testSamlProviderName,
@@ -99,7 +101,7 @@ describe("AWS.IAM federation resources", () => {
       });
       expect(created.SAMLMetadataDocument).toContain("urn:alchemy:test:idp");
 
-      yield* test.deploy(
+      yield* stack.deploy(
         Effect.gen(function* () {
           return yield* SAMLProvider("SamlProvider", {
             name: testSamlProviderName,
@@ -129,12 +131,12 @@ describe("AWS.IAM federation resources", () => {
         env: "prod",
       });
 
-      yield* destroy();
+      yield* stack.destroy();
 
       const deleted = yield* IAM.getSAMLProvider({
         SAMLProviderArn: provider.samlProviderArn,
       }).pipe(Effect.option);
       expect(deleted._tag).toBe("None");
-    }).pipe(Effect.provide(AWS.providers())),
+    }),
   );
 });

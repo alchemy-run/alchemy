@@ -271,11 +271,6 @@ const login = (profileName: string, config: CloudflareAuthConfig) =>
             "cf-oauth",
           );
 
-          if (creds?.type === "oauth" && creds.expires > Date.now() + 10_000) {
-            yield* Clank.info("Cloudflare: OAuth credentials are still valid.");
-            return;
-          }
-
           if (creds?.type === "oauth") {
             yield* Clank.info("Cloudflare: refreshing OAuth credentials...");
             yield* OAuthClient.refresh(creds).pipe(

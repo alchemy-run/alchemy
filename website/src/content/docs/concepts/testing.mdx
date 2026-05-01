@@ -5,47 +5,54 @@ sidebar:
   order: 10
 ---
 
-Alchemy provides test utilities that integrate with Bun and Vitest,
-wrapping their test APIs with Effect support and stack lifecycle
-management.
+Alchemy provides Effect-aware test utilities for both Bun and
+Vitest. Both runners expose the **same** `Test.make({ providers,
+state })` factory — pick whichever runner your project uses.
 
-## Test harness
+## Configure once per file
 
-The test harness provides Effect-aware versions of `test`,
-`beforeAll`, `afterAll`, and `expect`:
+Configure providers (and optionally state) once at the top of every
+test file:
 
 ```typescript
-import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Test from "alchemy/Test/Bun"; // or "alchemy/Test/Vitest"
+import * as Cloudflare from "alchemy/Cloudflare";
+
+const { test, deploy, destroy, beforeAll, afterAll } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),       // optional, defaults to localState()
+  // profile?: string              // optional ALCHEMY_PROFILE override
+});
 ```
 
-Each `test(name, effect)` runs an Effect generator instead of an
-async function. The harness provides platform layers (`HttpClient`,
-etc.) automatically.
-
-## Deploy and destroy
-
-`deploy(Stack)` returns an Effect that plans and applies a stack,
-resolving to its outputs. `destroy(Stack)` tears it down:
+`expect` and `describe` come from the underlying runner directly:
 
 ```typescript
-import { afterAll, beforeAll, deploy, destroy } from "alchemy/Test/Bun";
+import { expect, describe } from "bun:test";   // Bun
+// or:
+import { expect, describe } from "@effect/vitest"; // Vitest
+```
+
+Credentials resolve through the same `AuthProviders` registry as
+`alchemy deploy`. The harness honors `ALCHEMY_PROFILE` (and the
+`profile` factory option) so tests pick up the same `alchemy login`
+profile your CLI uses.
+
+## Two test shapes
+
+### `test(name, effect)` — stack tests
+
+For end-to-end tests against a deployed stack: deploy your
+`Alchemy.Stack` once in `beforeAll`, then assert against its
+outputs.
+
+```typescript
 import Stack from "../alchemy.run.ts";
 
 const stack = beforeAll(deploy(Stack));
+
 afterAll.skipIf(!process.env.CI)(destroy(Stack));
-```
 
-- `beforeAll(effect)` runs the Effect once before all tests and
-  returns a lazy accessor
-- `afterAll.skipIf(!process.env.CI)` skips destroy locally for fast
-  iteration
-- On CI (`CI=true`), the stack is torn down after tests complete
-
-## Accessing outputs
-
-Use `yield* stack` inside a test to get the deployed stack's outputs:
-
-```typescript
 test(
   "worker is reachable",
   Effect.gen(function* () {
@@ -55,9 +62,53 @@ test(
 );
 ```
 
+- `beforeAll(effect)` runs once before all tests and returns a lazy
+  accessor. `yield* stack` inside a test resolves to the deployed
+  outputs.
+- `afterAll.skipIf(predicate)` skips destroy locally for fast
+  iteration. On CI the stack is torn down after tests complete.
+
+### `test.provider(name, (stack) => effect)` — provider tests
+
+For unit-testing a custom provider's CRUD lifecycle. Each
+`test.provider` invocation gets its own scratch stack with a private
+in-memory state store; `stack.deploy(...)` and `stack.destroy()`
+exercise create / update / replace / delete paths without polluting
+`.alchemy/`.
+
+```typescript
+import { Table } from "alchemy/AWS/DynamoDB";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+
+test.provider(
+  "create, update, delete table",
+  (stack) => Effect.gen(function* () {
+    const table = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Table("TestTable", {
+          partitionKey: "id",
+          attributes: { id: "S" },
+        });
+      }),
+    );
+
+    const actual = yield* DynamoDB.describeTable({
+      TableName: table.tableName,
+    });
+    expect(actual.Table?.TableArn).toEqual(table.tableArn);
+
+    yield* stack.destroy();
+  }),
+);
+```
+
+Inside a `test.provider` body the configured `providers` layer is
+already in scope, so you can call provider SDKs (here
+`DynamoDB.describeTable`) directly.
+
 ## HTTP assertions
 
-`HttpClient` is provided automatically by the test harness:
+`HttpClient` is provided automatically by both runners:
 
 ```typescript
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -79,53 +130,34 @@ test(
 );
 ```
 
+## Test variants
+
+Both runners expose the same skip / only / todo modifiers:
+
+- `test.skip(name, effect)` / `test.skipIf(condition)(name, effect)`
+- `test.only(name, effect)` (Bun only)
+- `test.todo(name, effect)` (Bun only)
+- `test.provider.skip(name, fn)` /
+  `test.provider.skipIf(condition)(name, fn)`
+- `afterAll.skipIf(predicate)(effect)` — skip teardown locally,
+  run on CI
+
 ## State in tests
 
-Tests use the same state management as production deploys. By
-default, `LocalState` persists to `.alchemy/` so subsequent test
-runs reuse existing resources (making re-runs fast).
+`Test.make({ state })` controls the state store used by top-level
+`deploy(Stack)` / `destroy(Stack)`. Defaults to `localState()` which
+persists to `.alchemy/`, so re-runs reuse existing resources.
 
-For unit testing providers, Alchemy provides an in-memory state
-store:
-
-```typescript
-import * as TestState from "alchemy/Test/TestState";
-
-// Start with empty state
-const state = TestState.defaultState;
-
-// Or seed with existing resources
-const state = TestState.state({
-  MyResource: {
-    /* ResourceState */
-  },
-});
-```
-
-## Test CLI
-
-The test harness includes a `TestCli` that auto-approves plans and
-suppresses interactive prompts. This is provided automatically —
-you don't need to configure it.
-
-## Vitest support
-
-Alchemy also supports Vitest with the same API:
-
-```typescript
-import { beforeAll, deploy, expect, test } from "alchemy/Test/Vitest";
-```
-
-The Vitest harness provides identical functionality with Vitest's
-test runner instead of Bun's.
+`test.provider` always uses a fresh in-memory store per test —
+seed pre-existing resources by calling `state.set(...)` at the top
+of the test body if needed.
 
 ## Async and streaming pipelines
 
-The same harness works for offline jobs and streaming pipelines —
-write to the source, await the sink, no mocks:
+The same harness works for streaming pipelines — write to the
+source, await the sink, no mocks:
 
 ```typescript
-// Async / streaming jobs — same pattern.
 test(
   "DynamoDB stream → SQS pipeline",
   Effect.gen(function* () {
@@ -136,17 +168,16 @@ test(
       Item: { id: { S: "1" } },
     });
 
-    // wait for the Lambda to fan out into the queue
     const msg = yield* SQS.receive(queueUrl).pipe(Effect.timeout("10 seconds"));
     expect(msg.Body).toContain('"id":"1"');
   }),
 );
 ```
 
-- **No mocks** — Your tests run against real R2, real DynamoDB, real
+- **No mocks** — Tests run against real R2, real DynamoDB, real
   Workers. What passes locally passes in prod.
-- **Per-suite isolation** — Stage names from PR or test ID. Two suites
-  run the same tests in parallel without collision.
-- **Effect-aware test runner** — Vitest and Bun test wrapped with
-  Effect support. Yield from any test, get typed errors at the
-  assertion line.
+- **Per-suite isolation** — Stage names from PR or test ID. Two
+  suites run the same tests in parallel without collision.
+- **Effect-aware test runner** — Vitest and Bun wrapped with Effect
+  support. Yield from any test, get typed errors at the assertion
+  line.
