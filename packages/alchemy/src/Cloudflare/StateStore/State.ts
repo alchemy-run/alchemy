@@ -535,6 +535,13 @@ const readSecretViaEdge = (
       const body = yield* response.text.pipe(
         Effect.catch(() => Effect.succeed("")),
       );
+      // TEMP(sam): dump the full body so we can capture the exact
+      // Cloudflare error page when the probe fails in the wild. Drop
+      // this once we've confirmed the routing fix covers all the
+      // observed failure modes.
+      yield* Effect.logWarning(
+        `Secret probe failed (${response.status}) at ${session.url}\n${body}`,
+      );
       const isHtml = body.trimStart().toLowerCase().startsWith("<!doctype");
       const detail = isHtml
         ? `Cloudflare's edge served an HTML error page instead of routing to the preview ` +
