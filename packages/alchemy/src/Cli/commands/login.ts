@@ -22,8 +22,8 @@ import {
   envFile,
   importStack,
   instrumentCommand,
-  main,
   profile,
+  script,
   stage,
 } from "./_shared.ts";
 
@@ -37,7 +37,7 @@ const loginConfigure = Flag.boolean("configure").pipe(
 export const loginCommand = Command.make(
   "login",
   {
-    main,
+    main: script,
     envFile,
     stage,
     profile,

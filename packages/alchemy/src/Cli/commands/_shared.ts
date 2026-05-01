@@ -131,7 +131,7 @@ export const force = Flag.boolean("force").pipe(
   Flag.withDefault(false),
 );
 
-export const main = Argument.file("main", {
+export const script = Argument.file("main", {
   mustExist: true,
 }).pipe(
   Argument.withDescription("Main file to deploy, defaults to alchemy.run.ts"),

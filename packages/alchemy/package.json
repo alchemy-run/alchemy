@@ -124,6 +124,12 @@
       "worker": "./src/Cli/commands/index.ts",
       "import": "./lib/Cli/commands/index.js"
     },
+    "./Cli/InkCLI": {
+      "types": "./lib/Cli/InkCLI.d.ts",
+      "bun": "./src/Cli/InkCLI.tsx",
+      "worker": "./src/Cli/InkCLI.tsx",
+      "import": "./lib/Cli/InkCLI.js"
+    },
     "./Cloudflare": {
       "types": "./lib/Cloudflare/index.d.ts",
       "bun": "./src/Cloudflare/index.ts",

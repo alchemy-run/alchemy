@@ -1,7 +1,7 @@
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { execStack, ExecStackOptions } from "alchemy/Cli/Commands";
 import { inkCLI } from "alchemy/Cli/InkCLI";
-import { PlatformServices, runMain } from "alchemy/Util/PlatformServices";
+import { PlatformServices, runMain } from "alchemy/Util";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

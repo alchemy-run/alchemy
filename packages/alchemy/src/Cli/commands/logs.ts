@@ -19,11 +19,11 @@ import {
   formatLocalTimestamp,
   importStack,
   instrumentCommand,
-  main,
   parseResourceFilter,
   parseSince,
   profile,
   resourceFilter,
+  script,
   stage,
   TAIL_COLORS,
   TAIL_RESET,
@@ -45,7 +45,7 @@ const logsSince = Flag.string("since").pipe(
 export const logsCommand = Command.make(
   "logs",
   {
-    main,
+    main: script,
     envFile,
     stage,
     profile,

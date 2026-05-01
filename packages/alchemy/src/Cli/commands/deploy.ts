@@ -26,8 +26,8 @@ import {
   force,
   importStack,
   instrumentCommand,
-  main,
   profile,
+  script,
   stage,
   yes,
 } from "./_shared.ts";
@@ -163,7 +163,7 @@ export const deployCommand = Command.make(
   {
     dryRun: dryRunFlag,
     force,
-    main,
+    main: script,
     envFile,
     stage,
     yes,
@@ -177,7 +177,7 @@ export const destroyCommand = Command.make(
   "destroy",
   {
     dryRun: dryRunFlag,
-    main,
+    main: script,
     envFile,
     stage,
     yes,
@@ -197,7 +197,7 @@ export const destroyCommand = Command.make(
 export const planCommand = Command.make(
   "plan",
   {
-    main,
+    main: script,
     envFile,
     stage,
     profile,

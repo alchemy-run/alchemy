@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
-import { envFile, force, main, profile, stage } from "./_shared.ts";
+import { envFile, force, profile, script, stage } from "./_shared.ts";
 import { ExecStackOptions } from "./deploy.ts";
 
 // Source iteration uses unbundled exec.ts so --watch sees source-file changes;
@@ -20,7 +20,7 @@ export const devCommand = Command.make(
   "dev",
   {
     force,
-    main,
+    main: script,
     envFile,
     stage,
     profile,

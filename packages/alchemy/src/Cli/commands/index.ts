@@ -4,6 +4,7 @@ export * from "./deploy.ts";
 export * from "./dev.ts";
 export * from "./login.ts";
 export * from "./logs.ts";
+export * from "./main.ts";
 export * from "./profile.ts";
 export * from "./state.ts";
 export * from "./tail.ts";

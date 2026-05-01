@@ -19,10 +19,10 @@ import {
   formatLocalTimestamp,
   importStack,
   instrumentCommand,
-  main,
   parseResourceFilter,
   profile,
   resourceFilter,
+  script,
   stage,
   TAIL_COLORS,
   TAIL_RESET,
@@ -31,7 +31,7 @@ import {
 export const tailCommand = Command.make(
   "tail",
   {
-    main,
+    main: script,
     envFile,
     stage,
     profile,
