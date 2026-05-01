@@ -1301,18 +1301,10 @@ export const LiveWorkerProvider = () =>
           "path" in assets &&
           "hash" in assets
         ) {
-          // The caller (typically a Build resource) has already produced a
-          // deterministic input hash. Use it as the canonical asset hash for
-          // both diffing and state, and skip recomputing one from the
-          // directory contents. The directory is still walked to build the
-          // upload manifest, but the resulting `hash` field comes from the
-          // caller — not from a non-deterministic dist walk that would make
-          // every deploy look like a change.
-          const result = yield* readAssets({
+          return yield* readAssets({
             directory: assets.path as string,
             config: assets.config,
           });
-          return { ...result, hash: assets.hash };
         }
 
         // Handle string path or AssetsProps
@@ -1971,27 +1963,15 @@ ${[
           });
           return input !== output.hash?.input;
         }
-        // For asset diffing, prefer the caller-provided hash on
-        // `AssetsWithHash` (e.g. `Build.hash` from a `StaticSite`).
-        // That hash is a deterministic function of the build *inputs*,
-        // so it's stable across non-deterministic build outputs (Astro/
-        // Vite shuffling content-hashed filenames) and isn't subject to
-        // the race against `Build.update` writing into the same dist
-        // directory. Walking the dist on every diff was both wasteful
-        // and a source of false "Worker updated" diffs because the
-        // recomputed hash drifted between deploys even when no input
-        // had changed. Only fall back to walking when the caller hasn't
-        // pre-computed a hash (raw string path or bare `AssetsProps`).
-        const assetsHashEff =
-          props.assets &&
-          typeof props.assets === "object" &&
-          "path" in props.assets &&
-          "hash" in props.assets
-            ? Effect.succeed((props.assets as AssetsWithHash).hash)
-            : prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash));
+        // The asset hash comes from walking the actual `outdir` —
+        // whatever bytes are on disk are what we'd be deploying, so
+        // that's what we diff against. Non-deterministic build outputs
+        // (e.g. Astro/Vite shuffling content-hashed chunk filenames)
+        // are a property of the build, not something we should paper
+        // over here. The bundle hash is similarly recomputed.
         const [assetsHash, bundleHash] = yield* Effect.all(
           [
-            assetsHashEff,
+            prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash)),
             prepareBundle(id, props).pipe(Effect.map((b) => b.hash)),
           ],
           { concurrency: "unbounded" },
