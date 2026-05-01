@@ -149,7 +149,13 @@ jobs:
         run: |
           set -euo pipefail
           MARKER="<!-- pr-package-comment -->"
-          BODY=$(printf '%s\n\nInstall the packages built from this commit:\n\n**alchemy**\n```sh\nbun add https://pkg.ing/alchemy/%s\n```\n\n**@alchemy.run/better-auth**\n```sh\nbun add https://pkg.ing/@alchemy.run/better-auth/%s\n```\n\n**@alchemy.run/pr-package**\n```sh\nbun add https://pkg.ing/@alchemy.run/pr-package/%s\n```\n' "$MARKER" "$SHORT_SHA" "$SHORT_SHA" "$SHORT_SHA")
+          # Use `bun add <name>@<url>` instead of `bun add <url>`. Without an
+          # explicit name, bun's resolver hits a DependencyLoop bug when the
+          # consumer already has the same package name resolved from npm
+          # (oven-sh/bun#5789, oven-sh/bun#17946). The aliased form bypasses
+          # the buggy reconciliation path and works on fresh and existing
+          # projects alike.
+          BODY=$(printf '%s\n\nInstall the packages built from this commit:\n\n**alchemy**\n```sh\nbun add alchemy@https://pkg.ing/alchemy/%s\n```\n\n**@alchemy.run/better-auth**\n```sh\nbun add @alchemy.run/better-auth@https://pkg.ing/@alchemy.run/better-auth/%s\n```\n\n**@alchemy.run/pr-package**\n```sh\nbun add @alchemy.run/pr-package@https://pkg.ing/@alchemy.run/pr-package/%s\n```\n' "$MARKER" "$SHORT_SHA" "$SHORT_SHA" "$SHORT_SHA")
 
           existing=$(gh api --paginate \
             "repos/${REPO}/issues/${PR_NUMBER}/comments" \
