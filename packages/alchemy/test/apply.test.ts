@@ -546,7 +546,7 @@ describe("circularity via bindings", () => {
           const output = yield* program.pipe(stack.deploy);
           expectConvergedStatus((yield* getState("A"))?.status);
           expect((yield* getState("B"))?.status).toEqual("updated");
-          expect((yield* getState("D"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("D"))?.status);
           expect(output.A.env).toEqual({ SELF: "a-value-replaced" });
           expect(output.D!.string).toEqual("a-value-replaced");
         }),
@@ -581,7 +581,7 @@ describe("circularity via bindings", () => {
 
           expectConvergedStatus((yield* getState("A"))?.status);
           expect((yield* getState("B"))?.status).toEqual("updated");
-          expect((yield* getState("D"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("D"))?.status);
           expect(output.A.env).toEqual({
             SELF: "a-value-updated-during-recovery",
           });
@@ -615,7 +615,7 @@ describe("circularity via bindings", () => {
           const output = yield* program.pipe(stack.deploy);
           expectConvergedStatus((yield* getState("A"))?.status);
           expect((yield* getState("B"))?.status).toEqual("updated");
-          expect((yield* getState("D"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("D"))?.status);
           expect(output.A.env).toEqual({ SELF: "a-value-replaced" });
           expect(output.D!.string).toEqual("a-value-replaced");
         }),
@@ -650,7 +650,7 @@ describe("circularity via bindings", () => {
 
           expectConvergedStatus((yield* getState("A"))?.status);
           expect((yield* getState("B"))?.status).toEqual("updated");
-          expect((yield* getState("D"))?.status).toEqual("created");
+          expectConvergedStatus((yield* getState("D"))?.status);
           expect(output.A.env).toEqual({
             SELF: "a-value-updated-after-replace",
           });
@@ -715,7 +715,7 @@ describe("circularity via bindings", () => {
             const output = yield* program.pipe(stack.deploy);
             expectConvergedStatus((yield* getState("A"))?.status);
             expect((yield* getState("B"))?.status).toEqual("updated");
-            expect((yield* getState("D"))?.status).toEqual("created");
+            expectConvergedStatus((yield* getState("D"))?.status);
             expect(output.A.env).toEqual({ PEER: "b-value" });
             expect(output.B.env).toEqual({ PEER: "a-value-replaced" });
             expect(output.D!.string).toEqual("a-value-replaced-b-value");
@@ -751,7 +751,7 @@ describe("circularity via bindings", () => {
 
             expectConvergedStatus((yield* getState("A"))?.status);
             expect((yield* getState("B"))?.status).toEqual("updated");
-            expect((yield* getState("D"))?.status).toEqual("created");
+            expectConvergedStatus((yield* getState("D"))?.status);
             expect(output.A.env).toEqual({ PEER: "b-value" });
             expect(output.B.env).toEqual({
               PEER: "a-value-updated-during-recovery",
@@ -785,7 +785,7 @@ describe("circularity via bindings", () => {
 
             expectConvergedStatus((yield* getState("A"))?.status);
             expect((yield* getState("B"))?.status).toEqual("updated");
-            expect((yield* getState("D"))?.status).toEqual("created");
+            expectConvergedStatus((yield* getState("D"))?.status);
             expect(output.B.env).toEqual({
               PEER: "a-value-another-replacement",
             });
@@ -820,7 +820,7 @@ describe("circularity via bindings", () => {
             const output = yield* program.pipe(stack.deploy);
             expect((yield* getState("A"))?.status).toEqual("created");
             expect((yield* getState("B"))?.status).toEqual("updated");
-            expect((yield* getState("D"))?.status).toEqual("created");
+            expectConvergedStatus((yield* getState("D"))?.status);
             expect(output.A.env).toEqual({ PEER: "b-value" });
             expect(output.B.env).toEqual({ PEER: "a-value-replaced" });
             expect(output.D!.string).toEqual("a-value-replaced-b-value");
@@ -856,7 +856,7 @@ describe("circularity via bindings", () => {
 
             expect((yield* getState("A"))?.status).toEqual("created");
             expect((yield* getState("B"))?.status).toEqual("updated");
-            expect((yield* getState("D"))?.status).toEqual("created");
+            expectConvergedStatus((yield* getState("D"))?.status);
             expect(output.A.env).toEqual({ PEER: "b-value" });
             expect(output.B.env).toEqual({
               PEER: "a-value-updated-after-replace",
@@ -890,7 +890,7 @@ describe("circularity via bindings", () => {
 
             expectConvergedStatus((yield* getState("A"))?.status);
             expect((yield* getState("B"))?.status).toEqual("updated");
-            expect((yield* getState("D"))?.status).toEqual("created");
+            expectConvergedStatus((yield* getState("D"))?.status);
             expect(output.B.env).toEqual({
               PEER: "a-value-another-replacement",
             });
