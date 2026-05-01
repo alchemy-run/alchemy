@@ -1,0 +1,38 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "alchemy.run.ts",
+    "next.config.mjs",
+    "open-next.config.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "next-env.d.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".alchemy", ".open-next", ".wrangler"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "jsx": "preserve",
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "incremental": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "plugins": [{ "name": "next" }]
+  },
+  "references": [
+    {
+      "path": "../../packages/alchemy/tsconfig.json"
+    }
+  ]
+}

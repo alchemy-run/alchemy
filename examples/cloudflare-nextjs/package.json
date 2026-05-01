@@ -1,0 +1,33 @@
+{
+  "name": "cloudflare-nextjs-example",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alchemy-run/alchemy-effect"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "next build",
+    "build:worker": "next build && opennextjs-cloudflare build",
+    "deploy": "bun run build:worker && alchemy deploy",
+    "destroy": "alchemy destroy",
+    "dev": "next dev",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@opennextjs/cloudflare": "^1.17.1",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "next": "^16.2.4",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.9.3",
+    "wrangler": "catalog:"
+  }
+}

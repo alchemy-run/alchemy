@@ -1,0 +1,15 @@
+node_modules
+.next
+.open-next
+.wrangler
+.alchemy
+out
+build
+*.tsbuildinfo
+next-env.d.ts
+.env*.local
+
+# Override the root .gitignore which excludes `wrangler.jsonc` globally;
+# this example needs to commit its sanity-check wrangler config so that
+# `opennextjs-cloudflare build` works out of the box.
+!wrangler.jsonc
