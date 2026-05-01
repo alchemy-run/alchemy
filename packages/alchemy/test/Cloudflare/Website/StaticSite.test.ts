@@ -2,6 +2,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -123,7 +124,7 @@ const htmlPage = (marker: string) => `<!doctype html>
 const expectUrlAbsent = (
   url: string,
   marker: string,
-  options: { timeout?: string },
+  options: { timeout?: Duration.Input },
 ) =>
   Effect.gen(function* () {
     yield* expectUrlContains(url, "<", { ...options, label: "page exists" });
