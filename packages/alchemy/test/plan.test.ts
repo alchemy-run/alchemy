@@ -2189,6 +2189,7 @@ describe("unsatisfied cycle detection", () => {
       expect(Exit.isSuccess(exit)).toBe(true);
     }),
   );
+
 });
 
 describe("unresolved plan inputs in diff should conservatively update", () => {
