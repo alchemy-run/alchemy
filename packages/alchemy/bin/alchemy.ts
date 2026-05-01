@@ -1,4 +1,4 @@
-import { runMain } from "alchemy/Util";
+import { runMain } from "alchemy/Util/PlatformServices";
 
 import { main } from "alchemy/Cli";
 
