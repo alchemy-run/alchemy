@@ -26,7 +26,7 @@ export const withLock = <A, E, R>(
       await fs.writeFile(lockPath, "", { flag: "a" });
       return await lockfile.lock(lockPath, {
         retries: { retries: 600, minTimeout: 50, maxTimeout: 50 },
-        stale: 60_000,
+        stale: 5_000,
       });
     }),
     () => effect,
