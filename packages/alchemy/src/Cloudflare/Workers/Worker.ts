@@ -1301,10 +1301,18 @@ export const LiveWorkerProvider = () =>
           "path" in assets &&
           "hash" in assets
         ) {
-          return yield* readAssets({
+          // The caller (typically a Build resource) has already produced a
+          // deterministic input hash. Use it as the canonical asset hash for
+          // both diffing and state, and skip recomputing one from the
+          // directory contents. The directory is still walked to build the
+          // upload manifest, but the resulting `hash` field comes from the
+          // caller — not from a non-deterministic dist walk that would make
+          // every deploy look like a change.
+          const result = yield* readAssets({
             directory: assets.path as string,
             config: assets.config,
           });
+          return { ...result, hash: assets.hash };
         }
 
         // Handle string path or AssetsProps
@@ -1499,7 +1507,7 @@ ${[
           getCompatibility(props);
 
         yield* Effect.promise(async () => {
-          const vite = await loadVite();
+          const vite = await loadVite(props.vite?.rootDir);
           const builder = await vite.createBuilder(
             {
               root: props.vite?.rootDir,
@@ -1579,7 +1587,20 @@ ${[
         Effect.gen(function* () {
           if (props.vite) {
             const [{ assets, bundle }, input] = yield* Effect.all(
-              [viteBuild(props), hashDirectory(props.vite)],
+              [
+                viteBuild(props),
+                // hashDirectory expects `{ cwd, memo }`. The vite props
+                // store the project root under `rootDir`, so map it
+                // here. Without this, `cwd` falls back to
+                // `process.cwd()` and the input hash is computed over
+                // the wrong directory tree (often the entire monorepo
+                // root), making it both slow and unable to detect
+                // changes scoped to the actual Vite project.
+                hashDirectory({
+                  cwd: props.vite.rootDir,
+                  memo: props.vite.memo,
+                }),
+              ],
               { concurrency: "unbounded" },
             );
             return { assets, bundle, input };
@@ -1944,22 +1965,33 @@ ${[
         output: Worker["Attributes"],
       ) {
         if (props.vite) {
-          const input = yield* hashDirectory(props.vite);
+          const input = yield* hashDirectory({
+            cwd: props.vite.rootDir,
+            memo: props.vite.memo,
+          });
           return input !== output.hash?.input;
         }
-        // Always recompute both hashes by walking `dist/` (assets) and
-        // re-bundling the worker. The previous short-circuit
-        // (`Effect.succeed(output.hash.assets)`) compared the cached
-        // hash to itself and could never detect drift, and the
-        // `props.assets.hash` form is the *input* (source) hash which
-        // misses non-deterministic build output (e.g. Astro/Vite
-        // shuffling content-hashed filenames between builds). The
-        // result of either shortcut was deploying a new bundle on top
-        // of stale assets and 404'ing in production. Re-walking is the
-        // only correct comparison.
+        // For asset diffing, prefer the caller-provided hash on
+        // `AssetsWithHash` (e.g. `Build.hash` from a `StaticSite`).
+        // That hash is a deterministic function of the build *inputs*,
+        // so it's stable across non-deterministic build outputs (Astro/
+        // Vite shuffling content-hashed filenames) and isn't subject to
+        // the race against `Build.update` writing into the same dist
+        // directory. Walking the dist on every diff was both wasteful
+        // and a source of false "Worker updated" diffs because the
+        // recomputed hash drifted between deploys even when no input
+        // had changed. Only fall back to walking when the caller hasn't
+        // pre-computed a hash (raw string path or bare `AssetsProps`).
+        const assetsHashEff =
+          props.assets &&
+          typeof props.assets === "object" &&
+          "path" in props.assets &&
+          "hash" in props.assets
+            ? Effect.succeed((props.assets as AssetsWithHash).hash)
+            : prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash));
         const [assetsHash, bundleHash] = yield* Effect.all(
           [
-            prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash)),
+            assetsHashEff,
             prepareBundle(id, props).pipe(Effect.map((b) => b.hash)),
           ],
           { concurrency: "unbounded" },
@@ -2438,16 +2470,36 @@ let _viteModule: ViteModule | null = null;
  * Dynamically load Vite from the project root. Falls back to the bundled
  * copy if the project doesn't have its own Vite installation.
  */
-async function loadVite(): Promise<ViteModule> {
+async function loadVite(projectRoot?: string): Promise<ViteModule> {
   if (_viteModule) return _viteModule;
 
-  const projectRoot = process.cwd();
   let vitePath: string;
 
   try {
-    // Resolve "vite" from the project root, not from vinext's location
-    const require = createRequire(path.join(projectRoot, "package.json"));
-    vitePath = require.resolve("vite");
+    // Resolve `vite` starting from the user's Vite project root, then
+    // fall back to `process.cwd()`. The project-root candidate matters
+    // in monorepos where the Vite project is nested under a workspace
+    // root that doesn't itself depend on vite — without it, Node's
+    // resolution walks past the project's pinned vite and into the
+    // user's home node_modules, which often holds an older copy.
+    const candidates = [projectRoot, process.cwd()].filter(
+      (p): p is string => !!p,
+    );
+    const seen = new Set<string>();
+    let resolved: string | undefined;
+    for (const root of candidates) {
+      if (seen.has(root)) continue;
+      seen.add(root);
+      try {
+        const require = createRequire(path.join(root, "package.json"));
+        resolved = require.resolve("vite");
+        break;
+      } catch {
+        // try next candidate
+      }
+    }
+    if (!resolved) throw new Error("vite not resolvable");
+    vitePath = resolved;
   } catch {
     // Fallback: use the Vite that ships with vinext (works for non-linked installs)
     vitePath = "vite";
