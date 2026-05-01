@@ -6,9 +6,6 @@ export default class InternalWorker extends Cloudflare.Worker<InternalWorker>()(
   "InternalWorker",
   {
     main: import.meta.filename,
-    compatibility: {
-      date: "2024-01-01",
-    },
   },
   Effect.gen(function* () {
     return {

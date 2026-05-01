@@ -1,6 +1,6 @@
 import * as AWS from "@/AWS";
 import { Subnet, Vpc } from "@/AWS/EC2";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -8,17 +8,18 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const { test } = Test.make({ providers: AWS.providers() });
+
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-test(
-  "create, update, delete subnet",
+test.provider("create, update, delete subnet", (stack) =>
   Effect.gen(function* () {
-    yield* destroy();
+    yield* stack.destroy();
 
-    const { vpc, subnet } = yield* test.deploy(
+    const { vpc, subnet } = yield* stack.deploy(
       Effect.gen(function* () {
         const vpc = yield* Vpc("TestVpc", {
           cidrBlock: "10.0.0.0/16",
@@ -42,7 +43,7 @@ test(
     expect(actualSubnet.Subnets?.[0]?.MapPublicIpOnLaunch).toEqual(false);
 
     // Update subnet attributes
-    const { subnet: updatedSubnet } = yield* test.deploy(
+    const { subnet: updatedSubnet } = yield* stack.deploy(
       Effect.gen(function* () {
         const vpc = yield* Vpc("TestVpc", {
           cidrBlock: "10.0.0.0/16",
@@ -63,10 +64,10 @@ test(
     });
 
     // Delete subnet and VPC
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* assertSubnetDeleted(subnet.subnetId);
-  }).pipe(Effect.provide(AWS.providers()), logLevel),
+  }).pipe(logLevel),
 );
 
 const expectSubnetAttribute = Effect.fn(function* (props: {

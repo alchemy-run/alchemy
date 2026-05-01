@@ -1,4 +1,6 @@
-import { afterAll, beforeAll, destroy, test } from "@/Test/Vitest";
+import * as AWS from "@/AWS";
+import * as Core from "@/Test/Core";
+import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -7,6 +9,10 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { describe } from "vitest";
 
 import DynamoDBTestFunctionLive, { DynamoDBTestFunction } from "./handler";
+
+const testOptions = { providers: AWS.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "DynamoDBBindings");
 
 const readinessPolicy = Schedule.fixed("2 seconds").pipe(
   Schedule.both(Schedule.recurs(9)),
@@ -21,10 +27,10 @@ describe("DynamoDB Bindings", () => {
       yield* Effect.logInfo(
         "DynamoDB test setup: destroying previous resources",
       );
-      yield* destroy();
+      yield* sharedStack.destroy();
 
       yield* Effect.logInfo("DynamoDB test setup: deploying fixture");
-      const { functionUrl } = yield* test.deploy(
+      const { functionUrl } = yield* sharedStack.deploy(
         Effect.gen(function* () {
           return yield* DynamoDBTestFunction;
         }).pipe(Effect.provide(DynamoDBTestFunctionLive)),
@@ -41,7 +47,6 @@ describe("DynamoDB Bindings", () => {
         `DynamoDB test setup: probing readiness at ${readinessUrl} (20s budget)`,
       );
 
-      // Wait for the function to be ready
       yield* HttpClient.get(readinessUrl).pipe(
         Effect.flatMap((response) =>
           response.status === 200
@@ -62,11 +67,10 @@ describe("DynamoDB Bindings", () => {
     { timeout: 120_000 },
   );
 
-  afterAll(destroy(), { timeout: 60_000 });
+  afterAll(sharedStack.destroy(), { timeout: 60_000 });
 
   describe("PutItem", () => {
-    test(
-      "puts an item into the table",
+    test.provider("puts an item into the table", (_stack) =>
       Effect.gen(function* () {
         const response = yield* HttpClient.execute(
           HttpClientRequest.bodyJsonUnsafe(
@@ -81,10 +85,8 @@ describe("DynamoDB Bindings", () => {
   });
 
   describe("GetItem", () => {
-    test(
-      "gets an existing item from the table",
+    test.provider("gets an existing item from the table", (_stack) =>
       Effect.gen(function* () {
-        // First put an item
         yield* HttpClient.execute(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put`),
@@ -92,7 +94,6 @@ describe("DynamoDB Bindings", () => {
           ),
         );
 
-        // Then get it
         const response = yield* HttpClient.get(
           `${baseUrl}/get?pk=${encodeURIComponent("get-test#1")}&sk=item`,
         ).pipe(Effect.flatMap((r) => r.json));
@@ -104,8 +105,7 @@ describe("DynamoDB Bindings", () => {
       }),
     );
 
-    test(
-      "returns undefined for non-existent item",
+    test.provider("returns undefined for non-existent item", (_stack) =>
       Effect.gen(function* () {
         const response = yield* HttpClient.get(
           `${baseUrl}/get?pk=${encodeURIComponent("non-existent")}&sk=item`,
@@ -117,8 +117,7 @@ describe("DynamoDB Bindings", () => {
   });
 
   describe("DescribeTable", () => {
-    test(
-      "describes the bound table",
+    test.provider("describes the bound table", (_stack) =>
       Effect.gen(function* () {
         const response = yield* HttpClient.get(
           `${baseUrl}/describe-table`,
@@ -134,8 +133,7 @@ describe("DynamoDB Bindings", () => {
   });
 
   describe("DescribeTimeToLive", () => {
-    test(
-      "describes table ttl configuration",
+    test.provider("describes table ttl configuration", (_stack) =>
       Effect.gen(function* () {
         const response = yield* HttpClient.get(`${baseUrl}/describe-ttl`).pipe(
           Effect.flatMap((r) => r.json),
@@ -147,8 +145,7 @@ describe("DynamoDB Bindings", () => {
   });
 
   describe("BatchWriteItem", () => {
-    test(
-      "writes multiple items through the bound table",
+    test.provider("writes multiple items through the bound table", (_stack) =>
       Effect.gen(function* () {
         const response = yield* HttpClient.execute(
           HttpClientRequest.bodyJsonUnsafe(
@@ -186,8 +183,7 @@ describe("DynamoDB Bindings", () => {
   });
 
   describe("BatchGetItem", () => {
-    test(
-      "reads multiple items through the bound table",
+    test.provider("reads multiple items through the bound table", (_stack) =>
       Effect.gen(function* () {
         yield* HttpClient.execute(
           HttpClientRequest.bodyJsonUnsafe(
@@ -242,8 +238,7 @@ describe("DynamoDB Bindings", () => {
   });
 
   describe("UpdateTimeToLive", () => {
-    test(
-      "updates table ttl configuration",
+    test.provider("updates table ttl configuration", (_stack) =>
       Effect.gen(function* () {
         const response = yield* HttpClient.execute(
           HttpClientRequest.bodyJsonUnsafe(
@@ -261,52 +256,132 @@ describe("DynamoDB Bindings", () => {
   });
 
   describe("ExecuteStatement", () => {
-    test(
+    test.provider(
       "executes a PartiQL statement against the bound table",
-      Effect.gen(function* () {
-        yield* HttpClient.execute(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/put`),
-            { pk: "statement#1", sk: "item", data: "statement data" },
-          ),
-        );
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* HttpClient.execute(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/put`),
+              { pk: "statement#1", sk: "item", data: "statement data" },
+            ),
+          );
 
-        const response = yield* HttpClient.execute(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/execute-statement`),
-            { pk: "statement#1", sk: "item" },
-          ),
-        ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* HttpClient.execute(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/execute-statement`),
+              { pk: "statement#1", sk: "item" },
+            ),
+          ).pipe(Effect.flatMap((r) => r.json));
 
-        expect((response as any).items).toHaveLength(1);
-        expect((response as any).items[0].data.S).toBe("statement data");
-      }),
+          expect((response as any).items).toHaveLength(1);
+          expect((response as any).items[0].data.S).toBe("statement data");
+        }),
     );
   });
 
   describe("BatchExecuteStatement", () => {
-    test(
+    test.provider(
       "executes PartiQL statements against the bound table",
-      Effect.gen(function* () {
-        yield* HttpClient.execute(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/batch-write`),
-            {
-              RequestItems: {
-                [sourceTableId]: [
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* HttpClient.execute(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/batch-write`),
+              {
+                RequestItems: {
+                  [sourceTableId]: [
+                    {
+                      PutRequest: {
+                        Item: {
+                          pk: { S: "batch-statement#1" },
+                          sk: { S: "item" },
+                          data: { S: "first item" },
+                        },
+                      },
+                    },
+                    {
+                      PutRequest: {
+                        Item: {
+                          pk: { S: "batch-statement#2" },
+                          sk: { S: "item" },
+                          data: { S: "second item" },
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            ),
+          );
+
+          const response = yield* HttpClient.execute(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/batch-execute-statement`),
+              {
+                first: { pk: "batch-statement#1", sk: "item" },
+                second: { pk: "batch-statement#2", sk: "item" },
+              },
+            ),
+          ).pipe(Effect.flatMap((r) => r.json));
+
+          expect((response as any).responses).toHaveLength(2);
+        }),
+    );
+  });
+
+  describe("ExecuteTransaction", () => {
+    test.provider(
+      "executes a PartiQL transaction against the table",
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* HttpClient.execute(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/put`),
+              { pk: "tx#1", sk: "item1", data: "first" },
+            ),
+          );
+          yield* HttpClient.execute(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/put`),
+              { pk: "tx#1", sk: "item2", data: "second" },
+            ),
+          );
+
+          const response = yield* HttpClient.execute(
+            HttpClientRequest.post(`${baseUrl}/execute-transaction`),
+          ).pipe(Effect.flatMap((r) => r.json));
+
+          expect((response as any).responses).toHaveLength(2);
+        }),
+    );
+  });
+
+  describe("TransactWriteItems", () => {
+    test.provider(
+      "writes items transactionally through the bound table",
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* HttpClient.execute(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/transact-write`),
+              {
+                TransactItems: [
                   {
-                    PutRequest: {
+                    Put: {
+                      Table: sourceTableId,
                       Item: {
-                        pk: { S: "batch-statement#1" },
+                        pk: { S: "transact-write#1" },
                         sk: { S: "item" },
                         data: { S: "first item" },
                       },
                     },
                   },
                   {
-                    PutRequest: {
+                    Put: {
+                      Table: sourceTableId,
                       Item: {
-                        pk: { S: "batch-statement#2" },
+                        pk: { S: "transact-write#2" },
                         sk: { S: "item" },
                         data: { S: "second item" },
                       },
@@ -314,162 +389,85 @@ describe("DynamoDB Bindings", () => {
                   },
                 ],
               },
-            },
-          ),
-        );
+            ),
+          ).pipe(Effect.flatMap((r) => r.json));
 
-        const response = yield* HttpClient.execute(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/batch-execute-statement`),
-            {
-              first: { pk: "batch-statement#1", sk: "item" },
-              second: { pk: "batch-statement#2", sk: "item" },
-            },
-          ),
-        ).pipe(Effect.flatMap((r) => r.json));
-
-        expect((response as any).responses).toHaveLength(2);
-      }),
-    );
-  });
-
-  describe("ExecuteTransaction", () => {
-    test(
-      "executes a PartiQL transaction against the table",
-      Effect.gen(function* () {
-        yield* HttpClient.execute(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/put`),
-            { pk: "tx#1", sk: "item1", data: "first" },
-          ),
-        );
-        yield* HttpClient.execute(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/put`),
-            { pk: "tx#1", sk: "item2", data: "second" },
-          ),
-        );
-
-        const response = yield* HttpClient.execute(
-          HttpClientRequest.post(`${baseUrl}/execute-transaction`),
-        ).pipe(Effect.flatMap((r) => r.json));
-
-        expect((response as any).responses).toHaveLength(2);
-      }),
-    );
-  });
-
-  describe("TransactWriteItems", () => {
-    test(
-      "writes items transactionally through the bound table",
-      Effect.gen(function* () {
-        const response = yield* HttpClient.execute(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/transact-write`),
-            {
-              TransactItems: [
-                {
-                  Put: {
-                    Table: sourceTableId,
-                    Item: {
-                      pk: { S: "transact-write#1" },
-                      sk: { S: "item" },
-                      data: { S: "first item" },
-                    },
-                  },
-                },
-                {
-                  Put: {
-                    Table: sourceTableId,
-                    Item: {
-                      pk: { S: "transact-write#2" },
-                      sk: { S: "item" },
-                      data: { S: "second item" },
-                    },
-                  },
-                },
-              ],
-            },
-          ),
-        ).pipe(Effect.flatMap((r) => r.json));
-
-        expect((response as any).success).toBe(true);
-      }),
+          expect((response as any).success).toBe(true);
+        }),
     );
   });
 
   describe("TransactGetItems", () => {
-    test(
+    test.provider(
       "reads items transactionally through the bound table",
-      Effect.gen(function* () {
-        yield* HttpClient.execute(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/transact-write`),
-            {
-              TransactItems: [
-                {
-                  Put: {
-                    Table: sourceTableId,
-                    Item: {
-                      pk: { S: "transact-get#1" },
-                      sk: { S: "item" },
-                      data: { S: "first item" },
+      (_stack) =>
+        Effect.gen(function* () {
+          yield* HttpClient.execute(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/transact-write`),
+              {
+                TransactItems: [
+                  {
+                    Put: {
+                      Table: sourceTableId,
+                      Item: {
+                        pk: { S: "transact-get#1" },
+                        sk: { S: "item" },
+                        data: { S: "first item" },
+                      },
                     },
                   },
-                },
-                {
-                  Put: {
-                    Table: sourceTableId,
-                    Item: {
-                      pk: { S: "transact-get#2" },
-                      sk: { S: "item" },
-                      data: { S: "second item" },
+                  {
+                    Put: {
+                      Table: sourceTableId,
+                      Item: {
+                        pk: { S: "transact-get#2" },
+                        sk: { S: "item" },
+                        data: { S: "second item" },
+                      },
                     },
                   },
-                },
-              ],
-            },
-          ),
-        );
+                ],
+              },
+            ),
+          );
 
-        const response = yield* HttpClient.execute(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/transact-get`),
-            {
-              TransactItems: [
-                {
-                  Get: {
-                    Table: sourceTableId,
-                    Key: {
-                      pk: { S: "transact-get#1" },
-                      sk: { S: "item" },
+          const response = yield* HttpClient.execute(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/transact-get`),
+              {
+                TransactItems: [
+                  {
+                    Get: {
+                      Table: sourceTableId,
+                      Key: {
+                        pk: { S: "transact-get#1" },
+                        sk: { S: "item" },
+                      },
                     },
                   },
-                },
-                {
-                  Get: {
-                    Table: sourceTableId,
-                    Key: {
-                      pk: { S: "transact-get#2" },
-                      sk: { S: "item" },
+                  {
+                    Get: {
+                      Table: sourceTableId,
+                      Key: {
+                        pk: { S: "transact-get#2" },
+                        sk: { S: "item" },
+                      },
                     },
                   },
-                },
-              ],
-            },
-          ),
-        ).pipe(Effect.flatMap((r) => r.json));
+                ],
+              },
+            ),
+          ).pipe(Effect.flatMap((r) => r.json));
 
-        expect((response as any).responses).toHaveLength(2);
-      }),
+          expect((response as any).responses).toHaveLength(2);
+        }),
     );
   });
 
   describe("UpdateItem", () => {
-    test(
-      "updates an existing item",
+    test.provider("updates an existing item", (_stack) =>
       Effect.gen(function* () {
-        // First put an item
         yield* HttpClient.execute(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put`),
@@ -477,7 +475,6 @@ describe("DynamoDB Bindings", () => {
           ),
         );
 
-        // Update it
         const response = yield* HttpClient.execute(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/update`),
@@ -488,7 +485,6 @@ describe("DynamoDB Bindings", () => {
         expect(response).toHaveProperty("success", true);
         expect((response as any).attributes.data.S).toBe("updated");
 
-        // Verify the update
         const getResponse = yield* HttpClient.get(
           `${baseUrl}/get?pk=${encodeURIComponent("update-test#1")}&sk=item`,
         ).pipe(Effect.flatMap((r) => r.json));
@@ -499,10 +495,8 @@ describe("DynamoDB Bindings", () => {
   });
 
   describe("DeleteItem", () => {
-    test(
-      "deletes an existing item",
+    test.provider("deletes an existing item", (_stack) =>
       Effect.gen(function* () {
-        // First put an item
         yield* HttpClient.execute(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put`),
@@ -510,7 +504,6 @@ describe("DynamoDB Bindings", () => {
           ),
         );
 
-        // Delete it
         const response = yield* HttpClient.execute(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.delete(`${baseUrl}/delete`),
@@ -520,7 +513,6 @@ describe("DynamoDB Bindings", () => {
 
         expect(response).toHaveProperty("success", true);
 
-        // Verify deletion
         const getResponse = yield* HttpClient.get(
           `${baseUrl}/get?pk=${encodeURIComponent("delete-test#1")}&sk=item`,
         ).pipe(Effect.flatMap((r) => r.json));
@@ -531,10 +523,8 @@ describe("DynamoDB Bindings", () => {
   });
 
   describe("Query", () => {
-    test(
-      "queries items by partition key",
+    test.provider("queries items by partition key", (_stack) =>
       Effect.gen(function* () {
-        // Put multiple items with same pk
         yield* HttpClient.execute(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put`),
@@ -559,8 +549,7 @@ describe("DynamoDB Bindings", () => {
   });
 
   describe("ListTables", () => {
-    test(
-      "lists the deployed table",
+    test.provider("lists the deployed table", (_stack) =>
       Effect.gen(function* () {
         const described = yield* HttpClient.get(
           `${baseUrl}/describe-table`,
@@ -578,8 +567,7 @@ describe("DynamoDB Bindings", () => {
   });
 
   describe("ListTagsOfResource", () => {
-    test(
-      "lists alchemy ownership tags for the table",
+    test.provider("lists alchemy ownership tags for the table", (_stack) =>
       Effect.gen(function* () {
         const response = yield* HttpClient.get(`${baseUrl}/list-tags`).pipe(
           Effect.flatMap((r) => r.json),
@@ -594,30 +582,29 @@ describe("DynamoDB Bindings", () => {
   });
 
   describe("RestoreTableToPointInTime", () => {
-    test(
+    test.provider(
       "returns a structured error when point-in-time recovery is unavailable",
-      Effect.gen(function* () {
-        const response = yield* HttpClient.execute(
-          HttpClientRequest.bodyJsonUnsafe(
-            HttpClientRequest.post(`${baseUrl}/restore-table`),
-            {},
-          ),
-        ).pipe(Effect.flatMap((r) => r.json));
+      (_stack) =>
+        Effect.gen(function* () {
+          const response = yield* HttpClient.execute(
+            HttpClientRequest.bodyJsonUnsafe(
+              HttpClientRequest.post(`${baseUrl}/restore-table`),
+              {},
+            ),
+          ).pipe(Effect.flatMap((r) => r.json));
 
-        expect((response as any).ok).toBe(false);
-        expect([
-          "PointInTimeRecoveryUnavailableException",
-          "TableAlreadyExistsException",
-        ]).toContain((response as any).error);
-      }),
+          expect((response as any).ok).toBe(false);
+          expect([
+            "PointInTimeRecoveryUnavailableException",
+            "TableAlreadyExistsException",
+          ]).toContain((response as any).error);
+        }),
     );
   });
 
   describe("Scan", () => {
-    test(
-      "scans all items in the table",
+    test.provider("scans all items in the table", (_stack) =>
       Effect.gen(function* () {
-        // Put an item to ensure table isn't empty
         yield* HttpClient.execute(
           HttpClientRequest.bodyJsonUnsafe(
             HttpClientRequest.post(`${baseUrl}/put`),

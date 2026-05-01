@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -8,19 +8,20 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
+const { test } = Test.make({ providers: Cloudflare.providers() });
+
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-test(
-  "create and delete bucket with default props",
+test.provider("create and delete bucket with default props", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
 
-    yield* destroy();
+    yield* stack.destroy();
 
-    const bucket = yield* test.deploy(
+    const bucket = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2Bucket("DefaultBucket");
       }),
@@ -36,20 +37,19 @@ test(
     });
     expect(actualBucket.name).toEqual(bucket.bucketName);
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(logLevel),
 );
 
-test(
-  "create, update, delete bucket",
+test.provider("create, update, delete bucket", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
 
-    yield* destroy();
+    yield* stack.destroy();
 
-    const bucket = yield* test.deploy(
+    const bucket = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2Bucket("TestBucket", {
           name: "test-bucket-initial",
@@ -65,8 +65,7 @@ test(
     expect(actualBucket.name).toEqual(bucket.bucketName);
     expect(actualBucket.storageClass).toEqual("Standard");
 
-    // Update the bucket
-    const updatedBucket = yield* test.deploy(
+    const updatedBucket = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2Bucket("TestBucket", {
           name: "test-bucket-initial",
@@ -82,10 +81,10 @@ test(
     expect(actualUpdatedBucket.name).toEqual(updatedBucket.bucketName);
     expect(actualUpdatedBucket.storageClass).toEqual("InfrequentAccess");
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(logLevel),
 );
 
 const waitForBucketToBeDeleted = Effect.fn(function* (
