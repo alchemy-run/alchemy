@@ -12,9 +12,8 @@ import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
 import crypto from "node:crypto";
-import { fileURLToPath } from "node:url";
-import { SecretBindingLive } from "../SecretsStore/SecretBinding.ts";
 import * as Secret from "../SecretsStore/Secret.ts";
+import { SecretBindingLive } from "../SecretsStore/SecretBinding.ts";
 import { Worker } from "../Workers/Worker.ts";
 import Store from "./Store.ts";
 import { AuthToken } from "./Token.ts";
@@ -34,19 +33,11 @@ export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
  * In the bundled case, fall back to the published source file shipped
  * alongside the CLI under `../src/Cloudflare/StateStore/Api.ts`.
  */
-const API_SOURCE_PATH = (() => {
-  const here = fileURLToPath(import.meta.url);
-  if (here.endsWith(".ts")) return here;
-  return fileURLToPath(
-    new URL("../src/Cloudflare/StateStore/Api.ts", import.meta.url),
-  );
-})();
-
 export default Worker(
   "Api",
   {
     name: STATE_STORE_SCRIPT_NAME,
-    main: API_SOURCE_PATH,
+    main: import.meta.filename,
     url: true,
     compatibility: {
       flags: ["nodejs_compat"],
