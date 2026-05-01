@@ -62,9 +62,9 @@ project.
 
 ## Add `Cloudflare.Vite` to the Stack
 
-Configure asset handling for SPA fallback (every unmatched route
-serves `index.html`) and enable `nodejs_compat` (the Cloudflare
-Vite plugin's runtime shim imports from `node:*`):
+Yield `Cloudflare.Vite("Website")` from your Stack — defaults
+handle SPA fallback (unmatched routes serve `index.html`) and
+`nodejs_compat` for the Cloudflare Vite plugin's runtime shim:
 
 ```diff lang="typescript"
 // alchemy.run.ts
@@ -72,17 +72,6 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import Worker from "./src/worker.ts";
-
-+const Web = Cloudflare.Vite("Web", {
-+  // rootDir: "./web",   // omit to use the project root
-+  compatibility: { flags: ["nodejs_compat"] },
-+  assets: {
-+    config: {
-+      htmlHandling: "auto-trailing-slash",
-+      notFoundHandling: "single-page-application",
-+    },
-+  },
-+});
 
 export default Alchemy.Stack(
   "MyApp",
@@ -92,7 +81,7 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const worker = yield* Worker;
-+    const web = yield* Web;
++    const web = yield* Cloudflare.Vite("Website");
     return {
       url: worker.url,
 +      webUrl: web.url,
@@ -101,10 +90,10 @@ export default Alchemy.Stack(
 );
 ```
 
-`notFoundHandling: "single-page-application"` is what makes
-client-side routing work — a deep link like `/about` returns
-`index.html` instead of a 404, and your router handles it on the
-client.
+The defaults set `notFoundHandling: "single-page-application"`,
+which is what makes client-side routing work — a deep link like
+`/about` returns `index.html` instead of a 404, and your router
+handles it on the client.
 
 ## What NOT to do
 
