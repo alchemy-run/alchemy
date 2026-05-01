@@ -31,9 +31,13 @@ env:
   # Files produced by the bump job and consumed by every publish job + the
   # final commit job. Listed once here so additions stay in sync.
   BUMP_ARTIFACT_PATHS: |
+    packages/alchemy/lib
+    packages/alchemy/bin
     packages/alchemy/package.json
     packages/better-auth/package.json
+    packages/better-auth/lib
     packages/pr-package/package.json
+    packages/pr-package/lib
     bun.lock
 jobs:
   # ── Step 1: Compute the next version and stage the bump in-memory. ──
@@ -237,9 +241,8 @@ jobs:
   # `tag` channel (no commit), checkout the bump's pre-bump SHA and rely
   # on the bump-files artifact instead.
   publish-alchemy:
-    needs: [bump, commit-and-tag]
-    if:
-      always() && needs.bump.result == 'success' && (needs.commit-and-tag.result
+    needs: [ bump, commit-and-tag ]
+    if: always() && needs.bump.result == 'success' && (needs.commit-and-tag.result
       == 'success' || needs.commit-and-tag.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
@@ -283,9 +286,8 @@ jobs:
 
   # ── Step 3b: Build and publish `@alchemy.run/better-auth`. ──
   publish-better-auth:
-    needs: [bump, commit-and-tag, publish-alchemy]
-    if:
-      always() && needs.bump.result == 'success' && (needs.commit-and-tag.result
+    needs: [ bump, commit-and-tag, publish-alchemy ]
+    if: always() && needs.bump.result == 'success' && (needs.commit-and-tag.result
       == 'success' || needs.commit-and-tag.result == 'skipped') &&
       needs.publish-alchemy.result == 'success'
     runs-on: ubuntu-latest
@@ -330,9 +332,8 @@ jobs:
 
   # ── Step 3c: Build and publish `@alchemy.run/pr-package`. ──
   publish-pr-package:
-    needs: [bump, commit-and-tag, publish-alchemy]
-    if:
-      always() && needs.bump.result == 'success' && (needs.commit-and-tag.result
+    needs: [ bump, commit-and-tag, publish-alchemy ]
+    if: always() && needs.bump.result == 'success' && (needs.commit-and-tag.result
       == 'success' || needs.commit-and-tag.result == 'skipped') &&
       needs.publish-alchemy.result == 'success'
     runs-on: ubuntu-latest

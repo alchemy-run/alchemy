@@ -34,14 +34,11 @@ const harness = (response: Response) => {
     Effect.sync(() => {
       const body = request.body as HttpBody.HttpBody;
       const bodyText =
-        body._tag === "Uint8Array"
-          ? new TextDecoder().decode(body.body)
-          : "";
+        body._tag === "Uint8Array" ? new TextDecoder().decode(body.body) : "";
       captured = {
         url: request.url,
         method: request.method,
-        contentType:
-          body._tag === "Uint8Array" ? body.contentType : undefined,
+        contentType: body._tag === "Uint8Array" ? body.contentType : undefined,
         bodyJson: bodyText ? JSON.parse(bodyText) : undefined,
         authorization: request.headers.authorization,
       };

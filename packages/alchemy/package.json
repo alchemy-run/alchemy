@@ -118,6 +118,18 @@
       "worker": "./src/ContentType.ts",
       "import": "./lib/ContentType.js"
     },
+    "./Cli": {
+      "types": "./lib/Cli/index.d.ts",
+      "bun": "./src/Cli/index.ts",
+      "worker": "./src/Cli/index.ts",
+      "import": "./lib/Cli/index.js"
+    },
+    "./Cli/InkCLI": {
+      "types": "./lib/Cli/InkCLI.d.ts",
+      "bun": "./src/Cli/InkCLI.tsx",
+      "worker": "./src/Cli/InkCLI.tsx",
+      "import": "./lib/Cli/InkCLI.js"
+    },
     "./Cloudflare": {
       "types": "./lib/Cloudflare/index.d.ts",
       "bun": "./src/Cloudflare/index.ts",
@@ -263,10 +275,14 @@
     "fast-xml-parser": "catalog:",
     "foreground-child": "^4.0.3",
     "ignore": "^7.0.5",
+    "ink": "^6.3.1",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
     "magic-string": "^0.30.21",
+    "pathe": "^2.0.3",
     "picomatch": "^4.0.4",
+    "proper-lockfile": "^4.1.2",
+    "react": "^19.2.0",
     "rolldown": "catalog:",
     "sonda": "catalog:",
     "web-tree-sitter": "catalog:",
@@ -284,12 +300,10 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/picomatch": "^4.0.0",
+    "@types/proper-lockfile": "^4.1.4",
     "@types/react": "^19.2.2",
     "better-auth": "catalog:",
     "effect": "catalog:",
-    "ink": "^6.3.1",
-    "pathe": "^2.0.3",
-    "react": "^19.2.0",
     "react-devtools-core": "^7.0.1",
     "solid-js": "catalog:",
     "tsconfig-paths": "^4.2.0",

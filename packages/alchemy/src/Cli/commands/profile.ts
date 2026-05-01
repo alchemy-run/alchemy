@@ -5,18 +5,18 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { Command } from "effect/unstable/cli";
 
-import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
-import { deleteProfileCredentials } from "../../src/Auth/Credentials.ts";
+import { AuthProviders } from "../..//Auth/AuthProvider";
+import { deleteProfileCredentials } from "../..//Auth/Credentials";
 import {
   deleteProfile,
   getProfile,
   readConfig,
   withProfileOverride,
-} from "../../src/Auth/Profile.ts";
-import { AwsAuth } from "../../src/AWS/AuthProvider.ts";
-import { CloudflareAuth } from "../../src/Cloudflare/Auth/AuthProvider.ts";
-import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
-import { fileLogger } from "../../src/Util/FileLogger.ts";
+} from "../..//Auth/Profile";
+import { AwsAuth } from "../..//AWS/AuthProvider";
+import { CloudflareAuth } from "../..//Cloudflare/Auth/AuthProvider";
+import { loadConfigProvider } from "../..//Util/ConfigProvider";
+import { fileLogger } from "../../Util/FileLogger";
 
 import { envFile, instrumentCommand, profile } from "./_shared.ts";
 

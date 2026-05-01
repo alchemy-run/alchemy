@@ -8,17 +8,17 @@ import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
 
-import { AdoptPolicy } from "../../src/AdoptPolicy.ts";
-import { AlchemyContext } from "../../src/AlchemyContext.ts";
-import { apply } from "../../src/Apply.ts";
-import { ArtifactStore, createArtifactStore } from "../../src/Artifacts.ts";
-import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
-import { withProfileOverride } from "../../src/Auth/Profile.ts";
-import * as CLI from "../../src/Cli/index.ts";
-import * as Plan from "../../src/Plan.ts";
-import { Stage } from "../../src/Stage.ts";
-import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
-import { fileLogger } from "../../src/Util/FileLogger.ts";
+import { AdoptPolicy } from "../../AdoptPolicy";
+import { AlchemyContext } from "../../AlchemyContext";
+import { apply } from "../../Apply";
+import { ArtifactStore, createArtifactStore } from "../../Artifacts";
+import { AuthProviders } from "../../Auth/AuthProvider";
+import { withProfileOverride } from "../../Auth/Profile";
+import * as CLI from "../../Cli/Cli.ts";
+import * as Plan from "../../Plan";
+import { Stage } from "../../Stage";
+import { loadConfigProvider } from "../../Util/ConfigProvider";
+import { fileLogger } from "../../Util/FileLogger";
 
 import {
   dryRun as dryRunFlag,
@@ -26,8 +26,8 @@ import {
   force,
   importStack,
   instrumentCommand,
-  main,
   profile,
+  script,
   stage,
   yes,
 } from "./_shared.ts";
@@ -163,7 +163,7 @@ export const deployCommand = Command.make(
   {
     dryRun: dryRunFlag,
     force,
-    main,
+    main: script,
     envFile,
     stage,
     yes,
@@ -177,7 +177,7 @@ export const destroyCommand = Command.make(
   "destroy",
   {
     dryRun: dryRunFlag,
-    main,
+    main: script,
     envFile,
     stage,
     yes,
@@ -197,7 +197,7 @@ export const destroyCommand = Command.make(
 export const planCommand = Command.make(
   "plan",
   {
-    main,
+    main: script,
     envFile,
     stage,
     profile,

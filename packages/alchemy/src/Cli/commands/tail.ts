@@ -6,23 +6,23 @@ import * as Logger from "effect/Logger";
 import * as Stream from "effect/Stream";
 import * as Command from "effect/unstable/cli/Command";
 
-import { findProviderByType, type LogLine } from "../../src/Provider.ts";
-import { Stage } from "../../src/Stage.ts";
-import * as State from "../../src/State/index.ts";
-import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
-import { fileLogger } from "../../src/Util/FileLogger.ts";
+import { findProviderByType, type LogLine } from "../..//Provider";
+import { Stage } from "../..//Stage";
+import * as State from "../..//State/index";
+import { loadConfigProvider } from "../..//Util/ConfigProvider";
+import { fileLogger } from "../..//Util/FileLogger";
 
-import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
-import { withProfileOverride } from "../../src/Auth/Profile.ts";
+import { AuthProviders } from "../..//Auth/AuthProvider";
+import { withProfileOverride } from "../..//Auth/Profile";
 import {
   envFile,
   formatLocalTimestamp,
   importStack,
   instrumentCommand,
-  main,
   parseResourceFilter,
   profile,
   resourceFilter,
+  script,
   stage,
   TAIL_COLORS,
   TAIL_RESET,
@@ -31,7 +31,7 @@ import {
 export const tailCommand = Command.make(
   "tail",
   {
-    main,
+    main: script,
     envFile,
     stage,
     profile,

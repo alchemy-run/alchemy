@@ -22,7 +22,8 @@ env:
 jobs:
   # ── Publish on push-to-main and PR sync. ──────────────────────────────────
   publish:
-    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' &&
+      github.event.action != 'closed')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -48,18 +49,20 @@ jobs:
       # populates lib/ for the layer packages (better-auth, pr-package).
       # Their tarballs ship both src/ and lib/, and consumers in non-bun
       # runtimes resolve via the `import` condition → ./lib/index.js.
-      - run: bun run build
+      - run: bun run build:packages
 
       - name: Compute tags
         id: tags
         env:
           EVENT: ${{ github.event_name }}
           # `head_ref` for PRs (source branch), `ref_name` for push (e.g. "main").
-          BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
+          BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref ||
+            github.ref_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           # PR builds run on the merge commit by default; tag the actual head sha
           # so consumers can pin to a specific PR commit.
-          SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          SHA: ${{ github.event_name == 'pull_request' &&
+            github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           short="${SHA:0:7}"
