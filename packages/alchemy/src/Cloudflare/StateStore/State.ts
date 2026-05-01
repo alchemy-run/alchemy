@@ -542,16 +542,9 @@ const readSecretViaEdge = (
       yield* Effect.logWarning(
         `Secret probe failed (${response.status}) at ${session.url}\n${body}`,
       );
-      const isHtml = body.trimStart().toLowerCase().startsWith("<!doctype");
-      const detail = isHtml
-        ? `Cloudflare's edge served an HTML error page instead of routing to the preview ` +
-          `(host '${new URL(session.url).host}' did not resolve to a worker). ` +
-          `This usually means the '${scriptName}' worker is not deployed on this account ` +
-          `or does not have workers.dev enabled.`
-        : body.slice(0, 200);
       return yield* Effect.fail(
         new EdgeSessionError({
-          message: `Secret probe returned ${response.status}: ${detail}`,
+          message: `Secret probe returned ${response.status}: ${body.slice(0, 200)}`,
         }),
       );
     }
