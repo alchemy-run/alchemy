@@ -6,21 +6,21 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
-import { AuthProviders } from "../../src/Auth/AuthProvider.ts";
-import { withProfileOverride } from "../../src/Auth/Profile.ts";
-import { Stage } from "../../src/Stage.ts";
-import * as State from "../../src/State/index.ts";
-import { encodeState } from "../../src/State/StateEncoding.ts";
-import * as Clank from "../../src/Util/Clank.ts";
-import { loadConfigProvider } from "../../src/Util/ConfigProvider.ts";
-import { fileLogger } from "../../src/Util/FileLogger.ts";
+import { AuthProviders } from "../../Auth/AuthProvider";
+import { withProfileOverride } from "../../Auth/Profile";
+import { Stage } from "../../Stage";
+import * as State from "../../State/index";
+import { encodeState } from "../../State/StateEncoding";
+import * as Clank from "../../Util/Clank";
+import { loadConfigProvider } from "../../Util/ConfigProvider";
+import { fileLogger } from "../../Util/FileLogger";
 
 import {
   envFile,
   importStack,
   instrumentCommand,
-  main,
   profile,
+  script,
   stage,
   yes,
 } from "./_shared.ts";
@@ -98,7 +98,7 @@ const withStateService = <A, E>(
 
 const stacksCommand = Command.make(
   "stacks",
-  { main, envFile, stage, profile, local: localFlag },
+  { main: script, envFile, stage, profile, local: localFlag },
   instrumentCommand("state.stacks")(
     Effect.fnUntraced(function* (args) {
       yield* withStateService(args, (state) =>
@@ -119,7 +119,7 @@ const stacksCommand = Command.make(
 
 const stagesCommand = Command.make(
   "stages",
-  { stack: stackArg, main, envFile, stage, profile, local: localFlag },
+  { stack: stackArg, main: script, envFile, stage, profile, local: localFlag },
   instrumentCommand("state.stages")(
     Effect.fnUntraced(function* ({ stack: stackName, ...rest }) {
       yield* withStateService(rest, (state) =>
@@ -145,7 +145,7 @@ const resourcesCommand = Command.make(
     stageName: Argument.string("stage").pipe(
       Argument.withDescription("Stage to list resources from"),
     ),
-    main,
+    main: script,
     envFile,
     stage,
     profile,
@@ -180,7 +180,7 @@ const getCommand = Command.make(
       Argument.withDescription("Stage the resource lives in"),
     ),
     fqn: fqnArg,
-    main,
+    main: script,
     envFile,
     stage,
     profile,
@@ -216,7 +216,7 @@ const getCommand = Command.make(
 
 const treeCommand = Command.make(
   "tree",
-  { main, envFile, stage, profile, local: localFlag },
+  { main: script, envFile, stage, profile, local: localFlag },
   instrumentCommand("state.tree")(
     Effect.fnUntraced(function* (args) {
       yield* withStateService(args, (state) =>
@@ -295,7 +295,7 @@ const clearCommand = Command.make(
   {
     stack: clearStackArg,
     stageName: clearStageArg,
-    main,
+    main: script,
     envFile,
     stage,
     profile,

@@ -1010,7 +1010,6 @@ export const LiveWorkerProvider = () =>
       const getScriptSubdomain = yield* workers.getScriptSubdomain;
       const getScriptSettings = yield* workers.getScriptScriptAndVersionSetting;
       const getSubdomain = yield* workers.getSubdomain;
-      const listScripts = yield* workers.listScripts;
       const putScript = yield* workers.putScript;
       const putDomain = yield* workers.putDomain;
       const listDomains = yield* workers.listDomains;
@@ -2132,42 +2131,36 @@ ${[
             yield* Effect.logInfo(
               `Cloudflare Worker read: checking ${workerName}`,
             );
-            const [worker, subdomain, settings, domainsList] =
-              yield* Effect.all([
-                listScripts({
-                  accountId,
-                }).pipe(
-                  Effect.map((workers) =>
-                    workers.result.find((worker) => worker.id === workerName),
-                  ),
-                ),
-                getScriptSubdomain({
-                  accountId,
-                  scriptName: workerName,
-                }),
-                getScriptSettings({
-                  accountId,
-                  scriptName: workerName,
-                }),
-                listDomains({
-                  accountId,
-                  service: workerName,
-                }).pipe(Effect.map((r) => r.result ?? [])),
-              ]);
-            if (!worker) {
-              yield* Effect.logInfo(
-                `Cloudflare Worker read: ${workerName} not found in script list`,
-              );
-              return undefined;
-            }
+            // We deliberately don't call `listScripts({ accountId })` here:
+            // it pulls every Worker on the account back through a strict
+            // schema decode, and a single existing Worker the schema doesn't
+            // know about (e.g. `placement_mode: "targeted"`) breaks the
+            // entire read. `getScriptSettings` already fails with
+            // `WorkerNotFound` if the script doesn't exist, which the
+            // surrounding `Effect.catchTag` turns into `undefined` — that's
+            // all the existence check we need.
+            const [subdomain, settings, domainsList] = yield* Effect.all([
+              getScriptSubdomain({
+                accountId,
+                scriptName: workerName,
+              }),
+              getScriptSettings({
+                accountId,
+                scriptName: workerName,
+              }),
+              listDomains({
+                accountId,
+                service: workerName,
+              }).pipe(Effect.map((r) => r.result ?? [])),
+            ]);
             yield* Effect.logInfo(
               `Cloudflare Worker read: found ${workerName}`,
             );
             return {
               accountId,
-              workerId: worker.id ?? workerName,
+              workerId: workerName,
               workerName,
-              logpush: worker.logpush ?? undefined,
+              logpush: settings.logpush ?? undefined,
               url: subdomain.enabled
                 ? `https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`
                 : undefined,

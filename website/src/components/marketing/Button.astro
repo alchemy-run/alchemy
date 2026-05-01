@@ -85,4 +85,12 @@ const { variant = "primary", icon, href = "#", class: className } = Astro.props;
     background: var(--alc-terracotta);
     color: var(--alc-fg-on-accent);
   }
+  /* MDX wraps the button's slot text in a <p>, which inherits the UA
+     stylesheet's 1em block margin (~14px) and bloats the button
+     vertically. Flatten any <p> inside the button. `display: inline`
+     keeps the icon + label on one row inside the inline-flex anchor. */
+  .alc-btn :global(p) {
+    margin: 0;
+    display: inline;
+  }
 </style>

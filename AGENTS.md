@@ -499,3 +499,36 @@ Use `bun build:clean` when you encounter stale build artifacts or dependency iss
 2. `bun i` - Reinstalls dependencies
 3. `bun run build` - Builds the project
 4. `bun download:env` - Downloads environment files
+
+# Pull Request Conventions
+
+When you automatically open a PR, it MUST follow this structure:
+
+- **Title**: Use conventional commit format (e.g. `fix(website): mobile theme metas`, `feat(aws/s3): add bucket lifecycle rules`).
+- **Description heading levels**: NEVER use `#` or `##` in the PR description. The smallest heading allowed is `###`. The PR description must NOT begin with its own title heading — GitHub already renders the PR title above it.
+- **Content**: Aim for the minimal content needed to convey the idea.
+  - Use simple sentences. If there are multiple discrete changes, use bullet points.
+  - For anything that warrants it (new features, new resources, serious changes to existing resources, API/behavior changes), include code snippets and/or ` ```diff ` blocks showing what changes from the user's perspective.
+  - Skip examples for trivial fixes, internal refactors, or doc-only changes.
+- **Outstanding work / testing / review needed**: If there are outstanding steps, manual testing required, or review items, DO NOT leave a comment on the PR and DO NOT include them in the PR description. Instead:
+  1. Mark the PR as **draft**.
+  2. Tell the user (in the chat that initiated the PR creation) what is outstanding.
+
+The summary goes at the very top of the description as plain prose — NO heading above it, no `### Summary`, nothing. The PR title already serves as the title; do not repeat or re-title it. Only add `###` subheadings further down if the description genuinely has multiple sections worth separating.
+
+Example PR description (good):
+
+```
+Persist the user's selected theme across reloads and fix a hero scroll glitch on mobile.
+
+- Read theme from `localStorage` on mount before first paint
+- Add `<meta name="theme-color">` per theme so mobile chrome matches
+```
+
+Example PR description (BAD — do not do this):
+
+```
+## Theme persistence fix    ← no, the PR title already exists
+### Summary                  ← no, summary needs no heading
+Persist the user's theme...
+```
