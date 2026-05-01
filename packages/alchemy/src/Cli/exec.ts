@@ -1,10 +1,11 @@
-import { AlchemyContextLive } from "alchemy/AlchemyContext";
-import { PlatformServices } from "alchemy/Util";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+
+import { AlchemyContextLive } from "../AlchemyContext";
+import { PlatformServices } from "../Util/PlatformServices.ts";
 import { execStack, ExecStackOptions } from "./commands/deploy.ts";
 import { inkCLI } from "./tui/InkCLI.tsx";
 
