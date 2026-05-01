@@ -226,24 +226,45 @@ const treeCommand = Command.make(
             yield* Console.log("(empty state store)");
             return;
           }
-          for (const stk of stacks) {
-            yield* Console.log(stk);
-            const stages = [...(yield* state.listStages(stk))].sort();
+          // Fetch the entire tree in parallel: for each stack, list its
+          // stages; for each (stack, stage), list its resources. All
+          // network round-trips happen concurrently; output is rendered
+          // once at the end so the user doesn't see stuttered partial
+          // output.
+          const tree = yield* Effect.forEach(
+            stacks,
+            (stk) =>
+              Effect.gen(function* () {
+                const stages = [...(yield* state.listStages(stk))].sort();
+                const stageEntries = yield* Effect.forEach(
+                  stages,
+                  (stg) =>
+                    Effect.map(
+                      state.list({ stack: stk, stage: stg }),
+                      (fqns) => ({ stage: stg, fqns: [...fqns].sort() }),
+                    ),
+                  { concurrency: "unbounded" },
+                );
+                return { stack: stk, stages: stageEntries };
+              }),
+            { concurrency: "unbounded" },
+          );
+
+          const lines: string[] = [];
+          for (const { stack: stk, stages } of tree) {
+            lines.push(stk);
             for (let i = 0; i < stages.length; i++) {
-              const stg = stages[i]!;
+              const { stage: stg, fqns } = stages[i]!;
               const stageBranch = i === stages.length - 1 ? "└─" : "├─";
-              yield* Console.log(`${stageBranch} ${stg}`);
+              lines.push(`${stageBranch} ${stg}`);
               const indent = i === stages.length - 1 ? "   " : "│  ";
-              const fqns = [
-                ...(yield* state.list({ stack: stk, stage: stg })),
-              ].sort();
               for (let j = 0; j < fqns.length; j++) {
-                const fqn = fqns[j]!;
                 const leaf = j === fqns.length - 1 ? "└─" : "├─";
-                yield* Console.log(`${indent}${leaf} ${fqn}`);
+                lines.push(`${indent}${leaf} ${fqns[j]}`);
               }
             }
           }
+          yield* Console.log(lines.join("\n"));
         }),
       );
     }),
