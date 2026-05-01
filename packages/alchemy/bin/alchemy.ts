@@ -4,25 +4,25 @@ import * as Layer from "effect/Layer";
 import * as Command from "effect/unstable/cli/Command";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
-import packageJson from "../package.json" with { type: "json" };
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { inkCLI } from "alchemy/Cli/InkCLI";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { PlatformServices, runMain } from "alchemy/Util/PlatformServices";
+import packageJson from "../package.json" with { type: "json" };
 
-import { handleCancellation } from "./commands/_shared.ts";
-import { bootstrapCommand } from "./commands/bootstrap.ts";
 import {
+  bootstrapCommand,
   deployCommand,
   destroyCommand,
+  devCommand,
+  handleCancellation,
+  loginCommand,
+  logsCommand,
   planCommand,
-} from "./commands/deploy.ts";
-import { devCommand } from "./commands/dev.ts";
-import { loginCommand } from "./commands/login.ts";
-import { logsCommand } from "./commands/logs.ts";
-import { profileCommand } from "./commands/profile.ts";
-import { stateCommand } from "./commands/state.ts";
-import { tailCommand } from "./commands/tail.ts";
+  profileCommand,
+  stateCommand,
+  tailCommand,
+} from "alchemy/Cli/Commands";
 
 const root = Command.make("alchemy", {}).pipe(
   Command.withSubcommands([

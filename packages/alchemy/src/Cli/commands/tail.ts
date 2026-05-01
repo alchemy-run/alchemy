@@ -3,17 +3,17 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
-import * as Option from "effect/Option";
-import { Command, Flag } from "effect/unstable/cli";
+import * as Stream from "effect/Stream";
+import * as Command from "effect/unstable/cli/Command";
 
-import { findProviderByType, type LogLine } from "alchemy/Provider";
-import { Stage } from "alchemy/Stage";
-import * as State from "alchemy/State/index";
-import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
-import { fileLogger } from "alchemy/Util/FileLogger";
+import { findProviderByType, type LogLine } from "../..//Provider";
+import { Stage } from "../..//Stage";
+import * as State from "../..//State/index";
+import { loadConfigProvider } from "../..//Util/ConfigProvider";
+import { fileLogger } from "../..//Util/FileLogger";
 
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
-import { withProfileOverride } from "alchemy/Auth/Profile";
+import { AuthProviders } from "../..//Auth/AuthProvider";
+import { withProfileOverride } from "../..//Auth/Profile";
 import {
   envFile,
   formatLocalTimestamp,
@@ -21,7 +21,6 @@ import {
   instrumentCommand,
   main,
   parseResourceFilter,
-  parseSince,
   profile,
   resourceFilter,
   stage,
@@ -29,48 +28,24 @@ import {
   TAIL_RESET,
 } from "./_shared.ts";
 
-const logsLimit = Flag.integer("limit").pipe(
-  Flag.withDescription("Number of log entries to fetch"),
-  Flag.withDefault(100),
-);
-
-const logsSince = Flag.string("since").pipe(
-  Flag.withDescription(
-    "Fetch logs since this time (e.g. '1h', '30m', '2024-01-01T00:00:00Z')",
-  ),
-  Flag.optional,
-  Flag.map(Option.getOrUndefined),
-);
-
-export const logsCommand = Command.make(
-  "logs",
+export const tailCommand = Command.make(
+  "tail",
   {
     main,
     envFile,
     stage,
     profile,
     filter: resourceFilter,
-    limit: logsLimit,
-    since: logsSince,
   },
   instrumentCommand(
-    "logs",
-    (a: { main: string; stage: string; profile: string; limit: number }) => ({
+    "tail",
+    (a: { main: string; stage: string; profile: string }) => ({
       "alchemy.stage": a.stage,
       "alchemy.profile": a.profile,
       "alchemy.main": a.main,
-      "alchemy.limit": a.limit,
     }),
   )(
-    Effect.fnUntraced(function* ({
-      main,
-      stage,
-      envFile,
-      profile,
-      filter,
-      limit,
-      since,
-    }) {
+    Effect.fnUntraced(function* ({ main, stage, envFile, profile, filter }) {
       const stackEffect = yield* importStack(main);
 
       const services = Layer.mergeAll(
@@ -82,8 +57,6 @@ export const logsCommand = Command.make(
         Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
         State.localState(),
       );
-
-      const sinceDate = since ? parseSince(since) : undefined;
 
       yield* Effect.gen(function* () {
         const stack = yield* stackEffect;
@@ -108,7 +81,10 @@ export const logsCommand = Command.make(
           }
 
           const fqns = Object.keys(stack.resources);
-          const allLogs: { logicalId: string; lines: LogLine[] }[] = [];
+          const tailable: {
+            logicalId: string;
+            stream: Stream.Stream<LogLine, any, any>;
+          }[] = [];
 
           for (const fqn of fqns) {
             const resource = stack.resources[fqn]!;
@@ -122,45 +98,49 @@ export const logsCommand = Command.make(
             if (!resourceState?.attr) continue;
 
             const provider = yield* findProviderByType(resource.Type);
-            if (!provider.logs) continue;
+            if (!provider.tail) continue;
 
-            const lines = yield* provider.logs({
-              id: resource.LogicalId,
-              instanceId: resourceState.instanceId,
-              props: resourceState.props as any,
-              output: resourceState.attr as any,
-              options: { limit, since: sinceDate },
+            tailable.push({
+              logicalId: resource.LogicalId,
+              stream: provider.tail({
+                id: resource.LogicalId,
+                instanceId: resourceState.instanceId,
+                props: resourceState.props as any,
+                output: resourceState.attr as any,
+              }),
             });
-
-            allLogs.push({ logicalId: resource.LogicalId, lines });
           }
 
-          if (allLogs.length === 0) {
+          if (tailable.length === 0) {
             if (filterSet) {
               yield* Console.log(
-                "No resources with logs match --filter (deploy first, or selected resources may not expose logs).",
+                "No tailable resources match --filter (deploy first, or selected resources may not support tail).",
               );
             } else {
               yield* Console.log(
-                "No resources with logs found. Deploy first, then run logs.",
+                "No tailable resources found. Deploy first, then run tail.",
               );
             }
             return;
           }
 
-          const merged = allLogs
-            .flatMap(({ logicalId, lines }, i) => {
-              const color = TAIL_COLORS[i % TAIL_COLORS.length]!;
-              return lines.map((line) => ({
-                ...line,
-                formatted: `${color}${formatLocalTimestamp(line.timestamp)} [${logicalId}]${TAIL_RESET} ${line.message}`,
-              }));
-            })
-            .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+          yield* Console.log(
+            `Tailing: ${tailable.map((t) => t.logicalId).join(", ")}`,
+          );
 
-          for (const entry of merged) {
-            yield* Console.log(entry.formatted);
-          }
+          const taggedStreams = tailable.map(({ logicalId, stream }, i) => {
+            const color = TAIL_COLORS[i % TAIL_COLORS.length]!;
+            return stream.pipe(
+              Stream.map(({ timestamp, message }) => {
+                const ts = formatLocalTimestamp(timestamp);
+                return `${color}${ts} [${logicalId}]${TAIL_RESET} ${message}`;
+              }),
+            );
+          });
+
+          yield* Stream.mergeAll(taggedStreams, {
+            concurrency: "unbounded",
+          }).pipe(Stream.runForEach((line) => Console.log(line)));
         }).pipe(Effect.provide(stack.services));
       }).pipe(Effect.provide(services));
     }),

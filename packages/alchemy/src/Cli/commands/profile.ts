@@ -5,18 +5,18 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { Command } from "effect/unstable/cli";
 
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
-import { deleteProfileCredentials } from "alchemy/Auth/Credentials";
+import { AuthProviders } from "../..//Auth/AuthProvider";
+import { deleteProfileCredentials } from "../..//Auth/Credentials";
 import {
   deleteProfile,
   getProfile,
   readConfig,
   withProfileOverride,
-} from "alchemy/Auth/Profile";
-import { AwsAuth } from "alchemy/AWS/AuthProvider";
-import { CloudflareAuth } from "alchemy/Cloudflare/Auth/AuthProvider";
-import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
-import { fileLogger } from "alchemy/Util/FileLogger";
+} from "../..//Auth/Profile";
+import { AwsAuth } from "../..//AWS/AuthProvider";
+import { CloudflareAuth } from "../..//Cloudflare/Auth/AuthProvider";
+import { loadConfigProvider } from "../..//Util/ConfigProvider";
+import { fileLogger } from "../../Util/FileLogger";
 
 import { envFile, instrumentCommand, profile } from "./_shared.ts";
 

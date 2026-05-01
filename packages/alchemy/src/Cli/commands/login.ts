@@ -7,16 +7,16 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { AuthProviders } from "../..//Auth/AuthProvider";
 import {
   getProfile,
   setProfile,
   withProfileOverride,
-} from "alchemy/Auth/Profile";
-import { Stage } from "alchemy/Stage";
-import * as State from "alchemy/State/index";
-import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
-import { fileLogger } from "alchemy/Util/FileLogger";
+} from "../..//Auth/Profile";
+import { Stage } from "../..//Stage";
+import * as State from "../..//State/index";
+import { loadConfigProvider } from "../..//Util/ConfigProvider";
+import { fileLogger } from "../..//Util/FileLogger";
 
 import {
   envFile,

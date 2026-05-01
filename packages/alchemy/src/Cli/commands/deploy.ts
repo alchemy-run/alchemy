@@ -8,17 +8,17 @@ import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
 
-import { AdoptPolicy } from "alchemy/AdoptPolicy";
-import { AlchemyContext } from "alchemy/AlchemyContext";
-import { apply } from "alchemy/Apply";
-import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
-import { withProfileOverride } from "alchemy/Auth/Profile";
-import * as CLI from "alchemy/Cli/index";
-import * as Plan from "alchemy/Plan";
-import { Stage } from "alchemy/Stage";
-import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
-import { fileLogger } from "alchemy/Util/FileLogger";
+import { AdoptPolicy } from "../../AdoptPolicy";
+import { AlchemyContext } from "../../AlchemyContext";
+import { apply } from "../../Apply";
+import { ArtifactStore, createArtifactStore } from "../../Artifacts";
+import { AuthProviders } from "../../Auth/AuthProvider";
+import { withProfileOverride } from "../../Auth/Profile";
+import * as CLI from "../../Cli/index";
+import * as Plan from "../../Plan";
+import { Stage } from "../../Stage";
+import { loadConfigProvider } from "../../Util/ConfigProvider";
+import { fileLogger } from "../../Util/FileLogger";
 
 import {
   dryRun as dryRunFlag,

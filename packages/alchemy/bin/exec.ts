@@ -1,12 +1,12 @@
+import { AlchemyContextLive } from "alchemy/AlchemyContext";
+import { execStack, ExecStackOptions } from "alchemy/Cli/Commands";
+import { inkCLI } from "alchemy/Cli/InkCLI";
+import { PlatformServices, runMain } from "alchemy/Util/PlatformServices";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import { AlchemyContextLive } from "alchemy/AlchemyContext";
-import { inkCLI } from "alchemy/Cli/InkCLI";
-import { PlatformServices, runMain } from "alchemy/Util/PlatformServices";
-import { execStack, ExecStackOptions } from "./commands/deploy.ts";
 
 const services = Layer.mergeAll(
   Layer.provideMerge(AlchemyContextLive, PlatformServices),
