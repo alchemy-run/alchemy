@@ -118,6 +118,12 @@
       "worker": "./src/Build/index.ts",
       "import": "./lib/Build/index.js"
     },
+    "./Cli/InkCLI": {
+      "types": "./lib/Cli/InkCLI.d.ts",
+      "bun": "./src/Cli/InkCLI.tsx",
+      "worker": "./src/Cli/InkCLI.tsx",
+      "import": "./lib/Cli/InkCLI.js"
+    },
     "./Construct": {
       "types": "./lib/Construct/index.d.ts",
       "bun": "./src/Construct/index.ts",

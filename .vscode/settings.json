@@ -40,7 +40,9 @@
   },
   "files.exclude": {
     "**/__pycache__": true,
-    "**/*.pyc": true
+    "**/*.pyc": true,
+    "packages/alchemy/bin/**/*.js*": true,
+    "packages/alchemy/bin/**/*.d*": true
   },
   "[typescript]": {
     "editor.indentSize": 2,
