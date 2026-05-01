@@ -1,3 +1,13 @@
+## v2.0.0-beta.28
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Remove PlatformServices from Util barrel &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/137 [<samp>(f85dd)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f85ddfe)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.27...HEAD)
+
+---
+
 ## v2.0.0-beta.27
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
