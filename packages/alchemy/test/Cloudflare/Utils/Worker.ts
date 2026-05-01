@@ -69,16 +69,14 @@ export const waitForWorkerToBeDeleted = Effect.fn(function* (
   workerName: string,
   accountId: string,
 ) {
-  yield* workers
-    .getScript({ accountId, scriptName: workerName })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new WorkerStillExists())),
-      Effect.retry({
-        while: (e): e is WorkerStillExists => e instanceof WorkerStillExists,
-        schedule: Schedule.exponential(100).pipe(
-          Schedule.both(Schedule.recurs(20)),
-        ),
-      }),
-      Effect.catchTag("WorkerNotFound", () => Effect.void),
-    );
+  yield* workers.getScript({ accountId, scriptName: workerName }).pipe(
+    Effect.flatMap(() => Effect.fail(new WorkerStillExists())),
+    Effect.retry({
+      while: (e): e is WorkerStillExists => e instanceof WorkerStillExists,
+      schedule: Schedule.exponential(100).pipe(
+        Schedule.both(Schedule.recurs(20)),
+      ),
+    }),
+    Effect.catchTag("WorkerNotFound", () => Effect.void),
+  );
 });

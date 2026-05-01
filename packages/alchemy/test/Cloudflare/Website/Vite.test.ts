@@ -57,7 +57,10 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite("FixVite", viteProps(rootDir, memoInclude));
+          return yield* Cloudflare.Vite(
+            "FixVite",
+            viteProps(rootDir, memoInclude),
+          );
         }),
       );
 
@@ -75,7 +78,10 @@ test.provider(
 
       const site2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite("FixVite", viteProps(rootDir, memoInclude));
+          return yield* Cloudflare.Vite(
+            "FixVite",
+            viteProps(rootDir, memoInclude),
+          );
         }),
       );
 

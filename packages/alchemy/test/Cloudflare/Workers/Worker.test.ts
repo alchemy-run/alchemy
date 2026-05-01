@@ -219,4 +219,3 @@ test.provider("create, update, delete internal worker", (stack) =>
     yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
   }).pipe(logLevel),
 );
-

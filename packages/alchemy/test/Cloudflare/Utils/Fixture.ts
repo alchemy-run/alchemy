@@ -39,8 +39,7 @@ export const cloneFixture = Effect.fnUntraced(function* (
     directory: options.tempRoot,
   });
 
-  const entries =
-    options.entries ?? (yield* fs.readDirectory(sourceDir));
+  const entries = options.entries ?? (yield* fs.readDirectory(sourceDir));
 
   const copyTree = (relativePath: string): Effect.Effect<void, any, any> =>
     Effect.gen(function* () {
