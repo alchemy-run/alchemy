@@ -1,4 +1,8 @@
-/* Light parchment theme — single mode (no dark). Tokens come from tokens.css. */
+/* Theme bridge: maps our --alc-* design tokens onto Starlight's --sl-color-*
+   tokens. Each --alc-* token already adapts per `[data-theme]` (see tokens.css),
+   so most of this mapping is mode-agnostic. The walnut neutral scale is the
+   exception — its numeric steps don't flip semantically, so we override the
+   gray scale and `--sl-color-black` per-mode below. */
 
 :root {
   --sl-font: var(--alc-font-sans);
@@ -12,13 +16,10 @@
   color-scheme: light;
 }
 
-/* Hide the theme toggle — single light mode. */
-starlight-theme-select {
-  display: none !important;
+[data-theme="dark"] {
+  color-scheme: dark;
 }
 
-/* Force the same parchment palette across every Starlight theme attribute so
-   no flash-of-dark-mode is possible even before JS hydrates. */
 :root,
 [data-theme="dark"],
 [data-theme="light"] {
@@ -68,6 +69,23 @@ starlight-theme-select {
   /* Selection */
   --sl-color-selection-bg: var(--alc-accent-soft);
   --sl-color-selection-text: var(--alc-fg-1);
+}
+
+/* Dark mode: flip the walnut gray scale so gray-1 = lightest text and
+   gray-7 = darkest surface (Starlight's convention, with the values inverted).
+   `--sl-color-black` is reused by Starlight as the mobile sidebar and TOC
+   panel background, so it must resolve to a surface that is *visible* against
+   the page bg — we use bg-elev-1 (one step lifted from the page). */
+[data-theme="dark"] {
+  --sl-color-white: var(--alc-fg-1);
+  --sl-color-black: var(--alc-bg-elev-1);
+  --sl-color-gray-1: var(--alc-walnut-50);
+  --sl-color-gray-2: var(--alc-walnut-200);
+  --sl-color-gray-3: var(--alc-walnut-300);
+  --sl-color-gray-4: var(--alc-walnut-400);
+  --sl-color-gray-5: var(--alc-walnut-700);
+  --sl-color-gray-6: var(--alc-walnut-800);
+  --sl-color-gray-7: var(--alc-bg-nav);
 }
 
 /* ── Headings: serif for h1/h2, sans for h3/h4 (matches alc-h* scale) ── */
@@ -548,6 +566,19 @@ h1.hero-title,
 }
 .cta-buttons > p {
   display: contents;
+}
+/* MDX wraps loose JSX children in <p> (and sometimes emits an empty
+   <p> sibling when JSX sits between paragraphs). Use :has() to flatten
+   any paragraph that contains an `.alc-btn`, and hide empty wrapper
+   paragraphs anywhere inside the outro CTA — the User Agent's default
+   1em block margin on those empty <p>s is what was making the
+   "Read the tutorial" row look chunky. */
+p:has(> .alc-btn) {
+  margin: 0;
+  display: contents;
+}
+.alc-cta > p:empty {
+  display: none;
 }
 
 /* ── Getting Started next-steps cards ── */

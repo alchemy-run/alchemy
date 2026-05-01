@@ -1,12 +1,62 @@
 ---
 /**
- * Override Starlight's ThemeProvider to force dark mode.
- * This replaces the default component that reads system/localStorage preferences.
+ * Pre-paint theme initializer. Mirrors Starlight's default ThemeProvider
+ * contract so its built-in `<ThemeSelect>` (and our marketing nav toggle)
+ * keep working. Reads `localStorage["starlight-theme"]` first, falls back
+ * to `prefers-color-scheme`, and writes `data-theme` on <html> before any
+ * paint to avoid a flash.
+ *
+ * Exposes `window.StarlightThemeProvider.updatePickers(theme)` so the
+ * `<starlight-theme-select>` web component can sync its UI when storage
+ * or system preference changes.
  */
 ---
 
 <script is:inline>
-  document.documentElement.dataset.theme = "dark";
-  try { localStorage.setItem("starlight-theme", "dark"); } catch (e) {}
-  window.StarlightThemeProvider = { updatePickers() {} };
+  window.StarlightThemeProvider = (() => {
+    const storageKey = "starlight-theme";
+    const read = () => {
+      try {
+        return localStorage.getItem(storageKey);
+      } catch {
+        return null;
+      }
+    };
+    const resolve = (pref) => {
+      if (pref === "light" || pref === "dark") return pref;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    };
+    const apply = () => {
+      document.documentElement.dataset.theme = resolve(read() || "auto");
+    };
+    apply();
+
+    // Re-resolve when the system theme changes and the user is on "auto".
+    window
+      .matchMedia("(prefers-color-scheme: dark)")
+      .addEventListener("change", () => {
+        const stored = read();
+        if (!stored || stored === "auto") apply();
+      });
+
+    return {
+      updatePickers(theme = read() || "auto") {
+        document
+          .querySelectorAll("starlight-theme-select")
+          .forEach((picker) => {
+            const select = picker.querySelector("select");
+            if (select) select.value = theme;
+            const tmpl = document.querySelector("#theme-icons");
+            const newIcon =
+              tmpl && tmpl.content.querySelector("." + theme);
+            if (newIcon) {
+              const oldIcon = picker.querySelector("svg.label-icon");
+              if (oldIcon) oldIcon.outerHTML = newIcon.outerHTML;
+            }
+          });
+      },
+    };
+  })();
 </script>

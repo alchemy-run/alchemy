@@ -243,6 +243,16 @@ body.alc-root,
 .stack-deploy-diagram__col .alc-term .alc-term__body {
   flex: 1;
   min-height: 0;
+}
+/* Static code snippet fits the fixed-height card already; allowing
+   `overflow: auto` here causes a few-pixel scroll region that
+   hijacks page wheel events. Clip instead. */
+.stack-deploy-diagram__col .alc-code-block .alc-code-block__pre {
+  overflow: hidden;
+}
+/* The animated deploy terminal grows as resources stream in, so it
+   genuinely needs to scroll. */
+.stack-deploy-diagram__col .alc-term .alc-term__body {
   overflow: auto;
 }
 .stack-deploy-diagram__caption {
@@ -2299,6 +2309,13 @@ body.alc-root,
     transparent 100%
   );
 }
+/* In dark mode the brown noise multiplied onto the dark page just turns
+   to mud. Flip to `screen` so the same noise pattern adds a faint warm
+   highlight grain instead of subtracting into black. */
+[data-theme="dark"] .alc-hero::before {
+  mix-blend-mode: screen;
+  opacity: 0.16;
+}
 /* Parchment "halo" between the animation canvas and the hero text.
    Solid parchment at the center (where the headline + subtitle live)
    so the animation never competes with type, fading to transparent
@@ -2311,11 +2328,14 @@ body.alc-root,
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  /* The halo's job is to fade the page color *over* the canvas animation
+     so the headline reads cleanly. Anchored to `--alc-bg` so it matches
+     whatever theme is active. */
   background: radial-gradient(
     ellipse 55% 50% at 50% 52%,
-    rgba(245, 239, 227, 0.92) 0%,
-    rgba(245, 239, 227, 0.78) 30%,
-    rgba(245, 239, 227, 0.4) 60%,
+    color-mix(in srgb, var(--alc-bg) 92%, transparent) 0%,
+    color-mix(in srgb, var(--alc-bg) 78%, transparent) 30%,
+    color-mix(in srgb, var(--alc-bg) 40%, transparent) 60%,
     transparent 100%
   );
 }
@@ -2350,6 +2370,19 @@ body.alc-root,
     #000 60%,
     transparent 100%
   );
+}
+/* In dark mode `multiply` collapses the strokes into the page (cream × dark
+   walnut ≈ dark walnut). Flip to `screen` so the same stroke reads as a
+   light highlight on the dark page. Color is bumped to pure white and
+   opacity raised so the screen-blended markings sit a notch above
+   light-mode visibility — they otherwise read as muted warm cream. */
+[data-theme="dark"] .alc-hero__bg-graph {
+  mix-blend-mode: screen;
+  color: #ffffff;
+  opacity: 1;
+  /* Strokes are drawn at low alpha by the JS (cap ~0.32). Boost the
+     compositing brightness so they read clearly above the dark page. */
+  filter: brightness(3.6);
 }
 .alc-hero__inner {
   position: relative;
@@ -3050,9 +3083,7 @@ body.alc-root,
    ============================================================ */
 
 .alc-copy-agent {
-  display: flex;
-  align-items: stretch;
-  gap: 0;
+  position: relative;
   max-width: 720px;
   margin: 24px auto 0;
   background: var(--alc-bg-sunk);
@@ -3062,9 +3093,10 @@ body.alc-root,
   text-align: left;
 }
 .alc-copy-agent__text {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 12px 16px;
+  display: block;
+  /* Reserve space at the right edge so long prompt lines never run
+     under the floating copy icon. */
+  padding: 12px 52px 12px 16px;
   font-family: var(--alc-font-mono);
   font-size: 13.5px;
   line-height: 1.5;
@@ -3078,38 +3110,33 @@ body.alc-root,
   overflow-y: auto;
 }
 .alc-copy-agent__btn {
-  flex: 0 0 auto;
+  position: absolute;
+  top: 8px;
+  right: 8px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 16px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   background: transparent;
-  border: 0;
-  border-left: 1px solid var(--alc-hairline);
-  font-family: var(--alc-font-sans);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--alc-fg-2);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--alc-fg-3);
   cursor: pointer;
   transition:
     color 120ms ease,
-    background 120ms ease;
+    background 120ms ease,
+    border-color 120ms ease;
 }
 .alc-copy-agent__btn:hover {
   color: var(--alc-accent-deep);
-  background: var(--alc-accent-soft);
+  background: var(--alc-bg-elev-1);
+  border-color: var(--alc-hairline-2);
 }
-
-@media (max-width: 640px) {
-  .alc-copy-agent {
-    flex-direction: column;
-  }
-  .alc-copy-agent__btn {
-    border-left: 0;
-    border-top: 1px solid var(--alc-hairline);
-    padding: 10px 16px;
-    justify-content: center;
-  }
+.alc-copy-agent__btn:focus-visible {
+  outline: 2px solid var(--alc-accent-40);
+  outline-offset: 2px;
 }
 
 /* ============================================================
@@ -3191,6 +3218,12 @@ body.alc-root,
   font-family: var(--alc-font-sans);
   text-align: left;
   background: var(--alc-bg-sunk);
+  /* The CTA cards sit directly on the hero mandala, and their tint
+     fills are translucent so the pattern bleeds through. Blur what
+     sits behind so the card text stays readable — same approach as
+     the marketing header. */
+  backdrop-filter: saturate(140%) blur(8px);
+  -webkit-backdrop-filter: saturate(140%) blur(8px);
   transition:
     border-color 140ms ease,
     transform 140ms ease;

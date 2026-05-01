@@ -73,9 +73,8 @@ const {
     const intensity = Number(canvas.dataset.intensity ?? 1);
     const nLayers = Math.max(1, Number(canvas.dataset.count ?? 10));
     const zoom = Number(canvas.dataset.zoom ?? 0.06);
-    const reduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
+    const motionMq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let reduced = motionMq.matches;
 
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
     let width = 0;
@@ -375,9 +374,27 @@ const {
         resizeQueued = false;
         resize();
         rgb = resolveRGB();
+        // In reduced-motion mode the RAF loop is stopped, so we need to
+        // explicitly redraw the static frame after the canvas has been
+        // resized — otherwise the canvas goes blank after a resize.
+        if (reduced) draw(0);
       });
     };
     window.addEventListener("resize", onResize, { passive: true });
+
+    // Honor live changes to the user's `prefers-reduced-motion` setting.
+    // When the user enables reduced motion mid-session, stop the loop and
+    // hold a static frame; when they disable it, resume the animation.
+    const onMotionChange = (e: MediaQueryListEvent) => {
+      reduced = e.matches;
+      cancelAnimationFrame(raf);
+      if (reduced) {
+        draw(0);
+      } else if (visible) {
+        raf = requestAnimationFrame(loop);
+      }
+    };
+    motionMq.addEventListener("change", onMotionChange);
 
     if (centerEl && typeof ResizeObserver !== "undefined") {
       const ro = new ResizeObserver(() => {
@@ -393,8 +410,12 @@ const {
       (entries) => {
         const wasVisible = visible;
         visible = entries[0]?.isIntersecting ?? true;
-        if (visible && !wasVisible && !reduced) {
-          raf = requestAnimationFrame(loop);
+        if (visible && !wasVisible) {
+          // Restart the loop when the canvas scrolls back into view, or
+          // — in reduced-motion mode — redraw the single static frame
+          // (it may have been cleared / sized while off-screen).
+          if (reduced) draw(0);
+          else raf = requestAnimationFrame(loop);
         } else if (!visible) {
           cancelAnimationFrame(raf);
         }
