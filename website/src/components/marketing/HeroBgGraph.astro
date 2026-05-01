@@ -101,15 +101,28 @@ const {
       }
     };
 
-    const resize = () => {
+    const resize = (): boolean => {
       const rect = canvas.getBoundingClientRect();
-      width = rect.width;
-      height = rect.height;
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const newW = rect.width;
+      const newH = rect.height;
+      const newDpr = Math.min(window.devicePixelRatio || 1, 2);
+      // iOS Safari fires `resize` continuously as the URL bar collapses
+      // / expands during scroll. Reassigning `canvas.width`/`height`
+      // wipes the bitmap *even when set to the same value*, which
+      // shows up as the mandala flashing every time you swipe. Skip
+      // when nothing actually changed; only the centerline (handled
+      // separately via ResizeObserver) needs to update on scroll.
+      if (newW === width && newH === height && newDpr === dpr) {
+        return false;
+      }
+      width = newW;
+      height = newH;
+      dpr = newDpr;
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       measureCenter();
+      return true;
     };
 
     const resolveRGB = (): [number, number, number] => {
@@ -372,12 +385,13 @@ const {
       resizeQueued = true;
       requestAnimationFrame(() => {
         resizeQueued = false;
-        resize();
+        const changed = resize();
         rgb = resolveRGB();
-        // In reduced-motion mode the RAF loop is stopped, so we need to
-        // explicitly redraw the static frame after the canvas has been
-        // resized — otherwise the canvas goes blank after a resize.
-        if (reduced) draw(0);
+        // In reduced-motion mode the RAF loop is stopped, so when the
+        // canvas was actually resized we need to explicitly redraw the
+        // static frame. If `resize()` no-op'd (mobile URL-bar wiggle
+        // with unchanged dimensions) we don't need to redraw at all.
+        if (reduced && changed) draw(0);
       });
     };
     window.addEventListener("resize", onResize, { passive: true });
