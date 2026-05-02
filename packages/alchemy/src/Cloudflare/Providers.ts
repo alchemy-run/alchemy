@@ -90,8 +90,8 @@ export const providers = () =>
       Layer.mergeAll(Build.CommandProvider(), RandomProvider()),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
-    Layer.provideMerge(Access.AccessLive),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
     Layer.provideMerge(CloudflareAuth),
+    Layer.provideMerge(Access.AccessLive),
     Layer.orDie,
   );
