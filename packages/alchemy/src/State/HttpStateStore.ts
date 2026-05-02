@@ -3,6 +3,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import { Access } from "../Cloudflare/Access.ts";
 import { StateApi } from "./HttpStateApi.ts";
 
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
@@ -17,10 +18,15 @@ export interface HttpStateStoreProps {
 
 export const makeHttpStateStore = ({ url, authToken }: HttpStateStoreProps) =>
   Effect.gen(function* () {
+    const accessHeaders = yield* Access.use((access) =>
+      access.getAccessHeaders(new URL(url).host),
+    );
     const apiClient = yield* HttpApiClient.make(StateApi, {
       baseUrl: url,
-      transformClient: HttpClient.mapRequest(
-        HttpClientRequest.bearerToken(authToken),
+      transformClient: HttpClient.mapRequest((req) =>
+        HttpClientRequest.setHeaders(accessHeaders)(
+          HttpClientRequest.bearerToken(authToken)(req),
+        ),
       ),
     });
     const state = apiClient.state;
