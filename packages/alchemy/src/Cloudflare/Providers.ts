@@ -5,6 +5,7 @@ import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Artifacts from "./Artifacts/index.ts";
+import * as AiGateway from "./AiGateway/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Containers from "./Container/index.ts";
@@ -34,6 +35,8 @@ export const providers = () =>
     Provider.collection([
       ApiToken.AccountApiToken,
       ApiToken.UserApiToken,
+      AiGateway.AiGateway,
+      AiGateway.AiGatewayBindingPolicy,
       Artifacts.ArtifactsBindingPolicy,
       Command,
       Containers.Container,
@@ -60,6 +63,8 @@ export const providers = () =>
       Layer.mergeAll(
         ApiToken.AccountApiTokenProvider(),
         ApiToken.UserApiTokenProvider(),
+        AiGateway.AiGatewayProvider(),
+        AiGateway.AiGatewayBindingPolicyLive,
         Artifacts.ArtifactsBindingPolicyLive,
         Containers.ContainerProvider(),
         D1.D1ConnectionPolicyLive,

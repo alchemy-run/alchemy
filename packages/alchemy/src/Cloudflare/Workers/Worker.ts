@@ -51,6 +51,7 @@ import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { AiGateway } from "../AiGateway/AiGateway.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
@@ -190,6 +191,7 @@ export type WorkerBindingResource =
   | D1Database
   | KVNamespace
   | CloudflareQueue
+  | AiGateway
   | ArtifactsBinding
   | DurableObjectNamespaceLike<any>;
 
@@ -727,8 +729,13 @@ export const Worker: Platform<
                           name: bindingName,
                           queueName: binding.queueName,
                         }
-                      : // TODO(sam): handle others
-                        undefined;
+                      : binding.Type === "Cloudflare.AiGateway"
+                        ? {
+                            type: "ai",
+                            name: bindingName,
+                          }
+                        : // TODO(sam): handle others
+                          undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({

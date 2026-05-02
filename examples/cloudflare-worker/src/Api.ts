@@ -6,6 +6,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import Agent from "./Agent.ts";
+import { Gateway } from "./AiGateway.ts";
 import { Bucket } from "./Bucket.ts";
 import { KV } from "./KV.ts";
 import NotifyWorkflow from "./NotifyWorkflow.ts";
@@ -35,6 +36,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const kv = yield* Cloudflare.KVNamespace.bind(KV);
     const queue = yield* Cloudflare.QueueBinding.bind(Queue);
     const repos = yield* Cloudflare.Artifacts.bind(Repos);
+    const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
 
     return {
       fetch: Effect.gen(function* () {
@@ -328,6 +330,29 @@ export default class Api extends Cloudflare.Worker<Api>()(
         // The consumer side runs in examples/cloudflare-worker-async (Effect-
         // based workers currently only expose a `fetch` handler via `Main`,
         // so `queue()` handler support here is a follow-up).
+        // AI Gateway smoke test — POST /ai with { prompt }.
+        //
+        // Routes a Workers AI inference call through the gateway resource so
+        // every request is observable in the Cloudflare AI Gateway UI and
+        // benefits from caching/rate limiting configured on the resource.
+        if (request.url.startsWith("/ai") && request.method === "POST") {
+          const text = yield* request.text;
+          const body = (() => {
+            try {
+              return JSON.parse(text || "{}") as { prompt?: string };
+            } catch {
+              return {} as { prompt?: string };
+            }
+          })();
+          const prompt = body.prompt?.trim() || "Say hello in one short sentence.";
+          const response = yield* aiGateway.run({
+            provider: "workers-ai",
+            endpoint: "@cf/meta/llama-3.1-8b-instruct",
+            headers: { "content-type": "application/json" },
+            query: { prompt },
+          });
+          return HttpServerResponse.fromWeb(response);
+        }
         if (request.url === "/queue/send" && request.method === "POST") {
           const text = yield* request.text;
           yield* queue.send({ text, sentAt: Date.now() }).pipe(Effect.orDie);
@@ -354,6 +379,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         Cloudflare.KVNamespaceBindingLive,
         Cloudflare.QueueBindingLive,
         Cloudflare.ArtifactsBindingLive,
+        Cloudflare.AiGatewayBindingLive,
       ),
     ),
   ),
