@@ -114,23 +114,13 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           credentials,
         );
       }
-
-      // Even when the worker exists, its deployed code may pre-date
-      // the current `STATE_STORE_VERSION`. If the unauthenticated
-      // `/version` probe 404s or reports a mismatched version, fall
-      // through to the deploy path so the worker is brought up to
-      // the version this CLI was built against.
-      const versionOk = yield* checkStateStoreVersion(credentials.url);
-      if (versionOk) {
-        yield* Clank.success(
-          `Cloudflare State Store '${scriptName}' is ready.`,
-        );
-        return;
-      }
-      yield* Clank.info(
-        `Worker '${scriptName}' is out of date; redeploying...`,
-      );
-      yield* finishBootstrap({ scriptName, profileName, localState, isCI });
+      yield* redeployIfStale({
+        scriptName,
+        profileName,
+        localState,
+        isCI,
+        url: credentials.url,
+      });
       yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
       return;
     }
@@ -202,23 +192,17 @@ export const state = (props?: {
       if (credentials) {
         // We have local credentials. Before trusting them, verify
         // the deployed worker is on the version this CLI was built
-        // against. A 404 (worker missing or older deploy without the
-        // `/version` route) or a version mismatch means the deployed
-        // code is stale and we must run the bootstrap flow again
-        // rather than silently issuing requests against an
-        // incompatible worker.
-        const versionOk = yield* checkStateStoreVersion(credentials.url);
-        if (!versionOk) {
-          yield* Clank.info(
-            `Cloudflare State Store '${scriptName}' is out of date; redeploying...`,
-          );
-          return yield* finishBootstrap({
-            scriptName,
-            profileName,
-            localState,
-            isCI,
-          });
-        }
+        // against. If it isn't, `redeployIfStale` runs the idempotent
+        // bootstrap flow and short-circuits with the freshly-deployed
+        // store.
+        const fresh = yield* redeployIfStale({
+          scriptName,
+          profileName,
+          localState,
+          isCI,
+          url: credentials.url,
+        });
+        if (fresh) return fresh;
 
         const httpState = yield* makeHttpStateStore(credentials);
 
@@ -252,22 +236,14 @@ export const state = (props?: {
           );
         }
 
-        // The script exists on the account but may have been
-        // deployed by an older CLI. Verify the version contract
-        // before handing the store back; if it's stale, run the
-        // bootstrap flow to bring it up to the current version.
-        const versionOk = yield* checkStateStoreVersion(credentials.url);
-        if (!versionOk) {
-          yield* Clank.info(
-            `Cloudflare State Store '${scriptName}' is out of date; redeploying...`,
-          );
-          return yield* finishBootstrap({
-            scriptName,
-            profileName,
-            localState,
-            isCI,
-          });
-        }
+        const fresh = yield* redeployIfStale({
+          scriptName,
+          profileName,
+          localState,
+          isCI,
+          url: credentials.url,
+        });
+        if (fresh) return fresh;
 
         const httpState = yield* makeHttpStateStore(credentials);
 
@@ -536,6 +512,38 @@ export const loginWithCloudflare = () =>
       ),
     ),
   );
+
+/**
+ * Run {@link finishBootstrap} iff the worker at `url` fails the
+ * version probe; otherwise resolve to `undefined`. Centralises the
+ * "is the deployed worker still compatible?" guard used by every
+ * code path that already has a presumably-valid worker URL.
+ */
+const redeployIfStale = ({
+  url,
+  scriptName,
+  profileName,
+  localState,
+  isCI,
+}: {
+  url: string;
+  scriptName: string;
+  profileName: string;
+  localState: StateService;
+  isCI: boolean;
+}) =>
+  Effect.gen(function* () {
+    if (yield* checkStateStoreVersion(url)) return undefined;
+    yield* Clank.info(
+      `Cloudflare State Store '${scriptName}' is out of date; redeploying...`,
+    );
+    return yield* finishBootstrap({
+      scriptName,
+      profileName,
+      localState,
+      isCI,
+    });
+  });
 
 /**
  * Probe the deployed worker's `/version` endpoint and decide whether
