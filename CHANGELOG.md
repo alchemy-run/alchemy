@@ -1,3 +1,26 @@
+## v2.0.0-beta.29
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**: Add AiGateway resource &nbsp;-&nbsp; by **Jan Henning** in https://github.com/alchemy-run/alchemy-effect/issues/130 [<samp>(b0361)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b036165)
+- **cloudflare/state-store**: Version-gate the deployed worker &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/156 [<samp>(bdc37)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/bdc37df)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - Don't run update out of order for strict DAGs &nbsp;-&nbsp; by **sam** and **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/144 [<samp>(fcae5)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/fcae571)
+  - Run state-store secret probe under the deployed script name &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/150 [<samp>(061f8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/061f86b)
+- **cloudflare**:
+  - Handle cloudflare access for edge preview workers &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/155 [<samp>(09d01)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/09d0130)
+- **core**:
+  - Handle failed resource gracefully &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/119 [<samp>(94d4b)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/94d4b3f)
+- **website**:
+  - Mobile dark hero, theme reactivity, brighter beta badge, OG host &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/146 [<samp>(05eae)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/05eae4d)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.28...HEAD)
+
+---
+
 ## v2.0.0-beta.28
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
