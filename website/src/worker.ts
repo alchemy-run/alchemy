@@ -1,5 +1,31 @@
 import type { WorkerEnv } from "../alchemy.run.ts";
 
+// Minimal `HTMLRewriter` shape — the workers runtime exposes it as a
+// global, but we don't pull in `@cloudflare/workers-types`, so declare
+// just what this file uses.
+declare class HTMLRewriter {
+  on(selector: string, handler: { element(el: HTMLRewriterElement): void }): HTMLRewriter;
+  transform(response: Response): Response;
+}
+interface HTMLRewriterElement {
+  getAttribute(name: string): string | null;
+  setAttribute(name: string, value: string): HTMLRewriterElement;
+}
+
+/**
+ * Astro bakes absolute URLs into `<meta property="og:image">`,
+ * `og:url`, `twitter:image`, and `<link rel="canonical">` at build time
+ * using the `site` config (`https://v2.alchemy.run`). PR previews and
+ * custom domains then advertise OG / canonical URLs that point back at
+ * the canonical host — so a Slack/Twitter unfurl of a preview URL
+ * fetches the *production* card, not the one for the page being
+ * shared.
+ *
+ * Rewrite those tags at the edge to match the request's actual host so
+ * each deployment unfurls itself.
+ */
+const CANONICAL_HOST = "v2.alchemy.run";
+
 export default {
   fetch: async (request: Request, env: WorkerEnv) => {
     if (request.method === "GET" && prefersMarkdown(request)) {
@@ -7,8 +33,47 @@ export default {
       const res = await env.ASSETS.fetch(new Request(mdUrl, request));
       if (res.status !== 404) return res;
     }
-    return env.ASSETS.fetch(request);
+    const res = await env.ASSETS.fetch(request);
+    return rewriteCanonicalHost(request, res);
   },
+};
+
+const rewriteCanonicalHost = (request: Request, res: Response): Response => {
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("text/html")) return res;
+  const reqUrl = new URL(request.url);
+  if (reqUrl.host === CANONICAL_HOST) return res;
+
+  class HostRewriter {
+    attr: "content" | "href";
+    constructor(attr: "content" | "href") {
+      this.attr = attr;
+    }
+    element(el: HTMLRewriterElement) {
+      const value = el.getAttribute(this.attr);
+      if (!value) return;
+      let u: URL;
+      try {
+        u = new URL(value);
+      } catch {
+        return;
+      }
+      if (u.host !== CANONICAL_HOST) return;
+      u.protocol = reqUrl.protocol;
+      u.host = reqUrl.host;
+      el.setAttribute(this.attr, u.toString());
+    }
+  }
+
+  const content = new HostRewriter("content");
+  const href = new HostRewriter("href");
+
+  return new HTMLRewriter()
+    .on('meta[property="og:image"]', content)
+    .on('meta[property="og:url"]', content)
+    .on('meta[name="twitter:image"]', content)
+    .on('link[rel="canonical"]', href)
+    .transform(res);
 };
 
 /**

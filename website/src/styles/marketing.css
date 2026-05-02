@@ -2384,6 +2384,28 @@ body.alc-root,
      compositing brightness so they read clearly above the dark page. */
   filter: brightness(3.6);
 }
+/* On phones the hero canvas takes up a much larger fraction of the
+   viewport than on desktop, so the same brightness multiplier plus
+   wide mask makes the mandala bloom over the headline / subtitle and
+   reads as harsher than the dark-mode desktop view. Pull the brightness
+   back, drop opacity, and tighten the mask so strokes feather out well
+   before they reach the type. */
+@media (max-width: 640px) {
+  [data-theme="dark"] .alc-hero__bg-graph {
+    filter: brightness(2.2);
+    opacity: 0.75;
+    -webkit-mask-image: radial-gradient(
+      ellipse 80% 70% at var(--alc-bg-cx) var(--alc-bg-cy),
+      #000 35%,
+      transparent 100%
+    );
+    mask-image: radial-gradient(
+      ellipse 80% 70% at var(--alc-bg-cx) var(--alc-bg-cy),
+      #000 35%,
+      transparent 100%
+    );
+  }
+}
 .alc-hero__inner {
   position: relative;
   z-index: 1;
@@ -2451,6 +2473,27 @@ body.alc-root,
 /* Fluid section heading */
 .alc-h2 {
   font-size: clamp(26px, 4.8vw, 34px);
+}
+/* MDX wraps loose text fragments inside JSX headings in <p> tags
+   (e.g. the outro CTA's split "Paste this … to get started" h2 ends
+   up as `<p>…</p><span><p>…</p></span><p>.</p>`). The UA's default
+   1em block margin on those <p>s opens up a big gap between the two
+   wrapped lines. Flatten them back to inline so the heading reads as
+   one piece of text. */
+.alc-h2 p {
+  display: inline;
+  margin: 0;
+}
+/* Prefix ornament on a centered CTA heading sits ABOVE the text as a
+   printer's mark, not inline next to the first word. (The previous
+   behavior — where the ornament happened to land on its own line —
+   was an accidental side-effect of UA <p> margins inside the h2 that
+   we just collapsed.) */
+.alc-cta .alc-h2 > .alc-orn--prefix {
+  display: block;
+  width: 1.4em;
+  height: 1.4em;
+  margin: 0 auto 14px;
 }
 
 /* Hero-scale serif statement used in place of an .alc-h2 + small lede
