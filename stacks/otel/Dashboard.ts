@@ -17,6 +17,7 @@ import { Traces } from "./Datasets.ts";
  * 3. Top resources by op count | Resource latency p95 by type/op
  * 4. Active users by version | Resource error rate
  * 5. State store deploy success vs error | State store deploy error rate
+ * 6. CLI failure rate by command | (reserved)
  *
  * All queries target `${stage}-traces` — Axiom's metrics datasets
  * cannot be queried via APL, but every metric we emit has an
@@ -180,6 +181,41 @@ export const CliOverviewDashboard = Axiom.Dashboard(
           },
         },
         {
+          id: "cli-failure-rate",
+          name: "CLI failure rate by command (%)",
+          type: "TimeSeries",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where name startswith "cli."
+              | extend command=extract("cli\\\\.(.+)", 1, name),
+                       is_error=toint(tobool(['error']))
+              | summarize total=count(), errors=sum(is_error)
+                  by command, bin_auto(_time)
+              | extend failure_rate_pct=todouble(errors) * 100.0 / todouble(total)
+              | project _time, command, failure_rate_pct
+              | order by _time asc
+            `,
+          },
+        },
+        {
+          id: "cli-failure-rate-overall",
+          name: "CLI failure rate by command (7d)",
+          type: "Table",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where name startswith "cli."
+              | extend command=extract("cli\\\\.(.+)", 1, name),
+                       is_error=toint(tobool(['error']))
+              | summarize total=count(), errors=sum(is_error) by command
+              | extend failure_rate_pct=todouble(errors) * 100.0 / todouble(total)
+              | project command, total, errors, failure_rate_pct
+              | order by failure_rate_pct desc, total desc
+            `,
+          },
+        },
+        {
           id: "resource-error-rate",
           name: "Resource error rate",
           type: "TimeSeries",
@@ -213,6 +249,9 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         // Row 5
         { i: "state-store-deploys", x: 0, y: 24, w: 6, h: 6 },
         { i: "state-store-error-rate", x: 6, y: 24, w: 6, h: 6 },
+        // Row 6
+        { i: "cli-failure-rate", x: 0, y: 30, w: 6, h: 6 },
+        { i: "cli-failure-rate-overall", x: 6, y: 30, w: 6, h: 6 },
       ];
 
       return {
