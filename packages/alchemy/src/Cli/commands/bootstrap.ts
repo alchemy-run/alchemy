@@ -20,6 +20,7 @@ import * as AWSEnvironment from "../../AWS/Environment";
 import * as AWSRegion from "../../AWS/Region";
 import { AuthProviders } from "../../Auth/AuthProvider";
 import { withProfileOverride } from "../../Auth/Profile";
+import * as CloudflareAccess from "../../Cloudflare/Access.ts";
 import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider";
 import * as CloudflareEnvironment from "../../Cloudflare/CloudflareEnvironment";
 import * as CloudflareCredentials from "../../Cloudflare/Credentials";
@@ -190,6 +191,7 @@ const bootstrapCloudflareCommand = Command.make(
         Layer.mergeAll(
           CloudflareCredentials.fromAuthProvider(),
           CloudflareEnvironment.fromProfile(),
+          CloudflareAccess.AccessLive,
         ),
         authLayer,
       );

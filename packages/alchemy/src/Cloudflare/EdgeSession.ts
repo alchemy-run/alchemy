@@ -3,6 +3,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { Access } from "./Access.ts";
 import { CloudflareEnvironment } from "./CloudflareEnvironment.ts";
 
 /**
@@ -127,18 +128,27 @@ export const createEdgeSession = (
 ): Effect.Effect<
   EdgeSessionHandle,
   EdgeSessionError,
-  CloudflareEnvironment | HttpClient.HttpClient | Credentials
+  CloudflareEnvironment | HttpClient.HttpClient | Credentials | Access
 > =>
   Effect.gen(function* () {
-    const [{ previewToken }, host] = yield* Effect.all(
+    const [{ previewToken }, { url, headers }] = yield* Effect.all(
       [
         createUploadToken.pipe(Effect.flatMap((t) => uploadScript(options, t))),
-        workerHost(options.scriptName),
+        workerHost(options.scriptName).pipe(
+          Effect.flatMap(
+            Effect.fn(function* (host) {
+              const headers = yield* Access.use((access) =>
+                access.getAccessHeaders(host),
+              );
+              return { url: `https://${host}`, headers };
+            }),
+          ),
+        ),
       ],
       { concurrency: "unbounded" },
     );
     return {
-      url: `https://${host}`,
-      headers: { "cf-workers-preview-token": previewToken },
+      url,
+      headers: { ...headers, "cf-workers-preview-token": previewToken },
     } satisfies EdgeSessionHandle;
   }).pipe((e) => wrap(e, "Failed to create edge preview session"));

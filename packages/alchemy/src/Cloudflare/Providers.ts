@@ -3,9 +3,10 @@ import { Command } from "../Build/Command.ts";
 import * as Build from "../Build/index.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
+import * as Access from "./Access.ts";
+import * as AiGateway from "./AiGateway/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Artifacts from "./Artifacts/index.ts";
-import * as AiGateway from "./AiGateway/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Containers from "./Container/index.ts";
@@ -91,5 +92,6 @@ export const providers = () =>
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
     Layer.provideMerge(CloudflareAuth),
+    Layer.provideMerge(Access.AccessLive),
     Layer.orDie,
   );
