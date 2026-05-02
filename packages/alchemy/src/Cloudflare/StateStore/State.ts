@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 
 import * as Config from "effect/Config";
 import { adopt } from "../../AdoptPolicy.ts";
@@ -14,6 +15,7 @@ import { ALCHEMY_PROFILE } from "../../Auth/Profile.ts";
 import * as Cloudflare from "../../Cloudflare/Providers.ts";
 import { deploy } from "../../Deploy.ts";
 import * as Alchemy from "../../Stack.ts";
+import { StateApi } from "../../State/HttpStateApi.ts";
 import {
   makeHttpStateStore,
   type HttpStateStoreProps,
@@ -29,7 +31,7 @@ import * as Clank from "../../Util/Clank.ts";
 import * as Access from "../Access.ts";
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
-import Api, { STATE_STORE_SCRIPT_NAME } from "./Api.ts";
+import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
 import { AuthTokenSecretName, TokenValue } from "./Token.ts";
 
 /** Filename used for stored credentials under the profile directory. */
@@ -112,6 +114,23 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           credentials,
         );
       }
+
+      // Even when the worker exists, its deployed code may pre-date
+      // the current `STATE_STORE_VERSION`. If the unauthenticated
+      // `/version` probe 404s or reports a mismatched version, fall
+      // through to the deploy path so the worker is brought up to
+      // the version this CLI was built against.
+      const versionOk = yield* checkStateStoreVersion(credentials.url);
+      if (versionOk) {
+        yield* Clank.success(
+          `Cloudflare State Store '${scriptName}' is ready.`,
+        );
+        return;
+      }
+      yield* Clank.info(
+        `Worker '${scriptName}' is out of date; redeploying...`,
+      );
+      yield* finishBootstrap({ scriptName, profileName, localState, isCI });
       yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
       return;
     }
@@ -180,9 +199,27 @@ export const state = (props?: {
         });
       }
 
-      // TODO(sam): support upgrading state store, right now we only deploy once
       if (credentials) {
-        // it's in the profile, let's go
+        // We have local credentials. Before trusting them, verify
+        // the deployed worker is on the version this CLI was built
+        // against. A 404 (worker missing or older deploy without the
+        // `/version` route) or a version mismatch means the deployed
+        // code is stale and we must run the bootstrap flow again
+        // rather than silently issuing requests against an
+        // incompatible worker.
+        const versionOk = yield* checkStateStoreVersion(credentials.url);
+        if (!versionOk) {
+          yield* Clank.info(
+            `Cloudflare State Store '${scriptName}' is out of date; redeploying...`,
+          );
+          return yield* finishBootstrap({
+            scriptName,
+            profileName,
+            localState,
+            isCI,
+          });
+        }
+
         const httpState = yield* makeHttpStateStore(credentials);
 
         if (alchemyContext.updateStateStore) {
@@ -214,6 +251,24 @@ export const state = (props?: {
             credentials,
           );
         }
+
+        // The script exists on the account but may have been
+        // deployed by an older CLI. Verify the version contract
+        // before handing the store back; if it's stale, run the
+        // bootstrap flow to bring it up to the current version.
+        const versionOk = yield* checkStateStoreVersion(credentials.url);
+        if (!versionOk) {
+          yield* Clank.info(
+            `Cloudflare State Store '${scriptName}' is out of date; redeploying...`,
+          );
+          return yield* finishBootstrap({
+            scriptName,
+            profileName,
+            localState,
+            isCI,
+          });
+        }
+
         const httpState = yield* makeHttpStateStore(credentials);
 
         if (alchemyContext.updateStateStore) {
@@ -481,6 +536,30 @@ export const loginWithCloudflare = () =>
       ),
     ),
   );
+
+/**
+ * Probe the deployed worker's `/version` endpoint and decide whether
+ * it satisfies the current {@link STATE_STORE_VERSION} contract.
+ *
+ * Reuses the same typed {@link StateApi} client the rest of the store
+ * speaks, just without the bearer-token transform — the `/version`
+ * route is intentionally unauthenticated so we can probe it before
+ * trusting any locally-cached credentials.
+ *
+ * Returns `true` only on a successful response carrying the matching
+ * version. Any failure (404 from a pre-`/version` deploy, transport
+ * error, schema mismatch, version mismatch) collapses to `false`,
+ * since the caller's response in every case is the same: fall
+ * through to the idempotent bootstrap flow.
+ */
+const checkStateStoreVersion = (url: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
+    const result = yield* client.version
+      .getVersion()
+      .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    return result?.version === STATE_STORE_VERSION;
+  });
 
 /**
  * Tiny ES-module worker that reads `env.SECRET.get()` and echoes it
