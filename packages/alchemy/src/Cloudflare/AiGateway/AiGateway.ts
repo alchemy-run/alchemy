@@ -216,6 +216,12 @@ export type AiGateway = Resource<
   Providers
 >;
 
+// Cloudflare's AI Gateway API uses 0 to mean "disabled" for cache TTL and
+// rate limiting fields. Normalize back to null so user-facing semantics
+// match what was passed in.
+const nullIfZero = (value: number | null | undefined): number | null =>
+  value == null || value === 0 ? null : value;
+
 export const isAiGateway = (value: unknown): value is AiGateway =>
   typeof value === "object" &&
   value !== null &&
@@ -257,17 +263,13 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  * });
  * ```
  */
-export const AiGateway = Object.assign(
-  Resource<AiGateway>("Cloudflare.AiGateway"),
-  {
-    /**
-     * Bind this gateway to the surrounding Worker, returning an Effect-native
-     * client for the runtime AI Gateway binding.
-     */
-    bind: (...args: Parameters<typeof AiGatewayBinding.bind>) =>
-      AiGatewayBinding.bind(...args),
-  },
-);
+export const AiGateway = Resource<AiGateway>("Cloudflare.AiGateway")({
+  /**
+   * Bind this gateway to the surrounding Worker, returning an Effect-native
+   * client for the runtime AI Gateway binding.
+   */
+  bind: AiGatewayBinding.bind,
+});
 
 export const AiGatewayProvider = () =>
   Provider.effect(
@@ -325,13 +327,13 @@ export const AiGatewayProvider = () =>
         accountTag: gateway.accountTag ?? undefined,
         internalId: gateway.internalId ?? undefined,
         cacheInvalidateOnUpdate: gateway.cacheInvalidateOnUpdate,
-        cacheTtl: gateway.cacheTtl,
+        cacheTtl: nullIfZero(gateway.cacheTtl),
         collectLogs: gateway.collectLogs,
         createdAt: gateway.createdAt,
         modifiedAt: gateway.modifiedAt,
-        rateLimitingInterval: gateway.rateLimitingInterval,
-        rateLimitingLimit: gateway.rateLimitingLimit,
-        rateLimitingTechnique: gateway.rateLimitingTechnique,
+        rateLimitingInterval: nullIfZero(gateway.rateLimitingInterval),
+        rateLimitingLimit: nullIfZero(gateway.rateLimitingLimit),
+        rateLimitingTechnique: gateway.rateLimitingTechnique ?? "fixed",
         authentication: gateway.authentication ?? undefined,
         dlp: gateway.dlp,
         isDefault: gateway.isDefault ?? undefined,

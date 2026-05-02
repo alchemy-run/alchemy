@@ -109,15 +109,18 @@ export const AiGatewayBindingLive = Layer.effect(
 
     return Effect.fn(function* (gateway: AiGatewayResource) {
       yield* Policy(gateway);
+      // Capture the gatewayId accessor (which requires WorkerEnvironment) but
+      // don't resolve it here — that happens lazily at runtime when each
+      // method is invoked. Resolving eagerly would require WorkerEnvironment
+      // at deploy time, where it's intentionally not provided.
       const gatewayIdAccessor = yield* gateway.gatewayId;
-      const gatewayId = yield* gatewayIdAccessor;
       const ai = yield* Effect.serviceOption(WorkerEnvironment).pipe(
         Effect.map(Option.getOrUndefined),
         Effect.map((env) => env?.[gateway.LogicalId]! as Ai),
         Effect.cached,
       );
-      const runtimeGateway = yield* ai.pipe(
-        Effect.map((ai) => ai.gateway(gatewayId)),
+      const runtimeGateway = yield* Effect.zip(ai, gatewayIdAccessor).pipe(
+        Effect.map(([ai, gatewayId]) => ai.gateway(gatewayId)),
         Effect.cached,
       );
 

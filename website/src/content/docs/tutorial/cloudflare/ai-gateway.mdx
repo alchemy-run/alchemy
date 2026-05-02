@@ -1,0 +1,210 @@
+---
+title: Add an AI Gateway
+description: Route Workers AI calls through a Cloudflare AI Gateway for caching, rate limiting, and unified observability across providers.
+sidebar:
+  order: 6
+---
+
+You've now wired Durable Objects, hibernatable WebSockets, a
+container, and a Workflow into your Worker. The last piece in the
+Cloudflare track is an **AI Gateway** — a stable account-scoped
+endpoint that fronts every model provider you call (Workers AI,
+OpenAI, Anthropic, Bedrock, …) and gives you caching, rate
+limiting, retries, DLP, and a single dashboard of every request,
+token, and cost. This tutorial adds one to the chat app and routes
+a Workers AI inference call through it.
+
+## How an AI Gateway looks
+
+The shape is familiar — a tiny resource declaration in
+`alchemy.run.ts`, then `.bind(...)` it into the Worker so the
+runtime gets a typed client:
+
+```typescript
+const gateway = yield* Cloudflare.AiGateway("Gateway", {
+  cacheTtl: 60,
+  collectLogs: true,
+});
+```
+
+Every property is optional. The two above turn on response caching
+(60s TTL) and request logging — which surfaces every prompt,
+completion, latency, and token count in the AI Gateway dashboard.
+
+## Declare the gateway
+
+Create `src/AiGateway.ts` with a single resource definition. Pick
+sensible defaults — the rest can be tuned later without replacing
+the gateway:
+
+```typescript
+// src/AiGateway.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Gateway = Cloudflare.AiGateway("Gateway", {
+  cacheTtl: 60,
+  collectLogs: true,
+});
+```
+
+Add it to `alchemy.run.ts` so it gets deployed alongside the rest
+of the stack:
+
+```diff lang="typescript"
+// alchemy.run.ts
++import { Gateway } from "./src/AiGateway.ts";
+import Api from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "CloudflareWorkerExample",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const api = yield* Api;
++   const gateway = yield* Gateway;
+
+    return {
+      url: api.url.as<string>(),
++     gatewayId: gateway.gatewayId,
+    };
+  }),
+);
+```
+
+## Bind it into the Worker
+
+`Cloudflare.AiGateway.bind(Gateway)` returns an Effect-native
+client whose `run`, `getUrl`, `getLog`, and `patchLog` methods are
+all typed and tagged with `AiGatewayError`. Bind the gateway in
+the Worker's init phase, and provide `AiGatewayBindingLive` so the
+runtime knows how to resolve the underlying `Ai` binding:
+
+```diff lang="typescript"
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
++import { Gateway } from "./AiGateway.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.path, assets: "./assets" },
+  Effect.gen(function* () {
++   const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+
+    return {
+      fetch: Effect.gen(function* () {
+        // …existing routes
+      }),
+    };
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
++       Cloudflare.AiGatewayBindingLive,
+      ),
+    ),
+  ),
+) {}
+```
+
+Behind the scenes, `.bind(Gateway)`:
+
+1. Attaches an `ai` binding to the Worker config at deploy time
+   (the deploy-time `Binding.Policy`).
+2. Reads `env[Gateway.LogicalId]` at runtime and calls
+   `ai.gateway(gatewayId)` once, cached.
+3. Wraps every method on the runtime gateway in an Effect tagged
+   with `AiGatewayError`.
+
+You don't need to touch `wrangler.toml` or write the binding by
+hand — the resource owns both halves.
+
+## Add an `/ai` route
+
+Use `aiGateway.run(...)` to call any model the gateway routes to.
+For Workers AI, pass `provider: "workers-ai"` and an `endpoint`
+matching one of the model IDs:
+
+```diff lang="typescript"
+return {
+  fetch: Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+
++   if (request.url.startsWith("/ai") && request.method === "POST") {
++     const text = yield* request.text;
++     const { prompt } = JSON.parse(text || "{}") as { prompt?: string };
++
++     const response = yield* aiGateway.run({
++       provider: "workers-ai",
++       endpoint: "@cf/meta/llama-3.1-8b-instruct",
++       headers: { "content-type": "application/json" },
++       query: {
++         prompt: prompt?.trim() || "Say hello in one short sentence.",
++       },
++     });
++
++     return HttpServerResponse.fromWeb(response);
++   }
+
+    return HttpServerResponse.text("Not Found", { status: 404 });
+  }),
+};
+```
+
+`aiGateway.run` returns a standard `Response` — pipe it back out
+with `HttpServerResponse.fromWeb` and the Worker streams the
+model's reply directly to the client.
+
+:::tip[Universal endpoint]
+The same `aiGateway.run` works for OpenAI, Anthropic, Bedrock,
+Google AI Studio, Replicate, and any other provider AI Gateway
+supports. Swap the `provider` and `endpoint` fields and you get
+the same caching, rate limiting, and logging across providers.
+:::
+
+## Try it
+
+Deploy and send a prompt:
+
+```sh
+bun alchemy deploy
+curl -X POST "$(bun alchemy stack output url)/ai" \
+  -H "content-type: application/json" \
+  -d '{"prompt":"Write a haiku about Effect"}'
+```
+
+The first call should take ~1–2 seconds. Send the **exact same**
+prompt again and you'll see it return in milliseconds — that's
+the `cacheTtl: 60` config doing its job. Open the Cloudflare
+dashboard → **AI** → **AI Gateway** → your gateway and you'll see
+both requests, with the second flagged as a cache hit, plus
+latency and token usage on every entry.
+
+## Tune caching, rate limits, and DLP
+
+Every prop on `Cloudflare.AiGateway` maps to an update API call —
+no replacement, no downtime. A typical production-grade config
+might look like:
+
+```typescript
+const gateway = yield* Cloudflare.AiGateway("Gateway", {
+  id: "prod-gateway",
+  cacheTtl: 300,
+  cacheInvalidateOnUpdate: true,
+  rateLimitingInterval: 60,
+  rateLimitingLimit: 100,
+  rateLimitingTechnique: "sliding",
+  collectLogs: true,
+  logManagement: 100_000,
+  logManagementStrategy: "DELETE_OLDEST",
+  authentication: true,
+});
+```
+
+Bumping `cacheTtl`, `rateLimitingLimit`, or toggling
+`authentication` is a single `bun alchemy deploy` away — the
+diff updates the gateway in place.
+
+Your Worker now has every Cloudflare primitive the tutorial set
+covers — Durable Objects, hibernatable WebSockets, a Container, a
+Workflow, and an AI Gateway — all wired together as a single
+typed Effect program. From here, browse the
+[Concepts](/concepts/stack), [Guides](/guides/cli), and
+[Providers](/providers) sections to keep building.

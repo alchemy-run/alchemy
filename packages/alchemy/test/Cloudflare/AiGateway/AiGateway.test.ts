@@ -1,3 +1,4 @@
+import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Test from "@/Test/Vitest";
@@ -7,8 +8,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import { Gateway } from "./gateway.ts";
+import AiGatewayTestWorker from "./worker.ts";
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+});
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -124,3 +130,47 @@ const waitForGatewayToBeDeleted = Effect.fn(function* (
 });
 
 class GatewayStillExists extends Data.TaggedError("GatewayStillExists") {}
+
+const Stack = Alchemy.Stack(
+  "AiGatewayBindingStack",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const gateway = yield* Gateway;
+    const worker = yield* AiGatewayTestWorker;
+    return {
+      gatewayId: gateway.gatewayId,
+      url: worker.url.as<string>(),
+    };
+  }),
+);
+
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+
+test(
+  "deployed worker can call AiGateway binding (effect-native getUrl)",
+  Effect.gen(function* () {
+    const out = yield* stack;
+    const workerUrl = out.url;
+    expect(workerUrl).toBeTypeOf("string");
+    expect(out.gatewayId).toBe("alchemy-test-ai-gateway-binding");
+
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.get(`${workerUrl}/url`).pipe(
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 10,
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (yield* res.json) as { url: string };
+    // The runtime gateway exposes a stable account-scoped URL like
+    // https://gateway.ai.cloudflare.com/v1/<accountId>/<gatewayId>
+    expect(body.url).toContain(out.gatewayId);
+    expect(body.url).toContain("gateway.ai.cloudflare.com");
+  }).pipe(logLevel),
+  { timeout: 180_000 },
+);
