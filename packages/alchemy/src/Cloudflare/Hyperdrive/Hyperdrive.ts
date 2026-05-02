@@ -25,7 +25,7 @@ export type HyperdrivePublicOrigin = {
    * Database password. Pass a plain string or a `Redacted<string>` to keep it
    * out of logs.
    */
-  password: string | Redacted.Redacted<string>;
+  password: Redacted.Redacted<string>;
 };
 
 /**
@@ -36,9 +36,9 @@ export type HyperdriveAccessOrigin = {
   host: string;
   database: string;
   user: string;
-  password: string | Redacted.Redacted<string>;
-  accessClientId: string;
-  accessClientSecret: string | Redacted.Redacted<string>;
+  password: Redacted.Redacted<string>;
+  accessClientId: Redacted.Redacted<string>;
+  accessClientSecret: Redacted.Redacted<string>;
 };
 
 export type HyperdriveOrigin = HyperdrivePublicOrigin | HyperdriveAccessOrigin;
@@ -103,21 +103,20 @@ export type HyperdriveProps = {
 };
 
 
-type HyperdriveAttributes = {
-  hyperdriveId: string;
-  name: string;
-  accountId: string;
-  scheme: HyperdriveScheme;
-  host: string;
-  port: number | undefined;
-  database: string;
-  user: string;
-};
 
 export type Hyperdrive = Resource<
   "Cloudflare.Hyperdrive",
   HyperdriveProps,
-  HyperdriveAttributes,
+  {
+    hyperdriveId: string;
+    name: string;
+    accountId: string;
+    scheme: HyperdriveScheme;
+    host: string;
+    port: number | undefined;
+    database: string;
+    user: string;
+  },
   never,
   Providers
 >;
@@ -153,59 +152,6 @@ export type Hyperdrive = Resource<
  */
 export const Hyperdrive = Resource<Hyperdrive>("Cloudflare.Hyperdrive");
 
-export const defaultPort = (scheme: HyperdriveScheme): number =>
-  scheme === "mysql" ? 3306 : 5432;
-
-
-const unwrap = (v: string | Redacted.Redacted<string>): string =>
-  Redacted.isRedacted(v) ? Redacted.value(v) : v;
-
-/**
- * Build the request body shape that the distilled `createConfig`/`updateConfig`
- * methods accept. Secrets are unwrapped here because the distilled TS types
- * declare `password`/`access_client_secret` as plain strings even though the
- * runtime schema also accepts `Redacted<string>`.
- */
-const toRequestOrigin = (origin: HyperdriveOrigin) => {
-  if ("accessClientId" in origin) {
-    return {
-      accessClientId: origin.accessClientId,
-      accessClientSecret: unwrap(origin.accessClientSecret),
-      database: origin.database,
-      host: origin.host,
-      password: unwrap(origin.password),
-      scheme: origin.scheme,
-      user: origin.user,
-    };
-  }
-  return {
-    database: origin.database,
-    host: origin.host,
-    password: unwrap(origin.password),
-    port: origin.port ?? defaultPort(origin.scheme),
-    scheme: origin.scheme,
-    user: origin.user,
-  };
-};
-
-const projectOrigin = (origin: HyperdriveOrigin) => {
-  if ("accessClientId" in origin) {
-    return {
-      scheme: origin.scheme,
-      host: origin.host,
-      port: undefined,
-      database: origin.database,
-      user: origin.user,
-    };
-  }
-  return {
-    scheme: origin.scheme,
-    host: origin.host,
-    port: origin.port ?? defaultPort(origin.scheme),
-    database: origin.database,
-    user: origin.user,
-  };
-};
 
 export const HyperdriveProvider = () =>
   Provider.effect(
@@ -300,7 +246,7 @@ export const HyperdriveProvider = () =>
               name,
               accountId,
               ...projectOrigin(news.dev ?? news.origin),
-            } as HyperdriveAttributes;
+            }
           }
 
           const body = {
@@ -335,7 +281,7 @@ export const HyperdriveProvider = () =>
             name: created.name,
             accountId,
             ...projectOrigin(news.origin),
-          } as HyperdriveAttributes;
+          };
         }),
         update: Effect.fn(function* ({ news, output }) {
           const ctx = yield* AlchemyContext;
@@ -345,7 +291,7 @@ export const HyperdriveProvider = () =>
               name: output.name,
               accountId,
               ...projectOrigin(news.dev ?? news.origin),
-            } as HyperdriveAttributes;
+            };
 
           }
 
@@ -378,3 +324,59 @@ export const HyperdriveProvider = () =>
       };
     }),
   );
+
+
+
+export const defaultPort = (scheme: HyperdriveScheme): number =>
+  scheme === "mysql" ? 3306 : 5432;
+
+
+const unwrap = (v: string | Redacted.Redacted<string>): string =>
+  Redacted.isRedacted(v) ? Redacted.value(v) : v;
+
+/**
+ * Build the request body shape that the distilled `createConfig`/`updateConfig`
+ * methods accept. Secrets are unwrapped here because the distilled TS types
+ * declare `password`/`access_client_secret` as plain strings even though the
+ * runtime schema also accepts `Redacted<string>`.
+ */
+const toRequestOrigin = (origin: HyperdriveOrigin) => {
+  if ("accessClientId" in origin) {
+    return {
+      accessClientId: unwrap(origin.accessClientId),
+      accessClientSecret: unwrap(origin.accessClientSecret),
+      database: origin.database,
+      host: origin.host,
+      password: unwrap(origin.password),
+      scheme: origin.scheme,
+      user: origin.user,
+    };
+  }
+  return {
+    database: origin.database,
+    host: origin.host,
+    password: unwrap(origin.password),
+    port: origin.port ?? defaultPort(origin.scheme),
+    scheme: origin.scheme,
+    user: origin.user,
+  };
+};
+
+const projectOrigin = (origin: HyperdriveOrigin) => {
+  if ("accessClientId" in origin) {
+    return {
+      scheme: origin.scheme,
+      host: origin.host,
+      port: undefined,
+      database: origin.database,
+      user: origin.user,
+    };
+  }
+  return {
+    scheme: origin.scheme,
+    host: origin.host,
+    port: origin.port ?? defaultPort(origin.scheme),
+    database: origin.database,
+    user: origin.user,
+  };
+};
