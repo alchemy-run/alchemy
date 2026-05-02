@@ -30,6 +30,7 @@ import {
   type ResourceLike,
 } from "./Resource.ts";
 import { type StackSpec } from "./Stack.ts";
+import { findCycleMembers } from "./Util/scc.ts";
 import {
   State,
   type CreatedResourceState,
@@ -147,6 +148,14 @@ export type Plan<Output = any> = {
     [id in string]?: Delete<ResourceLike>;
   };
   output: Output;
+  /**
+   * FQNs of resources that participate in a strongly-connected component
+   * of the upstream dependency graph (or have a self-edge). The scheduler
+   * uses this to decide whether an `update` node must publish its prior
+   * attr early to break the cycle, or can simply wait for upstreams and
+   * publish a fresh attr (the common, linear case).
+   */
+  cycleMembers: ReadonlySet<string>;
 };
 
 export interface MakePlanOptions {
@@ -660,12 +669,18 @@ export const make = <A>(
       )).map((update) => [update.resource.FQN, update]),
     ) as Plan["resources"];
 
+    // Compute SCC membership once. Apply uses it to decide whether an
+    // update node must publish its prior attr early to break a cycle, or
+    // can simply wait for upstreams like a DAG node (the common case).
+    const cycleMembers = findCycleMembers(allUpstreamDependencies);
+
     // Detect unsatisfiable dependency cycles among create/replace nodes.
-    // Update/noop nodes signal their Deferred before waitForDeps so they
-    // cannot deadlock. Create/replace nodes only signal early when they
-    // have a precreate handler. Simulate the concurrent execution:
-    // precreate nodes are immediately "resolved", then iteratively resolve
-    // any node whose deps are all resolved. Remaining nodes would deadlock.
+    // Update/noop nodes signal their Deferred before waitForDeps when in a
+    // cycle so they cannot deadlock. Create/replace nodes only signal
+    // early when they have a precreate handler. Simulate the concurrent
+    // execution: precreate nodes are immediately "resolved", then
+    // iteratively resolve any node whose deps are all resolved. Remaining
+    // nodes would deadlock.
     {
       const createReplaceNodes = new Set(
         Object.entries(resourceGraph)
@@ -803,6 +818,7 @@ export const make = <A>(
       resources: resourceGraph,
       deletions,
       output: stack.output,
+      cycleMembers,
     } satisfies Plan<A> as Plan<A>;
   }).pipe(
     ensureArtifactStore,

@@ -424,7 +424,19 @@ export const loginWithCloudflare = () =>
     }
 
     // 2. Fetch the auth-token value via an edge-preview worker.
-    const authToken = yield* readSecretViaEdge(store.id, AuthTokenSecretName);
+    //    We piggy-back on the already-deployed state-store script so the
+    //    `cf-workers-preview-token` header has a real workers.dev route to
+    //    swap onto. Uploading the probe under a brand-new script name fails
+    //    on accounts where that script has never been deployed (or where
+    //    workers.dev preview URLs are off by default — the post-2024
+    //    Cloudflare default for new accounts) because the host doesn't
+    //    resolve and Cloudflare's edge serves a 400 HTML error page
+    //    instead of routing to the preview.
+    const authToken = yield* readSecretViaEdge(
+      STATE_STORE_SCRIPT_NAME,
+      store.id,
+      AuthTokenSecretName,
+    );
 
     // 3. Derive the deployed worker URL.
     const { subdomain } = yield* workers.getSubdomain({ accountId });
@@ -468,9 +480,6 @@ export const loginWithCloudflare = () =>
     ),
   );
 
-/** Preview script name used by the edge-probe worker. */
-const PROBE_SCRIPT_NAME = "alchemy-state-store-probe";
-
 /**
  * Tiny ES-module worker that reads `env.SECRET.get()` and echoes it
  * back. Uploaded as an ephemeral edge-preview, called once, then
@@ -488,19 +497,32 @@ const SECRET_PROBE_SOURCE = `export default {
 };`;
 
 /**
- * Upload a tiny edge-preview worker that binds the given Secrets
- * Store secret, call it once, and return the decoded value. The
- * Cloudflare REST API deliberately hides secret values; only worker
- * bindings can resolve them, so this is the out-of-band path.
+ * Upload an ephemeral edge-preview build of the given (already
+ * deployed) script that binds the requested Secrets Store secret,
+ * call it once with the preview token, and return the decoded value.
+ * The Cloudflare REST API deliberately hides secret values; only
+ * worker bindings can resolve them, so this is the out-of-band path.
+ *
+ * `scriptName` MUST be a script that is already deployed on the
+ * account with workers.dev enabled — the `cf-workers-preview-token`
+ * header swaps our probe code in for an existing route, it does not
+ * create one. Using an undeployed name (or a deployed script that
+ * doesn't have workers.dev enabled) makes the workers.dev edge serve
+ * a generic Cloudflare 400 HTML error page instead of routing to the
+ * preview. The state-store script itself satisfies both conditions.
  */
-const readSecretViaEdge = (storeId: string, secretName: string) =>
+const readSecretViaEdge = (
+  scriptName: string,
+  storeId: string,
+  secretName: string,
+) =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const file = new File([SECRET_PROBE_SOURCE], "worker.js", {
       type: "application/javascript+module",
     });
     const session = yield* createEdgeSession({
-      scriptName: PROBE_SCRIPT_NAME,
+      scriptName,
       files: [file],
       bindings: [
         { type: "secrets_store_secret", name: "SECRET", secretName, storeId },
@@ -512,6 +534,13 @@ const readSecretViaEdge = (storeId: string, secretName: string) =>
     if (response.status !== 200) {
       const body = yield* response.text.pipe(
         Effect.catch(() => Effect.succeed("")),
+      );
+      // TEMP(sam): dump the full body so we can capture the exact
+      // Cloudflare error page when the probe fails in the wild. Drop
+      // this once we've confirmed the routing fix covers all the
+      // observed failure modes.
+      yield* Effect.logWarning(
+        `Secret probe failed (${response.status}) at ${session.url}\n${body}`,
       );
       return yield* Effect.fail(
         new EdgeSessionError({
