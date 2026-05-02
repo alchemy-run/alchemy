@@ -41,14 +41,28 @@ export type StaticSite = ReturnType<typeof StaticSite>;
  * @resource
  *
  * @section Basic Usage
- * Point `command` at your build script and `outdir` at where it writes
- * output. Alchemy runs the command, hashes the output, and deploys it.
+ * Point `command` at your build script, `outdir` at where it writes
+ * output, and `main` at a Worker entrypoint that serves the assets.
+ * Alchemy runs the command, hashes the output, and deploys the
+ * Worker bound to the built assets.
+ *
+ * The Worker receives an `ASSETS` binding it can delegate to. A
+ * minimal passthrough Worker looks like:
+ *
+ * ```typescript
+ * // src/worker.ts
+ * export default {
+ *   fetch: (request: Request, env: { ASSETS: Fetcher }) =>
+ *     env.ASSETS.fetch(request),
+ * };
+ * ```
  *
  * @example Deploying a Hugo site
  * ```typescript
  * const site = yield* Cloudflare.StaticSite("Blog", {
  *   command: "hugo --minify",
  *   outdir: "public",
+ *   main: "./src/worker.ts",
  * });
  * ```
  *
@@ -61,10 +75,25 @@ export type StaticSite = ReturnType<typeof StaticSite>;
  * const site = yield* Cloudflare.StaticSite("App", {
  *   command: "npm run build",
  *   outdir: "dist",
+ *   main: "./src/worker.ts",
  *   assetsConfig: {
  *     htmlHandling: "auto-trailing-slash",
  *     notFoundHandling: "single-page-application",
  *   },
+ * });
+ * ```
+ *
+ * @section Building from a Subdirectory
+ * Set `cwd` to run the build command in a subdirectory (e.g. a
+ * monorepo package). `outdir` is resolved relative to `cwd`.
+ *
+ * @example Building a frontend in a monorepo
+ * ```typescript
+ * const site = yield* Cloudflare.StaticSite("Web", {
+ *   cwd: "apps/web",
+ *   command: "npm run build",
+ *   outdir: "dist",
+ *   main: "apps/web/worker.ts",
  * });
  * ```
  *
@@ -77,6 +106,7 @@ export type StaticSite = ReturnType<typeof StaticSite>;
  * const site = yield* Cloudflare.StaticSite("Docs", {
  *   command: "npm run build",
  *   outdir: "dist",
+ *   main: "./src/worker.ts",
  *   memo: {
  *     include: ["content/**", "templates/**", "config.toml"],
  *   },
