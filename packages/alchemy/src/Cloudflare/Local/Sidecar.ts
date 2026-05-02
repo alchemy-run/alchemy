@@ -14,6 +14,11 @@ import type { WorkerBundleOptions } from "../Workers/WorkerBundle.ts";
 export interface ServeOptions extends WorkerBundleOptions {
   name: string;
   bindings: WorkerBinding[];
+  /**
+   * Local-mode hyperdrive connection details, keyed by binding name.
+   * Forwarded to the runtime as the worker's `hyperdrives` field.
+   */
+  hyperdrives?: Record<string, Worker.HyperdriveOrigin>;
   durableObjectNamespaces: Worker.DurableObjectNamespace[];
 }
 

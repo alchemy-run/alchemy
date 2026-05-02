@@ -79,4 +79,4 @@ export class HyperdriveConnectionPolicy extends Binding.Policy<
 >()("Cloudflare.Hyperdrive.Connection") {}
 
 export const HyperdriveConnectionPolicyLive =
-  HyperdriveConnectionPolicy.layer.succeed(HyperdriveBinding);
+  HyperdriveConnectionPolicy.layer.effect(HyperdriveBinding);

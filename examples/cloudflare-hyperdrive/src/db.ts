@@ -4,11 +4,8 @@ import * as Redacted from "effect/Redacted";
 
 
 export const MyDb = Effect.gen(function* () {
-  /* console.log("host: ", process.env.PGHOST);
-  console.log("database: ", process.env.PGDATABASE);
-  console.log("user: ", process.env.PGUSER);
-  console.log("password: ", process.env.PGPASSWORD); */
   return yield* Cloudflare.Hyperdrive("mydb", {
+    // Production origin — used on `alchemy deploy`.
     origin: {
       scheme: "postgres",
       host: process.env.PGHOST!,           // e.g. "ep-xxx.us-east-1.aws.neon.tech"
@@ -16,6 +13,15 @@ export const MyDb = Effect.gen(function* () {
       database: process.env.PGDATABASE!,
       user: process.env.PGUSER!,
       password: Redacted.make(process.env.PGPASSWORD!),
+    },
+    // Local dev origin — used on `alchemy dev`.
+    dev: {
+      scheme: "postgres",
+      host: "localhost",
+      port: 5432,
+      database: "app",
+      user: "app",
+      password: Redacted.make("app"),
     },
   });
 });

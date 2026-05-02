@@ -2,6 +2,7 @@ import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -94,21 +95,29 @@ export type HyperdriveProps = {
    * the origin database.
    */
   originConnectionLimit?: number;
+  /**
+   * Local development overrides. When the stack runs in dev mode
+   * connect to a locally running database 
+   */
+  dev?: HyperdrivePublicOrigin;
+};
+
+
+type HyperdriveAttributes = {
+  hyperdriveId: string;
+  name: string;
+  accountId: string;
+  scheme: HyperdriveScheme;
+  host: string;
+  port: number | undefined;
+  database: string;
+  user: string;
 };
 
 export type Hyperdrive = Resource<
   "Cloudflare.Hyperdrive",
   HyperdriveProps,
-  {
-    hyperdriveId: string;
-    name: string;
-    accountId: string;
-    scheme: HyperdriveScheme;
-    host: string;
-    port: number | undefined;
-    database: string;
-    user: string;
-  },
+  HyperdriveAttributes,
   never,
   Providers
 >;
@@ -144,7 +153,7 @@ export type Hyperdrive = Resource<
  */
 export const Hyperdrive = Resource<Hyperdrive>("Cloudflare.Hyperdrive");
 
-const defaultPort = (scheme: HyperdriveScheme): number =>
+export const defaultPort = (scheme: HyperdriveScheme): number =>
   scheme === "mysql" ? 3306 : 5432;
 
 
@@ -224,6 +233,9 @@ export const HyperdriveProvider = () =>
       return {
         stables: ["hyperdriveId", "accountId"],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
+          const ctx = yield* AlchemyContext;
+          if (ctx.dev) return undefined;
+
           if (!isResolved(news)) return undefined;
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" } as const;
@@ -237,6 +249,11 @@ export const HyperdriveProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
+          const ctx = yield* AlchemyContext;
+          if (ctx.dev) {
+            return output;
+          }
+
           if (output?.hyperdriveId) {
             return yield* getConfig({
               accountId: output.accountId,
@@ -275,6 +292,17 @@ export const HyperdriveProvider = () =>
         }),
         create: Effect.fn(function* ({ id, news }) {
           const name = yield* createConfigName(id, news.name);
+
+          const ctx = yield* AlchemyContext;
+          if (ctx.dev) {
+            return {
+              hyperdriveId: "",
+              name,
+              accountId,
+              ...projectOrigin(news.dev ?? news.origin),
+            } as HyperdriveAttributes;
+          }
+
           const body = {
             accountId,
             name,
@@ -284,12 +312,6 @@ export const HyperdriveProvider = () =>
             originConnectionLimit: news.originConnectionLimit,
           };
           const created = yield* createConfig(body).pipe(
-            // `InvalidHyperdriveConfig` (code 2007) is Cloudflare's generic
-            // "config is invalid" bucket — it fires for name conflicts AND
-            // for genuine validation errors (private host, bad origin, etc.).
-            // Try to recover by adopting an existing config with the same
-            // name; if there isn't one, re-fail with the original error so
-            // the user sees Cloudflare's actual message.
             Effect.catchTag("InvalidHyperdriveConfig", (originalError) =>
               Effect.gen(function* () {
                 const match = yield* findByName(name);
@@ -313,9 +335,20 @@ export const HyperdriveProvider = () =>
             name: created.name,
             accountId,
             ...projectOrigin(news.origin),
-          };
+          } as HyperdriveAttributes;
         }),
         update: Effect.fn(function* ({ news, output }) {
+          const ctx = yield* AlchemyContext;
+          if (ctx.dev) {
+            return {
+              hyperdriveId: "",
+              name: output.name,
+              accountId,
+              ...projectOrigin(news.dev ?? news.origin),
+            } as HyperdriveAttributes;
+
+          }
+
           const updated = yield* updateConfig({
             accountId: output.accountId,
             hyperdriveId: output.hyperdriveId,
@@ -333,6 +366,8 @@ export const HyperdriveProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          if (!output.hyperdriveId) return;
+
           yield* deleteConfig({
             accountId: output.accountId,
             hyperdriveId: output.hyperdriveId,
