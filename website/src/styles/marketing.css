@@ -2484,6 +2484,17 @@ body.alc-root,
   display: inline;
   margin: 0;
 }
+/* Prefix ornament on a centered CTA heading sits ABOVE the text as a
+   printer's mark, not inline next to the first word. (The previous
+   behavior — where the ornament happened to land on its own line —
+   was an accidental side-effect of UA <p> margins inside the h2 that
+   we just collapsed.) */
+.alc-cta .alc-h2 > .alc-orn--prefix {
+  display: block;
+  width: 1.4em;
+  height: 1.4em;
+  margin: 0 auto 14px;
+}
 
 /* Hero-scale serif statement used in place of an .alc-h2 + small lede
    when a section's value-prop reads better as one big sentence. */
