@@ -2474,6 +2474,16 @@ body.alc-root,
 .alc-h2 {
   font-size: clamp(26px, 4.8vw, 34px);
 }
+/* MDX wraps loose text fragments inside JSX headings in <p> tags
+   (e.g. the outro CTA's split "Paste this … to get started" h2 ends
+   up as `<p>…</p><span><p>…</p></span><p>.</p>`). The UA's default
+   1em block margin on those <p>s opens up a big gap between the two
+   wrapped lines. Flatten them back to inline so the heading reads as
+   one piece of text. */
+.alc-h2 p {
+  display: inline;
+  margin: 0;
+}
 
 /* Hero-scale serif statement used in place of an .alc-h2 + small lede
    when a section's value-prop reads better as one big sentence. */
