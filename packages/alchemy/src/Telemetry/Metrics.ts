@@ -49,6 +49,32 @@ export const stateStoreCounter = Metric.counter(
 export type StateStoreOp = "deploy";
 
 /**
+ * Discriminator for a State store implementation. Recorded once per
+ * process via {@link recordStateStoreInit} when the State layer is
+ * constructed, so the dashboard can break projects down by which
+ * backend they're using.
+ *
+ * - `local` — filesystem-backed `localState()` (the default).
+ * - `inmemory` — `inMemoryState()` (tests, throwaway).
+ * - `http` — bare `makeHttpStateStore` against an arbitrary URL.
+ * - `cloudflare-http` — the Cloudflare-deployed HTTP state store.
+ */
+export type StateStoreKind = "local" | "inmemory" | "http" | "cloudflare-http";
+
+/**
+ * Counter for State store layer construction. Tagged with `kind` so we
+ * can answer "how many distinct projects are using each backend" from
+ * the corresponding `state_store.init` spans.
+ */
+export const stateStoreInitCounter = Metric.counter(
+  "alchemy.state_store.inits",
+  {
+    description: "Number of times a State store layer is constructed.",
+    incremental: true,
+  },
+);
+
+/**
  * Wraps a resource lifecycle Effect to record a counter + timer entry,
  * tagged with `resource_type`, `op`, and `status` (`success`/`error`).
  *
@@ -111,6 +137,31 @@ export const recordStateStoreOp =
           1,
         ),
       ),
+    );
+
+/**
+ * Wraps a State store construction Effect to:
+ *
+ * 1. Bump {@link stateStoreInitCounter} tagged with `kind`.
+ * 2. Open a `state_store.init` span carrying
+ *    `alchemy.state_store.kind` so Axiom (which can't query metric
+ *    datasets via APL) can group projects by backend.
+ *
+ * Apply at every `Layer.effect(State, …)` site exactly once.
+ */
+export const recordStateStoreInit =
+  (kind: StateStoreKind) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    self.pipe(
+      Effect.tap(() =>
+        Metric.update(
+          Metric.withAttributes(stateStoreInitCounter, { kind }),
+          1,
+        ),
+      ),
+      Effect.withSpan("state_store.init", {
+        attributes: { "alchemy.state_store.kind": kind },
+      }),
     );
 
 export type ResourceOp = "precreate" | "create" | "update" | "delete" | "read";

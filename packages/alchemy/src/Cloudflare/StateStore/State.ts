@@ -27,7 +27,10 @@ import * as Credentials from "../Credentials.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { makeLocalState } from "../../State/LocalState.ts";
 import { State, type StateService } from "../../State/State.ts";
-import { recordStateStoreOp } from "../../Telemetry/Metrics.ts";
+import {
+  recordStateStoreInit,
+  recordStateStoreOp,
+} from "../../Telemetry/Metrics.ts";
 import * as Clank from "../../Util/Clank.ts";
 import * as Access from "../Access.ts";
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
@@ -279,7 +282,7 @@ export const state = (props?: {
         localState,
         isCI,
       });
-    }).pipe(Effect.orDie),
+    }).pipe(recordStateStoreInit("cloudflare-http"), Effect.orDie),
   ).pipe(
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
