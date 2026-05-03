@@ -49,22 +49,11 @@ export const stateStoreCounter = Metric.counter(
 export type StateStoreOp = "deploy";
 
 /**
- * Discriminator for a State store implementation. Recorded once per
- * process via {@link recordStateStoreInit} when the State layer is
- * constructed, so the dashboard can break projects down by which
- * backend they're using.
- *
- * - `local` — filesystem-backed `localState()` (the default).
- * - `inmemory` — `inMemoryState()` (tests, throwaway).
- * - `http` — bare `makeHttpStateStore` against an arbitrary URL.
- * - `cloudflare-http` — the Cloudflare-deployed HTTP state store.
- */
-export type StateStoreKind = "local" | "inmemory" | "http" | "cloudflare-http";
-
-/**
- * Counter for State store layer construction. Tagged with `kind` so we
- * can answer "how many distinct projects are using each backend" from
- * the corresponding `state_store.init` spans.
+ * Counter for State store layer construction. Tagged with `id` (the
+ * `StateService.id` slug) so we can answer "how many distinct projects
+ * are using each backend" from the corresponding `state_store.init`
+ * spans. Open-ended on purpose: third-party state stores get counted
+ * automatically by setting their `StateService.id`.
  */
 export const stateStoreInitCounter = Metric.counter(
   "alchemy.state_store.inits",
@@ -142,27 +131,38 @@ export const recordStateStoreOp =
 /**
  * Wraps a State store construction Effect to:
  *
- * 1. Bump {@link stateStoreInitCounter} tagged with `kind`.
+ * 1. Bump {@link stateStoreInitCounter} tagged with `id`.
  * 2. Open a `state_store.init` span carrying
- *    `alchemy.state_store.kind` so Axiom (which can't query metric
+ *    `alchemy.state_store.id` so Axiom (which can't query metric
  *    datasets via APL) can group projects by backend.
  *
- * Apply at every `Layer.effect(State, …)` site exactly once.
+ * The `id` is read off the constructed `StateService.id` field, so any
+ * third-party state-store implementation gets tracked just by setting
+ * a stable slug there. Apply at every `Layer.effect(State, …)` site
+ * exactly once.
  */
-export const recordStateStoreInit =
-  (kind: StateStoreKind) =>
-  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-    self.pipe(
-      Effect.tap(() =>
-        Metric.update(
-          Metric.withAttributes(stateStoreInitCounter, { kind }),
-          1,
-        ),
+export const recordStateStoreInit = <
+  A extends { readonly id: string },
+  E,
+  R,
+>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  self.pipe(
+    Effect.tap((service) =>
+      Effect.all(
+        [
+          Metric.update(
+            Metric.withAttributes(stateStoreInitCounter, { id: service.id }),
+            1,
+          ),
+          Effect.annotateCurrentSpan("alchemy.state_store.id", service.id),
+        ],
+        { discard: true },
       ),
-      Effect.withSpan("state_store.init", {
-        attributes: { "alchemy.state_store.kind": kind },
-      }),
-    );
+    ),
+    Effect.withSpan("state_store.init"),
+  );
 
 export type ResourceOp = "precreate" | "create" | "update" | "delete" | "read";
 

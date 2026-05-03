@@ -17,8 +17,10 @@ import { Traces } from "./Datasets.ts";
  *      Distinct `alchemy.git.origin_hash` where `alchemy.ci=true`.
  *   4. **What state stores are people using?**
  *      Sourced from `state_store.init` spans tagged with
- *      `alchemy.state_store.kind` (`local` | `inmemory` | `http` |
- *      `cloudflare-http`). Emitted once per process via
+ *      `alchemy.state_store.id` (the open-ended `StateService.id`
+ *      slug; built-ins are `local` / `inmemory` / `http` /
+ *      `cloudflare-http`, third-party stores get tracked automatically
+ *      by setting their own slug). Emitted once per process via
  *      `recordStateStoreInit` at every `Layer.effect(State, …)` site.
  *
  * Project identity uses `alchemy.git.origin_hash` rather than
@@ -133,34 +135,34 @@ export const CliOverviewDashboard = Axiom.Dashboard(
 
         // Row 3 — Q4: state-store breakdown.
         {
-          id: "state-store-projects-by-kind",
-          name: "Projects by state store kind (7d)",
+          id: "state-store-projects-by-id",
+          name: "Projects by state store (7d)",
           type: "Table",
           query: {
             apl: Output.interpolate`
               ['${t}']
               | where name == "state_store.init"
-              | extend kind=tostring(['attributes.custom']['alchemy.state_store.kind']),
+              | extend store=tostring(['attributes.custom']['alchemy.state_store.id']),
                        project=tostring(['resource.custom']['alchemy.git.origin_hash']),
                        uid=tostring(['resource.custom']['alchemy.user.id'])
               | summarize projects=dcountif(project, project != ""),
                           users=dcount(uid),
                           inits=count()
-                  by kind
+                  by store
               | order by projects desc
             `,
           },
         },
         {
-          id: "state-store-kind-over-time",
-          name: "State store init by kind / hour",
+          id: "state-store-by-id-over-time",
+          name: "State store init by store / hour",
           type: "TimeSeries",
           query: {
             apl: Output.interpolate`
               ['${t}']
               | where name == "state_store.init"
-              | extend kind=tostring(['attributes.custom']['alchemy.state_store.kind'])
-              | summarize count=count() by kind, bin_auto(_time)
+              | extend store=tostring(['attributes.custom']['alchemy.state_store.id'])
+              | summarize count=count() by store, bin_auto(_time)
               | order by _time asc
             `,
           },
@@ -243,8 +245,8 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         { i: "users-per-project", x: 0, y: 4, w: 8, h: 8 },
         { i: "project-team-size-distribution", x: 8, y: 4, w: 4, h: 8 },
         // Row 3
-        { i: "state-store-projects-by-kind", x: 0, y: 12, w: 6, h: 6 },
-        { i: "state-store-kind-over-time", x: 6, y: 12, w: 6, h: 6 },
+        { i: "state-store-projects-by-id", x: 0, y: 12, w: 6, h: 6 },
+        { i: "state-store-by-id-over-time", x: 6, y: 12, w: 6, h: 6 },
         // Row 4
         { i: "projects-over-time", x: 0, y: 18, w: 6, h: 6 },
         { i: "ci-vs-local-projects", x: 6, y: 18, w: 6, h: 6 },

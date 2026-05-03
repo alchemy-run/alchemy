@@ -282,7 +282,7 @@ export const state = (props?: {
         localState,
         isCI,
       });
-    }).pipe(recordStateStoreInit("cloudflare-http"), Effect.orDie),
+    }).pipe(recordStateStoreInit, Effect.orDie),
   ).pipe(
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
@@ -304,6 +304,7 @@ const makeCloudflareStateStore = Effect.fnUntraced(function* ({
     url,
     authToken,
     transformClient: HttpClientRequest.setHeaders(accessHeaders),
+    id: "cloudflare-http",
   });
 });
 

@@ -9,7 +9,7 @@ import { State, StateStoreError, type StateService } from "./State.ts";
 import { encodeState, reviveState } from "./StateEncoding.ts";
 
 export const localState = () =>
-  Layer.effect(State, makeLocalState().pipe(recordStateStoreInit("local")));
+  Layer.effect(State, makeLocalState().pipe(recordStateStoreInit));
 
 export const makeLocalState = () =>
   Effect.gen(function* () {
@@ -56,6 +56,7 @@ export const makeLocalState = () =>
             .pipe(Effect.tap(() => Effect.sync(() => created.add(dir))));
 
     const state: StateService = {
+      id: "local",
       listStacks: () =>
         fs.readDirectory(stateDir).pipe(
           recover,

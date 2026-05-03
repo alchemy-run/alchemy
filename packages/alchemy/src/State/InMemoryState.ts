@@ -16,15 +16,14 @@ export const inMemoryState = (
 ) =>
   Layer.effect(
     State,
-    Effect.succeed(InMemoryService(initialState)).pipe(
-      recordStateStoreInit("inmemory"),
-    ),
+    Effect.succeed(InMemoryService(initialState)).pipe(recordStateStoreInit),
   );
 
 export const InMemoryService = (
   state: Record<StackId, Record<StageId, Record<Fqn, ResourceState>>> = {},
 ) =>
   State.of({
+    id: "inmemory",
     listStacks: () => Effect.succeed(Array.from(Object.keys(state))),
     listStages: (stack: string) =>
       Effect.succeed(

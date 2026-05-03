@@ -17,12 +17,19 @@ export interface HttpStateStoreProps {
   transformClient?: (
     client: HttpClientRequest.HttpClientRequest,
   ) => HttpClientRequest.HttpClientRequest;
+  /**
+   * `StateService.id` slug for telemetry. Defaults to `"http"`. The
+   * Cloudflare-deployed HTTP state store overrides this to
+   * `"cloudflare-http"`.
+   */
+  id?: string;
 }
 
 export const makeHttpStateStore = ({
   url,
   authToken,
   transformClient,
+  id = "http",
 }: HttpStateStoreProps) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
@@ -37,6 +44,7 @@ export const makeHttpStateStore = ({
     const state = apiClient.state;
 
     const service: StateService = {
+      id,
       listStacks: () =>
         state.listStacks().pipe(
           Effect.map((stacks) => [...stacks]),
