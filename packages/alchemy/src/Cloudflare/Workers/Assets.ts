@@ -165,18 +165,30 @@ export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
       );
     }),
   );
-  const result = {
-    directory: props.directory,
+  const sortedManifest = Object.fromEntries(
+    Array.from(manifest.entries()).sort((a, b) => a[0].localeCompare(b[0])),
+  );
+  // Hash only inputs that affect what gets uploaded — the file
+  // manifest, asset config, and the special `_headers` / `_redirects`
+  // files. `directory` is deliberately excluded: identical bytes at a
+  // different absolute path must produce the same hash, otherwise
+  // diffing across machines (CI runner → local laptop, monorepo
+  // root → workspace root, etc.) spuriously reports "changed" and
+  // causes both unnecessary re-uploads and `NotFound` failures when
+  // the previously-recorded path is gone.
+  const hash = yield* sha256Object({
     config: props.config,
-    manifest: Object.fromEntries(
-      Array.from(manifest.entries()).sort((a, b) => a[0].localeCompare(b[0])),
-    ),
+    manifest: sortedManifest,
     _headers,
     _redirects,
-  };
+  });
   return {
-    ...result,
-    hash: yield* sha256Object(result),
+    directory: props.directory,
+    config: props.config,
+    manifest: sortedManifest,
+    _headers,
+    _redirects,
+    hash,
   };
 });
 
