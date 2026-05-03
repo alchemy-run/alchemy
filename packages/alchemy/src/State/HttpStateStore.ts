@@ -10,26 +10,36 @@ import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import { StateStoreError, type StateService } from "./State.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
-export interface HttpStateStoreProps {
+/**
+ * Persisted shape of an HTTP state store endpoint — `{ url, authToken }`.
+ * Stored in the credentials file alongside other per-profile secrets.
+ * Deliberately separate from {@link HttpStateStoreProps}: `id` and
+ * `transformClient` are deployment-time choices, not credentials.
+ */
+export interface HttpStateStoreCredentials {
   url: string;
   /** Bearer token used to authenticate every request. */
   authToken: string;
+}
+
+export interface HttpStateStoreProps extends HttpStateStoreCredentials {
+  /**
+   * `StateService.id` slug for telemetry — e.g. `"http"` for a bare
+   * HTTP store, `"cloudflare-http"` for the Cloudflare-deployed
+   * variant. Required so every concrete deployment of this state-store
+   * shape shows up distinctly on the adoption dashboard.
+   */
+  id: string;
   transformClient?: (
     client: HttpClientRequest.HttpClientRequest,
   ) => HttpClientRequest.HttpClientRequest;
-  /**
-   * `StateService.id` slug for telemetry. Defaults to `"http"`. The
-   * Cloudflare-deployed HTTP state store overrides this to
-   * `"cloudflare-http"`.
-   */
-  id?: string;
 }
 
 export const makeHttpStateStore = ({
   url,
   authToken,
   transformClient,
-  id = "http",
+  id,
 }: HttpStateStoreProps) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
