@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { identity } from "effect/Function";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -13,14 +14,24 @@ export interface HttpStateStoreProps {
   url: string;
   /** Bearer token used to authenticate every request. */
   authToken: string;
+  transformClient?: (
+    client: HttpClientRequest.HttpClientRequest,
+  ) => HttpClientRequest.HttpClientRequest;
 }
 
-export const makeHttpStateStore = ({ url, authToken }: HttpStateStoreProps) =>
+export const makeHttpStateStore = ({
+  url,
+  authToken,
+  transformClient,
+}: HttpStateStoreProps) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
       baseUrl: url,
-      transformClient: HttpClient.mapRequest(
-        HttpClientRequest.bearerToken(authToken),
+      transformClient: HttpClient.mapRequest((req) =>
+        req.pipe(
+          HttpClientRequest.bearerToken(authToken),
+          transformClient ?? identity,
+        ),
       ),
     });
     const state = apiClient.state;
