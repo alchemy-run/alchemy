@@ -274,9 +274,7 @@ const executePlan = Effect.fnUntraced(function* (
     // Aggregate every collected lifecycle failure into a single parallel Cause
     // so the apply ends with one combined error containing every distinct
     // failure / defect that occurred across the concurrent fibers.
-    yield* Effect.failCause(
-      failures.map((f) => f.cause).reduce(Cause.combine),
-    );
+    yield* Effect.failCause(failures.map((f) => f.cause).reduce(Cause.combine));
   }
 });
 
@@ -882,10 +880,7 @@ const executeNode = (
           type: node.resource.Type,
           cause,
         });
-        yield* Deferred.failCause(
-          ready[fqn],
-          cause as Cause.Cause<never>,
-        );
+        yield* Deferred.failCause(ready[fqn], cause as Cause.Cause<never>);
         yield* session.emit({
           kind: "status-change",
           id: node.resource.LogicalId,

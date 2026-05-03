@@ -760,14 +760,8 @@ export class ResourceFailure extends Data.TaggedError("ResourceFailure")<{
 type LifecycleHook = "create" | "update" | "delete";
 
 export type LifecycleHooks = {
-  create?: (
-    id: string,
-    props: TestResourceProps,
-  ) => Effect.Effect<void, any>;
-  update?: (
-    id: string,
-    props: TestResourceProps,
-  ) => Effect.Effect<void, any>;
+  create?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
+  update?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
   delete?: (id: string) => Effect.Effect<void, any>;
 };
 

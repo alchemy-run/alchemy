@@ -344,7 +344,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
               return {} as { prompt?: string };
             }
           })();
-          const prompt = body.prompt?.trim() || "Say hello in one short sentence.";
+          const prompt =
+            body.prompt?.trim() || "Say hello in one short sentence.";
           const response = yield* aiGateway.run({
             provider: "workers-ai",
             endpoint: "@cf/meta/llama-3.1-8b-instruct",

@@ -55,13 +55,9 @@ const expectConvergedStatus = (status: ResourceState["status"] | undefined) => {
 // of those outcomes; the corresponding recovery deploy validates terminal
 // state.
 const expectNotStarted = (state: ResourceState | undefined) => {
-  expect([
-    undefined,
-    "creating",
-    "replacing",
-    "created",
-    "updated",
-  ]).toContain(state?.status);
+  expect([undefined, "creating", "replacing", "created", "updated"]).toContain(
+    state?.status,
+  );
 };
 
 export class ResourceFailure extends Data.TaggedError("ResourceFailure")<{
