@@ -1,3 +1,13 @@
+## v2.0.0-beta.30
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**: Apply Cloudflare Access headers to HTTP requests &nbsp;-&nbsp; by **jacobiajohnson** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/160 [<samp>(fd329)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/fd329e7)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.29...HEAD)
+
+---
+
 ## v2.0.0-beta.29
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
