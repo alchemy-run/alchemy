@@ -1,9 +1,9 @@
 import * as Effect from "effect/Effect";
+import { identity } from "effect/Function";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import { Access } from "../Cloudflare/Access.ts";
 import { StateApi } from "./HttpStateApi.ts";
 
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
@@ -14,18 +14,23 @@ export interface HttpStateStoreProps {
   url: string;
   /** Bearer token used to authenticate every request. */
   authToken: string;
+  transformClient?: (
+    client: HttpClientRequest.HttpClientRequest,
+  ) => HttpClientRequest.HttpClientRequest;
 }
 
-export const makeHttpStateStore = ({ url, authToken }: HttpStateStoreProps) =>
+export const makeHttpStateStore = ({
+  url,
+  authToken,
+  transformClient,
+}: HttpStateStoreProps) =>
   Effect.gen(function* () {
-    const accessHeaders = yield* Access.use((access) =>
-      access.getAccessHeaders(new URL(url).host),
-    );
     const apiClient = yield* HttpApiClient.make(StateApi, {
       baseUrl: url,
       transformClient: HttpClient.mapRequest((req) =>
-        HttpClientRequest.setHeaders(accessHeaders)(
-          HttpClientRequest.bearerToken(authToken)(req),
+        req.pipe(
+          HttpClientRequest.bearerToken(authToken),
+          transformClient ?? identity,
         ),
       ),
     });

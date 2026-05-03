@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 
 import * as Config from "effect/Config";
@@ -204,7 +205,7 @@ export const state = (props?: {
         });
         if (fresh) return fresh;
 
-        const httpState = yield* makeHttpStateStore(credentials);
+        const httpState = yield* makeCloudflareStateStore(credentials);
 
         if (alchemyContext.updateStateStore) {
           yield* deployStateStore(scriptName, httpState);
@@ -245,7 +246,7 @@ export const state = (props?: {
         });
         if (fresh) return fresh;
 
-        const httpState = yield* makeHttpStateStore(credentials);
+        const httpState = yield* makeCloudflareStateStore(credentials);
 
         if (alchemyContext.updateStateStore) {
           yield* deployStateStore(scriptName, httpState);
@@ -286,6 +287,18 @@ export const state = (props?: {
     Layer.provideMerge(Access.AccessLive),
     Layer.orDie,
   );
+
+const makeCloudflareStateStore = (props: { url: string; authToken: string }) =>
+  Effect.gen(function* () {
+    const access = yield* Access.Access;
+    const accessHeaders = yield* access.getAccessHeaders(
+      new URL(props.url).host,
+    );
+    return yield* makeHttpStateStore({
+      ...props,
+      transformClient: HttpClientRequest.setHeaders(accessHeaders),
+    });
+  });
 
 /**
  * Non-destructively copy every resource in the
@@ -350,7 +363,7 @@ const finishBootstrap = ({
     // credentials file (skipping the write in CI), so we don't need
     // to do that explicitly here.
     const { url, authToken } = yield* loginWithCloudflare();
-    const httpState = yield* makeHttpStateStore({ url, authToken });
+    const httpState = yield* makeCloudflareStateStore({ url, authToken });
     // `profileName` is intentionally unused here — `loginWithCloudflare`
     // resolves it itself. Reference it to keep the surrounding API
     // explicit and to avoid an unused-parameter lint.
