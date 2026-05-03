@@ -19,7 +19,7 @@ import * as Alchemy from "../../Stack.ts";
 import { StateApi } from "../../State/HttpStateApi.ts";
 import {
   makeHttpStateStore,
-  type HttpStateStoreProps,
+  type HttpStateStoreCredentials,
 } from "../../State/HttpStateStore.ts";
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import * as Credentials from "../Credentials.ts";
@@ -112,7 +112,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       );
       const credentials = yield* loginWithCloudflare();
       if (!isCI) {
-        yield* writeCredentials<HttpStateStoreProps>(
+        yield* writeCredentials<HttpStateStoreCredentials>(
           profileName,
           CREDENTIALS_FILE,
           credentials,
@@ -154,7 +154,7 @@ export const state = (props?: {
       const isCI = yield* Config.boolean("CI").pipe(Config.withDefault(false));
       const alchemyContext = yield* AlchemyContext;
       const profileName = yield* ALCHEMY_PROFILE;
-      const credentials = yield* readCredentials<HttpStateStoreProps>(
+      const credentials = yield* readCredentials<HttpStateStoreCredentials>(
         profileName,
         CREDENTIALS_FILE,
       );
@@ -233,7 +233,7 @@ export const state = (props?: {
         // it exists, so fetch the secret token
         const credentials = yield* loginWithCloudflare();
         if (!isCI) {
-          yield* writeCredentials<HttpStateStoreProps>(
+          yield* writeCredentials<HttpStateStoreCredentials>(
             profileName,
             CREDENTIALS_FILE,
             credentials,
@@ -499,7 +499,7 @@ export const loginWithCloudflare = () =>
     if (!isCI) {
       // 4. Persist credentials. The profile entry is managed by
       //    `loadOrConfigure` when this is invoked through `configure`.
-      yield* writeCredentials<HttpStateStoreProps>(
+      yield* writeCredentials<HttpStateStoreCredentials>(
         profileName,
         CREDENTIALS_FILE,
         {
