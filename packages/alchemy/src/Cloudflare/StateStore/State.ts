@@ -288,17 +288,21 @@ export const state = (props?: {
     Layer.orDie,
   );
 
-const makeCloudflareStateStore = (props: { url: string; authToken: string }) =>
-  Effect.gen(function* () {
-    const access = yield* Access.Access;
-    const accessHeaders = yield* access.getAccessHeaders(
-      new URL(props.url).host,
-    );
-    return yield* makeHttpStateStore({
-      ...props,
-      transformClient: HttpClientRequest.setHeaders(accessHeaders),
-    });
+const makeCloudflareStateStore = Effect.fnUntraced(function* ({
+  url,
+  authToken,
+}: {
+  url: string;
+  authToken: string;
+}) {
+  const access = yield* Access.Access;
+  const accessHeaders = yield* access.getAccessHeaders(new URL(url).host);
+  return yield* makeHttpStateStore({
+    url,
+    authToken,
+    transformClient: HttpClientRequest.setHeaders(accessHeaders),
   });
+});
 
 /**
  * Non-destructively copy every resource in the
