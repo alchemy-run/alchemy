@@ -90,8 +90,10 @@ describe("renderMarkdown", () => {
     expect(md).toContain("  - **lambda**:\n");
     expect(md).toContain("    - Second lambda fix");
     expect(md).toContain("    - Scope public url invokes");
-    // `s3` collapses inline because it has a single commit.
-    expect(md).toContain("  - **s3**: Handle presigned URLs");
+    // `s3` also emits a header + nested bullet (matches changelogithub's
+    // `group: true` default: if any sibling has >1 commits, every sibling
+    // gets a header for visual alignment).
+    expect(md).toContain("  - **s3**:\n    - Handle presigned URLs");
     // Plain `fix(aws)` shows as a bare bullet under the aws header.
     expect(md).toContain("  - Top-level aws fix");
     // No stray flat `**aws/lambda**` or `**aws/s3**` groups.
@@ -235,8 +237,60 @@ describe("renderMarkdown", () => {
 
     const md = renderMarkdown(commits, baseConfig);
     expect(md).toContain("- **aws**:");
+    // Both children are single-commit leaves with no other siblings forcing
+    // a header, so they collapse inline.
     expect(md).toContain("  - **lambda**: Trims segments");
     expect(md).toContain("  - **s3**: Skips empty segments");
+  });
+
+  test("collapses single-commit scopes inline when no sibling forces a header", () => {
+    const commits = [
+      makeCommit({
+        type: "fix",
+        scope: "core",
+        description: "just one",
+        hash: "core0000",
+      }),
+      makeCommit({
+        type: "fix",
+        scope: "website",
+        description: "also one",
+        hash: "web00000",
+      }),
+    ];
+    const md = renderMarkdown(commits, baseConfig);
+    expect(md).toContain("- **core**: Just one");
+    expect(md).toContain("- **website**: Also one");
+    expect(md).not.toContain("- **core**:\n");
+  });
+
+  test("forces headers on all siblings when any has multiple commits", () => {
+    // `group: true` default behavior: `website` is a single-commit leaf but
+    // gets a header because `core` has multiple commits in the same section.
+    const commits = [
+      makeCommit({
+        type: "fix",
+        scope: "core",
+        description: "first core",
+        hash: "c1c1c1c",
+      }),
+      makeCommit({
+        type: "fix",
+        scope: "core",
+        description: "second core",
+        hash: "c2c2c2c",
+      }),
+      makeCommit({
+        type: "fix",
+        scope: "website",
+        description: "solo website",
+        hash: "w1w1w1w",
+      }),
+    ];
+    const md = renderMarkdown(commits, baseConfig);
+    expect(md).toContain("- **core**:\n");
+    expect(md).toContain("- **website**:\n");
+    expect(md).not.toContain("- **website**: Solo website");
   });
 
   test("renders three-level nesting", () => {

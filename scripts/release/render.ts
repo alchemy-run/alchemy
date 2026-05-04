@@ -105,17 +105,30 @@ function renderNode(node: Node, depth: number, config: RenderConfig): string[] {
   }
 
   const childNames = Object.keys(node.children).sort();
+
+  // Match changelogithub's `group: true` default: within a given level, if
+  // ANY sibling scope has more than a single inline-able commit (either
+  // multiple commits or further sub-scopes), force every sibling to render
+  // with a header. This keeps visual alignment consistent and is what the
+  // existing CHANGELOG.md entries already use, so it avoids regressing
+  // historical release-notes style.
+  const forceHeaders = childNames.some((name) => {
+    const child = node.children[name];
+    return (
+      countCommits(child) > 1 || Object.keys(child.children).length > 0
+    );
+  });
+
   for (const name of childNames) {
     const child = node.children[name];
     const label = `**${name}**`;
 
-    // Collapse: a child with a single commit and no further descendants
-    // renders inline as `- **name**: description` rather than introducing a
-    // separate header line. This matches changelogithub's behavior when
-    // `group === 'multiple'` and keeps single-item scopes compact.
     const childCommitCount = countCommits(child);
     const hasGrandchildren = Object.keys(child.children).length > 0;
-    if (childCommitCount === 1 && !hasGrandchildren) {
+
+    // Collapse inline only when NO sibling wants a header and this child is
+    // a single-commit leaf. Otherwise emit the header + nested bullets.
+    if (!forceHeaders && childCommitCount === 1 && !hasGrandchildren) {
       const [commit] = child.commits;
       lines.push(`${pad}- ${label}: ${formatLine(commit, config)}`);
       continue;
