@@ -81,6 +81,12 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
     const profileName = yield* ALCHEMY_PROFILE;
     const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
     const force = options.force ?? false;
+    yield* Effect.annotateCurrentSpan({
+      "alchemy.state_store.script_name": scriptName,
+      "alchemy.state_store.profile": profileName,
+      "alchemy.state_store.force": force,
+      "alchemy.state_store.ci": isCI,
+    });
 
     const localState = yield* makeLocalState();
     const hasLocalStack = yield* Effect.map(
@@ -139,7 +145,15 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
 
     yield* finishBootstrap({ scriptName, profileName, localState, isCI });
     yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
-  });
+  }).pipe(
+    Effect.withSpan("state_store.bootstrap", {
+      attributes: {
+        "alchemy.state_store.op": "bootstrap",
+        "alchemy.state_store.script_name":
+          options.workerName ?? STATE_STORE_SCRIPT_NAME,
+      },
+    }),
+  );
 
 export const state = (props?: {
   /**
@@ -160,6 +174,11 @@ export const state = (props?: {
       );
 
       const scriptName = props?.workerName ?? STATE_STORE_SCRIPT_NAME;
+      yield* Effect.annotateCurrentSpan({
+        "alchemy.state_store.script_name": scriptName,
+        "alchemy.state_store.profile": profileName,
+        "alchemy.state_store.ci": isCI,
+      });
 
       // The bootstrap of the Cloudflare State Store is only considered
       // successful once two invariants hold:
@@ -326,6 +345,11 @@ const hoistBootstrapStack = Effect.fnUntraced(function* (
   const stack = "CloudflareStateStore";
   const stage = scriptName;
   const fqns = yield* source.list({ stack, stage });
+  yield* Effect.annotateCurrentSpan({
+    "alchemy.state_store.stack": stack,
+    "alchemy.state_store.stage": stage,
+    "alchemy.state_store.resources.count": fqns.length,
+  });
   yield* Effect.forEach(
     fqns,
     Effect.fnUntraced(function* (fqn) {
@@ -336,7 +360,7 @@ const hoistBootstrapStack = Effect.fnUntraced(function* (
     }),
     { concurrency: "unbounded" },
   );
-});
+}, Effect.withSpan("state_store.hoist_bootstrap_stack"));
 
 /**
  * Finish (or resume) the bootstrap of the Cloudflare State Store using
@@ -393,7 +417,16 @@ const finishBootstrap = ({
     });
 
     return httpState;
-  });
+  }).pipe(
+    Effect.withSpan("state_store.finish_bootstrap", {
+      attributes: {
+        "alchemy.state_store.op": "finish_bootstrap",
+        "alchemy.state_store.script_name": scriptName,
+        "alchemy.state_store.profile": profileName,
+        "alchemy.state_store.ci": isCI,
+      },
+    }),
+  );
 
 const deployStateStore = (scriptName: string, state?: StateService) =>
   Effect.gen(function* () {
@@ -532,6 +565,12 @@ export const loginWithCloudflare = () =>
         }),
       ),
     ),
+    Effect.withSpan("state_store.login", {
+      attributes: {
+        "alchemy.state_store.op": "login",
+        "alchemy.state_store.script_name": STATE_STORE_SCRIPT_NAME,
+      },
+    }),
   );
 
 /**
@@ -564,7 +603,15 @@ const redeployIfStale = ({
       localState,
       isCI,
     });
-  });
+  }).pipe(
+    Effect.withSpan("state_store.redeploy_if_stale", {
+      attributes: {
+        "alchemy.state_store.op": "redeploy_if_stale",
+        "alchemy.state_store.script_name": scriptName,
+        "alchemy.state_store.url": url,
+      },
+    }),
+  );
 
 /**
  * Probe the deployed worker's `/version` endpoint and decide whether
@@ -587,8 +634,18 @@ const checkStateStoreVersion = (url: string) =>
     const result = yield* client.version
       .getVersion()
       .pipe(Effect.catch(() => Effect.succeed(undefined)));
-    return result?.version === STATE_STORE_VERSION;
-  });
+    const matches = result?.version === STATE_STORE_VERSION;
+    yield* Effect.annotateCurrentSpan({
+      "alchemy.state_store.expected_version": STATE_STORE_VERSION,
+      "alchemy.state_store.observed_version": result?.version ?? -1,
+      "alchemy.state_store.version_match": matches,
+    });
+    return matches;
+  }).pipe(
+    Effect.withSpan("state_store.check_version", {
+      attributes: { "alchemy.state_store.op": "check_version" },
+    }),
+  );
 
 /**
  * Tiny ES-module worker that reads `env.SECRET.get()` and echoes it
@@ -665,4 +722,11 @@ const readSecretViaEdge = (
         ? cause
         : new EdgeSessionError({ message: "Failed to read secret", cause }),
     ),
+    Effect.withSpan("state_store.read_secret_via_edge", {
+      attributes: {
+        "alchemy.state_store.op": "read_secret_via_edge",
+        "alchemy.state_store.script_name": scriptName,
+        "alchemy.state_store.secret_name": secretName,
+      },
+    }),
   );
