@@ -7,8 +7,7 @@ import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { type Fetcher } from "../Fetcher.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
-import { WorkerEnvironment } from "../Workers/Worker.ts";
-import { type Container, ContainerError } from "./Container.ts";
+import { type Container, ContainerError, type ContainerStartupOptions } from "./Container.ts";
 
 /**
  * Runs the Container in a Durable Object and monitors it, providing a durable fetch and RPC interface to it.
@@ -16,39 +15,16 @@ import { type Container, ContainerError } from "./Container.ts";
 export const start = Effect.fnUntraced(function* <
   Shape extends Container,
   Req = never,
->(containerEff: Effect.Effect<Shape, never, Req | DurableObjectState>) {
+>(
+  containerEff: Effect.Effect<Shape, never, Req | DurableObjectState>,
+  options?: ContainerStartupOptions,
+) {
   const container = yield* containerEff;
 
   const ensureRunning = Effect.gen(function* () {
     if (yield* container.running) return;
     yield* Effect.logInfo("Container not running, starting...");
-    // Forward string-valued env secrets from the Worker to the container so
-    // bun can read them via `Bun.env.XXX` at runtime. CF Firecracker VMs are
-    // hermetic — they don't inherit the Worker's env unless passed explicitly
-    // through ContainerStartupOptions.env.
-    const workerEnvOpt = yield* Effect.serviceOption(WorkerEnvironment);
-    const env: Record<string, string> = {};
-    if (workerEnvOpt._tag === "Some") {
-      for (const [key, value] of Object.entries(workerEnvOpt.value as Record<string, unknown>)) {
-        if (typeof value === "string") env[key] = value;
-      }
-    }
-    // CF Containers default to BLOCKED public egress. Containers get only
-    // private addresses (10.0.0.1/24 + fd00::11) on cfeth0 and every DNS
-    // lookup / TCP connect / fetch hangs indefinitely unless enableInternet
-    // is explicitly set.
-    //
-    // Opt in by setting ALCHEMY_CONTAINER_ENABLE_INTERNET=1 in the Worker
-    // env (or as a secret). We log a one-line hint on first start when the
-    // flag is absent, so users hitting the DNS-hang symptom can find the
-    // fix in logs instead of debugging Firecracker networking blind.
-    const enableInternet = env.ALCHEMY_CONTAINER_ENABLE_INTERNET === "1";
-    if (!enableInternet) {
-      yield* Effect.logInfo(
-        "Container starting with public egress DISABLED. Set ALCHEMY_CONTAINER_ENABLE_INTERNET=1 in the Worker env to enable internet access (cfeth0 has only private addresses by default).",
-      );
-    }
-    yield* container.start({ enableInternet, env });
+    yield* container.start(options);
     yield* Effect.logInfo("Container started, launching monitor");
     yield* Effect.forkDetach(
       container.monitor().pipe(
