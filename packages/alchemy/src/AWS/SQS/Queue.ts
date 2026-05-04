@@ -240,10 +240,9 @@ export const QueueProvider = () =>
             queueUrl: url,
             queueArn,
           };
-          return yield* Unowned.unless(
-            hasAlchemyTags(id, tagsResp),
-            attrs,
-          );
+          return (yield* hasAlchemyTags(id, tagsResp))
+            ? attrs
+            : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           if (!isResolved(news)) return undefined;

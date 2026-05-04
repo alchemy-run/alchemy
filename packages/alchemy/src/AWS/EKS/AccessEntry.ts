@@ -117,7 +117,7 @@ export const AccessEntryProvider = () =>
         principalArn: (output?.principalArn ?? olds.principalArn) as string,
       });
       if (!state) return undefined;
-      return yield* Unowned.unless(hasAlchemyTags(id, state.tags), state);
+      return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
     }),
     create: Effect.fn(function* ({ id, news, session }) {
       const tags = {

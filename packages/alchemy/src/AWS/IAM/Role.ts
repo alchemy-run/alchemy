@@ -295,7 +295,7 @@ export const RoleProvider = () =>
               role.Role.PermissionsBoundary?.PermissionsBoundaryArn,
             tags,
           };
-          return yield* Unowned.unless(hasAlchemyTags(id, tags), attrs);
+          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const roleName = yield* toRoleName(id, news);

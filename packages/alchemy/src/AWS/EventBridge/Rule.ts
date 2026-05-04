@@ -337,10 +337,9 @@ export const RuleProvider = () =>
             ruleArn,
             eventBusName: resolvedEventBusName,
           };
-          return yield* Unowned.unless(
-            hasAlchemyTags(id, Tags ?? []),
-            attrs,
-          );
+          return (yield* hasAlchemyTags(id, Tags ?? []))
+            ? attrs
+            : Unowned(attrs);
         }),
         create: Effect.fn(function* ({ id, news = {}, session }) {
           yield* validateRuleProps(news);

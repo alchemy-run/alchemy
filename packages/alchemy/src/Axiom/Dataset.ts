@@ -268,7 +268,8 @@ export const DatasetProvider = () =>
             ownership.stack === stack.name &&
             ownership.stage === stage &&
             ownership.id === id;
-          return Unowned.unless(isOurs, toAttrs(existing));
+          const attrs = toAttrs(existing);
+          return isOurs ? attrs : Unowned(attrs);
         }),
       };
     }),

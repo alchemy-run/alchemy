@@ -173,10 +173,9 @@ export const EventBusProvider = () =>
             eventBusArn: described.Arn as EventBusArn,
             description: described.Description,
           };
-          return yield* Unowned.unless(
-            hasAlchemyTags(id, Tags ?? []),
-            attrs,
-          );
+          return (yield* hasAlchemyTags(id, Tags ?? []))
+            ? attrs
+            : Unowned(attrs);
         }),
         create: Effect.fn(function* ({ id, news = {}, session }) {
           const eventBusName = yield* createEventBusName(id, news);

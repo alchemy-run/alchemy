@@ -186,7 +186,7 @@ export const AddonProvider = () =>
             addonName: olds.addonName,
           });
           if (!state) return undefined;
-          return yield* Unowned.unless(hasAlchemyTags(id, state.tags), state);
+          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const tags = {

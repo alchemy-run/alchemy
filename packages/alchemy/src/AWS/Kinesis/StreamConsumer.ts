@@ -244,10 +244,9 @@ export const StreamConsumerProvider = () =>
         consumerArn: output?.consumerArn,
       });
       if (!state) return undefined;
-      return yield* Unowned.unless(
-        hasAlchemyTags(id, state.tags as Tags),
-        state,
-      );
+      return (yield* hasAlchemyTags(id, state.tags as Tags))
+        ? state
+        : Unowned(state);
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
       if (!isResolved(news)) return;

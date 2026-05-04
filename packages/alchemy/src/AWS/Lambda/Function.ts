@@ -1144,10 +1144,9 @@ export default await Effect.runPromise(handlerEffect)
             roleArn: fn.Role,
             roleName: output?.roleName ?? fn.Role.split("/").pop()!,
           } as any;
-          return yield* Unowned.unless(
-            hasAlchemyTags(id, tagsResult),
-            attrs,
-          );
+          return (yield* hasAlchemyTags(id, tagsResult))
+            ? attrs
+            : Unowned(attrs);
         }),
 
         precreate: Effect.fnUntraced(function* ({ id, news, session }) {

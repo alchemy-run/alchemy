@@ -851,10 +851,9 @@ export const TableProvider = () =>
           );
           if (!state) return undefined;
           const attrs = toAttrs(state);
-          return yield* Unowned.unless(
-            hasAlchemyTags(id, state.tags as any),
-            attrs,
-          );
+          return (yield* hasAlchemyTags(id, state.tags as any))
+            ? attrs
+            : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;

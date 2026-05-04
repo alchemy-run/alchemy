@@ -196,7 +196,7 @@ export const CapacityProviderProvider = () =>
             managedDraining: found.autoScalingGroupProvider?.managedDraining,
             tags: existingTags,
           };
-          return Unowned.unless(hasTags(internalTags, existingTags), attrs);
+          return hasTags(internalTags, existingTags) ? attrs : Unowned(attrs);
         }),
 
         create: Effect.fn(function* ({ id, news, session }) {
