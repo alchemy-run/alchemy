@@ -1,0 +1,467 @@
+---
+title: Build a Git Repo API
+description: Build a mini-GitHub on Cloudflare — Artifacts for Git storage, a Durable Object per repo for metadata, all wired into a Worker.
+sidebar:
+  order: 7
+---
+
+So far the Cloudflare track has added stateful primitives one at a
+time. This tutorial pulls two of them together into something
+recognizable: a tiny GitHub. **Cloudflare Artifacts** stores the
+actual Git history (clone, push, pull all work against it), and a
+**Durable Object per repo** holds the metadata you don't want
+inside the repo itself — description, topics, star count.
+
+By the end you'll have a Worker that lets a client create a repo,
+`git clone` against it, read combined info, star it, and update
+its description.
+
+## Declare the namespace
+
+A Cloudflare Artifacts namespace is the top-level container for
+Git-compatible repos. Namespaces are *implicit* — there's nothing
+to provision at deploy time, so the resource is a thin binding
+marker. Repos themselves are created at runtime through the
+binding.
+
+Create `src/Repos.ts`:
+
+```typescript twoslash
+// src/Repos.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Repos = Cloudflare.Artifacts("Repos");
+```
+
+That's the whole declaration. The Worker provider will see this
+the moment you `.bind(...)` it.
+
+## Bind it to the Worker
+
+`Cloudflare.Artifacts.bind(Repos)` returns an Effect-native client
+whose methods are tagged with `ArtifactsError`. Bind it in the
+Worker's init phase, and provide `ArtifactsBindingLive` so the
+runtime can resolve the underlying binding from `env`:
+
+```diff lang="typescript"
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import { Repos } from "./Repos.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.path },
+  Effect.gen(function* () {
++   const repos = yield* Cloudflare.Artifacts.bind(Repos);
+
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("Not Found", { status: 404 });
+      }),
+    };
+- })
++ }).pipe(
++   Effect.provide(Layer.mergeAll(Cloudflare.ArtifactsBindingLive)),
++ ),
+) {}
+```
+
+`repos` is now a typed handle into the Artifacts namespace. Next,
+let's use it.
+
+## Create a repo
+
+Add a `POST /repos` route that calls `repos.create(name, ...)`.
+The result includes the Git remote URL and a short-lived token
+the client can use to `git clone`:
+
+```diff lang="typescript"
+return {
+  fetch: Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
++   const url = new URL(request.url, "http://x");
++   const parts = url.pathname.split("/").filter(Boolean);
++
++   if (parts[0] === "repos" && parts.length === 1 && request.method === "POST") {
++     const body = JSON.parse((yield* request.text) || "{}") as {
++       name?: string;
++       description?: string;
++     };
++     const name = body.name?.trim();
++     if (!name) {
++       return yield* HttpServerResponse.json(
++         { error: "name is required" },
++         { status: 400 },
++       );
++     }
++     const created = yield* repos.create(name, {
++       description: body.description,
++       setDefaultBranch: "main",
++     });
++     return yield* HttpServerResponse.json({
++       name: created.name,
++       remote: created.remote,
++       token: created.token,
++       tokenExpiresAt: created.tokenExpiresAt,
++     });
++   }
+
+    return HttpServerResponse.text("Not Found", { status: 404 });
+  }),
+};
+```
+
+Deploy and try it:
+
+```sh
+URL=$(bun alchemy stack output url)
+curl -X POST "$URL/repos" \
+  -H "content-type: application/json" \
+  -d '{"name":"hello-world","description":"my first repo"}'
+```
+
+You'll get back a `remote` and a `token`. You can `git clone`
+against them right now.
+
+## Look up an existing repo
+
+`repos.get(name)` returns an `ArtifactsRepoClient` whose `.raw`
+field holds the underlying Cloudflare repo. Add a `GET /repos/:name`
+route:
+
+```diff lang="typescript"
+if (parts[0] === "repos" && parts.length === 1 && request.method === "POST") {
+  // …create
+}
+
++if (parts[0] === "repos" && parts.length === 2 && request.method === "GET") {
++  const name = parts[1]!;
++  const repo = yield* repos.get(name);
++  return yield* HttpServerResponse.json({
++    name: repo.raw.name,
++    remote: repo.raw.remote,
++    defaultBranch: repo.raw.defaultBranch,
++    lastPushAt: repo.raw.lastPushAt,
++  });
++}
+```
+
+If the repo doesn't exist, `get` fails with `ArtifactsError`. Catch
+it once at the bottom of the handler so every route gets the same
+404 behavior:
+
+```diff lang="typescript"
+return {
+  fetch: Effect.gen(function* () {
+    // …routes
+- }),
++ }).pipe(
++   Effect.catchTag("ArtifactsError", (err) =>
++     HttpServerResponse.json({ error: err.message }, { status: 404 }),
++   ),
++ ),
+};
+```
+
+## Mint a fresh clone token
+
+The token returned by `create` expires. Clients that already know
+a repo's name should be able to ask for a new one without
+recreating the repo. `repo.createToken(scope, ttl)` does exactly
+that:
+
+```diff lang="typescript"
++if (
++  parts[0] === "repos" &&
++  parts[2] === "clone-token" &&
++  request.method === "POST"
++) {
++  const body = JSON.parse((yield* request.text) || "{}") as {
++    scope?: "read" | "write";
++    ttl?: number;
++  };
++  const repo = yield* repos.get(parts[1]!);
++  const token = yield* repo.createToken(
++    body.scope ?? "read",
++    body.ttl ?? 3600,
++  );
++  return yield* HttpServerResponse.json(token);
++}
+```
+
+That covers the Git half. Artifacts is now storing history and
+handing out tokens. Next we'll add the metadata that lives
+*around* the repo.
+
+## Create the metadata Durable Object
+
+Artifacts owns commits, refs, and the clone protocol. It does not
+store the things a GitHub-like API needs alongside that —
+descriptions you can rename, topics, stars. We'll keep those in a
+Durable Object, one instance per repo (addressed by repo name),
+so each repo gets its own transactional storage.
+
+Start with the smallest possible DO — empty public API, no state:
+
+```typescript twoslash
+// src/RepoMetadata.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+export default class RepoMetadata extends Cloudflare.DurableObjectNamespace<RepoMetadata>()(
+  "RepoMetadata",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      return {};
+    });
+  }),
+) {}
+```
+
+## Persist the metadata
+
+Each DO instance has its own SQLite-backed key/value storage. Pull
+the current metadata out of storage in the inner init so it
+survives restarts and hibernation:
+
+```diff lang="typescript"
++export type Metadata = {
++  description: string;
++  topics: string[];
++  stars: number;
++  createdAt: number;
++};
+
+export default class RepoMetadata extends Cloudflare.DurableObjectNamespace<RepoMetadata>()(
+  "RepoMetadata",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
++     const state = yield* Cloudflare.DurableObjectState;
++     let meta = (yield* state.storage.get<Metadata>("meta")) ?? null;
+      return {};
+    });
+  }),
+) {}
+```
+
+`meta` is `null` until the repo is initialized. The next step
+adds the methods that fill it in and read it back.
+
+## Add `init` and `get`
+
+Any function returned from the inner Effect that produces an
+`Effect` becomes a typed RPC method. Add one to seed the metadata
+the first time a repo is created, and one to read it:
+
+```diff lang="typescript"
+return Effect.gen(function* () {
+  const state = yield* Cloudflare.DurableObjectState;
+  let meta = (yield* state.storage.get<Metadata>("meta")) ?? null;
+
++ const ensure = Effect.gen(function* () {
++   if (meta === null) {
++     return yield* Effect.fail(new Error("repo not initialized"));
++   }
++   return meta;
++ });
+
+- return {};
++ return {
++   init: (description: string) =>
++     Effect.gen(function* () {
++       if (meta !== null) return meta;
++       meta = {
++         description,
++         topics: [],
++         stars: 0,
++         createdAt: Date.now(),
++       };
++       yield* state.storage.put("meta", meta);
++       return meta;
++     }),
++   get: () => ensure,
++ };
+});
+```
+
+`init` is idempotent — calling it twice on the same repo doesn't
+overwrite existing metadata. We'll wire it into the create route
+next.
+
+## Wire the DO into the Worker
+
+Yield the `RepoMetadata` class in the Worker's init phase to get a
+namespace handle, then call `getByName(name)` inside `fetch` to
+obtain a typed stub for that repo's instance. Initialize metadata
+on create, and merge it into the GET response:
+
+```diff lang="typescript"
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import RepoMetadata from "./RepoMetadata.ts";
+import { Repos } from "./Repos.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    const repos = yield* Cloudflare.Artifacts.bind(Repos);
++   const metadata = yield* RepoMetadata;
+
+    return {
+      fetch: Effect.gen(function* () {
+        // …
+        if (parts[0] === "repos" && parts.length === 1 && request.method === "POST") {
+          // …existing create
+          const created = yield* repos.create(name, { /* … */ });
++         yield* metadata.getByName(name).init(body.description ?? "");
+          return yield* HttpServerResponse.json({ /* … */ });
+        }
+
+        if (parts[0] === "repos" && parts.length === 2 && request.method === "GET") {
+          const name = parts[1]!;
+          const repo = yield* repos.get(name);
++         const meta = yield* metadata.getByName(name).get();
+          return yield* HttpServerResponse.json({
+            name: repo.raw.name,
+            remote: repo.raw.remote,
+            defaultBranch: repo.raw.defaultBranch,
+            lastPushAt: repo.raw.lastPushAt,
++           ...meta,
+          });
+        }
+        // …
+      }),
+    };
+  }),
+) {}
+```
+
+Two things just happened:
+
+1. **`yield* RepoMetadata`** registers the DO with the Worker
+   (binding + class-migration metadata) and hands you the namespace.
+2. **`metadata.getByName(name)`** returns a typed stub: the Worker
+   sees `init(description: string): Effect<Metadata>` and
+   `get(): Effect<Metadata>` exactly as you defined them.
+
+Each repo name addresses its own durable instance, so writes never
+contend across repos.
+
+## Update description and topics
+
+Add an `update` method to the DO that merges a partial patch into
+the stored metadata:
+
+```diff lang="typescript"
+return {
+  init: (description: string) => /* … */,
+  get: () => ensure,
++ update: (patch: Partial<Pick<Metadata, "description" | "topics">>) =>
++   Effect.gen(function* () {
++     const current = yield* ensure;
++     meta = { ...current, ...patch };
++     yield* state.storage.put("meta", meta);
++     return meta;
++   }),
+};
+```
+
+Expose it via `PATCH /repos/:name`:
+
+```diff lang="typescript"
++if (parts[0] === "repos" && parts.length === 2 && request.method === "PATCH") {
++  const name = parts[1]!;
++  const patch = JSON.parse((yield* request.text) || "{}") as {
++    description?: string;
++    topics?: string[];
++  };
++  const meta = yield* metadata.getByName(name).update(patch);
++  return yield* HttpServerResponse.json(meta);
++}
+```
+
+## Star a repo
+
+Same pattern, one more method:
+
+```diff lang="typescript"
+return {
+  // …
+  update: (patch) => /* … */,
++ star: () =>
++   Effect.gen(function* () {
++     const current = yield* ensure;
++     meta = { ...current, stars: current.stars + 1 };
++     yield* state.storage.put("meta", meta);
++     return meta;
++   }),
+};
+```
+
+And the route:
+
+```diff lang="typescript"
++if (
++  parts[0] === "repos" &&
++  parts[2] === "star" &&
++  request.method === "POST"
++) {
++  const meta = yield* metadata.getByName(parts[1]!).star();
++  return yield* HttpServerResponse.json(meta);
++}
+```
+
+## Deploy and try the whole thing
+
+```sh
+bun alchemy deploy
+```
+
+Create a repo, star it, update the description, and read everything
+back — each call round-trips through Artifacts, the DO, or both:
+
+```sh
+URL=$(bun alchemy stack output url)
+
+curl -X POST "$URL/repos" \
+  -H "content-type: application/json" \
+  -d '{"name":"hello-world","description":"my first repo"}'
+
+curl -X POST "$URL/repos/hello-world/star"
+
+curl -X PATCH "$URL/repos/hello-world" \
+  -H "content-type: application/json" \
+  -d '{"description":"now with stars","topics":["demo","alchemy"]}'
+
+curl "$URL/repos/hello-world"
+# { name, remote, defaultBranch, description, topics, stars: 1, ... }
+
+curl -X POST "$URL/repos/hello-world/clone-token" \
+  -H "content-type: application/json" \
+  -d '{"scope":"read","ttl":3600}'
+```
+
+## Why this shape
+
+Artifacts and the per-repo DO each do one thing well:
+
+- **Artifacts** is the Git server — it owns commits, refs, and the
+  clone/push protocol. Tokens are scoped and short-lived, so you
+  mint them on demand instead of handing out long-lived secrets.
+- **The DO** is the source of truth for everything that lives
+  *around* the repo. Each repo gets its own instance, so a hot
+  repo's writes never contend with another's.
+
+Combine more primitives the same way: a Workflow that runs CI on
+push, a Container that builds and publishes artifacts, an AI
+Gateway that summarizes diffs. The Worker stays a thin router;
+each primitive owns its own state.
