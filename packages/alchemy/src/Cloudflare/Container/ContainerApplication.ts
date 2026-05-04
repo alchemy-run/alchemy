@@ -945,15 +945,20 @@ await Effect.runPromise(serverEffect).catch((err) => {
         const dos = bindings.flatMap((b) =>
           b.data.durableObjects ? [b.data.durableObjects] : [],
         );
-        if (dos.length === 0) {
+        // A single DO namespace may appear in multiple bindings (e.g. when
+        // a Container is referenced by several resources). Dedupe by namespaceId.
+        const uniqueDos = dos.filter(
+          (d, i, arr) => arr.findIndex((other) => other.namespaceId === d.namespaceId) === i,
+        );
+        if (uniqueDos.length === 0) {
           return Effect.succeed(undefined);
         }
-        if (dos.length === 1) {
-          return Effect.succeed(dos[0]);
+        if (uniqueDos.length === 1) {
+          return Effect.succeed(uniqueDos[0]);
         }
         return Effect.die(
           new Error(
-            `A Container can only be bound to one Durable Object namespace. Found ${dos.length} namespaces in bindings: ${bindings.map((b) => b.data.durableObjects?.namespaceId).join(", ")}`,
+            `A Container can only be bound to one Durable Object namespace. Found ${uniqueDos.length} unique namespaces in bindings: ${uniqueDos.map((d) => d.namespaceId).join(", ")}`,
           ),
         );
       };
