@@ -261,7 +261,7 @@
     "@distilled.cloud/axiom": "catalog:",
     "@distilled.cloud/cloudflare": "catalog:",
     "@distilled.cloud/cloudflare-rolldown-plugin": "catalog:",
-    "@distilled.cloud/cloudflare-runtime": "link:@distilled.cloud/cloudflare-runtime",
+    "@distilled.cloud/cloudflare-runtime": "catalog:",
     "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
     "@distilled.cloud/core": "catalog:",
     "@effect/vitest": "catalog:",
