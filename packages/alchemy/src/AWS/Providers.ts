@@ -1,8 +1,13 @@
+import {
+  makeDefault as defaultRetryPolicy,
+  Retry,
+} from "@distilled.cloud/aws/Retry";
 import * as Layer from "effect/Layer";
 import { Command, CommandProvider } from "../Build/Command.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as ACM from "./ACM/index.ts";
+import * as ApiGateway from "./ApiGateway/index.ts";
 import * as Assets from "./Assets.ts";
 import { AwsAuth } from "./AuthProvider.ts";
 import * as AutoScaling from "./AutoScaling/index.ts";
@@ -46,6 +51,20 @@ export const providers = () =>
       Command,
       Random,
       ACM.Certificate,
+      ApiGateway.Account,
+      ApiGateway.ApiKey,
+      ApiGateway.Authorizer,
+      ApiGateway.BasePathMapping,
+      ApiGateway.DeploymentResource,
+      ApiGateway.DomainName,
+      ApiGateway.GatewayResponse,
+      ApiGateway.MethodResource,
+      ApiGateway.GatewayResource,
+      ApiGateway.RestApi,
+      ApiGateway.StageResource,
+      ApiGateway.UsagePlan,
+      ApiGateway.UsagePlanKey,
+      ApiGateway.VpcLink,
       AutoScaling.AutoScalingGroup,
       AutoScaling.LaunchTemplate,
       AutoScaling.ScalingPolicy,
@@ -285,6 +304,20 @@ export const providers = () =>
     Layer.provide(
       Layer.mergeAll(
         ACM.CertificateProvider(),
+        ApiGateway.AccountProvider(),
+        ApiGateway.ApiKeyProvider(),
+        ApiGateway.AuthorizerProvider(),
+        ApiGateway.BasePathMappingProvider(),
+        ApiGateway.DeploymentProvider(),
+        ApiGateway.DomainNameProvider(),
+        ApiGateway.GatewayResponseProvider(),
+        ApiGateway.MethodProvider(),
+        ApiGateway.ResourceProvider(),
+        ApiGateway.RestApiProvider(),
+        ApiGateway.StageProvider(),
+        ApiGateway.UsagePlanProvider(),
+        ApiGateway.UsagePlanKeyProvider(),
+        ApiGateway.VpcLinkProvider(),
         AutoScaling.AutoScalingGroupProvider(),
         AutoScaling.LaunchTemplateProvider(),
         AutoScaling.ScalingPolicyProvider(),
@@ -533,5 +566,15 @@ export const providers = () =>
     Layer.provideMerge(Endpoint.fromEnvironment),
     Layer.provideMerge(DefaultEnvironment),
     Layer.provideMerge(AwsAuth),
+    // Apply a blanket retry policy to every AWS SDK call issued by any
+    // resource provider. `makeDefault` is the same retry policy the SDK
+    // itself applies: retries throttling (`TooManyRequests`, etc.), 5xx
+    // responses, and errors tagged with Smithy's @retryable trait, with
+    // exponential backoff, jitter, `RetryAfter` header awareness, and a
+    // cap of 5 attempts. The cap is important: unbounded retries (like
+    // `transientOptions`) mask real rate-limit pressure as an indefinite
+    // hang. This benefits every user of the AWS providers, not just tests,
+    // by absorbing transient failures without hiding systemic issues.
+    Layer.provideMerge(Layer.succeed(Retry, defaultRetryPolicy)),
     Layer.orDie,
   );

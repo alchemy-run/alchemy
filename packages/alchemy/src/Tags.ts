@@ -7,7 +7,7 @@ export type Tags =
   | [string, string][]
   | { Key: string; Value: string }[];
 
-const normalizeTags = (tags: Tags) =>
+export const normalizeTags = (tags: Tags) =>
   Array.isArray(tags)
     ? Object.fromEntries(
         tags.map((tag) =>
@@ -15,6 +15,13 @@ const normalizeTags = (tags: Tags) =>
         ),
       )
     : tags;
+
+export const tagRecord = (tags: Tags | undefined): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(normalizeTags(tags ?? {})).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  );
 
 export const hasTags = (expectedTags: Tags, tags: Tags | undefined) => {
   const actualTags = normalizeTags(tags ?? []);

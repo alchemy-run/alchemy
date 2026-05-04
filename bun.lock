@@ -101,6 +101,15 @@
         "pg": "^8.20.0",
       },
     },
+    "examples/aws-rest-api": {
+      "name": "aws-rest-api",
+      "version": "0.0.0",
+      "dependencies": {
+        "@distilled.cloud/aws": "catalog:",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "examples/aws-static-site": {
       "name": "aws-static-site-example",
       "version": "0.0.0",
@@ -1849,6 +1858,8 @@
     "aws-lambda-rpc": ["aws-lambda-rpc@workspace:examples/aws-lambda-rpc"],
 
     "aws-rds-example": ["aws-rds-example@workspace:examples/aws-rds"],
+
+    "aws-rest-api": ["aws-rest-api@workspace:examples/aws-rest-api"],
 
     "aws-static-site-example": ["aws-static-site-example@workspace:examples/aws-static-site"],
 
