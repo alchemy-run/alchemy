@@ -73,7 +73,9 @@ export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
       monitor: () =>
         Effect.promise(() => state.container?.monitor() ?? Promise.resolve()),
       start: (options?: ContainerStartupOptions) =>
-        Effect.sync(() => state.container!.start(options)),
+        Effect.promise(
+          () => state.container?.start(options) ?? Promise.resolve(),
+        ),
     } satisfies Container as Shape;
   });
 });
