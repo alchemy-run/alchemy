@@ -252,11 +252,19 @@ redeploys the function bundle.
 
 ```typescript
 // test/integ.test.ts
-import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
+import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, deploy } = Test.make({
+  providers: AWS.providers(),
+  state: Alchemy.localState(),
+});
 
 const stack = beforeAll(deploy(Stack));
 

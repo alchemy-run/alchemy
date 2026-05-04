@@ -153,10 +153,17 @@ own stateful instance:
 
 ```diff lang="typescript"
 // test/integ.test.ts
-import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, deploy } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+});
 
 const stack = beforeAll(deploy(Stack));
 
@@ -273,11 +280,18 @@ Add the test:
 
 ```diff lang="typescript"
 // test/integ.test.ts
-import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 +import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, deploy } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+});
 
 const stack = beforeAll(deploy(Stack));
 

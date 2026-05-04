@@ -22,7 +22,7 @@ Guides — cross-cutting how-tos:
   https://v2.alchemy.run/guides/effect-http-api     schema-validated HTTP API
   https://v2.alchemy.run/guides/effect-rpc          typed RPC
   https://v2.alchemy.run/guides/frontends           framework-specific Vite setup
-  https://v2.alchemy.run/guides/testing             integration testing patterns
+  https://v2.alchemy.run/concepts/testing           integration testing patterns
   https://v2.alchemy.run/guides/ci                  alternative CI setups
   https://v2.alchemy.run/guides/circular-bindings   two services that reference each other
   https://v2.alchemy.run/guides/migrating-from-v1   migrating from v1 (async/await)

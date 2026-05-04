@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import * as Test from "@/Test/Vitest";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -12,7 +13,7 @@ test.provider(
   "create, update, delete function",
   (stack) =>
     Effect.gen(function* () {
-      const { functionUrl } = yield* stack.deploy(
+      const { functionName, functionUrl } = yield* stack.deploy(
         TestFunction.asEffect().pipe(Effect.provide(TestFunctionLive)),
       );
 
@@ -37,7 +38,52 @@ test.provider(
       expect(response.status).toBe(200);
       expect(yield* response.text).toBe("Hello, world!");
 
-      yield* stack.destroy();
-    }),
+      const invokePolicy = yield* getPolicyStatement(
+        functionName,
+        "FunctionURLAllowPublicInvoke",
+      );
+      expect(invokePolicy.Condition).toEqual({
+        Bool: {
+          "lambda:InvokedViaFunctionUrl": "true",
+        },
+      });
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
   { timeout: 180_000 },
 );
+
+const getPolicyStatement = Effect.fn(function* (
+  functionName: string,
+  statementId: string,
+) {
+  return yield* Lambda.getPolicy({ FunctionName: functionName }).pipe(
+    Effect.flatMap(({ Policy }) =>
+      Effect.try({
+        try: () => {
+          const policy = JSON.parse(Policy ?? "{}") as {
+            Statement?: Array<{
+              Sid?: string;
+              Condition?: unknown;
+            }>;
+          };
+          const statement = policy.Statement?.find(
+            (statement) => statement.Sid === statementId,
+          );
+          if (!statement) {
+            throw new Error(`Policy statement ${statementId} not found`);
+          }
+          return statement;
+        },
+        catch: (cause) =>
+          cause instanceof Error ? cause : new Error(String(cause)),
+      }),
+    ),
+    Effect.retry({
+      schedule: Schedule.exponential(500).pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
+    }),
+  );
+});

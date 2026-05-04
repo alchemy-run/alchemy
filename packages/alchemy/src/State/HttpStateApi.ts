@@ -141,6 +141,21 @@ export const GetReplacedResources = HttpApiEndpoint.get(
   },
 );
 
+/** Response shape for the unauthenticated `/version` probe. */
+export const VersionResponse = Schema.Struct({
+  version: Schema.Number,
+});
+
+/**
+ * Unauthenticated probe so clients can detect a stale (or absent)
+ * deployed worker without holding a valid bearer token. The returned
+ * version is bumped whenever the wire / behavioural contract changes
+ * in a way that requires a redeploy.
+ */
+export const GetVersion = HttpApiEndpoint.get("getVersion", "/version", {
+  success: VersionResponse,
+});
+
 export class StateGroup extends HttpApiGroup.make("state")
   .add(ListStacks)
   .add(ListStages)
@@ -152,4 +167,10 @@ export class StateGroup extends HttpApiGroup.make("state")
   .add(DeleteStack)
   .middleware(StateAuth) {}
 
-export class StateApi extends HttpApi.make("alchemy-state").add(StateGroup) {}
+export class VersionGroup extends HttpApiGroup.make("version").add(
+  GetVersion,
+) {}
+
+export class StateApi extends HttpApi.make("alchemy-state")
+  .add(StateGroup)
+  .add(VersionGroup) {}

@@ -86,6 +86,13 @@
   --sl-color-gray-5: var(--alc-walnut-700);
   --sl-color-gray-6: var(--alc-walnut-800);
   --sl-color-gray-7: var(--alc-bg-nav);
+  /* Starlight paints the selected sidebar entry with `--sl-color-text-accent`
+     as background and `--sl-color-text-invert` as text. In dark mode the
+     accent lifts to a bright lime (`--alc-accent-deep` ≈ #a3c473) — cream
+     (`--alc-fg-invert`) on lime is ~1.7:1, well below AA. Flip the invert
+     token to the dark page background so the selected pill reads as dark
+     text on lime (~10:1, AAA). */
+  --sl-color-text-invert: var(--alc-bg);
 }
 
 /* ── Headings: serif for h1/h2, sans for h3/h4 (matches alc-h* scale) ── */

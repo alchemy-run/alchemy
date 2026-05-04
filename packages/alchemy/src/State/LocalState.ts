@@ -4,10 +4,12 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
+import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { State, StateStoreError, type StateService } from "./State.ts";
 import { encodeState, reviveState } from "./StateEncoding.ts";
 
-export const localState = () => Layer.effect(State, makeLocalState());
+export const localState = () =>
+  Layer.effect(State, makeLocalState().pipe(recordStateStoreInit));
 
 export const makeLocalState = () =>
   Effect.gen(function* () {
@@ -54,6 +56,7 @@ export const makeLocalState = () =>
             .pipe(Effect.tap(() => Effect.sync(() => created.add(dir))));
 
     const state: StateService = {
+      id: "local",
       listStacks: () =>
         fs.readDirectory(stateDir).pipe(
           recover,

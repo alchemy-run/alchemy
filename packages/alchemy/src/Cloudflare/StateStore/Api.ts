@@ -21,6 +21,17 @@ import { AuthToken } from "./Token.ts";
 export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
 
 /**
+ * Version of the deployed Cloudflare State Store worker contract.
+ *
+ * Bump this whenever the wire format or runtime behaviour of the
+ * worker changes in a way that an older deployed copy can no longer
+ * satisfy. Clients query `/version` on the deployed worker and
+ * compare against this constant; a mismatch (or 404) triggers a
+ * forced redeploy via the bootstrap flow.
+ */
+export const STATE_STORE_VERSION = 1 as const;
+
+/**
  * Path on disk to *this* file, used as the worker's bundling entry.
  *
  * When running from source (e.g. dev / monorepo), `import.meta.url` points
@@ -60,6 +71,12 @@ export default Worker(
           }),
         ),
         Effect.orDie,
+      ),
+    );
+
+    const versionApi = HttpApiBuilder.group(StateApi, "version", (handlers) =>
+      handlers.handle("getVersion", () =>
+        Effect.succeed({ version: STATE_STORE_VERSION }),
       ),
     );
 
@@ -133,6 +150,7 @@ export default Worker(
     return {
       fetch: HttpApiBuilder.layer(StateApi).pipe(
         Layer.provide(stateApi),
+        Layer.provide(versionApi),
         Layer.provide(StateAuthLive),
         Layer.provide(bearerTokenValidator),
         // The state-store worker never serves files, so HttpPlatform's

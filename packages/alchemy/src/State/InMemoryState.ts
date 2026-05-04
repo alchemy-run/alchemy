@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import type { ResourceState } from "./ResourceState.ts";
 import { State } from "./State.ts";
 
@@ -12,12 +13,17 @@ export const inMemoryState = (
     StackId,
     Record<StageId, Record<Fqn, ResourceState>>
   > = {},
-) => Layer.succeed(State, InMemoryService(initialState));
+) =>
+  Layer.effect(
+    State,
+    Effect.succeed(InMemoryService(initialState)).pipe(recordStateStoreInit),
+  );
 
 export const InMemoryService = (
   state: Record<StackId, Record<StageId, Record<Fqn, ResourceState>>> = {},
 ) =>
   State.of({
+    id: "inmemory",
     listStacks: () => Effect.succeed(Array.from(Object.keys(state))),
     listStages: (stack: string) =>
       Effect.succeed(

@@ -21,6 +21,15 @@ export class State extends Context.Service<State, StateService>()(
  * for provider operations.
  */
 export interface StateService {
+  /**
+   * Stable identifier for the State store implementation, used for
+   * telemetry tagging (`alchemy.state_store.id`) so we can answer
+   * "which backends are people using" without hard-coding a closed
+   * union. Examples: `"local"`, `"inmemory"`, `"http"`,
+   * `"cloudflare-http"`. Third-party state stores should pick a short,
+   * stable, kebab-case slug.
+   */
+  readonly id: string;
   listStacks(): Effect.Effect<readonly string[], StateStoreError, never>;
   listStages(
     stack: string,

@@ -508,8 +508,23 @@ When you automatically open a PR, it MUST follow this structure:
 - **Description heading levels**: NEVER use `#` or `##` in the PR description. The smallest heading allowed is `###`. The PR description must NOT begin with its own title heading — GitHub already renders the PR title above it.
 - **Content**: Aim for the minimal content needed to convey the idea.
   - Use simple sentences. If there are multiple discrete changes, use bullet points.
-  - For anything that warrants it (new features, new resources, serious changes to existing resources, API/behavior changes), include code snippets and/or ` ```diff ` blocks showing what changes from the user's perspective.
+  - **Prefer code snippets over prose.** A short ` ```ts ` or ` ```diff ` block showing the new/changed shape is worth more than a paragraph explaining it. Reach for code first; only add prose to fill in the "why" the snippet can't show on its own.
+  - Be direct and succinct. Cut adjectives, justifications, and anything that reads like marketing copy. If a sentence is restating what the diff already shows, delete it.
+  - **Never include a "Test plan", "Testing", or checklist of TODOs.** PR descriptions document the change, not the verification process. If something needs manual verification, follow the draft-PR rule below.
   - Skip examples for trivial fixes, internal refactors, or doc-only changes.
+
+Example PR description (good — code snippet does the talking):
+
+````
+Track which state-store backend each project uses by emitting a `state_store.init` span tagged with `alchemy.state_store.kind`.
+
+```ts
+// every Layer.effect(State, …) site now wraps construction:
+makeLocalState().pipe(recordStateStoreInit("local"))
+```
+
+Dashboard groups projects by kind from these spans (Axiom can't APL-query metric datasets).
+````
 - **Outstanding work / testing / review needed**: If there are outstanding steps, manual testing required, or review items, DO NOT leave a comment on the PR and DO NOT include them in the PR description. Instead:
   1. Mark the PR as **draft**.
   2. Tell the user (in the chat that initiated the PR creation) what is outstanding.

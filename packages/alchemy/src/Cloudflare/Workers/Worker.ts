@@ -52,6 +52,7 @@ import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { AiGateway } from "../AiGateway/AiGateway.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
@@ -191,6 +192,7 @@ export type WorkerBindingResource =
   | D1Database
   | KVNamespace
   | CloudflareQueue
+  | AiGateway
   | ArtifactsBinding
   | DurableObjectNamespaceLike<any>;
 
@@ -752,8 +754,13 @@ export const Worker: Platform<
                           name: bindingName,
                           queueName: binding.queueName,
                         }
-                      : // TODO(sam): handle others
-                        undefined;
+                      : binding.Type === "Cloudflare.AiGateway"
+                        ? {
+                            type: "ai",
+                            name: bindingName,
+                          }
+                        : // TODO(sam): handle others
+                          undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
@@ -1546,7 +1553,7 @@ ${[
           getCompatibility(props);
 
         yield* Effect.promise(async () => {
-          const vite = await loadVite();
+          const vite = await loadVite(props.vite?.rootDir);
           const builder = await vite.createBuilder(
             {
               root: props.vite?.rootDir,
@@ -1622,17 +1629,39 @@ ${[
         return { assets, bundle };
       });
 
-      const prepareAssetsAndBundle = (id: string, props: WorkerProps) =>
+      const prepareAssetsAndBundle = (
+        id: string,
+        props: WorkerProps,
+        opts: { skipAssetsRead?: boolean } = {},
+      ) =>
         Effect.gen(function* () {
           if (props.vite) {
             const [{ assets, bundle }, input] = yield* Effect.all(
-              [viteBuild(props), hashDirectory(props.vite)],
+              [
+                viteBuild(props),
+                // hashDirectory expects `{ cwd, memo }`. The vite props
+                // store the project root under `rootDir`, so map it
+                // here. Without this, `cwd` falls back to
+                // `process.cwd()` and the input hash is computed over
+                // the wrong directory tree (often the entire monorepo
+                // root), making it both slow and unable to detect
+                // changes scoped to the actual Vite project.
+                hashDirectory({
+                  cwd: props.vite.rootDir,
+                  memo: props.vite.memo,
+                }),
+              ],
               { concurrency: "unbounded" },
             );
             return { assets, bundle, input };
           }
           const [assets, bundle] = yield* Effect.all(
-            [prepareAssets(props.assets), prepareBundle(id, props)],
+            [
+              opts.skipAssetsRead
+                ? Effect.succeed(undefined)
+                : prepareAssets(props.assets),
+              prepareBundle(id, props),
+            ],
             { concurrency: "unbounded" },
           );
           return { assets, bundle };
@@ -1669,35 +1698,93 @@ ${[
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
-        const { assets, bundle, hash } = yield* prepareAssetsAndBundle(
-          id,
-          news,
-        );
+        // If the caller handed us a precomputed asset hash that matches
+        // what we previously stored, we can skip walking the directory
+        // entirely and tell Cloudflare to keep the assets it already
+        // has bound to this script. The disk read is the expensive
+        // part; the script PUT happens either way.
+        const previousAssetsHash = output?.hash?.assets;
+        const precomputedAssetsHash =
+          news.assets &&
+          typeof news.assets === "object" &&
+          "path" in news.assets &&
+          "hash" in news.assets
+            ? (news.assets.hash as string)
+            : undefined;
+        const assetsConfigFromProps =
+          news.assets &&
+          typeof news.assets === "object" &&
+          "config" in news.assets
+            ? news.assets.config
+            : undefined;
+        const skipAssetsRead =
+          precomputedAssetsHash !== undefined &&
+          precomputedAssetsHash === previousAssetsHash;
+        const {
+          assets,
+          bundle,
+          hash: preparedHash,
+        } = yield* prepareAssetsAndBundle(id, news, { skipAssetsRead });
+        // When the caller supplied a precomputed hash (e.g. via
+        // `Build.Command`), store *that* hash in output state so the
+        // next diff can short-circuit by comparing it directly. The
+        // hash that `readAssets` produces is the manifest-derived
+        // hash, which is shaped differently from any upstream
+        // build-input hash and will never match it on the next pass.
+        const hash = {
+          ...preparedHash,
+          assets: precomputedAssetsHash ?? preparedHash.assets,
+        } satisfies Worker["Attributes"]["hash"];
         const metadataBindings = bindings.flatMap((b) => b.data.bindings ?? []);
         const expectedDurableObjectClassNames =
           getExpectedDurableObjectClassNames(metadataBindings);
         let metadataAssets:
           | workers.PutScriptRequest["metadata"]["assets"]
           | undefined;
-        const keepAssets = false;
-        if (assets) {
-          // Always upload assets on every deploy. The "skip if hash
-          // unchanged" optimization was the source of subtle bundle/
-          // asset desync bugs (deploy succeeds but worker serves 404s
-          // because the bundle references hashed asset filenames that
-          // aren't in the still-on-Cloudflare manifest). The upload
-          // session is content-addressed on Cloudflare's side — only
-          // genuinely-new asset bytes are PUT; unchanged assets cost
-          // a manifest check and nothing else, so the optimization
-          // wasn't worth the failure mode.
+        let keepAssets = false;
+        if (skipAssetsRead) {
+          // Hash matched what's already on Cloudflare: keep the
+          // existing asset manifest and skip the upload session.
           yield* Effect.logInfo(
-            `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
+            `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
           );
-          const { jwt } = yield* uploadAssets(accountId, name, assets, session);
-          metadataAssets = {
-            jwt,
-            config: assets.config,
-          };
+          keepAssets = true;
+          metadataAssets = assetsConfigFromProps
+            ? { config: assetsConfigFromProps }
+            : undefined;
+          metadataBindings.push({
+            type: "assets",
+            name: "ASSETS",
+          });
+        } else if (assets) {
+          // We had to read the directory. Even after the read, the
+          // computed hash may match what's already deployed (e.g.
+          // legacy `string` / `AssetsProps` shapes that don't carry a
+          // precomputed hash, or a precomputed hash that disagreed with
+          // disk). In that case still keep the existing manifest and
+          // skip the upload session — Cloudflare's content-addressed
+          // session would no-op on every byte anyway.
+          if (assets.hash === previousAssetsHash) {
+            yield* Effect.logInfo(
+              `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
+            );
+            keepAssets = true;
+            metadataAssets = { config: assets.config };
+          } else {
+            yield* Effect.logInfo(
+              `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
+            );
+            const { jwt } = yield* uploadAssets(
+              accountId,
+              name,
+              assets,
+              session,
+            );
+            metadataAssets = {
+              jwt,
+              config: assets.config,
+            };
+          }
           metadataBindings.push({
             type: "assets",
             name: "ASSETS",
@@ -1991,30 +2078,47 @@ ${[
         output: Worker["Attributes"],
       ) {
         if (props.vite) {
-          const input = yield* hashDirectory(props.vite);
+          const input = yield* hashDirectory({
+            cwd: props.vite.rootDir,
+            memo: props.vite.memo,
+          });
           return input !== output.hash?.input;
         }
-        // Always recompute both hashes by walking `dist/` (assets) and
-        // re-bundling the worker. The previous short-circuit
-        // (`Effect.succeed(output.hash.assets)`) compared the cached
-        // hash to itself and could never detect drift, and the
-        // `props.assets.hash` form is the *input* (source) hash which
-        // misses non-deterministic build output (e.g. Astro/Vite
-        // shuffling content-hashed filenames between builds). The
-        // result of either shortcut was deploying a new bundle on top
-        // of stale assets and 404'ing in production. Re-walking is the
-        // only correct comparison.
-        const [assetsHash, bundleHash] = yield* Effect.all(
-          [
-            prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash)),
-            prepareBundle(id, props).pipe(Effect.map((b) => b.hash)),
-          ],
-          { concurrency: "unbounded" },
+        const bundleHash = yield* prepareBundle(id, props).pipe(
+          Effect.map((b) => b.hash),
         );
-        return (
-          assetsHash !== output.hash?.assets ||
-          bundleHash !== output.hash?.bundle
-        );
+        if (bundleHash !== output.hash?.bundle) {
+          return true;
+        }
+        if (!props.assets) {
+          return false;
+        }
+        // We deliberately don't read the assets directory during diff.
+        // For `AssetsWithHash` (the documented contract) the upstream
+        // `Build.Command` already gave us an authoritative hash — we
+        // just compare strings. Reading the directory here would
+        // (a) hash the same tree twice per apply (`putWorker` reads
+        // again when an upload is actually required), and (b) crash
+        // when the prior state was written on a different machine
+        // and `path` doesn't exist locally — blocking any local
+        // reapply even though the precomputed hash is right there
+        // in props.
+        //
+        // For the legacy `string` / `AssetsProps` shapes there's no
+        // hash in props to compare against, so we conservatively
+        // assume the assets changed; `putWorker` will read once,
+        // hash, and use `keepAssets` if it turns out nothing actually
+        // changed.
+        const assetsHash =
+          typeof props.assets === "object" &&
+          "path" in props.assets &&
+          "hash" in props.assets
+            ? (props.assets.hash as string)
+            : undefined;
+        if (assetsHash === undefined) {
+          return true;
+        }
+        return assetsHash !== output.hash?.assets;
       });
 
       return Worker.Provider.of({
@@ -2479,31 +2583,23 @@ const contentTypeFromExtension = (extension: string) => {
 };
 
 type ViteModule = typeof import("vite");
-let _viteModule: ViteModule | null = null;
 
 /**
  * Dynamically load Vite from the project root. Falls back to the bundled
  * copy if the project doesn't have its own Vite installation.
  */
-async function loadVite(): Promise<ViteModule> {
-  if (_viteModule) return _viteModule;
-
-  const projectRoot = process.cwd();
-  let vitePath: string;
-
+async function loadVite(
+  projectRoot: string = process.cwd(),
+): Promise<ViteModule> {
   try {
-    // Resolve "vite" from the project root, not from vinext's location
     const require = createRequire(path.join(projectRoot, "package.json"));
-    vitePath = require.resolve("vite");
+    const vitePath = require.resolve("vite");
+    // On Windows, absolute paths must be file:// URLs for ESM import().
+    const viteUrl = pathToFileURL(vitePath);
+    return await import(/* @vite-ignore */ viteUrl.href);
   } catch {
-    // Fallback: use the Vite that ships with vinext (works for non-linked installs)
-    vitePath = "vite";
+    // Fallback: try to import vite from the global node_modules (works for non-linked installs)
+    // The fallback is a bare specifier and works as-is.
+    return await import("vite");
   }
-
-  // On Windows, absolute paths must be file:// URLs for ESM import().
-  // The fallback ("vite") is a bare specifier and works as-is.
-  const viteUrl = vitePath === "vite" ? vitePath : pathToFileURL(vitePath).href;
-  const vite = (await import(/* @vite-ignore */ viteUrl)) as ViteModule;
-  _viteModule = vite;
-  return vite;
 }

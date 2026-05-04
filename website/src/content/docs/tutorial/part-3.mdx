@@ -12,16 +12,29 @@ hit the live Worker over HTTP, and verify it works.
 ## Create the test file
 
 Alchemy ships test utilities for Bun that wrap `bun:test` with Effect
-support. Create an empty test file:
+support. Configure providers (and state) once at the top of the file
+with `Test.make({...})` — the same `Cloudflare.providers()` /
+`Cloudflare.state()` you used in your `Stack`:
 
 ```typescript twoslash
 // @filename: ../alchemy.run.ts
 // ---cut---
 // test/integ.test.ts
-import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+});
 ```
+
+`expect` (and any other `bun:test` helpers like `describe`) come
+from `bun:test` directly — `Test.make` only provides the
+Effect-aware test runner pieces.
 
 ## Deploy the stack before tests
 
@@ -32,9 +45,16 @@ tests run:
 // @filename: ../alchemy.run.ts
 // ---cut---
 // test/integ.test.ts
-import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+});
 
 +const stack = beforeAll(deploy(Stack));
 ```
@@ -52,9 +72,16 @@ returned from your Stack in Part 2:
 // @filename: ../alchemy.run.ts
 // ---cut---
 // test/integ.test.ts
-import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+});
 
 const stack = beforeAll(deploy(Stack));
 
@@ -90,14 +117,20 @@ actually handles requests:
 // @filename: ../alchemy.run.ts
 // ---cut---
 // test/integ.test.ts
-import { beforeAll, deploy, expect, test } from "alchemy/Test/Bun";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
++import * as HttpBody from "effect/unstable/http/HttpBody";
++import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 
-const stack = beforeAll(deploy(Stack));
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+});
 
-+import * as HttpClient from "effect/unstable/http/HttpClient";
-+import * as HttpBody from "effect/unstable/http/HttpBody";
+const stack = beforeAll(deploy(Stack));
 
 -test(
 -  "worker returns a url",
@@ -147,46 +180,26 @@ Add `afterAll` with `destroy`, using `skipIf` to only tear down when
 ```typescript twoslash
 // @filename: ../alchemy.run.ts
 // ---cut---
-import {
-+ afterAll,
-  beforeAll,
-  deploy,
-+ destroy,
-  expect,
-  test,
-} from "alchemy/Test/Bun";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Test from "alchemy/Test/Bun";
+import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+});
 
 const stack = beforeAll(deploy(Stack));
 
-test(
-  "PUT and GET round-trip an object",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
-
-    const put = yield* HttpClient.put(`${url}/hello.txt`, {
-      body: HttpBody.text("Hello, World!"),
-    });
-    expect(put.status).toBe(201);
-
-    const get = yield* HttpClient.get(`${url}/hello.txt`);
-    expect(yield* get.text).toBe("Hello, World!");
-  }),
-);
-
-test(
-  "GET missing key returns 404",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
-    const response = yield* HttpClient.get(`${url}/no-such-key`);
-    expect(response.status).toBe(404);
-  }),
-);
-
 +afterAll.skipIf(!process.env.CI)(destroy(Stack));
+
+test(/* .. */);
+
+test(/* .. */);
 ```
 
 - **Locally** — `CI` is not set, so `skipIf` skips the destroy. You
@@ -198,6 +211,8 @@ test(
 
 You now have:
 
+- `Test.make({ providers, state })` to wire your provider Layer and
+  state store into the test runner once per file
 - `beforeAll(deploy(Stack))` to deploy once before tests
 - `yield* stack` to access outputs in each test
 - HTTP assertions using Effect's `HttpClient`

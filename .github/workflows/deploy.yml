@@ -103,6 +103,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Generate bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.ALCHEMY_VERSION_BOT_ID }}
+          private-key: ${{ secrets.ALCHEMY_VERSION_BOT_PRIVATE_KEY }}
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
@@ -124,3 +131,4 @@ jobs:
           CLOUDFLARE_EMAIL: ${{ secrets.ADMIN_CLOUDFLARE_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
           PULL_REQUEST: ${{ github.event.number }}
+          GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}

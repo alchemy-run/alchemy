@@ -5,6 +5,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 
 import * as Config from "effect/Config";
 import { adopt } from "../../AdoptPolicy.ts";
@@ -14,9 +16,10 @@ import { ALCHEMY_PROFILE } from "../../Auth/Profile.ts";
 import * as Cloudflare from "../../Cloudflare/Providers.ts";
 import { deploy } from "../../Deploy.ts";
 import * as Alchemy from "../../Stack.ts";
+import { StateApi } from "../../State/HttpStateApi.ts";
 import {
   makeHttpStateStore,
-  type HttpStateStoreProps,
+  type HttpStateStoreCredentials,
 } from "../../State/HttpStateStore.ts";
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import * as Credentials from "../Credentials.ts";
@@ -24,11 +27,15 @@ import * as Credentials from "../Credentials.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { makeLocalState } from "../../State/LocalState.ts";
 import { State, type StateService } from "../../State/State.ts";
-import { recordStateStoreOp } from "../../Telemetry/Metrics.ts";
+import {
+  recordStateStoreInit,
+  recordStateStoreOp,
+} from "../../Telemetry/Metrics.ts";
 import * as Clank from "../../Util/Clank.ts";
+import * as Access from "../Access.ts";
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
-import Api, { STATE_STORE_SCRIPT_NAME } from "./Api.ts";
+import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
 import { AuthTokenSecretName, TokenValue } from "./Token.ts";
 
 /** Filename used for stored credentials under the profile directory. */
@@ -105,12 +112,19 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       );
       const credentials = yield* loginWithCloudflare();
       if (!isCI) {
-        yield* writeCredentials<HttpStateStoreProps>(
+        yield* writeCredentials<HttpStateStoreCredentials>(
           profileName,
           CREDENTIALS_FILE,
           credentials,
         );
       }
+      yield* redeployIfStale({
+        scriptName,
+        profileName,
+        localState,
+        isCI,
+        url: credentials.url,
+      });
       yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
       return;
     }
@@ -140,7 +154,7 @@ export const state = (props?: {
       const isCI = yield* Config.boolean("CI").pipe(Config.withDefault(false));
       const alchemyContext = yield* AlchemyContext;
       const profileName = yield* ALCHEMY_PROFILE;
-      const credentials = yield* readCredentials<HttpStateStoreProps>(
+      const credentials = yield* readCredentials<HttpStateStoreCredentials>(
         profileName,
         CREDENTIALS_FILE,
       );
@@ -179,10 +193,22 @@ export const state = (props?: {
         });
       }
 
-      // TODO(sam): support upgrading state store, right now we only deploy once
       if (credentials) {
-        // it's in the profile, let's go
-        const httpState = yield* makeHttpStateStore(credentials);
+        // We have local credentials. Before trusting them, verify
+        // the deployed worker is on the version this CLI was built
+        // against. If it isn't, `redeployIfStale` runs the idempotent
+        // bootstrap flow and short-circuits with the freshly-deployed
+        // store.
+        const fresh = yield* redeployIfStale({
+          scriptName,
+          profileName,
+          localState,
+          isCI,
+          url: credentials.url,
+        });
+        if (fresh) return fresh;
+
+        const httpState = yield* makeCloudflareStateStore(credentials);
 
         if (alchemyContext.updateStateStore) {
           yield* deployStateStore(scriptName, httpState);
@@ -207,13 +233,23 @@ export const state = (props?: {
         // it exists, so fetch the secret token
         const credentials = yield* loginWithCloudflare();
         if (!isCI) {
-          yield* writeCredentials<HttpStateStoreProps>(
+          yield* writeCredentials<HttpStateStoreCredentials>(
             profileName,
             CREDENTIALS_FILE,
             credentials,
           );
         }
-        const httpState = yield* makeHttpStateStore(credentials);
+
+        const fresh = yield* redeployIfStale({
+          scriptName,
+          profileName,
+          localState,
+          isCI,
+          url: credentials.url,
+        });
+        if (fresh) return fresh;
+
+        const httpState = yield* makeCloudflareStateStore(credentials);
 
         if (alchemyContext.updateStateStore) {
           yield* deployStateStore(scriptName, httpState);
@@ -246,13 +282,31 @@ export const state = (props?: {
         localState,
         isCI,
       });
-    }).pipe(Effect.orDie),
+    }).pipe(recordStateStoreInit, Effect.orDie),
   ).pipe(
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
     Layer.provideMerge(CloudflareAuth),
+    Layer.provideMerge(Access.AccessLive),
     Layer.orDie,
   );
+
+const makeCloudflareStateStore = Effect.fnUntraced(function* ({
+  url,
+  authToken,
+}: {
+  url: string;
+  authToken: string;
+}) {
+  const access = yield* Access.Access;
+  const accessHeaders = yield* access.getAccessHeaders(new URL(url).host);
+  return yield* makeHttpStateStore({
+    url,
+    authToken,
+    transformClient: HttpClientRequest.setHeaders(accessHeaders),
+    id: "cloudflare-http",
+  });
+});
 
 /**
  * Non-destructively copy every resource in the
@@ -317,7 +371,7 @@ const finishBootstrap = ({
     // credentials file (skipping the write in CI), so we don't need
     // to do that explicitly here.
     const { url, authToken } = yield* loginWithCloudflare();
-    const httpState = yield* makeHttpStateStore({ url, authToken });
+    const httpState = yield* makeCloudflareStateStore({ url, authToken });
     // `profileName` is intentionally unused here — `loginWithCloudflare`
     // resolves it itself. Reference it to keep the surrounding API
     // explicit and to avoid an unused-parameter lint.
@@ -424,7 +478,19 @@ export const loginWithCloudflare = () =>
     }
 
     // 2. Fetch the auth-token value via an edge-preview worker.
-    const authToken = yield* readSecretViaEdge(store.id, AuthTokenSecretName);
+    //    We piggy-back on the already-deployed state-store script so the
+    //    `cf-workers-preview-token` header has a real workers.dev route to
+    //    swap onto. Uploading the probe under a brand-new script name fails
+    //    on accounts where that script has never been deployed (or where
+    //    workers.dev preview URLs are off by default — the post-2024
+    //    Cloudflare default for new accounts) because the host doesn't
+    //    resolve and Cloudflare's edge serves a 400 HTML error page
+    //    instead of routing to the preview.
+    const authToken = yield* readSecretViaEdge(
+      STATE_STORE_SCRIPT_NAME,
+      store.id,
+      AuthTokenSecretName,
+    );
 
     // 3. Derive the deployed worker URL.
     const { subdomain } = yield* workers.getSubdomain({ accountId });
@@ -433,7 +499,7 @@ export const loginWithCloudflare = () =>
     if (!isCI) {
       // 4. Persist credentials. The profile entry is managed by
       //    `loadOrConfigure` when this is invoked through `configure`.
-      yield* writeCredentials<HttpStateStoreProps>(
+      yield* writeCredentials<HttpStateStoreCredentials>(
         profileName,
         CREDENTIALS_FILE,
         {
@@ -468,8 +534,61 @@ export const loginWithCloudflare = () =>
     ),
   );
 
-/** Preview script name used by the edge-probe worker. */
-const PROBE_SCRIPT_NAME = "alchemy-state-store-probe";
+/**
+ * Run {@link finishBootstrap} iff the worker at `url` fails the
+ * version probe; otherwise resolve to `undefined`. Centralises the
+ * "is the deployed worker still compatible?" guard used by every
+ * code path that already has a presumably-valid worker URL.
+ */
+const redeployIfStale = ({
+  url,
+  scriptName,
+  profileName,
+  localState,
+  isCI,
+}: {
+  url: string;
+  scriptName: string;
+  profileName: string;
+  localState: StateService;
+  isCI: boolean;
+}) =>
+  Effect.gen(function* () {
+    if (yield* checkStateStoreVersion(url)) return undefined;
+    yield* Clank.info(
+      `Cloudflare State Store '${scriptName}' is out of date; redeploying...`,
+    );
+    return yield* finishBootstrap({
+      scriptName,
+      profileName,
+      localState,
+      isCI,
+    });
+  });
+
+/**
+ * Probe the deployed worker's `/version` endpoint and decide whether
+ * it satisfies the current {@link STATE_STORE_VERSION} contract.
+ *
+ * Reuses the same typed {@link StateApi} client the rest of the store
+ * speaks, just without the bearer-token transform — the `/version`
+ * route is intentionally unauthenticated so we can probe it before
+ * trusting any locally-cached credentials.
+ *
+ * Returns `true` only on a successful response carrying the matching
+ * version. Any failure (404 from a pre-`/version` deploy, transport
+ * error, schema mismatch, version mismatch) collapses to `false`,
+ * since the caller's response in every case is the same: fall
+ * through to the idempotent bootstrap flow.
+ */
+const checkStateStoreVersion = (url: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
+    const result = yield* client.version
+      .getVersion()
+      .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    return result?.version === STATE_STORE_VERSION;
+  });
 
 /**
  * Tiny ES-module worker that reads `env.SECRET.get()` and echoes it
@@ -488,19 +607,32 @@ const SECRET_PROBE_SOURCE = `export default {
 };`;
 
 /**
- * Upload a tiny edge-preview worker that binds the given Secrets
- * Store secret, call it once, and return the decoded value. The
- * Cloudflare REST API deliberately hides secret values; only worker
- * bindings can resolve them, so this is the out-of-band path.
+ * Upload an ephemeral edge-preview build of the given (already
+ * deployed) script that binds the requested Secrets Store secret,
+ * call it once with the preview token, and return the decoded value.
+ * The Cloudflare REST API deliberately hides secret values; only
+ * worker bindings can resolve them, so this is the out-of-band path.
+ *
+ * `scriptName` MUST be a script that is already deployed on the
+ * account with workers.dev enabled — the `cf-workers-preview-token`
+ * header swaps our probe code in for an existing route, it does not
+ * create one. Using an undeployed name (or a deployed script that
+ * doesn't have workers.dev enabled) makes the workers.dev edge serve
+ * a generic Cloudflare 400 HTML error page instead of routing to the
+ * preview. The state-store script itself satisfies both conditions.
  */
-const readSecretViaEdge = (storeId: string, secretName: string) =>
+const readSecretViaEdge = (
+  scriptName: string,
+  storeId: string,
+  secretName: string,
+) =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const file = new File([SECRET_PROBE_SOURCE], "worker.js", {
       type: "application/javascript+module",
     });
     const session = yield* createEdgeSession({
-      scriptName: PROBE_SCRIPT_NAME,
+      scriptName,
       files: [file],
       bindings: [
         { type: "secrets_store_secret", name: "SECRET", secretName, storeId },
@@ -512,6 +644,13 @@ const readSecretViaEdge = (storeId: string, secretName: string) =>
     if (response.status !== 200) {
       const body = yield* response.text.pipe(
         Effect.catch(() => Effect.succeed("")),
+      );
+      // TEMP(sam): dump the full body so we can capture the exact
+      // Cloudflare error page when the probe fails in the wild. Drop
+      // this once we've confirmed the routing fix covers all the
+      // observed failure modes.
+      yield* Effect.logWarning(
+        `Secret probe failed (${response.status}) at ${session.url}\n${body}`,
       );
       return yield* Effect.fail(
         new EdgeSessionError({
