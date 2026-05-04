@@ -58,7 +58,7 @@ export const SecretsStoreProvider = () =>
         stables: ["storeId", "storeName", "accountId"],
         create: Effect.fn(function* () {
           const adoptEnabled = yield* Effect.serviceOption(AdoptPolicy).pipe(
-            Effect.map(Option.getOrElse(() => false)),
+            Effect.map(Option.getOrElse(() => true)),
           );
 
           const adoptExisting = Effect.gen(function* () {

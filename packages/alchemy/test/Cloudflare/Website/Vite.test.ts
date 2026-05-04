@@ -98,6 +98,86 @@ test.provider(
   { timeout: 360_000 },
 );
 
+// ─────────────────────────────────────────────────────────────────────
+// Path-relocation behavior for the vite path
+//
+// `Cloudflare.Vite` hashes its memo'd input tree (`hash.input`)
+// instead of carrying an `AssetsWithHash`. The diff is:
+//
+//   `input !== output.hash?.input`
+//
+// — a pure content comparison that must be stable across rootDir
+// moves. We delete the original rootDir between deploys to make the
+// test fail loudly if anything still depends on the recorded path.
+// ─────────────────────────────────────────────────────────────────────
+
+test.provider(
+  "Vite: relocating rootDir (and deleting the old one) is a no-op when sources are identical",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      const memoInclude = ["index.html", "src/**", "package.json"];
+      const marker = `vite-relocate-${Date.now()}`;
+
+      const rootA = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-vite-relocate-a-",
+        tempRoot,
+        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      });
+      yield* fs.writeFileString(
+        path.join(rootA, "index.html"),
+        htmlPage(marker),
+      );
+
+      const site1 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Vite("ViteReloc", viteProps(rootA, memoInclude));
+        }),
+      );
+      expect(site1.hash?.input).toBeDefined();
+      yield* expectUrlContains(`${site1.url!}/`, marker, {
+        timeout: "120 seconds",
+        label: "deploy1 marker",
+      });
+
+      // Drop rootA so a stale path comparison can't quietly succeed.
+      yield* fs.remove(rootA, { recursive: true });
+
+      const rootB = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-vite-relocate-b-",
+        tempRoot,
+        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      });
+      yield* fs.writeFileString(
+        path.join(rootB, "index.html"),
+        htmlPage(marker),
+      );
+
+      const site2 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Vite("ViteReloc", viteProps(rootB, memoInclude));
+        }),
+      );
+
+      // Identical sources ⇒ identical input hash ⇒ diff says
+      // unchanged ⇒ no rebuild required for the apply to succeed.
+      expect(site2.hash?.input).toEqual(site1.hash?.input);
+      yield* expectUrlContains(`${site2.url!}/`, marker, {
+        timeout: "60 seconds",
+        label: "deploy2 marker",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
 const viteProps = (rootDir: string, memoInclude: string[]) => ({
   rootDir,
   url: true as const,

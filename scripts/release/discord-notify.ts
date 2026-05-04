@@ -10,6 +10,7 @@
  */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { extractTagBody, toDiscordBody } from "./discord-body.ts";
 
 const REPO = "alchemy-run/alchemy-effect";
 // Discord embed description hard limit.
@@ -28,44 +29,15 @@ if (!webhook) {
   process.exit(0);
 }
 
-// Pull the entry for this tag out of CHANGELOG.md. release-notes.ts writes
-// each entry as `## <tag>\n\n<body>\n\n---\n\n<previous entries>`.
 const changelogPath = join(process.cwd(), "CHANGELOG.md");
 const changelog = await readFile(changelogPath, "utf-8");
-const heading = `## ${tag}\n`;
-const start = changelog.indexOf(heading);
-if (start === -1) {
+const rawBody = extractTagBody(changelog, tag);
+if (rawBody === undefined) {
   console.error(`CHANGELOG.md has no entry for ${tag}`);
   process.exit(1);
 }
-const after = changelog.slice(start + heading.length);
-// Stop at the separator that release-notes.ts inserts between entries, or
-// the next `## ` heading if the separator is missing.
-const sepIdx = after.indexOf("\n---\n");
-const nextHeadingIdx = after.indexOf("\n## ");
-const end =
-  sepIdx === -1
-    ? nextHeadingIdx === -1
-      ? after.length
-      : nextHeadingIdx
-    : nextHeadingIdx === -1
-      ? sepIdx
-      : Math.min(sepIdx, nextHeadingIdx);
-const rawBody = after.slice(0, end).trim();
 
-// CHANGELOG.md is formatted for GitHub Releases, which renders HTML.
-// Discord renders neither HTML entities nor the `<samp>` tag, so swap them
-// for plain-text/markdown equivalents before posting.
-const body = rawBody
-  .replace(/&nbsp;/g, " ")
-  .replace(/<\/?samp>/g, "`")
-  // Collapse the long indent that the GitHub-flavored headings use.
-  .replace(/^(#{1,6})\s+/gm, "$1 ")
-  // Discord only renders #, ##, ### as headings; drop deeper levels so
-  // lines like "##### View changes on GitHub" become plain text.
-  .replace(/^#{4,6}\s+/gm, "")
-  // Strip any other stray HTML tags just in case.
-  .replace(/<\/?[a-z][^>]*>/gi, "");
+const body = toDiscordBody(rawBody);
 
 const releaseUrl = `https://github.com/${REPO}/releases/tag/${tag}`;
 const description = `${body}\n\n[Full release notes →](${releaseUrl})`;

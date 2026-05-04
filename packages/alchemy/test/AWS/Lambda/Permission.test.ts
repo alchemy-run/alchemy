@@ -4,45 +4,34 @@ import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import * as HttpClient from "effect/unstable/http/HttpClient";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
 test.provider(
-  "create, update, delete function",
+  "creates permission scoped to function URL invocation",
   (stack) =>
     Effect.gen(function* () {
-      const { functionName, functionUrl } = yield* stack.deploy(
-        TestFunction.asEffect().pipe(Effect.provide(TestFunctionLive)),
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const fn = yield* TestFunction;
+          const permission = yield* AWS.Lambda.Permission("UrlInvokeOnly", {
+            action: "lambda:InvokeFunction",
+            functionName: fn.functionName,
+            principal: "*",
+            invokedViaFunctionUrl: true,
+          });
+
+          return { fn, permission };
+        }).pipe(Effect.provide(TestFunctionLive)),
       );
 
-      expect(functionUrl).toBeTruthy();
-
-      const response = yield* HttpClient.get(functionUrl!).pipe(
-        Effect.flatMap((response) =>
-          response.status === 200
-            ? Effect.succeed(response)
-            : Effect.fail(
-                new Error(`Function URL returned ${response.status}`),
-              ),
-        ),
-        Effect.tapError((error) => Effect.logError(error)),
-        Effect.retry({
-          schedule: Schedule.exponential(500).pipe(
-            Schedule.both(Schedule.recurs(10)),
-          ),
-        }),
+      const policy = yield* getPolicyStatement(
+        deployed.fn.functionName,
+        deployed.permission.statementId,
       );
 
-      expect(response.status).toBe(200);
-      expect(yield* response.text).toBe("Hello, world!");
-
-      const invokePolicy = yield* getPolicyStatement(
-        functionName,
-        "FunctionURLAllowPublicInvoke",
-      );
-      expect(invokePolicy.Condition).toEqual({
+      expect(policy.Condition).toEqual({
         Bool: {
           "lambda:InvokedViaFunctionUrl": "true",
         },

@@ -6,22 +6,33 @@ import { Effect } from "effect";
 import { Traces } from "./Datasets.ts";
 
 /**
- * `${stage} alchemy CLI overview` — a single dashboard composing the
- * same insights exposed as `Axiom.View`s in `./Views.ts`, laid out on
- * a 12-column grid.
+ * `${stage} alchemy CLI overview` — a single dashboard answering the
+ * four questions we actually care about, laid out on a 12-column grid:
  *
- * Layout (rows top-to-bottom, all in 12 cols):
+ *   1. **How many active users are working on a project?**
+ *      Distinct `alchemy.user.id` per `alchemy.git.origin_hash`.
+ *   2. **How many distinct projects are there?**
+ *      Distinct `alchemy.git.origin_hash`.
+ *   3. **How many projects use CI/CD?**
+ *      Distinct `alchemy.git.origin_hash` where `alchemy.ci=true`.
+ *   4. **What state stores are people using?**
+ *      Sourced from `state_store.init` spans tagged with
+ *      `alchemy.state_store.id` (the open-ended `StateService.id`
+ *      slug; built-ins are `local` / `inmemory` / `http` /
+ *      `cloudflare-http`, third-party stores get tracked automatically
+ *      by setting their own slug). Emitted once per process via
+ *      `recordStateStoreInit` at every `Layer.effect(State, …)` site.
  *
- * 1. Active users (7d) | CLI invocations (24h) | Active users / hour
- * 2. Deploy/destroy latency p50/p95 | CLI invocations by command/status
- * 3. Top resources by op count | Resource latency p95 by type/op
- * 4. Active users by version | Resource error rate
- * 5. State store deploy success vs error | State store deploy error rate
- * 6. CLI failure rate by command | (reserved)
+ * Project identity uses `alchemy.git.origin_hash` rather than
+ * `alchemy.user.id`: ephemeral CI runners regenerate `~/.alchemy/id`
+ * every job, which dramatically inflates the user count. The git
+ * origin hash is stable across runs of the same repo and is the
+ * closest proxy we have for "a project".
  *
  * All queries target `${stage}-traces` — Axiom's metrics datasets
  * cannot be queried via APL, but every metric we emit has an
- * equivalent span (`cli.<command>`, `provider.<op>`).
+ * equivalent span (`cli.<command>`, `provider.<op>`,
+ * `state_store.deploy`, `state_store.init`).
  *
  * Each chart's APL query is built with `Output.interpolate` against
  * `traces.name` so Alchemy sequences the dashboard after the dataset
@@ -34,125 +45,166 @@ export const CliOverviewDashboard = Axiom.Dashboard(
     Effect.map(([stack, traces]) => {
       const t = traces.name;
       const charts: Input<Axiom.Chart>[] = [
+        // Row 1 — top-line counts answering Qs 1, 2, 3.
+        {
+          id: "distinct-projects",
+          name: "Distinct projects (7d)",
+          type: "Statistic",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | extend project=tostring(['resource.custom']['alchemy.git.origin_hash'])
+              | where project != ""
+              | summarize projects=dcount(project)
+            `,
+          },
+        },
+        {
+          id: "projects-using-ci",
+          name: "Projects using CI/CD (7d)",
+          type: "Statistic",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | extend project=tostring(['resource.custom']['alchemy.git.origin_hash']),
+                       ci=tostring(['resource.custom']['alchemy.ci'])
+              | where project != "" and ci == "true"
+              | summarize projects=dcount(project)
+            `,
+          },
+        },
         {
           id: "active-users-7d",
-          name: "Active users",
+          name: "Active users — non-CI (7d)",
           type: "Statistic",
-          query: {
-            apl: Output.interpolate`
-              ['${t}']
-              | extend uid=tostring(['resource.custom']['alchemy.user.id'])
-              | summarize users=dcount(uid)
-            `,
-          },
-        },
-        {
-          id: "cli-invocations-24h",
-          name: "CLI invocations",
-          type: "Statistic",
-          query: {
-            apl: Output.interpolate`
-              ['${t}']
-              | where name startswith "cli."
-              | summarize total=count()
-            `,
-          },
-        },
-        {
-          id: "active-users-hourly",
-          name: "Active users / hour",
-          type: "TimeSeries",
-          query: {
-            apl: Output.interpolate`
-              ['${t}']
-              | extend uid=tostring(['resource.custom']['alchemy.user.id'])
-              | summarize users=dcount(uid) by bin_auto(_time)
-              | order by _time asc
-            `,
-          },
-        },
-        {
-          id: "deploy-destroy-latency",
-          name: "Deploy / destroy latency",
-          type: "TimeSeries",
-          query: {
-            apl: Output.interpolate`
-              ['${t}']
-              | where name in ("cli.deploy", "cli.destroy")
-              | summarize p50=percentile(duration, 50),
-                          p95=percentile(duration, 95)
-                  by name, bin_auto(_time)
-              | order by _time asc
-            `,
-          },
-        },
-        {
-          id: "cli-invocations-by-command",
-          name: "CLI invocations by command / status",
-          type: "TimeSeries",
-          query: {
-            apl: Output.interpolate`
-              ['${t}']
-              | where name startswith "cli."
-              | extend command=extract("cli\\\\.(.+)", 1, name),
-                       status=iff(tobool(['error']), "error", "success")
-              | summarize count=count() by command, status, bin_auto(_time)
-              | order by _time asc
-            `,
-          },
-        },
-        {
-          id: "top-resources",
-          name: "Top resources by op count",
-          type: "Table",
-          query: {
-            apl: Output.interpolate`
-              ['${t}']
-              | where name startswith "provider."
-              | extend rt=tostring(['attributes.custom']['alchemy.resource.type']),
-                       op=tostring(['attributes.custom']['alchemy.resource.op'])
-              | summarize ops=count() by rt, op
-              | order by ops desc
-              | take 50
-            `,
-          },
-        },
-        {
-          id: "resource-latency",
-          name: "Resource latency p95 (provider.<op>)",
-          type: "Table",
-          query: {
-            apl: Output.interpolate`
-              ['${t}']
-              | where name startswith "provider."
-              | extend rt=tostring(['attributes.custom']['alchemy.resource.type']),
-                       op=tostring(['attributes.custom']['alchemy.resource.op'])
-              | summarize p50=percentile(duration, 50),
-                          p95=percentile(duration, 95),
-                          count=count()
-                  by rt, op
-              | order by p95 desc
-              | take 50
-            `,
-          },
-        },
-        {
-          id: "active-users-by-version",
-          name: "Active users by alchemy version",
-          type: "Table",
           query: {
             apl: Output.interpolate`
               ['${t}']
               | extend uid=tostring(['resource.custom']['alchemy.user.id']),
-                       version=tostring(['resource.custom']['alchemy.version'])
-              | summarize users=dcount(uid) by version
-              | order by users desc
+                       ci=tostring(['resource.custom']['alchemy.ci'])
+              | where ci != "true"
+              | summarize users=dcount(uid)
+            `,
+          },
+        },
+
+        // Row 2 — Q1 broken out per-project, plus solo-vs-team split.
+        {
+          id: "users-per-project",
+          name: "Active users per project (7d)",
+          type: "Table",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | extend project=tostring(['resource.custom']['alchemy.git.origin_hash']),
+                       uid=tostring(['resource.custom']['alchemy.user.id']),
+                       ci=tostring(['resource.custom']['alchemy.ci'])
+              | where project != ""
+              | summarize users_total=dcount(uid),
+                          users_local=dcountif(uid, ci != "true"),
+                          users_ci=dcountif(uid, ci == "true"),
+                          events=count()
+                  by project
+              | order by users_total desc
+              | take 100
             `,
           },
         },
         {
+          id: "project-team-size-distribution",
+          name: "Project team-size distribution (local users / project)",
+          type: "Table",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | extend project=tostring(['resource.custom']['alchemy.git.origin_hash']),
+                       uid=tostring(['resource.custom']['alchemy.user.id']),
+                       ci=tostring(['resource.custom']['alchemy.ci'])
+              | where project != "" and ci != "true"
+              | summarize users=dcount(uid) by project
+              | extend bucket = case(
+                  users == 1, "1 (solo)",
+                  users <= 3, "2-3",
+                  users <= 10, "4-10",
+                  "11+")
+              | summarize projects=count() by bucket
+              | order by bucket asc
+            `,
+          },
+        },
+
+        // Row 3 — Q4: state-store breakdown.
+        {
+          id: "state-store-projects-by-id",
+          name: "Projects by state store (7d)",
+          type: "Table",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where name == "state_store.init"
+              | extend store=tostring(['attributes.custom']['alchemy.state_store.id']),
+                       project=tostring(['resource.custom']['alchemy.git.origin_hash']),
+                       uid=tostring(['resource.custom']['alchemy.user.id'])
+              | summarize projects=dcountif(project, project != ""),
+                          users=dcount(uid),
+                          inits=count()
+                  by store
+              | order by projects desc
+            `,
+          },
+        },
+        {
+          id: "state-store-by-id-over-time",
+          name: "State store init by store / hour",
+          type: "TimeSeries",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where name == "state_store.init"
+              | extend store=tostring(['attributes.custom']['alchemy.state_store.id'])
+              | summarize count=count() by store, bin_auto(_time)
+              | order by _time asc
+            `,
+          },
+        },
+
+        // Row 4 — adoption shape: project growth + CI-vs-local split.
+        {
+          id: "projects-over-time",
+          name: "Distinct projects per day",
+          type: "TimeSeries",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | extend project=tostring(['resource.custom']['alchemy.git.origin_hash'])
+              | where project != ""
+              | summarize projects=dcount(project) by bin(_time, 1d)
+              | order by _time asc
+            `,
+          },
+        },
+        {
+          id: "ci-vs-local-projects",
+          name: "Projects: CI vs local per day",
+          type: "TimeSeries",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | extend project=tostring(['resource.custom']['alchemy.git.origin_hash']),
+                       ci=tostring(['resource.custom']['alchemy.ci'])
+              | where project != ""
+              | extend bucket=iff(ci == "true", "ci", "local")
+              | summarize projects=dcount(project) by bucket, bin(_time, 1d)
+              | order by _time asc
+            `,
+          },
+        },
+
+        // Row 5 — keep the state-store deploy health signals for the
+        // Cloudflare-hosted store (not just init, but actual deploys).
+        {
           id: "state-store-deploys",
-          name: "State store deploys (success vs error)",
+          name: "Cloudflare state store deploys (success vs error)",
           type: "TimeSeries",
           query: {
             apl: Output.interpolate`
@@ -165,68 +217,20 @@ export const CliOverviewDashboard = Axiom.Dashboard(
           },
         },
         {
-          id: "state-store-error-rate",
-          name: "State store deploy error rate (%)",
-          type: "TimeSeries",
-          query: {
-            apl: Output.interpolate`
-              ['${t}']
-              | where name == "state_store.deploy"
-              | extend is_error=toint(tobool(['error']))
-              | summarize total=count(), errors=sum(is_error) by bin_auto(_time)
-              | extend error_rate_pct=todouble(errors) * 100.0 / todouble(total)
-              | project _time, error_rate_pct
-              | order by _time asc
-            `,
-          },
-        },
-        {
-          id: "cli-failure-rate",
-          name: "CLI failure rate by command (%)",
-          type: "TimeSeries",
-          query: {
-            apl: Output.interpolate`
-              ['${t}']
-              | where name startswith "cli."
-              | extend command=extract("cli\\\\.(.+)", 1, name),
-                       is_error=toint(tobool(['error']))
-              | summarize total=count(), errors=sum(is_error)
-                  by command, bin_auto(_time)
-              | extend failure_rate_pct=todouble(errors) * 100.0 / todouble(total)
-              | project _time, command, failure_rate_pct
-              | order by _time asc
-            `,
-          },
-        },
-        {
-          id: "cli-failure-rate-overall",
-          name: "CLI failure rate by command (7d)",
+          id: "active-users-by-version",
+          name: "Active users by alchemy version (7d)",
           type: "Table",
           query: {
             apl: Output.interpolate`
               ['${t}']
-              | where name startswith "cli."
-              | extend command=extract("cli\\\\.(.+)", 1, name),
-                       is_error=toint(tobool(['error']))
-              | summarize total=count(), errors=sum(is_error) by command
-              | extend failure_rate_pct=todouble(errors) * 100.0 / todouble(total)
-              | project command, total, errors, failure_rate_pct
-              | order by failure_rate_pct desc, total desc
-            `,
-          },
-        },
-        {
-          id: "resource-error-rate",
-          name: "Resource error rate",
-          type: "TimeSeries",
-          query: {
-            apl: Output.interpolate`
-              ['${t}']
-              | where name startswith "provider."
-              | extend rt=tostring(['attributes.custom']['alchemy.resource.type']),
-                       status=iff(tobool(['error']), "error", "success")
-              | summarize total=count() by rt, status, bin_auto(_time)
-              | order by _time asc
+              | extend uid=tostring(['resource.custom']['alchemy.user.id']),
+                       version=tostring(['resource.custom']['alchemy.version']),
+                       ci=tostring(['resource.custom']['alchemy.ci'])
+              | summarize users_total=dcount(uid),
+                          users_local=dcountif(uid, ci != "true"),
+                          users_ci=dcountif(uid, ci == "true")
+                  by version
+              | order by users_total desc
             `,
           },
         },
@@ -234,24 +238,21 @@ export const CliOverviewDashboard = Axiom.Dashboard(
 
       const layout: Axiom.LayoutCell[] = [
         // Row 1
-        { i: "active-users-7d", x: 0, y: 0, w: 3, h: 4 },
-        { i: "cli-invocations-24h", x: 3, y: 0, w: 3, h: 4 },
-        { i: "active-users-hourly", x: 6, y: 0, w: 6, h: 4 },
+        { i: "distinct-projects", x: 0, y: 0, w: 4, h: 4 },
+        { i: "projects-using-ci", x: 4, y: 0, w: 4, h: 4 },
+        { i: "active-users-7d", x: 8, y: 0, w: 4, h: 4 },
         // Row 2
-        { i: "deploy-destroy-latency", x: 0, y: 4, w: 6, h: 6 },
-        { i: "cli-invocations-by-command", x: 6, y: 4, w: 6, h: 6 },
+        { i: "users-per-project", x: 0, y: 4, w: 8, h: 8 },
+        { i: "project-team-size-distribution", x: 8, y: 4, w: 4, h: 8 },
         // Row 3
-        { i: "top-resources", x: 0, y: 10, w: 6, h: 8 },
-        { i: "resource-latency", x: 6, y: 10, w: 6, h: 8 },
+        { i: "state-store-projects-by-id", x: 0, y: 12, w: 6, h: 6 },
+        { i: "state-store-by-id-over-time", x: 6, y: 12, w: 6, h: 6 },
         // Row 4
-        { i: "active-users-by-version", x: 0, y: 18, w: 6, h: 6 },
-        { i: "resource-error-rate", x: 6, y: 18, w: 6, h: 6 },
+        { i: "projects-over-time", x: 0, y: 18, w: 6, h: 6 },
+        { i: "ci-vs-local-projects", x: 6, y: 18, w: 6, h: 6 },
         // Row 5
         { i: "state-store-deploys", x: 0, y: 24, w: 6, h: 6 },
-        { i: "state-store-error-rate", x: 6, y: 24, w: 6, h: 6 },
-        // Row 6
-        { i: "cli-failure-rate", x: 0, y: 30, w: 6, h: 6 },
-        { i: "cli-failure-rate-overall", x: 6, y: 30, w: 6, h: 6 },
+        { i: "active-users-by-version", x: 6, y: 24, w: 6, h: 6 },
       ];
 
       return {
@@ -261,7 +262,10 @@ export const CliOverviewDashboard = Axiom.Dashboard(
           // can't create per-user "private" dashboards.
           owner: "",
           description:
-            "End-user CLI telemetry: active users, resource usage, deploy/destroy and per-resource latency, error rate, and Cloudflare State Store deploy success/error rate.",
+            "Adoption telemetry: distinct projects, active users per project, " +
+            "CI vs local usage, and state-store backend breakdown. " +
+            "Project identity = alchemy.git.origin_hash (stable across CI runs); " +
+            "user identity = alchemy.user.id (ephemeral in CI).",
           refreshTime: 60 as const,
           schemaVersion: 2 as const,
           // Axiom requires the `qr-now-{duration}` form for relative times.

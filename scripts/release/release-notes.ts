@@ -4,11 +4,17 @@
  * already appears as a heading in CHANGELOG.md, does nothing.
  *
  * Usage: bun scripts/release/release-notes.ts v2.0.0-beta.13
+ *
+ * Uses `changelogithub` to parse commits and resolve authors, then renders
+ * markdown with `./render.ts` so scopes containing `/` (e.g.
+ * `fix(aws/lambda): ...`) nest hierarchically instead of becoming flat
+ * unrelated groups.
  */
 import { $ } from "bun";
 import { generate } from "changelogithub";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { renderMarkdown } from "./render.ts";
 
 const tag = process.argv[2];
 if (!tag) {
@@ -34,14 +40,16 @@ const tagExists =
 const toRev = tagExists ? tag : "HEAD";
 
 console.log(`Generating release notes for ${tag} (using ${toRev})`);
-const changelog = await generate({
+const { commits, config } = await generate({
   to: toRev,
   emoji: true,
   contributors: true,
   repo: "alchemy-run/alchemy-effect",
 });
 
+const md = renderMarkdown(commits, config);
+
 await writeFile(
   changelogPath,
-  `## ${tag}\n\n${changelog.md}\n\n---\n\n${existing}`,
+  `## ${tag}\n\n${md}\n\n---\n\n${existing}`,
 );

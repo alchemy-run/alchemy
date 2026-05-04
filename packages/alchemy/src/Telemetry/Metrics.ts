@@ -49,6 +49,21 @@ export const stateStoreCounter = Metric.counter(
 export type StateStoreOp = "deploy";
 
 /**
+ * Counter for State store layer construction. Tagged with `id` (the
+ * `StateService.id` slug) so we can answer "how many distinct projects
+ * are using each backend" from the corresponding `state_store.init`
+ * spans. Open-ended on purpose: third-party state stores get counted
+ * automatically by setting their `StateService.id`.
+ */
+export const stateStoreInitCounter = Metric.counter(
+  "alchemy.state_store.inits",
+  {
+    description: "Number of times a State store layer is constructed.",
+    incremental: true,
+  },
+);
+
+/**
  * Wraps a resource lifecycle Effect to record a counter + timer entry,
  * tagged with `resource_type`, `op`, and `status` (`success`/`error`).
  *
@@ -112,6 +127,42 @@ export const recordStateStoreOp =
         ),
       ),
     );
+
+/**
+ * Wraps a State store construction Effect to:
+ *
+ * 1. Bump {@link stateStoreInitCounter} tagged with `id`.
+ * 2. Open a `state_store.init` span carrying
+ *    `alchemy.state_store.id` so Axiom (which can't query metric
+ *    datasets via APL) can group projects by backend.
+ *
+ * The `id` is read off the constructed `StateService.id` field, so any
+ * third-party state-store implementation gets tracked just by setting
+ * a stable slug there. Apply at every `Layer.effect(State, …)` site
+ * exactly once.
+ */
+export const recordStateStoreInit = <
+  A extends { readonly id: string },
+  E,
+  R,
+>(
+  self: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  self.pipe(
+    Effect.tap((service) =>
+      Effect.all(
+        [
+          Metric.update(
+            Metric.withAttributes(stateStoreInitCounter, { id: service.id }),
+            1,
+          ),
+          Effect.annotateCurrentSpan("alchemy.state_store.id", service.id),
+        ],
+        { discard: true },
+      ),
+    ),
+    Effect.withSpan("state_store.init"),
+  );
 
 export type ResourceOp = "precreate" | "create" | "update" | "delete" | "read";
 

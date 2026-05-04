@@ -146,6 +146,7 @@ export const PermissionProvider = () =>
             SourceAccount: news.sourceAccount,
             EventSourceToken: news.eventSourceToken,
             FunctionUrlAuthType: news.functionUrlAuthType,
+            InvokedViaFunctionUrl: news.invokedViaFunctionUrl,
             PrincipalOrgID: news.principalOrgID,
           }).pipe(
             Effect.catchTag("ResourceConflictException", () =>
@@ -163,6 +164,7 @@ export const PermissionProvider = () =>
                   SourceAccount: news.sourceAccount,
                   EventSourceToken: news.eventSourceToken,
                   FunctionUrlAuthType: news.functionUrlAuthType,
+                  InvokedViaFunctionUrl: news.invokedViaFunctionUrl,
                   PrincipalOrgID: news.principalOrgID,
                 });
               }),
@@ -197,6 +199,7 @@ export const PermissionProvider = () =>
             SourceAccount: news.sourceAccount,
             EventSourceToken: news.eventSourceToken,
             FunctionUrlAuthType: news.functionUrlAuthType,
+            InvokedViaFunctionUrl: news.invokedViaFunctionUrl,
             PrincipalOrgID: news.principalOrgID,
           });
 
