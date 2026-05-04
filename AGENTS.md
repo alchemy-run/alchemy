@@ -500,6 +500,81 @@ Use `bun build:clean` when you encounter stale build artifacts or dependency iss
 3. `bun run build` - Builds the project
 4. `bun download:env` - Downloads environment files
 
+# Tutorial Documentation Standard
+
+Tutorials under `website/src/content/docs/tutorial/` are **step-by-step and granular**: every code snippet introduces exactly **one** new thing, followed by a short prose explanation of just that thing. Each step gets its own `##` heading.
+
+**Anti-pattern** — one snippet that adds multiple distinct changes, followed by a numbered list or bullet list explaining each:
+
+````md
+## Bind the DO to the Worker
+
+```diff lang="typescript"
++import Counter from "./counter.ts";
++import { HttpServerRequest } from "...";
+
+  Effect.gen(function* () {
++    const counters = yield* Counter;
+    return {
+      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        if (request.url.startsWith("/counter/") && ...) {
++          const next = yield* counters.getByName(name).increment();
++          return HttpServerResponse.text(String(next));
++        }
+        return HttpServerResponse.text("Hello!");
+      }),
+    };
+  })
+```
+
+Two things just happened:
+1. `yield* Counter` registers the DO ...
+2. `counters.getByName(name)` returns a typed stub ...
+````
+
+**Correct** — split into one heading per step, each with one snippet and one explanation:
+
+````md
+## Bind the DO to the Worker
+
+```diff lang="typescript"
++import Counter from "./counter.ts";
+
+  Effect.gen(function* () {
++    const counters = yield* Counter;
+    ...
+  })
+```
+
+`yield* Counter` registers the DO with the Worker (binding + class-migration metadata) and hands you the namespace.
+
+## Call the DO from `fetch`
+
+```diff lang="typescript"
++import { HttpServerRequest } from "...";
+
+  fetch: Effect.gen(function* () {
++    const request = yield* HttpServerRequest;
++    if (request.url.startsWith("/counter/") && ...) {
++      const next = yield* counters.getByName(name).increment();
++      return HttpServerResponse.text(String(next));
++    }
+    return HttpServerResponse.text("Hello!");
+  })
+```
+
+`counters.getByName(name)` returns a typed stub — `increment()` and `get()` round-trip through Cloudflare's RPC machinery.
+````
+
+Rules of thumb:
+
+- If you find yourself writing "Two/three things just happened", "A few things are happening here", or a numbered/bulleted list explaining separate parts of a single snippet — **split the snippet**.
+- One concept ⇒ one heading ⇒ one diff snippet ⇒ one explanation paragraph (no bullets).
+- Bullet/numbered lists are fine when they describe a recap, prerequisites, or genuinely list-shaped content (e.g. "the Worker now handles two routes: PUT and GET" at the end). They are **not** fine as a substitute for splitting a compound snippet.
+- A single API call that internally does several things (e.g. `Cloudflare.upgrade()`) doesn't need splitting — describe its behavior in prose.
+- Use `diff lang="typescript"` blocks so each step shows what's added on top of the previous step.
+
 # Pull Request Conventions
 
 When you automatically open a PR, it MUST follow this structure:
