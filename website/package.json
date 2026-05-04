@@ -10,7 +10,8 @@
   "type": "module",
   "scripts": {
     "build:reference": "bun ../scripts/generate-api-reference.ts",
-    "build": "bun scripts/download-fonts.ts && bun scripts/generate-brand-assets.ts && bun run build:reference && astro build",
+    "build:llms": "bun scripts/generate-llms-txt.ts",
+    "build": "bun scripts/download-fonts.ts && bun scripts/generate-brand-assets.ts && bun run build:reference && bun run build:llms && astro build",
     "dev:site": "astro dev",
     "deploy": "alchemy deploy",
     "dev": "alchemy dev",
