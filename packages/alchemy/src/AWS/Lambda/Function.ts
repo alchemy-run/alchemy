@@ -1002,6 +1002,7 @@ export default await Effect.runPromise(handlerEffect)
             StatementId: "FunctionURLAllowPublicInvoke",
             Action: "lambda:InvokeFunction",
             Principal: "*",
+            InvokedViaFunctionUrl: true,
           } as const;
           const upsertPermission = (permission: Lambda.AddPermissionRequest) =>
             Lambda.addPermission(permission).pipe(
