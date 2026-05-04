@@ -130,29 +130,31 @@ against them right now.
 ## Look up an existing repo
 
 `repos.get(name)` returns an `ArtifactsRepoClient` whose `.raw`
-field holds the underlying Cloudflare repo. Add a `GET /repos/:name`
-route:
+field is the runtime RPC stub — useful for `createToken`, `fork`,
+etc., but **not a serialisable POJO**. To return repo info as JSON,
+use `repos.list(...)` and find the entry by name; every record in
+the list is a plain object with `name`, `remote`, `defaultBranch`,
+`createdAt`, `lastPushAt`, etc.
+
+Add `GET /repos/:name`:
 
 ```diff lang="typescript"
-if (parts[0] === "repos" && parts.length === 1 && request.method === "POST") {
-  // …create
-}
-
 +if (parts[0] === "repos" && parts.length === 2 && request.method === "GET") {
 +  const name = parts[1]!;
-+  const repo = yield* repos.get(name);
-+  return yield* HttpServerResponse.json({
-+    name: repo.raw.name,
-+    remote: repo.raw.remote,
-+    defaultBranch: repo.raw.defaultBranch,
-+    lastPushAt: repo.raw.lastPushAt,
-+  });
++  const list = yield* repos.list({ limit: 100 });
++  const found = list.repos.find((r) => r.name === name);
++  if (!found) {
++    return yield* HttpServerResponse.json(
++      { name, error: "not found" },
++      { status: 404 },
++    );
++  }
++  return yield* HttpServerResponse.json(found);
 +}
 ```
 
-If the repo doesn't exist, `get` fails with `ArtifactsError`. Catch
-it once at the bottom of the handler so every route gets the same
-404 behavior:
+Catch `ArtifactsError` once at the bottom of the handler so any
+underlying API failure surfaces consistently:
 
 ```diff lang="typescript"
 return {
@@ -161,7 +163,7 @@ return {
 - }),
 + }).pipe(
 +   Effect.catchTag("ArtifactsError", (err) =>
-+     HttpServerResponse.json({ error: err.message }, { status: 404 }),
++     HttpServerResponse.json({ error: err.message }, { status: 500 }),
 +   ),
 + ),
 };
@@ -171,8 +173,9 @@ return {
 
 The token returned by `create` expires. Clients that already know
 a repo's name should be able to ask for a new one without
-recreating the repo. `repo.createToken(scope, ttl)` does exactly
-that:
+recreating the repo. `repo.createToken(scope, ttl)` returns
+`{ id, plaintext, scope, expiresAt }` — the `plaintext` field is
+the actual bearer token used in the clone URL:
 
 ```diff lang="typescript"
 +if (
@@ -354,7 +357,23 @@ Two things just happened:
    `get(): Effect<Metadata>` exactly as you defined them.
 
 Each repo name addresses its own durable instance, so writes never
-contend across repos.
+contend across repos. Combine the metadata into the GET response
+the same way:
+
+```diff lang="typescript"
+if (parts[0] === "repos" && parts.length === 2 && request.method === "GET") {
+  const name = parts[1]!;
+  const list = yield* repos.list({ limit: 100 });
+  const found = list.repos.find((r) => r.name === name);
+  if (!found) { /* 404 */ }
++ const meta = yield* metadata
++   .getByName(name)
++   .get()
++   .pipe(Effect.catch(() => Effect.succeed(null)));
+- return yield* HttpServerResponse.json(found);
++ return yield* HttpServerResponse.json({ ...found, metadata: meta });
+}
+```
 
 ## Update description and topics
 

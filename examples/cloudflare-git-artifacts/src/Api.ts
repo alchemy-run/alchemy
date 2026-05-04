@@ -86,35 +86,38 @@ export default class Api extends Cloudflare.Worker<Api>()(
           );
         }
 
-        // GET /repos/:name — combined Artifacts + DO info
+        // GET /repos/:name — combined Artifacts info (from list) + DO metadata.
+        // `repos.get(name).raw` is an opaque RPC stub (no enumerable fields), so
+        // we look the repo up via `list()` to get a serialisable POJO.
         if (
           parts[0] === "repos" &&
           parts.length === 2 &&
           request.method === "GET"
         ) {
           const name = parts[1]!;
-          return yield* repos.get(name).pipe(
-            Effect.flatMap((repo) =>
-              metadata
+          return yield* repos.list({ limit: 100 }).pipe(
+            Effect.flatMap((list) => {
+              const found = list.repos.find((r) => r.name === name);
+              if (!found) {
+                return HttpServerResponse.json(
+                  { name, error: "not found" },
+                  { status: 404 },
+                );
+              }
+              return metadata
                 .getByName(name)
                 .get()
                 .pipe(
                   Effect.catch(() => Effect.succeed(null)),
                   Effect.flatMap((meta) =>
-                    HttpServerResponse.json({
-                      name: repo.raw.name,
-                      remote: repo.raw.remote,
-                      defaultBranch: repo.raw.defaultBranch,
-                      lastPushAt: repo.raw.lastPushAt,
-                      metadata: meta,
-                    }),
+                    HttpServerResponse.json({ ...found, metadata: meta }),
                   ),
-                ),
-            ),
+                );
+            }),
             Effect.catchTag("ArtifactsError", (err) =>
               HttpServerResponse.json(
                 { name, error: err.message },
-                { status: 404 },
+                { status: 500 },
               ),
             ),
           );
