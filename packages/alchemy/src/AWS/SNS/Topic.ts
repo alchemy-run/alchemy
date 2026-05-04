@@ -149,7 +149,7 @@ export const TopicProvider = () =>
         topicName,
       });
       if (!state) return undefined;
-      return Unowned.unless(yield* hasAlchemyTags(id, state.tags), state);
+      return yield* Unowned.unless(hasAlchemyTags(id, state.tags), state);
     }),
     stables: ["topicArn", "topicName", "fifo"],
     diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {

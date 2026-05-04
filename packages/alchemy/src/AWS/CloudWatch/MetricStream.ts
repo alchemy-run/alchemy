@@ -1,15 +1,16 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import {
-  brandOwnership,
   createName,
   readResourceTags,
   retryConcurrent,
@@ -164,7 +165,7 @@ export const MetricStreamProvider = () =>
             (yield* createMetricStreamName(id, olds ?? {}));
           const state = yield* readMetricStream(name);
           if (!state) return undefined;
-          return yield* brandOwnership(id, state, state.tags);
+          return yield* Unowned.unless(hasAlchemyTags(id, state.tags), state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const name = yield* createMetricStreamName(id, news);

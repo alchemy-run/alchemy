@@ -94,7 +94,13 @@ const UnownedTag: unique symbol = Symbol("alchemy/Unowned");
 export const Unowned: {
   <T extends object>(attrs: T): T;
   is: (value: unknown) => boolean;
-  unless: <T extends object>(owned: boolean, attrs: T) => T;
+  unless: {
+    <T extends object>(owned: boolean, attrs: T): T;
+    <T extends object, E, R>(
+      owned: Effect.Effect<boolean, E, R>,
+      attrs: T,
+    ): Effect.Effect<T, E, R>;
+  };
 } = Object.assign(
   <T extends object>(attrs: T): T => {
     const cloned = { ...attrs } as T;
@@ -113,15 +119,26 @@ export const Unowned: {
       (value as any)[UnownedTag] === true,
     /**
      * Convenience: return `attrs` as-is if `owned`, else brand with
-     * {@link Unowned}. Useful at the end of a `read` implementation that
-     * has just performed a tag check:
+     * {@link Unowned}. The first argument may be a plain `boolean` or an
+     * `Effect<boolean>` (so `hasAlchemyTags` can be passed directly without
+     * an inner `yield*`). Useful at the end of a `read` implementation:
      *
      * ```ts
-     * return Unowned.unless(yield* hasAlchemyTags(id, attrs.tags), attrs);
+     * return yield* Unowned.unless(hasAlchemyTags(id, attrs.tags), attrs);
      * ```
      */
-    unless: <T extends object>(owned: boolean, attrs: T): T =>
-      owned ? attrs : Unowned(attrs),
+    unless: ((owned: any, attrs: any): any =>
+      Effect.isEffect(owned)
+        ? Effect.map(owned, (b) => (b ? attrs : Unowned(attrs)))
+        : owned
+          ? attrs
+          : Unowned(attrs)) as {
+      <T extends object>(owned: boolean, attrs: T): T;
+      <T extends object, E, R>(
+        owned: Effect.Effect<boolean, E, R>,
+        attrs: T,
+      ): Effect.Effect<T, E, R>;
+    },
   },
 );
 

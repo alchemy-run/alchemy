@@ -240,8 +240,8 @@ export const QueueProvider = () =>
             queueUrl: url,
             queueArn,
           };
-          return Unowned.unless(
-            yield* hasAlchemyTags(id, tagsResp),
+          return yield* Unowned.unless(
+            hasAlchemyTags(id, tagsResp),
             attrs,
           );
         }),

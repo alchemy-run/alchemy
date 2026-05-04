@@ -1,14 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 
 export type CloudWatchTags = Record<string, string>;
 
@@ -44,19 +38,6 @@ export const createManagedTags = Effect.fn(function* (
     ...(yield* createInternalTags(id)),
     ...(tags ?? {}),
   };
-});
-
-/**
- * Brands the given attrs with {@link Unowned} when the resource's tags don't
- * match this stack/stage/logical-id. Use at the end of `read` so the engine
- * can route adoption decisions centrally.
- */
-export const brandOwnership = Effect.fn(function* <T extends object>(
-  id: string,
-  attrs: T,
-  tags: CloudWatchTags,
-) {
-  return Unowned.unless(yield* hasAlchemyTags(id, tags), attrs);
 });
 
 export const updateResourceTags = Effect.fn(function* ({

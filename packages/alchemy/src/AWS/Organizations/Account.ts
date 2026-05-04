@@ -2,12 +2,13 @@ import * as accountManagement from "@distilled.cloud/aws/account";
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
-  brandOwnership,
   collectPages,
   readResourceTags,
   retryOrganizations,
@@ -93,7 +94,7 @@ export const AccountProvider = () =>
                 })
               : undefined;
           if (!state) return undefined;
-          return yield* brandOwnership(id, state, state.tags);
+          return yield* Unowned.unless(hasAlchemyTags(id, state.tags), state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           // Engine has cleared us via `read` (foreign-tagged accounts are

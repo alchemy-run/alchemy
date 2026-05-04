@@ -337,8 +337,8 @@ export const RuleProvider = () =>
             ruleArn,
             eventBusName: resolvedEventBusName,
           };
-          return Unowned.unless(
-            yield* hasAlchemyTags(id, Tags ?? []),
+          return yield* Unowned.unless(
+            hasAlchemyTags(id, Tags ?? []),
             attrs,
           );
         }),

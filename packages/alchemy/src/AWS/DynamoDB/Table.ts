@@ -851,8 +851,8 @@ export const TableProvider = () =>
           );
           if (!state) return undefined;
           const attrs = toAttrs(state);
-          return Unowned.unless(
-            yield* hasAlchemyTags(id, state.tags as any),
+          return yield* Unowned.unless(
+            hasAlchemyTags(id, state.tags as any),
             attrs,
           );
         }),

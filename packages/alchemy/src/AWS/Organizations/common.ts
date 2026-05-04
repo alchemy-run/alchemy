@@ -1,9 +1,8 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { createInternalTags, diffTags } from "../../Tags.ts";
 
 export type OrganizationsTags = Record<string, string>;
 
@@ -78,19 +77,6 @@ export const readResourceTags = (resourceId: string) =>
       organizations.listTagsForResource({ ResourceId: resourceId, NextToken }),
     (page) => page.Tags,
   ).pipe(Effect.map(toTagRecord));
-
-/**
- * Brands the given attrs with {@link Unowned} when the resource's tags don't
- * match this stack/stage/logical-id. Use at the end of `read` so the engine
- * can route adoption decisions centrally.
- */
-export const brandOwnership = Effect.fn(function* <T extends object>(
-  id: string,
-  attrs: T,
-  tags: OrganizationsTags,
-) {
-  return Unowned.unless(yield* hasAlchemyTags(id, tags), attrs);
-});
 
 export const updateResourceTags = Effect.fn(function* ({
   id,

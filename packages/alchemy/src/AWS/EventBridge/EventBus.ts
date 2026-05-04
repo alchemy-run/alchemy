@@ -173,8 +173,8 @@ export const EventBusProvider = () =>
             eventBusArn: described.Arn as EventBusArn,
             description: described.Description,
           };
-          return Unowned.unless(
-            yield* hasAlchemyTags(id, Tags ?? []),
+          return yield* Unowned.unless(
+            hasAlchemyTags(id, Tags ?? []),
             attrs,
           );
         }),

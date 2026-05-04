@@ -1,12 +1,13 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import {
-  brandOwnership,
   collectPages,
   createName,
   readResourceTags,
@@ -91,7 +92,7 @@ export const PolicyProvider = () =>
                 })
               : undefined;
           if (!state) return undefined;
-          return yield* brandOwnership(id, state, state.tags);
+          return yield* Unowned.unless(hasAlchemyTags(id, state.tags), state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const name = yield* toName(id, news);

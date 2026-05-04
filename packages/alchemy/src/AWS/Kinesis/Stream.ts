@@ -445,8 +445,8 @@ export const StreamProvider = () =>
             streamArn: output?.streamArn,
           });
           if (!state) return undefined;
-          return Unowned.unless(
-            yield* hasAlchemyTags(id, state.tags as Tags),
+          return yield* Unowned.unless(
+            hasAlchemyTags(id, state.tags as Tags),
             state,
           );
         }),

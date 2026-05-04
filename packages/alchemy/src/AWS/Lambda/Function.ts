@@ -1144,8 +1144,8 @@ export default await Effect.runPromise(handlerEffect)
             roleArn: fn.Role,
             roleName: output?.roleName ?? fn.Role.split("/").pop()!,
           } as any;
-          return Unowned.unless(
-            yield* hasAlchemyTags(id, tagsResult),
+          return yield* Unowned.unless(
+            hasAlchemyTags(id, tagsResult),
             attrs,
           );
         }),

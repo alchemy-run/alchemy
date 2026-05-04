@@ -132,8 +132,8 @@ export const RepositoryProvider = () =>
             lifecyclePolicyText: output?.lifecyclePolicyText,
             tags: output?.tags ?? {},
           };
-          return Unowned.unless(
-            yield* hasAlchemyTags(id, listedTags.tags ?? []),
+          return yield* Unowned.unless(
+            hasAlchemyTags(id, listedTags.tags ?? []),
             attrs,
           );
         }),
