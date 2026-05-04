@@ -2,7 +2,7 @@ import {
   BearerTokenValidator,
   StateApi,
   StateAuthLive,
-} from "alchemy/State/HttpStateApi";
+} from "../../State/HttpStateApi.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
