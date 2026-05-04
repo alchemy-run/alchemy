@@ -74,8 +74,12 @@ export const toEffect = <A>(
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
     );
   }).pipe(
-    Effect.provideService(AuthProviders, {}),
+    // `options.state` (e.g. `Cloudflare.state()`) itself requires
+    // `AuthProviders` to read credentials, so AuthProviders must be provided
+    // AFTER the state layer or the state layer's requirement is never
+    // satisfied — which surfaces as `Service not found: AuthProviders`.
     Effect.provide(options.state ?? State.localState()),
+    Effect.provideService(AuthProviders, {}),
     Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer)),
     Effect.scoped,
   ) as Effect.Effect<A, any, never>;

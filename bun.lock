@@ -146,6 +146,16 @@
         "effect": "catalog:",
       },
     },
+    "examples/cloudflare-git-artifacts": {
+      "name": "cloudflare-git-artifacts",
+      "version": "0.0.0",
+      "dependencies": {
+        "@effect/platform-bun": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "examples/cloudflare-secrets-store": {
       "name": "cloudflare-secrets-store",
       "version": "0.0.0",
@@ -2002,6 +2012,8 @@
     "cloudflare": ["cloudflare@5.2.0", "", { "dependencies": { "@types/node": "^18.11.18", "@types/node-fetch": "^2.6.4", "abort-controller": "^3.0.0", "agentkeepalive": "^4.2.1", "form-data-encoder": "1.7.2", "formdata-node": "^4.3.2", "node-fetch": "^2.6.7" } }, "sha512-dVzqDpPFYR9ApEC9e+JJshFJZXcw4HzM8W+3DHzO5oy9+8rLC53G7x6fEf9A7/gSuSCxuvndzui5qJKftfIM9A=="],
 
     "cloudflare-dev": ["cloudflare-dev@workspace:examples/cloudflare-dev"],
+
+    "cloudflare-git-artifacts": ["cloudflare-git-artifacts@workspace:examples/cloudflare-git-artifacts"],
 
     "cloudflare-secrets-store": ["cloudflare-secrets-store@workspace:examples/cloudflare-secrets-store"],
 
