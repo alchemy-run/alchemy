@@ -270,13 +270,18 @@ import * as Cloudflare from "alchemy/Cloudflare";
 +import * as GitHub from "alchemy/GitHub";
 +import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
 import { Bucket } from "./src/bucket.ts";
 import Worker from "./src/worker.ts";
 
 export default Alchemy.Stack(
   "MyApp",
   {
-    providers: Cloudflare.providers(),
+-   providers: Cloudflare.providers(),
++   providers: Layer.mergeAll(
++     Cloudflare.providers(),
++     GitHub.providers(),
++   ),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
