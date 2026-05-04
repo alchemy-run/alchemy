@@ -242,6 +242,31 @@
         min-height: 2.5rem;
         line-height: 1.4;
       }
+      #ai-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        background: #1e293b;
+        border-radius: 0.5rem;
+        border: 1px solid #334155;
+      }
+      #ai-panel h2 {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      #ai-status {
+        font-size: 0.75rem;
+        font-family: "SF Mono", "Fira Code", monospace;
+        color: #cbd5e1;
+        white-space: pre-wrap;
+        word-break: break-word;
+        min-height: 2.5rem;
+        line-height: 1.4;
+      }
       #auth-panel {
         display: none;
         flex-direction: column;
@@ -474,6 +499,34 @@
         </div>
         <div id="artifacts-status">
           Create a repo, then mint scoped tokens for git clone/push.
+        </div>
+      </div>
+      <div id="ai-panel">
+        <h2>AI Gateway</h2>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap">
+          <input
+            id="ai-prompt"
+            type="text"
+            placeholder="Ask the model anything…"
+            style="
+              flex: 1;
+              min-width: 12rem;
+              padding: 0.6rem 0.75rem;
+              border-radius: 0.375rem;
+              border: 1px solid #334155;
+              background: #0f172a;
+              color: #e2e8f0;
+              font-size: 0.9rem;
+              outline: none;
+            "
+          />
+          <button id="ai-send" type="button" style="background: #f43f5e">
+            Ask
+          </button>
+        </div>
+        <div id="ai-status">
+          Routes Workers AI calls through Cloudflare AI Gateway for caching,
+          rate limiting and observability.
         </div>
       </div>
       <div id="workflow-panel">
@@ -892,6 +945,46 @@
           setArtifactsStatus("request failed", e.message);
         } finally {
           artifactsListBtn.disabled = false;
+        }
+      });
+
+      const aiPromptEl = document.getElementById("ai-prompt");
+      const aiSendBtn = document.getElementById("ai-send");
+      const aiStatusEl = document.getElementById("ai-status");
+
+      aiSendBtn.addEventListener("click", async () => {
+        const prompt = aiPromptEl.value.trim();
+        if (!prompt) {
+          aiStatusEl.textContent = "Enter a prompt first.";
+          return;
+        }
+        aiSendBtn.disabled = true;
+        aiStatusEl.textContent = `> ${prompt}\n…`;
+        try {
+          const resp = await fetch("/ai", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ prompt }),
+          });
+          const text = await resp.text();
+          let parsed;
+          try {
+            parsed = JSON.parse(text);
+          } catch {
+            parsed = text;
+          }
+          const out =
+            typeof parsed === "object" && parsed && "response" in parsed
+              ? parsed.response
+              : typeof parsed === "string"
+                ? parsed
+                : JSON.stringify(parsed, null, 2);
+          aiStatusEl.textContent = `> ${prompt}\n${out}`;
+          addMessage(`AI Gateway -> HTTP ${resp.status}`, true);
+        } catch (e) {
+          aiStatusEl.textContent = `Error: ${e.message}`;
+        } finally {
+          aiSendBtn.disabled = false;
         }
       });
 

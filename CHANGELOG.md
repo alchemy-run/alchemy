@@ -1,3 +1,107 @@
+## v2.0.0-beta.30
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**: Apply Cloudflare Access headers to HTTP requests &nbsp;-&nbsp; by **jacobiajohnson** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/160 [<samp>(fd329)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/fd329e7)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.29...HEAD)
+
+---
+
+## v2.0.0-beta.29
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**: Add AiGateway resource &nbsp;-&nbsp; by **Jan Henning** in https://github.com/alchemy-run/alchemy-effect/issues/130 [<samp>(b0361)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b036165)
+- **cloudflare/state-store**: Version-gate the deployed worker &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/156 [<samp>(bdc37)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/bdc37df)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - Don't run update out of order for strict DAGs &nbsp;-&nbsp; by **sam** and **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/144 [<samp>(fcae5)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/fcae571)
+  - Run state-store secret probe under the deployed script name &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/150 [<samp>(061f8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/061f86b)
+- **cloudflare**:
+  - Handle cloudflare access for edge preview workers &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/155 [<samp>(09d01)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/09d0130)
+- **core**:
+  - Handle failed resource gracefully &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/119 [<samp>(94d4b)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/94d4b3f)
+- **website**:
+  - Mobile dark hero, theme reactivity, brighter beta badge, OG host &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/146 [<samp>(05eae)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/05eae4d)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.28...HEAD)
+
+---
+
+## v2.0.0-beta.28
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Remove PlatformServices from Util barrel &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/137 [<samp>(f85dd)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f85ddfe)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.27...HEAD)
+
+---
+
+## v2.0.0-beta.27
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**: Don't bundle CLI with tsdown because it messes with import.meta.path &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/135 [<samp>(2796c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/2796c33)
+- **pr-package**: Use `bun add <name>@<url>` to dodge bun DependencyLoop bug &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/132 [<samp>(989e2)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/989e254)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.26...HEAD)
+
+---
+
+## v2.0.0-beta.26
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **test**: Align vitest and bun test helpers and integrate with profiles &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/129 [<samp>(07e83)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/07e83f3)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Export types as lib/.d.ts &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/121 [<samp>(a000c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a000c26)
+- Resolve bin/exec.ts via package name so devs modes bundled CLI works &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/128 [<samp>(303da)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/303daeb)
+- **cli**:
+  - Parallelize alchemy state tree &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/126 [<samp>(f3e8f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f3e8fef)
+- **cloudflare**:
+  - Bootstrap regressions in SecretsStore and StateStore &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/131 [<samp>(37db0)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/37db01a)
+- **core**:
+  - Fix broken url in error message and add state store guide &nbsp;-&nbsp; by **sam** [<samp>(4b991)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/4b991e7)
+  - Treat raw Resource refs as upstream dependencies &nbsp;-&nbsp; by **Mathieu Post** and **sam** in https://github.com/alchemy-run/alchemy-effect/issues/122 [<samp>(416f1)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/416f19c)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.25...HEAD)
+
+---
+
+## v2.0.0-beta.25
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**: Remove broken keepAssets optimization &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(845a7)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/845a7b7)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.24...HEAD)
+
+---
+
+## v2.0.0-beta.24
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Dev mode for cloudflare workers &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/88 [<samp>(5a0d7)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/5a0d779)
+- **core**: --adopt &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(2af88)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/2af8851)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - Add bootstrap command and harden bootstrap process of cloudflare &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/118 [<samp>(0858d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/0858dd8)
+  - Hoist stack non-destructively &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(c9621)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c9621d1)
+  - Don't fail on broken paths in state &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(05f16)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/05f16c8)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.23...HEAD)
+
+---
+
 ## v2.0.0-beta.23
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

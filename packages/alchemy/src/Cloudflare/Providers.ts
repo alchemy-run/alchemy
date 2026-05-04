@@ -3,6 +3,8 @@ import { Command } from "../Build/Command.ts";
 import * as Build from "../Build/index.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
+import * as Access from "./Access.ts";
+import * as AiGateway from "./AiGateway/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Artifacts from "./Artifacts/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
@@ -15,6 +17,8 @@ import * as KV from "./KV/index.ts";
 import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
 import * as SecretsStore from "./SecretsStore/index.ts";
+import * as Tunnel from "./Tunnel/index.ts";
+import * as VpcService from "./VpcService/index.ts";
 import * as Workers from "./Workers/index.ts";
 import * as Workflows from "./Workers/Workflow.ts";
 
@@ -35,6 +39,8 @@ export const providers = () =>
     Provider.collection([
       ApiToken.AccountApiToken,
       ApiToken.UserApiToken,
+      AiGateway.AiGateway,
+      AiGateway.AiGatewayBindingPolicy,
       Artifacts.ArtifactsBindingPolicy,
       Command,
       Containers.Container,
@@ -52,6 +58,8 @@ export const providers = () =>
       SecretsStore.SecretBindingPolicy,
       SecretsStore.SecretsStore,
       SecretsStore.Secret,
+      Tunnel.Tunnel,
+      VpcService.VpcService,
       Random,
       Workers.BindWorkerPolicy,
       Workers.FetchPolicy,
@@ -63,6 +71,8 @@ export const providers = () =>
       Layer.mergeAll(
         ApiToken.AccountApiTokenProvider(),
         ApiToken.UserApiTokenProvider(),
+        AiGateway.AiGatewayProvider(),
+        AiGateway.AiGatewayBindingPolicyLive,
         Artifacts.ArtifactsBindingPolicyLive,
         Containers.ContainerProvider(),
         D1.D1ConnectionPolicyLive,
@@ -79,6 +89,8 @@ export const providers = () =>
         SecretsStore.SecretBindingPolicyLive,
         SecretsStore.SecretsStoreProvider(),
         SecretsStore.StoreSecretProvider(),
+        Tunnel.TunnelProvider(),
+        VpcService.VpcServiceProvider(),
         Workers.BindWorkerPolicyLive,
         Workers.FetchPolicyLive,
         Workers.WorkerProvider(),
@@ -91,5 +103,6 @@ export const providers = () =>
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
     Layer.provideMerge(CloudflareAuth),
+    Layer.provideMerge(Access.AccessLive),
     Layer.orDie,
   );

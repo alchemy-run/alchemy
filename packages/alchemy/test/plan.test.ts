@@ -7,20 +7,18 @@ import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import {
   inMemoryState,
+  InMemoryService,
   State,
   type ResourceState,
   type ResourceStatus,
 } from "@/State";
-import {
-  test as baseTest,
-  expectEmptyObject,
-  expectPropExpr,
-} from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import {
   ArtifactProbe,
@@ -34,52 +32,59 @@ import {
   type TestResourceProps,
 } from "./test.resources";
 
-const test = Object.assign(
-  ((name: string, ...args: any[]) => {
-    if (args.length === 1) {
-      return (baseTest as any)(
-        name,
-        {
-          providers: false,
-        },
-        args[0],
-      );
-    }
+const TEST_STACK = "test";
+const TEST_STAGE = "test";
 
-    const [options, effect] = args;
-    return (baseTest as any)(
-      name,
-      {
-        ...options,
-        providers: false,
-      },
-      effect,
-    );
-  }) as typeof baseTest,
-  baseTest,
+// Fresh in-memory state per test run so seeded resources from one test
+// don't leak into another in the same file.
+const freshState = Layer.effect(
+  State,
+  Effect.sync(() => InMemoryService({})),
 );
 
-const _test = test;
+const { test } = Test.make({
+  providers: TestLayers(),
+  state: freshState,
+});
+
+// Resolve stack name/stage from ambient Stack if present (for test.provider)
+// otherwise fall back to the file-level defaults (for plain test()).
+const resolveStackId = Effect.gen(function* () {
+  const ambient = yield* Effect.serviceOption(Stack.Stack);
+  return Option.match(ambient, {
+    onNone: () => ({ name: TEST_STACK, stage: TEST_STAGE }),
+    onSome: (s) => ({ name: s.name, stage: s.stage }),
+  });
+});
+
+const seed = (resources: Record<string, ResourceState>) =>
+  Effect.gen(function* () {
+    const { name, stage } = yield* resolveStackId;
+    const state = yield* State;
+    for (const [fqn, value] of Object.entries(resources)) {
+      yield* state.set({ stack: name, stage, fqn, value });
+    }
+  });
 
 const instanceId = "852f6ec2e19b66589825efe14dca2971";
 
 const makePlan = <A, Err = never, Req = never>(
   effect: Effect.Effect<A, Err, Req>,
   options?: Plan.MakePlanOptions,
-): Effect.Effect<Plan.Plan<A>, Err, never> =>
-  // @ts-expect-error
+): Effect.Effect<Plan.Plan<A>, Err, State> =>
+  // @ts-expect-error - Stack.make's typing erases R unsoundly here
   Effect.gen(function* () {
-    const stack = yield* Stack.Stack;
+    const { name, stage } = yield* resolveStackId;
     // @ts-expect-error
     return yield* effect.pipe(
       // @ts-expect-error
       Stack.make({
-        name: stack.name,
+        name,
         providers: Layer.empty,
         state: inMemoryState(),
       }),
-      Effect.provideService(Stage, stack.stage),
-      Effect.flatMap((stackSpec) => Plan.make(stackSpec, options)),
+      Effect.provideService(Stage, stage),
+      Effect.flatMap((stackSpec: any) => Plan.make(stackSpec, options)),
       Effect.provide(TestLayers()),
     );
   });
@@ -88,20 +93,20 @@ const makePlanWithCustomStack =
   (stackSpec: any) =>
   <A, Err = never, Req = never>(
     effect: Effect.Effect<A, Err, Req>,
-  ): Effect.Effect<Plan.Plan<A>, Err, never> =>
+  ): Effect.Effect<Plan.Plan<A>, Err, State> =>
     // @ts-expect-error
     Effect.gen(function* () {
-      const stack = yield* Stack.Stack;
+      const { name, stage } = yield* resolveStackId;
       // @ts-expect-error
       return yield* effect.pipe(
         // @ts-expect-error
         Stack.make({
-          name: stack.name,
+          name,
           providers: Layer.empty,
           state: inMemoryState(),
           stack: stackSpec,
         }),
-        Effect.provideService(Stage, stack.stage),
+        Effect.provideService(Stage, stage),
         Effect.flatMap(Plan.make),
         Effect.provide(TestLayers()),
       );
@@ -109,8 +114,8 @@ const makePlanWithCustomStack =
 
 test(
   "artifacts are isolated by FQN during plan diff for namespaced resources",
-  {
-    state: test.state({
+  Effect.gen(function* () {
+    yield* seed({
       "Left/Shared": {
         instanceId: "left-instance",
         providerVersion: 0,
@@ -147,9 +152,7 @@ test(
         bindings: [],
         downstream: [],
       },
-    }),
-  },
-  Effect.gen(function* () {
+    });
     const Site = Construct.fn(function* (
       _id: string,
       props: { value: string },
@@ -170,9 +173,6 @@ test(
 
 test(
   "create all resources when plan is empty",
-  {
-    state: test.state(),
-  },
   Effect.gen(function* () {
     expect(
       yield* Effect.gen(function* () {
@@ -207,15 +207,18 @@ test(
           state: undefined,
         },
       },
-      deletions: expectEmptyObject(),
+      deletions: expect.toSatisfy(
+        (d: any) => Object.keys(d).length === 0,
+        "empty object",
+      ),
     });
   }),
 );
 
 test(
   "update the changed resources and no-op un-changed resources",
-  {
-    state: test.state({
+  Effect.gen(function* () {
+    yield* seed({
       MyBucket: {
         instanceId,
         providerVersion: 0,
@@ -233,9 +236,7 @@ test(
         bindings: [],
         downstream: [],
       },
-    }),
-  },
-  Effect.gen(function* () {
+    });
     expect(
       yield* makePlan(
         Effect.gen(function* () {
@@ -265,15 +266,18 @@ test(
           state: undefined,
         },
       },
-      deletions: expectEmptyObject(),
+      deletions: expect.toSatisfy(
+        (d: any) => Object.keys(d).length === 0,
+        "empty object",
+      ),
     });
   }),
 );
 
 test(
   "force changes noop resources into updates",
-  {
-    state: test.state({
+  Effect.gen(function* () {
+    yield* seed({
       MyBucket: {
         instanceId,
         providerVersion: 0,
@@ -291,9 +295,7 @@ test(
         bindings: [],
         downstream: [],
       },
-    }),
-  },
-  Effect.gen(function* () {
+    });
     expect(
       yield* makePlan(
         Effect.gen(function* () {
@@ -316,15 +318,18 @@ test(
           },
         },
       },
-      deletions: expectEmptyObject(),
+      deletions: expect.toSatisfy(
+        (d: any) => Object.keys(d).length === 0,
+        "empty object",
+      ),
     });
   }),
 );
 
 test(
   "no-op resources with undefined props",
-  {
-    state: test.state({
+  Effect.gen(function* () {
+    yield* seed({
       MyQueue: {
         instanceId,
         providerVersion: 0,
@@ -341,9 +346,7 @@ test(
         bindings: [],
         downstream: [],
       },
-    }),
-  },
-  Effect.gen(function* () {
+    });
     expect(
       yield* makePlan(
         Effect.gen(function* () {
@@ -360,15 +363,18 @@ test(
           },
         },
       },
-      deletions: expectEmptyObject(),
+      deletions: expect.toSatisfy(
+        (d: any) => Object.keys(d).length === 0,
+        "empty object",
+      ),
     });
   }),
 );
 
 test(
   "no-op resources when object prop key order changes",
-  {
-    state: test.state({
+  Effect.gen(function* () {
+    yield* seed({
       MyFunction: {
         instanceId,
         providerVersion: 0,
@@ -395,9 +401,7 @@ test(
         bindings: [],
         downstream: [],
       },
-    }),
-  },
-  Effect.gen(function* () {
+    });
     expect(
       yield* makePlan(
         Effect.gen(function* () {
@@ -420,15 +424,18 @@ test(
           },
         },
       },
-      deletions: expectEmptyObject(),
+      deletions: expect.toSatisfy(
+        (d: any) => Object.keys(d).length === 0,
+        "empty object",
+      ),
     });
   }),
 );
 
 test(
   "delete orphaned resources",
-  {
-    state: test.state({
+  Effect.gen(function* () {
+    yield* seed({
       MyBucket: {
         instanceId,
         providerVersion: 0,
@@ -463,9 +470,7 @@ test(
         bindings: [],
         downstream: [],
       },
-    }),
-  },
-  Effect.gen(function* () {
+    });
     expect(
       yield* makePlan(
         Effect.gen(function* () {
@@ -509,8 +514,8 @@ test(
 
 test(
   "allow deleting a resource after a surviving consumer removes the dependency",
-  {
-    state: test.state({
+  Effect.gen(function* () {
+    yield* seed({
       Secret: {
         instanceId,
         providerVersion: 0,
@@ -556,9 +561,7 @@ test(
         bindings: [],
         downstream: [],
       },
-    }),
-  },
-  Effect.gen(function* () {
+    });
     expect(
       yield* makePlan(
         Effect.gen(function* () {
@@ -592,8 +595,8 @@ test(
 
 test(
   "reject deleting a resource when a surviving consumer still references it",
-  {
-    state: test.state({
+  Effect.gen(function* () {
+    yield* seed({
       Secret: {
         instanceId,
         providerVersion: 0,
@@ -639,13 +642,10 @@ test(
         bindings: [],
         downstream: [],
       },
-    }),
-  },
-  Effect.gen(function* () {
-    const currentStack = yield* Stack.Stack;
+    });
     const malformedStack = {
-      name: currentStack.name,
-      stage: currentStack.stage,
+      name: TEST_STACK,
+      stage: TEST_STAGE,
       resources: {},
       bindings: {},
       output: undefined,
@@ -683,7 +683,7 @@ test(
 );
 
 describe("replace resource when replaceString changes", () => {
-  const state = test.state({
+  const stateResources: Record<string, ResourceState> = {
     A: {
       instanceId,
       providerVersion: 0,
@@ -699,12 +699,12 @@ describe("replace resource when replaceString changes", () => {
       downstream: [],
       bindings: [],
     },
-  });
+  };
 
   test(
     "noop and replace when replaceString is fully resolved at plan time",
-    { state },
     Effect.gen(function* () {
+      yield* seed(stateResources);
       expect(
         yield* Effect.gen(function* () {
           yield* TestResource("A", {
@@ -717,7 +717,10 @@ describe("replace resource when replaceString changes", () => {
             action: "noop",
           },
         },
-        deletions: expectEmptyObject(),
+        deletions: expect.toSatisfy(
+          (d: any) => Object.keys(d).length === 0,
+          "empty object",
+        ),
       });
 
       expect(
@@ -735,15 +738,18 @@ describe("replace resource when replaceString changes", () => {
             },
           },
         },
-        deletions: expectEmptyObject(),
+        deletions: expect.toSatisfy(
+          (d: any) => Object.keys(d).length === 0,
+          "empty object",
+        ),
       });
     }),
   );
 
   test(
     "force preserves replaces",
-    { state },
     Effect.gen(function* () {
+      yield* seed(stateResources);
       expect(
         yield* Effect.gen(function* () {
           yield* TestResource("A", {
@@ -759,15 +765,18 @@ describe("replace resource when replaceString changes", () => {
             },
           },
         },
-        deletions: expectEmptyObject(),
+        deletions: expect.toSatisfy(
+          (d: any) => Object.keys(d).length === 0,
+          "empty object",
+        ),
       });
     }),
   );
 
   test(
     "update when replaceString depends on unresolved output (diff short-circuits)",
-    { state },
     Effect.gen(function* () {
+      yield* seed(stateResources);
       let B: TestResource;
       expect(
         yield* Effect.gen(function* () {
@@ -783,11 +792,21 @@ describe("replace resource when replaceString changes", () => {
           A: {
             action: "update",
             props: {
-              replaceString: expectPropExpr("string", B!),
+              replaceString: expect.objectContaining({
+                kind: "PropExpr",
+                identifier: "string",
+                expr: expect.objectContaining({
+                  kind: "ResourceExpr",
+                  src: B!,
+                }),
+              }),
             },
           },
         },
-        deletions: expectEmptyObject(),
+        deletions: expect.toSatisfy(
+          (d: any) => Object.keys(d).length === 0,
+          "empty object",
+        ),
       });
     }),
   );
@@ -795,8 +814,8 @@ describe("replace resource when replaceString changes", () => {
 
 test(
   "update resource when a binding is added without prop changes",
-  {
-    state: test.state({
+  Effect.gen(function* () {
+    yield* seed({
       A: {
         instanceId,
         providerVersion: 0,
@@ -815,9 +834,7 @@ test(
         bindings: [],
         downstream: [],
       },
-    }),
-  },
-  Effect.gen(function* () {
+    });
     expect(
       yield* Effect.gen(function* () {
         const target = yield* BindingTarget("A", {
@@ -849,15 +866,18 @@ test(
           },
         },
       },
-      deletions: expectEmptyObject(),
+      deletions: expect.toSatisfy(
+        (d: any) => Object.keys(d).length === 0,
+        "empty object",
+      ),
     });
   }),
 );
 
 test(
   "update resource when a binding is removed without prop changes",
-  {
-    state: test.state({
+  Effect.gen(function* () {
+    yield* seed({
       A: {
         instanceId,
         providerVersion: 0,
@@ -887,9 +907,7 @@ test(
         ],
         downstream: [],
       },
-    }),
-  },
-  Effect.gen(function* () {
+    });
     expect(
       yield* Effect.gen(function* () {
         yield* BindingTarget("A", {
@@ -916,86 +934,91 @@ test(
           },
         },
       },
-      deletions: expectEmptyObject(),
+      deletions: expect.toSatisfy(
+        (d: any) => Object.keys(d).length === 0,
+        "empty object",
+      ),
     });
   }),
 );
 
-test(
+test.provider(
   "binding removals do not keep reappearing after apply",
-  {
-    state: test.state({
-      A: {
-        instanceId,
-        providerVersion: 0,
-        logicalId: "A",
+  (scratch) =>
+    Effect.gen(function* () {
+      const state = yield* State;
+      yield* state.set({
+        stack: scratch.name,
+        stage: TEST_STAGE,
         fqn: "A",
-        namespace: undefined,
-        resourceType: "Test.BindingTarget",
-        status: "created",
-        props: {
-          name: "target",
-        },
-        attr: {
-          name: "target",
-          env: {
-            FEATURE_FLAG: "on",
+        value: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "A",
+          fqn: "A",
+          namespace: undefined,
+          resourceType: "Test.BindingTarget",
+          status: "created",
+          props: {
+            name: "target",
           },
-        },
-        bindings: [
-          {
-            sid: "TestBinding",
-            data: {
-              env: {
-                FEATURE_FLAG: "on",
-              },
+          attr: {
+            name: "target",
+            env: {
+              FEATURE_FLAG: "on",
             },
           },
-        ],
-        downstream: [],
-      },
-    }),
-  },
-  Effect.gen(function* () {
-    const stack = yield* Stack.Stack;
-    const state = yield* State;
+          bindings: [
+            {
+              sid: "TestBinding",
+              data: {
+                env: {
+                  FEATURE_FLAG: "on",
+                },
+              },
+            },
+          ],
+          downstream: [],
+        },
+      });
 
-    yield* test
-      .deploy(
+      yield* scratch.deploy(
         Effect.gen(function* () {
           yield* BindingTarget("A", {
             name: "target",
           });
         }),
-      )
-      .pipe(Effect.provide(TestLayers()));
+      );
 
-    expect(
-      yield* state.get({
-        stack: stack.name,
-        stage: stack.stage,
-        fqn: "A",
-      }),
-    ).toMatchObject({
-      bindings: [],
-    });
+      expect(
+        yield* state.get({
+          stack: scratch.name,
+          stage: TEST_STAGE,
+          fqn: "A",
+        }),
+      ).toMatchObject({
+        bindings: [],
+      });
 
-    expect(
-      yield* Effect.gen(function* () {
-        yield* BindingTarget("A", {
-          name: "target",
-        });
-      }).pipe(makePlan),
-    ).toMatchObject({
-      resources: {
-        A: {
-          action: "noop",
-          bindings: [],
+      expect(
+        yield* Effect.gen(function* () {
+          yield* BindingTarget("A", {
+            name: "target",
+          });
+        }).pipe(makePlan),
+      ).toMatchObject({
+        resources: {
+          A: {
+            action: "noop",
+            bindings: [],
+          },
         },
-      },
-      deletions: expectEmptyObject(),
-    });
-  }),
+        deletions: expect.toSatisfy(
+          (d: any) => Object.keys(d).length === 0,
+          "empty object",
+        ),
+      });
+    }),
 );
 
 describe("construct namespaces", () => {
@@ -1032,14 +1055,23 @@ describe("construct namespaces", () => {
                 sid: "Policy",
                 data: {
                   env: {
-                    BUCKET: expectPropExpr(
-                      "string",
-                      plan.resources["MarketingSite/Bucket"]!.resource,
-                    ),
-                    DISTRIBUTION: expectPropExpr(
-                      "string",
-                      plan.resources["MarketingSite/Distribution"]!.resource,
-                    ),
+                    BUCKET: expect.objectContaining({
+                      kind: "PropExpr",
+                      identifier: "string",
+                      expr: expect.objectContaining({
+                        kind: "ResourceExpr",
+                        src: plan.resources["MarketingSite/Bucket"]!.resource,
+                      }),
+                    }),
+                    DISTRIBUTION: expect.objectContaining({
+                      kind: "PropExpr",
+                      identifier: "string",
+                      expr: expect.objectContaining({
+                        kind: "ResourceExpr",
+                        src: plan.resources["MarketingSite/Distribution"]!
+                          .resource,
+                      }),
+                    }),
                   },
                 },
               },
@@ -1050,7 +1082,10 @@ describe("construct namespaces", () => {
             bindings: [],
           },
         },
-        deletions: expectEmptyObject(),
+        deletions: expect.toSatisfy(
+          (d: any) => Object.keys(d).length === 0,
+          "empty object",
+        ),
       });
     }),
   );
@@ -1091,7 +1126,10 @@ describe("construct namespaces", () => {
             },
           },
         },
-        deletions: expectEmptyObject(),
+        deletions: expect.toSatisfy(
+          (d: any) => Object.keys(d).length === 0,
+          "empty object",
+        ),
       });
     }),
   );
@@ -1200,15 +1238,13 @@ const testSimple = (
 ) =>
   test(
     title,
-    {
-      state: test.state({
+    Effect.gen(function* () {
+      yield* seed({
         A: createTestResourceState({
           ...testCase.state,
           logicalId: "A",
         }),
-      }),
-    },
-    Effect.gen(function* () {
+      });
       {
         const plan = Effect.gen(function* () {
           yield* TestResource("A", testCase.props);
@@ -1229,7 +1265,10 @@ const testSimple = (
             resources: {
               A: testCase.plan,
             },
-            deletions: expectEmptyObject(),
+            deletions: expect.toSatisfy(
+              (d: any) => Object.keys(d).length === 0,
+              "empty object",
+            ),
           });
         }
       }
@@ -1665,21 +1704,31 @@ test(
           props: {
             name: "test-function",
             env: {
-              QUEUE_URL: expectPropExpr("queueUrl", MyQueue!),
+              QUEUE_URL: expect.objectContaining({
+                kind: "PropExpr",
+                identifier: "queueUrl",
+                expr: expect.objectContaining({
+                  kind: "ResourceExpr",
+                  src: MyQueue!,
+                }),
+              }),
             },
           },
           state: undefined,
         },
       },
-      deletions: expectEmptyObject(),
+      deletions: expect.toSatisfy(
+        (d: any) => Object.keys(d).length === 0,
+        "empty object",
+      ),
     });
   }),
 );
 
 test(
   "detect that queueUrl will change and pass through the PropExpr instead of old output",
-  {
-    state: test.state({
+  Effect.gen(function* () {
+    yield* seed({
       MyQueue: {
         instanceId,
         providerVersion: 0,
@@ -1697,9 +1746,7 @@ test(
         downstream: [],
         bindings: [],
       },
-    }),
-  },
-  Effect.gen(function* () {
+    });
     let MyQueue: Queue;
     let MyFunction: Function;
     const plan = yield* Effect.gen(function* () {
@@ -1720,19 +1767,29 @@ test(
           props: {
             name: "test-function",
             env: {
-              QUEUE_URL: expectPropExpr("queueUrl", MyQueue!),
+              QUEUE_URL: expect.objectContaining({
+                kind: "PropExpr",
+                identifier: "queueUrl",
+                expr: expect.objectContaining({
+                  kind: "ResourceExpr",
+                  src: MyQueue!,
+                }),
+              }),
             },
           },
           state: undefined,
         },
       },
-      deletions: expectEmptyObject(),
+      deletions: expect.toSatisfy(
+        (d: any) => Object.keys(d).length === 0,
+        "empty object",
+      ),
     });
   }),
 );
 
 describe("Outputs should resolve to old values", () => {
-  const state = _test.state({
+  const stateResources: Record<string, ResourceState> = {
     A: {
       instanceId,
       providerVersion: 0,
@@ -1752,7 +1809,7 @@ describe("Outputs should resolve to old values", () => {
       downstream: [],
       bindings: [],
     },
-  });
+  };
 
   const expected = (props: Input.Resolve<InputProps<TestResourceProps>>) => ({
     resources: {
@@ -1766,20 +1823,21 @@ describe("Outputs should resolve to old values", () => {
         props: props,
       },
     },
-    deletions: expectEmptyObject(),
+    deletions: expect.toSatisfy(
+      (d: any) => Object.keys(d).length === 0,
+      "empty object",
+    ),
   });
 
-  const test = <const I extends InputProps<TestResourceProps>>(
+  const subtest = <const I extends InputProps<TestResourceProps>>(
     description: string,
     input: (resource: TestResource) => I,
     attr: Input.Resolve<I>,
   ) =>
-    _test(
+    test(
       description,
-      {
-        state,
-      },
       Effect.gen(function* () {
+        yield* seed(stateResources);
         expect(
           yield* Effect.gen(function* () {
             const A = yield* TestResource("A", {
@@ -1792,7 +1850,7 @@ describe("Outputs should resolve to old values", () => {
       }),
     );
 
-  test(
+  subtest(
     "string",
     (A) => ({
       string: A.string,
@@ -1802,7 +1860,7 @@ describe("Outputs should resolve to old values", () => {
     },
   );
 
-  test(
+  subtest(
     "string.apply(string => undefined)",
     (A) => ({
       string: A.string.pipe(Output.map(() => undefined)),
@@ -1812,7 +1870,7 @@ describe("Outputs should resolve to old values", () => {
     },
   );
 
-  test(
+  subtest(
     "string.effect(string => Effect.succeed(undefined))",
     (A) => ({
       string: A.string.pipe(Output.mapEffect(() => Effect.succeed(undefined))),
@@ -1822,7 +1880,7 @@ describe("Outputs should resolve to old values", () => {
     },
   );
 
-  test(
+  subtest(
     "stringArray[0].toUpperCase()",
     (A) => ({
       string: A.stringArray.pipe(
@@ -1834,7 +1892,7 @@ describe("Outputs should resolve to old values", () => {
     },
   );
 
-  test(
+  subtest(
     "resource object",
     (A) => ({
       object: A as any,
@@ -1847,17 +1905,52 @@ describe("Outputs should resolve to old values", () => {
   );
 });
 
+describe("raw Resource refs in props are tracked as upstream dependencies", () => {
+  test(
+    "raw Resource passed directly as a prop value populates the upstream's downstream",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", { string: "a-value" });
+        yield* TestResource("B", {
+          object: A as any,
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A!.downstream).toEqual(["B"]);
+      expect(plan.resources.B!.downstream).toEqual([]);
+    }),
+  );
+
+  test(
+    "raw Resources nested in arrays/objects are tracked as upstream dependencies",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        const A = yield* TestResource("A", { string: "a-value" });
+        const B = yield* TestResource("B", { string: "b-value" });
+        yield* TestResource("C", {
+          stringArray: [A] as any,
+          object: { ref: B } as any,
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A!.downstream).toEqual(["C"]);
+      expect(plan.resources.B!.downstream).toEqual(["C"]);
+      expect(plan.resources.C!.downstream).toEqual([]);
+    }),
+  );
+});
+
 describe("stable properties should not cause downstream changes", () => {
-  const test = (
+  const subtest = (
     description: string,
     input: (A: TestResource) => InputProps<TestResourceProps>,
   ) => {
     // @ts-expect-error - get the keys
     const props = input(Output.of({}));
-    _test(
+    test(
       description,
-      {
-        state: _test.state({
+      Effect.gen(function* () {
+        yield* seed({
           A: {
             instanceId,
             providerVersion: 0,
@@ -1897,9 +1990,7 @@ describe("stable properties should not cause downstream changes", () => {
             downstream: [],
             bindings: [],
           },
-        }),
-      },
-      Effect.gen(function* () {
+        });
         expect(
           yield* Effect.gen(function* () {
             const A = yield* TestResource("A", {
@@ -1919,47 +2010,56 @@ describe("stable properties should not cause downstream changes", () => {
               action: "noop",
             },
           },
-          deletions: expectEmptyObject(),
+          deletions: expect.toSatisfy(
+            (d: any) => Object.keys(d).length === 0,
+            "empty object",
+          ),
         });
       }),
     );
   };
 
-  test("A.stableString", (A) => ({
+  subtest("A.stableString", (A) => ({
     string: A.stableString,
   }));
 
-  test("A.stableString.apply((string) => string.toUpperCase())", (A) => ({
+  subtest("A.stableString.apply((string) => string.toUpperCase())", (A) => ({
     string: A.stableString.pipe(Output.map((string) => string.toUpperCase())),
   }));
 
-  test("A.stableString.effect((string) => Effect.succeed(string.toUpperCase()))", (A) => ({
-    string: A.stableString.pipe(
-      Output.mapEffect((string) => Effect.succeed(string.toUpperCase())),
-    ),
-  }));
+  subtest(
+    "A.stableString.effect((string) => Effect.succeed(string.toUpperCase()))",
+    (A) => ({
+      string: A.stableString.pipe(
+        Output.mapEffect((string) => Effect.succeed(string.toUpperCase())),
+      ),
+    }),
+  );
 
-  test("A.stableArray", (A) => ({
+  subtest("A.stableArray", (A) => ({
     stringArray: A.stableArray,
   }));
 
-  test("A.stableArray[0]", (A) => ({
+  subtest("A.stableArray[0]", (A) => ({
     string: A.stableArray.pipe(Output.map((stableArray) => stableArray[0]!)),
   }));
 
-  test("A.stableArray[0].apply((string) => string.toUpperCase())", (A) => ({
+  subtest("A.stableArray[0].apply((string) => string.toUpperCase())", (A) => ({
     string: A.stableArray.pipe(
       Output.map((stableArray) => stableArray[0]!.toUpperCase()),
     ),
   }));
 
-  test("A.stableArray[0].effect((string) => Effect.succeed(string.toUpperCase()))", (A) => ({
-    string: A.stableArray.pipe(
-      Output.mapEffect((stableArray) =>
-        Effect.succeed(stableArray[0]!.toUpperCase()),
+  subtest(
+    "A.stableArray[0].effect((string) => Effect.succeed(string.toUpperCase()))",
+    (A) => ({
+      string: A.stableArray.pipe(
+        Output.mapEffect((stableArray) =>
+          Effect.succeed(stableArray[0]!.toUpperCase()),
+        ),
       ),
-    ),
-  }));
+    }),
+  );
 });
 
 describe("unsatisfied cycle detection", () => {
@@ -1973,9 +2073,6 @@ describe("unsatisfied cycle detection", () => {
 
   test(
     "binding cycle between resources without precreate dies",
-    {
-      state: test.state(),
-    },
     Effect.gen(function* () {
       const exit = yield* makePlan(
         Effect.gen(function* () {
@@ -2003,9 +2100,6 @@ describe("unsatisfied cycle detection", () => {
 
   test(
     "binding cycle with all precreate resources succeeds",
-    {
-      state: test.state(),
-    },
     Effect.gen(function* () {
       const exit = yield* makePlan(
         Effect.gen(function* () {
@@ -2029,9 +2123,6 @@ describe("unsatisfied cycle detection", () => {
 
   test(
     "mixed cycle succeeds when precreate resource breaks it",
-    {
-      state: test.state(),
-    },
     Effect.gen(function* () {
       const exit = yield* makePlan(
         Effect.gen(function* () {
@@ -2054,9 +2145,6 @@ describe("unsatisfied cycle detection", () => {
 
   test(
     "three-node binding cycle dies when none have precreate",
-    {
-      state: test.state(),
-    },
     Effect.gen(function* () {
       const exit = yield* makePlan(
         Effect.gen(function* () {
@@ -2082,9 +2170,6 @@ describe("unsatisfied cycle detection", () => {
 
   test(
     "acyclic binding graph succeeds even without precreate",
-    {
-      state: test.state(),
-    },
     Effect.gen(function* () {
       const exit = yield* makePlan(
         Effect.gen(function* () {
@@ -2109,8 +2194,8 @@ describe("unsatisfied cycle detection", () => {
 describe("unresolved plan inputs in diff should conservatively update", () => {
   test(
     "update when upstream resource is new and downstream news contains exprs",
-    {
-      state: _test.state({
+    Effect.gen(function* () {
+      yield* seed({
         B: {
           instanceId,
           providerVersion: 0,
@@ -2130,9 +2215,7 @@ describe("unresolved plan inputs in diff should conservatively update", () => {
           downstream: [],
           bindings: [],
         },
-      }),
-    },
-    Effect.gen(function* () {
+      });
       const plan = yield* Effect.gen(function* () {
         const A = yield* TestResource("A", {
           string: "hello",
@@ -2151,9 +2234,6 @@ describe("unresolved plan inputs in diff should conservatively update", () => {
 describe("Redacted props/outputs are preserved through plan", () => {
   test(
     "Redacted prop on a new resource is preserved as a Redacted in the plan",
-    {
-      state: test.state(),
-    },
     Effect.gen(function* () {
       const plan = yield* Effect.gen(function* () {
         yield* TestResource("A", {
@@ -2172,9 +2252,6 @@ describe("Redacted props/outputs are preserved through plan", () => {
 
   test(
     "Redacted prop nested inside an array is preserved through the plan",
-    {
-      state: test.state(),
-    },
     Effect.gen(function* () {
       const plan = yield* Effect.gen(function* () {
         yield* TestResource("A", {
@@ -2197,8 +2274,8 @@ describe("Redacted props/outputs are preserved through plan", () => {
 
   test(
     "no-op when prior state has the same Redacted value",
-    {
-      state: test.state({
+    Effect.gen(function* () {
+      yield* seed({
         A: {
           instanceId,
           providerVersion: 0,
@@ -2223,9 +2300,7 @@ describe("Redacted props/outputs are preserved through plan", () => {
           downstream: [],
           bindings: [],
         },
-      }),
-    },
-    Effect.gen(function* () {
+      });
       const plan = yield* Effect.gen(function* () {
         yield* TestResource("A", {
           string: "x",
@@ -2239,8 +2314,8 @@ describe("Redacted props/outputs are preserved through plan", () => {
 
   test(
     "update when Redacted prop value changes",
-    {
-      state: test.state({
+    Effect.gen(function* () {
+      yield* seed({
         A: {
           instanceId,
           providerVersion: 0,
@@ -2265,9 +2340,7 @@ describe("Redacted props/outputs are preserved through plan", () => {
           downstream: [],
           bindings: [],
         },
-      }),
-    },
-    Effect.gen(function* () {
+      });
       const plan = yield* Effect.gen(function* () {
         yield* TestResource("A", {
           string: "x",
@@ -2285,8 +2358,8 @@ describe("Redacted props/outputs are preserved through plan", () => {
 
   test(
     "Redacted output flowing into a downstream resource preserves its redaction",
-    {
-      state: test.state({
+    Effect.gen(function* () {
+      yield* seed({
         A: {
           instanceId,
           providerVersion: 0,
@@ -2311,9 +2384,7 @@ describe("Redacted props/outputs are preserved through plan", () => {
           downstream: [],
           bindings: [],
         },
-      }),
-    },
-    Effect.gen(function* () {
+      });
       const plan = yield* Effect.gen(function* () {
         const A = yield* TestResource("A", {
           string: "x",

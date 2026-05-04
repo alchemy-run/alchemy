@@ -52,6 +52,7 @@ import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { AiGateway } from "../AiGateway/AiGateway.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
@@ -191,6 +192,7 @@ export type WorkerBindingResource =
   | D1Database
   | KVNamespace
   | CloudflareQueue
+  | AiGateway
   | ArtifactsBinding
   | DurableObjectNamespaceLike<any>;
 
@@ -729,8 +731,13 @@ export const Worker: Platform<
                           name: bindingName,
                           queueName: binding.queueName,
                         }
-                      : // TODO(sam): handle others
-                        undefined;
+                      : binding.Type === "Cloudflare.AiGateway"
+                        ? {
+                            type: "ai",
+                            name: bindingName,
+                          }
+                        : // TODO(sam): handle others
+                          undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
@@ -1012,7 +1019,6 @@ export const LiveWorkerProvider = () =>
       const getScriptSubdomain = yield* workers.getScriptSubdomain;
       const getScriptSettings = yield* workers.getScriptScriptAndVersionSetting;
       const getSubdomain = yield* workers.getSubdomain;
-      const listScripts = yield* workers.listScripts;
       const putScript = yield* workers.putScript;
       const putDomain = yield* workers.putDomain;
       const listDomains = yield* workers.listDomains;
@@ -1106,11 +1112,42 @@ export const LiveWorkerProvider = () =>
       const reconcileDomains = (
         scriptName: string,
         desired: string[],
-        previous: Worker["Attributes"]["domains"],
+        _previous: Worker["Attributes"]["domains"],
       ) =>
         Effect.gen(function* () {
+          // Always query the live state of domains attached to *this*
+          // Worker rather than trusting `_previous` from local state.
+          // State may have been wiped, populated by another machine, or
+          // simply be out of date. Without this we PUT domains that are
+          // already registered to this same Worker and Cloudflare
+          // returns a confusing "hostname already in use" error.
+          const liveAll = yield* listDomains({
+            accountId,
+            service: scriptName,
+          }).pipe(
+            Effect.map((r) =>
+              (r.result ?? []).flatMap((d) =>
+                d.id && d.hostname && d.zoneId
+                  ? [
+                      {
+                        id: d.id,
+                        hostname: d.hostname,
+                        zoneId: d.zoneId,
+                        service: d.service ?? undefined,
+                      },
+                    ]
+                  : [],
+              ),
+            ),
+            Effect.catch(() => Effect.succeed([])),
+          );
+
           const desiredSet = new Set(desired);
-          const toRemove = previous.filter((p) => !desiredSet.has(p.hostname));
+          const liveByHostname = new Map(liveAll.map((d) => [d.hostname, d]));
+
+          // Detach what's no longer wanted. Use the live list so we
+          // don't try to delete domains we no longer track.
+          const toRemove = liveAll.filter((d) => !desiredSet.has(d.hostname));
           yield* Effect.all(
             toRemove.map((d) =>
               deleteDomain({ accountId, domainId: d.id }).pipe(
@@ -1123,28 +1160,63 @@ export const LiveWorkerProvider = () =>
           if (desired.length === 0) return [];
 
           const zoneCache = new Map<string, string>();
-          const applied = yield* Effect.all(
-            desired.map((hostname) =>
-              Effect.gen(function* () {
-                const zoneId = yield* inferZoneIdForHostname(
-                  hostname,
-                  zoneCache,
-                );
-                const res = yield* putDomain({
-                  accountId,
-                  hostname,
-                  service: scriptName,
-                  zoneId,
-                });
-                return {
-                  hostname,
-                  id: res.id ?? "",
-                  zoneId: res.zoneId ?? zoneId,
-                };
-              }),
-            ),
-            { concurrency: "unbounded" },
-          );
+
+          // Attach `hostname` to this Worker. Skip the PUT entirely if
+          // the hostname is already attached to *this* Worker — that's a
+          // no-op for Cloudflare and avoids the "already in use" 409.
+          // If it's attached to a *different* Worker, refuse with a
+          // clear message rather than silently re-routing traffic.
+          const attachDomain = Effect.fnUntraced(function* (hostname: string) {
+            const live = liveByHostname.get(hostname);
+            if (live) {
+              return {
+                hostname: live.hostname,
+                id: live.id,
+                zoneId: live.zoneId,
+              };
+            }
+
+            // Not attached to this Worker — but it could still belong
+            // to another Worker. Check before we try to PUT so we can
+            // emit a helpful error instead of the raw 409.
+            const otherOwner = yield* listDomains({
+              accountId,
+              hostname,
+            }).pipe(
+              Effect.map((r) =>
+                (r.result ?? []).find(
+                  (d) => d.hostname === hostname && d.service !== scriptName,
+                ),
+              ),
+              Effect.catch(() => Effect.succeed(undefined)),
+            );
+            if (otherOwner?.id) {
+              return yield* Effect.die(
+                new Error(
+                  `Cannot attach hostname '${hostname}' to Worker '${scriptName}': ` +
+                    `it is already attached to Worker '${otherOwner.service ?? "<unknown>"}'. ` +
+                    `Detach it from that Worker first, or pick a different hostname.`,
+                ),
+              );
+            }
+
+            const zoneId = yield* inferZoneIdForHostname(hostname, zoneCache);
+            const res = yield* putDomain({
+              accountId,
+              hostname,
+              service: scriptName,
+              zoneId,
+            });
+            return {
+              hostname,
+              id: res.id ?? "",
+              zoneId: res.zoneId ?? zoneId,
+            };
+          });
+
+          const applied = yield* Effect.all(desired.map(attachDomain), {
+            concurrency: "unbounded",
+          });
           return applied;
         });
 
@@ -1233,21 +1305,15 @@ export const LiveWorkerProvider = () =>
           return undefined;
         }
 
-        // Handle AssetsWithHash (from Build resource)
-        // Props are resolved by Plan, so Input<string> values are already strings at runtime
         if (
           typeof assets === "object" &&
           "path" in assets &&
           "hash" in assets
         ) {
-          const result = yield* readAssets({
+          return yield* readAssets({
             directory: assets.path as string,
             config: assets.config,
           });
-          return {
-            ...result,
-            hash: assets.hash as string,
-          };
         }
 
         // Handle string path or AssetsProps
@@ -1442,7 +1508,7 @@ ${[
           getCompatibility(props);
 
         yield* Effect.promise(async () => {
-          const vite = await loadVite();
+          const vite = await loadVite(props.vite?.rootDir);
           const builder = await vite.createBuilder(
             {
               root: props.vite?.rootDir,
@@ -1518,17 +1584,39 @@ ${[
         return { assets, bundle };
       });
 
-      const prepareAssetsAndBundle = (id: string, props: WorkerProps) =>
+      const prepareAssetsAndBundle = (
+        id: string,
+        props: WorkerProps,
+        opts: { skipAssetsRead?: boolean } = {},
+      ) =>
         Effect.gen(function* () {
           if (props.vite) {
             const [{ assets, bundle }, input] = yield* Effect.all(
-              [viteBuild(props), hashDirectory(props.vite)],
+              [
+                viteBuild(props),
+                // hashDirectory expects `{ cwd, memo }`. The vite props
+                // store the project root under `rootDir`, so map it
+                // here. Without this, `cwd` falls back to
+                // `process.cwd()` and the input hash is computed over
+                // the wrong directory tree (often the entire monorepo
+                // root), making it both slow and unable to detect
+                // changes scoped to the actual Vite project.
+                hashDirectory({
+                  cwd: props.vite.rootDir,
+                  memo: props.vite.memo,
+                }),
+              ],
               { concurrency: "unbounded" },
             );
             return { assets, bundle, input };
           }
           const [assets, bundle] = yield* Effect.all(
-            [prepareAssets(props.assets), prepareBundle(id, props)],
+            [
+              opts.skipAssetsRead
+                ? Effect.succeed(undefined)
+                : prepareAssets(props.assets),
+              prepareBundle(id, props),
+            ],
             { concurrency: "unbounded" },
           );
           return { assets, bundle };
@@ -1565,10 +1653,43 @@ ${[
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: preparing bundle for ${name}`,
         );
-        const { assets, bundle, hash } = yield* prepareAssetsAndBundle(
-          id,
-          news,
-        );
+        // If the caller handed us a precomputed asset hash that matches
+        // what we previously stored, we can skip walking the directory
+        // entirely and tell Cloudflare to keep the assets it already
+        // has bound to this script. The disk read is the expensive
+        // part; the script PUT happens either way.
+        const previousAssetsHash = output?.hash?.assets;
+        const precomputedAssetsHash =
+          news.assets &&
+          typeof news.assets === "object" &&
+          "path" in news.assets &&
+          "hash" in news.assets
+            ? (news.assets.hash as string)
+            : undefined;
+        const assetsConfigFromProps =
+          news.assets &&
+          typeof news.assets === "object" &&
+          "config" in news.assets
+            ? news.assets.config
+            : undefined;
+        const skipAssetsRead =
+          precomputedAssetsHash !== undefined &&
+          precomputedAssetsHash === previousAssetsHash;
+        const {
+          assets,
+          bundle,
+          hash: preparedHash,
+        } = yield* prepareAssetsAndBundle(id, news, { skipAssetsRead });
+        // When the caller supplied a precomputed hash (e.g. via
+        // `Build.Command`), store *that* hash in output state so the
+        // next diff can short-circuit by comparing it directly. The
+        // hash that `readAssets` produces is the manifest-derived
+        // hash, which is shaped differently from any upstream
+        // build-input hash and will never match it on the next pass.
+        const hash = {
+          ...preparedHash,
+          assets: precomputedAssetsHash ?? preparedHash.assets,
+        } satisfies Worker["Attributes"]["hash"];
         const metadataBindings = bindings.flatMap((b) => b.data.bindings ?? []);
         const expectedDurableObjectClassNames =
           getExpectedDurableObjectClassNames(metadataBindings);
@@ -1576,8 +1697,35 @@ ${[
           | workers.PutScriptRequest["metadata"]["assets"]
           | undefined;
         let keepAssets = false;
-        if (assets) {
-          if (output?.hash?.assets !== assets.hash) {
+        if (skipAssetsRead) {
+          // Hash matched what's already on Cloudflare: keep the
+          // existing asset manifest and skip the upload session.
+          yield* Effect.logInfo(
+            `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
+          );
+          keepAssets = true;
+          metadataAssets = assetsConfigFromProps
+            ? { config: assetsConfigFromProps }
+            : undefined;
+          metadataBindings.push({
+            type: "assets",
+            name: "ASSETS",
+          });
+        } else if (assets) {
+          // We had to read the directory. Even after the read, the
+          // computed hash may match what's already deployed (e.g.
+          // legacy `string` / `AssetsProps` shapes that don't carry a
+          // precomputed hash, or a precomputed hash that disagreed with
+          // disk). In that case still keep the existing manifest and
+          // skip the upload session — Cloudflare's content-addressed
+          // session would no-op on every byte anyway.
+          if (assets.hash === previousAssetsHash) {
+            yield* Effect.logInfo(
+              `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
+            );
+            keepAssets = true;
+            metadataAssets = { config: assets.config };
+          } else {
             yield* Effect.logInfo(
               `Cloudflare Worker ${olds ? "update" : "create"}: uploading assets for ${name}`,
             );
@@ -1591,14 +1739,6 @@ ${[
               jwt,
               config: assets.config,
             };
-          } else {
-            yield* Effect.logInfo(
-              `Cloudflare Worker update: reusing existing assets for ${name}`,
-            );
-            metadataAssets = {
-              config: assets.config,
-            };
-            keepAssets = true;
           }
           metadataBindings.push({
             type: "assets",
@@ -1893,22 +2033,47 @@ ${[
         output: Worker["Attributes"],
       ) {
         if (props.vite) {
-          const input = yield* hashDirectory(props.vite);
+          const input = yield* hashDirectory({
+            cwd: props.vite.rootDir,
+            memo: props.vite.memo,
+          });
           return input !== output.hash?.input;
         }
-        const [assetsHash, bundleHash] = yield* Effect.all(
-          [
-            "assets" in output && output.hash?.assets
-              ? Effect.succeed(output.hash.assets)
-              : prepareAssets(props.assets).pipe(Effect.map((a) => a?.hash)),
-            prepareBundle(id, props).pipe(Effect.map((b) => b.hash)),
-          ],
-          { concurrency: "unbounded" },
+        const bundleHash = yield* prepareBundle(id, props).pipe(
+          Effect.map((b) => b.hash),
         );
-        return (
-          assetsHash !== output.hash?.assets ||
-          bundleHash !== output.hash?.bundle
-        );
+        if (bundleHash !== output.hash?.bundle) {
+          return true;
+        }
+        if (!props.assets) {
+          return false;
+        }
+        // We deliberately don't read the assets directory during diff.
+        // For `AssetsWithHash` (the documented contract) the upstream
+        // `Build.Command` already gave us an authoritative hash — we
+        // just compare strings. Reading the directory here would
+        // (a) hash the same tree twice per apply (`putWorker` reads
+        // again when an upload is actually required), and (b) crash
+        // when the prior state was written on a different machine
+        // and `path` doesn't exist locally — blocking any local
+        // reapply even though the precomputed hash is right there
+        // in props.
+        //
+        // For the legacy `string` / `AssetsProps` shapes there's no
+        // hash in props to compare against, so we conservatively
+        // assume the assets changed; `putWorker` will read once,
+        // hash, and use `keepAssets` if it turns out nothing actually
+        // changed.
+        const assetsHash =
+          typeof props.assets === "object" &&
+          "path" in props.assets &&
+          "hash" in props.assets
+            ? (props.assets.hash as string)
+            : undefined;
+        if (assetsHash === undefined) {
+          return true;
+        }
+        return assetsHash !== output.hash?.assets;
       });
 
       return Worker.Provider.of({
@@ -2072,42 +2237,36 @@ ${[
             yield* Effect.logInfo(
               `Cloudflare Worker read: checking ${workerName}`,
             );
-            const [worker, subdomain, settings, domainsList] =
-              yield* Effect.all([
-                listScripts({
-                  accountId,
-                }).pipe(
-                  Effect.map((workers) =>
-                    workers.result.find((worker) => worker.id === workerName),
-                  ),
-                ),
-                getScriptSubdomain({
-                  accountId,
-                  scriptName: workerName,
-                }),
-                getScriptSettings({
-                  accountId,
-                  scriptName: workerName,
-                }),
-                listDomains({
-                  accountId,
-                  service: workerName,
-                }).pipe(Effect.map((r) => r.result ?? [])),
-              ]);
-            if (!worker) {
-              yield* Effect.logInfo(
-                `Cloudflare Worker read: ${workerName} not found in script list`,
-              );
-              return undefined;
-            }
+            // We deliberately don't call `listScripts({ accountId })` here:
+            // it pulls every Worker on the account back through a strict
+            // schema decode, and a single existing Worker the schema doesn't
+            // know about (e.g. `placement_mode: "targeted"`) breaks the
+            // entire read. `getScriptSettings` already fails with
+            // `WorkerNotFound` if the script doesn't exist, which the
+            // surrounding `Effect.catchTag` turns into `undefined` — that's
+            // all the existence check we need.
+            const [subdomain, settings, domainsList] = yield* Effect.all([
+              getScriptSubdomain({
+                accountId,
+                scriptName: workerName,
+              }),
+              getScriptSettings({
+                accountId,
+                scriptName: workerName,
+              }),
+              listDomains({
+                accountId,
+                service: workerName,
+              }).pipe(Effect.map((r) => r.result ?? [])),
+            ]);
             yield* Effect.logInfo(
               `Cloudflare Worker read: found ${workerName}`,
             );
             return {
               accountId,
-              workerId: worker.id ?? workerName,
+              workerId: workerName,
               workerName,
-              logpush: worker.logpush ?? undefined,
+              logpush: settings.logpush ?? undefined,
               url: subdomain.enabled
                 ? `https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`
                 : undefined,
@@ -2379,31 +2538,23 @@ const contentTypeFromExtension = (extension: string) => {
 };
 
 type ViteModule = typeof import("vite");
-let _viteModule: ViteModule | null = null;
 
 /**
  * Dynamically load Vite from the project root. Falls back to the bundled
  * copy if the project doesn't have its own Vite installation.
  */
-async function loadVite(): Promise<ViteModule> {
-  if (_viteModule) return _viteModule;
-
-  const projectRoot = process.cwd();
-  let vitePath: string;
-
+async function loadVite(
+  projectRoot: string = process.cwd(),
+): Promise<ViteModule> {
   try {
-    // Resolve "vite" from the project root, not from vinext's location
     const require = createRequire(path.join(projectRoot, "package.json"));
-    vitePath = require.resolve("vite");
+    const vitePath = require.resolve("vite");
+    // On Windows, absolute paths must be file:// URLs for ESM import().
+    const viteUrl = pathToFileURL(vitePath);
+    return await import(/* @vite-ignore */ viteUrl.href);
   } catch {
-    // Fallback: use the Vite that ships with vinext (works for non-linked installs)
-    vitePath = "vite";
+    // Fallback: try to import vite from the global node_modules (works for non-linked installs)
+    // The fallback is a bare specifier and works as-is.
+    return await import("vite");
   }
-
-  // On Windows, absolute paths must be file:// URLs for ESM import().
-  // The fallback ("vite") is a bare specifier and works as-is.
-  const viteUrl = vitePath === "vite" ? vitePath : pathToFileURL(vitePath).href;
-  const vite = (await import(/* @vite-ignore */ viteUrl)) as ViteModule;
-  _viteModule = vite;
-  return vite;
 }

@@ -184,7 +184,7 @@ export const make =
                 `    providers: Cloudflare.providers(),\n` +
                 `    state: Cloudflare.state(), // <-- required\n` +
                 `  }, ...)\n` +
-                `See https://alchemy.run/concepts/state-store for available state stores.`,
+                `See https://v2.alchemy.run/concepts/state-store for available state stores.`,
             ),
           );
         }
@@ -249,7 +249,7 @@ export const CurrentStack = Effect.serviceOption(Stack)
 const platform = Layer.mergeAll(
   PlatformServices,
   FetchHttpClient.layer,
-  Logger.layer([fileLogger("out")]),
+  Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
 );
 // override alchemy state store, CLI/reporting, state, and Config
 const alchemy = Layer.mergeAll(

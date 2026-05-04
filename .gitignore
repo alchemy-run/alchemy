@@ -7,7 +7,7 @@ dist/
 .DS_Store
 .env
 *.tsbuildinfo
-
+.claude/worktrees
 .alchemy/
 # !.alchemy/github:alchemy/
 # examples/*/.alchemy
@@ -42,3 +42,4 @@ examples/cloudflare-worker/src/scratch.ts
 
 !/packages/alchemy/bin/cli.js
 .vendor/*
+.tmp

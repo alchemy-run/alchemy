@@ -213,9 +213,10 @@ third-party API, declare a `Resource` type with its input props and
 output attributes — then implement its provider as a `Layer`. Same
 engine plans, deploys, and destroys it.
 
-See [Provider › Authoring a custom provider](/concepts/provider#authoring-a-custom-provider)
-for the lifecycle hooks (`create`, `update`, `delete`, `diff`,
-`read`) you'll implement.
+See [Writing a Custom Resource Provider](/guides/custom-provider)
+for a step-by-step walkthrough of declaring the type and
+implementing each lifecycle hook (`create`, `update`, `delete`,
+`diff`, `read`).
 
 ```typescript
 // 1. Declare the type + constructor.

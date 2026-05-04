@@ -1,0 +1,91 @@
+# Alchemy
+
+> Alchemy Effect is an Infrastructure-as-Effects (IaE) framework that combines cloud infrastructure and application logic into a single, type-safe program powered by [Effect](https://effect.website). Resources are declared as Effects; bindings wire IAM, env vars, and typed SDKs in one call; deploys and runtime share the same code.
+
+This file is a navigation index for the documentation site at https://v2.alchemy.run. Every page under `/src/content/docs/` is listed below with its URL and a one-line summary, so an agent can pick the right page in one hop.
+
+## Start here
+
+- [What is Alchemy?](https://v2.alchemy.run/what-is-alchemy) — Alchemy is an Infrastructure-as-Effects framework that combines cloud infrastructure and application logic into a single type-safe program powered by Effect.
+- [Getting Started](https://v2.alchemy.run/getting-started) — Install Alchemy and create your first Stack in under two minutes.
+
+## Tutorial — main path (Cloudflare)
+
+A linear five-part walkthrough from zero to a tested, locally-developed, CI-deployed Cloudflare project. Each part builds on the previous one.
+
+- [Part 1: Your First Stack](https://v2.alchemy.run/tutorial/part-1) — Install Alchemy, create a Stack with a Cloudflare R2 Bucket, and deploy it.
+- [Part 2: Add a Worker](https://v2.alchemy.run/tutorial/part-2) — Create a Cloudflare Worker, bind the R2 Bucket, and implement GET/PUT routes.
+- [Part 3: Testing](https://v2.alchemy.run/tutorial/part-3) — Write integration tests that deploy your stack and make HTTP requests against your live Worker.
+- [Part 4: Local Dev](https://v2.alchemy.run/tutorial/part-4) — Run your stack locally with alchemy dev for hot reloading and instant feedback.
+- [Part 5: CI/CD](https://v2.alchemy.run/tutorial/part-5) — Set up GitHub Actions for automated deployments, PR previews, and remote state — with Cloudflare credentials managed as code.
+
+## Tutorial — Cloudflare add-ons
+
+Standalone tutorials that extend the main tutorial's Worker with a specific Cloudflare feature. Pick the ones that match your use case.
+
+- [Add a Durable Object](https://v2.alchemy.run/tutorial/cloudflare/durable-objects) — Add a Durable Object to your Worker — persist state per key, expose RPC methods, and stream values back to the client.
+- [Accept WebSockets](https://v2.alchemy.run/tutorial/cloudflare/hibernatable-websockets) — Accept WebSocket connections in a Durable Object, broadcast between peers, and survive Cloudflare's hibernation.
+- [Run a Container](https://v2.alchemy.run/tutorial/cloudflare/containers) — Run a long-lived container alongside a Durable Object, expose RPC methods, and proxy HTTP requests to ports inside the container.
+- [Add a Workflow](https://v2.alchemy.run/tutorial/cloudflare/workflows) — Orchestrate durable, multi-step work with Cloudflare Workflows — automatic retries, replayable steps, and at-least-once delivery.
+- [Add a Vite SPA](https://v2.alchemy.run/tutorial/cloudflare/vite-spa) — Ship a Vite single-page app from the same Stack as your Worker — built, bundled, and deployed to Cloudflare in one command.
+- [Add an AI Gateway](https://v2.alchemy.run/tutorial/cloudflare/ai-gateway) — Route Workers AI calls through a Cloudflare AI Gateway for caching, rate limiting, and unified observability across providers.
+
+## Tutorial — AWS
+
+End-to-end AWS tutorials. Read the Lambda page first; the others bind storage and event sources to that Lambda.
+
+- [Deploy a Lambda Function](https://v2.alchemy.run/tutorial/aws/lambda) — Stand up an AWS Lambda Function from a single Effect, expose it over a Function URL, and call it from a test.
+- [Read & Write S3](https://v2.alchemy.run/tutorial/aws/s3) — Add an S3 Bucket to your Stack, bind PutObject and GetObject as runtime capabilities, and let Alchemy mint the IAM policy for you.
+- [React to S3 Events](https://v2.alchemy.run/tutorial/aws/s3-events) — Subscribe a Lambda Function to S3 bucket notifications, process them as an Effect Stream, and let Alchemy wire up the IAM and event-source plumbing.
+- [Send & Consume SQS Messages](https://v2.alchemy.run/tutorial/aws/sqs) — Add an SQS Queue, publish messages from your Lambda, and consume them from a second consumer Lambda — all wired through Alchemy bindings.
+- [Stream Records with Kinesis](https://v2.alchemy.run/tutorial/aws/kinesis) — Add a Kinesis Data Stream, publish records from one Lambda, and consume them in order from another — wired through the same Stream-shaped event source.
+- [Store Records in DynamoDB](https://v2.alchemy.run/tutorial/aws/dynamodb) — Add a DynamoDB Table, bind GetItem and PutItem to your Lambda, and serve a typed key/value HTTP API backed by DynamoDB.
+- [Process DynamoDB Streams](https://v2.alchemy.run/tutorial/aws/dynamodb-streams) — Enable a DynamoDB Stream on your table and consume change records as a typed Effect Stream from the same Lambda.
+
+## Concepts — the mental model
+
+Reference pages explaining what each primitive means and how they fit together. Read these when something in a tutorial feels magical, or before designing a new Stack.
+
+- [Resource](https://v2.alchemy.run/concepts/resource) — Resources are named cloud entities with input properties and output attributes.
+- [Provider](https://v2.alchemy.run/concepts/provider) — Providers implement the lifecycle operations for a resource type — create, update, delete, diff, read, and more.
+- [Resource Lifecycle](https://v2.alchemy.run/concepts/resource-lifecycle) — How alchemy plans, applies, replaces, and destroys resources — and how to think about idempotency and recovery.
+- [Stack](https://v2.alchemy.run/concepts/stack) — A Stack is a collection of Resources deployed together as a unit.
+- [Stages](https://v2.alchemy.run/concepts/stages) — Stages are isolated instances of a Stack — dev_sam, staging, prod, pr-42 — each with their own state and physical names.
+- [Phases](https://v2.alchemy.run/concepts/phases) — Alchemy programs run in two phases — plantime/init drives the deploy, runtime/exec handles requests. Knowing which is which is the key to using Platforms.
+- [Platform](https://v2.alchemy.run/concepts/platform) — A Platform bundles infrastructure with the runtime code that runs on it — Workers, Lambda Functions, Containers — so your handler ships with its bindings.
+- [Binding](https://v2.alchemy.run/concepts/binding) — A binding connects a resource to a Worker or Lambda. It generates IAM policies, env vars, and a typed SDK in one call.
+- [Inputs and Outputs](https://v2.alchemy.run/concepts/outputs) — Output<T> is alchemy's lazy reference type — the lazy values that flow between resources, get composed with .pipe, mapped, interpolated, and resolved during deploy.
+- [Layers](https://v2.alchemy.run/concepts/layers) — Use Effect Layers to encapsulate infrastructure behind a clean interface — define a service once, swap implementations across stacks, providers, and tests.
+- [State Store](https://v2.alchemy.run/concepts/state-store) — How Alchemy persists resource state between deploys to compute diffs and track infrastructure.
+- [Profiles](https://v2.alchemy.run/concepts/profiles) — Profiles store cloud credentials per environment in ~/.alchemy/profiles.json — switch between work and personal accounts, or between staging and prod credentials.
+- [Local Development](https://v2.alchemy.run/concepts/local-development) — How alchemy dev provides hot reloading, local workerd execution, and cloud-backed resources for fast iteration.
+- [Observability](https://v2.alchemy.run/concepts/observability) — Effect emits OpenTelemetry — ship traces, metrics, and logs to Axiom, Datadog, CloudWatch, or any OTLP endpoint. Declare dashboards and alarms in code.
+- [Testing](https://v2.alchemy.run/concepts/testing) — Reference for alchemy/Test — every helper, hook, and option exposed by Test.make for Bun and Vitest.
+
+## Guides — task-oriented
+
+Standalone how-to pages. Each solves a specific problem; read in any order.
+
+- [Continuous Integration](https://v2.alchemy.run/guides/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
+- [Circular Bindings](https://v2.alchemy.run/guides/circular-bindings) — How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
+- [CLI Reference](https://v2.alchemy.run/guides/cli) — All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, bootstrap, login, and profile.
+- [Writing a Custom Resource Provider](https://v2.alchemy.run/guides/custom-provider) — Add support for a new cloud or third-party API by declaring a Resource type and implementing its lifecycle as an Effect Layer.
+- [Writing a Custom State Store](https://v2.alchemy.run/guides/custom-state-store) — Build a Postgres-backed Alchemy state store step by step — implement the StateService interface, plug it into a stack, and test it end-to-end.
+- [Effect HTTP API](https://v2.alchemy.run/guides/effect-http-api) — Build a schema-validated HTTP API with Effect's HttpApi module and deploy it as a Cloudflare Worker.
+- [Effect RPC](https://v2.alchemy.run/guides/effect-rpc) — Build a typed RPC API with Effect's Rpc module and deploy it as a Cloudflare Worker.
+- [Frontend frameworks](https://v2.alchemy.run/guides/frontends) — Deploy Vite-based frameworks (TanStack Start, Astro, SolidStart, Nuxt, React) and any custom-built static site (Hugo, Eleventy) to Cloudflare with one declaration.
+- [Migrating from v1](https://v2.alchemy.run/guides/migrating-from-v1) — Migrate your Alchemy v1 (async/await) project to Alchemy v2.
+
+## Blog
+
+- [Hello World](https://v2.alchemy.run/blog/2026-04-13-hello-world) — Introducing the alchemy blog — a place for updates, deep dives, and patterns for building cloud programs with Effect.
+
+## Providers — auto-generated API reference
+
+Per-resource API pages live under `https://v2.alchemy.run/providers/{Cloud}/{Resource}` (e.g. `/providers/AWS/Bucket`, `/providers/Cloudflare/Worker`). They are generated from JSDoc on the source `.ts` files via `bun generate:api-reference` and are not checked into git, so this index does not enumerate them. Each page documents:
+
+- The resource's input properties (props) with types, defaults, and constraints.
+- The resource's output attributes.
+- Quick Reference and Examples sections derived from `@section` / `@example` JSDoc tags.
+
+To find a specific resource, browse the Providers section in the sidebar at https://v2.alchemy.run, or read the source JSDoc at `packages/alchemy/src/{Cloud}/{Service}/{Resource}.ts` in [the repository](https://github.com/alchemy-run/alchemy-effect).

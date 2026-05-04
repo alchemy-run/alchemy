@@ -1,6 +1,10 @@
-import type { ReplacedResourceState, ResourceState } from "alchemy/State";
-import { encodeState } from "alchemy/State";
 import * as Effect from "effect/Effect";
+
+import type {
+  ReplacedResourceState,
+  ResourceState,
+} from "../../State/ResourceState.ts";
+import { encodeState } from "../../State/StateEncoding.ts";
 import { pipe } from "effect/Function";
 import * as Secret from "../SecretsStore/Secret.ts";
 import { DurableObjectNamespace } from "../Workers/DurableObjectNamespace.ts";

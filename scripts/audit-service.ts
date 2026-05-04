@@ -1020,6 +1020,7 @@ async function auditService(serviceName: string): Promise<AuditReport> {
         distilled: "secrets-manager",
         alchemy: "SecretsManager",
       },
+      apigateway: { distilled: "api-gateway", alchemy: "ApiGateway" },
     };
 
   const config = serviceConfig[serviceNameLower] || {

@@ -1,5 +1,6 @@
 export * from "./ApiToken/index.ts";
 export * from "./Artifacts/index.ts";
+export * from "./AiGateway/index.ts";
 export * from "./CloudflareEnvironment.ts";
 export * from "./Container/index.ts";
 export * from "./D1/index.ts";
@@ -11,5 +12,7 @@ export * from "./Queue/index.ts";
 export * from "./R2/index.ts";
 export * from "./SecretsStore/index.ts";
 export * from "./StateStore/index.ts";
+export * from "./Tunnel/index.ts";
+export * from "./VpcService/index.ts";
 export * from "./Website/index.ts";
 export * from "./Workers/index.ts";

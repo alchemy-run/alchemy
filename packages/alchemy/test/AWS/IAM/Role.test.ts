@@ -1,9 +1,11 @@
 import * as AWS from "@/AWS";
 import { Role } from "@/AWS/IAM";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as IAM from "@distilled.cloud/aws/iam";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+
+const { test } = Test.make({ providers: AWS.providers() });
 
 const assumeRolePolicy = {
   Version: "2012-10-17" as const,
@@ -18,12 +20,11 @@ const assumeRolePolicy = {
   ],
 };
 
-test(
-  "create, update, and delete role",
+test.provider("create, update, and delete role", (stack) =>
   Effect.gen(function* () {
-    yield* destroy();
+    yield* stack.destroy();
 
-    const role = yield* test.deploy(
+    const role = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Role("IamRole", {
           assumeRolePolicyDocument: assumeRolePolicy,
@@ -54,7 +55,7 @@ test(
     });
     expect(created.Role.RoleName).toBe(role.roleName);
 
-    yield* test.deploy(
+    yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Role("IamRole", {
           assumeRolePolicyDocument: assumeRolePolicy,
@@ -89,11 +90,11 @@ test(
       env: "prod",
     });
 
-    yield* destroy();
+    yield* stack.destroy();
 
     const deleted = yield* IAM.getRole({
       RoleName: role.roleName,
     }).pipe(Effect.option);
     expect(deleted._tag).toBe("None");
-  }).pipe(Effect.provide(AWS.providers())),
+  }),
 );

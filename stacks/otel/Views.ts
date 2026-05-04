@@ -1,5 +1,8 @@
+import * as Alchemy from "alchemy";
 import * as Axiom from "alchemy/Axiom";
-import { Stack } from "alchemy/Stack";
+import * as Output from "alchemy/Output";
+import { Effect } from "effect";
+import { Traces } from "./Datasets.ts";
 
 /**
  * Saved Axiom views (APL queries) for the alchemy CLI's OTEL signals.
@@ -10,6 +13,11 @@ import { Stack } from "alchemy/Stack";
  * invocations, `provider.<op>` for resource lifecycle ops with
  * `duration` for latency and `error` for status — so we derive
  * everything from traces.
+ *
+ * Each view's `datasets` entry references `traces.name` (an Output) rather
+ * than a literal `${stage}-traces` string so Alchemy sequences view creation
+ * after the dataset exists. Without this, Axiom rejects the view with
+ * `BadRequest: failed to validate view: entity not found`.
  *
  * Attribute paths:
  * - Resource attributes (per-process, set on `OtlpTracer.resource`):
@@ -22,12 +30,21 @@ import { Stack } from "alchemy/Stack";
  * `error` (bool) and `status.code` are first-class span fields.
  */
 
+const viewProps = <A>(
+  fn: (ctx: { stage: string; traces: Output.Output<string> }) => A,
+) =>
+  Effect.all([Alchemy.Stack.asEffect(), Traces]).pipe(
+    Effect.map(([stack, traces]) =>
+      fn({ stage: stack.stage, traces: traces.name }),
+    ),
+  );
+
 export const ActiveUsersHourly = Axiom.View(
   "ActiveUsersHourly",
-  Stack.useSync(({ stage }) => ({
+  viewProps(({ stage, traces }) => ({
     name: `${stage}-active-users-hourly`,
     description: "Distinct alchemy.user.id per hour, last 7d",
-    datasets: [`${stage}-traces`],
+    datasets: [traces],
     aplQuery: `
       ['${stage}-traces']
       | where _time > ago(7d)
@@ -40,10 +57,10 @@ export const ActiveUsersHourly = Axiom.View(
 
 export const ActiveUsersByVersion = Axiom.View(
   "ActiveUsersByVersion",
-  Stack.useSync(({ stage }) => ({
+  viewProps(({ stage, traces }) => ({
     name: `${stage}-active-users-by-version`,
     description: "Distinct users grouped by alchemy.version (last 7d)",
-    datasets: [`${stage}-traces`],
+    datasets: [traces],
     aplQuery: `
       ['${stage}-traces']
       | where _time > ago(7d)
@@ -57,10 +74,10 @@ export const ActiveUsersByVersion = Axiom.View(
 
 export const ActiveUsersByCi = Axiom.View(
   "ActiveUsersByCi",
-  Stack.useSync(({ stage }) => ({
+  viewProps(({ stage, traces }) => ({
     name: `${stage}-active-users-by-ci`,
     description: "CI vs local users (last 7d)",
-    datasets: [`${stage}-traces`],
+    datasets: [traces],
     aplQuery: `
       ['${stage}-traces']
       | where _time > ago(7d)
@@ -73,10 +90,10 @@ export const ActiveUsersByCi = Axiom.View(
 
 export const ResourcesUsed = Axiom.View(
   "ResourcesUsed",
-  Stack.useSync(({ stage }) => ({
+  viewProps(({ stage, traces }) => ({
     name: `${stage}-resources-used`,
     description: "Top resource types by lifecycle op count (last 7d)",
-    datasets: [`${stage}-traces`],
+    datasets: [traces],
     aplQuery: `
       ['${stage}-traces']
       | where _time > ago(7d)
@@ -91,10 +108,10 @@ export const ResourcesUsed = Axiom.View(
 
 export const DeployDestroyLatency = Axiom.View(
   "DeployDestroyLatency",
-  Stack.useSync(({ stage }) => ({
+  viewProps(({ stage, traces }) => ({
     name: `${stage}-deploy-destroy-latency`,
     description: "p50/p95/p99 of cli.deploy and cli.destroy spans",
-    datasets: [`${stage}-traces`],
+    datasets: [traces],
     aplQuery: `
       ['${stage}-traces']
       | where _time > ago(7d)
@@ -110,11 +127,11 @@ export const DeployDestroyLatency = Axiom.View(
 
 export const ResourceLatency = Axiom.View(
   "ResourceLatency",
-  Stack.useSync(({ stage }) => ({
+  viewProps(({ stage, traces }) => ({
     name: `${stage}-resource-latency`,
     description:
       "p50/p95 of provider.<op> spans by resource_type and op (last 7d)",
-    datasets: [`${stage}-traces`],
+    datasets: [traces],
     aplQuery: `
       ['${stage}-traces']
       | where _time > ago(7d)
@@ -132,11 +149,11 @@ export const ResourceLatency = Axiom.View(
 
 export const CliInvocations = Axiom.View(
   "CliInvocations",
-  Stack.useSync(({ stage }) => ({
+  viewProps(({ stage, traces }) => ({
     name: `${stage}-cli-invocations`,
     description:
       "cli.<command> span counts grouped by command and success/error",
-    datasets: [`${stage}-traces`],
+    datasets: [traces],
     aplQuery: `
       ['${stage}-traces']
       | where _time > ago(7d)
@@ -151,11 +168,11 @@ export const CliInvocations = Axiom.View(
 
 export const ResourceErrorRate = Axiom.View(
   "ResourceErrorRate",
-  Stack.useSync(({ stage }) => ({
+  viewProps(({ stage, traces }) => ({
     name: `${stage}-resource-error-rate`,
     description:
       "provider.<op> spans split by status (success vs error) per hour",
-    datasets: [`${stage}-traces`],
+    datasets: [traces],
     aplQuery: `
       ['${stage}-traces']
       | where _time > ago(7d)

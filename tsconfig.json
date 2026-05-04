@@ -30,6 +30,9 @@
       "path": "./examples/aws-lambda-httpapi/tsconfig.json"
     },
     {
+      "path": "./examples/aws-rest-api/tsconfig.json"
+    },
+    {
       "path": "./examples/aws-lambda-rpc/tsconfig.json"
     },
     {

@@ -1,40 +1,89 @@
 import * as AWS from "@/AWS";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
+import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
-test(
+const { test } = Test.make({ providers: AWS.providers() });
+
+test.provider(
   "create, update, delete function",
-  { timeout: 180_000 },
-  Effect.gen(function* () {
-    // yield* destroy();
+  (stack) =>
+    Effect.gen(function* () {
+      const { functionName, functionUrl } = yield* stack.deploy(
+        TestFunction.asEffect().pipe(Effect.provide(TestFunctionLive)),
+      );
 
-    const { functionUrl } = yield* test.deploy(
-      TestFunction.asEffect().pipe(Effect.provide(TestFunctionLive)),
-    );
+      expect(functionUrl).toBeTruthy();
 
-    expect(functionUrl).toBeTruthy();
-
-    const response = yield* HttpClient.get(functionUrl!).pipe(
-      Effect.flatMap((response) =>
-        response.status === 200
-          ? Effect.succeed(response)
-          : Effect.fail(new Error(`Function URL returned ${response.status}`)),
-      ),
-      Effect.tapError((error) => Effect.logError(error)),
-      Effect.retry({
-        schedule: Schedule.exponential(500).pipe(
-          Schedule.both(Schedule.recurs(10)),
+      const response = yield* HttpClient.get(functionUrl!).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(
+                new Error(`Function URL returned ${response.status}`),
+              ),
         ),
-      }),
-    );
+        Effect.tapError((error) => Effect.logError(error)),
+        Effect.retry({
+          schedule: Schedule.exponential(500).pipe(
+            Schedule.both(Schedule.recurs(10)),
+          ),
+        }),
+      );
 
-    expect(response.status).toBe(200);
-    expect(yield* response.text).toBe("Hello, world!");
+      expect(response.status).toBe(200);
+      expect(yield* response.text).toBe("Hello, world!");
 
-    yield* destroy();
-  }).pipe(Effect.provide(AWS.providers())) as Effect.Effect<void, any, any>,
+      const invokePolicy = yield* getPolicyStatement(
+        functionName,
+        "FunctionURLAllowPublicInvoke",
+      );
+      expect(invokePolicy.Condition).toEqual({
+        Bool: {
+          "lambda:InvokedViaFunctionUrl": "true",
+        },
+      });
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { timeout: 180_000 },
 );
+
+const getPolicyStatement = Effect.fn(function* (
+  functionName: string,
+  statementId: string,
+) {
+  return yield* Lambda.getPolicy({ FunctionName: functionName }).pipe(
+    Effect.flatMap(({ Policy }) =>
+      Effect.try({
+        try: () => {
+          const policy = JSON.parse(Policy ?? "{}") as {
+            Statement?: Array<{
+              Sid?: string;
+              Condition?: unknown;
+            }>;
+          };
+          const statement = policy.Statement?.find(
+            (statement) => statement.Sid === statementId,
+          );
+          if (!statement) {
+            throw new Error(`Policy statement ${statementId} not found`);
+          }
+          return statement;
+        },
+        catch: (cause) =>
+          cause instanceof Error ? cause : new Error(String(cause)),
+      }),
+    ),
+    Effect.retry({
+      schedule: Schedule.exponential(500).pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
+    }),
+  );
+});

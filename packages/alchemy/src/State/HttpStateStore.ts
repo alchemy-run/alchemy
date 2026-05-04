@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { identity } from "effect/Function";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -9,23 +10,51 @@ import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import { StateStoreError, type StateService } from "./State.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
-export interface HttpStateStoreProps {
+/**
+ * Persisted shape of an HTTP state store endpoint — `{ url, authToken }`.
+ * Stored in the credentials file alongside other per-profile secrets.
+ * Deliberately separate from {@link HttpStateStoreProps}: `id` and
+ * `transformClient` are deployment-time choices, not credentials.
+ */
+export interface HttpStateStoreCredentials {
   url: string;
   /** Bearer token used to authenticate every request. */
   authToken: string;
 }
 
-export const makeHttpStateStore = ({ url, authToken }: HttpStateStoreProps) =>
+export interface HttpStateStoreProps extends HttpStateStoreCredentials {
+  /**
+   * `StateService.id` slug for telemetry — e.g. `"http"` for a bare
+   * HTTP store, `"cloudflare-http"` for the Cloudflare-deployed
+   * variant. Required so every concrete deployment of this state-store
+   * shape shows up distinctly on the adoption dashboard.
+   */
+  id: string;
+  transformClient?: (
+    client: HttpClientRequest.HttpClientRequest,
+  ) => HttpClientRequest.HttpClientRequest;
+}
+
+export const makeHttpStateStore = ({
+  url,
+  authToken,
+  transformClient,
+  id,
+}: HttpStateStoreProps) =>
   Effect.gen(function* () {
     const apiClient = yield* HttpApiClient.make(StateApi, {
       baseUrl: url,
-      transformClient: HttpClient.mapRequest(
-        HttpClientRequest.bearerToken(authToken),
+      transformClient: HttpClient.mapRequest((req) =>
+        req.pipe(
+          HttpClientRequest.bearerToken(authToken),
+          transformClient ?? identity,
+        ),
       ),
     });
     const state = apiClient.state;
 
     const service: StateService = {
+      id,
       listStacks: () =>
         state.listStacks().pipe(
           Effect.map((stacks) => [...stacks]),

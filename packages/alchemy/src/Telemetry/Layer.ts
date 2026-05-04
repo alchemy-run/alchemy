@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as OtlpLogger from "effect/unstable/observability/OtlpLogger";
 import * as OtlpMetrics from "effect/unstable/observability/OtlpMetrics";
 import * as OtlpSerialization from "effect/unstable/observability/OtlpSerialization";
 import * as OtlpTracer from "effect/unstable/observability/OtlpTracer";
@@ -11,6 +12,7 @@ import { collectAttributes, isTelemetryDisabled } from "./Attributes.ts";
 
 const TRACES_URL = "https://otel.alchemy.run/v1/traces";
 const METRICS_URL = "https://otel.alchemy.run/v1/metrics";
+const LOGS_URL = "https://otel.alchemy.run/v1/logs";
 
 const SERVICE_NAME = "alchemy-cli";
 
@@ -35,8 +37,18 @@ const buildOtlpLayer = (
     resource,
     exportInterval: "1 second",
   });
+  // Replace (don't merge with) the default stdout logger here; downstream
+  // commands re-add their own `fileLogger`/`consolePretty` via
+  // `Logger.layer([...], { mergeWithExisting: true })`, which stacks on top
+  // of this OtlpLogger without resurrecting Effect's default stdout logger.
+  const logger = OtlpLogger.layer({
+    url: LOGS_URL,
+    resource,
+    exportInterval: "1 second",
+    mergeWithExisting: false,
+  });
 
-  return Layer.mergeAll(tracer, metrics).pipe(
+  return Layer.mergeAll(tracer, metrics, logger).pipe(
     Layer.provide(OtlpSerialization.layerJson),
     Layer.provide(FetchHttpClient.layer),
   );
