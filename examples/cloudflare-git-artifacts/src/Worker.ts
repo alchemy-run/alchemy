@@ -6,14 +6,6 @@ import * as Etag from "effect/unstable/http/Etag";
 import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-
-// Workers don't have a FileSystem, so HttpPlatform's file-response surface
-// is stubbed. The repo API never serves files.
-const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
-  fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
-  fileWebResponse: () =>
-    Effect.die("HttpPlatform.fileWebResponse not supported"),
-});
 import {
   CloneToken,
   CreateRepoResponse,
@@ -23,8 +15,16 @@ import {
   RepoInfo,
   RepoNotFound,
 } from "./Api.ts";
-import RepoMetadata from "./RepoMetadata.ts";
+import Repo from "./Repo.ts";
 import { Repos } from "./Repos.ts";
+
+// Workers don't have a FileSystem, so HttpPlatform's file-response surface
+// is stubbed. The repo API never serves files.
+const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
+  fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
+  fileWebResponse: () =>
+    Effect.die("HttpPlatform.fileWebResponse not supported"),
+});
 
 export default class Worker extends Cloudflare.Worker<Worker>()(
   "Api",
@@ -37,13 +37,15 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
     },
   },
   Effect.gen(function* () {
-    const repos = yield* Cloudflare.Artifacts.bind(Repos);
-    const metadata = yield* RepoMetadata;
+    const artifacts = yield* Cloudflare.Artifacts.bind(Repos);
+    const repos = yield* Repo;
 
     const findRepo = (name: string) =>
-      repos.list({ limit: 100 }).pipe(
+      artifacts.list({ limit: 100 }).pipe(
         Effect.flatMap((res) => {
-          const found = res.repos.find((r: { name: string }) => r.name === name);
+          const found = res.repos.find(
+            (r: { name: string }) => r.name === name,
+          );
           return found
             ? Effect.succeed(found)
             : Effect.fail(new RepoNotFound({ name }));
@@ -56,14 +58,14 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
     const handlers = HttpApiBuilder.group(RepoApi, "repos", (h) =>
       h
         .handle("createRepo", ({ payload }) =>
-          repos
+          artifacts
             .create(payload.name, {
               description: payload.description,
               setDefaultBranch: "main",
             })
             .pipe(
               Effect.tap(() =>
-                metadata
+                repos
                   .getByName(payload.name)
                   .init(payload.description ?? "")
                   .pipe(Effect.orDie),
@@ -85,7 +87,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
         .handle("getRepo", ({ params }) =>
           findRepo(params.name).pipe(
             Effect.flatMap((found) =>
-              metadata
+              repos
                 .getByName(params.name)
                 .get()
                 .pipe(
@@ -113,7 +115,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
         .handle("updateRepo", ({ params, payload }) =>
           findRepo(params.name).pipe(
             Effect.flatMap(() =>
-              metadata
+              repos
                 .getByName(params.name)
                 .update({
                   description: payload.description,
@@ -125,7 +127,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
           ),
         )
         .handle("deleteRepo", ({ params }) =>
-          repos.delete(params.name).pipe(
+          artifacts.delete(params.name).pipe(
             Effect.asVoid,
             Effect.catchTag("ArtifactsError", () =>
               Effect.fail(new RepoNotFound({ name: params.name })),
@@ -135,15 +137,15 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
         .handle("starRepo", ({ params }) =>
           findRepo(params.name).pipe(
             Effect.flatMap(() =>
-              metadata.getByName(params.name).star().pipe(Effect.orDie),
+              repos.getByName(params.name).star().pipe(Effect.orDie),
             ),
             Effect.map((m) => new Metadata(m)),
           ),
         )
         .handle("cloneToken", ({ params, payload }) =>
-          repos.get(params.name).pipe(
-            Effect.flatMap((repo) =>
-              repo.createToken(payload.scope ?? "read", payload.ttl ?? 3600),
+          artifacts.get(params.name).pipe(
+            Effect.flatMap((handle) =>
+              handle.createToken(payload.scope ?? "read", payload.ttl ?? 3600),
             ),
             Effect.map(
               (t) =>

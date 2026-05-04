@@ -123,11 +123,11 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
     compatibility: { flags: ["nodejs_compat"], date: "2026-03-17" },
   },
   Effect.gen(function* () {
-    const repos = yield* Cloudflare.Artifacts.bind(Repos);
+    const artifacts = yield* Cloudflare.Artifacts.bind(Repos);
 
     const handlers = HttpApiBuilder.group(RepoApi, "repos", (h) =>
       h.handle("createRepo", ({ payload }) =>
-        repos
+        artifacts
           .create(payload.name, {
             description: payload.description,
             setDefaultBranch: "main",
@@ -162,7 +162,7 @@ export default class Worker extends Cloudflare.Worker<Worker>()(
 
 The handler returns a `CreateRepoResponse` instance — `Schema.Class`
 expects an actual instance, not a plain object. Errors from
-`repos.create` (the only declared error path) are translated to
+`artifacts.create` (the only declared error path) are translated to
 `RepoConflict`; anything else dies and surfaces as a 500.
 
 ## Set up the integration test
@@ -227,9 +227,9 @@ them right now.
 
 ## Look up an existing repo
 
-`repos.get(name)` returns an opaque RPC stub — useful for
+`artifacts.get(name)` returns an opaque RPC stub — useful for
 `createToken` later, but its fields aren't enumerable. To return
-repo info as JSON, use `repos.list(...)` and find the entry by
+repo info as JSON, use `artifacts.list(...)` and find the entry by
 name; every record in the list is a plain object.
 
 Add a `RepoInfo` schema and a `getRepo` endpoint to the API:
@@ -289,10 +289,10 @@ helper since several handlers will need to look up a repo:
 
 ```diff lang="typescript"
 // src/Worker.ts — inside Effect.gen
-const repos = yield* Cloudflare.Artifacts.bind(Repos);
+const artifacts = yield* Cloudflare.Artifacts.bind(Repos);
 
 +const findRepo = (name: string) =>
-+  repos.list({ limit: 100 }).pipe(
++  artifacts.list({ limit: 100 }).pipe(
 +    Effect.flatMap((res) => {
 +      const found = res.repos.find((r: { name: string }) => r.name === name);
 +      return found
@@ -404,9 +404,9 @@ instance:
 ```diff lang="typescript"
 .handle("getRepo", ({ params }) => /* … */)
 +.handle("cloneToken", ({ params, payload }) =>
-+  repos.get(params.name).pipe(
-+    Effect.flatMap((repo) =>
-+      repo.createToken(payload.scope ?? "read", payload.ttl ?? 3600),
++  artifacts.get(params.name).pipe(
++    Effect.flatMap((handle) =>
++      handle.createToken(payload.scope ?? "read", payload.ttl ?? 3600),
 +    ),
 +    Effect.map(
 +      (t) =>
@@ -458,23 +458,23 @@ That covers the Git half. Artifacts is now storing history and
 handing out tokens. Next we'll add the metadata that lives
 *around* the repo.
 
-## Create the metadata Durable Object
+## Add the `Repo` Durable Object
 
 Artifacts owns commits, refs, and the clone protocol. It does not
 store the things a GitHub-like API needs alongside that —
-descriptions you can rename, topics, stars. We'll keep those in a
-Durable Object, one instance per repo (addressed by repo name),
-so each repo gets its own transactional storage.
+descriptions you can rename, topics, stars. The `Repo` Durable
+Object represents one repository: a single addressable instance
+per repo name with its own transactional storage.
 
 Start with the smallest possible DO — empty public API, no state:
 
 ```typescript twoslash
-// src/RepoMetadata.ts
+// src/Repo.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-export default class RepoMetadata extends Cloudflare.DurableObjectNamespace<RepoMetadata>()(
-  "RepoMetadata",
+export default class Repo extends Cloudflare.DurableObjectNamespace<Repo>()(
+  "Repo",
   Effect.gen(function* () {
     return Effect.gen(function* () {
       return {};
@@ -497,8 +497,8 @@ survives restarts and hibernation:
 +  createdAt: number;
 +};
 
-export default class RepoMetadata extends Cloudflare.DurableObjectNamespace<RepoMetadata>()(
-  "RepoMetadata",
+export default class Repo extends Cloudflare.DurableObjectNamespace<Repo>()(
+  "Repo",
   Effect.gen(function* () {
     return Effect.gen(function* () {
 +     const state = yield* Cloudflare.DurableObjectState;
@@ -572,12 +572,13 @@ export class RepoInfo extends Schema.Class<RepoInfo>("RepoInfo")({
 }) {}
 ```
 
-Yield the `RepoMetadata` class in the Worker's init phase, then
-update `createRepo` to seed metadata and `getRepo` to merge it in:
+Yield the `Repo` class in the Worker's init phase. The handle is a
+DO namespace — `repos.getByName(name)` returns a typed RPC stub for
+that repo's instance:
 
 ```diff lang="typescript"
 // src/Worker.ts
-+import RepoMetadata from "./RepoMetadata.ts";
++import Repo from "./Repo.ts";
 import {
   CloneToken,
   CreateRepoResponse,
@@ -589,8 +590,8 @@ import {
 } from "./Api.ts";
 
   Effect.gen(function* () {
-    const repos = yield* Cloudflare.Artifacts.bind(Repos);
-+   const metadata = yield* RepoMetadata;
+    const artifacts = yield* Cloudflare.Artifacts.bind(Repos);
++   const repos = yield* Repo;
     // …findRepo helper
 ```
 
@@ -599,14 +600,14 @@ is created, `getRepo` reads metadata and merges it:
 
 ```diff lang="typescript"
 .handle("createRepo", ({ payload }) =>
-  repos
+  artifacts
     .create(payload.name, {
       description: payload.description,
       setDefaultBranch: "main",
     })
     .pipe(
 +     Effect.tap(() =>
-+       metadata
++       repos
 +         .getByName(payload.name)
 +         .init(payload.description ?? "")
 +         .pipe(Effect.orDie),
@@ -628,7 +629,7 @@ is created, `getRepo` reads metadata and merges it:
 .handle("getRepo", ({ params }) =>
   findRepo(params.name).pipe(
 +   Effect.flatMap((found) =>
-+     metadata
++     repos
 +       .getByName(params.name)
 +       .get()
 +       .pipe(
@@ -735,7 +736,7 @@ And the handler:
 +.handle("updateRepo", ({ params, payload }) =>
 +  findRepo(params.name).pipe(
 +    Effect.flatMap(() =>
-+      metadata
++      repos
 +        .getByName(params.name)
 +        .update({
 +          description: payload.description,
@@ -767,7 +768,7 @@ Same pattern — add `star` to the DO, `starRepo` to the API, and
 the handler:
 
 ```diff lang="typescript"
-// src/RepoMetadata.ts
+// src/Repo.ts
 return {
   // …
   update: (patch) => /* … */,
@@ -807,7 +808,7 @@ export class ReposGroup extends HttpApiGroup.make("repos")
 +.handle("starRepo", ({ params }) =>
 +  findRepo(params.name).pipe(
 +    Effect.flatMap(() =>
-+      metadata.getByName(params.name).star().pipe(Effect.orDie),
++      repos.getByName(params.name).star().pipe(Effect.orDie),
 +    ),
 +    Effect.map((m) => new Metadata(m)),
 +  ),
@@ -830,7 +831,7 @@ bun test
 ```
 
 Each call round-trips through Artifacts, the Durable Object, or
-both — created via `repos.create`, looked up via `repos.list`,
+both — created via `artifacts.create`, looked up via `artifacts.list`,
 mutated via the DO's `init`/`update`/`star` RPC methods. The whole
 flow is type-checked end-to-end through the same `RepoApi` schema,
 on both the server and the client.
