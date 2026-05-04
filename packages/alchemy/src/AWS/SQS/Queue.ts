@@ -218,31 +218,25 @@ export const QueueProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const queueName =
             output?.queueName ?? (yield* createQueueName(id, olds ?? {}));
-          const url = yield* sqs
-            .getQueueUrl({ QueueName: queueName })
-            .pipe(
-              Effect.map((r) => r.QueueUrl),
-              Effect.catchTag("QueueDoesNotExist", () =>
-                Effect.succeed(undefined),
-              ),
-            );
+          const url = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
+            Effect.map((r) => r.QueueUrl),
+            Effect.catchTag("QueueDoesNotExist", () =>
+              Effect.succeed(undefined),
+            ),
+          );
           if (!url) return undefined;
           const queueArn =
             `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
-          const tagsResp = yield* sqs
-            .listQueueTags({ QueueUrl: url })
-            .pipe(
-              Effect.map((r) => r.Tags ?? {}),
-              Effect.catch(() => Effect.succeed({} as Record<string, string>)),
-            );
+          const tagsResp = yield* sqs.listQueueTags({ QueueUrl: url }).pipe(
+            Effect.map((r) => r.Tags ?? {}),
+            Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+          );
           const attrs = {
             queueName,
             queueUrl: url,
             queueArn,
           };
-          return (yield* hasAlchemyTags(id, tagsResp))
-            ? attrs
-            : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tagsResp)) ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           if (!isResolved(news)) return undefined;

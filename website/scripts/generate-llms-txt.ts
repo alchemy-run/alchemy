@@ -190,7 +190,10 @@ async function loadPage(slug: string): Promise<Page> {
   throw new Error(`Page not found: ${slug} (looked for .mdx and .md)`);
 }
 
-async function listSlugs(directory: string, exclude: string[] = []): Promise<string[]> {
+async function listSlugs(
+  directory: string,
+  exclude: string[] = [],
+): Promise<string[]> {
   const dir = path.join(docsDir, directory);
   const entries = await readdir(dir, { withFileTypes: true });
   const slugs: string[] = [];

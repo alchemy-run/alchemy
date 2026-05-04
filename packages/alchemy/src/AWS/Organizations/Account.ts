@@ -94,7 +94,9 @@ export const AccountProvider = () =>
                 })
               : undefined;
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           // Engine has cleared us via `read` (foreign-tagged accounts are

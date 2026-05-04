@@ -325,10 +325,7 @@ describe("renderMarkdown", () => {
         scope: "core",
         description: "thing",
         hash: "a1b2c3d",
-        authors: [
-          { login: "alice", name: "Alice" },
-          { name: "Bob" },
-        ],
+        authors: [{ login: "alice", name: "Alice" }, { name: "Bob" }],
       }),
     ];
 

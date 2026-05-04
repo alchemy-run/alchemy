@@ -112,11 +112,19 @@ const formatPlanLine = (
 const displayPlan = <P extends Plan>(plan: P): Effect.Effect<void> =>
   Effect.gen(function* () {
     const entries = Object.entries(plan.resources ?? {})
-      .map(([id, node]) => ({ id, action: node.action, type: node.resource.Type }))
+      .map(([id, node]) => ({
+        id,
+        action: node.action,
+        type: node.resource.Type,
+      }))
       .sort((a, b) => a.type.localeCompare(b.type) || a.id.localeCompare(b.id));
     const deletions = Object.entries(plan.deletions ?? {})
       .filter(([, n]) => n != null)
-      .map(([id, node]) => ({ id, action: "delete" as const, type: node!.resource.Type }))
+      .map(([id, node]) => ({
+        id,
+        action: "delete" as const,
+        type: node!.resource.Type,
+      }))
       .sort((a, b) => a.type.localeCompare(b.type) || a.id.localeCompare(b.id));
 
     const all = [...entries, ...deletions];
@@ -142,7 +150,9 @@ const displayPlan = <P extends Plan>(plan: P): Effect.Effect<void> =>
     }
   });
 
-const formatStatusLine = (event: Extract<ApplyEvent, { kind: "status-change" }>) => {
+const formatStatusLine = (
+  event: Extract<ApplyEvent, { kind: "status-change" }>,
+) => {
   const statusColor = STATUS_COLOR[event.status] ?? C.gray;
   const statusLabel = paint(statusColor, event.status.padEnd(22));
   const typeLabel = paint(colorForType(event.type), event.type);
@@ -176,9 +186,7 @@ const startApplySession = <P extends Plan>(_plan: P) =>
             ["created", "updated", "replaced", "deleted", "fail"] as const
           )
             .filter((s) => counts[s])
-            .map((s) =>
-              paint(STATUS_COLOR[s] ?? C.gray, `${counts[s]} ${s}`),
-            );
+            .map((s) => paint(STATUS_COLOR[s] ?? C.gray, `${counts[s]} ${s}`));
           if (parts.length > 0) {
             process.stdout.write(
               `${paint(C.bold, "Apply complete")} ${paint(C.gray, "(")}${parts.join(paint(C.gray, ", "))}${paint(C.gray, ")")}\n`,

@@ -342,20 +342,18 @@ export const BucketProvider = () =>
       const fetchBucketTags = (
         bucketName: string,
       ): Effect.Effect<Record<string, string>, never, any> =>
-        s3
-          .getBucketTagging({ Bucket: bucketName })
-          .pipe(
-            Effect.map(
-              (r) =>
-                Object.fromEntries(
-                  (r.TagSet ?? []).map((t) => [t.Key!, t.Value!]),
-                ) as Record<string, string>,
-            ),
-            Effect.catchTag("NoSuchTagSet", () =>
-              Effect.succeed({} as Record<string, string>),
-            ),
-            Effect.catch(() => Effect.succeed({} as Record<string, string>)),
-          );
+        s3.getBucketTagging({ Bucket: bucketName }).pipe(
+          Effect.map(
+            (r) =>
+              Object.fromEntries(
+                (r.TagSet ?? []).map((t) => [t.Key!, t.Value!]),
+              ) as Record<string, string>,
+          ),
+          Effect.catchTag("NoSuchTagSet", () =>
+            Effect.succeed({} as Record<string, string>),
+          ),
+          Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+        );
 
       const syncBucketTags = Effect.fnUntraced(function* ({
         bucketName,
@@ -488,13 +486,11 @@ export const BucketProvider = () =>
             output?.bucketName ?? (yield* createBucketName(id, olds ?? {}));
           const region = yield* Region;
           const { accountId } = yield* AWSEnvironment;
-          const exists = yield* s3
-            .headBucket({ Bucket: bucketName })
-            .pipe(
-              Effect.map(() => true),
-              Effect.catchTag("NotFound", () => Effect.succeed(false)),
-              Effect.catch(() => Effect.succeed(false)),
-            );
+          const exists = yield* s3.headBucket({ Bucket: bucketName }).pipe(
+            Effect.map(() => true),
+            Effect.catchTag("NotFound", () => Effect.succeed(false)),
+            Effect.catch(() => Effect.succeed(false)),
+          );
           if (!exists) return undefined;
           return {
             bucketName,

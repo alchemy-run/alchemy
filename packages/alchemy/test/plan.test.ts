@@ -2511,9 +2511,7 @@ describe("engine-level adoption", () => {
       // accidentally uses `Symbol.for` rather than `Unowned.is`).
       const persistedAttr = persisted?.attr as object;
       expect(Unowned.is(persistedAttr)).toBe(false);
-      expect(
-        Object.getOwnPropertySymbols(persistedAttr).length,
-      ).toBe(0);
+      expect(Object.getOwnPropertySymbols(persistedAttr).length).toBe(0);
       expect(JSON.stringify(persistedAttr)).not.toContain("Unowned");
     }),
   );

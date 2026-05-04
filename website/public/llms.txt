@@ -68,7 +68,7 @@ Standalone how-to pages. Each solves a specific problem; read in any order.
 
 - [Continuous Integration](https://v2.alchemy.run/guides/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
 - [Circular Bindings](https://v2.alchemy.run/guides/circular-bindings) — How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
-- [CLI Reference](https://v2.alchemy.run/guides/cli) — All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, bootstrap, login, and profile.
+- [CLI Reference](https://v2.alchemy.run/guides/cli) — All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, bootstrap, login, profile, and state.
 - [Writing a Custom Resource Provider](https://v2.alchemy.run/guides/custom-provider) — Add support for a new cloud or third-party API by declaring a Resource type and implementing its lifecycle as an Effect Layer.
 - [Writing a Custom State Store](https://v2.alchemy.run/guides/custom-state-store) — Build a Postgres-backed Alchemy state store step by step — implement the StateService interface, plug it into a stack, and test it end-to-end.
 - [Effect HTTP API](https://v2.alchemy.run/guides/effect-http-api) — Build a schema-validated HTTP API with Effect's HttpApi module and deploy it as a Cloudflare Worker.

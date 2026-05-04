@@ -204,8 +204,9 @@ export const EventBusProvider = () =>
               Tags: createTagsList(allTags),
             })
             .pipe(
-              Effect.catchTag("ResourceAlreadyExistsException", () =>
-                Effect.void,
+              Effect.catchTag(
+                "ResourceAlreadyExistsException",
+                () => Effect.void,
               ),
             );
 

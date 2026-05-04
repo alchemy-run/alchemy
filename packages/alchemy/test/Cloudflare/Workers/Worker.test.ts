@@ -530,72 +530,70 @@ test.provider(
     }).pipe(logLevel),
 );
 
-test.provider(
-  "adopt(true) takes over a foreign-tagged worker",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+test.provider("adopt(true) takes over a foreign-tagged worker", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+    yield* stack.destroy();
 
-      // Phase 1: deploy under logical id "Original" with an explicit
-      // physical name. The Cloudflare Worker is now tagged
-      // `alchemy:id:Original` — i.e. owned by *that* logical resource.
-      const physicalName = `alchemy-test-adopt-takeover-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
-      const original = yield* stack.deploy(
+    // Phase 1: deploy under logical id "Original" with an explicit
+    // physical name. The Cloudflare Worker is now tagged
+    // `alchemy:id:Original` — i.e. owned by *that* logical resource.
+    const physicalName = `alchemy-test-adopt-takeover-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    const original = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.Worker("Original", {
+          main,
+          name: physicalName,
+          subdomain: { enabled: true, previewsEnabled: true },
+          compatibility: { date: "2024-01-01" },
+        });
+      }),
+    );
+    expect(yield* findWorker(original.workerName, accountId)).toBeDefined();
+    expect(yield* getWorkerTags(physicalName, accountId)).toContain(
+      "alchemy:id:Original",
+    );
+
+    // Wipe state for the "Original" entry; the worker stays on Cloudflare.
+    yield* Effect.gen(function* () {
+      const state = yield* State;
+      yield* state.delete({
+        stack: stack.name,
+        stage: "test",
+        fqn: "Original",
+      });
+    }).pipe(Effect.provide(stack.state));
+
+    // Phase 2: redeploy under a *different* logical id with the same
+    // physical name and `adopt(true)`. `Worker.read` returns
+    // `Unowned(attrs)` because the existing tags identify a different
+    // logical id; with adopt enabled the engine takes over and the
+    // follow-up create/update rewrites the tags. (The rejection path
+    // — same scenario without `adopt(true)` — is covered by the unit
+    // tests in `plan.test.ts`.)
+    const takenOver = yield* stack
+      .deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Worker("Original", {
+          return yield* Cloudflare.Worker("Different", {
             main,
             name: physicalName,
             subdomain: { enabled: true, previewsEnabled: true },
             compatibility: { date: "2024-01-01" },
           });
         }),
-      );
-      expect(yield* findWorker(original.workerName, accountId)).toBeDefined();
-      expect(yield* getWorkerTags(physicalName, accountId)).toContain(
-        "alchemy:id:Original",
-      );
+      )
+      .pipe(adopt(true));
 
-      // Wipe state for the "Original" entry; the worker stays on Cloudflare.
-      yield* Effect.gen(function* () {
-        const state = yield* State;
-        yield* state.delete({
-          stack: stack.name,
-          stage: "test",
-          fqn: "Original",
-        });
-      }).pipe(Effect.provide(stack.state));
+    expect(takenOver.workerName).toEqual(physicalName);
 
-      // Phase 2: redeploy under a *different* logical id with the same
-      // physical name and `adopt(true)`. `Worker.read` returns
-      // `Unowned(attrs)` because the existing tags identify a different
-      // logical id; with adopt enabled the engine takes over and the
-      // follow-up create/update rewrites the tags. (The rejection path
-      // — same scenario without `adopt(true)` — is covered by the unit
-      // tests in `plan.test.ts`.)
-      const takenOver = yield* stack
-        .deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.Worker("Different", {
-              main,
-              name: physicalName,
-              subdomain: { enabled: true, previewsEnabled: true },
-              compatibility: { date: "2024-01-01" },
-            });
-          }),
-        )
-        .pipe(adopt(true));
+    const newTags = yield* getWorkerTags(physicalName, accountId);
+    expect(newTags).toContain("alchemy:id:Different");
+    expect(newTags).not.toContain("alchemy:id:Original");
 
-      expect(takenOver.workerName).toEqual(physicalName);
-
-      const newTags = yield* getWorkerTags(physicalName, accountId);
-      expect(newTags).toContain("alchemy:id:Different");
-      expect(newTags).not.toContain("alchemy:id:Original");
-
-      yield* stack.destroy();
-      yield* waitForWorkerToBeDeleted(physicalName, accountId);
-    }).pipe(logLevel),
+    yield* stack.destroy();
+    yield* waitForWorkerToBeDeleted(physicalName, accountId);
+  }).pipe(logLevel),
 );

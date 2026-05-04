@@ -91,7 +91,9 @@ export const OrganizationalUnitProvider = () =>
                 })
               : undefined;
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const name = yield* toName(id, news);

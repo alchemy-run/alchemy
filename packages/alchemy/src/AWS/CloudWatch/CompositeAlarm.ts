@@ -120,7 +120,9 @@ export const CompositeAlarmProvider = () =>
             output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
           const state = yield* readCompositeAlarm(name);
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const name = yield* createAlarmName(id, news);

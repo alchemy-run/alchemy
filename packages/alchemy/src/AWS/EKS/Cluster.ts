@@ -452,7 +452,9 @@ export const ClusterProvider = () =>
             kubernetesObjects: output?.kubernetesObjects,
           });
           if (!state) return undefined;
-          return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, bindings, session }) {
           yield* validateProps(news);

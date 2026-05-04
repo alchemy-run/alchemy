@@ -141,11 +141,7 @@ export const recordStateStoreOp =
  * a stable slug there. Apply at every `Layer.effect(State, …)` site
  * exactly once.
  */
-export const recordStateStoreInit = <
-  A extends { readonly id: string },
-  E,
-  R,
->(
+export const recordStateStoreInit = <A extends { readonly id: string }, E, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   self.pipe(
