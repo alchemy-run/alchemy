@@ -23,6 +23,41 @@ test(
 );
 
 /**
+ * Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/172
+ *
+ * The stack now includes two Workers (`Api` and `SecondaryApi`) that both
+ * bind the same `Agent` Durable Object, which in turn binds the `Sandbox`
+ * Container. Each `yield* Agent` runs the DO's outer init, calling
+ * `Cloudflare.Container.bind(Sandbox)` once per Worker, so the Sandbox
+ * ContainerApplication receives two bindings sharing one `namespaceId`.
+ *
+ * Before the dedupe fix, `getDurableObjects` counted those as two distinct
+ * namespaces and the deploy died with:
+ *
+ *   "A Container can only be bound to one Durable Object namespace.
+ *    Found 2 namespaces in bindings: <id>, <id>"
+ *
+ * If the deploy in `beforeAll` ever starts failing again, this test (and the
+ * rest of the suite) won't run — that itself is the regression signal. The
+ * assertion below additionally exercises the second Worker so a future
+ * regression that drops the binding silently still surfaces here.
+ */
+test(
+  "secondary worker reaches the shared Sandbox container",
+  Effect.gen(function* () {
+    const { secondaryApiUrl } = yield* stack;
+
+    const response = yield* Effect.tryPromise({
+      try: () => fetch(secondaryApiUrl),
+      catch: (cause) =>
+        cause instanceof Error ? cause : new Error(String(cause)),
+    });
+    expect(response.status).toBe(200);
+  }),
+  { timeout: 60_000 },
+);
+
+/**
  * Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/71
  *
  * `NotifyWorkflow` accesses `Cloudflare.WorkerEnvironment` inside its body and
