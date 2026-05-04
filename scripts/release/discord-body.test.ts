@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Commit } from "changelogithub";
-import { extractTagBody, toDiscordBody } from "../release/discord-body.ts";
-import { renderMarkdown, type RenderConfig } from "../release/render.ts";
+import { extractTagBody, toDiscordBody } from "./discord-body.ts";
+import { renderMarkdown, type RenderConfig } from "./render.ts";
 
 const baseConfig: RenderConfig = {
   titles: { breakingChanges: "🚨 Breaking Changes" },

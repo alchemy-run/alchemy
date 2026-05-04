@@ -6,7 +6,7 @@
  */
 import { describe, expect, test } from "bun:test";
 import { generateMarkdown, type Commit } from "changelogithub";
-import { renderMarkdown, type RenderConfig } from "../release/render.ts";
+import { renderMarkdown, type RenderConfig } from "./render.ts";
 
 const config = {
   titles: { breakingChanges: "🚨 Breaking Changes" },

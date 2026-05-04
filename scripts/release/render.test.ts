@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Commit } from "changelogithub";
-import { renderMarkdown, type RenderConfig } from "../release/render.ts";
+import { renderMarkdown, type RenderConfig } from "./render.ts";
 
 // Minimal config that matches the defaults used by `release-notes.ts`.
 const baseConfig: RenderConfig = {
