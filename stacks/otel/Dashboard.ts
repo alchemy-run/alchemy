@@ -184,6 +184,37 @@ export const CliOverviewDashboard = Axiom.Dashboard(
           },
         },
         {
+          id: "active-users-over-time-hourly",
+          name: "Active users per hour (non-CI)",
+          type: "TimeSeries",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | extend uid=tostring(['resource.custom']['alchemy.user.id']),
+                       ci=tostring(['resource.custom']['alchemy.ci'])
+              | where ci != "true" and uid != ""
+              | summarize users=dcount(uid) by bin(_time, 1h)
+              | order by _time asc
+            `,
+          },
+        },
+        {
+          id: "active-users-over-time-daily",
+          name: "Active users per day (CI vs local)",
+          type: "TimeSeries",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | extend uid=tostring(['resource.custom']['alchemy.user.id']),
+                       ci=tostring(['resource.custom']['alchemy.ci'])
+              | where uid != ""
+              | extend bucket=iff(ci == "true", "ci", "local")
+              | summarize users=dcount(uid) by bucket, bin(_time, 1d)
+              | order by _time asc
+            `,
+          },
+        },
+        {
           id: "ci-vs-local-projects",
           name: "Projects: CI vs local per day",
           type: "TimeSeries",
@@ -241,18 +272,21 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         { i: "distinct-projects", x: 0, y: 0, w: 4, h: 4 },
         { i: "projects-using-ci", x: 4, y: 0, w: 4, h: 4 },
         { i: "active-users-7d", x: 8, y: 0, w: 4, h: 4 },
-        // Row 2
-        { i: "users-per-project", x: 0, y: 4, w: 8, h: 8 },
-        { i: "project-team-size-distribution", x: 8, y: 4, w: 4, h: 8 },
+        // Row 2 — active users over time
+        { i: "active-users-over-time-hourly", x: 0, y: 4, w: 6, h: 6 },
+        { i: "active-users-over-time-daily", x: 6, y: 4, w: 6, h: 6 },
         // Row 3
-        { i: "state-store-projects-by-id", x: 0, y: 12, w: 6, h: 6 },
-        { i: "state-store-by-id-over-time", x: 6, y: 12, w: 6, h: 6 },
+        { i: "users-per-project", x: 0, y: 10, w: 8, h: 8 },
+        { i: "project-team-size-distribution", x: 8, y: 10, w: 4, h: 8 },
         // Row 4
-        { i: "projects-over-time", x: 0, y: 18, w: 6, h: 6 },
-        { i: "ci-vs-local-projects", x: 6, y: 18, w: 6, h: 6 },
+        { i: "state-store-projects-by-id", x: 0, y: 18, w: 6, h: 6 },
+        { i: "state-store-by-id-over-time", x: 6, y: 18, w: 6, h: 6 },
         // Row 5
-        { i: "state-store-deploys", x: 0, y: 24, w: 6, h: 6 },
-        { i: "active-users-by-version", x: 6, y: 24, w: 6, h: 6 },
+        { i: "projects-over-time", x: 0, y: 24, w: 6, h: 6 },
+        { i: "ci-vs-local-projects", x: 6, y: 24, w: 6, h: 6 },
+        // Row 6
+        { i: "state-store-deploys", x: 0, y: 30, w: 6, h: 6 },
+        { i: "active-users-by-version", x: 6, y: 30, w: 6, h: 6 },
       ];
 
       return {
