@@ -1,6 +1,6 @@
 ---
 title: CLI Reference
-description: All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, bootstrap, login, and profile.
+description: All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, bootstrap, login, profile, and state.
 sidebar:
   order: 1
 ---
@@ -413,6 +413,112 @@ alchemy profile show
 
 # Show a named profile
 alchemy profile show --profile prod
+```
+
+## `state`
+
+Inspect and manage the state store — the record of which resources
+Alchemy thinks exist for each stack/stage. Reads from whatever state
+layer the stack file configures (e.g. `Cloudflare.state(...)`), or
+from the on-disk `.alchemy/state` directory with `--local`.
+
+```sh
+alchemy state <subcommand> [options]
+```
+
+The stack file is imported to resolve its configured state layer, so
+all subcommands accept the same `--stage`, `--profile`, and
+`--env-file` options as `deploy`. Pass `[file]` via the standard
+positional `script` argument inherited from the root command.
+
+| Option              | Description                                                                       |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `--local`           | Read from local `.alchemy/state` instead of the stack's configured state store    |
+| `--stage <name>`    | Stage used while loading the stack (defaults to `dev_$USER`)                      |
+| `--profile <name>`  | Auth profile to use (defaults to `default` or `$ALCHEMY_PROFILE`)                 |
+| `--env-file <path>` | Load environment variables from a file                                            |
+
+### `state stacks`
+
+List every stack name present in the state store.
+
+```sh
+alchemy state stacks [file] [options]
+```
+
+### `state stages <stack>`
+
+List every stage that has state recorded under `<stack>`.
+
+```sh
+alchemy state stages <stack> [file] [options]
+```
+
+### `state resources <stack> <stage>`
+
+List the fully-qualified resource names (FQNs) tracked under a given
+stack/stage.
+
+```sh
+alchemy state resources <stack> <stage> [file] [options]
+```
+
+### `state get <stack> <stage> <fqn>`
+
+Print a single resource's persisted state as JSON. Output uses the
+same encoding the store persists: redacted secrets are unwrapped into
+`{ __redacted__: ... }` and Resources are flattened.
+
+```sh
+alchemy state get <stack> <stage> <fqn> [file] [options]
+```
+
+### `state tree`
+
+Render the entire state store as a tree of stacks → stages →
+resources.
+
+```sh
+alchemy state tree [file] [options]
+```
+
+<Terminal content={`AlchemyEffectWebsite
+├─ dev_sam
+│  ├─ Bucket
+│  └─ Worker
+└─ prod
+   ├─ Bucket
+   └─ Worker`} />
+
+### `state clear [stack] [stage]`
+
+Delete state entries from the store. **Destructive but local-only** —
+the actual cloud resources are not touched, only Alchemy's record of
+them. A subsequent `deploy` will see an empty state and try to
+re-create everything (use `--adopt` to reconcile against existing
+infrastructure).
+
+```sh
+alchemy state clear [stack] [stage] [file] [options]
+```
+
+- Omit both arguments to clear **all stacks** in the store.
+- Pass `<stack>` to clear every stage under that stack.
+- Pass `<stack> <stage>` to clear a single stage.
+
+| Option  | Description              |
+| ------- | ------------------------ |
+| `--yes` | Skip the confirmation prompt |
+
+```sh
+# Inspect what's in the store
+alchemy state tree
+
+# Drop a single PR-preview stage
+alchemy state clear myapp pr-42 --yes
+
+# Wipe local state after a botched bootstrap
+alchemy state clear --local
 ```
 
 ## Stages
