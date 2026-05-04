@@ -16,7 +16,14 @@ import type { ChangelogOptions, Commit } from "changelogithub";
 export type RenderConfig = Required<
   Pick<
     ChangelogOptions,
-    "titles" | "types" | "capitalize" | "emoji" | "baseUrl" | "repo" | "from" | "to"
+    | "titles"
+    | "types"
+    | "capitalize"
+    | "emoji"
+    | "baseUrl"
+    | "repo"
+    | "from"
+    | "to"
   >
 > & {
   scopeMap?: Record<string, string>;
@@ -25,7 +32,10 @@ export type RenderConfig = Required<
 const emojisRE =
   /([\u2700-\u27BF\uE000-\uF8FF\u2011-\u26FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDD10-\uDDFF])/g;
 
-export function renderMarkdown(commits: Commit[], config: RenderConfig): string {
+export function renderMarkdown(
+  commits: Commit[],
+  config: RenderConfig,
+): string {
   const lines: string[] = [];
   const [breaking, rest] = partition(commits, (c) => c.isBreaking);
 
@@ -114,9 +124,7 @@ function renderNode(node: Node, depth: number, config: RenderConfig): string[] {
   // historical release-notes style.
   const forceHeaders = childNames.some((name) => {
     const child = node.children[name];
-    return (
-      countCommits(child) > 1 || Object.keys(child.children).length > 0
-    );
+    return countCommits(child) > 1 || Object.keys(child.children).length > 0;
   });
 
   for (const name of childNames) {

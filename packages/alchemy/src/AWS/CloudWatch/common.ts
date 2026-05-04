@@ -2,12 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 
 export type CloudWatchTags = Record<string, string>;
 
@@ -43,21 +38,6 @@ export const createManagedTags = Effect.fn(function* (
     ...(yield* createInternalTags(id)),
     ...(tags ?? {}),
   };
-});
-
-export const ensureOwnedByAlchemy = Effect.fn(function* (
-  id: string,
-  name: string,
-  tags: CloudWatchTags,
-  resourceType: string,
-) {
-  if (!(yield* hasAlchemyTags(id, tags))) {
-    return yield* Effect.fail(
-      new Error(
-        `${resourceType} '${name}' already exists and is not managed by this stack`,
-      ),
-    );
-  }
 });
 
 export const updateResourceTags = Effect.fn(function* ({

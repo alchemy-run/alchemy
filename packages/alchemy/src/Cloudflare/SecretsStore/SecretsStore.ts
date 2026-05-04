@@ -1,7 +1,5 @@
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import { AdoptPolicy } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -27,9 +25,11 @@ export type SecretsStore = Resource<
  * Deleting a store changes its ID and permanently destroys all secrets
  * inside it. Because of this, the provider always **adopts** an existing
  * store rather than creating a new one, and **never deletes** the store
- * on teardown. If no store exists yet, one is created, but once it
- * exists it is treated as account-level infrastructure that outlives
- * any single stack.
+ * on teardown. The `read` lifecycle reports the existing account store
+ * (if any) as plain attrs, so the engine silently adopts it on cold
+ * start and `create` is only ever invoked when no store exists yet.
+ * Once it exists it is treated as account-level infrastructure that
+ * outlives any single stack.
  *
  * @section Creating a Store
  * @example Basic Secrets Store (adopts existing or creates one)
@@ -56,46 +56,39 @@ export const SecretsStoreProvider = () =>
 
       return {
         stables: ["storeId", "storeName", "accountId"],
-        create: Effect.fn(function* () {
-          const adoptEnabled = yield* Effect.serviceOption(AdoptPolicy).pipe(
-            Effect.map(Option.getOrElse(() => true)),
-          );
-
-          const adoptExisting = Effect.gen(function* () {
-            const stores = yield* listStores({ accountId });
-            const first = stores.result[0];
-            if (!first) return undefined;
-            return {
-              storeId: first.id,
-              storeName: first.name,
-              accountId,
-            };
+        // The engine calls `read` whenever there's no prior state. Cloudflare
+        // allows exactly one Secrets Store per account, so any account that's
+        // ever provisioned one must reuse it. Returning the existing store as
+        // plain attrs makes the engine silently adopt it; `create` is only
+        // ever invoked when no store exists yet.
+        read: Effect.fn(function* ({ output }) {
+          const stores = yield* listStores({
+            accountId: output?.accountId ?? accountId,
           });
-
-          // Cloudflare allows exactly one Secrets Store per account, so
-          // any account that's been touched before may already have one.
-          // Only adopt it if the caller opted in via `AdoptPolicy`,
-          // otherwise let `createStore` surface MaximumStoresExceeded.
-          if (adoptEnabled) {
-            const adopted = yield* adoptExisting;
-            if (adopted) return adopted;
-          }
-
-          const create = createStore({
+          const match = output?.storeId
+            ? stores.result.find((s) => s.id === output.storeId)
+            : stores.result[0];
+          if (!match) return undefined;
+          return {
+            storeId: match.id,
+            storeName: match.name,
+            accountId: output?.accountId ?? accountId,
+          };
+        }),
+        create: Effect.fn(function* () {
+          const response = yield* createStore({
             accountId,
             // `default_secrets_store` is the name Cloudflare uses for an
             // account's default Secrets Store.
             name: "default_secrets_store",
-          });
-          const response = adoptEnabled
-            ? yield* create.pipe(
-                // A concurrent process (or a previous partially-failed
-                // deploy) may have raced us between list and create.
-                Effect.catchTag("MaximumStoresExceeded", () =>
-                  Effect.succeed(undefined),
-                ),
-              )
-            : yield* create;
+          }).pipe(
+            // A concurrent process (or a previous partially-failed deploy)
+            // may have raced us between read and create — fall back to
+            // listing the account's existing store.
+            Effect.catchTag("MaximumStoresExceeded", () =>
+              Effect.succeed(undefined),
+            ),
+          );
 
           if (response) {
             return {
@@ -105,8 +98,15 @@ export const SecretsStoreProvider = () =>
             };
           }
 
-          const recovered = yield* adoptExisting;
-          if (recovered) return recovered;
+          const stores = yield* listStores({ accountId });
+          const first = stores.result[0];
+          if (first) {
+            return {
+              storeId: first.id,
+              storeName: first.name,
+              accountId,
+            };
+          }
 
           return yield* Effect.die(
             new Error(
@@ -122,19 +122,6 @@ export const SecretsStoreProvider = () =>
           // account and deleting it permanently destroys all secrets inside.
           // The store is treated as shared, account-level infrastructure that
           // should never be torn down by a single stack.
-        }),
-        read: Effect.fn(function* ({ output }) {
-          if (!output?.storeId) return undefined;
-          const stores = yield* listStores({
-            accountId: output.accountId,
-          });
-          const match = stores.result.find((s) => s.id === output.storeId);
-          if (!match) return undefined;
-          return {
-            storeId: match.id,
-            storeName: match.name,
-            accountId: output.accountId,
-          };
         }),
       };
     }),

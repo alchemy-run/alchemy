@@ -1,5 +1,6 @@
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -116,7 +117,10 @@ export const RepositoryProvider = () =>
           if (!repository?.repositoryArn || !repository.repositoryUri) {
             return undefined;
           }
-          return {
+          const listedTags = yield* ecr.listTagsForResource({
+            resourceArn: repository.repositoryArn,
+          });
+          const attrs = {
             repositoryName,
             repositoryArn: repository.repositoryArn as RepositoryArn,
             repositoryUri: repository.repositoryUri as RepositoryUri,
@@ -128,6 +132,9 @@ export const RepositoryProvider = () =>
             lifecyclePolicyText: output?.lifecyclePolicyText,
             tags: output?.tags ?? {},
           };
+          return (yield* hasAlchemyTags(id, listedTags.tags ?? []))
+            ? attrs
+            : Unowned(attrs);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const repositoryName = yield* toRepositoryName(id, news);
@@ -135,6 +142,9 @@ export const RepositoryProvider = () =>
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
+          // Engine has cleared us via `read` (foreign-tagged repositories
+          // are surfaced as `Unowned`). On a race between read and create,
+          // describe-and-adopt the existing repository.
           const created = yield* ecr
             .createRepository({
               repositoryName,
@@ -158,16 +168,6 @@ export const RepositoryProvider = () =>
                     return yield* Effect.fail(
                       new Error(
                         `Repository '${repositoryName}' already exists`,
-                      ),
-                    );
-                  }
-                  const listedTags = yield* ecr.listTagsForResource({
-                    resourceArn: repo.repositoryArn,
-                  });
-                  if (!(yield* hasAlchemyTags(id, listedTags.tags ?? []))) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Repository '${repositoryName}' already exists and is not managed by alchemy`,
                       ),
                     );
                   }

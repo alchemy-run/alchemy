@@ -1,5 +1,7 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -100,7 +102,6 @@ export const QueueProvider = () =>
       const getQueue = yield* queues.getQueue;
       const updateQueue = yield* queues.updateQueue;
       const deleteQueue = yield* queues.deleteQueue;
-      const listQueues = yield* queues.listQueues;
 
       const createQueueName = (id: string, name: string | undefined) =>
         Effect.gen(function* () {
@@ -110,6 +111,16 @@ export const QueueProvider = () =>
             maxLength: 63,
           })).toLowerCase();
         });
+
+      // Cloudflare's `listQueues` accepts no name/prefix filter, so
+      // adoption-by-name has to scan every page. Use the paginated
+      // `.items` stream off the un-yielded operation method.
+      const findQueueByName = (queueName: string) =>
+        queues.listQueues.items({ accountId }).pipe(
+          Stream.filter((q) => q.queueName === queueName),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
 
       return {
         stables: ["queueId", "accountId"],
@@ -135,10 +146,7 @@ export const QueueProvider = () =>
             Effect.catch(() =>
               Effect.gen(function* () {
                 // Queue may already exist -- look it up by name
-                const allQueues = yield* listQueues({ accountId });
-                const match = allQueues.result.find(
-                  (q) => q.queueName === queueName,
-                );
+                const match = yield* findQueueByName(queueName);
                 if (match && match.queueId && match.queueName) {
                   return match as { queueId: string; queueName: string };
                 }
@@ -188,8 +196,7 @@ export const QueueProvider = () =>
             );
           }
           const queueName = yield* createQueueName(id, olds?.name);
-          const allQueues = yield* listQueues({ accountId });
-          const match = allQueues.result.find((q) => q.queueName === queueName);
+          const match = yield* findQueueByName(queueName);
           if (match && match.queueId && match.queueName) {
             return {
               queueId: match.queueId,

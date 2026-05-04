@@ -1,5 +1,7 @@
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -68,12 +70,22 @@ export const KVNamespaceProvider = () =>
       const updateNamespace = yield* kv.updateNamespace;
       const deleteNamespace = yield* kv.deleteNamespace;
       const getNamespaceFn = yield* kv.getNamespace;
-      const listNamespaces = yield* kv.listNamespaces;
 
       const createTitle = (id: string, title: string | undefined) =>
         Effect.gen(function* () {
           return title ?? (yield* createPhysicalName({ id }));
         });
+
+      // Cloudflare's `listNamespaces` accepts no title/prefix filter, so
+      // adoption-by-name has to scan every page. Use the paginated
+      // `.items` stream off the un-yielded operation method (yielding
+      // `kv.listNamespaces` collapses it to a single-page call).
+      const findNamespaceByTitle = (title: string) =>
+        kv.listNamespaces.items({ accountId }).pipe(
+          Stream.filter((ns) => ns.title === title),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
 
       return {
         stables: ["namespaceId", "accountId"],
@@ -91,16 +103,15 @@ export const KVNamespaceProvider = () =>
         }),
         create: Effect.fn(function* ({ id, news = {} }) {
           const title = yield* createTitle(id, news.title);
+          // Engine has cleared us via `read`. On a race between read and
+          // create, look up the namespace by title and adopt it.
           const namespace = yield* createNamespace({
             accountId,
             title,
           }).pipe(
             Effect.catchTag("NamespaceTitleAlreadyExists", () =>
               Effect.gen(function* () {
-                const namespaces = yield* listNamespaces({ accountId });
-                const match = namespaces.result.find(
-                  (ns) => ns.title === title,
-                );
+                const match = yield* findNamespaceByTitle(title);
                 if (match) {
                   return match;
                 }
@@ -155,8 +166,7 @@ export const KVNamespaceProvider = () =>
             );
           }
           const title = yield* createTitle(id, olds?.title);
-          const namespaces = yield* listNamespaces({ accountId });
-          const match = namespaces.result.find((ns) => ns.title === title);
+          const match = yield* findNamespaceByTitle(title);
           if (match) {
             return {
               title: match.title,

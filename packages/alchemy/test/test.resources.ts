@@ -366,7 +366,17 @@ export class TestResourceHooks extends Context.Service<
     create?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
     update?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
     delete?: (id: string) => Effect.Effect<void, any>;
-    read?: (id: string) => Effect.Effect<void, any>;
+    /**
+     * If provided, the read hook is invoked for the resource's `read` lifecycle
+     * operation. Return:
+     *   - attrs (any object) to simulate an existing cloud resource that is
+     *     adoptable
+     *   - `undefined` to simulate a resource that does not exist
+     *   - fail with `OwnedBySomeoneElse` to reject adoption
+     */
+    read?: (
+      id: string,
+    ) => Effect.Effect<TestResource["Attributes"] | undefined, any>;
   }
 >()("TestResourceHooks") {}
 

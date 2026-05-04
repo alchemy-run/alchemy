@@ -1,6 +1,8 @@
 import * as kinesis from "@distilled.cloud/aws/kinesis";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -149,31 +151,45 @@ const readConsumer = Effect.fn(function* ({
   });
 });
 
-const resolveOwnedConsumer = Effect.fn(function* (
-  id: string,
+// Kinesis tells us "in use" via ResourceInUseException, but the consumer
+// registry is eventually consistent — describeStreamConsumer can briefly
+// return ResourceNotFoundException for a consumer the registry just
+// confirmed exists. Poll up to ~10s before giving up.
+class ConsumerRegistryNotConsistent extends Data.TaggedError(
+  "ConsumerRegistryNotConsistent",
+)<{ consumerName: string }> {}
+
+const adoptExistingConsumer = Effect.fn(function* (
   streamArn: string,
   consumerName: string,
 ) {
-  const state = yield* readConsumer({
-    streamArn,
-    consumerName,
-  });
+  return yield* Effect.gen(function* () {
+    const state = yield* readConsumer({
+      streamArn,
+      consumerName,
+    });
 
-  if (!state) {
-    return yield* Effect.fail(
-      new Error(`consumer ${consumerName} exists but could not be read`),
-    );
-  }
+    if (!state) {
+      return yield* new ConsumerRegistryNotConsistent({ consumerName });
+    }
 
-  if (!(yield* hasAlchemyTags(id, state.tags as Tags))) {
-    return yield* Effect.fail(
-      new Error(
-        `consumer ${consumerName} already exists but is not owned by this stack`,
+    return state;
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "ConsumerRegistryNotConsistent",
+      schedule: Schedule.exponential(250).pipe(
+        Schedule.both(Schedule.recurs(8)),
       ),
-    );
-  }
-
-  return state;
+    }),
+    Effect.catchTag("ConsumerRegistryNotConsistent", () =>
+      Effect.fail(
+        new Error(
+          `consumer ${consumerName} exists but could not be read after ` +
+            `~10s of registry-consistency retries`,
+        ),
+      ),
+    ),
+  );
 });
 
 const waitForConsumerStatus = (
@@ -222,11 +238,15 @@ export const StreamConsumerProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const consumerName =
         output?.consumerName ?? (yield* createConsumerName(id, olds ?? {}));
-      return yield* readConsumer({
+      const state = yield* readConsumer({
         streamArn: olds.streamArn as string | undefined,
         consumerName,
         consumerArn: output?.consumerArn,
       });
+      if (!state) return undefined;
+      return (yield* hasAlchemyTags(id, state.tags as Tags))
+        ? state
+        : Unowned(state);
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
       if (!isResolved(news)) return;
@@ -249,6 +269,9 @@ export const StreamConsumerProvider = () =>
       const internalTags = yield* createInternalTags(id);
       const allTags = { ...internalTags, ...news.tags };
 
+      // Engine has cleared us via `read` (foreign-tagged consumers are
+      // surfaced as `Unowned`). On a race between read and create, treat
+      // `ResourceInUseException` as adoption.
       const consumerArn = yield* kinesis
         .registerStreamConsumer({
           StreamARN: streamArn,
@@ -258,7 +281,7 @@ export const StreamConsumerProvider = () =>
         .pipe(
           Effect.map((response) => response.Consumer.ConsumerARN),
           Effect.catchTag("ResourceInUseException", () =>
-            resolveOwnedConsumer(id, streamArn, consumerName).pipe(
+            adoptExistingConsumer(streamArn, consumerName).pipe(
               Effect.map((state) => state.consumerArn),
             ),
           ),

@@ -380,12 +380,12 @@ return StripeProduct.Provider.of({
  });
 ```
 
-## Implement `read` (optional, for state recovery)
+## Implement `read` (optional, for recovery and adoption)
 
-If state is lost between `create` succeeding and Alchemy
-persisting the result, the next deploy uses `read` to look up the
-live resource and re-sync. Returning `undefined` tells Alchemy the
-resource doesn't exist and should be re-created.
+The engine calls `read` whenever a resource has no prior state, both
+to recover from interrupted creates *and* to import pre-existing
+cloud resources into a fresh state store. Returning `undefined` tells
+Alchemy the resource doesn't exist and should be created.
 
 ```diff lang="typescript"
 return StripeProduct.Provider.of({
@@ -406,6 +406,37 @@ return StripeProduct.Provider.of({
    delete: Effect.fnUntraced(function* ({ output }) { /* ... */ }),
  });
 ```
+
+This Stripe example only finds resources by an ID we previously
+saved (`output.productId`) — without a prior output it can't
+locate anything, so it returns `undefined`. That's a fine default.
+
+**Ownership-aware reads.** If your provider can detect an existing
+resource from props alone (e.g. by tag-aware lookup or deterministic
+naming), brand the returned attributes with `Unowned` when they
+belong to someone else:
+
+```typescript
+import { Unowned } from "alchemy/AdoptPolicy";
+
+read: Effect.fnUntraced(function* ({ id, olds }) {
+  const live = yield* lookupByName(olds.name);
+  if (!live) return undefined;
+  const attrs = { productId: live.id, created: live.created };
+  // Compare tags/owner against this stack/stage/id.
+  return ownsResource(id, live.tags) ? attrs : Unowned(attrs);
+}),
+```
+
+The engine uses this to decide:
+
+- plain attrs → silently import the resource as our own
+- `Unowned(attrs)` → fail with `OwnedBySomeoneElse` unless the user
+  passed `--adopt` (or wrapped the effect in `adopt(true)`), in
+  which case it's a takeover.
+
+See [Resource Lifecycle › Adoption](/concepts/resource-lifecycle#adoption)
+for the full flow.
 
 ## Implement an `AuthProvider`
 

@@ -1,5 +1,6 @@
 import * as eks from "@distilled.cloud/aws/eks";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
@@ -110,11 +111,13 @@ export const AccessEntryProvider = () =>
         return { action: "replace" } as const;
       }
     }),
-    read: Effect.fn(function* ({ olds, output }) {
-      return yield* readAccessEntry({
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const state = yield* readAccessEntry({
         clusterName: (output?.clusterName ?? olds.clusterName) as string,
         principalArn: (output?.principalArn ?? olds.principalArn) as string,
       });
+      if (!state) return undefined;
+      return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
     }),
     create: Effect.fn(function* ({ id, news, session }) {
       const tags = {
@@ -122,6 +125,9 @@ export const AccessEntryProvider = () =>
         ...news.tags,
       };
 
+      // Engine has cleared us via `read` (foreign-tagged entries are
+      // surfaced as `Unowned`). On a race between read and create, treat
+      // `ResourceInUseException` as adoption.
       yield* eks
         .createAccessEntry({
           clusterName: news.clusterName as string,
@@ -131,24 +137,7 @@ export const AccessEntryProvider = () =>
           type: news.type,
           tags,
         })
-        .pipe(
-          Effect.catchTag("ResourceInUseException", () =>
-            readAccessEntry({
-              clusterName: news.clusterName as string,
-              principalArn: news.principalArn as string,
-            }).pipe(
-              Effect.flatMap((existing) =>
-                existing && hasAlchemyTags(id, existing.tags)
-                  ? Effect.succeed(existing)
-                  : Effect.fail(
-                      new Error(
-                        `AccessEntry '${news.principalArn as string}' already exists and is not managed by alchemy`,
-                      ),
-                    ),
-              ),
-            ),
-          ),
-        );
+        .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
       for (const policy of normalizeAccessPolicies(news.accessPolicies)) {
         yield* eks.associateAccessPolicy({

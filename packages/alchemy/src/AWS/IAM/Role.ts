@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -9,6 +10,7 @@ import {
   createInternalTags,
   createTagsList,
   diffTags,
+  hasAlchemyTags,
   hasTags,
 } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
@@ -250,13 +252,12 @@ export const RoleProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        read: Effect.fn(function* ({ output }) {
-          if (!output) {
-            return undefined;
-          }
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const roleName =
+            output?.roleName ?? (yield* toRoleName(id, olds ?? {}));
           const role = yield* iam
             .getRole({
-              RoleName: output.roleName,
+              RoleName: roleName,
             })
             .pipe(
               Effect.catchTag("NoSuchEntityException", () =>
@@ -268,16 +269,19 @@ export const RoleProvider = () =>
           }
 
           const [managedPolicyArns, inlinePolicies, tags] = yield* Effect.all([
-            readManagedPolicies(output.roleName),
-            readInlinePolicies(output.roleName),
-            readTags(output.roleName),
+            readManagedPolicies(roleName),
+            readInlinePolicies(roleName),
+            readTags(roleName),
           ]);
 
           const assumeRolePolicyDocument =
             parsePolicyDocument(role.Role.AssumeRolePolicyDocument) ??
-            output.assumeRolePolicyDocument;
+            output?.assumeRolePolicyDocument;
+          if (!assumeRolePolicyDocument) {
+            return undefined;
+          }
 
-          return {
+          const attrs = {
             roleArn: role.Role.Arn as RoleArn,
             roleName: role.Role.RoleName,
             roleId: role.Role.RoleId,
@@ -291,6 +295,7 @@ export const RoleProvider = () =>
               role.Role.PermissionsBoundary?.PermissionsBoundaryArn,
             tags,
           };
+          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const roleName = yield* toRoleName(id, news);
@@ -299,6 +304,9 @@ export const RoleProvider = () =>
             ...news.tags,
           };
 
+          // Engine has cleared us via `read` (foreign-tagged roles are
+          // surfaced as `Unowned`). On a race between read and create,
+          // adopt the existing role.
           const created = yield* iam
             .createRole({
               Path: news.path,
@@ -313,15 +321,7 @@ export const RoleProvider = () =>
             })
             .pipe(
               Effect.catchTag("EntityAlreadyExistsException", () =>
-                iam.getRole({ RoleName: roleName }).pipe(
-                  Effect.filterOrFail(
-                    (existing) => hasTags(tags, existing.Role?.Tags),
-                    () =>
-                      new Error(
-                        `Role '${roleName}' already exists and is not managed by alchemy`,
-                      ),
-                  ),
-                ),
+                iam.getRole({ RoleName: roleName }),
               ),
             );
 
@@ -401,10 +401,11 @@ export const RoleProvider = () =>
             news: news.inlinePolicies ?? {},
           });
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
+          // Use the cloud's actual tags as the "previous state" so that an
+          // adoption-takeover (where olds.tags == news.tags but the cloud
+          // tags identify a different logical id) correctly rewrites the
+          // ownership tags on the role.
+          const oldTags = output.tags ?? {};
           const newTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,

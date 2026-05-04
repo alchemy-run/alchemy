@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { Bucket } from "@/AWS/S3";
+import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as S3 from "@distilled.cloud/aws/s3";
 import { expect } from "@effect/vitest";
@@ -318,6 +319,57 @@ test.provider("create and remove bucket policy from bindings", (stack) =>
 
     yield* assertBucketDeleted(bucket.bucketName);
   }),
+);
+
+// Engine-level adoption: S3 has no per-stack ownership signal (we don't
+// stamp alchemy tags on buckets — the canonical existence check is
+// `headBucket`, which only succeeds when the bucket is owned by *this AWS
+// account*). So a name match means we own it at the account level — silent
+// adoption is correct for the cold-start case.
+test.provider(
+  "owned bucket (account-level) is silently adopted without --adopt",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const bucketName = `alchemy-test-s3-adopt-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Bucket("AdoptableBucket", {
+            bucketName,
+            forceDestroy: true,
+          });
+        }),
+      );
+      expect(initial.bucketName).toEqual(bucketName);
+
+      // Wipe state — bucket stays in S3.
+      yield* Effect.gen(function* () {
+        const state = yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: "test",
+          fqn: "AdoptableBucket",
+        });
+      }).pipe(Effect.provide(stack.state));
+
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Bucket("AdoptableBucket", {
+            bucketName,
+            forceDestroy: true,
+          });
+        }),
+      );
+
+      expect(adopted.bucketArn).toEqual(initial.bucketArn);
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucketName);
+    }),
 );
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}

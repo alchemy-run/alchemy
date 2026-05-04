@@ -93,19 +93,57 @@ alchemy deploy --adopt
 
 ### Adoption
 
-`--adopt` provides an `AdoptPolicy = true` to the entire deploy.
-Resource providers that opt in to adoption (e.g. `Cloudflare.Worker`
-custom domains, `Cloudflare.SecretsStore`, `Cloudflare.SecretsStore.Secret`)
-will reconcile against pre-existing cloud resources instead of failing
-with "already exists" errors.
+When a resource has no prior state, the engine calls the provider's
+`read` to check whether the resource already exists in the cloud. The
+return value drives one of three paths:
 
-This is the right escape hatch when you've **lost or wiped your state
-store** but the underlying cloud infrastructure is still in place. Run
-`alchemy deploy --adopt` once to re-import everything; subsequent
-deploys can drop the flag.
+| `read` returns      | Without `--adopt`         | With `--adopt`        |
+| ------------------- | ------------------------- | --------------------- |
+| `undefined`         | create                    | create                |
+| owned (plain attrs) | silent adopt              | silent adopt          |
+| `Unowned(attrs)`    | fail `OwnedBySomeoneElse` | take over (silently)  |
 
-Without `--adopt`, conflicts surface loudly so an unintentional
-collision with a production resource is never silently taken over.
+"Owned" means the provider can prove the resource was created by
+*this* stack/stage/logical-id — typically by inspecting tags or a
+naming convention. Recovering a wiped state store for resources you
+already own is the **default** behavior: no flag required.
+
+`--adopt` only matters when the provider reports a resource exists
+but isn't ours. That's the deliberately load-bearing case: by
+default Alchemy refuses to silently overwrite tags/config of a
+resource it can't prove ownership of. `--adopt` says "yes, take it
+over."
+
+```sh
+# Re-import existing alchemy-tagged resources into a fresh state
+# store — no flag needed for these. Ones with foreign ownership tags
+# will surface as `OwnedBySomeoneElse` errors.
+alchemy deploy
+
+# Force takeover of any conflicting resource regardless of tags.
+alchemy deploy --adopt
+```
+
+You can also enable adoption programmatically by piping the
+`adopt` combinator onto a deploy effect from `alchemy/AdoptPolicy`:
+
+```typescript
+import { adopt } from "alchemy/AdoptPolicy";
+
+yield* deploy(
+  Effect.gen(function* () {
+    yield* Cloudflare.Worker("API", { /* ... */ });
+  }),
+).pipe(adopt(true));
+```
+
+`AdoptPolicy` is consulted at plan time, so the combinator must
+wrap the *deploy* (or test runner's `stack.deploy(...)`) — not the
+inner resource-declaration effect.
+
+Resources without ownership semantics (e.g. APIs that always
+return a singleton by name, with no tag concept) silently adopt
+unconditionally — `--adopt` is a no-op for them.
 
 ## `plan`
 

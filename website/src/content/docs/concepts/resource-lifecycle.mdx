@@ -127,7 +127,35 @@ handles this by requiring `create` and `delete` to be safe to retry:
   existing resource instead of creating a duplicate.
 - **Delete**: a missing resource is treated as already deleted.
 - **Read**: providers can implement `read` so alchemy can recover
-  state from the live cloud when persistence fails partway.
+  state from the live cloud when persistence fails partway, and to
+  detect adoptable resources on a fresh state store.
+
+## Adoption
+
+When planning a resource that has no prior state, the engine calls
+`provider.read` (if the provider implements it). This serves two
+overlapping purposes:
+
+- **State recovery** — the resource was created on a previous
+  deploy, but state was lost between the cloud op succeeding and the
+  store persisting. `read` finds the live resource and the engine
+  rebuilds `created` state from its attributes.
+- **Adoption** — you're deploying against existing infrastructure
+  you didn't manage with Alchemy yet (or you wiped state
+  intentionally). `read` recognizes the resource and the engine
+  imports it into the new state.
+
+Providers signal "this is mine" vs. "this exists but isn't mine" via
+the `Unowned(attrs)` brand. The engine routes:
+
+| `read` returns      | `--adopt` off             | `--adopt` on          |
+| ------------------- | ------------------------- | --------------------- |
+| `undefined`         | create                    | create                |
+| owned (plain attrs) | silent adopt              | silent adopt          |
+| `Unowned(attrs)`    | fail `OwnedBySomeoneElse` | take over (silently)  |
+
+See [Provider › read](/concepts/provider#read) for the implementation
+contract and [CLI › Adoption](/guides/cli#adoption) for the CLI flag.
 
 ## Errors
 

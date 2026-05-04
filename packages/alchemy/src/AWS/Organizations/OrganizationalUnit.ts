@@ -1,13 +1,14 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
   createName,
-  ensureOwnedByAlchemy,
   readResourceTags,
   retryOrganizations,
   updateResourceTags,
@@ -81,35 +82,30 @@ export const OrganizationalUnitProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          if (output?.ouId) {
-            return yield* readOUById(output.ouId);
-          }
-
-          const parentId = olds?.parentId;
-          if (!parentId) {
-            return undefined;
-          }
-
-          return yield* readOUByParentAndName({
-            parentId,
-            name: yield* toName(id, olds ?? {}),
-          });
+          const state = output?.ouId
+            ? yield* readOUById(output.ouId)
+            : olds?.parentId
+              ? yield* readOUByParentAndName({
+                  parentId: olds.parentId,
+                  name: yield* toName(id, olds ?? {}),
+                })
+              : undefined;
+          if (!state) return undefined;
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const name = yield* toName(id, news);
+          // Engine has cleared us via `read` (foreign-tagged OUs are surfaced
+          // as `Unowned`). On a race between read and create, treat the
+          // duplicate-name exception as adoption.
           const existing = yield* readOUByParentAndName({
             parentId: news.parentId,
             name,
           });
 
-          if (existing) {
-            yield* ensureOwnedByAlchemy(
-              id,
-              existing.ouId,
-              existing.tags,
-              "organizational unit",
-            );
-          } else {
+          if (!existing) {
             yield* retryOrganizations(
               organizations
                 .createOrganizationalUnit({

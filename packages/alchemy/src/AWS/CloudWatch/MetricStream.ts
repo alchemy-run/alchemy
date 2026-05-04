@@ -1,16 +1,17 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import {
   createName,
-  ensureOwnedByAlchemy,
   readResourceTags,
   retryConcurrent,
   updateResourceTags,
@@ -162,20 +163,17 @@ export const MetricStreamProvider = () =>
           const name =
             output?.metricStreamName ??
             (yield* createMetricStreamName(id, olds ?? {}));
-          return yield* readMetricStream(name);
+          const state = yield* readMetricStream(name);
+          if (!state) return undefined;
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const name = yield* createMetricStreamName(id, news);
+          // Engine has cleared us via `read` (foreign-tagged metric streams
+          // are surfaced as `Unowned`). `putMetricStream` is idempotent.
           const existing = yield* readMetricStream(name);
-
-          if (existing) {
-            yield* ensureOwnedByAlchemy(
-              id,
-              name,
-              existing.tags,
-              "metric stream",
-            );
-          }
 
           yield* retryConcurrent(
             cloudwatch.putMetricStream({

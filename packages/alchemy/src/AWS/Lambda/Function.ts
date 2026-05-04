@@ -15,6 +15,7 @@ import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
@@ -26,7 +27,12 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
-import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  hasAlchemyTags,
+  hasTags,
+} from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";
@@ -533,6 +539,9 @@ export const FunctionProvider = () =>
       }) {
         yield* Effect.logDebug(`creating role ${id}`);
         const tags = yield* createInternalTags(id);
+        // Engine has cleared us via `read` — foreign-tagged functions are
+        // surfaced as `Unowned` and require `--adopt`. On a race between
+        // read and create, treat `EntityAlreadyExistsException` as adoption.
         const role = yield* iam
           .createRole({
             RoleName: roleName,
@@ -552,19 +561,9 @@ export const FunctionProvider = () =>
           })
           .pipe(
             Effect.catchTag("EntityAlreadyExistsException", () =>
-              iam
-                .getRole({
-                  RoleName: roleName,
-                })
-                .pipe(
-                  Effect.filterOrFail(
-                    (role) => hasTags(tags, role.Role?.Tags),
-                    () =>
-                      new Error(
-                        `Role ${roleName} exists but has incorrect tags`,
-                      ),
-                  ),
-                ),
+              iam.getRole({
+                RoleName: roleName,
+              }),
             ),
           );
 
@@ -1099,31 +1098,55 @@ export default await Effect.runPromise(handlerEffect)
             return { action: "update" };
           }
         }),
-        read: Effect.fnUntraced(function* ({ id, output }) {
-          if (output) {
-            yield* Effect.logDebug(`reading function ${id}`);
-            // example: refresh the function URL from the API
-            return {
-              ...output,
-              functionUrl: (yield* Lambda.getFunctionUrlConfig({
-                FunctionName: yield* createFunctionName(
-                  id,
-                  output.functionName,
-                ),
-              }).pipe(
-                Effect.map((f) => f.FunctionUrl),
-                Effect.retry({
-                  // TODO(sam): did we lose this error? Is it missing for a good
-                  while: (e: any) => e._tag === "ResourceConflictException",
-                  schedule: Schedule.exponential(100),
-                }),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              )) as any,
-            };
+        read: Effect.fnUntraced(function* ({ id, olds, output }) {
+          const functionName =
+            output?.functionName ??
+            (yield* createFunctionName(id, olds?.functionName));
+          yield* Effect.logDebug(`reading function ${functionName}`);
+          const fn = yield* Lambda.getFunction({
+            FunctionName: functionName,
+          }).pipe(
+            Effect.map((r) => r.Configuration),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          if (!fn?.FunctionArn || !fn.FunctionName || !fn.Role) {
+            return undefined;
           }
-          return output;
+          const tagsResult = yield* Lambda.listTags({
+            Resource: fn.FunctionArn,
+          }).pipe(
+            Effect.map((r) => r.Tags ?? {}),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed({} as Record<string, string>),
+            ),
+          );
+          const functionUrl = yield* Lambda.getFunctionUrlConfig({
+            FunctionName: fn.FunctionName,
+          }).pipe(
+            Effect.map((f) => f.FunctionUrl),
+            Effect.retry({
+              while: (e: any) => e._tag === "ResourceConflictException",
+              schedule: Schedule.exponential(100),
+            }),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          // Reuse the persisted output where we have it (e.g. code hash) so
+          // diff doesn't see drift it can't reconstruct from the API.
+          const attrs = {
+            ...(output ?? {}),
+            functionArn: fn.FunctionArn,
+            functionName: fn.FunctionName,
+            functionUrl,
+            roleArn: fn.Role,
+            roleName: output?.roleName ?? fn.Role.split("/").pop()!,
+          } as any;
+          return (yield* hasAlchemyTags(id, tagsResult))
+            ? attrs
+            : Unowned(attrs);
         }),
 
         precreate: Effect.fnUntraced(function* ({ id, news, session }) {

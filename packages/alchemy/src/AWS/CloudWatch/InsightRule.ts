@@ -3,16 +3,17 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import {
   createName,
-  ensureOwnedByAlchemy,
   readResourceTags,
   retryConcurrent,
   updateResourceTags,
@@ -183,20 +184,17 @@ export const InsightRuleProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.ruleName ?? (yield* createRuleName(id, olds ?? {}));
-          return yield* readInsightRule(name);
+          const state = yield* readInsightRule(name);
+          if (!state) return undefined;
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const name = yield* createRuleName(id, news);
+          // Engine has cleared us via `read` (foreign-tagged insight rules
+          // are surfaced as `Unowned`). `putInsightRule` is idempotent.
           const existing = yield* readInsightRule(name);
-
-          if (existing) {
-            yield* ensureOwnedByAlchemy(
-              id,
-              name,
-              existing.tags,
-              "insight rule",
-            );
-          }
 
           yield* retryConcurrent(
             cloudwatch.putInsightRule({

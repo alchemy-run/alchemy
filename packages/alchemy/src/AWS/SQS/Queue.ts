@@ -2,10 +2,12 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
@@ -213,6 +215,29 @@ export const QueueProvider = () =>
       };
       return Queue.Provider.of({
         stables: ["queueName", "queueUrl", "queueArn"],
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const queueName =
+            output?.queueName ?? (yield* createQueueName(id, olds ?? {}));
+          const url = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
+            Effect.map((r) => r.QueueUrl),
+            Effect.catchTag("QueueDoesNotExist", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          if (!url) return undefined;
+          const queueArn =
+            `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
+          const tagsResp = yield* sqs.listQueueTags({ QueueUrl: url }).pipe(
+            Effect.map((r) => r.Tags ?? {}),
+            Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+          );
+          const attrs = {
+            queueName,
+            queueUrl: url,
+            queueArn,
+          };
+          return (yield* hasAlchemyTags(id, tagsResp)) ? attrs : Unowned(attrs);
+        }),
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           if (!isResolved(news)) return undefined;
           const oldFifo = olds.fifo ?? false;
@@ -229,10 +254,12 @@ export const QueueProvider = () =>
         }),
         create: Effect.fn(function* ({ id, news = {}, session, bindings }) {
           const queueName = yield* createQueueName(id, news);
+          const internalTags = yield* createInternalTags(id);
           const response = yield* sqs
             .createQueue({
               QueueName: queueName,
               Attributes: createAttributes(news, bindings),
+              tags: internalTags,
             })
             .pipe(
               Effect.retry({

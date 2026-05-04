@@ -1,6 +1,7 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -322,16 +323,23 @@ export const RuleProvider = () =>
           }
 
           const resolvedEventBusName = described.EventBusName ?? eventBusName;
-          return {
+          const ruleArn = toRuleArn(
+            region,
+            accountId,
+            resolvedEventBusName,
+            described.Name,
+          );
+          const { Tags } = yield* eventbridge.listTagsForResource({
+            ResourceARN: described.Arn ?? ruleArn,
+          });
+          const attrs = {
             ruleName: described.Name,
-            ruleArn: toRuleArn(
-              region,
-              accountId,
-              resolvedEventBusName,
-              described.Name,
-            ),
+            ruleArn,
             eventBusName: resolvedEventBusName,
           };
+          return (yield* hasAlchemyTags(id, Tags ?? []))
+            ? attrs
+            : Unowned(attrs);
         }),
         create: Effect.fn(function* ({ id, news = {}, session }) {
           yield* validateRuleProps(news);
@@ -345,31 +353,9 @@ export const RuleProvider = () =>
             (news.eventBusName as string | undefined) ?? "default";
           const ruleArn = toRuleArn(region, accountId, eventBusName, ruleName);
 
-          const existing = yield* eventbridge
-            .describeRule({
-              Name: ruleName,
-              EventBusName:
-                eventBusName !== "default" ? eventBusName : undefined,
-            })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-
-          if (existing) {
-            const { Tags } = yield* eventbridge.listTagsForResource({
-              ResourceARN: existing.Arn ?? ruleArn,
-            });
-
-            if (!(yield* hasAlchemyTags(id, Tags ?? []))) {
-              return yield* Effect.fail(
-                new Error(
-                  `Rule '${ruleName}' already exists on event bus '${eventBusName}' and is not managed by alchemy`,
-                ),
-              );
-            }
-          }
+          // Engine has cleared us via `read` (foreign-tagged rules are
+          // surfaced as `Unowned`). `putRule` is itself idempotent, so we
+          // skip the redundant pre-existence check here.
 
           const { RuleArn } = yield* eventbridge.putRule({
             Name: ruleName,

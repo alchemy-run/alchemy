@@ -15,10 +15,12 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import {
   createInternalTags,
   createTagsList,
   diffTags,
+  hasAlchemyTags,
   hasTags,
 } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
@@ -252,31 +254,13 @@ export const TableProvider = () =>
           }))
           .sort((a, b) => a.AttributeName.localeCompare(b.AttributeName));
 
-      const resolveTableIfOwned = (id: string, tableName: string) =>
-        // if it already exists, let's see if it contains tags indicating we (this app+stage) owns it
-        // that would indicate we are in a partial state and can safely take control
-        dynamodb.describeTable({ TableName: tableName }).pipe(
-          Effect.flatMap((r) =>
-            dynamodb
-              .listTagsOfResource({
-                // oxlint-disable-next-line no-non-null-asserted-optional-chain
-                ResourceArn: r.Table?.TableArn!,
-              })
-              .pipe(
-                Effect.map((tags) => [r, tags.Tags] as const),
-                Effect.flatMap(
-                  Effect.fn(function* ([r, tags]) {
-                    if (hasTags(yield* createInternalTags(id), tags)) {
-                      return r.Table!;
-                    }
-                    return yield* Effect.fail(
-                      new Error("Table tags do not match expected values"),
-                    );
-                  }),
-                ),
-              ),
-          ),
-        );
+      const adoptExistingTable = (tableName: string) =>
+        // The engine has cleared us via `read` (foreign-tagged tables are
+        // surfaced as `Unowned`). On a race between read and create, just
+        // describe the existing table and continue.
+        dynamodb
+          .describeTable({ TableName: tableName })
+          .pipe(Effect.map((r) => r.Table!));
 
       const createTags = Effect.fn(function* (
         id: string,
@@ -660,6 +644,13 @@ export const TableProvider = () =>
           }
         });
 
+      // For read, we want `ResourceNotFoundException` to propagate immediately
+      // (the table doesn't exist — this is the cold-start adoption "no
+      // resource" signal). Only retry on transient control-plane errors.
+      const isRetryableReadError = (error: { _tag?: string }) =>
+        error._tag === "InternalServerError" ||
+        error._tag === "LimitExceededException";
+
       const readTableState = (tableName: string) =>
         Effect.gen(function* () {
           const response = yield* dynamodb
@@ -668,7 +659,7 @@ export const TableProvider = () =>
             })
             .pipe(
               Effect.retry({
-                while: isRetryableControlPlaneError,
+                while: isRetryableReadError,
                 schedule: Schedule.exponential(250).pipe(
                   Schedule.both(Schedule.recurs(30)),
                 ),
@@ -688,7 +679,7 @@ export const TableProvider = () =>
               })
               .pipe(
                 Effect.retry({
-                  while: isRetryableControlPlaneError,
+                  while: isRetryableReadError,
                   schedule: Schedule.exponential(250).pipe(
                     Schedule.both(Schedule.recurs(30)),
                   ),
@@ -848,11 +839,21 @@ export const TableProvider = () =>
 
       return Table.Provider.of({
         stables: ["tableName", "tableId", "tableArn"],
-        read: Effect.fn(function* ({ output }) {
-          if (!output) return undefined;
-          const state = yield* readTableState(output.tableName);
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const tableName =
+            output?.tableName ??
+            (olds ? yield* createTableName(id, olds) : undefined);
+          if (!tableName) return undefined;
+          const state = yield* readTableState(tableName).pipe(
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
           if (!state) return undefined;
-          return toAttrs(state);
+          const attrs = toAttrs(state);
+          return (yield* hasAlchemyTags(id, state.tags as any))
+            ? attrs
+            : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -923,7 +924,7 @@ export const TableProvider = () =>
                 schedule: Schedule.exponential(100),
               }),
               Effect.catchTag("ResourceInUseException", () =>
-                resolveTableIfOwned(id, tableName),
+                adoptExistingTable(tableName),
               ),
             );
 
@@ -1115,7 +1116,9 @@ export const TableProvider = () =>
             });
           }
 
-          const oldTags = yield* createTags(id, olds.tags);
+          // Use the cloud's actual tags as the "previous state" so an
+          // adoption-takeover rewrites ownership tags on the table.
+          const oldTags = output.tags ?? {};
           const newTags = yield* createTags(id, news.tags);
           const { removed, upsert } = diffTags(oldTags, newTags);
 

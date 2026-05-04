@@ -1,5 +1,7 @@
+import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Stream } from "@/AWS/Kinesis";
+import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import { describe, expect } from "@effect/vitest";
@@ -545,6 +547,101 @@ describe("AWS.Kinesis.Stream", () => {
 
         yield* stack.destroy();
         yield* assertStreamDeleted(stream.streamName);
+      }),
+    { timeout: 240_000 },
+  );
+
+  test.provider(
+    "owned stream (matching alchemy tags) is silently adopted without --adopt",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const streamName = `alchemy-test-kinesis-adopt-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Stream("AdoptableStream", { streamName });
+          }),
+        );
+        expect(initial.streamName).toEqual(streamName);
+
+        // Wipe state — the stream stays in Kinesis.
+        yield* Effect.gen(function* () {
+          const state = yield* State;
+          yield* state.delete({
+            stack: stack.name,
+            stage: "test",
+            fqn: "AdoptableStream",
+          });
+        }).pipe(Effect.provide(stack.state));
+
+        const adopted = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Stream("AdoptableStream", { streamName });
+          }),
+        );
+
+        expect(adopted.streamArn).toEqual(initial.streamArn);
+
+        yield* stack.destroy();
+        yield* assertStreamDeleted(streamName);
+      }),
+    { timeout: 240_000 },
+  );
+
+  test.provider(
+    "foreign-tagged stream requires adopt(true) to take over",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const streamName = `alchemy-test-kinesis-takeover-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Stream("Original", { streamName });
+          }),
+        );
+
+        yield* Effect.gen(function* () {
+          const state = yield* State;
+          yield* state.delete({
+            stack: stack.name,
+            stage: "test",
+            fqn: "Original",
+          });
+        }).pipe(Effect.provide(stack.state));
+
+        const takenOver = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              return yield* Stream("Different", { streamName });
+            }),
+          )
+          .pipe(adopt(true));
+
+        expect(takenOver.streamName).toEqual(streamName);
+
+        const tagsResp = yield* Kinesis.listTagsForResource({
+          ResourceARN: takenOver.streamArn,
+        });
+        const tagMap = Object.fromEntries(
+          (tagsResp.Tags ?? [])
+            .filter(
+              (t): t is { Key: string; Value: string } =>
+                typeof t.Value === "string",
+            )
+            .map((t) => [t.Key, t.Value]),
+        );
+        expect(tagMap["alchemy::id"]).toEqual("Different");
+
+        yield* stack.destroy();
+        yield* assertStreamDeleted(streamName);
       }),
     { timeout: 240_000 },
   );

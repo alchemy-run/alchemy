@@ -1,5 +1,7 @@
+import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Table } from "@/AWS/DynamoDB";
+import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import { describe, expect } from "@effect/vitest";
@@ -556,6 +558,125 @@ describe("AWS.DynamoDB.Table", () => {
         yield* assertTableIsDeleted(withoutLsiAgain.tableName);
       }),
     { timeout: 240_000 },
+  );
+
+  // Engine-level adoption: a table tagged with this stack/stage/id is
+  // silently adopted on a fresh state store; a table tagged with a
+  // different logical id is rejected unless `adopt(true)` is supplied.
+  // Longer timeouts because DynamoDB table create/delete each take ~30s.
+  test.provider(
+    "owned table (matching alchemy tags) is silently adopted without --adopt",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const tableName = `alchemy-test-ddb-adopt-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+
+        // Phase 1: deploy normally; alchemy stamps internal tags.
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("AdoptableTable", {
+              tableName,
+              partitionKey: "id",
+              attributes: { id: "S" },
+            });
+          }),
+        );
+        expect(initial.tableName).toEqual(tableName);
+
+        // Phase 2: wipe local state — the table stays in DynamoDB.
+        yield* Effect.gen(function* () {
+          const state = yield* State;
+          yield* state.delete({
+            stack: stack.name,
+            stage: "test",
+            fqn: "AdoptableTable",
+          });
+        }).pipe(Effect.provide(stack.state));
+
+        // Phase 3: redeploy without `adopt(true)`. Read sees alchemy tags
+        // matching this stack/stage/id and returns plain attrs — silent
+        // adoption.
+        const adopted = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("AdoptableTable", {
+              tableName,
+              partitionKey: "id",
+              attributes: { id: "S" },
+            });
+          }),
+        );
+
+        expect(adopted.tableArn).toEqual(initial.tableArn);
+
+        yield* stack.destroy();
+        yield* assertTableIsDeleted(tableName);
+      }),
+    { timeout: 360_000 },
+  );
+
+  test.provider(
+    "foreign-tagged table requires adopt(true) to take over",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const tableName = `alchemy-test-ddb-takeover-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+
+        // Phase 1: deploy under "Original" — table tagged
+        // alchemy::id=Original.
+        const original = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("Original", {
+              tableName,
+              partitionKey: "id",
+              attributes: { id: "S" },
+            });
+          }),
+        );
+        expect(original.tableName).toEqual(tableName);
+
+        // Wipe state for "Original"; table stays in DynamoDB.
+        yield* Effect.gen(function* () {
+          const state = yield* State;
+          yield* state.delete({
+            stack: stack.name,
+            stage: "test",
+            fqn: "Original",
+          });
+        }).pipe(Effect.provide(stack.state));
+
+        // Phase 2: redeploy under "Different" with `adopt(true)`. Read
+        // returns Unowned(attrs) because the table's tags identify a
+        // different logical id; with adopt enabled the engine takes over
+        // and the update rewrites tags.
+        const takenOver = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              return yield* Table("Different", {
+                tableName,
+                partitionKey: "id",
+                attributes: { id: "S" },
+              });
+            }),
+          )
+          .pipe(adopt(true));
+
+        expect(takenOver.tableName).toEqual(tableName);
+
+        // After the update the tags should now identify this stack/stage/id.
+        // The takeover update reads tags back from the cloud after writing,
+        // so `takenOver.tags` already reflects the rewritten tag set.
+        expect(takenOver.tags?.["alchemy::id"]).toEqual("Different");
+
+        yield* stack.destroy();
+        yield* assertTableIsDeleted(tableName);
+      }),
+    { timeout: 360_000 },
   );
 
   const assertTableIsDeleted = Effect.fn(function* (tableName: string) {

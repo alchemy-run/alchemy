@@ -1,4 +1,10 @@
+import { Retry } from "@distilled.cloud/cloudflare";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
 import { Command } from "../Build/Command.ts";
 import * as Build from "../Build/index.ts";
 import * as Provider from "../Provider.ts";
@@ -99,5 +105,63 @@ export const providers = () =>
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
     Layer.provideMerge(CloudflareAuth),
     Layer.provideMerge(Access.AccessLive),
+    // Apply a blanket retry policy to every Cloudflare API call. Extends
+    // `Retry.makeDefault`'s transient detection (throttling / 5xx /
+    // network) with one Cloudflare-specific misleadingly-tagged
+    // transient case the SDK doesn't yet mark retryable — see
+    // `cloudflareRetryFactory` below. Without this, the matching brief
+    // CF infrastructure blips surface as test failures and resource
+    // leaks.
+    //
+    // Deliberately narrow: we ONLY add cases where the message
+    // unambiguously indicates a transient infrastructure failure (not
+    // a real auth/permission failure). Auto-retrying ambiguous cases
+    // like `Unauthorized: Authentication error` would silently loop on
+    // genuinely invalid tokens.
+    //
+    // TODO(distilled): once
+    // https://github.com/alchemy-run/distilled/pull/233 lands, this
+    // wrapper can collapse back to `Retry.makeDefault`.
+    Layer.provideMerge(Layer.succeed(Retry.Retry, cloudflareRetryFactory)),
     Layer.orDie,
   );
+
+const isMisleadinglyTaggedTransient = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const tag = (error as { _tag?: unknown })._tag;
+  const message = ((error as { message?: unknown }).message ?? "") as string;
+  // CF code 10001: "Method not allowed for token" is a real permission
+  // failure (NOT retryable), but the same code is also returned with
+  // message "internal error" during Cloudflare-side hiccups. The two
+  // messages are unambiguously distinct, so we can safely retry only
+  // the internal-error variant.
+  if (tag === "Forbidden" && /internal error/i.test(message)) return true;
+  return false;
+};
+
+const cloudflareRetryFactory: Retry.Factory = (lastError) => {
+  const defaults = Retry.makeDefault(lastError);
+  return {
+    while: (error) =>
+      defaults.while?.(error) === true || isMisleadinglyTaggedTransient(error),
+    schedule: pipe(
+      Schedule.exponential(Duration.millis(250), 2),
+      Schedule.modifyDelay(
+        Effect.fnUntraced(function* (duration) {
+          const error = yield* Ref.get(lastError);
+          // Throttling errors (429): honor a 500ms floor matching the
+          // distilled default.
+          const isThrottling =
+            (error as { _tag?: unknown })?._tag === "TooManyRequests";
+          if (isThrottling && Duration.toMillis(duration) < 500) {
+            return Duration.toMillis(Duration.millis(500));
+          }
+          return Duration.toMillis(duration);
+        }),
+      ),
+      Retry.capped(Duration.seconds(5)),
+      Retry.jittered,
+      Schedule.both(Schedule.recurs(8)),
+    ),
+  };
+};

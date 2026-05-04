@@ -2,6 +2,7 @@ import * as eks from "@distilled.cloud/aws/eks";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -179,11 +180,15 @@ export const AddonProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        read: Effect.fn(function* ({ olds }) {
-          return yield* readAddon({
+        read: Effect.fn(function* ({ id, olds }) {
+          const state = yield* readAddon({
             clusterName: olds.clusterName as string,
             addonName: olds.addonName,
           });
+          if (!state) return undefined;
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const tags = {
@@ -191,6 +196,9 @@ export const AddonProvider = () =>
             ...news.tags,
           };
 
+          // Engine has cleared us via `read` (foreign-tagged addons are
+          // surfaced as `Unowned`). On a race between read and create, treat
+          // `ResourceInUseException` as adoption.
           yield* eks
             .createAddon({
               clusterName: news.clusterName as string,
@@ -206,25 +214,7 @@ export const AddonProvider = () =>
               tags,
               clientRequestToken: yield* toClientRequestToken(id, "create"),
             })
-            .pipe(
-              Effect.catchTag("ResourceInUseException", () =>
-                readAddon({
-                  clusterName: news.clusterName as string,
-                  addonName: news.addonName,
-                }).pipe(
-                  Effect.flatMap((existing) =>
-                    existing && hasAlchemyTags(id, existing.tags)
-                      ? Effect.succeed(existing)
-                      : Effect.fail(
-                          new Error(
-                            `Addon '${news.clusterName as string}/${news.addonName}' already exists and is not managed by alchemy`,
-                          ),
-                        ),
-                  ),
-                  Effect.asVoid,
-                ),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
           const addon = yield* waitForAddonActive({
             clusterName: news.clusterName as string,

@@ -2,13 +2,14 @@ import * as accountManagement from "@distilled.cloud/aws/account";
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
-  ensureOwnedByAlchemy,
   readResourceTags,
   retryOrganizations,
   updateResourceTags,
@@ -83,34 +84,30 @@ export const AccountProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        read: Effect.fn(function* ({ olds, output }) {
-          if (output?.accountId) {
-            return yield* readAccountById(output.accountId);
-          }
-
-          if (!olds) {
-            return undefined;
-          }
-
-          return yield* readAccountByNameOrEmail({
-            name: olds.name,
-            email: olds.email,
-          });
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const state = output?.accountId
+            ? yield* readAccountById(output.accountId)
+            : olds
+              ? yield* readAccountByNameOrEmail({
+                  name: olds.name,
+                  email: olds.email,
+                })
+              : undefined;
+          if (!state) return undefined;
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
+          // Engine has cleared us via `read` (foreign-tagged accounts are
+          // surfaced as `Unowned`). On a race between read and create,
+          // re-fetch the existing account by name/email.
           const existing = yield* readAccountByNameOrEmail({
             name: news.name,
             email: news.email,
           });
 
-          if (existing) {
-            yield* ensureOwnedByAlchemy(
-              id,
-              existing.accountId,
-              existing.tags,
-              "account",
-            );
-          } else {
+          if (!existing) {
             const createResponse = yield* retryOrganizations(
               organizations.createAccount({
                 Email: news.email,

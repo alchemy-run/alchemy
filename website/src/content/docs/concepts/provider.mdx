@@ -144,17 +144,69 @@ default path handle it.
 
 ### `read`
 
-Optional. Called during recovery — if state was lost between create
-and persist, alchemy uses `read` to look up the live resource and
-sync state.
+Optional. The engine consults `read` whenever a resource has no prior
+state — both for **state recovery** (state lost between create and
+persist) and for **adoption** (a fresh state store deploying against
+existing cloud infrastructure). It is the single source of truth for
+"does this resource exist, and is it ours?".
 
 ```typescript
-read: ({ id, output }) =>
-  Effect.promise(() => stripe.products.retrieve(output.productId));
+read: Effect.fnUntraced(function* ({ id, olds, output }) {
+  const stripe = yield* StripeClient;
+  if (!output?.productId) return undefined;
+  const product = yield* Effect.tryPromise(() =>
+    stripe.products.retrieve(output.productId),
+  ).pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+  if (!product) return undefined;
+  return { productId: product.id, name: product.name };
+}),
 ```
 
-Returning `undefined` tells alchemy the resource doesn't actually
-exist and should be re-created.
+`read` returns one of three values:
+
+- **`undefined`** — the resource doesn't exist. The engine will
+  drive a normal `create`.
+- **plain attributes** — the resource exists and we own it.
+  The engine silently adopts: it persists the attributes as the
+  initial `created` state and lets ordinary `diff` decide whether
+  the next deploy is a noop or update.
+- **`Unowned(attributes)`** — the resource exists but we *don't*
+  own it. By default the engine fails with `OwnedBySomeoneElse`
+  so you don't accidentally clobber a production resource.
+  Re-running with `--adopt` (or scoping the effect with
+  `adopt(true)`) unlocks a takeover.
+
+`Unowned` is a brand from `alchemy/AdoptPolicy` — there's no wrapper
+to unwrap, just a hidden symbol on the attributes object:
+
+```typescript
+import { Unowned } from "alchemy/AdoptPolicy";
+
+read: Effect.fnUntraced(function* ({ id, olds }) {
+  const live = yield* lookup(olds.name);
+  if (!live) return undefined;
+  const attrs = { productId: live.id, name: live.name };
+  return ownsResource(id, live.tags) ? attrs : Unowned(attrs);
+}),
+```
+
+**Inputs.** `read` may be called for an existence/adoption probe with
+`output: undefined` (no prior state). Resources whose live lookup
+requires a previously-persisted ID (e.g. `output.productId`) should
+return `undefined` in that case — they have no way to find the
+resource without it.
+
+**Ownership detection.** Resources with no notion of ownership (e.g.
+"the cloud API just gives us a single global object by name") should
+always return plain attributes. The engine treats them as owned and
+silent adoption is the default, so `--adopt` is unnecessary.
+Resources with tag-based or naming-based ownership (most cloud
+resources) should brand foreign-owned attributes with `Unowned`.
+
+> **Lifecycle methods don't gate on ownership.** Once `read` clears a
+> resource for write, `create`/`update` can assume it's safe to
+> proceed. Don't repeat the ownership check inside `create` — that
+> just hides the policy decision from the engine.
 
 ### `precreate`
 

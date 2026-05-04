@@ -1,10 +1,9 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
-import { AdoptPolicy } from "../../AdoptPolicy.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
@@ -356,9 +355,6 @@ export const ContainerProvider = () =>
     Effect.gen(function* () {
       const stack = yield* Stack;
       const { accountId } = yield* CloudflareEnvironment;
-      const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
-        Effect.map(Option.getOrElse(() => false)),
-      );
       const { dotAlchemy } = yield* AlchemyContext;
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -781,9 +777,10 @@ await Effect.runPromise(serverEffect).catch((err) => {
           return String(error);
         };
 
-        const existingByName = adoptPolicy
-          ? yield* findApplicationByName(name)
-          : undefined;
+        // Engine has cleared us via `read` (foreign-named applications are
+        // surfaced as `Unowned`). Re-fetch the existing application to fold
+        // it into the upsert path.
+        const existingByName = yield* findApplicationByName(name);
 
         if (existingByName) {
           yield* Effect.logInfo(
@@ -1049,7 +1046,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
         }) {
           const name = yield* createApplicationName(id, news.name);
           yield* Effect.logInfo(
-            `Cloudflare Container create: starting ${name}${adoptPolicy ? " with adopt" : ""}`,
+            `Cloudflare Container create: starting ${name}`,
           );
           const durableObjects = yield* getDurableObjects(bindings);
           const { files, imageRef, imageHash } = yield* computeImageHash(
@@ -1058,11 +1055,10 @@ await Effect.runPromise(serverEffect).catch((err) => {
           );
           const configuration = desiredConfiguration(news, imageRef);
 
-          if (
-            output &&
-            !adoptPolicy &&
-            !deepEqual(output.durableObjects, durableObjects)
-          ) {
+          // Engine has cleared us via `read` — adoption decisions are
+          // centralized. The DO-binding branch below handles the precreate
+          // → real-create transition for the durable object circular case.
+          if (output && !deepEqual(output.durableObjects, durableObjects)) {
             if (durableObjects) {
               const existing = yield* findApplicationByNamespace(
                 durableObjects.namespaceId,
@@ -1190,11 +1186,12 @@ await Effect.runPromise(serverEffect).catch((err) => {
               };
             });
 
+          let attrs: ContainerApplication["Attributes"] | undefined;
           if (output?.applicationId) {
             yield* Effect.logInfo(
               `Cloudflare Container read: checking ${output.applicationName}`,
             );
-            return yield* getContainerApplication({
+            attrs = yield* getContainerApplication({
               accountId: output.accountId,
               applicationId: output.applicationId,
             }).pipe(
@@ -1206,10 +1203,18 @@ await Effect.runPromise(serverEffect).catch((err) => {
                 readByName(output.applicationName),
               ),
             );
+            // If we matched by id from prior state, treat as owned.
+            return attrs;
           }
 
           const name = yield* createApplicationName(id, olds?.name);
-          return yield* readByName(name);
+          attrs = yield* readByName(name);
+          if (!attrs) return undefined;
+          // Cloudflare container applications carry no ownership signal that
+          // we can read back from the API, so a name match is not proof of
+          // ownership. Brand it `Unowned` so the engine surfaces
+          // `OwnedBySomeoneElse` unless the caller opted in via `--adopt`.
+          return Unowned(attrs);
         }),
         tail: ({ output }) =>
           telemetry.tailStream({

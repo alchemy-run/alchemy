@@ -1,8 +1,7 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import { AdoptPolicy } from "../../AdoptPolicy.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -103,6 +102,10 @@ export interface CapacityProvider extends Resource<
  * ```
  *
  * @section Adopting Existing Capacity Providers
+ * Foreign-tagged capacity providers (i.e. providers that exist in AWS but were
+ * not created by this stack/stage/logical-id) are surfaced as `Unowned` by
+ * `read`, and the engine fails with `OwnedBySomeoneElse` unless adoption is
+ * explicitly opted in via `--adopt` or {@link adopt}.
  * @example Adopt an existing provider
  * ```typescript
  * import { adopt } from "alchemy/AdoptPolicy";
@@ -121,10 +124,6 @@ export const CapacityProviderProvider = () =>
   Provider.effect(
     CapacityProvider,
     Effect.gen(function* () {
-      const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
-        Effect.map(Option.getOrElse(() => false)),
-      );
-
       const toEcsTags = (tags: Record<string, string>): ecs.Tag[] =>
         Object.entries(tags).map(([key, value]) => ({ key, value }));
 
@@ -181,7 +180,9 @@ export const CapacityProviderProvider = () =>
           if (!found?.name || !found.capacityProviderArn) {
             return undefined;
           }
-          return {
+          const internalTags = yield* createInternalTags(id);
+          const existingTags = fromEcsTags(found.tags);
+          const attrs = {
             capacityProviderArn:
               found.capacityProviderArn as CapacityProviderArn,
             name: found.name,
@@ -193,8 +194,9 @@ export const CapacityProviderProvider = () =>
             managedTerminationProtection:
               found.autoScalingGroupProvider?.managedTerminationProtection,
             managedDraining: found.autoScalingGroupProvider?.managedDraining,
-            tags: fromEcsTags(found.tags),
+            tags: existingTags,
           };
+          return hasTags(internalTags, existingTags) ? attrs : Unowned(attrs);
         }),
 
         create: Effect.fn(function* ({ id, news, session }) {
@@ -204,29 +206,19 @@ export const CapacityProviderProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const tags = { ...internalTags, ...news.tags };
 
+          // The engine has already cleared us via `read` (foreign capacity
+          // providers are surfaced as `Unowned` and require `--adopt`). On a
+          // race between read and create, fall back to tagging-the-existing
+          // and updating its config below.
           const existing = yield* describe(name);
           if (existing?.name && existing.capacityProviderArn) {
-            // The provider already exists. Only adopt when AdoptPolicy is true.
-            if (!adoptPolicy) {
-              return yield* Effect.die(
-                new Error(
-                  `ECS capacity provider "${name}" already exists. ` +
-                    `Provide adopt() on the resource or stack to adopt it.`,
-                ),
-              );
-            }
             yield* session.note(
               `Adopting existing ECS capacity provider ${name}`,
             );
-
-            // If we own it (tags match), leave tags as-is. Otherwise apply
-            // our internal tags so future operations can identify ownership.
-            if (!hasTags(internalTags, fromEcsTags(existing.tags))) {
-              yield* ecs.tagResource({
-                resourceArn: existing.capacityProviderArn,
-                tags: toEcsTags(tags),
-              });
-            }
+            yield* ecs.tagResource({
+              resourceArn: existing.capacityProviderArn,
+              tags: toEcsTags(tags),
+            });
 
             return {
               capacityProviderArn:

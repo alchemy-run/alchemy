@@ -1,14 +1,15 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import type { PolicyDocument } from "../IAM/Policy.ts";
 import {
   collectPages,
   createName,
-  ensureOwnedByAlchemy,
   readResourceTags,
   retryOrganizations,
   updateResourceTags,
@@ -82,34 +83,30 @@ export const PolicyProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          if (output?.policyId) {
-            return yield* readPolicyById(output.policyId);
-          }
-
-          if (!olds) {
-            return undefined;
-          }
-
-          return yield* readPolicyByName({
-            type: olds.type,
-            name: yield* toName(id, olds),
-          });
+          const state = output?.policyId
+            ? yield* readPolicyById(output.policyId)
+            : olds
+              ? yield* readPolicyByName({
+                  type: olds.type,
+                  name: yield* toName(id, olds),
+                })
+              : undefined;
+          if (!state) return undefined;
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const name = yield* toName(id, news);
+          // Engine has cleared us via `read` (foreign-tagged policies are
+          // surfaced as `Unowned`). On a race between read and create,
+          // `DuplicatePolicyException` is treated as adoption.
           const existing = yield* readPolicyByName({
             type: news.type,
             name,
           });
 
-          if (existing) {
-            yield* ensureOwnedByAlchemy(
-              id,
-              existing.policyId,
-              existing.tags,
-              "policy",
-            );
-          } else {
+          if (!existing) {
             yield* retryOrganizations(
               organizations
                 .createPolicy({

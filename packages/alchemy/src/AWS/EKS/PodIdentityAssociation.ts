@@ -1,5 +1,6 @@
 import * as eks from "@distilled.cloud/aws/eks";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -133,6 +134,9 @@ export const PodIdentityAssociationProvider = () =>
             ...news.tags,
           };
 
+          // Engine has cleared us via `read` (foreign-tagged associations are
+          // surfaced as `Unowned`). On a race between read and create, treat
+          // `ResourceInUseException` as adoption.
           yield* eks
             .createPodIdentityAssociation({
               clusterName: news.clusterName as string,
@@ -145,27 +149,7 @@ export const PodIdentityAssociationProvider = () =>
               tags,
               clientRequestToken: yield* toClientRequestToken(id, "create"),
             })
-            .pipe(
-              Effect.catchTag("ResourceInUseException", () =>
-                findAssociation({
-                  id,
-                  clusterName: news.clusterName as string,
-                  namespace: news.namespace,
-                  serviceAccount: news.serviceAccount,
-                }).pipe(
-                  Effect.flatMap((existing) =>
-                    existing
-                      ? Effect.succeed(existing)
-                      : Effect.fail(
-                          new Error(
-                            `PodIdentityAssociation '${news.namespace}/${news.serviceAccount}' already exists and is not managed by alchemy`,
-                          ),
-                        ),
-                  ),
-                  Effect.asVoid,
-                ),
-              ),
-            );
+            .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
 
           const state = yield* findAssociation({
             id,
@@ -326,6 +310,21 @@ const findAssociation = Effect.fn(function* ({
   serviceAccount: string;
 }) {
   let nextToken: string | undefined;
+  type Association = {
+    associationArn: string;
+    associationId: string;
+    clusterName: string;
+    namespace: string;
+    serviceAccount: string;
+    roleArn: string;
+    disableSessionTags: boolean;
+    targetRoleArn: string | undefined;
+    externalId: string | undefined;
+    ownerArn: string | undefined;
+    policy: string | undefined;
+    tags: Record<string, string>;
+  };
+  let firstMatch: Association | undefined;
 
   while (true) {
     const response = yield* eks.listPodIdentityAssociations({
@@ -345,13 +344,16 @@ const findAssociation = Effect.fn(function* ({
         associationId: summary.associationId,
       });
 
-      if (association && (yield* hasAlchemyTags(id, association.tags))) {
-        return association;
+      if (!association) continue;
+
+      if (yield* hasAlchemyTags(id, association.tags)) {
+        return association as Association;
       }
+      firstMatch ??= association as Association;
     }
 
     if (!response.nextToken) {
-      return undefined;
+      return firstMatch ? Unowned(firstMatch) : undefined;
     }
 
     nextToken = response.nextToken;

@@ -22,6 +22,7 @@ import { pathToFileURL } from "node:url";
 import type * as rolldown from "rolldown";
 import Sonda from "sonda/rolldown";
 import type * as vite from "vite";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
@@ -2147,13 +2148,11 @@ ${[
           );
 
           if (existingSettings) {
-            if (!hasAlchemyWorkerTags(id, existingSettings.tags ?? [])) {
-              return yield* Effect.die(
-                `Worker "${name}" already exists but is not owned by this stack/stage/resource`,
-              );
-            }
+            // Engine has already cleared this resource for write via
+            // `read` + AdoptPolicy. Either we own it (matching tags) or
+            // the user opted in to a takeover (`--adopt` / `adopt(true)`).
             yield* Effect.logInfo(
-              `Cloudflare Worker precreate: adopting existing ${name} owned by this stack/stage/resource`,
+              `Cloudflare Worker precreate: reusing existing ${name}`,
             );
           } else {
             yield* session.note("Pre-creating worker...");
@@ -2260,7 +2259,7 @@ ${[
             yield* Effect.logInfo(
               `Cloudflare Worker read: found ${workerName}`,
             );
-            return {
+            const attrs = {
               accountId,
               workerId: workerName,
               workerName,
@@ -2278,6 +2277,16 @@ ${[
                   : [],
               ),
             } satisfies Worker["Attributes"];
+
+            // Centralized ownership decision: the engine routes `read`'s
+            // return value based on `AdoptPolicy`. We hand it the attrs
+            // either as-is (owned: alchemy tags identify this stack/stage/id,
+            // safe to silently adopt even without `--adopt`) or branded with
+            // `Unowned` (caller must opt in via `--adopt` or the engine
+            // raises `OwnedBySomeoneElse`).
+            return hasAlchemyWorkerTags(id, settings.tags ?? [])
+              ? attrs
+              : Unowned(attrs);
           },
           (effect) =>
             effect.pipe(
@@ -2320,16 +2329,10 @@ ${[
             )}`,
           );
           if (existingSettings) {
+            // Engine has already cleared this resource for write via
+            // `read` + AdoptPolicy. Tag check is no longer needed here.
             yield* Effect.logInfo(
-              `Cloudflare Worker create: ${name} already exists`,
-            );
-            if (!hasAlchemyWorkerTags(id, existingSettings.tags ?? [])) {
-              return yield* Effect.die(
-                `Worker "${name}" already exists but is not owned by this stack/stage/resource`,
-              );
-            }
-            yield* Effect.logInfo(
-              `Cloudflare Worker create: adopting existing ${name} owned by this stack/stage/resource`,
+              `Cloudflare Worker create: ${name} already exists, reusing`,
             );
           }
           return yield* putWorker(

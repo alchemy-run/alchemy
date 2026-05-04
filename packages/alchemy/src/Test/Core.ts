@@ -1,17 +1,17 @@
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
+import { AdoptPolicy } from "../AdoptPolicy.ts";
 import type { AlchemyContext } from "../AlchemyContext.ts";
 import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { apply } from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../Auth/Profile.ts";
-import { LoggingCli } from "../Cli/LoggingCli.ts";
+import { TestCli } from "./TestCli.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
 import type { Input } from "../Input.ts";
@@ -41,17 +41,19 @@ export interface MakeOptions<ROut = any> {
   profile?: string;
   /** Default stage for deploy/destroy (default `"test"`). */
   stage?: string;
+  /**
+   * Engine-level adoption policy for this test run. When `true`, resources
+   * without prior state will be adopted from the cloud via `provider.read`
+   * (matching the CLI's `--adopt` flag). Defaults to `false`.
+   */
+  adopt?: boolean;
 }
 
 export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
 
 const platformLayer = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
 
-const alchemyLayer = Layer.mergeAll(
-  LoggingCli,
-  Logger.layer([Logger.consolePretty()], { mergeWithExisting: true }),
-  AlchemyContextLive,
-);
+const alchemyLayer = Layer.mergeAll(TestCli, AlchemyContextLive);
 
 /**
  * Build the per-test runtime and return a self-contained Effect.
@@ -74,6 +76,7 @@ export const toEffect = <A>(
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
     );
   }).pipe(
+    Effect.provideService(AdoptPolicy, options.adopt ?? false),
     // `options.state` (e.g. `Cloudflare.state()`) itself requires
     // `AuthProviders` to read credentials, so AuthProviders must be provided
     // AFTER the state layer or the state layer's requirement is never

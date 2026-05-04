@@ -1,6 +1,7 @@
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import { expect } from "@effect/vitest";
@@ -108,6 +109,70 @@ test.provider("create, update, delete ai gateway", (stack) =>
 
     yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
   }).pipe(logLevel),
+);
+
+// Engine-level adoption: AI Gateways have no ownership signal (Cloudflare
+// doesn't expose tags on AI Gateways), so a name match in `read` is treated
+// as silent adoption.
+test.provider(
+  "existing ai gateway (matching id) is silently adopted without --adopt",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const gatewayId = `alchemy-test-aigw-adopt-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+      // Phase 1: deploy normally so a real AI Gateway exists.
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.AiGateway("AdoptableGateway", {
+            id: gatewayId,
+          });
+        }),
+      );
+      expect(initial.gatewayId).toEqual(gatewayId);
+
+      // Phase 2: wipe local state — the gateway stays on Cloudflare.
+      yield* Effect.gen(function* () {
+        const state = yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: "test",
+          fqn: "AdoptableGateway",
+        });
+      }).pipe(Effect.provide(stack.state));
+
+      // Phase 3: redeploy without `adopt(true)`. The engine calls
+      // `provider.read`, which fetches the gateway by id and returns plain
+      // attrs — silent adoption.
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.AiGateway("AdoptableGateway", {
+            id: gatewayId,
+          });
+        }),
+      );
+
+      expect(adopted.gatewayId).toEqual(gatewayId);
+
+      const persisted = yield* Effect.gen(function* () {
+        const state = yield* State;
+        return yield* state.get({
+          stack: stack.name,
+          stage: "test",
+          fqn: "AdoptableGateway",
+        });
+      }).pipe(Effect.provide(stack.state));
+
+      expect(persisted?.attr).toMatchObject({ gatewayId });
+
+      yield* stack.destroy();
+      yield* waitForGatewayToBeDeleted(gatewayId, accountId);
+    }).pipe(logLevel),
 );
 
 const waitForGatewayToBeDeleted = Effect.fn(function* (

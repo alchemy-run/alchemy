@@ -73,7 +73,7 @@ const hook =
     create?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
     update?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
     delete?: (id: string) => Effect.Effect<void, any>;
-    read?: (id: string) => Effect.Effect<void, any>;
+    read?: (id: string) => Effect.Effect<any, any>;
   }) =>
   <A, Err, Req>(test: Effect.Effect<A, Err, Req>) =>
     test.pipe(

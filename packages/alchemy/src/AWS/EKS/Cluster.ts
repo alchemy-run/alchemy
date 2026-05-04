@@ -2,6 +2,7 @@ import * as eks from "@distilled.cloud/aws/eks";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import {
   deleteObjects,
@@ -312,23 +313,13 @@ export const ClusterProvider = () =>
         return mapClusterState(cluster, tags, kubernetesObjects ?? []);
       });
 
-      const resolveOwnedCluster = Effect.fn(function* (
-        id: string,
-        clusterName: string,
-      ) {
+      const adoptExistingCluster = Effect.fn(function* (clusterName: string) {
         const state = yield* readCluster({
           clusterName,
         });
         if (!state) {
           return yield* Effect.fail(
             new Error(`cluster '${clusterName}' exists but could not be read`),
-          );
-        }
-        if (!(yield* hasAlchemyTags(id, state.tags))) {
-          return yield* Effect.fail(
-            new Error(
-              `cluster '${clusterName}' already exists and is not managed by alchemy`,
-            ),
           );
         }
         return state;
@@ -456,10 +447,14 @@ export const ClusterProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const clusterName =
             output?.clusterName ?? (yield* toClusterName(id, olds ?? {}));
-          return yield* readCluster({
+          const state = yield* readCluster({
             clusterName,
             kubernetesObjects: output?.kubernetesObjects,
           });
+          if (!state) return undefined;
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, bindings, session }) {
           yield* validateProps(news);
@@ -471,6 +466,9 @@ export const ClusterProvider = () =>
             ...news.tags,
           };
 
+          // Engine has cleared us via `read` (foreign-tagged clusters are
+          // surfaced as `Unowned`). On a race between read and create,
+          // `ResourceInUseException` is treated as adoption.
           yield* eks
             .createCluster({
               name: clusterName,
@@ -489,7 +487,7 @@ export const ClusterProvider = () =>
             })
             .pipe(
               Effect.catchTag("ResourceInUseException", () =>
-                resolveOwnedCluster(id, clusterName).pipe(Effect.asVoid),
+                adoptExistingCluster(clusterName).pipe(Effect.asVoid),
               ),
             );
 

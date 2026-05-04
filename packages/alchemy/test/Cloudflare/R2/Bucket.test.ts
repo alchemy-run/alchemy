@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "@effect/vitest";
@@ -85,6 +86,70 @@ test.provider("create, update, delete bucket", (stack) =>
 
     yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
   }).pipe(logLevel),
+);
+
+// Engine-level adoption: R2 buckets have no ownership signal (Cloudflare
+// doesn't expose tags on R2 buckets), so a name match in `read` is treated
+// as silent adoption.
+test.provider(
+  "existing bucket (matching name) is silently adopted without --adopt",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const bucketName = `alchemy-test-r2-adopt-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+      // Phase 1: deploy normally so a real R2 bucket exists.
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2Bucket("AdoptableBucket", {
+            name: bucketName,
+          });
+        }),
+      );
+      expect(initial.bucketName).toEqual(bucketName);
+
+      // Phase 2: wipe local state — the bucket stays on Cloudflare.
+      yield* Effect.gen(function* () {
+        const state = yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: "test",
+          fqn: "AdoptableBucket",
+        });
+      }).pipe(Effect.provide(stack.state));
+
+      // Phase 3: redeploy without `adopt(true)`. The engine calls
+      // `provider.read`, which fetches the bucket by name and returns
+      // plain attrs — silent adoption.
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2Bucket("AdoptableBucket", {
+            name: bucketName,
+          });
+        }),
+      );
+
+      expect(adopted.bucketName).toEqual(bucketName);
+
+      const persisted = yield* Effect.gen(function* () {
+        const state = yield* State;
+        return yield* state.get({
+          stack: stack.name,
+          stage: "test",
+          fqn: "AdoptableBucket",
+        });
+      }).pipe(Effect.provide(stack.state));
+
+      expect(persisted?.attr).toMatchObject({ bucketName });
+
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(bucketName, accountId);
+    }).pipe(logLevel),
 );
 
 const waitForBucketToBeDeleted = Effect.fn(function* (

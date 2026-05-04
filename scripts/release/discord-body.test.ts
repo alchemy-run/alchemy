@@ -188,7 +188,9 @@ describe("toDiscordBody(renderMarkdown(...))", () => {
     // fail and force an intentional decision.
     expect(md).toContain("&nbsp;");
     expect(md).toContain("<samp>");
-    expect(md).toContain("##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub]");
+    expect(md).toContain(
+      "##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub]",
+    );
   });
 
   test("discord output has no HTML entities", () => {
@@ -202,7 +204,9 @@ describe("toDiscordBody(renderMarkdown(...))", () => {
   });
 
   test("discord output has no #### / ##### / ###### heading markers", () => {
-    const deepHeading = discord.split("\n").find((line) => /^#{4,6}\s/.test(line));
+    const deepHeading = discord
+      .split("\n")
+      .find((line) => /^#{4,6}\s/.test(line));
     expect(deepHeading).toBeUndefined();
   });
 

@@ -1,15 +1,16 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { AlarmArn } from "./Alarm.ts";
 import {
   createName,
-  ensureOwnedByAlchemy,
   readResourceTags,
   retryConcurrent,
   updateResourceTags,
@@ -117,20 +118,17 @@ export const CompositeAlarmProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
-          return yield* readCompositeAlarm(name);
+          const state = yield* readCompositeAlarm(name);
+          if (!state) return undefined;
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
         create: Effect.fn(function* ({ id, news, session }) {
           const name = yield* createAlarmName(id, news);
+          // Engine has cleared us via `read` (foreign-tagged composite alarms
+          // are surfaced as `Unowned`). `putCompositeAlarm` is idempotent.
           const existing = yield* readCompositeAlarm(name);
-
-          if (existing) {
-            yield* ensureOwnedByAlchemy(
-              id,
-              name,
-              existing.tags,
-              "composite alarm",
-            );
-          }
 
           yield* retryConcurrent(
             cloudwatch.putCompositeAlarm({

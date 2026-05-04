@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import { AdoptPolicy } from "../../AdoptPolicy.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -123,11 +123,11 @@ export const StoreSecretProvider = () =>
         create: Effect.fn(function* ({ id, news }) {
           const name = resolveName(id, news.name);
           const scopes = resolveScopes(news.scopes);
-          const adoptEnabled = yield* Effect.serviceOption(AdoptPolicy).pipe(
-            Effect.map(Option.getOrElse(() => false)),
-          );
 
-          const create = createStoreSecret({
+          // Engine's `read` has already cleared us for adoption (foreign
+          // secrets are surfaced as `Unowned` and require `--adopt`). On a
+          // race between read and create, fall back to lookup-and-PATCH.
+          const created = yield* createStoreSecret({
             accountId: news.store.accountId,
             storeId: news.store.storeId,
             body: [
@@ -138,18 +138,11 @@ export const StoreSecretProvider = () =>
                 comment: news.comment,
               },
             ],
-          });
-          // Only swallow the conflict when adoption is opted-in via
-          // `AdoptPolicy`; otherwise surface `SecretNameAlreadyExists`
-          // so the caller learns the secret already exists rather than
-          // silently taking ownership of someone else's secret.
-          const created = adoptEnabled
-            ? yield* create.pipe(
-                Effect.catchTag("SecretNameAlreadyExists", () =>
-                  Effect.succeed(undefined),
-                ),
-              )
-            : yield* create;
+          }).pipe(
+            Effect.catchTag("SecretNameAlreadyExists", () =>
+              Effect.succeed(undefined),
+            ),
+          );
 
           if (created) {
             const secret = created.result[0]!;
@@ -164,15 +157,11 @@ export const StoreSecretProvider = () =>
             };
           }
 
-          // Adopt-on-conflict path. A secret with this name already
-          // exists in Cloudflare — typically because a previous deploy
-          // partially failed (e.g. the secret was created server-side
-          // but the response was lost so local state never recorded
-          // it). We re-fetch the existing secret and reconcile
-          // scopes/comment. The value itself cannot be read back from
-          // the API and we trust that an identically-named secret in
-          // the same store reflects the same intent (this matches how
-          // SecretsStore itself adopts the account-wide store).
+          // The secret already exists server-side (typically a previous
+          // deploy was partially persisted). Re-fetch and reconcile
+          // scopes/comment. The value cannot be read back from the API and
+          // we trust an identically-named secret in the same store reflects
+          // the same intent.
           const existing = yield* listStoreSecrets
             .items({
               accountId: news.store.accountId,
@@ -285,7 +274,11 @@ export const StoreSecretProvider = () =>
               Effect.map(Option.getOrUndefined),
             );
           if (!match) return undefined;
-          return {
+          // Secrets carry no ownership signal (Cloudflare doesn't expose
+          // tags on store secrets), so a name match is not proof we own
+          // it. Brand it `Unowned` so the engine surfaces
+          // `OwnedBySomeoneElse` unless the caller opted in via `--adopt`.
+          return Unowned({
             secretId: match.id,
             secretName: match.name,
             storeId: match.storeId,
@@ -293,7 +286,7 @@ export const StoreSecretProvider = () =>
             status: match.status,
             scopes: resolveScopes(olds.scopes),
             comment: match.comment ?? undefined,
-          };
+          });
         }),
       };
     }),

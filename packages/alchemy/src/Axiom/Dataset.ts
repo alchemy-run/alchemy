@@ -1,8 +1,7 @@
 import * as Axiom from "@distilled.cloud/axiom";
 import { Credentials } from "@distilled.cloud/axiom/Credentials";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import { AdoptPolicy } from "../AdoptPolicy.ts";
+import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -205,10 +204,11 @@ export const DatasetProvider = () =>
         create: Effect.fn(function* ({ id, news }) {
           const stack = yield* Stack;
           const stage = yield* Stage;
-          const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
-            Effect.map(Option.getOrElse(() => false)),
-          );
           const marker = buildMarker(stack.name, stage, id);
+          // The engine has already cleared us via `read` (foreign datasets are
+          // surfaced as `Unowned` and require `--adopt`). On a race between
+          // read and create, treat a Conflict as adoption: PATCH the existing
+          // dataset to reflect the desired props.
           const dataset = yield* (
             create({
               name: news.name,
@@ -226,33 +226,11 @@ export const DatasetProvider = () =>
               (e): e is { readonly _tag: "Conflict" | "UnprocessableEntity" } =>
                 e._tag === "Conflict" || e._tag === "UnprocessableEntity",
               () =>
-                Effect.gen(function* () {
-                  const existing = yield* get({ dataset_id: news.name });
-                  const ownership = parseMarker(existing.description);
-                  const isOurs =
-                    ownership !== undefined &&
-                    ownership.stack === stack.name &&
-                    ownership.stage === stage &&
-                    ownership.id === id;
-                  if (isOurs || adoptPolicy) {
-                    // Re-apply the user's desired props (and re-stamp marker)
-                    // so adoption is idempotent and Axiom-side state matches
-                    // the resource spec.
-                    return yield* update({
-                      dataset_id: existing.id,
-                      description: augmentDescription(news.description, marker),
-                      retentionDays: news.retentionDays,
-                      useRetentionPeriod: news.useRetentionPeriod,
-                    });
-                  }
-                  return yield* Effect.die(
-                    new Error(
-                      `Axiom dataset "${news.name}" already exists and was ` +
-                        `not created by this stack (${stack.name}/${stage}/${id}). ` +
-                        `Pipe the resource through \`adopt()\` from "alchemy/AdoptPolicy" ` +
-                        `to take ownership, or delete the dataset in Axiom and retry.`,
-                    ),
-                  );
+                update({
+                  dataset_id: news.name,
+                  description: augmentDescription(news.description, marker),
+                  retentionDays: news.retentionDays,
+                  useRetentionPeriod: news.useRetentionPeriod,
                 }),
             ),
           );
@@ -275,12 +253,23 @@ export const DatasetProvider = () =>
             Effect.catchTag("NotFound", () => Effect.void),
           );
         }),
-        read: Effect.fn(function* ({ output }) {
-          if (!output?.id) return undefined;
-          return yield* get({ dataset_id: output.id }).pipe(
-            Effect.map(toAttrs),
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const stack = yield* Stack;
+          const stage = yield* Stage;
+          const datasetId = output?.id ?? olds?.name;
+          if (!datasetId) return undefined;
+          const existing = yield* get({ dataset_id: datasetId }).pipe(
             Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           );
+          if (!existing) return undefined;
+          const ownership = parseMarker(existing.description);
+          const isOurs =
+            ownership !== undefined &&
+            ownership.stack === stack.name &&
+            ownership.stage === stage &&
+            ownership.id === id;
+          const attrs = toAttrs(existing);
+          return isOurs ? attrs : Unowned(attrs);
         }),
       };
     }),
