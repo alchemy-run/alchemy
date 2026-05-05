@@ -146,14 +146,29 @@
         "effect": "catalog:",
       },
     },
+<<<<<<< HEAD
+    "examples/cloudflare-hyperdrive": {
+      "name": "cloudflare-hyperdrive",
+      "version": "0.0.0",
+      "dependencies": {
+        "@cloudflare/workers-types": "catalog:",
+=======
     "examples/cloudflare-git-artifacts": {
       "name": "cloudflare-git-artifacts",
       "version": "0.0.0",
       "dependencies": {
+>>>>>>> main
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
         "alchemy": "workspace:*",
         "effect": "catalog:",
+<<<<<<< HEAD
+        "pg": "^8.20.0",
+      },
+      "devDependencies": {
+        "@types/pg": "^8.20.0",
+=======
+>>>>>>> main
       },
     },
     "examples/cloudflare-secrets-store": {
@@ -280,7 +295,11 @@
     },
     "packages/alchemy": {
       "name": "alchemy",
+<<<<<<< HEAD
+      "version": "2.0.0-beta.23",
+=======
       "version": "2.0.0-beta.30",
+>>>>>>> main
       "bin": {
         "alchemy": "./bin/cli.js",
       },
@@ -294,7 +313,7 @@
         "@distilled.cloud/axiom": "catalog:",
         "@distilled.cloud/cloudflare": "catalog:",
         "@distilled.cloud/cloudflare-rolldown-plugin": "catalog:",
-        "@distilled.cloud/cloudflare-runtime": "catalog:",
+        "@distilled.cloud/cloudflare-runtime": "link:@distilled.cloud/cloudflare-runtime",
         "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
         "@distilled.cloud/core": "catalog:",
         "@effect/vitest": "catalog:",
@@ -364,7 +383,11 @@
     },
     "packages/better-auth": {
       "name": "@alchemy.run/better-auth",
+<<<<<<< HEAD
+      "version": "2.0.0-beta.23",
+=======
       "version": "2.0.0-beta.30",
+>>>>>>> main
       "dependencies": {
         "alchemy": "workspace:*",
         "better-auth": "catalog:",
@@ -373,7 +396,11 @@
     },
     "packages/pr-package": {
       "name": "@alchemy.run/pr-package",
+<<<<<<< HEAD
+      "version": "2.0.0-beta.23",
+=======
       "version": "2.0.0-beta.30",
+>>>>>>> main
       "dependencies": {
         "alchemy": "workspace:*",
         "effect": "catalog:",
@@ -729,7 +756,11 @@
 
     "@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@0.3.0", "", { "dependencies": { "@cloudflare/unenv-preset": "^2.16.0", "unenv": "^2.0.0-rc.24" }, "peerDependencies": { "rolldown": "^1.0.0-rc.9" } }, "sha512-6DIPmARCtlWR/ZsPYkaQzWV1AcUBYs9fs/NRnRMxVjKKJo0YtmCYICJ2dggWxZ6nmhukYEWK3GpMPZfq6WlGdw=="],
 
+<<<<<<< HEAD
+    "@distilled.cloud/cloudflare-runtime": ["@distilled.cloud/cloudflare-runtime@link:@distilled.cloud/cloudflare-runtime", {}],
+=======
     "@distilled.cloud/cloudflare-runtime": ["@distilled.cloud/cloudflare-runtime@0.1.2", "", { "dependencies": { "capnp-es": "^0.0.14", "workerd": "^1.20260414.1" }, "peerDependencies": { "@distilled.cloud/cloudflare": "^0.13.1", "@effect/platform-bun": "4.0.0-beta.58", "@effect/platform-node": "4.0.0-beta.58", "effect": "4.0.0-beta.58" }, "optionalPeers": ["@effect/platform-bun", "@effect/platform-node"] }, "sha512-yhpIx4XBfGNLAugSs6PsnnM5WfdiKafqihIpxubDXi4yF16mHwK6l+U4gbav6tt+dLrGC9FpGt6k38CGbq+pfA=="],
+>>>>>>> main
 
     "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@0.2.0", "", { "dependencies": { "@distilled.cloud/cloudflare-rolldown-plugin": "0.2.0" }, "peerDependencies": { "vite": "^7.0.0 || ^8.0.0" } }, "sha512-yLk+q5EUQthiVU5nIEyF8mL1CujaO8bZp5Z7DQsxKkqwtwKLXapXjDsnknAGwv5xJuEyZG9rbSKNY2cVVRPdZQ=="],
 
@@ -2013,7 +2044,11 @@
 
     "cloudflare-dev": ["cloudflare-dev@workspace:examples/cloudflare-dev"],
 
+<<<<<<< HEAD
+    "cloudflare-hyperdrive": ["cloudflare-hyperdrive@workspace:examples/cloudflare-hyperdrive"],
+=======
     "cloudflare-git-artifacts": ["cloudflare-git-artifacts@workspace:examples/cloudflare-git-artifacts"],
+>>>>>>> main
 
     "cloudflare-secrets-store": ["cloudflare-secrets-store@workspace:examples/cloudflare-secrets-store"],
 
@@ -2113,7 +2148,7 @@
 
     "csstype": ["csstype@3.2.3", "", {}, "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="],
 
-    "cytoscape": ["cytoscape@3.33.2", "", {}, "sha512-sj4HXd3DokGhzZAdjDejGvTPLqlt84vNFN8m7bGsOzDY5DyVcxIb2ejIXat2Iy7HxWhdT/N1oKyheJ5YdpsGuw=="],
+    "cytoscape": ["cytoscape@3.33.3", "", {}, "sha512-Gej7U+OKR+LZ8kvX7rb2HhCYJ0IhvEFsnkud4SB1PR+BUY/TsSO0dmOW59WEVLu51b1Rm+gQRKoz4bLYxGSZ2g=="],
 
     "cytoscape-cose-bilkent": ["cytoscape-cose-bilkent@4.1.0", "", { "dependencies": { "cose-base": "^1.0.0" }, "peerDependencies": { "cytoscape": "^3.2.0" } }, "sha512-wgQlVIUJF13Quxiv5e1gstZ08rnZj2XaLHGoFMYXz7SkNfCDOOteKBE6SYRfA9WxxI/iBc3ajfDoc6hb/MRAHQ=="],
 
@@ -3761,10 +3796,13 @@
 
     "@cspotcode/source-map-support/@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.9", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.0.3", "@jridgewell/sourcemap-codec": "^1.4.10" } }, "sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ=="],
 
+<<<<<<< HEAD
+=======
     "@distilled.cloud/cloudflare-runtime/@distilled.cloud/cloudflare": ["@distilled.cloud/cloudflare@0.13.1", "", { "dependencies": { "@distilled.cloud/core": "0.13.1", "effect": "4.0.0-beta.58" } }, "sha512-DfZI0cO+hBAuzvO+rA/vuCXo63qr5SLG9XoOoN7PUoI6g0KNRPyY3gqKM+EZTiJ80EHY3eJ5k6k5uiw7qMlsog=="],
 
     "@distilled.cloud/cloudflare-runtime/workerd": ["workerd@1.20260424.1", "", { "optionalDependencies": { "@cloudflare/workerd-darwin-64": "1.20260424.1", "@cloudflare/workerd-darwin-arm64": "1.20260424.1", "@cloudflare/workerd-linux-64": "1.20260424.1", "@cloudflare/workerd-linux-arm64": "1.20260424.1", "@cloudflare/workerd-windows-64": "1.20260424.1" }, "bin": { "workerd": "bin/workerd" } }, "sha512-oKsB0Xo/mfkYMdSACoS06XZg09VUK4rXwHfF/1t3P++sMbwzf4UHQvMO57+zxpEB2nVrY/ZkW0bYFGq4GdAFSQ=="],
 
+>>>>>>> main
     "@distilled.cloud/cloudflare-vite-plugin/@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@0.2.0", "", { "dependencies": { "@cloudflare/unenv-preset": "^2.16.0", "unenv": "^2.0.0-rc.24" }, "peerDependencies": { "rolldown": "^1.0.0-rc.9" } }, "sha512-zZFzGzp+6sy+zP3fOxkJ0pXyTXd08pLrOw/9ooIR4NkcyL1D1k2NxNPuan0X5pttebigTVCP8Ny3e62gUe9MBg=="],
 
     "@eslint-community/eslint-utils/eslint-visitor-keys": ["eslint-visitor-keys@3.4.3", "", {}, "sha512-wpc+LXeiyiisxPlEkUzU6svyS1frIO3Mgxj1fdy7Pm8Ygzguax2N3Fa/D/ag1WqbOprdI+uY6wMUl8/a2G+iag=="],
@@ -4009,7 +4047,7 @@
 
     "mermaid/marked": ["marked@16.4.2", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-TI3V8YYWvkVf3KJe1dRkpnjs68JUPyEa5vjKrp1XEEJUAOaQc+Qj+L1qWbPd0SJuAdQkFU0h73sXXqwDYxsiDA=="],
 
-    "mermaid/uuid": ["uuid@11.1.0", "", { "bin": { "uuid": "dist/esm/bin/uuid" } }, "sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A=="],
+    "mermaid/uuid": ["uuid@11.1.1", "", { "bin": { "uuid": "dist/esm/bin/uuid" } }, "sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ=="],
 
     "micromatch/picomatch": ["picomatch@2.3.2", "", {}, "sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA=="],
 
@@ -4185,6 +4223,8 @@
 
     "@aws-crypto/util/@smithy/util-utf8/@smithy/util-buffer-from": ["@smithy/util-buffer-from@2.2.0", "", { "dependencies": { "@smithy/is-array-buffer": "^2.2.0", "tslib": "^2.6.2" } }, "sha512-IJdWBbTcMQ6DA0gdNhh/BwrLkDR+ADW5Kr1aZmd4k3DIF6ezMV4R2NIAmT08wQJ3yUK82thHWmC/TnK/wpMMIA=="],
 
+<<<<<<< HEAD
+=======
     "@distilled.cloud/cloudflare-runtime/@distilled.cloud/cloudflare/@distilled.cloud/core": ["@distilled.cloud/core@0.13.1", "", { "dependencies": { "effect": "4.0.0-beta.58" } }, "sha512-CncOtnwY3A8KNwp60C18ws2rKrNgC8GrMSNgiO84KilzAVpiCIoeoGW8xF58u/OVviXKfmQcxUBiNB15WFAZBA=="],
 
     "@distilled.cloud/cloudflare-runtime/workerd/@cloudflare/workerd-darwin-64": ["@cloudflare/workerd-darwin-64@1.20260424.1", "", { "os": "darwin", "cpu": "x64" }, "sha512-yFR1XaJbSDLg/qbwtrYaU2xwFXatIPKR5nrMQCN1q/m6+Qe/j6r+kCnFEvOJjMZOm9iCKsE6Qly5clgl4u32qw=="],
@@ -4197,6 +4237,7 @@
 
     "@distilled.cloud/cloudflare-runtime/workerd/@cloudflare/workerd-windows-64": ["@cloudflare/workerd-windows-64@1.20260424.1", "", { "os": "win32", "cpu": "x64" }, "sha512-tZ7Z9qmYNAP6z1/+8r/zKbk8F8DZmpmwNzMeN+zkde2Wnhfr3FBqOkJXT/5zmli8HPoWrIXxSiyqcNDMy8V2Zg=="],
 
+>>>>>>> main
     "@expressive-code/plugin-shiki/shiki/@shikijs/core": ["@shikijs/core@3.23.0", "", { "dependencies": { "@shikijs/types": "3.23.0", "@shikijs/vscode-textmate": "^10.0.2", "@types/hast": "^3.0.4", "hast-util-to-html": "^9.0.5" } }, "sha512-NSWQz0riNb67xthdm5br6lAkvpDJRTgB36fxlo37ZzM2yq0PQFFzbd8psqC2XMPgCzo1fW6cVi18+ArJ44wqgA=="],
 
     "@expressive-code/plugin-shiki/shiki/@shikijs/engine-javascript": ["@shikijs/engine-javascript@3.23.0", "", { "dependencies": { "@shikijs/types": "3.23.0", "@shikijs/vscode-textmate": "^10.0.2", "oniguruma-to-es": "^4.3.4" } }, "sha512-aHt9eiGFobmWR5uqJUViySI1bHMqrAgamWE1TYSUoftkAeCCAiGawPMwM+VCadylQtF4V3VNOZ5LmfItH5f3yA=="],

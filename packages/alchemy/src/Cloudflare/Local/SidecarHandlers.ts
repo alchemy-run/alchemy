@@ -34,6 +34,7 @@ export const SidecarHandlers = Layer.effect(
           compatibilityDate: worker.compatibility.date,
           compatibilityFlags: worker.compatibility.flags,
           bindings: worker.bindings,
+          hyperdrives: worker.hyperdrives,
           durableObjectNamespaces: worker.durableObjectNamespaces,
           modules,
         })

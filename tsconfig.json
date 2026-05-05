@@ -63,6 +63,9 @@
       "path": "./examples/cloudflare-worker-async/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-hyperdrive/tsconfig.json"
+    },
+    {
       "path": "./packages/better-auth/tsconfig.json"
     },
     {

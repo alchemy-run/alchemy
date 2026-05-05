@@ -1,3 +1,4 @@
+import type * as runtimeWorker from "@distilled.cloud/cloudflare-runtime/Worker";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Provider from "../../Provider.ts";
@@ -25,12 +26,16 @@ export const LocalWorkerProvider = () =>
         const name = yield* createWorkerName(id, props.name);
         const workerBindings: WorkerBinding[] = [];
         const durableObjectNamespaces: Record<string, string> = {};
+        const hyperdrives: Record<string, runtimeWorker.HyperdriveOrigin> = {};
         for (const { sid, data } of bindings) {
           for (const binding of data.bindings ?? []) {
             workerBindings.push(binding);
             if (binding.type === "durable_object_namespace") {
               durableObjectNamespaces[binding.name] = sid;
             }
+          }
+          if (data.hyperdrives) {
+            Object.assign(hyperdrives, data.hyperdrives);
           }
         }
         for (const [key, value] of Object.entries(props.env ?? {})) {
@@ -63,6 +68,7 @@ export const LocalWorkerProvider = () =>
               },
           stack: { name: stack.name, stage: stack.stage },
           bindings: workerBindings,
+          hyperdrives,
           durableObjectNamespaces: Object.entries(durableObjectNamespaces).map(
             ([className, namespaceId]) => ({
               className,
