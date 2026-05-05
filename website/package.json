@@ -11,6 +11,7 @@
   "scripts": {
     "build:reference": "bun ../scripts/generate-api-reference.ts",
     "build:llms": "bun scripts/generate-llms-txt.ts",
+    "generate:readme-hero": "bun scripts/download-fonts.ts && bun scripts/generate-readme-hero.ts",
     "build": "bun scripts/download-fonts.ts && bun scripts/generate-brand-assets.ts && bun run build:reference && bun run build:llms && NODE_OPTIONS=--max-old-space-size=8192 astro build",
     "dev:site": "astro dev",
     "deploy": "alchemy deploy",
