@@ -152,62 +152,83 @@ export const KeyGroupProvider = () =>
           if (!found) return undefined;
           return toAttrs(found.id, found.config, found.etag);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
           const items = news.items as string[];
-          const created = yield* cloudfront
-            .createKeyGroup({
-              KeyGroupConfig: buildConfig(name, items, news.comment),
-            })
-            .pipe(
-              Effect.catchTag("KeyGroupAlreadyExists", () =>
-                getByName(name).pipe(
-                  Effect.flatMap((existing) =>
-                    existing
-                      ? Effect.succeed({
-                          KeyGroup: {
-                            Id: existing.id,
-                            LastModifiedTime: new Date(),
-                            KeyGroupConfig: existing.config,
-                          },
-                          ETag: existing.etag,
-                          Location: undefined,
-                        })
-                      : Effect.fail(
-                          new Error(
-                            `Key group '${name}' already exists but could not be recovered`,
+
+          // Observe — locate the key group by id (cached on `output`) or
+          // by name. Trust observed cloud state, not stale `olds`.
+          let observed = output?.keyGroupId
+            ? yield* getById(output.keyGroupId).pipe(
+                Effect.map((found) =>
+                  found ? { id: output.keyGroupId, ...found } : undefined,
+                ),
+              )
+            : undefined;
+          if (!observed) {
+            observed = yield* getByName(name);
+          }
+
+          // Ensure — create the key group if it's missing. Tolerate
+          // `KeyGroupAlreadyExists` (race with a peer reconciler).
+          if (!observed) {
+            const created = yield* cloudfront
+              .createKeyGroup({
+                KeyGroupConfig: buildConfig(name, items, news.comment),
+              })
+              .pipe(
+                Effect.catchTag("KeyGroupAlreadyExists", () =>
+                  getByName(name).pipe(
+                    Effect.flatMap((existing) =>
+                      existing
+                        ? Effect.succeed({
+                            KeyGroup: {
+                              Id: existing.id,
+                              LastModifiedTime: new Date(),
+                              KeyGroupConfig: existing.config,
+                            },
+                            ETag: existing.etag,
+                            Location: undefined,
+                          })
+                        : Effect.fail(
+                            new Error(
+                              `Key group '${name}' already exists but could not be recovered`,
+                            ),
                           ),
-                        ),
+                    ),
                   ),
                 ),
-              ),
-            );
-          if (!created.KeyGroup?.Id) {
-            return yield* Effect.fail(
-              new Error("createKeyGroup returned no identifier"),
+              );
+            if (!created.KeyGroup?.Id) {
+              return yield* Effect.fail(
+                new Error("createKeyGroup returned no identifier"),
+              );
+            }
+            yield* session.note(created.KeyGroup.Id);
+            return toAttrs(
+              created.KeyGroup.Id,
+              created.KeyGroup.KeyGroupConfig,
+              created.ETag,
             );
           }
-          yield* session.note(created.KeyGroup.Id);
-          return toAttrs(
-            created.KeyGroup.Id,
-            created.KeyGroup.KeyGroupConfig,
-            created.ETag,
-          );
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          const current = yield* getById(output.keyGroupId);
-          const items = news.items as string[];
+
+          // Sync — patch the observed config to the desired state. The
+          // freshly observed ETag handles optimistic concurrency.
           const updated = yield* cloudfront.updateKeyGroup({
-            Id: output.keyGroupId,
-            IfMatch: current?.etag ?? output.etag,
-            KeyGroupConfig: buildConfig(output.name, items, news.comment),
+            Id: observed.id,
+            IfMatch: observed.etag,
+            KeyGroupConfig: buildConfig(
+              observed.config.Name,
+              items,
+              news.comment,
+            ),
           });
           if (!updated.KeyGroup?.Id) {
             return yield* Effect.fail(
               new Error("updateKeyGroup returned no identifier"),
             );
           }
-          yield* session.note(output.keyGroupId);
+          yield* session.note(observed.id);
           return toAttrs(
             updated.KeyGroup.Id,
             updated.KeyGroup.KeyGroupConfig,

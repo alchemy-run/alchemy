@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as KV from "@/Cloudflare/KV/index";
+import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import { expect } from "@effect/vitest";
@@ -83,6 +84,77 @@ test.provider("create, update, delete namespace", (stack) =>
 
     yield* waitForNamespaceToBeDeleted(namespace.namespaceId, accountId);
   }).pipe(logLevel),
+);
+
+// Engine-level adoption: KV namespaces have no ownership signal (Cloudflare
+// doesn't expose tags on KV), so a name match in `read` is treated as silent
+// adoption. The test wipes local state mid-run while leaving the namespace
+// on Cloudflare — this simulates a fresh state store seeing an existing
+// resource with the same physical name.
+test.provider(
+  "existing namespace (matching title) is silently adopted without --adopt",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // Use a fixed title so the namespace's identity persists across a
+      // state-store wipe.
+      const title = `alchemy-test-kv-adopt-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+      // Phase 1: deploy normally so a real KV namespace exists on Cloudflare.
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* KV.KVNamespace("AdoptableNamespace", { title });
+        }),
+      );
+      expect(initial.title).toEqual(title);
+      const initialId = initial.namespaceId;
+      expect(initialId).toBeDefined();
+
+      // Phase 2: wipe local state — the namespace stays on Cloudflare.
+      yield* Effect.gen(function* () {
+        const state = yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: "test",
+          fqn: "AdoptableNamespace",
+        });
+      }).pipe(Effect.provide(stack.state));
+
+      // Phase 3: redeploy without `adopt(true)`. The engine calls
+      // `provider.read`, which lists namespaces, matches by title, and
+      // returns plain attrs — silent adoption.
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* KV.KVNamespace("AdoptableNamespace", { title });
+        }),
+      );
+
+      // Same physical namespace — adoption, not re-creation.
+      expect(adopted.namespaceId).toEqual(initialId);
+      expect(adopted.title).toEqual(title);
+
+      const persisted = yield* Effect.gen(function* () {
+        const state = yield* State;
+        return yield* state.get({
+          stack: stack.name,
+          stage: "test",
+          fqn: "AdoptableNamespace",
+        });
+      }).pipe(Effect.provide(stack.state));
+
+      expect(persisted?.attr).toMatchObject({
+        namespaceId: initialId,
+        title,
+      });
+
+      yield* stack.destroy();
+      yield* waitForNamespaceToBeDeleted(initialId, accountId);
+    }).pipe(logLevel),
 );
 
 const waitForNamespaceToBeDeleted = Effect.fn(function* (

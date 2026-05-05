@@ -480,12 +480,17 @@ export const WorkflowProvider = () =>
 
       return WorkflowResource.Provider.of({
         stables: ["workflowId", "accountId"],
-        create: Effect.fnUntraced(function* ({ news }) {
+        reconcile: Effect.fnUntraced(function* ({ news, output }) {
+          const acct = output?.accountId ?? accountId;
           yield* Effect.logInfo(
-            `Cloudflare Workflow create: ${news.workflowName}`,
+            `Cloudflare Workflow reconcile: ${news.workflowName}`,
           );
+          // Cloudflare's `putWorkflow` is a true PUT-as-upsert: identical
+          // payloads converge to the same state and a missing workflow is
+          // created on the spot. There is no separate observe step needed
+          // — the API is naturally reconciler-shaped.
           const result = yield* putWorkflow({
-            accountId,
+            accountId: acct,
             workflowName: news.workflowName,
             className: news.className,
             scriptName: news.scriptName,
@@ -495,25 +500,7 @@ export const WorkflowProvider = () =>
             workflowName: result.name,
             className: result.className,
             scriptName: result.scriptName,
-            accountId,
-          };
-        }),
-        update: Effect.fnUntraced(function* ({ news, output }) {
-          yield* Effect.logInfo(
-            `Cloudflare Workflow update: ${news.workflowName}`,
-          );
-          const result = yield* putWorkflow({
-            accountId: output.accountId,
-            workflowName: news.workflowName,
-            className: news.className,
-            scriptName: news.scriptName,
-          });
-          return {
-            workflowId: result.id,
-            workflowName: result.name,
-            className: result.className,
-            scriptName: result.scriptName,
-            accountId: output.accountId,
+            accountId: acct,
           };
         }),
         delete: Effect.fnUntraced(function* ({ output }) {

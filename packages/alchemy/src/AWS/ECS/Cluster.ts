@@ -154,31 +154,79 @@ export const ClusterProvider = () =>
             tags: output?.tags ?? {},
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const clusterName = yield* toClusterName(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const created = yield* ecs.createCluster({
-            clusterName,
+          const clusterArn =
+            `arn:aws:ecs:${region}:${accountId}:cluster/${clusterName}` as ClusterArn;
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
+
+          // Observe — fetch live cloud state.
+          let described = yield* ecs.describeClusters({
+            clusters: [clusterArn],
+            include: ["SETTINGS", "TAGS", "CONFIGURATIONS"],
+          });
+          let cluster = described.clusters?.find(
+            (c) =>
+              c.clusterName === clusterName &&
+              (c.status === "ACTIVE" || c.status === "PROVISIONING"),
+          );
+
+          // Ensure — create if missing. ECS createCluster is idempotent for
+          // identical params and returns the existing cluster on conflict;
+          // we always sync below regardless.
+          if (!cluster?.clusterArn) {
+            const created = yield* ecs.createCluster({
+              clusterName,
+              settings: news.settings,
+              configuration: news.configuration,
+              serviceConnectDefaults: news.serviceConnectDefaults,
+              tags: toEcsTags(desiredTags),
+            });
+            cluster = created.cluster;
+          }
+
+          // Sync cluster config — call updateCluster to converge settings,
+          // configuration, and serviceConnectDefaults to desired state.
+          yield* ecs.updateCluster({
+            cluster: clusterArn,
             settings: news.settings,
             configuration: news.configuration,
             serviceConnectDefaults: news.serviceConnectDefaults,
-            tags: toEcsTags(tags),
           });
+
+          // Sync capacity providers — observed ↔ desired.
           yield* applyCapacityProviders({
-            cluster: clusterName,
+            cluster: clusterArn,
             capacityProviders: news.capacityProviders,
             defaultCapacityProviderStrategy:
               news.defaultCapacityProviderStrategy,
           });
 
-          const cluster = created.cluster;
-          const clusterArn = (cluster?.clusterArn ??
-            `arn:aws:ecs:${region}:${accountId}:cluster/${clusterName}`) as ClusterArn;
-          yield* session.note(clusterArn);
+          // Sync tags — diff observed cloud tags against desired.
+          const observedTags = Object.fromEntries(
+            (cluster?.tags ?? [])
+              .filter(
+                (t): t is { key: string; value: string } =>
+                  typeof t.key === "string" && typeof t.value === "string",
+              )
+              .map((t) => [t.key, t.value]),
+          );
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0) {
+            yield* ecs.tagResource({
+              resourceArn: clusterArn,
+              tags: upsert.map((tag) => ({ key: tag.Key, value: tag.Value })),
+            });
+          }
+          if (removed.length > 0) {
+            yield* ecs.untagResource({
+              resourceArn: clusterArn,
+              tagKeys: removed,
+            });
+          }
 
+          yield* session.note(clusterArn);
           return {
             clusterArn,
             clusterName,
@@ -189,55 +237,7 @@ export const ClusterProvider = () =>
             defaultCapacityProviderStrategy:
               news.defaultCapacityProviderStrategy ?? [],
             serviceConnectDefaults: news.serviceConnectDefaults,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* ecs.updateCluster({
-            cluster: output.clusterArn,
-            settings: news.settings,
-            configuration: news.configuration,
-            serviceConnectDefaults: news.serviceConnectDefaults,
-          });
-          yield* applyCapacityProviders({
-            cluster: output.clusterArn,
-            capacityProviders: news.capacityProviders,
-            defaultCapacityProviderStrategy:
-              news.defaultCapacityProviderStrategy,
-          });
-
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-          if (upsert.length > 0) {
-            yield* ecs.tagResource({
-              resourceArn: output.clusterArn,
-              tags: upsert.map((tag) => ({ key: tag.Key, value: tag.Value })),
-            });
-          }
-          if (removed.length > 0) {
-            yield* ecs.untagResource({
-              resourceArn: output.clusterArn,
-              tagKeys: removed,
-            });
-          }
-
-          yield* session.note(output.clusterArn);
-          return {
-            ...output,
-            settings: news.settings ?? [],
-            configuration: news.configuration,
-            capacityProviders: news.capacityProviders ?? [],
-            defaultCapacityProviderStrategy:
-              news.defaultCapacityProviderStrategy ?? [],
-            serviceConnectDefaults: news.serviceConnectDefaults,
-            tags: newTags,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

@@ -196,116 +196,91 @@ export const SecretProvider = () =>
             tags: toTagRecord(described.Tags),
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const secretName = yield* toSecretName(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const secretName =
+            output?.secretName ?? (yield* toSecretName(id, news));
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
+          const hasNewValue =
+            news.secretString !== undefined ||
+            news.secretBinary !== undefined ||
+            news.generateSecretString !== undefined;
 
-          const created = yield* secretsmanager
-            .createSecret({
-              Name: secretName,
-              Description: news.description,
-              KmsKeyId: news.kmsKeyId,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-              ...(yield* createValue(news)),
-            })
-            .pipe(
-              Effect.catchTag("ResourceExistsException", () =>
-                Effect.gen(function* () {
-                  const existing = yield* secretsmanager.describeSecret({
-                    SecretId: secretName,
-                  });
-                  if (!existing.ARN || !existing.Name) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Secret '${secretName}' already exists but could not be described`,
-                      ),
-                    );
-                  }
+          // Observe — describe the secret using whichever identifier we
+          // have (ARN preferred, name as fallback).
+          let observed = yield* readSecret(output?.secretArn ?? secretName);
 
-                  if (
-                    news.secretString !== undefined ||
-                    news.secretBinary !== undefined ||
-                    news.generateSecretString !== undefined
-                  ) {
-                    const updated = yield* secretsmanager.updateSecret({
-                      SecretId: secretName,
-                      Description: news.description,
-                      KmsKeyId: news.kmsKeyId,
-                      ...(yield* createValue(news)),
-                    });
-                    return {
-                      ARN: existing.ARN,
-                      Name: existing.Name,
-                      VersionId: updated.VersionId,
-                    };
-                  }
+          // Ensure — create if missing. Tolerate `ResourceExistsException`
+          // by re-describing; the sync step below converges metadata and
+          // value.
+          if (!observed?.ARN) {
+            yield* secretsmanager
+              .createSecret({
+                Name: secretName,
+                Description: news.description,
+                KmsKeyId: news.kmsKeyId,
+                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+                ...(yield* createValue(news)),
+              })
+              .pipe(
+                Effect.catchTag("ResourceExistsException", () => Effect.void),
+              );
+            observed = yield* readSecret(secretName);
+          }
 
-                  return {
-                    ARN: existing.ARN,
-                    Name: existing.Name,
-                    VersionId: undefined,
-                  };
-                }),
-              ),
+          if (!observed?.ARN || !observed.Name) {
+            return yield* Effect.fail(
+              new Error(`Failed to describe Secret '${secretName}'`),
             );
+          }
 
-          yield* session.note(created.ARN ?? secretName);
-          return {
-            secretArn: created.ARN ?? secretName,
-            secretName: created.Name ?? secretName,
-            versionId: created.VersionId,
-            description: news.description,
-            kmsKeyId: news.kmsKeyId,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const updateRequest: secretsmanager.UpdateSecretRequest = {
-            SecretId: output.secretArn,
+          const secretArn = observed.ARN;
+
+          // Sync metadata + value. `updateSecret` accepts description,
+          // KMS key, and the secret value in one call. We always send
+          // metadata (idempotent) and only send a new value if the user
+          // provided one — `updateSecret` requires SecretString or
+          // SecretBinary to actually rotate, but is fine to call without
+          // them to update description/kmsKeyId only.
+          const valuePayload = yield* createValue(news);
+          const updated = yield* secretsmanager.updateSecret({
+            SecretId: secretArn,
             Description: news.description,
             KmsKeyId: news.kmsKeyId,
-            ...(yield* createValue(news)),
-          };
+            ...valuePayload,
+          });
 
-          const updated = yield* secretsmanager.updateSecret(updateRequest);
-
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags — diff observed cloud tags against desired.
+          const observedTags = toTagRecord(observed.Tags);
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
 
           if (upsert.length > 0) {
             yield* secretsmanager.tagResource({
-              SecretId: output.secretArn,
+              SecretId: secretArn,
               Tags: upsert,
             });
           }
 
           if (removed.length > 0) {
             yield* secretsmanager.untagResource({
-              SecretId: output.secretArn,
+              SecretId: secretArn,
               TagKeys: removed,
             });
           }
 
-          yield* session.note(output.secretArn);
+          yield* session.note(secretArn);
           return {
-            ...output,
-            versionId: updated.VersionId ?? output.versionId,
+            secretArn,
+            secretName: observed.Name,
+            versionId: hasNewValue
+              ? (updated.VersionId ?? output?.versionId)
+              : output?.versionId,
             description: news.description,
             kmsKeyId: news.kmsKeyId,
-            tags: newTags,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

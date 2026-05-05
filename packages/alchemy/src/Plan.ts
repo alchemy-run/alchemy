@@ -2,6 +2,13 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import {
+  AdoptPolicy,
+  OwnedBySomeoneElse,
+  stripUnowned,
+  Unowned,
+} from "./AdoptPolicy.ts";
+import { AlchemyContext } from "./AlchemyContext.ts";
 import { asEffect } from ".//Util/types.ts";
 import {
   Artifacts,
@@ -13,11 +20,12 @@ import {
 import {
   diffBindings,
   havePropsChanged,
+  isResolved,
   type NoopDiff,
   type UpdateDiff,
 } from "./Diff.ts";
 import { parseFqn } from "./FQN.ts";
-import { InstanceId } from "./InstanceId.ts";
+import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
   findProviderByType,
@@ -175,6 +183,20 @@ export const make = <A>(
     // TODO(sam): rename terminology to Stack
     const stackName = stack.name;
     const stage = stack.stage;
+
+    // Resolve the effective adoption setting for this plan. AdoptPolicy
+    // (provided by the CLI or scoped via `adopt(...)`) takes precedence; if
+    // unset, fall back to the AlchemyContext's `adopt` default; otherwise
+    // adoption is disabled.
+    const shouldAdopt = Effect.gen(function* () {
+      const fromService = yield* Effect.serviceOption(AdoptPolicy);
+      if (Option.isSome(fromService)) return fromService.value;
+      const ctx = yield* Effect.serviceOption(AlchemyContext);
+      return Option.match(ctx, {
+        onNone: () => false,
+        onSome: (c) => c.adopt,
+      });
+    });
 
     const resourceFqns = yield* state.list({
       stack: stackName,
@@ -416,11 +438,98 @@ export const make = <A>(
             const newBindings: ResourceBinding[] = yield* resolveInput(
               stack.bindings[fqn] ?? [],
             );
-            const oldState = yield* state.get({
+            let oldState = yield* state.get({
               stack: stackName,
               stage: stage,
               fqn,
             });
+
+            // Engine-level adoption. When there is no prior state, always
+            // consult `provider.read` (if implemented) so the engine — not
+            // each lifecycle method — owns the existence/ownership decision.
+            //
+            // The provider returns one of:
+            //   - `undefined`        → resource doesn't exist; create it
+            //   - plain attrs        → exists and is owned by us; silent adopt
+            //   - `Unowned(attrs)`   → exists but is *not* ours
+            //
+            // Routing:
+            //   - owned                          → persist `created` state
+            //                                      from attrs and continue
+            //                                      through the normal diff
+            //                                      path (so subsequent props
+            //                                      drift produces an update).
+            //   - unowned + adopt enabled        → take over: persist `created`
+            //                                      state and let the next
+            //                                      update overwrite tags / etc.
+            //   - unowned + adopt disabled       → fail with
+            //                                      `OwnedBySomeoneElse`.
+            // After a cold-start adoption (engine just discovered an
+            // existing cloud resource via `read`), force the engine's
+            // normal `update` path so the provider can re-sync ownership
+            // tags, configuration, etc. against the desired props.
+            // Adoption persists state with `props: news`, so the default
+            // diff sees no drift and would noop — which would leave any
+            // foreign-owned tags / divergent config in place. Forcing
+            // update keeps the deploy idempotent: if cloud state already
+            // matches news, the provider's update is a no-op write.
+            //
+            // Skip the adoption probe entirely when `news` still contains
+            // unresolved upstream Outputs (e.g. a `streamArn` referencing
+            // a stream being created in the same plan). Calling `read` with
+            // an unresolved value would surface as `ParseError` from the
+            // SDK protocol layer. Resources whose props depend on
+            // not-yet-created upstreams cannot themselves be pre-existing
+            // — there's nothing to adopt.
+            let forceUpdateAfterAdoption = false;
+            if (oldState === undefined && provider.read && isResolved(news)) {
+              const adoptInstanceId = yield* generateInstanceId();
+              const readResult = yield* provider
+                .read({
+                  id,
+                  instanceId: adoptInstanceId,
+                  olds: news,
+                  output: undefined,
+                })
+                .pipe(providePlanScope(fqn, adoptInstanceId));
+              if (readResult !== undefined) {
+                const isUnowned = Unowned.is(readResult);
+                if (isUnowned && !(yield* shouldAdopt)) {
+                  return yield* new OwnedBySomeoneElse({
+                    message:
+                      `Cannot adopt resource '${fqn}' (${resource.Type}): ` +
+                      "it exists in the cloud but is not owned by this " +
+                      "stack/stage/logical-id. Re-run with `--adopt` (or " +
+                      "wrap the effect in `adopt(true)`) to take it over.",
+                    resourceType: resource.Type,
+                    logicalId: id,
+                  });
+                }
+                const adoptedState = {
+                  status: "created" as const,
+                  fqn,
+                  logicalId: id,
+                  instanceId: adoptInstanceId,
+                  namespace: resource.Namespace,
+                  resourceType: resource.Type,
+                  props: news,
+                  attr: stripUnowned(readResult),
+                  providerVersion: provider.version ?? 0,
+                  bindings: [],
+                  downstream,
+                  removalPolicy: resource.RemovalPolicy,
+                } satisfies CreatedResourceState;
+                yield* state.set({
+                  stack: stackName,
+                  stage: stage,
+                  fqn,
+                  value: adoptedState,
+                });
+                oldState = adoptedState;
+                forceUpdateAfterAdoption = true;
+              }
+            }
+
             const oldBindings = oldState?.bindings ?? [];
             const bindingDiffs = diffBindings(oldBindings, newBindings);
 
@@ -507,6 +616,17 @@ export const make = <A>(
                   ? ({
                       action: "update",
                     } satisfies UpdateDiff)
+                  : diff,
+              ),
+              // After a cold-start adoption (silent or takeover), force at
+              // least an update so the provider re-syncs ownership tags /
+              // config against the desired props (otherwise the engine
+              // would noop and any drift between the existing cloud
+              // resource and `news` — including foreign-owned tags after a
+              // takeover — would persist).
+              Effect.map((diff) =>
+                forceUpdateAfterAdoption && diff.action === "noop"
+                  ? ({ action: "update" } satisfies UpdateDiff)
                   : diff,
               ),
             );

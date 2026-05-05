@@ -1,0 +1,232 @@
+---
+title: Connect to Neon with Hyperdrive
+description: Provision a Neon Postgres project + branch and front it with a Cloudflare Hyperdrive so your Worker reaches the database with edge-pooled, low-latency connections.
+sidebar:
+  order: 7
+---
+
+import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
+
+export const pgDeps = `pg`;
+export const pgDevDeps = `@types/pg`;
+
+You've now wired Durable Objects, hibernatable WebSockets, a
+Container, a Workflow, and an AI Gateway into your Worker. The
+last missing piece for most apps is a real database. This tutorial
+provisions a serverless Postgres on **Neon** and fronts it with
+**Cloudflare Hyperdrive**, then binds the connection into your
+Worker.
+
+Hyperdrive is a Cloudflare-managed pgbouncer/pooler that sits
+between Workers and your origin database. The Worker sees a
+familiar Postgres connection string, but the connection itself is
+already pooled at the edge — no per-request TCP handshakes, no
+cold-start connection storms.
+
+## Add the Neon provider
+
+The Neon provider is a separate `providers()` layer — register it
+alongside `Cloudflare.providers()` in your stack:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
++import * as Neon from "alchemy/Neon";
++import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "MyStack",
+  {
+-    providers: Cloudflare.providers(),
++    providers: Layer.mergeAll(Cloudflare.providers(), Neon.providers()),
+    state: Alchemy.localState(),
+  },
+  // ...
+);
+```
+
+Neon's auth is API-key-based. The first `bun alchemy login` after
+this change adds a `Neon` step that either reads `NEON_API_KEY`
+from the environment (good for CI) or stores a key under
+`~/.alchemy/credentials/<profile>/neon-stored.json`.
+
+## Provision a project and branch
+
+Create `src/Db.ts`. A `Neon.Project` is the top-level container —
+it owns a default branch, a default role, and the WAL history that
+copy-on-write branches fork from:
+
+```typescript
+// src/Db.ts
+import * as Neon from "alchemy/Neon";
+import * as Effect from "effect/Effect";
+
+export const NeonDb = Effect.gen(function* () {
+  const project = yield* Neon.Project("app-db", {
+    region: "aws-us-east-1",
+  });
+
+  const branch = yield* Neon.Branch("app-branch", {
+    project,
+  });
+
+  return { project, branch };
+});
+```
+
+`Neon.Branch` is a copy-on-write fork — cheap to create, fast to
+destroy, and ideal for preview environments. Each branch has its
+own connection string (`branch.connectionUri`) and a pooled variant
+(`branch.pooledConnectionUri`) that terminates at Neon's pgbouncer.
+
+## Put Hyperdrive in front
+
+Hyperdrive needs an `origin` describing where your database lives.
+`Neon.Branch` exposes a pre-parsed `origin` output (`{ scheme, host,
+port, database, user, password }`) ready to feed straight in:
+
+```diff lang="typescript"
+// src/Db.ts
++import * as Cloudflare from "alchemy/Cloudflare";
+import * as Neon from "alchemy/Neon";
+import * as Effect from "effect/Effect";
+
+export const NeonDb = Effect.gen(function* () {
+  const project = yield* Neon.Project("app-db", { region: "aws-us-east-1" });
+  const branch = yield* Neon.Branch("app-branch", { project });
+  return { project, branch };
+});
+
++export const Hyperdrive = Effect.gen(function* () {
++  const { branch } = yield* NeonDb;
++  return yield* Cloudflare.Hyperdrive("app-hyperdrive", {
++    origin: branch.origin,
++  });
++});
+```
+
+`branch.origin` points at the **direct** (non-pooled) Neon endpoint —
+the recommended target when sitting behind Hyperdrive, since Hyperdrive
+already does its own connection pooling. The `origin` is an `Output`,
+so alchemy correctly orders Neon → Hyperdrive on the deploy graph.
+
+## Bind Hyperdrive to your Worker
+
+Install [`pg`](https://node-postgres.com) (the Worker uses `pg.Client`
+to talk to Hyperdrive over the binding):
+
+<Tabs syncKey="pkgManager">
+  <TabItem label="bun" icon="bun">
+    <Code code={`bun add ${pgDeps}\nbun add -d ${pgDevDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="npm" icon="npm">
+    <Code code={`npm install ${pgDeps}\nnpm install -D ${pgDevDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="pnpm" icon="pnpm">
+    <Code code={`pnpm add ${pgDeps}\npnpm add -D ${pgDevDeps}`} lang="sh" />
+  </TabItem>
+  <TabItem label="yarn" icon="seti:yarn">
+    <Code code={`yarn add ${pgDeps}\nyarn add -D ${pgDevDeps}`} lang="sh" />
+  </TabItem>
+</Tabs>
+
+`Cloudflare.Hyperdrive.bind(...)` returns a typed
+accessor for the runtime binding — connection string, host, port,
+user, password, database — plus a `raw` escape hatch for libraries
+that want the underlying `Hyperdrive` object:
+
+```diff lang="typescript"
+// src/Api.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
++import { Client } from "pg";
++import { Hyperdrive } from "./Db.ts";
+
+export default class Api extends Cloudflare.Worker<Api>()(
+  "Api",
+  {
+    main: import.meta.path,
++    compatibility: {
++      // node-postgres needs Node.js APIs to run inside a Worker.
++      flags: ["nodejs_compat"],
++    },
+  },
+  Effect.gen(function* () {
++    const hd = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
++
+    return {
+      fetch: Effect.gen(function* () {
++        const connectionString = yield* hd.connectionString;
++        const rows = yield* Effect.promise(async () => {
++          // One client per request — Hyperdrive does the pooling.
++          const client = new Client({ connectionString });
++          await client.connect();
++          try {
++            const r = await client.query("SELECT now() as now");
++            return r.rows;
++          } finally {
++            await client.end().catch(() => {});
++          }
++        });
++        return yield* HttpServerResponse.json({ ok: true, rows });
+      }),
+    };
+-  }),
++  }).pipe(Effect.provide(Cloudflare.HyperdriveConnectionLive)),
+) {}
+```
+
+Two things to notice:
+
+- The `nodejs_compat` flag is required because `pg` (node-postgres)
+  uses Node's `net` and `crypto` APIs.
+- The fetch handler opens a fresh `Client` per request and ends it
+  on the way out. This is intentional — Hyperdrive does the
+  pooling on Cloudflare's side, so the Worker doesn't need its
+  own. (We'll revisit this in the Drizzle tutorial when we want
+  long-lived clients.)
+
+## Wire the resources into the stack
+
+Update `alchemy.run.ts` to yield `NeonDb` and `Hyperdrive` so they
+become part of the deploy graph:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import Api from "./src/Api.ts";
++import { Hyperdrive, NeonDb } from "./src/Db.ts";
+
+export default Alchemy.Stack(
+  "MyStack",
+  { /* ... */ },
+  Effect.gen(function* () {
++    yield* NeonDb;
++    yield* Hyperdrive;
+    const api = yield* Api;
+    return { url: api.url.as<string>() };
+  }),
+);
+```
+
+## Deploy
+
+```sh
+bun alchemy deploy
+```
+
+Watch the deploy plan: alchemy creates the Neon project, then the
+branch, then the Hyperdrive that points at the branch's pooled
+URI, then the Worker with the Hyperdrive binding attached. After
+it completes, hit your Worker URL and you should see something
+like:
+
+```json
+{ "ok": true, "rows": [{ "now": "2026-05-04T07:53:48.123Z" }] }
+```
+
+You're now talking to Neon Postgres from the edge through
+Hyperdrive. The next tutorial swaps the raw `pg.Client` for
+**Drizzle ORM** and lets alchemy own migration generation as part
+of every deploy.

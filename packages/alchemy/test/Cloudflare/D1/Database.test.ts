@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import { expect } from "@effect/vitest";
@@ -549,6 +550,76 @@ const getResults = Effect.fn(function* <T>(
     Effect.orDie,
   );
 });
+
+// Engine-level adoption: D1 databases have no ownership signal (Cloudflare
+// doesn't expose tags on D1), so a name match in `read` is treated as silent
+// adoption.
+test.provider(
+  "existing database (matching name) is silently adopted without --adopt",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const databaseName = `alchemy-test-d1-adopt-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+      // Phase 1: deploy normally so a real D1 database exists.
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.D1Database("AdoptableDatabase", {
+            name: databaseName,
+          });
+        }),
+      );
+      expect(initial.databaseName).toEqual(databaseName);
+      const initialId = initial.databaseId;
+
+      // Phase 2: wipe local state — the database stays on Cloudflare.
+      yield* Effect.gen(function* () {
+        const state = yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: "test",
+          fqn: "AdoptableDatabase",
+        });
+      }).pipe(Effect.provide(stack.state));
+
+      // Phase 3: redeploy without `adopt(true)`. The engine calls
+      // `provider.read`, which lists databases by name and returns plain
+      // attrs — silent adoption.
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.D1Database("AdoptableDatabase", {
+            name: databaseName,
+          });
+        }),
+      );
+
+      // Same physical database — adoption, not re-creation.
+      expect(adopted.databaseId).toEqual(initialId);
+      expect(adopted.databaseName).toEqual(databaseName);
+
+      const persisted = yield* Effect.gen(function* () {
+        const state = yield* State;
+        return yield* state.get({
+          stack: stack.name,
+          stage: "test",
+          fqn: "AdoptableDatabase",
+        });
+      }).pipe(Effect.provide(stack.state));
+
+      expect(persisted?.attr).toMatchObject({
+        databaseId: initialId,
+        databaseName,
+      });
+
+      yield* stack.destroy();
+      yield* waitForDatabaseToBeDeleted(initialId, accountId);
+    }).pipe(logLevel),
+);
 
 const waitForDatabaseToBeDeleted = Effect.fn(function* (
   databaseId: string,

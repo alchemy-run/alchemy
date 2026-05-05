@@ -4,6 +4,7 @@ import * as Provider from "../../Provider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { HyperdriveOrigin } from "../Hyperdrive/HyperdriveOriginRuntime.ts";
 import { Sidecar } from "../Local/Sidecar.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { Worker, type WorkerBinding, type WorkerProps } from "./Worker.ts";
@@ -25,12 +26,16 @@ export const LocalWorkerProvider = () =>
         const name = yield* createWorkerName(id, props.name);
         const workerBindings: WorkerBinding[] = [];
         const durableObjectNamespaces: Record<string, string> = {};
+        const hyperdrives: Record<string, HyperdriveOrigin> = {};
         for (const { sid, data } of bindings) {
           for (const binding of data.bindings ?? []) {
             workerBindings.push(binding);
             if (binding.type === "durable_object_namespace") {
               durableObjectNamespaces[binding.name] = sid;
             }
+          }
+          if (data.hyperdrives) {
+            Object.assign(hyperdrives, data.hyperdrives);
           }
         }
         for (const [key, value] of Object.entries(props.env ?? {})) {
@@ -63,6 +68,7 @@ export const LocalWorkerProvider = () =>
               },
           stack: { name: stack.name, stage: stack.stage },
           bindings: workerBindings,
+          hyperdrives,
           durableObjectNamespaces: Object.entries(durableObjectNamespaces).map(
             ([className, namespaceId]) => ({
               className,
@@ -85,8 +91,11 @@ export const LocalWorkerProvider = () =>
 
       return {
         diff: () => Effect.succeed({ action: "update" }),
-        create: ({ id, news, bindings }) => run(id, news, bindings),
-        update: ({ id, news, bindings }) => run(id, news, bindings),
+        // The local sidecar `serve` operation is itself a true upsert:
+        // it tears down any existing process for the worker name and
+        // starts a fresh one with the latest bindings, so observe and
+        // sync collapse into a single sidecar call.
+        reconcile: ({ id, news, bindings }) => run(id, news, bindings),
         delete: ({ output }) => sidecar.stop(output.workerName),
       };
     }),

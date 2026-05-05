@@ -315,26 +315,78 @@ const stack = beforeAll(deploy(Stack));
 exposes the result (including the public `url`) as an `Effect`
 the tests can `yield*`.
 
-## A Socket-based `connect` helper
+## Open the socket and acquire a writer
 
 We want each test to say "give me a connected client" and get back
-something with `send` and `next` methods. Build that on top of
-`Socket.makeWebSocket`:
+something with `send` and `next` methods. Start by opening the
+socket and grabbing a writer for sending frames:
 
 ```typescript
 const connect = (url: string) =>
   Effect.gen(function* () {
     const socket = yield* Socket.makeWebSocket(url);
+    const send = yield* socket.writer;
+
+    return {
+      send: (msg: string) => send(msg),
+    };
+  });
+```
+
+`Socket.makeWebSocket(url)` builds a `Socket` resource. It needs a
+`WebSocketConstructor` in context, which we'll provide at the test
+boundary. `socket.writer` returns a function for sending frames —
+acquiring it once is more efficient than re-deriving it per send.
+
+## Drain inbound frames into a queue
+
+To let the test consume incoming messages, push each frame into an
+unbounded `Queue` and expose a `next` accessor that pulls one off:
+
+```diff lang="typescript"
+const connect = (url: string) =>
+  Effect.gen(function* () {
+    const socket = yield* Socket.makeWebSocket(url);
++    const messages = yield* Queue.unbounded<string>();
+    const send = yield* socket.writer;
+
++    yield* Effect.forkScoped(
++      socket.runString((msg) => Queue.offer(messages, msg)),
++    );
++
+    return {
+      send: (msg: string) => send(msg),
++      next: Queue.take(messages),
+    };
+  });
+```
+
+`socket.runString` consumes inbound text frames and hands each one
+to your callback. `Effect.forkScoped` runs the read loop in the
+background, tied to the surrounding scope — when the test scope
+closes, the loop is interrupted and the socket is closed.
+
+## Wait for the open handshake
+
+Returning before the socket is actually open lets the caller race
+the handshake — `send` could fire before the server is ready. Block
+on a `Deferred` that the `onOpen` hook fulfils:
+
+```diff lang="typescript"
+const connect = (url: string) =>
+  Effect.gen(function* () {
+    const socket = yield* Socket.makeWebSocket(url);
     const messages = yield* Queue.unbounded<string>();
     const send = yield* socket.writer;
-    const opened = yield* Deferred.make<void>();
++    const opened = yield* Deferred.make<void>();
 
     yield* Effect.forkScoped(
-      socket.runString((msg) => Queue.offer(messages, msg), {
-        onOpen: Deferred.succeed(opened, undefined),
-      }),
+-      socket.runString((msg) => Queue.offer(messages, msg)),
++      socket.runString((msg) => Queue.offer(messages, msg), {
++        onOpen: Deferred.succeed(opened, undefined),
++      }),
     );
-    yield* Deferred.await(opened);
++    yield* Deferred.await(opened);
 
     return {
       send: (msg: string) => send(msg),
@@ -343,27 +395,15 @@ const connect = (url: string) =>
   });
 ```
 
-A few things are happening here:
+`Deferred.await(opened)` blocks the helper until `onOpen` fires, so
+the caller can `send` immediately on return without racing the
+handshake.
 
-- `Socket.makeWebSocket(url)` builds a `Socket` resource. It needs
-  a `WebSocketConstructor` in context, which we'll provide at the
-  test boundary.
-- `socket.writer` returns a function for sending frames. Acquiring
-  it once is more efficient than re-deriving it per send.
-- `socket.runString` consumes inbound text frames and hands each
-  one to your callback. We push them into an unbounded `Queue` so
-  the test can pull them off in order with `Queue.take`.
-- `Effect.forkScoped` runs the read loop in the background, tied
-  to the surrounding scope — when the test scope closes, the loop
-  is interrupted and the socket is closed.
-- The `onOpen` hook fulfils a `Deferred`, and we wait on it before
-  returning. That guarantees the caller can `send` immediately
-  without racing the handshake.
-
-## Write the test
+## Write the test body
 
 Open two clients to the same room, have one send `"hello bob"`,
-and assert the other receives the broadcast:
+and assert the other receives the broadcast. Wrap the whole effect
+in `Effect.scoped` so the test scope closes when it finishes:
 
 ```typescript
 test(
@@ -379,22 +419,37 @@ test(
 
     const received = yield* bob.next;
     expect(received).toMatch(/hello bob$/);
+  }).pipe(Effect.scoped),
+  { timeout: 30_000 },
+);
+```
+
+`Effect.scoped` closes the scope at the end of the test, which
+interrupts every forked read loop in `connect` and closes both
+sockets.
+
+## Provide the WebSocket constructor
+
+`Socket.makeWebSocket` doesn't know how to actually open a
+connection by itself — it depends on a `WebSocketConstructor`
+service. Provide the global one:
+
+```diff lang="typescript"
+test(
+  "Room broadcasts messages between peers",
+  Effect.gen(function* () {
+    // ...
   }).pipe(
     Effect.scoped,
-    Effect.provide(Socket.layerWebSocketConstructorGlobal),
++    Effect.provide(Socket.layerWebSocketConstructorGlobal),
   ),
   { timeout: 30_000 },
 );
 ```
 
-Two pieces at the bottom do the heavy lifting:
-
-- `Effect.scoped` closes the scope at the end of the test, which
-  interrupts every forked read loop and closes both sockets.
-- `Effect.provide(Socket.layerWebSocketConstructorGlobal)` supplies
-  the runtime's global `WebSocket` constructor so `Socket.makeWebSocket`
-  knows how to actually open a connection. On Bun and Node 22+ this
-  picks up the built-in `WebSocket`.
+`layerWebSocketConstructorGlobal` supplies the runtime's global
+`WebSocket` constructor. On Bun and Node 22+ this picks up the
+built-in `WebSocket`.
 
 Run it:
 

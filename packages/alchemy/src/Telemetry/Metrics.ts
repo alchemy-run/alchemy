@@ -69,7 +69,7 @@ export const stateStoreInitCounter = Metric.counter(
  *
  * Usage:
  * ```ts
- * provider.create(input).pipe(recordResourceOp(node.resource.Type, "create"))
+ * provider.reconcile(input).pipe(recordResourceOp(node.resource.Type, "create"))
  * ```
  */
 export const recordResourceOp =
@@ -141,11 +141,7 @@ export const recordStateStoreOp =
  * a stable slug there. Apply at every `Layer.effect(State, …)` site
  * exactly once.
  */
-export const recordStateStoreInit = <
-  A extends { readonly id: string },
-  E,
-  R,
->(
+export const recordStateStoreInit = <A extends { readonly id: string }, E, R>(
   self: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   self.pipe(

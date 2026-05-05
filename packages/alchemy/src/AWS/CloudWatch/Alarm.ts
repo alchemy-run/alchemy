@@ -1,15 +1,16 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import {
   createName,
-  ensureOwnedByAlchemy,
   readResourceTags,
   retryConcurrent,
   updateResourceTags,
@@ -124,16 +125,22 @@ export const AlarmProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));
-          return yield* readAlarm(name);
+          const state = yield* readAlarm(name);
+          if (!state) return undefined;
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* createAlarmName(id, news);
+        reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
+          // Observe — derive the alarm name and read whatever is currently
+          // in CloudWatch under that name. `output.alarmName` wins when
+          // present so an existing physical resource is never renamed.
+          const name = output?.alarmName ?? (yield* createAlarmName(id, news));
           const existing = yield* readAlarm(name);
 
-          if (existing) {
-            yield* ensureOwnedByAlchemy(id, name, existing.tags, "alarm");
-          }
-
+          // Ensure — `putMetricAlarm` is an upsert; we always send the full
+          // desired config so the cloud converges to `news` regardless of
+          // whether the alarm pre-existed.
           yield* retryConcurrent(
             cloudwatch.putMetricAlarm({
               ...news,
@@ -141,10 +148,13 @@ export const AlarmProvider = () =>
             }),
           );
 
+          // Sync tags — diff observed (or prior) tags against desired and
+          // apply only the delta. On adoption `olds` is undefined, so we
+          // fall back to whatever we just observed.
           const tags = yield* updateResourceTags({
             id,
             resourceArn: alarmArn(name),
-            olds: existing?.tags,
+            olds: olds?.tags ?? existing?.tags,
             news: news.tags,
           });
 
@@ -153,36 +163,7 @@ export const AlarmProvider = () =>
           const state = yield* readAlarm(name);
           if (!state) {
             return yield* Effect.fail(
-              new Error(`failed to read created alarm '${name}'`),
-            );
-          }
-
-          return {
-            ...state,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* retryConcurrent(
-            cloudwatch.putMetricAlarm({
-              ...news,
-              AlarmName: output.alarmName,
-            }),
-          );
-
-          const tags = yield* updateResourceTags({
-            id,
-            resourceArn: output.alarmArn,
-            olds: olds.tags,
-            news: news.tags,
-          });
-
-          yield* session.note(output.alarmArn);
-
-          const state = yield* readAlarm(output.alarmName);
-          if (!state) {
-            return yield* Effect.fail(
-              new Error(`failed to read updated alarm '${output.alarmName}'`),
+              new Error(`failed to read reconciled alarm '${name}'`),
             );
           }
 

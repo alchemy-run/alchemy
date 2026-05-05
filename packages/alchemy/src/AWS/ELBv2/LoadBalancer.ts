@@ -124,30 +124,59 @@ export const LoadBalancerProvider = () =>
               ) ?? [],
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const name = yield* toName(id, news);
-          const tags = {
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
-          const created = yield* elbv2.createLoadBalancer({
-            Name: name,
-            Scheme: news.scheme ?? "internet-facing",
-            Type: news.type ?? "application",
-            Subnets: news.subnets as string[],
-            SecurityGroups: news.securityGroups as string[] | undefined,
-            IpAddressType: news.ipAddressType,
-            Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
-          });
-          const loadBalancer = created.LoadBalancers?.[0];
-          if (!loadBalancer?.LoadBalancerArn) {
-            return yield* Effect.die(
-              new Error("createLoadBalancer returned no load balancer"),
+
+          // Observe — look up by deterministic name.
+          let described = yield* elbv2
+            .describeLoadBalancers({
+              Names: [name],
+            })
+            .pipe(
+              Effect.catchTag("LoadBalancerNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
             );
+          let loadBalancer = described?.LoadBalancers?.[0];
+
+          // Ensure — create if missing. The replacement axes (scheme, type,
+          // subnets, securityGroups, ipAddressType) are handled by diff so
+          // we don't need to deal with mismatches here.
+          if (!loadBalancer?.LoadBalancerArn) {
+            const created = yield* elbv2.createLoadBalancer({
+              Name: name,
+              Scheme: news.scheme ?? "internet-facing",
+              Type: news.type ?? "application",
+              Subnets: news.subnets as string[],
+              SecurityGroups: news.securityGroups as string[] | undefined,
+              IpAddressType: news.ipAddressType,
+              Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
+            });
+            loadBalancer = created.LoadBalancers?.[0];
+            if (!loadBalancer?.LoadBalancerArn) {
+              return yield* Effect.die(
+                new Error("createLoadBalancer returned no load balancer"),
+              );
+            }
           }
+
+          const loadBalancerArn =
+            loadBalancer.LoadBalancerArn as LoadBalancerArn;
+
+          // Sync attributes — observed ↔ desired. We always apply when
+          // desired attrs are non-empty; AWS rejects an empty list anyway,
+          // and reading observed attributes is an extra round-trip we
+          // don't need for convergence.
           if (news.attributes && Object.keys(news.attributes).length > 0) {
             yield* elbv2.modifyLoadBalancerAttributes({
-              LoadBalancerArn: loadBalancer.LoadBalancerArn,
+              LoadBalancerArn: loadBalancerArn,
               Attributes: Object.entries(news.attributes).map(
                 ([Key, Value]) => ({
                   Key,
@@ -156,9 +185,36 @@ export const LoadBalancerProvider = () =>
               ),
             });
           }
-          yield* session.note(loadBalancer.LoadBalancerArn);
+
+          // Sync tags — diff observed cloud tags against desired.
+          const tagDescriptions = yield* elbv2.describeTags({
+            ResourceArns: [loadBalancerArn],
+          });
+          const observedTags = Object.fromEntries(
+            (tagDescriptions.TagDescriptions?.[0]?.Tags ?? [])
+              .filter(
+                (t): t is { Key: string; Value: string } =>
+                  typeof t.Key === "string" && typeof t.Value === "string",
+              )
+              .map((t) => [t.Key, t.Value]),
+          );
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0) {
+            yield* elbv2.addTags({
+              ResourceArns: [loadBalancerArn],
+              Tags: upsert,
+            });
+          }
+          if (removed.length > 0) {
+            yield* elbv2.removeTags({
+              ResourceArns: [loadBalancerArn],
+              TagKeys: removed,
+            });
+          }
+
+          yield* session.note(loadBalancerArn);
           return {
-            loadBalancerArn: loadBalancer.LoadBalancerArn as LoadBalancerArn,
+            loadBalancerArn,
             loadBalancerName: loadBalancer.LoadBalancerName!,
             dnsName: loadBalancer.DNSName!,
             canonicalHostedZoneId: loadBalancer.CanonicalHostedZoneId!,
@@ -170,49 +226,7 @@ export const LoadBalancerProvider = () =>
               loadBalancer.AvailabilityZones?.flatMap((zone) =>
                 zone.SubnetId ? [zone.SubnetId] : [],
               ) ?? [],
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          if (
-            JSON.stringify(news.attributes ?? {}) !==
-            JSON.stringify(olds.attributes ?? {})
-          ) {
-            yield* elbv2.modifyLoadBalancerAttributes({
-              LoadBalancerArn: output.loadBalancerArn,
-              Attributes: Object.entries(news.attributes ?? {}).map(
-                ([Key, Value]) => ({
-                  Key,
-                  Value,
-                }),
-              ),
-            });
-          }
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-          if (upsert.length > 0) {
-            yield* elbv2.addTags({
-              ResourceArns: [output.loadBalancerArn],
-              Tags: upsert,
-            });
-          }
-          if (removed.length > 0) {
-            yield* elbv2.removeTags({
-              ResourceArns: [output.loadBalancerArn],
-              TagKeys: removed,
-            });
-          }
-          yield* session.note(output.loadBalancerArn);
-          return {
-            ...output,
-            tags: newTags,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

@@ -136,7 +136,10 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite("ViteReloc", viteProps(rootA, memoInclude));
+          return yield* Cloudflare.Vite(
+            "ViteReloc",
+            viteProps(rootA, memoInclude),
+          );
         }),
       );
       expect(site1.hash?.input).toBeDefined();
@@ -160,7 +163,10 @@ test.provider(
 
       const site2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.Vite("ViteReloc", viteProps(rootB, memoInclude));
+          return yield* Cloudflare.Vite(
+            "ViteReloc",
+            viteProps(rootB, memoInclude),
+          );
         }),
       );
 

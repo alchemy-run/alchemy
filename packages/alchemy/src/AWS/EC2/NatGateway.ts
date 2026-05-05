@@ -270,43 +270,68 @@ export const NatGatewayProvider = () =>
           // Tags can be updated in-place
         }),
 
-        create: Effect.fn(function* ({ id, news, session }) {
-          yield* session.note("Creating NAT Gateway...");
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const desiredTags = yield* createTags(id, news.tags);
 
-          const result = yield* ec2.createNatGateway({
-            SubnetId: news.subnetId as string,
-            AllocationId: news.allocationId as string | undefined,
-            ConnectivityType: news.connectivityType ?? "public",
-            PrivateIpAddress: news.privateIpAddress,
-            SecondaryAllocationIds: news.secondaryAllocationIds as
-              | string[]
-              | undefined,
-            SecondaryPrivateIpAddresses: news.secondaryPrivateIpAddresses,
-            SecondaryPrivateIpAddressCount: news.secondaryPrivateIpAddressCount,
-            TagSpecifications: [
-              {
-                ResourceType: "natgateway",
-                Tags: createTagsList(yield* createTags(id, news.tags)),
-              },
-            ],
-            DryRun: false,
-          });
+          // Observe — try the cached id first; if missing, search by alchemy
+          // tags so an interrupted create can recover before re-running the
+          // API. We treat a non-deleted match as ours because diff/replace
+          // already covers immutable property changes upstream.
+          let gw: ec2.NatGateway | undefined;
+          if (output?.natGatewayId) {
+            const lookup = yield* ec2
+              .describeNatGateways({ NatGatewayIds: [output.natGatewayId] })
+              .pipe(
+                Effect.catchTag("NatGatewayNotFound", () =>
+                  Effect.succeed({ NatGateways: [] }),
+                ),
+              );
+            gw = lookup.NatGateways?.[0];
+          } else {
+            gw = yield* findNatGatewayByTags(id);
+          }
 
-          const natGatewayId = result.NatGateway!.NatGatewayId!;
-          yield* session.note(`NAT Gateway created: ${natGatewayId}`);
+          // Treat a deleted/deleting NAT as if it doesn't exist so we recreate.
+          if (
+            gw &&
+            (gw.State === "deleted" ||
+              gw.State === "deleting" ||
+              gw.State === "failed")
+          ) {
+            gw = undefined;
+          }
 
-          // Wait for NAT Gateway to be available
-          const gw = yield* waitForNatGatewayAvailable(natGatewayId, session);
+          // Ensure — create the NAT gateway when missing.
+          if (gw === undefined) {
+            yield* session.note("Creating NAT Gateway...");
+            const result = yield* ec2.createNatGateway({
+              SubnetId: news.subnetId as string,
+              AllocationId: news.allocationId as string | undefined,
+              ConnectivityType: news.connectivityType ?? "public",
+              PrivateIpAddress: news.privateIpAddress,
+              SecondaryAllocationIds: news.secondaryAllocationIds as
+                | string[]
+                | undefined,
+              SecondaryPrivateIpAddresses: news.secondaryPrivateIpAddresses,
+              SecondaryPrivateIpAddressCount:
+                news.secondaryPrivateIpAddressCount,
+              TagSpecifications: [
+                {
+                  ResourceType: "natgateway",
+                  Tags: createTagsList(desiredTags),
+                },
+              ],
+              DryRun: false,
+            });
+            const natGatewayId = result.NatGateway!.NatGatewayId!;
+            yield* session.note(`NAT Gateway created: ${natGatewayId}`);
+            gw = yield* waitForNatGatewayAvailable(natGatewayId, session);
+          }
 
-          return toAttrs(gw);
-        }),
+          const natGatewayId = gw.NatGatewayId!;
 
-        update: Effect.fn(function* ({ id, news, output, session }) {
-          const natGatewayId = output.natGatewayId;
-
-          // Handle tag updates
-          const newTags = yield* createTags(id, news.tags);
-          const oldTags =
+          // Sync tags — observed cloud tags vs desired.
+          const currentTags =
             (yield* ec2
               .describeTags({
                 Filters: [
@@ -322,9 +347,7 @@ export const NatGatewayProvider = () =>
                     ) as Record<string, string>,
                 ),
               )) ?? {};
-
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
+          const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {
             yield* ec2.deleteTags({
               Resources: [natGatewayId],
@@ -338,12 +361,11 @@ export const NatGatewayProvider = () =>
               Tags: upsert,
               DryRun: false,
             });
-            yield* session.note("Updated tags");
           }
 
-          // Refresh state
-          const gw = yield* describeNatGateway(natGatewayId);
-          return toAttrs(gw);
+          // Re-read final state.
+          const final = yield* describeNatGateway(natGatewayId);
+          return toAttrs(final);
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

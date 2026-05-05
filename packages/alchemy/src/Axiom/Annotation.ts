@@ -67,12 +67,31 @@ export const AnnotationProvider = () =>
 
       return {
         stables: ["id"],
-        create: Effect.fn(function* ({ news }) {
-          return yield* create(news);
-        }),
-        update: Effect.fn(function* ({ news, output }) {
-          const result = yield* update({ ...news, id: output.id });
-          return { ...result, id: output.id, time: result.time ?? output.time };
+        reconcile: Effect.fn(function* ({ news, output }) {
+          // Observe — Axiom assigns the annotation id server-side, so the
+          // only handle to a previously-created annotation is the cached
+          // `output.id`. Probe for live state with that id; treat NotFound
+          // (deleted out-of-band, or never created) as "no observed state".
+          const observed = output?.id
+            ? yield* get({ id: output.id }).pipe(
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
+            : undefined;
+
+          // Ensure — when no observed annotation exists, POST creates one
+          // and Axiom assigns the id.
+          if (observed === undefined) {
+            return yield* create(news);
+          }
+
+          // Sync — the annotation exists; apply desired props with PUT and
+          // preserve the stable id and original time as fallbacks.
+          const result = yield* update({ ...news, id: observed.id! });
+          return {
+            ...result,
+            id: observed.id!,
+            time: result.time ?? output?.time ?? news.time,
+          };
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* del({ id: output.id }).pipe(

@@ -163,39 +163,61 @@ export const CommentProvider = () =>
   Provider.succeed(Comment, {
     stables: ["commentId"],
 
-    create: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ news, output }) {
       const octokit = createClient(news);
       const body = dedent(news.body);
 
-      const { data } = yield* Effect.tryPromise(() =>
-        octokit.rest.issues.createComment({
-          owner: news.owner,
-          repo: news.repository,
-          issue_number: news.issueNumber,
-          body,
-        }),
-      );
+      // Observe — GitHub assigns `comment_id` server-side. Probe for live
+      // state via the cached id; a 404 (deleted out-of-band, or never
+      // created) collapses to "no observed comment" so we converge by
+      // posting a fresh one.
+      const observedId = output?.commentId
+        ? yield* Effect.tryPromise({
+            try: async () => {
+              try {
+                const { data } = await octokit.rest.issues.getComment({
+                  owner: news.owner,
+                  repo: news.repository,
+                  comment_id: output.commentId,
+                });
+                return data.id;
+              } catch (error: any) {
+                if (error.status === 404) return undefined;
+                throw error;
+              }
+            },
+            catch: (e) => e as Error,
+          })
+        : undefined;
 
-      return {
-        commentId: data.id,
-        htmlUrl: data.html_url,
-        updatedAt: data.updated_at,
-      };
-    }),
+      // Ensure — when no live comment exists, POST creates one.
+      if (observedId === undefined) {
+        const { data } = yield* Effect.tryPromise(() =>
+          octokit.rest.issues.createComment({
+            owner: news.owner,
+            repo: news.repository,
+            issue_number: news.issueNumber,
+            body,
+          }),
+        );
+        return {
+          commentId: data.id,
+          htmlUrl: data.html_url,
+          updatedAt: data.updated_at,
+        };
+      }
 
-    update: Effect.fn(function* ({ news, output }) {
-      const octokit = createClient(news);
-      const body = dedent(news.body);
-
+      // Sync — PATCH the existing comment with the desired body. GitHub's
+      // updateComment is idempotent for identical bodies (returns same
+      // updatedAt), so we always issue the call rather than diffing.
       const { data } = yield* Effect.tryPromise(() =>
         octokit.rest.issues.updateComment({
           owner: news.owner,
           repo: news.repository,
-          comment_id: output.commentId,
+          comment_id: observedId,
           body,
         }),
       );
-
       return {
         commentId: data.id,
         htmlUrl: data.html_url,

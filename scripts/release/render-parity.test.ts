@@ -25,8 +25,7 @@ const config = {
   scopeMap: {},
   contributors: true,
   tag: "v%s",
-} as unknown as RenderConfig &
-  Parameters<typeof generateMarkdown>[1];
+} as unknown as RenderConfig & Parameters<typeof generateMarkdown>[1];
 
 function makeCommit(input: {
   type: string;
@@ -129,10 +128,7 @@ describe("render.ts / changelogithub parity for non-`/` scopes", () => {
         scope: "website",
         description: "solo website fix",
         hash: "eee0000",
-        authors: [
-          { login: "alice", name: "Alice" },
-          { name: "Bob" },
-        ],
+        authors: [{ login: "alice", name: "Alice" }, { name: "Bob" }],
       }),
       makeCommit({
         type: "feat",

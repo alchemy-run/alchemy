@@ -9,9 +9,11 @@ import type { Stage } from "./Stage.ts";
 export const destroy = ({
   stack,
   stage,
+  dev,
 }: {
   stack: StackEffect<CompiledStack, Stage | AlchemyContext>;
   stage: string;
+  dev?: boolean;
 }) =>
   evalStack(
     stack,
@@ -24,5 +26,5 @@ export const destroy = ({
         bindings: {},
         output: {},
       }).pipe(Effect.flatMap(Apply.apply)),
-    { stage },
+    { stage, dev },
   );

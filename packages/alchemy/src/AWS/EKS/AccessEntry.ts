@@ -1,5 +1,6 @@
 import * as eks from "@distilled.cloud/aws/eks";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
@@ -110,158 +111,132 @@ export const AccessEntryProvider = () =>
         return { action: "replace" } as const;
       }
     }),
-    read: Effect.fn(function* ({ olds, output }) {
-      return yield* readAccessEntry({
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const state = yield* readAccessEntry({
         clusterName: (output?.clusterName ?? olds.clusterName) as string,
         principalArn: (output?.principalArn ?? olds.principalArn) as string,
       });
+      if (!state) return undefined;
+      return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
     }),
-    create: Effect.fn(function* ({ id, news, session }) {
-      const tags = {
+    reconcile: Effect.fn(function* ({ id, news, session }) {
+      const clusterName = news.clusterName as string;
+      const principalArn = news.principalArn as string;
+      const desiredTags = {
         ...(yield* createInternalTags(id)),
         ...news.tags,
       };
 
-      yield* eks
-        .createAccessEntry({
-          clusterName: news.clusterName as string,
-          principalArn: news.principalArn as string,
-          kubernetesGroups: news.kubernetesGroups,
-          username: news.username,
-          type: news.type,
-          tags,
-        })
-        .pipe(
-          Effect.catchTag("ResourceInUseException", () =>
-            readAccessEntry({
-              clusterName: news.clusterName as string,
-              principalArn: news.principalArn as string,
-            }).pipe(
-              Effect.flatMap((existing) =>
-                existing && hasAlchemyTags(id, existing.tags)
-                  ? Effect.succeed(existing)
-                  : Effect.fail(
-                      new Error(
-                        `AccessEntry '${news.principalArn as string}' already exists and is not managed by alchemy`,
-                      ),
-                    ),
-              ),
-            ),
-          ),
-        );
+      // Observe — fetch live cloud state by (clusterName, principalArn).
+      let state = yield* readAccessEntry({
+        clusterName,
+        principalArn,
+      });
 
-      for (const policy of normalizeAccessPolicies(news.accessPolicies)) {
-        yield* eks.associateAccessPolicy({
-          clusterName: news.clusterName as string,
-          principalArn: news.principalArn as string,
-          policyArn: policy.policyArn,
-          accessScope: policy.accessScope,
+      // Ensure — create the entry if missing. Tolerate
+      // `ResourceInUseException` as a race with a peer reconciler.
+      if (!state) {
+        yield* eks
+          .createAccessEntry({
+            clusterName,
+            principalArn,
+            kubernetesGroups: news.kubernetesGroups,
+            username: news.username,
+            type: news.type,
+            tags: desiredTags,
+          })
+          .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
+
+        state = yield* readAccessEntry({
+          clusterName,
+          principalArn,
         });
+
+        if (!state) {
+          return yield* Effect.fail(
+            new Error(
+              `AccessEntry '${principalArn}' could not be read after creation`,
+            ),
+          );
+        }
       }
 
-      yield* session.note(
-        `${news.clusterName as string}:${news.principalArn as string}`,
-      );
-
-      return yield* readAccessEntry({
-        clusterName: news.clusterName as string,
-        principalArn: news.principalArn as string,
-      }).pipe(
-        Effect.flatMap((state) =>
-          state
-            ? Effect.succeed(state)
-            : Effect.fail(
-                new Error(
-                  `AccessEntry '${news.principalArn as string}' could not be read after creation`,
-                ),
-              ),
-        ),
-      );
-    }),
-    update: Effect.fn(function* ({ id, olds, news, output, session }) {
-      const oldGroups = olds.kubernetesGroups ?? [];
-      const newGroups = news.kubernetesGroups ?? [];
-
+      // Sync kubernetesGroups + username — observed ↔ desired.
+      const observedGroups = state.kubernetesGroups ?? [];
+      const desiredGroups = news.kubernetesGroups ?? [];
       if (
-        JSON.stringify(oldGroups) !== JSON.stringify(newGroups) ||
-        olds.username !== news.username
+        JSON.stringify(observedGroups) !== JSON.stringify(desiredGroups) ||
+        state.username !== news.username
       ) {
         yield* eks.updateAccessEntry({
-          clusterName: output.clusterName,
-          principalArn: output.principalArn,
-          kubernetesGroups: newGroups,
+          clusterName,
+          principalArn,
+          kubernetesGroups: desiredGroups,
           username: news.username,
         });
       }
 
-      const oldTags = {
-        ...(yield* createInternalTags(id)),
-        ...olds.tags,
-      };
-      const newTags = {
-        ...(yield* createInternalTags(id)),
-        ...news.tags,
-      };
-      const { removed, upsert } = diffTags(oldTags, newTags);
-
+      // Sync tags — diff observed cloud tags against desired.
+      const { removed, upsert } = diffTags(state.tags, desiredTags);
       if (upsert.length > 0) {
         yield* eks.tagResource({
-          resourceArn: output.accessEntryArn,
+          resourceArn: state.accessEntryArn,
           tags: Object.fromEntries(
             upsert.map((tag) => [tag.Key, tag.Value] as const),
           ),
         });
       }
-
       if (removed.length > 0) {
         yield* eks.untagResource({
-          resourceArn: output.accessEntryArn,
+          resourceArn: state.accessEntryArn,
           tagKeys: removed,
         });
       }
 
-      const oldPolicies = normalizeAccessPolicies(olds.accessPolicies);
-      const newPolicies = normalizeAccessPolicies(news.accessPolicies);
-      const oldPolicyMap = new Map(
-        oldPolicies.map((policy) => [policyKey(policy), policy]),
+      // Sync access policy associations — diff observed against desired.
+      const observedPolicies = state.accessPolicies;
+      const desiredPolicies = normalizeAccessPolicies(news.accessPolicies);
+      const observedPolicyMap = new Map(
+        observedPolicies.map((policy) => [policyKey(policy), policy]),
       );
-      const newPolicyMap = new Map(
-        newPolicies.map((policy) => [policyKey(policy), policy]),
+      const desiredPolicyMap = new Map(
+        desiredPolicies.map((policy) => [policyKey(policy), policy]),
       );
 
-      for (const [key, policy] of newPolicyMap) {
-        if (!oldPolicyMap.has(key)) {
+      for (const [key, policy] of desiredPolicyMap) {
+        if (!observedPolicyMap.has(key)) {
           yield* eks.associateAccessPolicy({
-            clusterName: output.clusterName,
-            principalArn: output.principalArn,
+            clusterName,
+            principalArn,
             policyArn: policy.policyArn,
             accessScope: policy.accessScope,
           });
         }
       }
 
-      for (const [key, policy] of oldPolicyMap) {
-        if (!newPolicyMap.has(key)) {
+      for (const [key, policy] of observedPolicyMap) {
+        if (!desiredPolicyMap.has(key)) {
           yield* eks.disassociateAccessPolicy({
-            clusterName: output.clusterName,
-            principalArn: output.principalArn,
+            clusterName,
+            principalArn,
             policyArn: policy.policyArn,
           });
         }
       }
 
-      yield* session.note(output.accessEntryArn);
+      yield* session.note(state.accessEntryArn);
 
+      // Re-read final state so returned attributes reflect post-sync.
       return yield* readAccessEntry({
-        clusterName: output.clusterName,
-        principalArn: output.principalArn,
+        clusterName,
+        principalArn,
       }).pipe(
-        Effect.flatMap((state) =>
-          state
-            ? Effect.succeed(state)
+        Effect.flatMap((finalState) =>
+          finalState
+            ? Effect.succeed(finalState)
             : Effect.fail(
                 new Error(
-                  `AccessEntry '${output.principalArn}' could not be read after update`,
+                  `AccessEntry '${principalArn}' could not be read after reconcile`,
                 ),
               ),
         ),

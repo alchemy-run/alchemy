@@ -1,6 +1,6 @@
 ---
 title: Provider
-description: Providers implement the lifecycle operations for a resource type — create, update, delete, diff, read, and more.
+description: Providers implement the lifecycle operations for a resource type — reconcile, delete, diff, read, and more.
 sidebar:
   order: 4
 ---
@@ -51,44 +51,66 @@ Alchemy.Stack(
 ## Lifecycle operations
 
 A provider is an object implementing some subset of these operations.
-`create`, `update`, and `delete` are required; the rest are optional
-hooks alchemy uses for richer behavior.
+`reconcile` and `delete` are required; the rest are optional hooks
+alchemy uses for richer behavior.
 
-### `create`
+### `reconcile`
 
-Required. Called when a resource is declared but not yet persisted.
-Returns the **output attributes** that downstream resources can
-reference.
+Required. Called for every "make it so" intent — first-time
+provisioning, routine updates, and adoption takeovers. Returns the
+**output attributes** that downstream resources can reference.
+
+A reconciler is a single observe → ensure → sync → return flow:
 
 ```typescript
-create: Effect.fnUntraced(function* ({ id, instanceId, news, bindings }) {
+reconcile: Effect.fnUntraced(function* ({ news, output }) {
   const stripe = yield* StripeClient;
-  const product = yield* Effect.promise(() =>
-    stripe.products.create({ name: news.name }),
-  );
-  return { productId: product.id };
+
+  // Observe — fetch live state if we have a cached id.
+  let product = output?.productId
+    ? yield* Effect.tryPromise(() =>
+        stripe.products.retrieve(output.productId),
+      ).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+    : undefined;
+
+  // Ensure — create if missing.
+  if (!product) {
+    product = yield* Effect.tryPromise(() =>
+      stripe.products.create({ name: news.name }),
+    );
+  }
+
+  // Sync — patch any field that drifted from desired.
+  if (product.name !== news.name) {
+    product = yield* Effect.tryPromise(() =>
+      stripe.products.update(product!.id, { name: news.name }),
+    );
+  }
+
+  return { productId: product.id, name: product.name };
 }),
 ```
 
-`create` must be **idempotent** — alchemy may retry it after a state
-persistence failure. Use deterministic physical names so a retry
-finds the existing resource.
+The provider receives `output: Attributes | undefined` and
+`olds: Props | undefined`:
 
-### `update`
+| `output`    | `olds`      | Meaning                              |
+| ----------- | ----------- | ------------------------------------ |
+| `undefined` | `undefined` | Greenfield — no prior resource       |
+| defined     | defined     | Routine update                       |
+| defined     | `undefined` | Adoption — engine adopted via `read` |
 
-Required. Called when a resource exists and at least one input
-property changed (and the change isn't a replacement). Receives both
-old and new props plus the previous output:
+The reconciler must work for all three combinations. **Do not
+branch the body on `output === undefined`** — that just renames the
+old `create`/`update` split. Trust observed cloud state, not `olds`.
 
-```typescript
-update: Effect.fnUntraced(function* ({ news, olds, output }) {
-  const stripe = yield* StripeClient;
-  yield* Effect.promise(() =>
-    stripe.products.update(output.productId, { name: news.name }),
-  );
-  return output;
-}),
-```
+`reconcile` must be **idempotent**: alchemy may retry it after a
+state persistence failure. Deterministic physical names plus the
+observe step ensure a retry finds the existing resource and re-syncs
+any drifted fields.
+
+See the [custom provider guide](/guides/custom-provider#implement-reconcile)
+for the full walkthrough.
 
 ### `delete`
 
@@ -144,17 +166,69 @@ default path handle it.
 
 ### `read`
 
-Optional. Called during recovery — if state was lost between create
-and persist, alchemy uses `read` to look up the live resource and
-sync state.
+Optional. The engine consults `read` whenever a resource has no prior
+state — both for **state recovery** (state lost between create and
+persist) and for **adoption** (a fresh state store deploying against
+existing cloud infrastructure). It is the single source of truth for
+"does this resource exist, and is it ours?".
 
 ```typescript
-read: ({ id, output }) =>
-  Effect.promise(() => stripe.products.retrieve(output.productId));
+read: Effect.fnUntraced(function* ({ id, olds, output }) {
+  const stripe = yield* StripeClient;
+  if (!output?.productId) return undefined;
+  const product = yield* Effect.tryPromise(() =>
+    stripe.products.retrieve(output.productId),
+  ).pipe(Effect.catchAll(() => Effect.succeed(undefined)));
+  if (!product) return undefined;
+  return { productId: product.id, name: product.name };
+}),
 ```
 
-Returning `undefined` tells alchemy the resource doesn't actually
-exist and should be re-created.
+`read` returns one of three values:
+
+- **`undefined`** — the resource doesn't exist. The engine will
+  drive a normal `create`.
+- **plain attributes** — the resource exists and we own it.
+  The engine silently adopts: it persists the attributes as the
+  initial `created` state and lets ordinary `diff` decide whether
+  the next deploy is a noop or update.
+- **`Unowned(attributes)`** — the resource exists but we *don't*
+  own it. By default the engine fails with `OwnedBySomeoneElse`
+  so you don't accidentally clobber a production resource.
+  Re-running with `--adopt` (or scoping the effect with
+  `adopt(true)`) unlocks a takeover.
+
+`Unowned` is a brand from `alchemy/AdoptPolicy` — there's no wrapper
+to unwrap, just a hidden symbol on the attributes object:
+
+```typescript
+import { Unowned } from "alchemy/AdoptPolicy";
+
+read: Effect.fnUntraced(function* ({ id, olds }) {
+  const live = yield* lookup(olds.name);
+  if (!live) return undefined;
+  const attrs = { productId: live.id, name: live.name };
+  return ownsResource(id, live.tags) ? attrs : Unowned(attrs);
+}),
+```
+
+**Inputs.** `read` may be called for an existence/adoption probe with
+`output: undefined` (no prior state). Resources whose live lookup
+requires a previously-persisted ID (e.g. `output.productId`) should
+return `undefined` in that case — they have no way to find the
+resource without it.
+
+**Ownership detection.** Resources with no notion of ownership (e.g.
+"the cloud API just gives us a single global object by name") should
+always return plain attributes. The engine treats them as owned and
+silent adoption is the default, so `--adopt` is unnecessary.
+Resources with tag-based or naming-based ownership (most cloud
+resources) should brand foreign-owned attributes with `Unowned`.
+
+> **Lifecycle methods don't gate on ownership.** Once `read` clears a
+> resource for write, `reconcile` can assume it's safe to proceed.
+> Don't repeat the ownership check inside `reconcile` — that just
+> hides the policy decision from the engine.
 
 ### `precreate`
 

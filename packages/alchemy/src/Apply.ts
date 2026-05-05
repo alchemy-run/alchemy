@@ -523,12 +523,13 @@ const executeNode = (
         );
 
         attr = yield* node.provider
-          .create({
+          .reconcile({
             id: logicalId,
             news,
             instanceId,
             bindings: bindingOutputs,
             session: scopedSession,
+            olds: undefined,
             output: attr,
           })
           .pipe(
@@ -640,14 +641,13 @@ const executeNode = (
         );
 
         const attr = yield* node.provider
-          .update({
+          .reconcile({
             id: logicalId,
             news,
             instanceId,
             bindings: bindingOutputs,
             session: scopedSession,
             olds: previousProps,
-            // @ts-expect-error - type system says this can be undefined, can it be?
             output: node.state.attr,
           })
           .pipe(
@@ -811,12 +811,13 @@ const executeNode = (
         );
 
         attr = yield* node.provider
-          .create({
+          .reconcile({
             id: logicalId,
             news,
             instanceId,
             bindings: bindingOutputs,
             session: scopedSession,
+            olds: undefined,
             output: attr,
           })
           .pipe(
@@ -904,7 +905,7 @@ const executeNode = (
 // After the initial concurrent pass, some resources may have been created
 // with stale upstream values (e.g. a precreate stub instead of the final
 // output). Walk the plan and re-evaluate each resource's props/bindings
-// against the current tracker outputs. Call provider.update for any
+// against the current tracker outputs. Call provider.reconcile for any
 // resource whose resolved inputs differ from what it was last applied with.
 // Repeat until no resource needs updating.
 
@@ -973,7 +974,7 @@ const converge = Effect.fnUntraced(function* (
       } satisfies ScopedPlanStatusSession;
 
       const attr = yield* node.provider
-        .update({
+        .reconcile({
           id: logicalId,
           news: newProps,
           instanceId,

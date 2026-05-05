@@ -2,7 +2,7 @@ import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { createPhysicalName } from "../../PhysicalName.ts";
-import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { createInternalTags, diffTags } from "../../Tags.ts";
 
 export type OrganizationsTags = Record<string, string>;
 
@@ -77,21 +77,6 @@ export const readResourceTags = (resourceId: string) =>
       organizations.listTagsForResource({ ResourceId: resourceId, NextToken }),
     (page) => page.Tags,
   ).pipe(Effect.map(toTagRecord));
-
-export const ensureOwnedByAlchemy = Effect.fn(function* (
-  id: string,
-  resourceId: string,
-  tags: OrganizationsTags,
-  resourceType: string,
-) {
-  if (!(yield* hasAlchemyTags(id, tags))) {
-    return yield* Effect.fail(
-      new Error(
-        `${resourceType} '${resourceId}' already exists and is not managed by this stack`,
-      ),
-    );
-  }
-});
 
 export const updateResourceTags = Effect.fn(function* ({
   id,

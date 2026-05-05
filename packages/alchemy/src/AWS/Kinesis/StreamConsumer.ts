@@ -1,6 +1,8 @@
 import * as kinesis from "@distilled.cloud/aws/kinesis";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -149,31 +151,45 @@ const readConsumer = Effect.fn(function* ({
   });
 });
 
-const resolveOwnedConsumer = Effect.fn(function* (
-  id: string,
+// Kinesis tells us "in use" via ResourceInUseException, but the consumer
+// registry is eventually consistent — describeStreamConsumer can briefly
+// return ResourceNotFoundException for a consumer the registry just
+// confirmed exists. Poll up to ~10s before giving up.
+class ConsumerRegistryNotConsistent extends Data.TaggedError(
+  "ConsumerRegistryNotConsistent",
+)<{ consumerName: string }> {}
+
+const adoptExistingConsumer = Effect.fn(function* (
   streamArn: string,
   consumerName: string,
 ) {
-  const state = yield* readConsumer({
-    streamArn,
-    consumerName,
-  });
+  return yield* Effect.gen(function* () {
+    const state = yield* readConsumer({
+      streamArn,
+      consumerName,
+    });
 
-  if (!state) {
-    return yield* Effect.fail(
-      new Error(`consumer ${consumerName} exists but could not be read`),
-    );
-  }
+    if (!state) {
+      return yield* new ConsumerRegistryNotConsistent({ consumerName });
+    }
 
-  if (!(yield* hasAlchemyTags(id, state.tags as Tags))) {
-    return yield* Effect.fail(
-      new Error(
-        `consumer ${consumerName} already exists but is not owned by this stack`,
+    return state;
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "ConsumerRegistryNotConsistent",
+      schedule: Schedule.exponential(250).pipe(
+        Schedule.both(Schedule.recurs(8)),
       ),
-    );
-  }
-
-  return state;
+    }),
+    Effect.catchTag("ConsumerRegistryNotConsistent", () =>
+      Effect.fail(
+        new Error(
+          `consumer ${consumerName} exists but could not be read after ` +
+            `~10s of registry-consistency retries`,
+        ),
+      ),
+    ),
+  );
 });
 
 const waitForConsumerStatus = (
@@ -222,11 +238,23 @@ export const StreamConsumerProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const consumerName =
         output?.consumerName ?? (yield* createConsumerName(id, olds ?? {}));
-      return yield* readConsumer({
-        streamArn: olds.streamArn as string | undefined,
+      const streamArn = output?.streamArn ?? olds?.streamArn;
+      // describeStreamConsumer rejects with InvalidArgumentException unless
+      // either consumerARN, or both streamARN + consumerName, are provided.
+      // If the engine probed for adoption before our upstream Stream was
+      // created we'll have neither — treat that as "doesn't exist".
+      if (typeof streamArn !== "string" && !output?.consumerArn) {
+        return undefined;
+      }
+      const state = yield* readConsumer({
+        streamArn: typeof streamArn === "string" ? streamArn : undefined,
         consumerName,
         consumerArn: output?.consumerArn,
       });
+      if (!state) return undefined;
+      return (yield* hasAlchemyTags(id, state.tags as Tags))
+        ? state
+        : Unowned(state);
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
       if (!isResolved(news)) return;
@@ -243,53 +271,67 @@ export const StreamConsumerProvider = () =>
         return { action: "replace" } as const;
       }
     }),
-    create: Effect.fn(function* ({ id, news, session }) {
-      const consumerName = yield* createConsumerName(id, news);
+    reconcile: Effect.fn(function* ({ id, news, output, session }) {
+      const consumerName =
+        output?.consumerName ?? (yield* createConsumerName(id, news));
       const streamArn = news.streamArn as string;
       const internalTags = yield* createInternalTags(id);
-      const allTags = { ...internalTags, ...news.tags };
+      const desiredTags = { ...internalTags, ...news.tags };
 
-      const consumerArn = yield* kinesis
-        .registerStreamConsumer({
-          StreamARN: streamArn,
-          ConsumerName: consumerName,
-          Tags: allTags,
-        })
-        .pipe(
-          Effect.map((response) => response.Consumer.ConsumerARN),
-          Effect.catchTag("ResourceInUseException", () =>
-            resolveOwnedConsumer(id, streamArn, consumerName).pipe(
-              Effect.map((state) => state.consumerArn),
-            ),
-          ),
-        );
-
-      yield* waitForConsumerStatus(consumerArn, "ACTIVE");
-
-      const state = yield* readConsumer({
-        consumerArn,
+      // Observe — fetch live cloud state. `output` is treated as a cache
+      // for the consumer ARN; the consumer's actual existence and tags are
+      // fetched fresh so the reconciler converges regardless of drift,
+      // adoption, or a partially-completed prior run.
+      let state = yield* readConsumer({
         streamArn,
         consumerName,
+        consumerArn: output?.consumerArn,
       });
 
-      if (!state) {
-        return yield* Effect.fail(
-          new Error(`failed to read created consumer ${consumerName}`),
-        );
+      // Ensure — register the consumer if it's missing. Tolerate
+      // `ResourceInUseException` as a race with a peer reconciler: a
+      // brief registry-consistency wait, then re-read and continue the
+      // sync path.
+      if (state === undefined) {
+        yield* kinesis
+          .registerStreamConsumer({
+            StreamARN: streamArn,
+            ConsumerName: consumerName,
+            Tags: desiredTags,
+          })
+          .pipe(
+            Effect.asVoid,
+            Effect.catchTag("ResourceInUseException", () =>
+              adoptExistingConsumer(streamArn, consumerName).pipe(
+                Effect.asVoid,
+              ),
+            ),
+          );
+
+        state = yield* adoptExistingConsumer(streamArn, consumerName);
+        yield* waitForConsumerStatus(state.consumerArn, "ACTIVE");
+
+        state = yield* readConsumer({
+          consumerArn: state.consumerArn,
+          streamArn,
+          consumerName,
+        });
+        if (state === undefined) {
+          return yield* Effect.fail(
+            new Error(`failed to read created consumer ${consumerName}`),
+          );
+        }
       }
 
-      yield* session.note(state.consumerArn);
-      return state;
-    }),
-    update: Effect.fn(function* ({ id, news, olds, output, session }) {
-      const internalTags = yield* createInternalTags(id);
-      const oldTags = { ...internalTags, ...olds.tags };
-      const newTags = { ...internalTags, ...news.tags };
-      const { removed, upsert } = diffTags(oldTags, newTags);
+      // Sync tags — diff observed cloud tags against desired. Adoption
+      // may bring us a consumer that already has its own tag set; diffing
+      // against `state.tags` (fetched fresh) lets the reconciler converge
+      // ownership without fighting whatever was there before.
+      const { removed, upsert } = diffTags(state.tags, desiredTags);
 
       if (removed.length > 0) {
         yield* kinesis.untagResource({
-          ResourceARN: output.consumerArn,
+          ResourceARN: state.consumerArn,
           TagKeys: removed,
         });
       }
@@ -300,22 +342,24 @@ export const StreamConsumerProvider = () =>
           tagsToAdd[Key] = Value;
         }
         yield* kinesis.tagResource({
-          ResourceARN: output.consumerArn,
+          ResourceARN: state.consumerArn,
           Tags: tagsToAdd,
         });
       }
 
-      const state = yield* readConsumer({
-        consumerArn: output.consumerArn,
+      // Re-read final state so the returned attributes reflect what's
+      // actually in the cloud after all sync steps.
+      const final = yield* readConsumer({
+        consumerArn: state.consumerArn,
       });
-      if (!state) {
+      if (!final) {
         return yield* Effect.fail(
-          new Error(`failed to read updated consumer ${output.consumerName}`),
+          new Error(`failed to read reconciled consumer ${consumerName}`),
         );
       }
 
-      yield* session.note(output.consumerArn);
-      return state;
+      yield* session.note(final.consumerArn);
+      return final;
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* kinesis

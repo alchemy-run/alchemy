@@ -117,8 +117,15 @@ export const AlarmMuteRuleProvider = () =>
             (yield* createMuteRuleName(id, olds ?? {}));
           return yield* readAlarmMuteRule(name);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* createMuteRuleName(id, news);
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          // Observe — pin the physical name from `output` if we already
+          // have one; otherwise derive it from desired props.
+          const name =
+            output?.alarmMuteRuleName ?? (yield* createMuteRuleName(id, news));
+
+          // Ensure — `putAlarmMuteRule` is an upsert. The CloudWatch API
+          // accepts `Tags` on every put, so we send the full managed tag
+          // set every reconcile and let the API converge it.
           const tags = yield* createManagedTags(id, news.tags);
 
           yield* retryConcurrent(
@@ -137,37 +144,7 @@ export const AlarmMuteRuleProvider = () =>
           const state = yield* readAlarmMuteRule(name);
           if (!state) {
             return yield* Effect.fail(
-              new Error(`failed to read created alarm mute rule '${name}'`),
-            );
-          }
-
-          return {
-            ...state,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, output, session }) {
-          const tags = yield* createManagedTags(id, news.tags);
-
-          yield* retryConcurrent(
-            cloudwatch.putAlarmMuteRule({
-              ...news,
-              Name: output.alarmMuteRuleName,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            }),
-          );
-
-          yield* session.note(output.alarmMuteRuleArn);
-
-          const state = yield* readAlarmMuteRule(output.alarmMuteRuleName);
-          if (!state) {
-            return yield* Effect.fail(
-              new Error(
-                `failed to read updated alarm mute rule '${output.alarmMuteRuleName}'`,
-              ),
+              new Error(`failed to read reconciled alarm mute rule '${name}'`),
             );
           }
 

@@ -91,43 +91,53 @@ export const SigningCertificateProvider = () =>
         uploadDate: cert.UploadDate,
       };
     }),
-    create: Effect.fn(function* ({ news, session }) {
-      const created = yield* iam.uploadSigningCertificate({
-        UserName: news.userName,
-        CertificateBody: news.certificateBody,
-      });
-      if (
-        news.status !== undefined &&
-        created.Certificate.Status !== news.status
-      ) {
+    reconcile: Effect.fn(function* ({ news, output, session }) {
+      // Observe — certificate ids are AWS-generated; we can only locate
+      // the live entry via the prior output. The certificate body is
+      // immutable (`diff` triggers replacement on body change), so a
+      // missing entry always means we need to upload.
+      const observed = output
+        ? yield* iam
+            .listSigningCertificates({ UserName: output.userName })
+            .pipe(
+              Effect.map((r) =>
+                r.Certificates.find(
+                  (entry) => entry.CertificateId === output.certificateId,
+                ),
+              ),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
+            )
+        : undefined;
+
+      // Ensure — upload when missing.
+      let cert = observed;
+      if (!cert?.CertificateId) {
+        const uploaded = yield* iam.uploadSigningCertificate({
+          UserName: news.userName,
+          CertificateBody: news.certificateBody,
+        });
+        cert = uploaded.Certificate;
+      }
+
+      // Sync — apply the desired status when it differs.
+      const desiredStatus = news.status ?? cert.Status;
+      if (desiredStatus !== cert.Status) {
         yield* iam.updateSigningCertificate({
           UserName: news.userName,
-          CertificateId: created.Certificate.CertificateId,
-          Status: news.status,
+          CertificateId: cert.CertificateId,
+          Status: desiredStatus,
         });
       }
-      yield* session.note(created.Certificate.CertificateId);
+
+      yield* session.note(cert.CertificateId);
       return {
-        userName: created.Certificate.UserName,
-        certificateId: created.Certificate.CertificateId,
-        certificateBody: created.Certificate.CertificateBody,
-        status: news.status ?? created.Certificate.Status,
-        uploadDate: created.Certificate.UploadDate,
-      };
-    }),
-    update: Effect.fn(function* ({ news, output, session }) {
-      const status = news.status ?? output.status;
-      if (status !== output.status) {
-        yield* iam.updateSigningCertificate({
-          UserName: output.userName,
-          CertificateId: output.certificateId,
-          Status: status,
-        });
-      }
-      yield* session.note(output.certificateId);
-      return {
-        ...output,
-        status,
+        userName: cert.UserName,
+        certificateId: cert.CertificateId,
+        certificateBody: cert.CertificateBody,
+        status: desiredStatus,
+        uploadDate: cert.UploadDate,
       };
     }),
     delete: Effect.fn(function* ({ output }) {

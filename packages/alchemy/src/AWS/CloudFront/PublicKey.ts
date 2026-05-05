@@ -161,56 +161,77 @@ export const PublicKeyProvider = () =>
           if (!found) return undefined;
           return toAttrs(found.id, found.config, found.etag);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
-          const callerReference = name;
-          const created = yield* cloudfront
-            .createPublicKey({
-              PublicKeyConfig: buildConfig(name, callerReference, news),
-            })
-            .pipe(
-              Effect.catchTag("PublicKeyAlreadyExists", () =>
-                getByName(name).pipe(
-                  Effect.flatMap((existing) =>
-                    existing
-                      ? Effect.succeed({
-                          PublicKey: {
-                            Id: existing.id,
-                            CreatedTime: new Date(),
-                            PublicKeyConfig: existing.config,
-                          },
-                          ETag: existing.etag,
-                          Location: undefined,
-                        })
-                      : Effect.fail(
-                          new Error(
-                            `Public key '${name}' already exists but could not be recovered`,
+
+          // Observe — locate the public key by id (cached on `output`)
+          // or by name. Trust observed cloud state, not stale `olds`.
+          let observed = output?.publicKeyId
+            ? yield* getById(output.publicKeyId).pipe(
+                Effect.map((found) =>
+                  found ? { id: output.publicKeyId, ...found } : undefined,
+                ),
+              )
+            : undefined;
+          if (!observed) {
+            observed = yield* getByName(name);
+          }
+
+          // Ensure — create the public key if it's missing. Tolerate
+          // `PublicKeyAlreadyExists` (race with a peer reconciler).
+          if (!observed) {
+            const callerReference = name;
+            const created = yield* cloudfront
+              .createPublicKey({
+                PublicKeyConfig: buildConfig(name, callerReference, news),
+              })
+              .pipe(
+                Effect.catchTag("PublicKeyAlreadyExists", () =>
+                  getByName(name).pipe(
+                    Effect.flatMap((existing) =>
+                      existing
+                        ? Effect.succeed({
+                            PublicKey: {
+                              Id: existing.id,
+                              CreatedTime: new Date(),
+                              PublicKeyConfig: existing.config,
+                            },
+                            ETag: existing.etag,
+                            Location: undefined,
+                          })
+                        : Effect.fail(
+                            new Error(
+                              `Public key '${name}' already exists but could not be recovered`,
+                            ),
                           ),
-                        ),
+                    ),
                   ),
                 ),
-              ),
-            );
-          if (!created.PublicKey?.Id) {
-            return yield* Effect.fail(
-              new Error("createPublicKey returned no identifier"),
+              );
+            if (!created.PublicKey?.Id) {
+              return yield* Effect.fail(
+                new Error("createPublicKey returned no identifier"),
+              );
+            }
+            yield* session.note(created.PublicKey.Id);
+            return toAttrs(
+              created.PublicKey.Id,
+              created.PublicKey.PublicKeyConfig,
+              created.ETag,
             );
           }
-          yield* session.note(created.PublicKey.Id);
-          return toAttrs(
-            created.PublicKey.Id,
-            created.PublicKey.PublicKeyConfig,
-            created.ETag,
-          );
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          const current = yield* getById(output.publicKeyId);
+
+          // Sync — patch the comment via `updatePublicKey`. The key body
+          // is immutable (replacement is forced in `diff`), and the
+          // CallerReference is observed from the live config rather than
+          // re-derived. The freshly observed ETag handles optimistic
+          // concurrency.
           const updated = yield* cloudfront.updatePublicKey({
-            Id: output.publicKeyId,
-            IfMatch: current?.etag ?? output.etag,
+            Id: observed.id,
+            IfMatch: observed.etag,
             PublicKeyConfig: buildConfig(
-              output.name,
-              output.callerReference,
+              observed.config.Name,
+              observed.config.CallerReference,
               news,
             ),
           });
@@ -219,7 +240,7 @@ export const PublicKeyProvider = () =>
               new Error("updatePublicKey returned no identifier"),
             );
           }
-          yield* session.note(output.publicKeyId);
+          yield* session.note(observed.id);
           return toAttrs(
             updated.PublicKey.Id,
             updated.PublicKey.PublicKeyConfig,

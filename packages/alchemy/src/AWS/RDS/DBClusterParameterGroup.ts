@@ -107,80 +107,74 @@ export const DBClusterParameterGroupProvider = () =>
             tags: output?.tags ?? {},
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* toName(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const created = yield* rds
-            .createDBClusterParameterGroup({
-              DBClusterParameterGroupName: name,
-              DBParameterGroupFamily: news.family,
-              Description:
-                news.description ?? `Alchemy parameter group ${name}`,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            })
-            .pipe(
-              Effect.catchTag("DBParameterGroupAlreadyExistsFault", () =>
-                rds.describeDBClusterParameterGroups({
-                  DBClusterParameterGroupName: name,
-                }),
-              ),
-            );
-          const group =
-            "DBClusterParameterGroup" in created
-              ? created.DBClusterParameterGroup
-              : (created as rds.DBClusterParameterGroupsMessage)
-                  .DBClusterParameterGroups?.[0];
-          if (!group?.DBClusterParameterGroupName) {
-            return yield* Effect.fail(
-              new Error(
-                `Failed to create DB cluster parameter group '${name}'`,
-              ),
-            );
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const name =
+            output?.dbClusterParameterGroupName ?? (yield* toName(id, news));
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
+
+          // Observe — fetch the parameter group's live state.
+          let observed = yield* readGroup(name);
+
+          // Ensure — create if missing. Tolerate
+          // `DBParameterGroupAlreadyExistsFault` as a race with a peer
+          // reconciler by re-reading.
+          if (!observed?.DBClusterParameterGroupName) {
+            yield* rds
+              .createDBClusterParameterGroup({
+                DBClusterParameterGroupName: name,
+                DBParameterGroupFamily: news.family,
+                Description:
+                  news.description ?? `Alchemy parameter group ${name}`,
+                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              })
+              .pipe(
+                Effect.catchTag(
+                  "DBParameterGroupAlreadyExistsFault",
+                  () => Effect.void,
+                ),
+              );
+            observed = yield* readGroup(name);
+            if (!observed?.DBClusterParameterGroupName) {
+              return yield* Effect.fail(
+                new Error(
+                  `Failed to create DB cluster parameter group '${name}'`,
+                ),
+              );
+            }
           }
-          yield* session.note(group.DBClusterParameterGroupArn ?? name);
-          return {
-            dbClusterParameterGroupName: group.DBClusterParameterGroupName,
-            dbClusterParameterGroupArn: group.DBClusterParameterGroupArn,
-            family: group.DBParameterGroupFamily ?? news.family,
-            description: group.Description,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-          if (upsert.length > 0 && output.dbClusterParameterGroupArn) {
+
+          const dbClusterParameterGroupArn =
+            observed.DBClusterParameterGroupArn;
+
+          // Sync tags — diff observed (the describe response does not
+          // surface tags, so use prior `output.tags` as the baseline) ↔
+          // desired.
+          const observedTags = output?.tags ?? {};
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0 && dbClusterParameterGroupArn) {
             yield* rds.addTagsToResource({
-              ResourceName: output.dbClusterParameterGroupArn,
+              ResourceName: dbClusterParameterGroupArn,
               Tags: upsert,
             });
           }
-          if (removed.length > 0 && output.dbClusterParameterGroupArn) {
+          if (removed.length > 0 && dbClusterParameterGroupArn) {
             yield* rds.removeTagsFromResource({
-              ResourceName: output.dbClusterParameterGroupArn,
+              ResourceName: dbClusterParameterGroupArn,
               TagKeys: removed,
             });
           }
-          yield* session.note(
-            output.dbClusterParameterGroupArn ??
-              output.dbClusterParameterGroupName,
-          );
+
+          yield* session.note(dbClusterParameterGroupArn ?? name);
           return {
-            ...output,
-            tags: newTags,
+            dbClusterParameterGroupName: observed.DBClusterParameterGroupName,
+            dbClusterParameterGroupArn,
+            family: observed.DBParameterGroupFamily ?? news.family,
+            description: observed.Description,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

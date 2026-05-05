@@ -148,110 +148,105 @@ export const ServerCertificateProvider = () =>
             tags: toTagRecord(tags.Tags),
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* toName(id, news);
-          const tags = {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const name =
+            output?.serverCertificateName ?? (yield* toName(id, news));
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
-          const created = yield* iam
-            .uploadServerCertificate({
-              Path: news.path,
+
+          // Observe — `getServerCertificate` returns the live cert (or
+          // absence). The cert body / chain are immutable (`diff`
+          // triggers replacement), so we never re-upload during sync.
+          let cert = yield* readCertificate(name);
+
+          // Ensure — upload when missing. On race, verify alchemy
+          // ownership tags; bail out otherwise.
+          if (!cert?.ServerCertificateMetadata?.Arn) {
+            const created = yield* iam
+              .uploadServerCertificate({
+                Path: news.path,
+                ServerCertificateName: name,
+                CertificateBody: news.certificateBody,
+                PrivateKey:
+                  typeof news.privateKey === "string"
+                    ? news.privateKey
+                    : Redacted.value(news.privateKey),
+                CertificateChain: news.certificateChain,
+                Tags: createTagsList(desiredTags),
+              })
+              .pipe(
+                Effect.catchTag("EntityAlreadyExistsException", () =>
+                  Effect.gen(function* () {
+                    const existing = yield* readCertificate(name);
+                    if (!existing?.ServerCertificateMetadata?.Arn) {
+                      return yield* Effect.fail(
+                        new Error(
+                          `Server certificate '${name}' already exists but could not be described`,
+                        ),
+                      );
+                    }
+                    if (!hasTags(desiredTags, existing.Tags)) {
+                      return yield* Effect.fail(
+                        new Error(
+                          `Server certificate '${name}' already exists and is not managed by alchemy`,
+                        ),
+                      );
+                    }
+                    return {
+                      ServerCertificateMetadata:
+                        existing.ServerCertificateMetadata,
+                    };
+                  }),
+                ),
+              );
+            if (!created.ServerCertificateMetadata?.Arn) {
+              return yield* Effect.fail(
+                new Error(`uploadServerCertificate returned no metadata`),
+              );
+            }
+            cert = yield* readCertificate(name);
+          }
+
+          // Sync tags against the cloud's actual tags.
+          const observedTags = toTagRecord(cert?.Tags);
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0) {
+            yield* iam.tagServerCertificate({
               ServerCertificateName: name,
-              CertificateBody: news.certificateBody,
-              PrivateKey:
-                typeof news.privateKey === "string"
-                  ? news.privateKey
-                  : Redacted.value(news.privateKey),
-              CertificateChain: news.certificateChain,
-              Tags: createTagsList(tags),
-            })
-            .pipe(
-              Effect.catchTag("EntityAlreadyExistsException", () =>
-                Effect.gen(function* () {
-                  const existing = yield* readCertificate(name);
-                  if (!existing?.ServerCertificateMetadata?.Arn) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Server certificate '${name}' already exists but could not be described`,
-                      ),
-                    );
-                  }
-                  if (!hasTags(tags, existing.Tags)) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Server certificate '${name}' already exists and is not managed by alchemy`,
-                      ),
-                    );
-                  }
-                  return {
-                    ServerCertificateMetadata:
-                      existing.ServerCertificateMetadata,
-                  };
-                }),
-              ),
-            );
-          const metadata = created.ServerCertificateMetadata;
+              Tags: upsert,
+            });
+          }
+          if (removed.length > 0) {
+            yield* iam.untagServerCertificate({
+              ServerCertificateName: name,
+              TagKeys: removed,
+            });
+          }
+
+          // Re-read for fresh metadata.
+          const fresh = yield* readCertificate(name);
+          const metadata = fresh?.ServerCertificateMetadata;
           if (!metadata?.Arn || !metadata.ServerCertificateName) {
             return yield* Effect.fail(
-              new Error(`uploadServerCertificate returned no metadata`),
+              new Error(
+                `Server certificate '${name}' was not readable after sync`,
+              ),
             );
           }
+
           yield* session.note(metadata.Arn);
           return {
             serverCertificateArn: metadata.Arn,
             serverCertificateName: metadata.ServerCertificateName,
             serverCertificateId: metadata.ServerCertificateId,
             path: metadata.Path,
-            certificateBody: news.certificateBody,
-            certificateChain: news.certificateChain,
+            certificateBody: fresh?.CertificateBody ?? news.certificateBody,
+            certificateChain: fresh?.CertificateChain ?? news.certificateChain,
             uploadDate: metadata.UploadDate,
             expiration: metadata.Expiration,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-          if (upsert.length > 0) {
-            yield* iam.tagServerCertificate({
-              ServerCertificateName: output.serverCertificateName,
-              Tags: upsert,
-            });
-          }
-          if (removed.length > 0) {
-            yield* iam.untagServerCertificate({
-              ServerCertificateName: output.serverCertificateName,
-              TagKeys: removed,
-            });
-          }
-          const cert = yield* readCertificate(output.serverCertificateName);
-          yield* session.note(output.serverCertificateArn);
-          return {
-            serverCertificateArn:
-              cert?.ServerCertificateMetadata?.Arn ??
-              output.serverCertificateArn,
-            serverCertificateName:
-              cert?.ServerCertificateMetadata?.ServerCertificateName ??
-              output.serverCertificateName,
-            serverCertificateId:
-              cert?.ServerCertificateMetadata?.ServerCertificateId ??
-              output.serverCertificateId,
-            path: cert?.ServerCertificateMetadata?.Path ?? output.path,
-            certificateBody: cert?.CertificateBody ?? output.certificateBody,
-            certificateChain: cert?.CertificateChain ?? output.certificateChain,
-            uploadDate:
-              cert?.ServerCertificateMetadata?.UploadDate ?? output.uploadDate,
-            expiration:
-              cert?.ServerCertificateMetadata?.Expiration ?? output.expiration,
-            tags: newTags,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

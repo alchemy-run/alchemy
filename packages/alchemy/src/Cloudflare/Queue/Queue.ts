@@ -1,5 +1,7 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -98,9 +100,7 @@ export const QueueProvider = () =>
       const { accountId } = yield* CloudflareEnvironment;
       const createQueue = yield* queues.createQueue;
       const getQueue = yield* queues.getQueue;
-      const updateQueue = yield* queues.updateQueue;
       const deleteQueue = yield* queues.deleteQueue;
-      const listQueues = yield* queues.listQueues;
 
       const createQueueName = (id: string, name: string | undefined) =>
         Effect.gen(function* () {
@@ -110,6 +110,16 @@ export const QueueProvider = () =>
             maxLength: 63,
           })).toLowerCase();
         });
+
+      // Cloudflare's `listQueues` accepts no name/prefix filter, so
+      // adoption-by-name has to scan every page. Use the paginated
+      // `.items` stream off the un-yielded operation method.
+      const findQueueByName = (queueName: string) =>
+        queues.listQueues.items({ accountId }).pipe(
+          Stream.filter((q) => q.queueName === queueName),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
 
       return {
         stables: ["queueId", "accountId"],
@@ -126,45 +136,56 @@ export const QueueProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news = {} }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const queueName = yield* createQueueName(id, news.name);
-          const queue = yield* createQueue({
-            accountId,
-            queueName,
-          }).pipe(
-            Effect.catch(() =>
-              Effect.gen(function* () {
-                // Queue may already exist -- look it up by name
-                const allQueues = yield* listQueues({ accountId });
-                const match = allQueues.result.find(
-                  (q) => q.queueName === queueName,
-                );
-                if (match && match.queueId && match.queueName) {
-                  return match as { queueId: string; queueName: string };
-                }
-                return yield* Effect.die(
-                  `Queue "${queueName}" already exists but could not be found`,
-                );
-              }),
-            ),
-          );
+          const acct = output?.accountId ?? accountId;
+
+          // Observe — re-fetch the cached queue; fall back to a name scan
+          // when the cached id is gone (out-of-band delete or partial
+          // state-persistence failure).
+          let observed:
+            | { queueId?: string | null; queueName?: string | null }
+            | undefined;
+          if (output?.queueId) {
+            observed = yield* getQueue({
+              accountId: acct,
+              queueId: output.queueId,
+            }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+          }
+          if (!observed) {
+            observed = yield* findQueueByName(queueName);
+          }
+
+          // Ensure — create if missing. Cloudflare returns a generic
+          // failure when the queue name is taken; tolerate by adopting
+          // the queue with the same name so reconciles converge after a
+          // crashed peer.
+          if (!observed) {
+            observed = yield* createQueue({
+              accountId: acct,
+              queueName,
+            }).pipe(
+              Effect.catch(() =>
+                Effect.gen(function* () {
+                  const match = yield* findQueueByName(queueName);
+                  if (match && match.queueId && match.queueName) {
+                    return match;
+                  }
+                  return yield* Effect.die(
+                    `Queue "${queueName}" already exists but could not be found`,
+                  );
+                }),
+              ),
+            );
+          }
+
+          // Sync — Cloudflare Queues have no mutable per-queue settings
+          // here (the queue name itself is treated as a replace by diff),
+          // so observed state is the answer.
           return {
-            queueId: queue.queueId!,
-            queueName: queue.queueName!,
-            accountId,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news = {}, output }) {
-          const queueName = yield* createQueueName(id, news.name);
-          const queue = yield* updateQueue({
-            accountId: output.accountId,
-            queueId: output.queueId,
-            queueName,
-          });
-          return {
-            queueId: queue.queueId!,
-            queueName: queue.queueName!,
-            accountId: output.accountId,
+            queueId: observed.queueId!,
+            queueName: observed.queueName!,
+            accountId: acct,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -188,8 +209,7 @@ export const QueueProvider = () =>
             );
           }
           const queueName = yield* createQueueName(id, olds?.name);
-          const allQueues = yield* listQueues({ accountId });
-          const match = allQueues.result.find((q) => q.queueName === queueName);
+          const match = yield* findQueueByName(queueName);
           if (match && match.queueId && match.queueName) {
             return {
               queueId: match.queueId,

@@ -1,5 +1,6 @@
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -116,7 +117,10 @@ export const RepositoryProvider = () =>
           if (!repository?.repositoryArn || !repository.repositoryUri) {
             return undefined;
           }
-          return {
+          const listedTags = yield* ecr.listTagsForResource({
+            resourceArn: repository.repositoryArn,
+          });
+          const attrs = {
             repositoryName,
             repositoryArn: repository.repositoryArn as RepositoryArn,
             repositoryUri: repository.repositoryUri as RepositoryUri,
@@ -128,56 +132,70 @@ export const RepositoryProvider = () =>
             lifecyclePolicyText: output?.lifecyclePolicyText,
             tags: output?.tags ?? {},
           };
+          return (yield* hasAlchemyTags(id, listedTags.tags ?? []))
+            ? attrs
+            : Unowned(attrs);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const repositoryName = yield* toRepositoryName(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const created = yield* ecr
-            .createRepository({
-              repositoryName,
-              imageTagMutability: news.imageTagMutability,
-              imageScanningConfiguration: news.scanOnPush
-                ? { scanOnPush: true }
-                : undefined,
-              tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
+
+          // Observe — fetch live cloud state. We never trust prior `output`
+          // blindly: the repository may have been deleted out-of-band.
+          let described = yield* ecr
+            .describeRepositories({
+              repositoryNames: [repositoryName],
             })
             .pipe(
-              Effect.catchTag("RepositoryAlreadyExistsException", () =>
-                Effect.gen(function* () {
-                  const existing = yield* ecr.describeRepositories({
-                    repositoryNames: [repositoryName],
-                  });
-                  const repo = existing.repositories?.[0];
-                  if (!repo?.repositoryArn) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Repository '${repositoryName}' already exists`,
-                      ),
-                    );
-                  }
-                  const listedTags = yield* ecr.listTagsForResource({
-                    resourceArn: repo.repositoryArn,
-                  });
-                  if (!(yield* hasAlchemyTags(id, listedTags.tags ?? []))) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Repository '${repositoryName}' already exists and is not managed by alchemy`,
-                      ),
-                    );
-                  }
-                  return {
-                    repository: repo,
-                  };
-                }),
+              Effect.catchTag("RepositoryNotFoundException", () =>
+                Effect.succeed(undefined),
               ),
             );
+          let repository = described?.repositories?.[0];
 
+          // Ensure — create the repository if missing. Tolerate
+          // `RepositoryAlreadyExistsException` as a race with a peer
+          // reconciler: re-describe and continue with the sync path.
+          if (!repository?.repositoryArn || !repository.repositoryUri) {
+            const created = yield* ecr
+              .createRepository({
+                repositoryName,
+                imageTagMutability: news.imageTagMutability,
+                imageScanningConfiguration: news.scanOnPush
+                  ? { scanOnPush: true }
+                  : undefined,
+                tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              })
+              .pipe(
+                Effect.catchTag("RepositoryAlreadyExistsException", () =>
+                  ecr
+                    .describeRepositories({
+                      repositoryNames: [repositoryName],
+                    })
+                    .pipe(
+                      Effect.map((res) => ({
+                        repository: res.repositories?.[0],
+                      })),
+                    ),
+                ),
+              );
+            repository = created.repository;
+            if (!repository?.repositoryArn || !repository.repositoryUri) {
+              return yield* Effect.fail(
+                new Error(
+                  `Failed to create or read repository ${repositoryName}`,
+                ),
+              );
+            }
+          }
+
+          const repositoryArn = repository.repositoryArn as RepositoryArn;
+
+          // Sync lifecycle policy — observed ↔ desired.
           if (news.lifecyclePolicyText) {
             yield* ecr.putLifecyclePolicy({
               repositoryName,
@@ -185,59 +203,44 @@ export const RepositoryProvider = () =>
             });
           }
 
-          const repository = created.repository!;
-          yield* session.note(repository.repositoryArn!);
-
-          return {
-            repositoryName,
-            repositoryArn: repository.repositoryArn as RepositoryArn,
-            repositoryUri: repository.repositoryUri as RepositoryUri,
-            registryId: repository.registryId!,
-            imageTagMutability: news.imageTagMutability ?? "MUTABLE",
-            lifecyclePolicyText: news.lifecyclePolicyText,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          if (
-            news.lifecyclePolicyText !== undefined &&
-            news.lifecyclePolicyText !== olds.lifecyclePolicyText
-          ) {
-            yield* ecr.putLifecyclePolicy({
-              repositoryName: output.repositoryName,
-              lifecyclePolicyText: news.lifecyclePolicyText,
-            });
-          }
-
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags — diff observed cloud tags against desired.
+          const listedTags = yield* ecr.listTagsForResource({
+            resourceArn: repositoryArn,
+          });
+          const observedTags = Object.fromEntries(
+            (listedTags.tags ?? [])
+              .filter(
+                (t): t is { Key: string; Value: string } =>
+                  typeof t.Key === "string" && typeof t.Value === "string",
+              )
+              .map((t) => [t.Key, t.Value]),
+          );
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* ecr.tagResource({
-              resourceArn: output.repositoryArn,
+              resourceArn: repositoryArn,
               tags: upsert,
             });
           }
           if (removed.length > 0) {
             yield* ecr.untagResource({
-              resourceArn: output.repositoryArn,
+              resourceArn: repositoryArn,
               tagKeys: removed,
             });
           }
 
-          yield* session.note(output.repositoryArn);
+          yield* session.note(repositoryArn);
           return {
-            ...output,
+            repositoryName,
+            repositoryArn,
+            repositoryUri: repository.repositoryUri as RepositoryUri,
+            registryId: repository.registryId!,
             imageTagMutability:
-              news.imageTagMutability ?? output.imageTagMutability,
+              news.imageTagMutability ??
+              repository.imageTagMutability ??
+              "MUTABLE",
             lifecyclePolicyText: news.lifecyclePolicyText,
-            tags: newTags,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

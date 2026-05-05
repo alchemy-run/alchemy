@@ -180,60 +180,81 @@ export const OriginRequestPolicyProvider = () =>
           if (!found) return undefined;
           return toAttrs(found.id, found.config, found.etag);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
-          const created = yield* cloudfront
-            .createOriginRequestPolicy({
-              OriginRequestPolicyConfig: buildConfig(name, news),
-            })
-            .pipe(
-              Effect.catchTag("OriginRequestPolicyAlreadyExists", () =>
-                getByName(name).pipe(
-                  Effect.flatMap((existing) =>
-                    existing
-                      ? Effect.succeed({
-                          OriginRequestPolicy: {
-                            Id: existing.id,
-                            LastModifiedTime: new Date(),
-                            OriginRequestPolicyConfig: existing.config,
-                          },
-                          ETag: existing.etag,
-                          Location: undefined,
-                        })
-                      : Effect.fail(
-                          new Error(
-                            `Origin request policy '${name}' already exists but could not be recovered`,
+
+          // Observe — locate the policy by id (cached on `output`) or
+          // by name. Trust observed cloud state, not stale `olds`.
+          let observed = output?.originRequestPolicyId
+            ? yield* getById(output.originRequestPolicyId).pipe(
+                Effect.map((found) =>
+                  found
+                    ? { id: output.originRequestPolicyId, ...found }
+                    : undefined,
+                ),
+              )
+            : undefined;
+          if (!observed) {
+            observed = yield* getByName(name);
+          }
+
+          // Ensure — create the policy if it's missing. Tolerate
+          // `OriginRequestPolicyAlreadyExists` (race with a peer
+          // reconciler).
+          if (!observed) {
+            const created = yield* cloudfront
+              .createOriginRequestPolicy({
+                OriginRequestPolicyConfig: buildConfig(name, news),
+              })
+              .pipe(
+                Effect.catchTag("OriginRequestPolicyAlreadyExists", () =>
+                  getByName(name).pipe(
+                    Effect.flatMap((existing) =>
+                      existing
+                        ? Effect.succeed({
+                            OriginRequestPolicy: {
+                              Id: existing.id,
+                              LastModifiedTime: new Date(),
+                              OriginRequestPolicyConfig: existing.config,
+                            },
+                            ETag: existing.etag,
+                            Location: undefined,
+                          })
+                        : Effect.fail(
+                            new Error(
+                              `Origin request policy '${name}' already exists but could not be recovered`,
+                            ),
                           ),
-                        ),
+                    ),
                   ),
                 ),
-              ),
-            );
-          if (!created.OriginRequestPolicy?.Id) {
-            return yield* Effect.fail(
-              new Error("createOriginRequestPolicy returned no identifier"),
+              );
+            if (!created.OriginRequestPolicy?.Id) {
+              return yield* Effect.fail(
+                new Error("createOriginRequestPolicy returned no identifier"),
+              );
+            }
+            yield* session.note(created.OriginRequestPolicy.Id);
+            return toAttrs(
+              created.OriginRequestPolicy.Id,
+              created.OriginRequestPolicy.OriginRequestPolicyConfig,
+              created.ETag,
             );
           }
-          yield* session.note(created.OriginRequestPolicy.Id);
-          return toAttrs(
-            created.OriginRequestPolicy.Id,
-            created.OriginRequestPolicy.OriginRequestPolicyConfig,
-            created.ETag,
-          );
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          const current = yield* getById(output.originRequestPolicyId);
+
+          // Sync — patch the observed config to the desired state. The
+          // freshly observed ETag handles optimistic concurrency.
           const updated = yield* cloudfront.updateOriginRequestPolicy({
-            Id: output.originRequestPolicyId,
-            IfMatch: current?.etag ?? output.etag,
-            OriginRequestPolicyConfig: buildConfig(output.name, news),
+            Id: observed.id,
+            IfMatch: observed.etag,
+            OriginRequestPolicyConfig: buildConfig(observed.config.Name, news),
           });
           if (!updated.OriginRequestPolicy?.Id) {
             return yield* Effect.fail(
               new Error("updateOriginRequestPolicy returned no identifier"),
             );
           }
-          yield* session.note(output.originRequestPolicyId);
+          yield* session.note(observed.id);
           return toAttrs(
             updated.OriginRequestPolicy.Id,
             updated.OriginRequestPolicy.OriginRequestPolicyConfig,

@@ -1,8 +1,25 @@
+import {
+  isRetryable,
+  isThrottlingError,
+  isTransientError,
+} from "@distilled.cloud/aws/Category";
+import {
+  capped,
+  jittered,
+  Retry,
+  type Factory as RetryFactory,
+} from "@distilled.cloud/aws/Retry";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
 import { Command, CommandProvider } from "../Build/Command.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as ACM from "./ACM/index.ts";
+import * as ApiGateway from "./ApiGateway/index.ts";
 import * as Assets from "./Assets.ts";
 import { AwsAuth } from "./AuthProvider.ts";
 import * as AutoScaling from "./AutoScaling/index.ts";
@@ -46,6 +63,20 @@ export const providers = () =>
       Command,
       Random,
       ACM.Certificate,
+      ApiGateway.Account,
+      ApiGateway.ApiKey,
+      ApiGateway.Authorizer,
+      ApiGateway.BasePathMapping,
+      ApiGateway.DeploymentResource,
+      ApiGateway.DomainName,
+      ApiGateway.GatewayResponse,
+      ApiGateway.MethodResource,
+      ApiGateway.GatewayResource,
+      ApiGateway.RestApi,
+      ApiGateway.StageResource,
+      ApiGateway.UsagePlan,
+      ApiGateway.UsagePlanKey,
+      ApiGateway.VpcLink,
       AutoScaling.AutoScalingGroup,
       AutoScaling.LaunchTemplate,
       AutoScaling.ScalingPolicy,
@@ -285,6 +316,20 @@ export const providers = () =>
     Layer.provide(
       Layer.mergeAll(
         ACM.CertificateProvider(),
+        ApiGateway.AccountProvider(),
+        ApiGateway.ApiKeyProvider(),
+        ApiGateway.AuthorizerProvider(),
+        ApiGateway.BasePathMappingProvider(),
+        ApiGateway.DeploymentProvider(),
+        ApiGateway.DomainNameProvider(),
+        ApiGateway.GatewayResponseProvider(),
+        ApiGateway.MethodProvider(),
+        ApiGateway.ResourceProvider(),
+        ApiGateway.RestApiProvider(),
+        ApiGateway.StageProvider(),
+        ApiGateway.UsagePlanProvider(),
+        ApiGateway.UsagePlanKeyProvider(),
+        ApiGateway.VpcLinkProvider(),
         AutoScaling.AutoScalingGroupProvider(),
         AutoScaling.LaunchTemplateProvider(),
         AutoScaling.ScalingPolicyProvider(),
@@ -533,5 +578,36 @@ export const providers = () =>
     Layer.provideMerge(Endpoint.fromEnvironment),
     Layer.provideMerge(DefaultEnvironment),
     Layer.provideMerge(AwsAuth),
+    // Apply a blanket retry policy to every AWS SDK call. Like distilled's
+    // `makeDefault` it retries throttling, 5xx, and Smithy `@retryable`
+    // errors with exponential backoff + jitter + `RetryAfter` header
+    // awareness, but with a higher attempt cap (10 vs 5) so heavy
+    // parallel deploys ride out S3 `SlowDown` bursts that span more than
+    // a few seconds. Bounded so real rate-limit pressure still surfaces
+    // instead of masking as an indefinite hang.
+    Layer.provideMerge(Layer.succeed(Retry, awsRetryFactory)),
     Layer.orDie,
   );
+
+const awsRetryFactory: RetryFactory = (lastError) => ({
+  while: (error) =>
+    isTransientError(error) || isThrottlingError(error) || isRetryable(error),
+  schedule: pipe(
+    Schedule.exponential(Duration.millis(200), 2),
+    Schedule.modifyDelay(
+      Effect.fnUntraced(function* (duration) {
+        const error = yield* Ref.get(lastError);
+        if (isThrottlingError(error)) {
+          // Throttling: floor at 500ms (matches distilled default).
+          if (Duration.toMillis(duration) < 500) {
+            return Duration.toMillis(Duration.millis(500));
+          }
+        }
+        return Duration.toMillis(duration);
+      }),
+    ),
+    capped(Duration.seconds(5)),
+    jittered,
+    Schedule.both(Schedule.recurs(10)),
+  ),
+});

@@ -101,13 +101,21 @@ export const AssetDeploymentProvider = () =>
   Provider.effect(
     AssetDeployment,
     Effect.gen(function* () {
-      const sync = Effect.fn(function* (news: AssetDeploymentProps) {
+      const reconcileSync = Effect.fn(function* (news: AssetDeploymentProps) {
         const bucketName = news.bucket.bucketName;
         const prefix = normalizePrefix(news.prefix);
         const root = news.sourcePath;
         const files = yield* Effect.tryPromise(() => walk(root));
         const hash = createHash("sha256");
         const desiredKeys = new Set<string>();
+
+        // Observe — list every key already under the prefix and capture
+        // its ETag (S3 ETag for non-multipart PUTs is the hex MD5 of the
+        // body) so we can skip re-uploads when the content already matches.
+        const observed = yield* listObjects(
+          bucketName,
+          prefix ? `${prefix}/` : prefix,
+        );
 
         for (const relativePath of files.sort((a, b) => a.localeCompare(b))) {
           const body = yield* Effect.tryPromise(() =>
@@ -130,6 +138,15 @@ export const AssetDeploymentProvider = () =>
 
           desiredKeys.add(key);
 
+          // Sync — diff observed object hash against desired body hash,
+          // and only PUT when the content has changed. ETag is wrapped in
+          // quotes by S3 and is lower-case hex.
+          const expectedETag = createHash("md5").update(body).digest("hex");
+          const observedETag = observed.get(key)?.replace(/^"|"$/g, "");
+          if (observedETag === expectedETag) {
+            continue;
+          }
+
           yield* s3.putObject({
             Bucket: bucketName,
             Key: key,
@@ -139,12 +156,12 @@ export const AssetDeploymentProvider = () =>
           });
         }
 
+        // Sync purge — delete observed keys that aren't in the desired
+        // set. Reuses the same observation rather than re-listing.
         if (news.purge ?? false) {
-          const existingKeys = yield* listKeys(
-            bucketName,
-            prefix ? `${prefix}/` : prefix,
+          const staleKeys = [...observed.keys()].filter(
+            (key) => !desiredKeys.has(key),
           );
-          const staleKeys = existingKeys.filter((key) => !desiredKeys.has(key));
           yield* deleteKeys(bucketName, staleKeys);
         }
 
@@ -160,15 +177,8 @@ export const AssetDeploymentProvider = () =>
         read: Effect.fn(function* ({ output }) {
           return output;
         }),
-        create: Effect.fn(function* ({ news, session }) {
-          const output = yield* retryForBucketReadiness(sync(news));
-          yield* session.note(
-            `Uploaded ${output.fileCount} file(s) to s3://${output.bucketName}/${output.prefix}`,
-          );
-          return output;
-        }),
-        update: Effect.fn(function* ({ news, session }) {
-          const output = yield* retryForBucketReadiness(sync(news));
+        reconcile: Effect.fn(function* ({ news, session }) {
+          const output = yield* retryForBucketReadiness(reconcileSync(news));
           yield* session.note(
             `Uploaded ${output.fileCount} file(s) to s3://${output.bucketName}/${output.prefix}`,
           );
@@ -316,6 +326,29 @@ const listKeys = Effect.fn(function* (bucketName: string, prefix: string) {
   } while (continuationToken);
 
   return keys;
+});
+
+/** List `{key -> ETag}` pairs under `prefix`. ETag from S3 is wrapped in
+ * quotes; for non-multipart uploads it is the hex MD5 of the object body. */
+const listObjects = Effect.fn(function* (bucketName: string, prefix: string) {
+  let continuationToken: string | undefined;
+  const out = new Map<string, string>();
+
+  do {
+    const response = yield* s3.listObjectsV2({
+      Bucket: bucketName,
+      Prefix: prefix || undefined,
+      ContinuationToken: continuationToken,
+    });
+    for (const item of response.Contents ?? []) {
+      if (item.Key && item.ETag) {
+        out.set(item.Key, item.ETag);
+      }
+    }
+    continuationToken = response.NextContinuationToken;
+  } while (continuationToken);
+
+  return out;
 });
 
 const deleteKeys = Effect.fn(function* (bucketName: string, keys: string[]) {

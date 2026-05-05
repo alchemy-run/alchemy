@@ -91,7 +91,21 @@ export const ApiTokenProvider = () =>
           if (deepEqual(olds, news)) return undefined;
           return { action: "replace" } as const;
         }),
-        create: Effect.fn(function* ({ news }) {
+        reconcile: Effect.fn(function* ({ news, output }) {
+          // Observe — Axiom does not expose an update endpoint for tokens,
+          // so any actual change to the inputs is forced to a replacement
+          // by `diff` above. That means by the time `reconcile` runs we
+          // are either (a) creating fresh, or (b) re-reconciling identical
+          // inputs against an existing token.
+          if (output !== undefined) {
+            // Identical inputs — Axiom does not echo the bearer back, so
+            // the cached `output` (with the persisted Redacted token) is
+            // the authoritative current state.
+            return output;
+          }
+
+          // Ensure — mint a new token. Axiom returns the bearer exactly
+          // once; capture it into Redacted state for downstream consumers.
           const result = yield* create(news);
           if (!result.token) {
             return yield* Effect.die(
@@ -102,11 +116,6 @@ export const ApiTokenProvider = () =>
             ...result,
             token: Redacted.make(result.token),
           };
-        }),
-        update: Effect.fn(function* ({ output }) {
-          // Diff returns "replace" for every change, so update should never
-          // run. If invoked, just return current state unchanged.
-          return output;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* del({ id: output.id }).pipe(

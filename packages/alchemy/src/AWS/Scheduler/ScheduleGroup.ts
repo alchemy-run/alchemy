@@ -98,84 +98,109 @@ export const ScheduleGroupProvider = () =>
             state: described.State,
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const scheduleGroupName = yield* toName(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const scheduleGroupName =
+            output?.scheduleGroupName ?? (yield* toName(id, news));
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
 
-          const created = yield* scheduler
-            .createScheduleGroup({
-              Name: scheduleGroupName,
-              Tags: createTagsList(tags),
-            })
+          // Observe — fetch live group; gracefully handle missing.
+          let observed = yield* scheduler
+            .getScheduleGroup({ Name: scheduleGroupName })
             .pipe(
-              Effect.catchTag("ConflictException", () =>
-                scheduler.getScheduleGroup({ Name: scheduleGroupName }).pipe(
-                  Effect.flatMap((existing) =>
-                    existing.Arn
-                      ? scheduler
-                          .listTagsForResource({
-                            ResourceArn: existing.Arn,
-                          })
-                          .pipe(
-                            Effect.filterOrFail(
-                              ({ Tags }) => hasTags(tags, Tags),
-                              () =>
-                                new Error(
-                                  `ScheduleGroup '${scheduleGroupName}' already exists and is not managed by alchemy`,
-                                ),
-                            ),
-                            Effect.as({
-                              ScheduleGroupArn: existing.Arn,
-                            }),
-                          )
-                      : Effect.fail(
-                          new Error(
-                            `ScheduleGroup '${scheduleGroupName}' already exists but could not be described`,
-                          ),
-                        ),
-                  ),
-                ),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
               ),
             );
 
-          yield* session.note(created.ScheduleGroupArn ?? scheduleGroupName);
+          // Ensure — create if missing. Tolerate `ConflictException` as a
+          // race or adoption case: verify ownership via tags before
+          // continuing.
+          if (!observed?.Arn) {
+            yield* scheduler
+              .createScheduleGroup({
+                Name: scheduleGroupName,
+                Tags: createTagsList(desiredTags),
+              })
+              .pipe(
+                Effect.catchTag("ConflictException", () =>
+                  scheduler.getScheduleGroup({ Name: scheduleGroupName }).pipe(
+                    Effect.flatMap((existing) =>
+                      existing.Arn
+                        ? scheduler
+                            .listTagsForResource({ ResourceArn: existing.Arn })
+                            .pipe(
+                              Effect.filterOrFail(
+                                ({ Tags }) => hasTags(internalTags, Tags),
+                                () =>
+                                  new Error(
+                                    `ScheduleGroup '${scheduleGroupName}' already exists and is not managed by alchemy`,
+                                  ),
+                              ),
+                              Effect.asVoid,
+                            )
+                        : Effect.fail(
+                            new Error(
+                              `ScheduleGroup '${scheduleGroupName}' already exists but could not be described`,
+                            ),
+                          ),
+                    ),
+                  ),
+                ),
+              );
+            observed = yield* scheduler
+              .getScheduleGroup({ Name: scheduleGroupName })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+          }
 
-          return {
-            scheduleGroupArn: created.ScheduleGroupArn ?? scheduleGroupName,
-            scheduleGroupName,
-            state: undefined,
-          };
-        }),
-        update: Effect.fn(function* ({ id, olds, news, output, session }) {
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          if (!observed?.Arn) {
+            return yield* Effect.fail(
+              new Error(
+                `Failed to read created ScheduleGroup '${scheduleGroupName}'`,
+              ),
+            );
+          }
+
+          const groupArn = observed.Arn;
+
+          // Sync tags — diff observed cloud tags against desired so
+          // adoption rewrites ownership tags.
+          const observedTagsResp = yield* scheduler
+            .listTagsForResource({ ResourceArn: groupArn })
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed({ Tags: [] as scheduler.Tag[] }),
+              ),
+            );
+          const observedTags = Object.fromEntries(
+            (observedTagsResp.Tags ?? []).map((t) => [t.Key, t.Value]),
+          );
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
 
           if (removed.length > 0) {
             yield* scheduler.untagResource({
-              ResourceArn: output.scheduleGroupArn,
+              ResourceArn: groupArn,
               TagKeys: removed,
             });
           }
-
           if (upsert.length > 0) {
             yield* scheduler.tagResource({
-              ResourceArn: output.scheduleGroupArn,
+              ResourceArn: groupArn,
               Tags: upsert,
             });
           }
 
-          yield* session.note(output.scheduleGroupArn);
-          return output;
+          yield* session.note(groupArn);
+
+          return {
+            scheduleGroupArn: groupArn,
+            scheduleGroupName,
+            state: observed?.State,
+          };
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* scheduler

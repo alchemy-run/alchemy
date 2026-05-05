@@ -86,6 +86,7 @@ export const execStack = Effect.fn(function* ({
         Effect.map((ctx) => ({
           ...ctx,
           dev,
+          adopt,
         })),
       ),
     ),

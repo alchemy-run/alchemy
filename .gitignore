@@ -7,7 +7,7 @@ dist/
 .DS_Store
 .env
 *.tsbuildinfo
-
+.claude/
 .alchemy/
 # !.alchemy/github:alchemy/
 # examples/*/.alchemy
@@ -23,7 +23,6 @@ wrangler.jsonc
 .smoke.logs
 smoke
 .svelte-kit
-.claude/*.local.json
 .astro
 .wrangler
 
@@ -42,3 +41,4 @@ examples/cloudflare-worker/src/scratch.ts
 
 !/packages/alchemy/bin/cli.js
 .vendor/*
+.tmp

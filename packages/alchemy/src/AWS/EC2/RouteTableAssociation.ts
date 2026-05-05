@@ -95,75 +95,112 @@ export const RouteTableAssociationProvider = () =>
           // Route table change can be done via ReplaceRouteTableAssociation
         }),
 
-        create: Effect.fn(function* ({ news, session }) {
-          // Call AssociateRouteTable
-          const result = yield* ec2
-            .associateRouteTable({
-              RouteTableId: news.routeTableId,
-              SubnetId: news.subnetId,
-              GatewayId: news.gatewayId,
-              DryRun: false,
-            })
-            .pipe(
-              Effect.retry({
-                // Retry if route table or subnet/gateway is not yet available
-                while: (e) =>
-                  e._tag === "InvalidRouteTableID.NotFound" ||
-                  e._tag === "InvalidSubnetID.NotFound",
-                schedule: Schedule.exponential(100),
-              }),
+        reconcile: Effect.fn(function* ({ news, output, session }) {
+          // Observe — try the cached associationId first; if the association
+          // was disassociated out-of-band, fall through to AssociateRouteTable.
+          let observed:
+            | {
+                associationId: string;
+                routeTableId: string;
+                subnetId?: string;
+                gatewayId?: string;
+                state?: EC2.RouteTableAssociationStateCode;
+                statusMessage?: string;
+              }
+            | undefined;
+          if (output?.associationId) {
+            const lookup = yield* ec2
+              .describeRouteTables({
+                Filters: [
+                  {
+                    Name: "association.route-table-association-id",
+                    Values: [output.associationId],
+                  },
+                ],
+              })
+              .pipe(
+                Effect.catchTag("InvalidRouteTableID.NotFound", () =>
+                  Effect.succeed({ RouteTables: [] }),
+                ),
+              );
+            for (const rt of lookup.RouteTables ?? []) {
+              const assoc = rt.Associations?.find(
+                (a) => a.RouteTableAssociationId === output.associationId,
+              );
+              if (assoc) {
+                observed = {
+                  associationId: assoc.RouteTableAssociationId!,
+                  routeTableId: assoc.RouteTableId!,
+                  subnetId: assoc.SubnetId,
+                  gatewayId: assoc.GatewayId,
+                  state: assoc.AssociationState?.State,
+                  statusMessage: assoc.AssociationState?.StatusMessage,
+                };
+                break;
+              }
+            }
+          }
+
+          // Ensure — no existing association ⇒ AssociateRouteTable.
+          if (observed === undefined) {
+            const result = yield* ec2
+              .associateRouteTable({
+                RouteTableId: news.routeTableId,
+                SubnetId: news.subnetId,
+                GatewayId: news.gatewayId,
+                DryRun: false,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e) =>
+                    e._tag === "InvalidRouteTableID.NotFound" ||
+                    e._tag === "InvalidSubnetID.NotFound",
+                  schedule: Schedule.exponential(100),
+                }),
+              );
+            const associationId =
+              result.AssociationId! as RouteTableAssociationId;
+            yield* session.note(
+              `Route table association created: ${associationId}`,
             );
+            yield* waitForAssociationState(
+              news.routeTableId,
+              associationId,
+              "associated",
+              session,
+            );
+            return {
+              associationId,
+              routeTableId: news.routeTableId as RouteTableId,
+              subnetId: news.subnetId as SubnetId | undefined,
+              gatewayId: news.gatewayId as string | undefined,
+              associationState: {
+                state: result.AssociationState?.State ?? "associated",
+                statusMessage: result.AssociationState?.StatusMessage,
+              },
+            };
+          }
 
-          const associationId =
-            result.AssociationId! as RouteTableAssociationId;
-          yield* session.note(
-            `Route table association created: ${associationId}`,
-          );
-
-          // Wait for association to be associated
-          yield* waitForAssociationState(
-            news.routeTableId,
-            associationId,
-            "associated",
-            session,
-          );
-
-          // Return attributes
-          return {
-            associationId,
-            routeTableId: news.routeTableId as RouteTableId,
-            subnetId: news.subnetId as SubnetId | undefined,
-            gatewayId: news.gatewayId as string | undefined,
-            associationState: {
-              state: result.AssociationState?.State ?? "associated",
-              statusMessage: result.AssociationState?.StatusMessage,
-            },
-          };
-        }),
-
-        update: Effect.fn(function* ({ news, olds, output, session }) {
-          // If route table changed, use ReplaceRouteTableAssociation
-          if (news.routeTableId !== olds.routeTableId) {
+          // Sync — drift in routeTableId is patched in place by
+          // ReplaceRouteTableAssociation. Subnet/gateway changes are
+          // intercepted upstream by `diff` as a replacement.
+          if (observed.routeTableId !== (news.routeTableId as string)) {
             const result = yield* ec2.replaceRouteTableAssociation({
-              AssociationId: output.associationId,
+              AssociationId: observed.associationId,
               RouteTableId: news.routeTableId,
               DryRun: false,
             });
-
             const newAssociationId =
               result.NewAssociationId! as RouteTableAssociationId;
             yield* session.note(
               `Route table association replaced: ${newAssociationId}`,
             );
-
-            // Wait for new association to be associated
             yield* waitForAssociationState(
               news.routeTableId,
               newAssociationId,
               "associated",
               session,
             );
-
             return {
               associationId: newAssociationId,
               routeTableId: news.routeTableId as RouteTableId,
@@ -176,8 +213,17 @@ export const RouteTableAssociationProvider = () =>
             };
           }
 
-          // No changes needed
-          return output;
+          // Already in the desired state — just report it.
+          return {
+            associationId: observed.associationId as RouteTableAssociationId,
+            routeTableId: observed.routeTableId as RouteTableId,
+            subnetId: observed.subnetId as SubnetId | undefined,
+            gatewayId: observed.gatewayId,
+            associationState: {
+              state: observed.state ?? "associated",
+              statusMessage: observed.statusMessage,
+            },
+          };
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

@@ -50,12 +50,11 @@ export const AccountPasswordPolicyProvider = () =>
         );
       return response?.PasswordPolicy;
     }),
-    create: Effect.fn(function* ({ news, session }) {
-      yield* iam.updateAccountPasswordPolicy(news);
-      yield* session.note("account-password-policy");
-      return news;
-    }),
-    update: Effect.fn(function* ({ news, session }) {
+    reconcile: Effect.fn(function* ({ news, session }) {
+      // The account password policy is a singleton driven entirely by
+      // `updateAccountPasswordPolicy`, which is itself a full upsert.
+      // Observation is implicit in the API — there is nothing meaningful
+      // to diff because the request payload *is* the desired state.
       yield* iam.updateAccountPasswordPolicy(news);
       yield* session.note("account-password-policy");
       return news;

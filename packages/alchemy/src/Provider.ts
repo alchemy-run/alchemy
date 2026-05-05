@@ -23,8 +23,7 @@ export interface Provider<R extends ResourceLike = ResourceLike> {
     ReadReq = never,
     DiffReq = never,
     PrecreateReq = never,
-    CreateReq = never,
-    UpdateReq = never,
+    ReconcileReq = never,
     DeleteReq = never,
     TailReq = never,
     LogsReq = never,
@@ -35,8 +34,7 @@ export interface Provider<R extends ResourceLike = ResourceLike> {
         ReadReq,
         DiffReq,
         PrecreateReq,
-        CreateReq,
-        UpdateReq,
+        ReconcileReq,
         DeleteReq,
         TailReq,
         LogsReq
@@ -48,8 +46,7 @@ export interface Provider<R extends ResourceLike = ResourceLike> {
     ReadReq,
     DiffReq,
     PrecreateReq,
-    CreateReq,
-    UpdateReq,
+    ReconcileReq,
     DeleteReq,
     TailReq,
     LogsReq
@@ -88,8 +85,7 @@ export interface ProviderService<
   ReadReq = never,
   DiffReq = never,
   PrecreateReq = never,
-  CreateReq = never,
-  UpdateReq = never,
+  ReconcileReq = never,
   DeleteReq = never,
   TailReq = never,
   LogsReq = never,
@@ -156,23 +152,37 @@ export interface ProviderService<
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
   }): Effect.Effect<Res["Attributes"], any, PrecreateReq>;
-  create(input: {
+  /**
+   * Reconciles the desired state of a Resource with the live cloud state.
+   *
+   * This unified lifecycle method replaces the previous `create` and `update`
+   * pair. The engine dispatches `reconcile` for both intents — initial
+   * provisioning and subsequent updates — and providers must defensively
+   * handle every combination of inputs:
+   *
+   * - `output === undefined` and `olds === undefined` — first reconciliation
+   *   for this logical resource. Treat as a create. Must remain idempotent
+   *   because state persistence can fail after a successful API call.
+   * - `output !== undefined` and `olds === undefined` — engine adopted an
+   *   existing cloud resource (via {@link read}). The provider has never
+   *   written this resource through Alchemy before, so cannot rely on prior
+   *   props as a baseline.
+   * - `output !== undefined` and `olds !== undefined` — standard update
+   *   path with a known prior state.
+   *
+   * Ownership has already been verified upstream — by the time `reconcile`
+   * runs, the engine has confirmed (via `read` returning a non-`Unowned`
+   * value, or by writing the resource itself) that mutation is safe.
+   */
+  reconcile(input: {
     id: string;
     instanceId: string;
     news: Props<Res>;
+    olds: Props<Res> | undefined;
+    output: Res["Attributes"] | undefined;
     session: ScopedPlanStatusSession;
     bindings: BindingData<Res>;
-    output?: Res["Attributes"];
-  }): Effect.Effect<Res["Attributes"], any, CreateReq>;
-  update(input: {
-    id: string;
-    instanceId: string;
-    news: Props<Res>;
-    olds: Props<Res>;
-    output: Res["Attributes"];
-    session: ScopedPlanStatusSession;
-    bindings: BindingData<Res>;
-  }): Effect.Effect<Res["Attributes"], any, UpdateReq>;
+  }): Effect.Effect<Res["Attributes"], any, ReconcileReq>;
   delete(input: {
     id: string;
     instanceId: string;
@@ -189,8 +199,7 @@ export const effect = <
   ReadReq = never,
   DiffReq = never,
   PrecreateReq = never,
-  CreateReq = never,
-  UpdateReq = never,
+  ReconcileReq = never,
   DeleteReq = never,
   TailReq = never,
   LogsReq = never,
@@ -202,8 +211,7 @@ export const effect = <
       ReadReq,
       DiffReq,
       PrecreateReq,
-      CreateReq,
-      UpdateReq,
+      ReconcileReq,
       DeleteReq,
       TailReq,
       LogsReq
@@ -215,7 +223,7 @@ export const effect = <
   Provider<R>,
   never,
   Exclude<
-    Req | ReadReq | DiffReq | PrecreateReq | CreateReq | UpdateReq | DeleteReq,
+    Req | ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq,
     LifecycleServices
   >
 > =>
@@ -227,8 +235,7 @@ export const succeed = <
   ReadReq = never,
   DiffReq = never,
   PrecreateReq = never,
-  CreateReq = never,
-  UpdateReq = never,
+  ReconcileReq = never,
   DeleteReq = never,
   TailReq = never,
   LogsReq = never,
@@ -239,8 +246,7 @@ export const succeed = <
     ReadReq,
     DiffReq,
     PrecreateReq,
-    CreateReq,
-    UpdateReq,
+    ReconcileReq,
     DeleteReq,
     TailReq,
     LogsReq
@@ -249,7 +255,7 @@ export const succeed = <
   Provider<R>,
   never,
   Exclude<
-    ReadReq | DiffReq | PrecreateReq | CreateReq | UpdateReq | DeleteReq,
+    ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq,
     LifecycleServices
   >
 > =>

@@ -264,94 +264,102 @@ export const DBClusterProvider = () =>
             tags: toTagRecord(cluster.TagList),
           });
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const identifier = yield* toIdentifier(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const identifier =
+            output?.dbClusterIdentifier ?? (yield* toIdentifier(id, news));
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
           const credentials = yield* resolveMasterCredentials(news);
 
-          yield* rds
-            .createDBCluster({
+          // Observe — fetch live cluster state. We never trust `output`
+          // blindly: the cluster may have been deleted out-of-band, or this
+          // may be a first-time reconcile after adoption.
+          let observed = yield* readCluster(identifier);
+
+          // Ensure — create the cluster if it's missing. Tolerate
+          // `DBClusterAlreadyExistsFault` as a race with a peer reconciler
+          // (e.g. retry after state-persistence failure).
+          if (!observed?.DBClusterArn) {
+            yield* rds
+              .createDBCluster({
+                DBClusterIdentifier: identifier,
+                Engine: news.engine,
+                EngineVersion: news.engineVersion,
+                DatabaseName: news.databaseName,
+                DBSubnetGroupName: news.dbSubnetGroupName,
+                DBClusterParameterGroupName: news.dbClusterParameterGroupName,
+                VpcSecurityGroupIds: news.vpcSecurityGroupIds,
+                Port: news.port,
+                EnableIAMDatabaseAuthentication:
+                  news.enableIAMDatabaseAuthentication,
+                EnableHttpEndpoint: news.enableHttpEndpoint,
+                EngineMode: news.engineMode,
+                ServerlessV2ScalingConfiguration:
+                  news.serverlessV2ScalingConfiguration,
+                CopyTagsToSnapshot: news.copyTagsToSnapshot,
+                DeletionProtection: news.deletionProtection,
+                StorageEncrypted: news.storageEncrypted,
+                KmsKeyId: news.kmsKeyId,
+                ManageMasterUserPassword: news.manageMasterUserPassword,
+                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+                ...credentials,
+              })
+              .pipe(
+                Effect.catchTag(
+                  "DBClusterAlreadyExistsFault",
+                  () => Effect.void,
+                ),
+              );
+
+            observed = yield* waitForCluster(identifier);
+          } else {
+            // Sync mutable cluster config — push the desired shape via
+            // `modifyDBCluster`. Many fields land in `PendingModifiedValues`
+            // and apply on next reboot; `ApplyImmediately` shortens that.
+            yield* rds.modifyDBCluster({
               DBClusterIdentifier: identifier,
-              Engine: news.engine,
               EngineVersion: news.engineVersion,
-              DatabaseName: news.databaseName,
-              DBSubnetGroupName: news.dbSubnetGroupName,
               DBClusterParameterGroupName: news.dbClusterParameterGroupName,
               VpcSecurityGroupIds: news.vpcSecurityGroupIds,
               Port: news.port,
               EnableIAMDatabaseAuthentication:
                 news.enableIAMDatabaseAuthentication,
               EnableHttpEndpoint: news.enableHttpEndpoint,
-              EngineMode: news.engineMode,
               ServerlessV2ScalingConfiguration:
                 news.serverlessV2ScalingConfiguration,
               CopyTagsToSnapshot: news.copyTagsToSnapshot,
               DeletionProtection: news.deletionProtection,
-              StorageEncrypted: news.storageEncrypted,
-              KmsKeyId: news.kmsKeyId,
-              ManageMasterUserPassword: news.manageMasterUserPassword,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-              ...credentials,
-            })
-            .pipe(
-              Effect.catchTag("DBClusterAlreadyExistsFault", () => Effect.void),
-            );
+              MasterUserPassword: credentials.MasterUserPassword,
+              ApplyImmediately: true,
+            });
+            observed = yield* waitForCluster(identifier);
+          }
 
-          const cluster = yield* waitForCluster(identifier);
-          yield* session.note(cluster.DBClusterArn ?? identifier);
-          return toAttrs({ cluster, tags });
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const credentials = yield* resolveMasterCredentials(news);
+          const dbClusterArn = observed.DBClusterArn ?? "";
 
-          yield* rds.modifyDBCluster({
-            DBClusterIdentifier: output.dbClusterIdentifier,
-            EngineVersion: news.engineVersion,
-            DBClusterParameterGroupName: news.dbClusterParameterGroupName,
-            VpcSecurityGroupIds: news.vpcSecurityGroupIds,
-            Port: news.port,
-            EnableIAMDatabaseAuthentication:
-              news.enableIAMDatabaseAuthentication,
-            EnableHttpEndpoint: news.enableHttpEndpoint,
-            ServerlessV2ScalingConfiguration:
-              news.serverlessV2ScalingConfiguration,
-            CopyTagsToSnapshot: news.copyTagsToSnapshot,
-            DeletionProtection: news.deletionProtection,
-            MasterUserPassword: credentials.MasterUserPassword,
-            ApplyImmediately: true,
-          });
-
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-          if (upsert.length > 0) {
+          // Sync tags — diff observed cloud tags against desired so the
+          // reconciler converges regardless of what was on the resource
+          // before (initial create, adoption, or drift).
+          const observedTags = toTagRecord(observed.TagList);
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0 && dbClusterArn) {
             yield* rds.addTagsToResource({
-              ResourceName: output.dbClusterArn,
+              ResourceName: dbClusterArn,
               Tags: upsert,
             });
           }
-          if (removed.length > 0) {
+          if (removed.length > 0 && dbClusterArn) {
             yield* rds.removeTagsFromResource({
-              ResourceName: output.dbClusterArn,
+              ResourceName: dbClusterArn,
               TagKeys: removed,
             });
           }
 
-          const cluster = yield* waitForCluster(output.dbClusterIdentifier);
-          yield* session.note(output.dbClusterArn);
-          return toAttrs({ cluster, tags: newTags });
+          yield* session.note(dbClusterArn || identifier);
+          return toAttrs({ cluster: observed, tags: desiredTags });
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* rds

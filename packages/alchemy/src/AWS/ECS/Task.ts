@@ -739,10 +739,19 @@ await Effect.runPromise(program);
                 ?.containerPort ?? output.port,
           };
         }),
-        create: Effect.fn(function* ({ id, news, bindings, output, session }) {
+        reconcile: Effect.fn(function* ({
+          id,
+          news,
+          bindings,
+          output,
+          session,
+        }) {
           const family = yield* toTaskFamily(id, news);
-          const taskRoleName = yield* createRoleName(id, "task-role");
-          const executionRoleName = yield* createRoleName(id, "execution-role");
+          const taskRoleName =
+            output?.taskRoleName ?? (yield* createRoleName(id, "task-role"));
+          const executionRoleName =
+            output?.executionRoleName ??
+            (yield* createRoleName(id, "execution-role"));
           const taskPolicyName = yield* createPolicyName(id, "task-policy");
           const repositoryName =
             output?.repositoryName ?? (yield* createRepositoryName(id));
@@ -753,6 +762,9 @@ await Effect.runPromise(program);
             ...news.tags,
           };
 
+          // Ensure roles, repository, and log group. Each helper is
+          // idempotent (creates on miss, adopts on race) so the same
+          // sequence runs on initial create, adoption, or update.
           const taskRoleArn =
             output?.taskRoleArn ??
             (yield* createTaskRoleIfNotExists({ id, roleName: taskRoleName }));
@@ -765,10 +777,14 @@ await Effect.runPromise(program);
             }));
 
           for (const policyArn of news.taskRoleManagedPolicyArns ?? []) {
-            yield* iam.attachRolePolicy({
-              RoleName: taskRoleName,
-              PolicyArn: policyArn,
-            });
+            yield* iam
+              .attachRolePolicy({
+                RoleName: taskRoleName,
+                PolicyArn: policyArn,
+              })
+              .pipe(
+                Effect.catchTag("LimitExceededException", () => Effect.void),
+              );
           }
 
           const bindingEnv = yield* attachBindings({
@@ -777,11 +793,16 @@ await Effect.runPromise(program);
             bindings,
           });
 
-          const { repositoryUri } = yield* ensureRepository({
-            id,
-            repositoryName,
-            tags,
-          });
+          const { repositoryUri } =
+            output?.repositoryUri && output?.repositoryName === repositoryName
+              ? {
+                  repositoryUri: output.repositoryUri,
+                }
+              : yield* ensureRepository({
+                  id,
+                  repositoryName,
+                  tags,
+                });
           const logGroupArn =
             output?.logGroupArn ??
             (yield* ensureLogGroup({
@@ -789,6 +810,10 @@ await Effect.runPromise(program);
               logGroupName,
             }));
 
+          // Build, push, and register a new task definition revision. Task
+          // definitions are versioned in AWS, so registering a new revision
+          // is the unit of "update" — the prior revision is deregistered
+          // only on `delete` of the resource.
           const { code, hash } = yield* bundleProgram(id, news);
           const imageUri = yield* buildAndPushImage({
             id,
@@ -826,7 +851,7 @@ await Effect.runPromise(program);
             taskFamily: family,
             containerName:
               taskDefinition.containerDefinitions?.[0]?.name ?? family,
-            port: news.port ?? 3000,
+            port: news.port ?? output?.port ?? 3000,
             imageUri,
             repositoryName,
             repositoryUri,
@@ -836,63 +861,6 @@ await Effect.runPromise(program);
             executionRoleName,
             logGroupName,
             logGroupArn,
-            code: {
-              hash,
-            },
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, bindings, output, session }) {
-          const family = yield* toTaskFamily(id, news);
-          const taskPolicyName = yield* createPolicyName(id, "task-policy");
-
-          const bindingEnv = yield* attachBindings({
-            roleName: output.taskRoleName,
-            policyName: taskPolicyName,
-            bindings,
-          });
-
-          const { code, hash } = yield* bundleProgram(id, news);
-          const imageUri = yield* buildAndPushImage({
-            id,
-            repositoryUri: output.repositoryUri,
-            hash,
-            code,
-            props: {
-              ...news,
-              env: {
-                ...bindingEnv,
-                ...alchemyEnv,
-                ...news.env,
-              },
-            },
-          });
-
-          const taskDefinition = yield* registerTaskDefinition({
-            props: {
-              ...news,
-              env: {
-                ...bindingEnv,
-                ...alchemyEnv,
-                ...news.env,
-              },
-            },
-            family,
-            imageUri,
-            taskRoleArn: output.taskRoleArn,
-            executionRoleArn: output.executionRoleArn,
-            logGroupName: output.logGroupName,
-          });
-
-          yield* session.note(taskDefinition.taskDefinitionArn!);
-          return {
-            ...output,
-            taskDefinitionArn: taskDefinition.taskDefinitionArn!,
-            taskFamily: family,
-            containerName:
-              taskDefinition.containerDefinitions?.[0]?.name ??
-              output.containerName,
-            port: news.port ?? output.port,
-            imageUri,
             code: {
               hash,
             },

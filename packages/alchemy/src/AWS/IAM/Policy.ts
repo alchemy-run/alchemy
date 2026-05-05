@@ -234,129 +234,132 @@ export const PolicyProvider = () =>
             tags: toTagRecord(tags.Tags),
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const policyName = yield* toPolicyName(id, news);
-          const policyArn = yield* toPolicyArn(id, news);
-          const tags = {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const policyName =
+            output?.policyName ?? (yield* toPolicyName(id, news));
+          const policyArn = output?.policyArn ?? (yield* toPolicyArn(id, news));
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
 
-          const created = yield* iam
-            .createPolicy({
-              PolicyName: policyName,
-              Path: news.path,
-              PolicyDocument: stringifyPolicyDocument(news.policyDocument),
-              Description: news.description,
-              Tags: createTagsList(tags),
-            })
-            .pipe(
-              Effect.catchTag("EntityAlreadyExistsException", () =>
-                Effect.gen(function* () {
-                  const existing = yield* readPolicy(policyArn);
-                  if (!existing?.Arn) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Policy '${policyName}' already exists but could not be described`,
-                      ),
-                    );
-                  }
-                  const existingTags = yield* iam.listPolicyTags({
-                    PolicyArn: existing.Arn,
-                  });
-                  if (!hasTags(tags, existingTags.Tags)) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Policy '${policyName}' already exists and is not managed by alchemy`,
-                      ),
-                    );
-                  }
-                  return { Policy: existing };
-                }),
-              ),
-            );
+          // Observe — fetch the policy metadata, current default-version
+          // document, and tags. Each piece feeds an independent sync step.
+          let observed = yield* readPolicy(policyArn);
 
-          yield* session.note(created.Policy?.Arn ?? policyArn);
+          // Ensure — create the managed policy when it is missing. We
+          // pass the desired document as the initial version so first
+          // create lands fully configured. On race, adopt by reading
+          // existing.
+          if (!observed?.Arn) {
+            const created = yield* iam
+              .createPolicy({
+                PolicyName: policyName,
+                Path: news.path,
+                PolicyDocument: stringifyPolicyDocument(news.policyDocument),
+                Description: news.description,
+                Tags: createTagsList(desiredTags),
+              })
+              .pipe(
+                Effect.catchTag("EntityAlreadyExistsException", () =>
+                  Effect.gen(function* () {
+                    const existing = yield* readPolicy(policyArn);
+                    if (!existing?.Arn) {
+                      return yield* Effect.fail(
+                        new Error(
+                          `Policy '${policyName}' already exists but could not be described`,
+                        ),
+                      );
+                    }
+                    const existingTags = yield* iam.listPolicyTags({
+                      PolicyArn: existing.Arn,
+                    });
+                    if (!hasTags(desiredTags, existingTags.Tags)) {
+                      return yield* Effect.fail(
+                        new Error(
+                          `Policy '${policyName}' already exists and is not managed by alchemy`,
+                        ),
+                      );
+                    }
+                    return { Policy: existing };
+                  }),
+                ),
+              );
+            observed = created.Policy;
+          }
 
-          return {
-            policyArn: (created.Policy?.Arn ?? policyArn) as PolicyArn,
-            policyName,
-            policyId: created.Policy?.PolicyId,
-            path: created.Policy?.Path ?? news.path ?? "/",
-            defaultVersionId: created.Policy?.DefaultVersionId,
-            attachmentCount: created.Policy?.AttachmentCount,
-            permissionsBoundaryUsageCount:
-              created.Policy?.PermissionsBoundaryUsageCount,
-            isAttachable: created.Policy?.IsAttachable,
-            description: created.Policy?.Description ?? news.description,
-            policyDocument: news.policyDocument,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
+          // Sync default-version document — IAM managed policies are
+          // immutable per version, so any document change requires
+          // creating a new default version (and pruning the oldest non-
+          // default if we're at the 5-version cap).
+          const observedDocument = yield* readPolicyDocument({
+            policyArn,
+            versionId: observed?.DefaultVersionId,
+          });
           if (
-            JSON.stringify(news.policyDocument) !==
-            JSON.stringify(olds.policyDocument)
+            JSON.stringify(observedDocument ?? null) !==
+            JSON.stringify(news.policyDocument)
           ) {
-            yield* prunePolicyVersions(output.policyArn);
+            yield* prunePolicyVersions(policyArn);
             const createdVersion = yield* iam.createPolicyVersion({
-              PolicyArn: output.policyArn,
+              PolicyArn: policyArn,
               PolicyDocument: stringifyPolicyDocument(news.policyDocument),
               SetAsDefault: true,
             });
             if (createdVersion.PolicyVersion?.VersionId) {
               yield* iam.setDefaultPolicyVersion({
-                PolicyArn: output.policyArn,
+                PolicyArn: policyArn,
                 VersionId: createdVersion.PolicyVersion.VersionId,
               });
             }
           }
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags against the cloud's actual tags so adoption /
+          // out-of-band tag changes converge.
+          const observedTagsResp = yield* iam.listPolicyTags({
+            PolicyArn: policyArn,
+          });
+          const observedTags = toTagRecord(observedTagsResp.Tags);
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* iam.tagPolicy({
-              PolicyArn: output.policyArn,
+              PolicyArn: policyArn,
               Tags: upsert,
             });
           }
           if (removed.length > 0) {
             yield* iam.untagPolicy({
-              PolicyArn: output.policyArn,
+              PolicyArn: policyArn,
               TagKeys: removed,
             });
           }
 
-          const policy = yield* readPolicy(output.policyArn);
-          const policyDocument =
+          // Re-read for fresh metadata and the now-current document.
+          const fresh = yield* readPolicy(policyArn);
+          const freshDocument =
             (yield* readPolicyDocument({
-              policyArn: output.policyArn,
-              versionId: policy?.DefaultVersionId,
+              policyArn,
+              versionId: fresh?.DefaultVersionId,
             })) ?? news.policyDocument;
 
-          yield* session.note(output.policyArn);
+          yield* session.note(policyArn);
           return {
-            policyArn: output.policyArn,
-            policyName: output.policyName,
-            policyId: policy?.PolicyId ?? output.policyId,
-            path: policy?.Path ?? output.path,
+            policyArn,
+            policyName,
+            policyId: fresh?.PolicyId ?? observed?.PolicyId,
+            path: fresh?.Path ?? observed?.Path ?? news.path ?? "/",
             defaultVersionId:
-              policy?.DefaultVersionId ?? output.defaultVersionId,
-            attachmentCount: policy?.AttachmentCount ?? output.attachmentCount,
+              fresh?.DefaultVersionId ?? observed?.DefaultVersionId,
+            attachmentCount:
+              fresh?.AttachmentCount ?? observed?.AttachmentCount,
             permissionsBoundaryUsageCount:
-              policy?.PermissionsBoundaryUsageCount ??
-              output.permissionsBoundaryUsageCount,
-            isAttachable: policy?.IsAttachable ?? output.isAttachable,
-            description: policy?.Description ?? output.description,
-            policyDocument,
-            tags: newTags,
+              fresh?.PermissionsBoundaryUsageCount ??
+              observed?.PermissionsBoundaryUsageCount,
+            isAttachable: fresh?.IsAttachable ?? observed?.IsAttachable,
+            description:
+              fresh?.Description ?? observed?.Description ?? news.description,
+            policyDocument: freshDocument,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

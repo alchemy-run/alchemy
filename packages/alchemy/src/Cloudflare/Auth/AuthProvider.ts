@@ -666,6 +666,8 @@ export const DEFAULT_SCOPES = [
   "ai-search:write",
   "ai-search:run",
   "ai:write",
+  "aig:read",
+  "aig:write",
   "cloudchamber:write",
   "connectivity:admin",
   "containers:write",

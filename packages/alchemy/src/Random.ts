@@ -32,11 +32,17 @@ export const Random = Resource<Random>("Alchemy.Random");
 
 export const RandomProvider = () =>
   Provider.succeed(Random, {
-    create: Effect.fn(function* ({ news = {}, output }) {
+    reconcile: Effect.fn(function* ({ news = {}, output }) {
+      // Observe — there is no remote state. The cached `output.text` is
+      // the authoritative current value; once minted it is preserved
+      // across reconciles to keep the secret stable.
       if (output?.text) {
         return output;
       }
 
+      // Ensure — no observed value: mint a fresh random secret and
+      // return it. The next reconcile will see this in `output` and
+      // short-circuit above.
       const byteLength = news.bytes ?? 32;
       const text = yield* Effect.sync(() => {
         const bytes = new Uint8Array(byteLength);
@@ -49,9 +55,6 @@ export const RandomProvider = () =>
       });
 
       return { text };
-    }),
-    update: Effect.fn(function* ({ output }) {
-      return output;
     }),
     delete: Effect.fn(function* () {
       return undefined;

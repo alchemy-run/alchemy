@@ -76,11 +76,81 @@ export const ListenerProvider = () =>
         protocol: listener.Protocol!,
       };
     }),
-    create: Effect.fn(function* ({ news, session }) {
-      const created = yield* elbv2.createListener({
-        LoadBalancerArn: news.loadBalancerArn as string,
+    reconcile: Effect.fn(function* ({ news, output, session }) {
+      const loadBalancerArn = news.loadBalancerArn as LoadBalancerArn;
+      const desiredTargetGroupArn = news.targetGroupArn as TargetGroupArn;
+      const desiredProtocol = news.protocol ?? "HTTP";
+
+      // Observe — describe the listener if we have a prior ARN; otherwise
+      // list listeners on the load balancer and find one matching port.
+      let listener: elbv2.Listener | undefined;
+      if (output?.listenerArn) {
+        const described = yield* elbv2
+          .describeListeners({
+            ListenerArns: [output.listenerArn],
+          })
+          .pipe(
+            Effect.catchTag("ListenerNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        listener = described?.Listeners?.[0];
+      }
+      if (!listener?.ListenerArn) {
+        const listed = yield* elbv2
+          .describeListeners({
+            LoadBalancerArn: loadBalancerArn,
+          })
+          .pipe(
+            Effect.catchTag("LoadBalancerNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.catchTag("ListenerNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        listener = listed?.Listeners?.find((l) => l.Port === news.port);
+      }
+
+      // Ensure — create if missing.
+      if (!listener?.ListenerArn) {
+        const created = yield* elbv2.createListener({
+          LoadBalancerArn: loadBalancerArn,
+          Port: news.port,
+          Protocol: desiredProtocol,
+          Certificates: news.certificateArn
+            ? [{ CertificateArn: news.certificateArn }]
+            : undefined,
+          SslPolicy: news.sslPolicy,
+          DefaultActions: [
+            {
+              Type: "forward",
+              TargetGroupArn: desiredTargetGroupArn,
+            },
+          ],
+        });
+        listener = created.Listeners?.[0];
+        if (!listener?.ListenerArn) {
+          return yield* Effect.die(
+            new Error("createListener returned no listener"),
+          );
+        }
+        yield* session.note(listener.ListenerArn);
+        return {
+          listenerArn: listener.ListenerArn as ListenerArn,
+          loadBalancerArn: listener.LoadBalancerArn as LoadBalancerArn,
+          targetGroupArn: desiredTargetGroupArn,
+          port: listener.Port!,
+          protocol: listener.Protocol!,
+        };
+      }
+
+      // Sync — apply mutable fields (port, protocol, certificates,
+      // sslPolicy, defaultActions). modifyListener fully replaces these.
+      const modified = yield* elbv2.modifyListener({
+        ListenerArn: listener.ListenerArn,
         Port: news.port,
-        Protocol: news.protocol ?? "HTTP",
+        Protocol: desiredProtocol,
         Certificates: news.certificateArn
           ? [{ CertificateArn: news.certificateArn }]
           : undefined,
@@ -88,49 +158,18 @@ export const ListenerProvider = () =>
         DefaultActions: [
           {
             Type: "forward",
-            TargetGroupArn: news.targetGroupArn as string,
+            TargetGroupArn: desiredTargetGroupArn,
           },
         ],
       });
-      const listener = created.Listeners?.[0];
-      if (!listener?.ListenerArn) {
-        return yield* Effect.die(
-          new Error("createListener returned no listener"),
-        );
-      }
+      const final = modified.Listeners?.[0] ?? listener;
       yield* session.note(listener.ListenerArn);
       return {
         listenerArn: listener.ListenerArn as ListenerArn,
         loadBalancerArn: listener.LoadBalancerArn as LoadBalancerArn,
-        targetGroupArn: news.targetGroupArn as TargetGroupArn,
-        port: listener.Port!,
-        protocol: listener.Protocol!,
-      };
-    }),
-    update: Effect.fn(function* ({ news, output, session }) {
-      const modified = yield* elbv2.modifyListener({
-        ListenerArn: output.listenerArn,
-        Port: news.port,
-        Protocol: news.protocol ?? "HTTP",
-        Certificates: news.certificateArn
-          ? [{ CertificateArn: news.certificateArn }]
-          : undefined,
-        SslPolicy: news.sslPolicy,
-        DefaultActions: [
-          {
-            Type: "forward",
-            TargetGroupArn: news.targetGroupArn as string,
-          },
-        ],
-      });
-      const listener = modified.Listeners?.[0];
-      yield* session.note(output.listenerArn);
-      return {
-        listenerArn: output.listenerArn,
-        loadBalancerArn: output.loadBalancerArn,
-        targetGroupArn: news.targetGroupArn as TargetGroupArn,
-        port: listener?.Port ?? news.port,
-        protocol: listener?.Protocol ?? news.protocol ?? "HTTP",
+        targetGroupArn: desiredTargetGroupArn,
+        port: final.Port ?? news.port,
+        protocol: final.Protocol ?? desiredProtocol,
       };
     }),
     delete: Effect.fn(function* ({ output }) {

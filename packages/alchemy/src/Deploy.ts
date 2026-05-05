@@ -9,9 +9,11 @@ import { Stage } from "./Stage.ts";
 export const deploy = <A>({
   stack,
   stage,
+  dev,
 }: {
   stack: StackEffect<CompiledStack<A>, Stage | AlchemyContext>;
   stage: string;
+  dev?: boolean;
 }) =>
   evalStack(
     stack,
@@ -21,5 +23,5 @@ export const deploy = <A>({
         const output = yield* Apply.apply(plan);
         return output as Input.Resolve<A>;
       }),
-    { stage },
+    { stage, dev },
   );

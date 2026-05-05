@@ -153,44 +153,65 @@ export const R2BucketProvider = () =>
             } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news = {} }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const name = yield* createBucketName(id, news.name);
-          const bucket = yield* createBucket({
-            accountId,
-            name,
-            storageClass: news.storageClass,
-            jurisdiction: news.jurisdiction,
-            locationHint: news.locationHint,
+          const acct = output?.accountId ?? accountId;
+          const jurisdiction =
+            output?.jurisdiction ?? news.jurisdiction ?? "default";
+
+          // Observe — fetch the bucket. R2 reports a deleted bucket as
+          // `NoSuchBucket`; tolerate that so the reconciler falls
+          // through to the create path.
+          let observed = yield* getBucket({
+            accountId: acct,
+            bucketName: name,
+            jurisdiction,
           }).pipe(
-            Effect.catchTag("BucketAlreadyExists", () =>
-              getBucket({
-                accountId,
-                bucketName: name,
-                jurisdiction: news.jurisdiction,
-              }),
-            ),
+            Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
           );
+
+          // Ensure — create if missing. R2 reports a concurrent create
+          // (or partial state-persistence failure) as
+          // `BucketAlreadyExists`; tolerate by re-fetching the bucket.
+          if (!observed) {
+            observed = yield* createBucket({
+              accountId: acct,
+              name,
+              storageClass: news.storageClass,
+              jurisdiction: news.jurisdiction,
+              locationHint: news.locationHint,
+            }).pipe(
+              Effect.catchTag("BucketAlreadyExists", () =>
+                getBucket({
+                  accountId: acct,
+                  bucketName: name,
+                  jurisdiction: news.jurisdiction,
+                }),
+              ),
+            );
+          }
+
+          // Sync — storage class is the only mutable property; location
+          // and jurisdiction are immutable (the diff function flags those
+          // as `replace`). Only patch when the desired class drifts from
+          // observed to avoid unnecessary API calls.
+          const desiredStorageClass = news.storageClass ?? "Standard";
+          const observedStorageClass = observed.storageClass ?? "Standard";
+          if (observedStorageClass !== desiredStorageClass) {
+            observed = yield* patchBucket({
+              accountId: acct,
+              bucketName: observed.name!,
+              storageClass: desiredStorageClass,
+              jurisdiction: observed.jurisdiction ?? jurisdiction,
+            });
+          }
+
           return {
-            bucketName: bucket.name!,
-            storageClass: bucket.storageClass ?? "Standard",
-            jurisdiction: bucket.jurisdiction ?? "default",
-            location: normalizeLocation(bucket.location),
-            accountId,
-          };
-        }),
-        update: Effect.fn(function* ({ news = {}, output }) {
-          const bucket = yield* patchBucket({
-            accountId: output.accountId,
-            bucketName: output.bucketName,
-            storageClass: news.storageClass ?? output.storageClass,
-            jurisdiction: output.jurisdiction,
-          });
-          return {
-            bucketName: bucket.name!,
-            storageClass: bucket.storageClass ?? "Standard",
-            jurisdiction: bucket.jurisdiction ?? "default",
-            location: normalizeLocation(bucket.location),
-            accountId: output.accountId,
+            bucketName: observed.name!,
+            storageClass: observed.storageClass ?? "Standard",
+            jurisdiction: observed.jurisdiction ?? "default",
+            location: normalizeLocation(observed.location),
+            accountId: acct,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

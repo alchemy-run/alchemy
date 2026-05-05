@@ -73,12 +73,27 @@ export const RootProvider = () =>
             name: olds?.name,
           });
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const root = yield* readRoot(news);
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          // Observe — discover the live root. `Root` is import-only: AWS
+          // creates the root for us when the organization is created, and we
+          // never create or delete it. We always look it up fresh.
+          const root = yield* readRoot({
+            rootId: output?.rootId ?? news.rootId,
+            name: news.name,
+          });
           if (!root) {
-            return yield* Effect.fail(new Error("organization root not found"));
+            return yield* Effect.fail(
+              new Error(
+                output?.rootId
+                  ? `organization root '${output.rootId}' not found`
+                  : "organization root not found",
+              ),
+            );
           }
 
+          // Sync tags — diff observed cloud tags against desired. Using
+          // `root.tags` as the baseline (instead of stale `olds.tags`) keeps
+          // the reconciler convergent even on adoption or after drift.
           const tags = yield* updateResourceTags({
             id,
             resourceId: root.rootId,
@@ -87,27 +102,6 @@ export const RootProvider = () =>
           });
 
           yield* session.note(root.rootArn);
-          return {
-            ...root,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const root = yield* readRoot({ rootId: output.rootId });
-          if (!root) {
-            return yield* Effect.fail(
-              new Error(`organization root '${output.rootId}' not found`),
-            );
-          }
-
-          const tags = yield* updateResourceTags({
-            id,
-            resourceId: output.rootId,
-            olds: olds.tags,
-            news: news.tags,
-          });
-
-          yield* session.note(output.rootArn);
           return {
             ...root,
             tags,

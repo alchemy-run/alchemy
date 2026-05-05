@@ -1,4 +1,4 @@
-import { Random } from "alchemy";
+import { Random } from "../../Random.ts";
 import * as Effect from "effect/Effect";
 import * as Secret from "../SecretsStore/Secret.ts";
 import { SecretsStore } from "../SecretsStore/SecretsStore.ts";

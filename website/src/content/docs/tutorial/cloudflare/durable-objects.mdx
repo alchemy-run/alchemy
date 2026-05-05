@@ -95,14 +95,12 @@ fully type-checked through the Cloudflare RPC machinery.
 ## Bind the DO to the Worker
 
 Yield the `Counter` class in your Worker's init phase to get a
-namespace handle, then call `getByName(...)` inside `fetch` to obtain
-a typed stub:
+namespace handle:
 
 ```diff lang="typescript"
 // src/worker.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 +import Counter from "./counter.ts";
 
@@ -111,6 +109,38 @@ export default Cloudflare.Worker(
   { main: import.meta.path },
   Effect.gen(function* () {
 +    const counters = yield* Counter;
+
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("Hello from my Worker!");
+      }),
+    };
+  }),
+);
+```
+
+`yield* Counter` in init registers the DO with the Worker
+(binding + class-migration metadata) and hands you the namespace.
+
+## Call the DO from `fetch`
+
+Inside the `fetch` handler, route `POST /counter/:name` to the DO
+by calling `getByName(...)` to obtain a typed stub, then invoking
+`increment()`:
+
+```diff lang="typescript"
+// src/worker.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
++import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import Counter from "./counter.ts";
+
+export default Cloudflare.Worker(
+  "Worker",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    const counters = yield* Counter;
 
     return {
       fetch: Effect.gen(function* () {
@@ -129,14 +159,10 @@ export default Cloudflare.Worker(
 );
 ```
 
-Two things just happened:
-
-1. **`yield* Counter`** in init registers the DO with the Worker
-   (binding + class-migration metadata) and hands you the namespace.
-2. **`counters.getByName(name)`** returns a typed stub: the Worker
-   sees `increment(): Effect<number>` and `get(): Effect<number>`
-   exactly as you defined them. Calling `.increment()` round-trips
-   through Cloudflare's RPC machinery to the durable instance.
+`counters.getByName(name)` returns a typed stub: the Worker sees
+`increment(): Effect<number>` and `get(): Effect<number>` exactly as
+you defined them. Calling `.increment()` round-trips through
+Cloudflare's RPC machinery to the durable instance.
 
 ## Deploy and verify
 

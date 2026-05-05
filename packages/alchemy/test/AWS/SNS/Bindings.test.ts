@@ -30,22 +30,20 @@ describe.sequential("SNS Bindings", () => {
         }
 
         yield* Effect.logInfo("SNS test setup: deploying fixture");
-        const deployed = yield* stack
-          .deploy(
-            Effect.gen(function* () {
-              const { topic, queue, subscription } = yield* TopicAndQueue;
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const { topic, queue, subscription } = yield* TopicAndQueue;
 
-              const apiFunction = yield* SNSApiFunction;
+            const apiFunction = yield* SNSApiFunction;
 
-              return {
-                apiFunction,
-                topic,
-                queue,
-                subscription,
-              };
-            }),
-          )
-          .pipe(Effect.provide(SNSApiFunctionLive));
+            return {
+              apiFunction,
+              topic,
+              queue,
+              subscription,
+            };
+          }).pipe(Effect.provide(SNSApiFunctionLive)),
+        );
 
         const baseUrl = deployed.apiFunction.functionUrl!.replace(/\/+$/, "");
         const queueUrl = deployed.queue.queueUrl;
@@ -201,16 +199,29 @@ describe.sequential("SNS Bindings", () => {
           expect((response as any).Attributes.TopicArn).toBe(topicArn);
         });
 
-        // SetTopicAttributes
+        // SetTopicAttributes — eventual consistency. SNS can take a few
+        // seconds to propagate a SetTopicAttributes change, and during
+        // that window GetTopicAttributes may return a payload without
+        // the updated key. Poll briefly.
         yield* Effect.gen(function* () {
           yield* postJson("/topic-attributes", {
             name: "DisplayName",
             value: "updated-display-name",
           });
 
-          const response = yield* getJson("/topic-attributes");
-          expect((response as any).Attributes.DisplayName).toBe(
-            "updated-display-name",
+          yield* Effect.gen(function* () {
+            const response = yield* getJson("/topic-attributes");
+            const displayName = (response as any).Attributes?.DisplayName;
+            if (displayName !== "updated-display-name") {
+              return yield* Effect.fail(new TopicAttributeNotPropagated());
+            }
+          }).pipe(
+            Effect.retry({
+              while: (e) => e._tag === "TopicAttributeNotPropagated",
+              schedule: Schedule.fixed("1 second").pipe(
+                Schedule.both(Schedule.recurs(15)),
+              ),
+            }),
           );
         });
 
@@ -260,20 +271,38 @@ describe.sequential("SNS Bindings", () => {
           expect(arns).toContain(topicArn);
         });
 
-        // ListSubscriptions
+        // ListSubscriptions (account-wide) — the alchemy binding wraps
+        // SNS's single-page `ListSubscriptions` operation, which returns
+        // up to 100 subscriptions. On a busy account our brand-new
+        // subscription may simply be on a later page. Just assert the
+        // binding works (returns an Array of subscriptions). Our specific
+        // ARN is verified via the topic-scoped call below.
         yield* Effect.gen(function* () {
           const response = yield* getJson("/subscriptions");
-          const arns = ((response as any).Subscriptions ?? []).map(
-            (subscription: any) => subscription.SubscriptionArn,
-          );
-          expect(arns).toContain(subscriptionArn);
+          const subscriptions = (response as any).Subscriptions ?? [];
+          expect(Array.isArray(subscriptions)).toBe(true);
         });
 
-        // ListSubscriptionsByTopic
+        // ListSubscriptionsByTopic — scoped to the topic we just created,
+        // so propagation is tight. SNS still has eventual consistency on
+        // brand-new subscriptions; poll for ~30s.
         yield* Effect.gen(function* () {
-          const response = yield* getJson("/subscriptions-by-topic");
-          const arns = ((response as any).Subscriptions ?? []).map(
-            (subscription: any) => subscription.SubscriptionArn,
+          const arns = yield* Effect.gen(function* () {
+            const response = yield* getJson("/subscriptions-by-topic");
+            const arns = ((response as any).Subscriptions ?? []).map(
+              (subscription: any) => subscription.SubscriptionArn,
+            );
+            if (!arns.includes(subscriptionArn)) {
+              return yield* Effect.fail(new SubscriptionNotListed());
+            }
+            return arns;
+          }).pipe(
+            Effect.retry({
+              while: (e) => e._tag === "SubscriptionNotListed",
+              schedule: Schedule.fixed("2 seconds").pipe(
+                Schedule.both(Schedule.recurs(15)),
+              ),
+            }),
           );
           expect(arns).toContain(subscriptionArn);
         });
@@ -373,8 +402,12 @@ describe.sequential("SNS Bindings", () => {
           yield* stack.destroy();
         }
       }),
-    { timeout: 240_000 },
+    { timeout: 360_000 },
   );
 });
 
 class QueueMessageNotReady extends Data.TaggedError("QueueMessageNotReady") {}
+class SubscriptionNotListed extends Data.TaggedError("SubscriptionNotListed") {}
+class TopicAttributeNotPropagated extends Data.TaggedError(
+  "TopicAttributeNotPropagated",
+) {}

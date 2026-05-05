@@ -82,75 +82,96 @@ export const GroupProvider = () =>
 
           return yield* readGroupByDisplayName(olds);
         }),
-        create: Effect.fn(function* ({ news, session }) {
-          const identityStoreId = yield* resolveIdentityStoreId(news);
-          const existing = yield* readGroupByDisplayName({
-            ...news,
-            identityStoreId,
-          });
-          if (existing) {
-            yield* session.note(existing.groupId);
-            return existing;
-          }
+        reconcile: Effect.fn(function* ({ news, output, session }) {
+          const identityStoreId =
+            output?.identityStoreId ?? (yield* resolveIdentityStoreId(news));
 
-          const response = yield* retryIdentityCenter(
-            identitystore.createGroup({
-              IdentityStoreId: identityStoreId,
-              DisplayName: news.displayName,
-              Description: news.description,
-            }),
-          );
-
-          const created =
-            (response.GroupId
-              ? yield* readGroupById(identityStoreId, response.GroupId)
+          // Observe — find the group by id (if we already have one) or
+          // by display name. We never trust `output.groupId` blindly: a
+          // group deleted out of band shows up as missing here.
+          let existing =
+            (output?.groupId
+              ? yield* readGroupById(identityStoreId, output.groupId)
               : undefined) ??
             (yield* readGroupByDisplayName({
               ...news,
               identityStoreId,
             }));
 
-          if (!created) {
-            return yield* Effect.fail(
-              new Error(`group '${news.displayName}' not found after create`),
+          // Ensure — create the group if missing.
+          if (!existing) {
+            const response = yield* retryIdentityCenter(
+              identitystore.createGroup({
+                IdentityStoreId: identityStoreId,
+                DisplayName: news.displayName,
+                Description: news.description,
+              }),
             );
+
+            existing =
+              (response.GroupId
+                ? yield* readGroupById(identityStoreId, response.GroupId)
+                : undefined) ??
+              (yield* readGroupByDisplayName({
+                ...news,
+                identityStoreId,
+              }));
+
+            if (!existing) {
+              return yield* Effect.fail(
+                new Error(`group '${news.displayName}' not found after create`),
+              );
+            }
+
+            yield* session.note(existing.groupId);
+            return existing;
           }
 
-          yield* session.note(created.groupId);
-          return created;
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          const operations = [
-            {
+          // Sync mutable attributes — `updateGroup` overwrites
+          // displayName and description in one call. We diff against
+          // observed cloud state so adoption converges.
+          const operations: {
+            AttributePath: string;
+            AttributeValue: string;
+          }[] = [];
+          if (existing.displayName !== news.displayName) {
+            operations.push({
               AttributePath: "DisplayName",
               AttributeValue: news.displayName,
-            },
-            {
+            });
+          }
+          const desiredDescription = news.description ?? "";
+          if ((existing.description ?? "") !== desiredDescription) {
+            operations.push({
               AttributePath: "Description",
-              AttributeValue: news.description ?? "",
-            },
-          ];
-
-          yield* retryIdentityCenter(
-            identitystore.updateGroup({
-              IdentityStoreId: output.identityStoreId,
-              GroupId: output.groupId,
-              Operations: operations,
-            }),
-          );
-
-          const updated = yield* readGroupById(
-            output.identityStoreId,
-            output.groupId,
-          );
-          if (!updated) {
-            return yield* Effect.fail(
-              new Error(`group '${output.groupId}' not found after update`),
-            );
+              AttributeValue: desiredDescription,
+            });
           }
 
-          yield* session.note(updated.groupId);
-          return updated;
+          if (operations.length > 0) {
+            yield* retryIdentityCenter(
+              identitystore.updateGroup({
+                IdentityStoreId: existing.identityStoreId,
+                GroupId: existing.groupId,
+                Operations: operations,
+              }),
+            );
+
+            const updated = yield* readGroupById(
+              existing.identityStoreId,
+              existing.groupId,
+            );
+            if (!updated) {
+              return yield* Effect.fail(
+                new Error(`group '${existing.groupId}' not found after update`),
+              );
+            }
+            yield* session.note(updated.groupId);
+            return updated;
+          }
+
+          yield* session.note(existing.groupId);
+          return existing;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* retryIdentityCenter(

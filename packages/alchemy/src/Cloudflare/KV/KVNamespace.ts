@@ -1,5 +1,7 @@
 import * as kv from "@distilled.cloud/cloudflare/kv";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -68,12 +70,22 @@ export const KVNamespaceProvider = () =>
       const updateNamespace = yield* kv.updateNamespace;
       const deleteNamespace = yield* kv.deleteNamespace;
       const getNamespaceFn = yield* kv.getNamespace;
-      const listNamespaces = yield* kv.listNamespaces;
 
       const createTitle = (id: string, title: string | undefined) =>
         Effect.gen(function* () {
           return title ?? (yield* createPhysicalName({ id }));
         });
+
+      // Cloudflare's `listNamespaces` accepts no title/prefix filter, so
+      // adoption-by-name has to scan every page. Use the paginated
+      // `.items` stream off the un-yielded operation method (yielding
+      // `kv.listNamespaces` collapses it to a single-page call).
+      const findNamespaceByTitle = (title: string) =>
+        kv.listNamespaces.items({ accountId }).pipe(
+          Stream.filter((ns) => ns.title === title),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
 
       return {
         stables: ["namespaceId", "accountId"],
@@ -89,46 +101,75 @@ export const KVNamespaceProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news = {} }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const title = yield* createTitle(id, news.title);
-          const namespace = yield* createNamespace({
-            accountId,
-            title,
-          }).pipe(
-            Effect.catchTag("NamespaceTitleAlreadyExists", () =>
-              Effect.gen(function* () {
-                const namespaces = yield* listNamespaces({ accountId });
-                const match = namespaces.result.find(
-                  (ns) => ns.title === title,
-                );
-                if (match) {
-                  return match;
-                }
-                return yield* Effect.die(
-                  `Namespace with title "${title}" already exists but could not be found`,
-                );
-              }),
-            ),
-          );
+          const acct = output?.accountId ?? accountId;
+
+          // Observe — re-fetch the cached namespace; fall back to a title
+          // scan so we recover from out-of-band deletes or partial state
+          // persistence failures.
+          let observed:
+            | {
+                id: string;
+                title: string;
+                supportsUrlEncoding?: boolean | null | undefined;
+              }
+            | undefined;
+          if (output?.namespaceId) {
+            observed = yield* getNamespaceFn({
+              accountId: acct,
+              namespaceId: output.namespaceId,
+            }).pipe(
+              Effect.catchTag("NamespaceNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          }
+
+          // Ensure — create if missing. Cloudflare returns
+          // `NamespaceTitleAlreadyExists` on a concurrent create; tolerate
+          // by adopting the namespace with the same title.
+          if (!observed) {
+            observed = yield* createNamespace({
+              accountId: acct,
+              title,
+            }).pipe(
+              Effect.catchTag("NamespaceTitleAlreadyExists", () =>
+                Effect.gen(function* () {
+                  const match = yield* findNamespaceByTitle(title);
+                  if (match) {
+                    return match;
+                  }
+                  return yield* Effect.die(
+                    `Namespace with title "${title}" already exists but could not be found`,
+                  );
+                }),
+              ),
+            );
+          }
+
+          // Sync — KV's only mutable property is the title. Rename only
+          // when the observed title drifts from desired so we avoid
+          // unnecessary API calls on every reconcile.
+          let namespaceId = observed.id;
+          let resolvedTitle = observed.title;
+          let supportsUrlEncoding = observed.supportsUrlEncoding ?? undefined;
+          if (observed.title !== title) {
+            const renamed = yield* updateNamespace({
+              accountId: acct,
+              namespaceId: observed.id,
+              title,
+            });
+            namespaceId = renamed.id;
+            resolvedTitle = renamed.title;
+            supportsUrlEncoding = renamed.supportsUrlEncoding ?? undefined;
+          }
+
           return {
-            title: namespace.title,
-            namespaceId: namespace.id,
-            supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
-            accountId,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news = {}, output }) {
-          const title = yield* createTitle(id, news.title);
-          const namespace = yield* updateNamespace({
-            accountId,
-            namespaceId: output.namespaceId,
-            title,
-          });
-          return {
-            title: namespace.title,
-            namespaceId: namespace.id,
-            supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
-            accountId,
+            title: resolvedTitle,
+            namespaceId,
+            supportsUrlEncoding,
+            accountId: acct,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -155,8 +196,7 @@ export const KVNamespaceProvider = () =>
             );
           }
           const title = yield* createTitle(id, olds?.title);
-          const namespaces = yield* listNamespaces({ accountId });
-          const match = namespaces.result.find((ns) => ns.title === title);
+          const match = yield* findNamespaceByTitle(title);
           if (match) {
             return {
               title: match.title,

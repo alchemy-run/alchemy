@@ -93,33 +93,18 @@ export const PermissionSetProvider = () =>
 
           return yield* readPermissionSetByName(olds);
         }),
-        create: Effect.fn(function* ({ news, session }) {
-          const instance = yield* resolveInstance(news.instanceArn);
-          const existing = yield* readPermissionSetByName({
-            ...news,
-            instanceArn: instance.InstanceArn,
-          });
-          if (existing) {
-            yield* session.note(existing.permissionSetArn);
-            return existing;
-          }
-
-          const response = yield* retryIdentityCenter(
-            ssoAdmin.createPermissionSet({
-              InstanceArn: instance.InstanceArn!,
-              Name: news.name,
-              Description: news.description,
-              SessionDuration: news.sessionDuration,
-              RelayState: news.relayState,
-            }),
+        reconcile: Effect.fn(function* ({ news, output, session }) {
+          const instance = yield* resolveInstance(
+            output?.instanceArn ?? news.instanceArn,
           );
 
-          const createdArn = response.PermissionSet?.PermissionSetArn;
-          const created =
-            (createdArn
+          // Observe — find the permission set by ARN (when we already
+          // have one) or by name on the resolved instance.
+          let existing =
+            (output?.permissionSetArn
               ? yield* readPermissionSetByArn({
                   instanceArn: instance.InstanceArn!,
-                  permissionSetArn: createdArn,
+                  permissionSetArn: output.permissionSetArn,
                 })
               : undefined) ??
             (yield* readPermissionSetByName({
@@ -127,40 +112,79 @@ export const PermissionSetProvider = () =>
               instanceArn: instance.InstanceArn,
             }));
 
-          if (!created) {
-            return yield* Effect.fail(
-              new Error(`permission set '${news.name}' not found after create`),
+          // Ensure — create the permission set if missing.
+          if (!existing) {
+            const response = yield* retryIdentityCenter(
+              ssoAdmin.createPermissionSet({
+                InstanceArn: instance.InstanceArn!,
+                Name: news.name,
+                Description: news.description,
+                SessionDuration: news.sessionDuration,
+                RelayState: news.relayState,
+              }),
             );
+
+            const createdArn = response.PermissionSet?.PermissionSetArn;
+            existing =
+              (createdArn
+                ? yield* readPermissionSetByArn({
+                    instanceArn: instance.InstanceArn!,
+                    permissionSetArn: createdArn,
+                  })
+                : undefined) ??
+              (yield* readPermissionSetByName({
+                ...news,
+                instanceArn: instance.InstanceArn,
+              }));
+
+            if (!existing) {
+              return yield* Effect.fail(
+                new Error(
+                  `permission set '${news.name}' not found after create`,
+                ),
+              );
+            }
+
+            yield* session.note(existing.permissionSetArn);
+            return existing;
           }
 
-          yield* session.note(created.permissionSetArn);
-          return created;
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          yield* retryIdentityCenter(
-            ssoAdmin.updatePermissionSet({
-              InstanceArn: output.instanceArn,
-              PermissionSetArn: output.permissionSetArn,
-              Description: news.description,
-              SessionDuration: news.sessionDuration,
-              RelayState: news.relayState,
-            }),
-          );
-
-          const updated = yield* readPermissionSetByArn({
-            instanceArn: output.instanceArn,
-            permissionSetArn: output.permissionSetArn,
-          });
-          if (!updated) {
-            return yield* Effect.fail(
-              new Error(
-                `permission set '${output.permissionSetArn}' not found after update`,
-              ),
+          // Sync mutable attributes — `updatePermissionSet` overwrites
+          // description, sessionDuration, relayState. Diff against
+          // observed cloud state so adoption converges; only call when
+          // there's a real delta.
+          if (
+            (existing.description ?? undefined) !== news.description ||
+            (existing.sessionDuration ?? undefined) !== news.sessionDuration ||
+            (existing.relayState ?? undefined) !== news.relayState
+          ) {
+            yield* retryIdentityCenter(
+              ssoAdmin.updatePermissionSet({
+                InstanceArn: existing.instanceArn,
+                PermissionSetArn: existing.permissionSetArn,
+                Description: news.description,
+                SessionDuration: news.sessionDuration,
+                RelayState: news.relayState,
+              }),
             );
+
+            const updated = yield* readPermissionSetByArn({
+              instanceArn: existing.instanceArn,
+              permissionSetArn: existing.permissionSetArn,
+            });
+            if (!updated) {
+              return yield* Effect.fail(
+                new Error(
+                  `permission set '${existing.permissionSetArn}' not found after update`,
+                ),
+              );
+            }
+            yield* session.note(updated.permissionSetArn);
+            return updated;
           }
 
-          yield* session.note(updated.permissionSetArn);
-          return updated;
+          yield* session.note(existing.permissionSetArn);
+          return existing;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* retryIdentityCenter(

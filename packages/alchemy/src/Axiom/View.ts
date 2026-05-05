@@ -81,13 +81,26 @@ export const ViewProvider = () =>
           }
           return undefined;
         }),
-        create: Effect.fn(function* ({ news }) {
-          const result = yield* create(news);
-          return { ...result, id: news.name };
-        }),
-        update: Effect.fn(function* ({ news, output }) {
-          const result = yield* update({ ...news, id: output.id });
-          return { ...result, id: output.id };
+        reconcile: Effect.fn(function* ({ news, output }) {
+          // Observe — `name` is the path identifier for views. Renames are
+          // forced to a replacement by `diff` above, so the cached
+          // `output.id` (set to `news.name` on first create) and the
+          // current `news.name` always agree by the time we land here.
+          const viewId = output?.id ?? news.name;
+          const observed = yield* get({ id: viewId }).pipe(
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
+
+          // Ensure — POST creates the view under `news.name`.
+          if (observed === undefined) {
+            const result = yield* create(news);
+            return { ...result, id: news.name };
+          }
+
+          // Sync — the view exists; PUT against its id with the desired
+          // props.
+          const result = yield* update({ ...news, id: viewId });
+          return { ...result, id: viewId };
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* del({ id: output.id }).pipe(

@@ -108,81 +108,113 @@ export const OpenIDConnectProviderProvider = () =>
             tags: toTagRecord(tags.Tags),
           };
         }),
-        create: Effect.fn(function* ({ news, session }) {
-          const created = yield* iam.createOpenIDConnectProvider({
-            Url: news.url,
-            ClientIDList: news.clientIDList,
-            ThumbprintList: news.thumbprintList,
-            Tags: Object.entries(news.tags ?? {}).map(([Key, Value]) => ({
-              Key,
-              Value,
-            })),
-          });
-
+        reconcile: Effect.fn(function* ({ news, output, session }) {
+          // The OIDC provider's ARN is deterministic from its URL, so we
+          // can observe with or without prior output.
           const providerArn =
-            created.OpenIDConnectProviderArn ?? oidcArnFromUrl(news.url);
-          yield* session.note(providerArn);
-          return {
-            openIDConnectProviderArn: providerArn,
-            url: news.url,
-            clientIDList: news.clientIDList ?? [],
-            thumbprintList: news.thumbprintList ?? [],
-            tags: news.tags ?? {},
-          };
-        }),
-        update: Effect.fn(function* ({ news, olds, output, session }) {
-          const oldClientIds = new Set(olds.clientIDList ?? []);
-          const newClientIds = new Set(news.clientIDList ?? []);
-          for (const clientId of news.clientIDList ?? []) {
-            if (!oldClientIds.has(clientId)) {
+            output?.openIDConnectProviderArn ?? oidcArnFromUrl(news.url);
+
+          // Observe — read the live provider; absent when missing.
+          let observed = yield* readProvider(providerArn);
+          let observedClientIds: string[] = [];
+          let observedThumbprints: string[] = [];
+          let observedTags: Record<string, string> = {};
+
+          if (observed?.Url) {
+            observedClientIds = observed.ClientIDList ?? [];
+            observedThumbprints = observed.ThumbprintList ?? [];
+            const tagsResp = yield* iam.listOpenIDConnectProviderTags({
+              OpenIDConnectProviderArn: providerArn,
+            });
+            observedTags = toTagRecord(tagsResp.Tags);
+          }
+
+          // Ensure — create the provider when it is missing. The API does
+          // not return idempotently for OIDC, but the deterministic ARN
+          // means a race manifests as `EntityAlreadyExistsException`.
+          if (!observed?.Url) {
+            yield* iam
+              .createOpenIDConnectProvider({
+                Url: news.url,
+                ClientIDList: news.clientIDList,
+                ThumbprintList: news.thumbprintList,
+                Tags: Object.entries(news.tags ?? {}).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              })
+              .pipe(
+                Effect.catchTag(
+                  "EntityAlreadyExistsException",
+                  () => Effect.void,
+                ),
+              );
+            observed = yield* readProvider(providerArn);
+            observedClientIds = observed?.ClientIDList ?? [];
+            observedThumbprints = observed?.ThumbprintList ?? [];
+            const tagsResp = yield* iam.listOpenIDConnectProviderTags({
+              OpenIDConnectProviderArn: providerArn,
+            });
+            observedTags = toTagRecord(tagsResp.Tags);
+          }
+
+          // Sync client IDs against the observed list.
+          const desiredClientIds = news.clientIDList ?? [];
+          const observedClientSet = new Set(observedClientIds);
+          const desiredClientSet = new Set(desiredClientIds);
+          for (const clientId of desiredClientIds) {
+            if (!observedClientSet.has(clientId)) {
               yield* iam.addClientIDToOpenIDConnectProvider({
-                OpenIDConnectProviderArn: output.openIDConnectProviderArn,
+                OpenIDConnectProviderArn: providerArn,
                 ClientID: clientId,
               });
             }
           }
-          for (const clientId of olds.clientIDList ?? []) {
-            if (!newClientIds.has(clientId)) {
+          for (const clientId of observedClientIds) {
+            if (!desiredClientSet.has(clientId)) {
               yield* iam.removeClientIDFromOpenIDConnectProvider({
-                OpenIDConnectProviderArn: output.openIDConnectProviderArn,
+                OpenIDConnectProviderArn: providerArn,
                 ClientID: clientId,
               });
             }
           }
+
+          // Sync thumbprints — `updateOpenIDConnectProviderThumbprint`
+          // replaces the entire list, so call it whenever the set differs.
+          const desiredThumbprints = news.thumbprintList ?? [];
           if (
-            JSON.stringify(olds.thumbprintList ?? []) !==
-            JSON.stringify(news.thumbprintList ?? [])
+            JSON.stringify([...observedThumbprints].sort()) !==
+            JSON.stringify([...desiredThumbprints].sort())
           ) {
             yield* iam.updateOpenIDConnectProviderThumbprint({
-              OpenIDConnectProviderArn: output.openIDConnectProviderArn,
-              ThumbprintList: news.thumbprintList ?? [],
+              OpenIDConnectProviderArn: providerArn,
+              ThumbprintList: desiredThumbprints,
             });
           }
 
-          const { removed, upsert } = diffTags(
-            olds.tags ?? {},
-            news.tags ?? {},
-          );
+          // Sync tags against the observed cloud tags.
+          const desiredTags = news.tags ?? {};
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* iam.tagOpenIDConnectProvider({
-              OpenIDConnectProviderArn: output.openIDConnectProviderArn,
+              OpenIDConnectProviderArn: providerArn,
               Tags: upsert,
             });
           }
           if (removed.length > 0) {
             yield* iam.untagOpenIDConnectProvider({
-              OpenIDConnectProviderArn: output.openIDConnectProviderArn,
+              OpenIDConnectProviderArn: providerArn,
               TagKeys: removed,
             });
           }
 
-          yield* session.note(output.openIDConnectProviderArn);
+          yield* session.note(providerArn);
           return {
-            openIDConnectProviderArn: output.openIDConnectProviderArn,
-            url: output.url,
-            clientIDList: news.clientIDList ?? [],
-            thumbprintList: news.thumbprintList ?? [],
-            tags: news.tags ?? {},
+            openIDConnectProviderArn: providerArn,
+            url: news.url,
+            clientIDList: desiredClientIds,
+            thumbprintList: desiredThumbprints,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

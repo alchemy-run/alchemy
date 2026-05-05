@@ -1,5 +1,7 @@
+import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Topic } from "@/AWS/SNS";
+import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as SNS from "@distilled.cloud/aws/sns";
 import { describe, expect } from "@effect/vitest";
@@ -111,6 +113,100 @@ describe("AWS.SNS.Topic", () => {
       yield* stack.destroy();
       yield* assertTopicDeleted(topic.topicArn);
     }),
+  );
+
+  // Engine-level adoption tests for SNS Topic.
+  test.provider(
+    "owned topic (matching alchemy tags) is silently adopted without --adopt",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const topicName = `alchemy-test-sns-adopt-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Topic("AdoptableTopic", { topicName });
+          }),
+        );
+        expect(initial.topicName).toEqual(topicName);
+
+        // Wipe state — the topic stays in SNS.
+        yield* Effect.gen(function* () {
+          const state = yield* State;
+          yield* state.delete({
+            stack: stack.name,
+            stage: "test",
+            fqn: "AdoptableTopic",
+          });
+        }).pipe(Effect.provide(stack.state));
+
+        const adopted = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Topic("AdoptableTopic", { topicName });
+          }),
+        );
+
+        expect(adopted.topicArn).toEqual(initial.topicArn);
+
+        yield* stack.destroy();
+        yield* assertTopicDeleted(initial.topicArn);
+      }),
+  );
+
+  test.provider(
+    "foreign-tagged topic requires adopt(true) to take over",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const topicName = `alchemy-test-sns-takeover-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+
+        const original = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Topic("Original", { topicName });
+          }),
+        );
+
+        yield* Effect.gen(function* () {
+          const state = yield* State;
+          yield* state.delete({
+            stack: stack.name,
+            stage: "test",
+            fqn: "Original",
+          });
+        }).pipe(Effect.provide(stack.state));
+
+        const takenOver = yield* stack
+          .deploy(
+            Effect.gen(function* () {
+              return yield* Topic("Different", { topicName });
+            }),
+          )
+          .pipe(adopt(true));
+
+        expect(takenOver.topicArn).toEqual(original.topicArn);
+
+        const tagsResp = yield* SNS.listTagsForResource({
+          ResourceArn: takenOver.topicArn,
+        });
+        const tagMap = Object.fromEntries(
+          (tagsResp.Tags ?? [])
+            .filter(
+              (t): t is { Key: string; Value: string } =>
+                typeof t.Value === "string",
+            )
+            .map((t) => [t.Key, t.Value]),
+        );
+        expect(tagMap["alchemy::id"]).toEqual("Different");
+
+        yield* stack.destroy();
+        yield* assertTopicDeleted(takenOver.topicArn);
+      }),
   );
 
   class TopicStillExists extends Data.TaggedError("TopicStillExists") {}

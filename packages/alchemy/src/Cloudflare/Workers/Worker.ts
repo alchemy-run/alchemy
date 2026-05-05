@@ -1,6 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
+import type { HyperdriveOrigin } from "../Hyperdrive/HyperdriveOriginRuntime.ts";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import type * as Cause from "effect/Cause";
@@ -22,6 +23,7 @@ import { pathToFileURL } from "node:url";
 import type * as rolldown from "rolldown";
 import Sonda from "sonda/rolldown";
 import type * as vite from "vite";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
@@ -337,6 +339,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   {
     bindings?: WorkerBinding[];
     containers?: { className: string }[];
+    hyperdrives?: Record<string, HyperdriveOrigin>;
   },
   Providers
 >;
@@ -1478,7 +1481,6 @@ const exportsEffect = tag.asEffect().pipe(
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),
-      // TODO(sam): additional credentials?
       Layer.provideMerge(platform),
       Layer.provideMerge(
         Layer.succeed(
@@ -1487,23 +1489,15 @@ const exportsEffect = tag.asEffect().pipe(
             ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
             ConfigProvider.fromUnknown(env),
           ),
-        )
+        ),
       ),
+      Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),
       Layer.provideMerge(
-        Layer.succeed(
-          WorkerEnvironment,
-          env,
-        )
+        Layer.succeed(MinimumLogLevel, env.DEBUG ? "Debug" : "Info"),
       ),
-      Layer.provideMerge(
-        Layer.succeed(
-          MinimumLogLevel,
-          env.DEBUG ? "Debug" : "Info",
-        )
-      ),
-    )
+    ),
   ),
-  Effect.scoped
+  Effect.scoped,
 );
 
 // TODO(sam): we could kick this off during module init, but any I/O will break deploy
@@ -2194,13 +2188,11 @@ ${[
           );
 
           if (existingSettings) {
-            if (!hasAlchemyWorkerTags(id, existingSettings.tags ?? [])) {
-              return yield* Effect.die(
-                `Worker "${name}" already exists but is not owned by this stack/stage/resource`,
-              );
-            }
+            // Engine has already cleared this resource for write via
+            // `read` + AdoptPolicy. Either we own it (matching tags) or
+            // the user opted in to a takeover (`--adopt` / `adopt(true)`).
             yield* Effect.logInfo(
-              `Cloudflare Worker precreate: adopting existing ${name} owned by this stack/stage/resource`,
+              `Cloudflare Worker precreate: reusing existing ${name}`,
             );
           } else {
             yield* session.note("Pre-creating worker...");
@@ -2307,7 +2299,7 @@ ${[
             yield* Effect.logInfo(
               `Cloudflare Worker read: found ${workerName}`,
             );
-            return {
+            const attrs = {
               accountId,
               workerId: workerName,
               workerName,
@@ -2325,6 +2317,16 @@ ${[
                   : [],
               ),
             } satisfies Worker["Attributes"];
+
+            // Centralized ownership decision: the engine routes `read`'s
+            // return value based on `AdoptPolicy`. We hand it the attrs
+            // either as-is (owned: alchemy tags identify this stack/stage/id,
+            // safe to silently adopt even without `--adopt`) or branded with
+            // `Unowned` (caller must opt in via `--adopt` or the engine
+            // raises `OwnedBySomeoneElse`).
+            return hasAlchemyWorkerTags(id, settings.tags ?? [])
+              ? attrs
+              : Unowned(attrs);
           },
           (effect) =>
             effect.pipe(
@@ -2333,26 +2335,36 @@ ${[
               ),
             ),
         ),
-        create: Effect.fnUntraced(function* ({
+        reconcile: Effect.fnUntraced(function* ({
           id,
           news,
+          olds,
           bindings,
           output,
           session,
         }) {
-          const name = yield* createWorkerName(id, news.name);
+          const name =
+            output?.workerName ?? (yield* createWorkerName(id, news.name));
           const durableObjects = getDurableObjectBindings(bindings, name).map(
             ({ logicalId, className }) => ({
               logicalId,
               className,
             }),
           );
-          yield* Effect.logInfo(`Cloudflare Worker create: starting ${name}`);
           yield* Effect.logInfo(
-            `Cloudflare Worker create: durable objects ${JSON.stringify(
+            `Cloudflare Worker reconcile: starting ${name}`,
+          );
+          yield* Effect.logInfo(
+            `Cloudflare Worker reconcile: durable objects ${JSON.stringify(
               durableObjects,
             )}`,
           );
+
+          // Observe — fetch the script's current settings if it already exists.
+          // `putWorker` is a true upsert against the Cloudflare API; the
+          // existing settings inform asset/migration decisions and let the
+          // reconciler converge whether the worker is brand-new, adopted, or
+          // an in-place update.
           const existingSettings = yield* getScriptSettings({
             accountId,
             scriptName: name,
@@ -2360,66 +2372,28 @@ ${[
             Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
           );
           yield* Effect.logInfo(
-            `Cloudflare Worker create: existing durable object tags ${JSON.stringify(
+            `Cloudflare Worker reconcile: existing durable object tags ${JSON.stringify(
               (existingSettings?.tags ?? []).filter((tag) =>
                 tag.startsWith("alchemy:do:"),
               ),
             )}`,
           );
-          if (existingSettings) {
-            yield* Effect.logInfo(
-              `Cloudflare Worker create: ${name} already exists`,
-            );
-            if (!hasAlchemyWorkerTags(id, existingSettings.tags ?? [])) {
-              return yield* Effect.die(
-                `Worker "${name}" already exists but is not owned by this stack/stage/resource`,
-              );
-            }
-            yield* Effect.logInfo(
-              `Cloudflare Worker create: adopting existing ${name} owned by this stack/stage/resource`,
-            );
-          }
-          return yield* putWorker(
-            id,
-            news,
-            bindings,
-            undefined,
-            output,
-            session,
-            existingSettings,
-          );
-        }),
-        update: Effect.fnUntraced(function* ({
-          id,
-          olds,
-          news,
-          output,
-          bindings,
-          session,
-        }) {
-          const durableObjects = getDurableObjectBindings(
-            bindings,
-            output.workerName,
-          ).map(({ logicalId, className }) => ({
-            logicalId,
-            className,
-          }));
           yield* Effect.logInfo(
-            `Cloudflare Worker update: starting ${output.workerName}`,
-          );
-          yield* Effect.logInfo(
-            `Cloudflare Worker update: durable objects ${JSON.stringify(
-              durableObjects,
-            )}`,
-          );
-          yield* Effect.logInfo(
-            `Cloudflare Worker update: previous durable object tags ${JSON.stringify(
-              (output.tags ?? []).filter((tag) =>
+            `Cloudflare Worker reconcile: previous durable object tags ${JSON.stringify(
+              (output?.tags ?? []).filter((tag) =>
                 tag.startsWith("alchemy:do:"),
               ),
             )}`,
           );
-          return yield* putWorker(id, news, bindings, olds, output, session);
+          return yield* putWorker(
+            id,
+            news,
+            bindings,
+            olds,
+            output,
+            session,
+            existingSettings,
+          );
         }),
         delete: Effect.fnUntraced(function* ({ output }) {
           yield* Effect.logInfo(
