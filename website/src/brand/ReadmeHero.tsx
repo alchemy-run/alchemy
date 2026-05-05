@@ -1,11 +1,11 @@
 /**
  * Satori template for the README hero — a tight stacked lockup of the
- * yantra mark above the italic "alchemy" wordmark, centered on a
+ * yantra mark above the italic "Alchemy" wordmark, centered on a
  * parchment ground. No frame, no tagline, no URL stamp. Rendered offline
  * by `scripts/generate-readme-hero.ts` to `images/readme-hero.png`.
  *
- * The native render size is 1200×720 (5:3). Cropped tight to the lockup
- * so there's no dead space at any GitHub display width.
+ * The native render size is 1200×720 (5:3). The README displays it at a
+ * fixed badge width (~360px) so it reads as a brand mark, not a banner.
  */
 
 import { yantraSvg } from "./yantra";
