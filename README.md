@@ -1,6 +1,6 @@
 <div align="center">
 
-<a href="https://alchemy.run">
+<a href="https://v2.alchemy.run">
   <img src="./images/readme-hero.png" alt="Alchemy — Infrastructure as Effects" width="360" />
 </a>
 
@@ -12,7 +12,7 @@
 
 **Infrastructure-as-Effects** — cloud infrastructure and application logic as a single, type-safe [Effect](https://effect.website) program.
 
-[Docs](https://alchemy.run) · [Tutorial](https://alchemy.run/tutorial/part-1) · [Examples](./examples) · [Discord](https://discord.gg/jwKw8dBJdN)
+[Docs](https://v2.alchemy.run) · [Tutorial](https://v2.alchemy.run/tutorial/part-1) · [Examples](./examples) · [Discord](https://discord.gg/jwKw8dBJdN)
 
 </div>
 
@@ -33,7 +33,7 @@ bun add alchemy effect
 Paste this into Claude Code, Cursor, or any agent that can fetch a URL:
 
 ```
-You are an Alchemy expert. Read https://alchemy.run/llms.txt to load the
+You are an Alchemy expert. Read https://v2.alchemy.run/llms.txt to load the
 full documentation index, then act as my pair on this project.
 
 Goal: help me set up, build, test, and deploy a cloud application with
@@ -47,11 +47,11 @@ dependencies or breaking conventions.
 
 ## Learn more
 
-- [What is Alchemy?](https://alchemy.run/what-is-alchemy) — the framework in 2 minutes
-- [Getting Started](https://alchemy.run/getting-started) — your first Stack
-- [Tutorial](https://alchemy.run/tutorial/part-1) — five-part walkthrough to a tested, CI-deployed app
+- [What is Alchemy?](https://v2.alchemy.run/what-is-alchemy) — the framework in 2 minutes
+- [Getting Started](https://v2.alchemy.run/getting-started) — your first Stack
+- [Tutorial](https://v2.alchemy.run/tutorial/part-1) — five-part walkthrough to a tested, CI-deployed app
 - [Examples](./examples) — runnable projects on AWS and Cloudflare
-- [llms.txt](https://alchemy.run/llms.txt) — agent-ready documentation index
+- [llms.txt](https://v2.alchemy.run/llms.txt) — agent-ready documentation index
 
 > **alchemy** is in alpha. Expect breaking changes. Come hang in our [Discord](https://discord.gg/jwKw8dBJdN).
 
