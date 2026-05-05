@@ -945,7 +945,8 @@ await Effect.runPromise(serverEffect).catch((err) => {
         // A single DO namespace may appear in multiple bindings (e.g. when
         // a Container is referenced by several resources). Dedupe by namespaceId.
         const uniqueDos = dos.filter(
-          (d, i, arr) => arr.findIndex((other) => other.namespaceId === d.namespaceId) === i,
+          (d, i, arr) =>
+            arr.findIndex((other) => other.namespaceId === d.namespaceId) === i,
         );
         if (uniqueDos.length === 0) {
           return Effect.succeed(undefined);
