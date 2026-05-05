@@ -57,10 +57,16 @@
       "path": "./examples/cloudflare-worker/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-neon-drizzle/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-secrets-store/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-worker-async/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-hyperdrive/tsconfig.json"
     },
     {
       "path": "./packages/better-auth/tsconfig.json"

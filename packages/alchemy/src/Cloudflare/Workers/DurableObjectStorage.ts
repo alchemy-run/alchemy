@@ -23,6 +23,13 @@ export interface SqlCursor<
 }
 
 export interface SqlStorage {
+  /**
+   * The raw underlying Cloudflare SqlStorage binding.
+   *
+   * Use this when you need direct access for libraries that already support
+   * Cloudflare Durable Object SQLite storage.
+   */
+  readonly raw: cf.SqlStorage;
   exec<T extends Record<string, SqlStorageValue>>(
     query: string,
     ...bindings: any[]
@@ -49,6 +56,7 @@ const fromSqlCursor = <T extends Record<string, SqlStorageValue>>(
 };
 
 const fromSqlStorage = (sql: cf.SqlStorage): SqlStorage => ({
+  raw: sql,
   exec: <T extends Record<string, SqlStorageValue>>(
     query: string,
     ...bindings: any[]

@@ -265,6 +265,156 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
           },
         },
+
+        // ─── Cloudflare State Store ────────────────────────────────
+        //
+        // Two span sources feed this section:
+        //
+        //   - **CLI spans** (`state_store.init`, `state_store.bootstrap`,
+        //     `state_store.deploy`, ...) — emitted from the user's
+        //     terminal/CI. Carry `alchemy.cloudflare.account_hash` (a
+        //     SHA-256 of the CF accountId) so we can count distinct
+        //     deployments without leaking raw account IDs.
+        //
+        //   - **Worker handler spans** (`state_store.{getVersion,
+        //     listStacks,listStages,listResources,getState,setState,
+        //     deleteState,getReplacedResources,deleteStack}`) — emitted
+        //     from inside the deployed `alchemy-state-store` worker.
+        //     Distinguished by the `alchemy.state_store.script_name`
+        //     **resource** attribute (set on the worker's OTLP tracer
+        //     resource); CLI spans do not carry that resource attr.
+        //
+        // Worker handler spans carry `alchemy.state_store.{op,stack,
+        // stage,fqn}` as span attributes plus a `duration` field —
+        // that's what powers the latency / op-rate / stack-count
+        // charts. Account-hash sits on CLI spans only (worker-side
+        // injection would need a separate deploy-time env-var pass).
+        {
+          id: "state-store-distinct-cloudflare-stores",
+          name: "Distinct Cloudflare state-store deployments (7d)",
+          type: "Statistic",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where name == "state_store.init"
+              | extend hash=tostring(['attributes.custom']['alchemy.cloudflare.account_hash'])
+              | where hash != ""
+              | summarize stores=dcount(hash)
+            `,
+          },
+        },
+        {
+          id: "state-store-distinct-stacks",
+          name: "Distinct stacks tracked (7d)",
+          type: "Statistic",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where ['resource.custom']['alchemy.state_store.script_name'] != ""
+              | extend stack=tostring(['attributes.custom']['alchemy.state_store.stack'])
+              | where stack != ""
+              | summarize stacks=dcount(stack)
+            `,
+          },
+        },
+        {
+          id: "state-store-total-ops",
+          name: "Cloudflare state store ops (7d)",
+          type: "Statistic",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where ['resource.custom']['alchemy.state_store.script_name'] != ""
+              | extend op=tostring(['attributes.custom']['alchemy.state_store.op'])
+              | where op != ""
+              | summarize ops=count()
+            `,
+          },
+        },
+        {
+          id: "state-store-op-latency",
+          name: "State store op latency (p50 / p95 / p99, 7d)",
+          type: "Table",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where ['resource.custom']['alchemy.state_store.script_name'] != ""
+              | extend op=tostring(['attributes.custom']['alchemy.state_store.op'])
+              | where op != ""
+              | summarize p50=percentile(duration, 50),
+                          p95=percentile(duration, 95),
+                          p99=percentile(duration, 99),
+                          calls=count()
+                  by op
+              | order by calls desc
+            `,
+          },
+        },
+        {
+          id: "state-store-ops-over-time",
+          name: "State store ops over time (by op)",
+          type: "TimeSeries",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where ['resource.custom']['alchemy.state_store.script_name'] != ""
+              | extend op=tostring(['attributes.custom']['alchemy.state_store.op'])
+              | where op != ""
+              | summarize count=count() by op, bin_auto(_time)
+              | order by _time asc
+            `,
+          },
+        },
+        {
+          id: "state-store-error-rate",
+          name: "State store error rate by op (7d)",
+          type: "Table",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where ['resource.custom']['alchemy.state_store.script_name'] != ""
+              | extend op=tostring(['attributes.custom']['alchemy.state_store.op']),
+                       err=tobool(['error'])
+              | where op != ""
+              | summarize errors=countif(err == true),
+                          total=count()
+                  by op
+              | extend error_rate=todouble(errors) / todouble(total)
+              | order by total desc
+            `,
+          },
+        },
+        {
+          id: "state-store-top-stacks",
+          name: "Top stacks by activity (7d)",
+          type: "Table",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where ['resource.custom']['alchemy.state_store.script_name'] != ""
+              | extend stack=tostring(['attributes.custom']['alchemy.state_store.stack'])
+              | where stack != ""
+              | summarize ops=count() by stack
+              | order by ops desc
+              | take 25
+            `,
+          },
+        },
+        {
+          id: "state-store-deployments-over-time",
+          name: "Distinct Cloudflare state-store deployments per day",
+          type: "TimeSeries",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where name == "state_store.init"
+              | extend hash=tostring(['attributes.custom']['alchemy.cloudflare.account_hash'])
+              | where hash != ""
+              | summarize stores=dcount(hash) by bin(_time, 1d)
+              | order by _time asc
+            `,
+          },
+        },
       ];
 
       const layout: Axiom.LayoutCell[] = [
@@ -287,6 +437,24 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         // Row 6
         { i: "state-store-deploys", x: 0, y: 30, w: 6, h: 6 },
         { i: "active-users-by-version", x: 6, y: 30, w: 6, h: 6 },
+        // Row 7 — Cloudflare State Store: top-line stats
+        {
+          i: "state-store-distinct-cloudflare-stores",
+          x: 0,
+          y: 36,
+          w: 4,
+          h: 4,
+        },
+        { i: "state-store-distinct-stacks", x: 4, y: 36, w: 4, h: 4 },
+        { i: "state-store-total-ops", x: 8, y: 36, w: 4, h: 4 },
+        // Row 8 — performance: latency table (full width)
+        { i: "state-store-op-latency", x: 0, y: 40, w: 12, h: 8 },
+        // Row 9 — ops over time + error rate
+        { i: "state-store-ops-over-time", x: 0, y: 48, w: 8, h: 6 },
+        { i: "state-store-error-rate", x: 8, y: 48, w: 4, h: 6 },
+        // Row 10 — distribution + adoption shape
+        { i: "state-store-top-stacks", x: 0, y: 54, w: 6, h: 8 },
+        { i: "state-store-deployments-over-time", x: 6, y: 54, w: 6, h: 8 },
       ];
 
       return {
@@ -297,9 +465,13 @@ export const CliOverviewDashboard = Axiom.Dashboard(
           owner: "",
           description:
             "Adoption telemetry: distinct projects, active users per project, " +
-            "CI vs local usage, and state-store backend breakdown. " +
+            "CI vs local usage, and state-store backend breakdown. Plus " +
+            "Cloudflare State Store ops: distinct deployments, stack count, " +
+            "per-op latency / error rate. " +
             "Project identity = alchemy.git.origin_hash (stable across CI runs); " +
-            "user identity = alchemy.user.id (ephemeral in CI).",
+            "user identity = alchemy.user.id (ephemeral in CI); " +
+            "Cloudflare deployment identity = alchemy.cloudflare.account_hash " +
+            "(SHA-256 of accountId, set on CLI state_store.* spans).",
           refreshTime: 60 as const,
           schemaVersion: 2 as const,
           // Axiom requires the `qr-now-{duration}` form for relative times.

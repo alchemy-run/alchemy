@@ -1,6 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
+import type { HyperdriveOrigin } from "../Hyperdrive/HyperdriveOriginRuntime.ts";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import type * as Cause from "effect/Cause";
@@ -313,6 +314,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   {
     bindings?: WorkerBinding[];
     containers?: { className: string }[];
+    hyperdrives?: Record<string, HyperdriveOrigin>;
   },
   Providers
 >;
@@ -1432,7 +1434,6 @@ const exportsEffect = tag.asEffect().pipe(
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),
-      // TODO(sam): additional credentials?
       Layer.provideMerge(platform),
       Layer.provideMerge(
         Layer.succeed(
@@ -1441,23 +1442,15 @@ const exportsEffect = tag.asEffect().pipe(
             ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
             ConfigProvider.fromUnknown(env),
           ),
-        )
+        ),
       ),
+      Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),
       Layer.provideMerge(
-        Layer.succeed(
-          WorkerEnvironment,
-          env,
-        )
+        Layer.succeed(MinimumLogLevel, env.DEBUG ? "Debug" : "Info"),
       ),
-      Layer.provideMerge(
-        Layer.succeed(
-          MinimumLogLevel,
-          env.DEBUG ? "Debug" : "Info",
-        )
-      ),
-    )
+    ),
   ),
-  Effect.scoped
+  Effect.scoped,
 );
 
 // TODO(sam): we could kick this off during module init, but any I/O will break deploy

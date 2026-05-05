@@ -75,6 +75,7 @@ Standalone how-to pages. Each solves a specific problem; read in any order.
 - [Effect RPC](https://v2.alchemy.run/guides/effect-rpc) — Build a typed RPC API with Effect's Rpc module and deploy it as a Cloudflare Worker.
 - [Frontend frameworks](https://v2.alchemy.run/guides/frontends) — Deploy Vite-based frameworks (TanStack Start, Astro, SolidStart, Nuxt, React) and any custom-built static site (Hugo, Eleventy) to Cloudflare with one declaration.
 - [Migrating from v1](https://v2.alchemy.run/guides/migrating-from-v1) — Migrate your Alchemy v1 (async/await) project to Alchemy v2.
+- [Privacy & Telemetry](https://v2.alchemy.run/guides/privacy) — What data the Alchemy CLI and Cloudflare State Store collect, where it goes, and how to opt out.
 
 ## Blog
 
