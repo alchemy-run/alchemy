@@ -6,6 +6,7 @@ import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "../alchemy.run.ts";
 
@@ -33,12 +34,25 @@ test(
   }),
 );
 
+// workers.dev subdomain takes a few seconds to propagate after first
+// enable; retry until the worker actually answers.
+const getOnce = (url: string) =>
+  Effect.gen(function* () {
+    const response = yield* HttpClient.get(url);
+    if (response.status === 404) {
+      return yield* Effect.fail(new Error("workers.dev not yet propagated"));
+    }
+    return response;
+  }).pipe(
+    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
+  );
+
 test(
   "GET / returns the empty `users` table through Drizzle / Hyperdrive / Neon",
   Effect.gen(function* () {
     const { url } = yield* stack;
 
-    const response = yield* HttpClient.get(url);
+    const response = yield* getOnce(url);
     expect(response.status).toBe(200);
 
     const body = (yield* response.json) as unknown[];
@@ -59,7 +73,7 @@ test(
     // occasional Cloudflare 1101 transient on cold isolates.
     let ok = 0;
     for (let i = 0; i < 4; i++) {
-      const response = yield* HttpClient.get(`${url}?n=${i}`);
+      const response = yield* getOnce(`${url}?n=${i}`);
       if (response.status === 200) ok += 1;
     }
     expect(ok).toBeGreaterThanOrEqual(2);
