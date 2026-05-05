@@ -1,5 +1,6 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Client } from "pg";
 import { MyDb } from "./db";
@@ -23,7 +24,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return yield* Effect.promise(async () => {
           // Open a fresh client per request — Hyperdrive does the pooling
           // on the Cloudflare side, so the Worker doesn't need its own pool.
-          const client = new Client({ connectionString });
+          const client = new Client({
+            connectionString: Redacted.value(connectionString),
+          });
           try {
             await client.connect();
             const results = await client.query(`SELECT * FROM pg_tables`);
