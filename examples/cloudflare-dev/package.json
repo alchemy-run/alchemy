@@ -1,20 +1,13 @@
 {
   "name": "cloudflare-dev",
   "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/alchemy-run/alchemy"
   },
-  "dependencies": {
-    "@cloudflare/workers-types": "catalog:",
-    "@effect/platform-bun": "catalog:",
-    "@effect/platform-node": "catalog:",
-    "@effect/sql-pg": "catalog:",
-    "alchemy": "workspace:*",
-    "effect": "catalog:"
-  },
-  "license": "Apache-2.0",
-  "private": true,
+  "type": "module",
   "scripts": {
     "deploy": "alchemy deploy",
     "dev": "alchemy dev",
@@ -22,5 +15,11 @@
     "logs": "alchemy logs",
     "tail": "alchemy tail"
   },
-  "type": "module"
+  "dependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  }
 }
