@@ -15,8 +15,6 @@ export const HyperdriveBinding = Effect.gen(function* () {
       );
     }
 
-    const dev = hyperdrive.Props.dev;
-
     yield* host.bind`${hyperdrive}`({
       bindings: [
         {
@@ -26,18 +24,24 @@ export const HyperdriveBinding = Effect.gen(function* () {
         },
       ],
       hyperdrives:
-        ctx.dev && dev
-          ? Output.map(hyperdrive.hyperdriveId, (id) => ({
-              [id]: {
-                scheme: dev.scheme,
-                host: dev.host,
-                port: dev.port ?? defaultPort(dev.scheme),
-                user: dev.user,
-                database: dev.database,
-                password: dev.password,
-                sslmode: dev.sslmode ?? "prefer",
-              },
-            }))
+        ctx.dev && hyperdrive.Props.dev
+          ? Output.map(
+              Output.all(
+                Output.asOutput(hyperdrive.Props.dev),
+                hyperdrive.hyperdriveId,
+              ),
+              ([dev, id]) => ({
+                [id]: {
+                  scheme: dev.scheme,
+                  host: dev.host,
+                  port: dev.port ?? defaultPort(dev.scheme),
+                  user: dev.user,
+                  database: dev.database,
+                  password: dev.password,
+                  sslmode: dev.sslmode ?? "prefer",
+                },
+              }),
+            )
           : undefined,
     });
   });
