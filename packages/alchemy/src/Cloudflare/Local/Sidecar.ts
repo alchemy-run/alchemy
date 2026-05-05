@@ -8,6 +8,7 @@ import * as Schema from "effect/Schema";
 import { BundleError } from "../../Bundle/Bundle.ts";
 import * as RpcClient from "../../Sidecar/RpcClient.ts";
 import { defineSchema } from "../../Sidecar/RpcHandler.ts";
+import type { HyperdriveOrigin } from "../Hyperdrive/HyperdriveOriginRuntime.ts";
 import type { WorkerBinding } from "../Workers/Worker.ts";
 import type { WorkerBundleOptions } from "../Workers/WorkerBundle.ts";
 
@@ -18,7 +19,7 @@ export interface ServeOptions extends WorkerBundleOptions {
    * Local-mode hyperdrive connection details, keyed by binding name.
    * Forwarded to the runtime as the worker's `hyperdrives` field.
    */
-  hyperdrives?: Record<string, Worker.HyperdriveOrigin>;
+  hyperdrives?: Record<string, HyperdriveOrigin>;
   durableObjectNamespaces: Worker.DurableObjectNamespace[];
 }
 

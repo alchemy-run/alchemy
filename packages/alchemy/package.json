@@ -148,6 +148,12 @@
       "worker": "./src/Cloudflare/*/index.ts",
       "import": "./lib/Cloudflare/*/index.js"
     },
+    "./Drizzle": {
+      "types": "./lib/Drizzle/index.d.ts",
+      "bun": "./src/Drizzle/index.ts",
+      "worker": "./src/Drizzle/index.ts",
+      "import": "./lib/Drizzle/index.js"
+    },
     "./Axiom": {
       "types": "./lib/Axiom/index.d.ts",
       "bun": "./src/Axiom/index.ts",
@@ -171,6 +177,18 @@
       "bun": "./src/Kubernetes/index.ts",
       "worker": "./src/Kubernetes/index.ts",
       "import": "./lib/Kubernetes/index.js"
+    },
+    "./Neon": {
+      "types": "./lib/Neon/index.d.ts",
+      "bun": "./src/Neon/index.ts",
+      "worker": "./src/Neon/index.ts",
+      "import": "./lib/Neon/index.js"
+    },
+    "./Neon/*": {
+      "types": "./lib/Neon/*/index.d.ts",
+      "bun": "./src/Neon/*/index.ts",
+      "worker": "./src/Neon/*/index.ts",
+      "import": "./lib/Neon/*/index.js"
     },
     "./Output": {
       "types": "./lib/Output.d.ts",
@@ -264,6 +282,8 @@
     "@distilled.cloud/cloudflare-runtime": "catalog:",
     "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
     "@distilled.cloud/core": "catalog:",
+    "@distilled.cloud/neon": "catalog:",
+    "pg": "^8.13.0",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
@@ -302,6 +322,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
     "@oxc-project/types": "^0.127.0",
+    "@types/pg": "^8.11.0",
     "@types/aws-lambda": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
@@ -320,6 +341,9 @@
   "peerDependencies": {
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@effect/sql-pg": ">=4.0.0-beta.58",
+    "drizzle-kit": ">=1.0.0-rc.1",
+    "drizzle-orm": ">=1.0.0-rc.1",
     "effect": "catalog:",
     "vite": "catalog:"
   },
@@ -328,6 +352,15 @@
       "optional": true
     },
     "@effect/platform-bun": {
+      "optional": true
+    },
+    "@effect/sql-pg": {
+      "optional": true
+    },
+    "drizzle-kit": {
+      "optional": true
+    },
+    "drizzle-orm": {
       "optional": true
     },
     "vite": {

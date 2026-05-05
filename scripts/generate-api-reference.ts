@@ -118,12 +118,18 @@ interface ParsedJSDoc {
   summary: string;
   sections: ExampleSection[];
   hasResourceTag: boolean;
+  hasBindingTag: boolean;
 }
 
 function parseJSDoc(node: Node): ParsedJSDoc {
   const docs = getJsDocBlocks(node);
   if (docs.length === 0) {
-    return { summary: "", sections: [], hasResourceTag: false };
+    return {
+      summary: "",
+      sections: [],
+      hasResourceTag: false,
+      hasBindingTag: false,
+    };
   }
 
   const clean = cleanDocComment(docs.map((doc) => doc.getText()).join("\n"));
@@ -132,6 +138,7 @@ function parseJSDoc(node: Node): ParsedJSDoc {
   const summaryLines: string[] = [];
   const sections: ExampleSection[] = [];
   let hasResourceTag = false;
+  let hasBindingTag = false;
   let sawTag = false;
   let currentSection: ExampleSection | undefined;
   let currentExample: ExampleBlock | undefined;
@@ -167,6 +174,9 @@ function parseJSDoc(node: Node): ParsedJSDoc {
       switch (name) {
         case "resource":
           hasResourceTag = true;
+          break;
+        case "binding":
+          hasBindingTag = true;
           break;
         case "section":
           flushExample();
@@ -207,6 +217,7 @@ function parseJSDoc(node: Node): ParsedJSDoc {
     summary: summaryLines.join("\n").trim(),
     sections,
     hasResourceTag,
+    hasBindingTag,
   };
 }
 
@@ -228,7 +239,12 @@ function findPrimaryJSDoc(sourceFile: SourceFile): ParsedJSDoc {
   for (const cls of sourceFile.getClasses()) {
     if (!cls.isExported()) continue;
     const jsdoc = parseJSDoc(cls);
-    if (jsdoc.hasResourceTag || jsdoc.sections.length > 0) return jsdoc;
+    if (
+      jsdoc.hasResourceTag ||
+      jsdoc.hasBindingTag ||
+      jsdoc.sections.length > 0
+    )
+      return jsdoc;
     if (jsdoc.summary) return jsdoc;
   }
 
@@ -236,7 +252,12 @@ function findPrimaryJSDoc(sourceFile: SourceFile): ParsedJSDoc {
   for (const stmt of sourceFile.getStatements()) {
     if (Node.isExportable(stmt) && stmt.isExported()) {
       const jsdoc = parseJSDoc(stmt);
-      if (jsdoc.hasResourceTag || jsdoc.sections.length > 0) return jsdoc;
+      if (
+        jsdoc.hasResourceTag ||
+        jsdoc.hasBindingTag ||
+        jsdoc.sections.length > 0
+      )
+        return jsdoc;
       if (!firstWithSummary && jsdoc.summary) firstWithSummary = jsdoc;
     }
   }
@@ -246,12 +267,17 @@ function findPrimaryJSDoc(sourceFile: SourceFile): ParsedJSDoc {
   const rawJSDocBlocks = sourceFile.getFullText().match(/\/\*\*[\s\S]*?\*\//g);
   if (rawJSDocBlocks) {
     for (const block of rawJSDocBlocks) {
-      if (block.includes("@section") || block.includes("@resource")) {
+      if (
+        block.includes("@section") ||
+        block.includes("@resource") ||
+        block.includes("@binding")
+      ) {
         const clean = cleanDocComment(block);
         const lines = clean.split("\n");
         const summaryLines: string[] = [];
         const sections: ExampleSection[] = [];
         let hasResourceTag = false;
+        let hasBindingTag = false;
         let sawTag = false;
         let currentSection: ExampleSection | undefined;
         let currentExample: ExampleBlock | undefined;
@@ -291,6 +317,9 @@ function findPrimaryJSDoc(sourceFile: SourceFile): ParsedJSDoc {
               case "resource":
                 hasResourceTag = true;
                 break;
+              case "binding":
+                hasBindingTag = true;
+                break;
               case "section":
                 flushExample();
                 flushSectionDesc();
@@ -325,13 +354,18 @@ function findPrimaryJSDoc(sourceFile: SourceFile): ParsedJSDoc {
 
         const summary = summaryLines.join("\n").trim();
         if (summary || sections.length > 0) {
-          return { summary, sections, hasResourceTag };
+          return { summary, sections, hasResourceTag, hasBindingTag };
         }
       }
     }
   }
 
-  return { summary: "", sections: [], hasResourceTag: false };
+  return {
+    summary: "",
+    sections: [],
+    hasResourceTag: false,
+    hasBindingTag: false,
+  };
 }
 
 function isResourceFile(sourceFile: SourceFile): boolean {
@@ -347,7 +381,8 @@ function isResourceFile(sourceFile: SourceFile): boolean {
     }
   }
 
-  if (fullText.includes("@resource")) return true;
+  if (fullText.includes("@resource") || fullText.includes("@binding"))
+    return true;
 
   const text = sourceFile.getFullText();
   if (text.includes("Binding.Service<") || text.includes("Binding.Policy<")) {
@@ -489,7 +524,7 @@ async function main() {
   }
 
   console.log(
-    `Filtered to ${resourceEntries.length} resource files (excluded ${entries.length - resourceEntries.length} binding/utility files).`,
+    `Filtered to ${resourceEntries.length} documented files (excluded ${entries.length - resourceEntries.length} unannotated files).`,
   );
 
   let written = 0;

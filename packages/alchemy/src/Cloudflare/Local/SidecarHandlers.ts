@@ -29,6 +29,10 @@ export const SidecarHandlers = Layer.effect(
     ) {
       const scope = yield* Effect.flatMap(Effect.scope, Scope.fork);
       const result = yield* server
+        // The published @distilled.cloud/cloudflare-runtime types don't yet
+        // declare `hyperdrives` on the serve options, but the runtime
+        // accepts it. Cast through any so dev-mode local DB wiring works
+        // until the type is shipped upstream.
         .serve({
           name: worker.id.toLowerCase(),
           compatibilityDate: worker.compatibility.date,
@@ -37,7 +41,7 @@ export const SidecarHandlers = Layer.effect(
           hyperdrives: worker.hyperdrives,
           durableObjectNamespaces: worker.durableObjectNamespaces,
           modules,
-        })
+        } as any)
         .pipe(Scope.provide(scope));
       const previous = serverScopes.get(worker.name);
       if (previous) {

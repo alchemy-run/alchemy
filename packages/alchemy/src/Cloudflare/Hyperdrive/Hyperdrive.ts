@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { HyperdriveConnection } from "./HyperdriveConnection.ts";
 
 export type HyperdriveScheme = "postgres" | "postgresql" | "mysql";
 
@@ -97,12 +98,10 @@ export type HyperdriveProps = {
   originConnectionLimit?: number;
   /**
    * Local development overrides. When the stack runs in dev mode
-   * connect to a locally running database 
+   * connect to a locally running database
    */
   dev?: HyperdrivePublicOrigin;
 };
-
-
 
 export type Hyperdrive = Resource<
   "Cloudflare.Hyperdrive",
@@ -146,12 +145,13 @@ export type Hyperdrive = Resource<
  * @section Binding to a Worker
  * @example Using Hyperdrive inside a Worker
  * ```typescript
- * const hd = yield* Cloudflare.HyperdriveConnection.bind(MyDB);
+ * const hd = yield* Cloudflare.Hyperdrive.bind(MyDB);
  * const url = yield* hd.connectionString;
  * ```
  */
-export const Hyperdrive = Resource<Hyperdrive>("Cloudflare.Hyperdrive");
-
+export const Hyperdrive = Resource<Hyperdrive>("Cloudflare.Hyperdrive")({
+  bind: HyperdriveConnection.bind,
+});
 
 export const HyperdriveProvider = () =>
   Provider.effect(
@@ -167,7 +167,7 @@ export const HyperdriveProvider = () =>
       const createConfigName = (id: string, name: string | undefined) =>
         Effect.gen(function* () {
           if (name) return name;
-          return (yield* createPhysicalName({ id, lowercase: true }));
+          return yield* createPhysicalName({ id, lowercase: true });
         });
 
       const findByName = (name: string) =>
@@ -246,7 +246,7 @@ export const HyperdriveProvider = () =>
               name,
               accountId,
               ...projectOrigin(news.dev ?? news.origin),
-            }
+            };
           }
 
           const body = {
@@ -292,7 +292,6 @@ export const HyperdriveProvider = () =>
               accountId,
               ...projectOrigin(news.dev ?? news.origin),
             };
-
           }
 
           const updated = yield* updateConfig({
@@ -325,11 +324,8 @@ export const HyperdriveProvider = () =>
     }),
   );
 
-
-
 export const defaultPort = (scheme: HyperdriveScheme): number =>
   scheme === "mysql" ? 3306 : 5432;
-
 
 const unwrap = (v: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(v) ? Redacted.value(v) : v;

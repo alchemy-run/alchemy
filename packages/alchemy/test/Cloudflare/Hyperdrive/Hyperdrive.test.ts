@@ -1,6 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
-import { destroy, test } from "@/Test/Vitest";
+import * as Test from "@/Test/Vitest";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -8,6 +8,8 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+
+const { test } = Test.make({ providers: Cloudflare.providers() });
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -23,14 +25,13 @@ const baseOrigin = {
   password: Redacted.make("p4ssword!"),
 };
 
-test(
-  "create and delete hyperdrive with default props",
+test.provider("create and delete hyperdrive with default props", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
 
-    yield* destroy();
+    yield* stack.destroy();
 
-    const hd = yield* test.deploy(
+    const hd = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.Hyperdrive("DefaultHyperdrive", {
           origin: baseOrigin,
@@ -48,20 +49,19 @@ test(
     expect(actual.id).toEqual(hd.hyperdriveId);
     expect(actual.origin.host).toEqual(baseOrigin.host);
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* waitForConfigToBeDeleted(hd.hyperdriveId, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(logLevel),
 );
 
-test(
-  "create, update, delete hyperdrive",
+test.provider("create, update, delete hyperdrive", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
 
-    yield* destroy();
+    yield* stack.destroy();
 
-    const hd = yield* test.deploy(
+    const hd = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.Hyperdrive("UpdateHyperdrive", {
           origin: baseOrigin,
@@ -70,7 +70,7 @@ test(
       }),
     );
 
-    const updated = yield* test.deploy(
+    const updated = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.Hyperdrive("UpdateHyperdrive", {
           origin: baseOrigin,
@@ -88,26 +88,24 @@ test(
     // After PUT with `disabled: true`, caching should reflect the change.
     expect(actual.caching).toBeDefined();
 
-    yield* destroy();
+    yield* stack.destroy();
 
     yield* waitForConfigToBeDeleted(hd.hyperdriveId, accountId);
-  }).pipe(Effect.provide(Cloudflare.providers()), logLevel),
+  }).pipe(logLevel),
 );
 
 const waitForConfigToBeDeleted = Effect.fn(function* (
   hyperdriveId: string,
   accountId: string,
 ) {
-  yield* hyperdrive
-    .getConfig({ accountId, hyperdriveId })
-    .pipe(
-      Effect.flatMap(() => Effect.fail(new ConfigStillExists())),
-      Effect.retry({
-        while: (e): e is ConfigStillExists => e instanceof ConfigStillExists,
-        schedule: Schedule.exponential(100),
-      }),
-      Effect.catchTag("HyperdriveConfigNotFound", () => Effect.void),
-    );
+  yield* hyperdrive.getConfig({ accountId, hyperdriveId }).pipe(
+    Effect.flatMap(() => Effect.fail(new ConfigStillExists())),
+    Effect.retry({
+      while: (e): e is ConfigStillExists => e instanceof ConfigStillExists,
+      schedule: Schedule.exponential(100),
+    }),
+    Effect.catchTag("HyperdriveConfigNotFound", () => Effect.void),
+  );
 });
 
 class ConfigStillExists extends Data.TaggedError("ConfigStillExists") {}

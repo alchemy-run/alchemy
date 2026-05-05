@@ -1,10 +1,10 @@
-import type * as runtimeWorker from "@distilled.cloud/cloudflare-runtime/Worker";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Provider from "../../Provider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { HyperdriveOrigin } from "../Hyperdrive/HyperdriveOriginRuntime.ts";
 import { Sidecar } from "../Local/Sidecar.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { Worker, type WorkerBinding, type WorkerProps } from "./Worker.ts";
@@ -26,7 +26,7 @@ export const LocalWorkerProvider = () =>
         const name = yield* createWorkerName(id, props.name);
         const workerBindings: WorkerBinding[] = [];
         const durableObjectNamespaces: Record<string, string> = {};
-        const hyperdrives: Record<string, runtimeWorker.HyperdriveOrigin> = {};
+        const hyperdrives: Record<string, HyperdriveOrigin> = {};
         for (const { sid, data } of bindings) {
           for (const binding of data.bindings ?? []) {
             workerBindings.push(binding);

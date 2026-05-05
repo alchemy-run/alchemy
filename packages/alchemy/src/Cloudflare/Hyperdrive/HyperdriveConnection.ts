@@ -40,6 +40,20 @@ export interface HyperdriveConnectionClient {
   database: Effect.Effect<string>;
 }
 
+/**
+ * A typed accessor for a Cloudflare Hyperdrive runtime binding inside a
+ * Worker. Provides the same shape as the raw `Hyperdrive` runtime object
+ * (connection string, host, port, user, password, database) plus a `raw`
+ * escape hatch for libraries that want direct access.
+ *
+ * @example Bind Hyperdrive in a Worker
+ * ```typescript
+ * const hd = yield* Cloudflare.Hyperdrive.bind(MyHyperdrive);
+ * const url = yield* hd.connectionString;
+ * ```
+ *
+ * @binding
+ */
 export class HyperdriveConnection extends Binding.Service<
   HyperdriveConnection,
   (hyperdrive: Hyperdrive) => Effect.Effect<HyperdriveConnectionClient>
@@ -54,9 +68,7 @@ export const HyperdriveConnectionLive = Layer.effect(
       yield* Policy(hyperdrive);
       const hd = yield* Effect.serviceOption(WorkerEnvironment).pipe(
         Effect.map(Option.getOrUndefined),
-        Effect.map(
-          (env) => env?.[hyperdrive.LogicalId]! as runtime.Hyperdrive,
-        ),
+        Effect.map((env) => env?.[hyperdrive.LogicalId]! as runtime.Hyperdrive),
         Effect.cached,
       );
 
