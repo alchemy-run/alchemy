@@ -116,11 +116,9 @@ export type Hyperdrive = Resource<
     hyperdriveId: string;
     name: string;
     accountId: string;
-    scheme: HyperdriveScheme;
-    host: string;
-    port: number | undefined;
-    database: string;
-    user: string;
+    origin: HyperdriveOrigin;
+    mtls: HyperdriveMtls;
+    dev: HyperdriveDevOrigin | undefined;
   },
   never,
   Providers
@@ -183,7 +181,8 @@ export const HyperdriveProvider = () =>
         });
 
       return {
-        stables: ["hyperdriveId", "accountId"],
+        // The `hyperdriveId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
+        stables: ["accountId"],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
           const ctx = yield* AlchemyContext;
           if (ctx.dev) return undefined;
@@ -198,6 +197,9 @@ export const HyperdriveProvider = () =>
             : yield* createConfigName(id, olds.name);
           if (oldName !== name) {
             return { action: "replace" } as const;
+          }
+          if (!isHyperdriveId(output?.hyperdriveId)) {
+            return { action: "update" };
           }
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
@@ -215,11 +217,16 @@ export const HyperdriveProvider = () =>
                 hyperdriveId: c.id,
                 name: c.name,
                 accountId: output.accountId,
-                scheme: c.origin.scheme,
-                host: c.origin.host,
-                port: "port" in c.origin ? c.origin.port : undefined,
-                database: c.origin.database,
-                user: c.origin.user,
+                origin: {
+                  ...c.origin,
+                  password: olds?.origin?.password,
+                } as HyperdriveOrigin,
+                mtls: {
+                  caCertificateId: c.mtls?.caCertificateId ?? undefined,
+                  mtlsCertificateId: c.mtls?.mtlsCertificateId ?? undefined,
+                  sslmode: c.mtls?.sslmode ?? undefined,
+                } as HyperdriveMtls,
+                dev: output?.dev,
               })),
               Effect.catchTag("HyperdriveConfigNotFound", () =>
                 Effect.succeed(undefined),
@@ -233,11 +240,16 @@ export const HyperdriveProvider = () =>
               hyperdriveId: match.id,
               name: match.name,
               accountId,
-              scheme: match.origin.scheme,
-              host: match.origin.host,
-              port: "port" in match.origin ? match.origin.port : undefined,
-              database: match.origin.database,
-              user: match.origin.user,
+              origin: {
+                ...match.origin,
+                password: olds?.origin?.password,
+              } as HyperdriveOrigin,
+              mtls: {
+                caCertificateId: match.mtls?.caCertificateId ?? undefined,
+                mtlsCertificateId: match.mtls?.mtlsCertificateId ?? undefined,
+                sslmode: match.mtls?.sslmode ?? undefined,
+              } as HyperdriveMtls,
+              dev: output?.dev,
             };
           }
           return undefined;
@@ -248,12 +260,13 @@ export const HyperdriveProvider = () =>
           const ctx = yield* AlchemyContext;
           if (ctx.dev) {
             return {
-              hyperdriveId: isHyperdriveId(output?.hyperdriveId)
-                ? output.hyperdriveId
-                : `dev:${crypto.randomUUID()}`,
+              hyperdriveId:
+                output?.hyperdriveId ?? `dev:${crypto.randomUUID()}`,
               name,
               accountId: output?.accountId ?? accountId,
-              ...projectOrigin(news.dev ?? news.origin),
+              origin: news.origin,
+              mtls: news.mtls ?? {},
+              dev: news.dev,
             };
           }
 
@@ -296,7 +309,9 @@ export const HyperdriveProvider = () =>
             hyperdriveId: synced.id,
             name: synced.name,
             accountId: output?.accountId ?? accountId,
-            ...projectOrigin(news.origin),
+            origin: news.origin,
+            mtls: news.mtls ?? {},
+            dev: news.dev,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -306,7 +321,12 @@ export const HyperdriveProvider = () =>
             accountId: output.accountId,
             hyperdriveId: output.hyperdriveId,
           }).pipe(
-            Effect.catchTag("HyperdriveConfigNotFound", () => Effect.void),
+            Effect.catchIf(
+              (e) =>
+                e._tag === "HyperdriveConfigNotFound" ||
+                (e._tag === "CloudflareHttpError" && e.status === 404),
+              () => Effect.void,
+            ),
           );
         }),
       };
@@ -346,25 +366,6 @@ const toRequestOrigin = (origin: HyperdriveOrigin) => {
     password: unwrap(origin.password),
     port: origin.port ?? defaultPort(origin.scheme),
     scheme: origin.scheme,
-    user: origin.user,
-  };
-};
-
-const projectOrigin = (origin: HyperdriveOrigin) => {
-  if ("accessClientId" in origin) {
-    return {
-      scheme: origin.scheme,
-      host: origin.host,
-      port: undefined,
-      database: origin.database,
-      user: origin.user,
-    };
-  }
-  return {
-    scheme: origin.scheme,
-    host: origin.host,
-    port: origin.port ?? defaultPort(origin.scheme),
-    database: origin.database,
     user: origin.user,
   };
 };
