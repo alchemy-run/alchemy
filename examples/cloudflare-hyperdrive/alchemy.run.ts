@@ -13,11 +13,11 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const api = yield* Api;
-    const db = yield* MyDb
+    const db = yield* MyDb;
 
     return {
       url: api.url.as<string>(),
-      hyperdriveId: db.hyperdriveId
+      hyperdriveId: db.hyperdriveId,
     };
   }),
 );
