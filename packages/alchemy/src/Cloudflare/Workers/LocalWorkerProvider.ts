@@ -35,8 +35,8 @@ export const LocalWorkerProvider = () =>
             }
           }
           if (data.hyperdrives) {
-            for (const [name, origin] of Object.entries(data.hyperdrives)) {
-              hyperdrives[name] = {
+            for (const [id, origin] of Object.entries(data.hyperdrives)) {
+              hyperdrives[id] = {
                 scheme: origin.scheme,
                 host: origin.host,
                 port: origin.port,
