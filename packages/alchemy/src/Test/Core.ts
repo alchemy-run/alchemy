@@ -5,8 +5,7 @@ import * as Option from "effect/Option";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import { AdoptPolicy } from "../AdoptPolicy.ts";
-import type { AlchemyContext } from "../AlchemyContext.ts";
-import { AlchemyContextLive } from "../AlchemyContext.ts";
+import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
 import { apply } from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
@@ -47,7 +46,29 @@ export interface MakeOptions<ROut = any> {
    * (matching the CLI's `--adopt` flag). Defaults to `false`.
    */
   adopt?: boolean;
+  /**
+   * Run providers in local-dev mode (matching the CLI's `alchemy dev` flag).
+   * When `true`, resources like Cloudflare Workers run locally via workerd
+   * instead of being deployed to the cloud. When omitted, falls back to the
+   * `ALCHEMY_DEV` environment variable (`"1"` / `"true"` enable it).
+   */
+  dev?: boolean;
 }
+
+/** Resolve the effective `dev` flag from explicit options or `ALCHEMY_DEV`. */
+export const resolveDev = (options: { dev?: boolean }): boolean => {
+  if (options.dev !== undefined) return options.dev;
+  const env = process.env.ALCHEMY_DEV;
+  return env === "1" || env?.toLowerCase() === "true";
+};
+
+const overrideAlchemyContext = (overrides: { dev: boolean }) =>
+  Layer.effect(
+    AlchemyContext,
+    AlchemyContext.asEffect().pipe(
+      Effect.map((ctx) => ({ ...ctx, ...overrides })),
+    ),
+  );
 
 export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
 
@@ -77,6 +98,7 @@ export const toEffect = <A>(
     );
   }).pipe(
     Effect.provideService(AdoptPolicy, options.adopt ?? false),
+    Effect.provide(overrideAlchemyContext({ dev: resolveDev(options) })),
     // `options.state` (e.g. `Cloudflare.state()`) itself requires
     // `AuthProviders` to read credentials, so AuthProviders must be provided
     // AFTER the state layer or the state layer's requirement is never
@@ -129,6 +151,7 @@ export const deploy = <A>(
   _deploy({
     stack: stack as Effect.Effect<CompiledStack<A>, never, any>,
     stage: callOptions?.stage ?? options.stage ?? "test",
+    dev: resolveDev(options),
   }).pipe(Effect.provide(TelemetryLive));
 
 export const destroy = (
@@ -139,6 +162,7 @@ export const destroy = (
   _destroy({
     stack: stack as Effect.Effect<CompiledStack, never, any>,
     stage: callOptions?.stage ?? options.stage ?? "test",
+    dev: resolveDev(options),
   }).pipe(Effect.provide(TelemetryLive));
 
 /**
