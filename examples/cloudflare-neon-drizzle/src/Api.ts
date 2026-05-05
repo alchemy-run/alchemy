@@ -85,5 +85,5 @@ export default class Api extends Cloudflare.Worker<Api>()(
         }),
       ),
     };
-  }).pipe(Effect.provide(Cloudflare.HyperdriveConnectionLive)),
+  }).pipe(Effect.provide(Cloudflare.HyperdriveBindingLive)),
 ) {}

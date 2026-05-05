@@ -45,9 +45,7 @@ export const Postgres = makeWithDefaults({
   relations,
 });
 
-export const layerPgClient = (
-  hyperdrive: Cloudflare.HyperdriveConnectionClient,
-) =>
+export const layerPgClient = (hyperdrive: Cloudflare.HyperdriveBindingClient) =>
   hyperdrive.connectionString.pipe(
     Effect.map((url) => PgClient.layer({ url })),
     Layer.unwrap,

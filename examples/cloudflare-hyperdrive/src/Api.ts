@@ -14,7 +14,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     },
   },
   Effect.gen(function* () {
-    const db = yield* Cloudflare.HyperdriveConnection.bind(MyDb);
+    const db = yield* Cloudflare.HyperdriveBinding.bind(MyDb);
 
     return {
       fetch: Effect.gen(function* () {
@@ -45,5 +45,5 @@ export default class Api extends Cloudflare.Worker<Api>()(
         });
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.HyperdriveConnectionLive)),
+  }).pipe(Effect.provide(Cloudflare.HyperdriveBindingLive)),
 ) {}
