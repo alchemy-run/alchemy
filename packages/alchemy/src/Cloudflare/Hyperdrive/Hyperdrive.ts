@@ -206,7 +206,7 @@ export const HyperdriveProvider = () =>
             return output;
           }
 
-          if (output?.hyperdriveId) {
+          if (isHyperdriveId(output?.hyperdriveId)) {
             return yield* getConfig({
               accountId: output.accountId,
               hyperdriveId: output.hyperdriveId,
@@ -248,7 +248,9 @@ export const HyperdriveProvider = () =>
           const ctx = yield* AlchemyContext;
           if (ctx.dev) {
             return {
-              hyperdriveId: "",
+              hyperdriveId: isHyperdriveId(output?.hyperdriveId)
+                ? output.hyperdriveId
+                : `dev:${crypto.randomUUID()}`,
               name,
               accountId: output?.accountId ?? accountId,
               ...projectOrigin(news.dev ?? news.origin),
@@ -266,7 +268,7 @@ export const HyperdriveProvider = () =>
           // to update; otherwise we createConfig and fall back to "find by
           // name then update" if Cloudflare reports the name is already in
           // use (race or a cold-start adoption).
-          const synced = output?.hyperdriveId
+          const synced = isHyperdriveId(output?.hyperdriveId)
             ? yield* updateConfig({
                 accountId: output.accountId,
                 hyperdriveId: output.hyperdriveId,
@@ -298,7 +300,7 @@ export const HyperdriveProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          if (!output.hyperdriveId) return;
+          if (!isHyperdriveId(output.hyperdriveId)) return;
 
           yield* deleteConfig({
             accountId: output.accountId,
@@ -316,6 +318,9 @@ export const defaultPort = (scheme: HyperdriveScheme): number =>
 
 const unwrap = (v: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(v) ? Redacted.value(v) : v;
+
+const isHyperdriveId = (maybeId: string | undefined): maybeId is string =>
+  typeof maybeId === "string" && !maybeId.startsWith("dev:");
 
 /**
  * Build the request body shape that the distilled `createConfig`/`updateConfig`
