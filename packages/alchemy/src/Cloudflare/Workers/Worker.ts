@@ -1,7 +1,6 @@
 import type * as cf from "@cloudflare/workers-types";
 import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
-import type { HyperdriveOrigin } from "../Hyperdrive/HyperdriveOriginRuntime.ts";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import type * as Cause from "effect/Cause";
@@ -27,10 +26,6 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
-import {
-  isArtifacts as isArtifactsBinding,
-  type Artifacts as ArtifactsBinding,
-} from "../Artifacts/Artifacts.ts";
 import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
@@ -52,10 +47,15 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { AiGateway } from "../AiGateway/AiGateway.ts";
+import {
+  isArtifacts as isArtifactsBinding,
+  type Artifacts as ArtifactsBinding,
+} from "../Artifacts/Artifacts.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
+import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
 import { SidecarLive } from "../Local/Sidecar.ts";
 import { CloudflareLogs } from "../Logs.ts";
@@ -314,7 +314,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   {
     bindings?: WorkerBinding[];
     containers?: { className: string }[];
-    hyperdrives?: Record<string, HyperdriveOrigin>;
+    hyperdrives?: Record<string, Required<HyperdriveDevOrigin>>;
   },
   Providers
 >;

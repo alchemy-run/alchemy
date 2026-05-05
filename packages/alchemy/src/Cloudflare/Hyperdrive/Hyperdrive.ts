@@ -23,8 +23,7 @@ export type HyperdrivePublicOrigin = {
   database: string;
   user: string;
   /**
-   * Database password. Pass a plain string or a `Redacted<string>` to keep it
-   * out of logs.
+   * Database password.
    */
   password: Redacted.Redacted<string>;
 };
@@ -66,9 +65,16 @@ export type HyperdriveMtls = {
   caCertificateId?: string;
   mtlsCertificateId?: string;
   /**
-   * @default "verify-full"
+   * @default "require"
    */
-  sslmode?: string;
+  sslmode?: "require" | "verify-ca" | "verify-full";
+};
+
+export type HyperdriveDevOrigin = HyperdrivePublicOrigin & {
+  /**
+   * @default "prefer"
+   */
+  sslmode?: "disable" | "prefer" | "require" | "verify-ca" | "verify-full";
 };
 
 export type HyperdriveProps = {
@@ -100,7 +106,7 @@ export type HyperdriveProps = {
    * Local development overrides. When the stack runs in dev mode
    * connect to a locally running database
    */
-  dev?: HyperdrivePublicOrigin;
+  dev?: HyperdriveDevOrigin;
 };
 
 export type Hyperdrive = Resource<

@@ -1,5 +1,6 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Alchemy from "alchemy/Stack";
+import * as State from "alchemy/State";
 import * as Effect from "effect/Effect";
 import type { Counter as CounterClass } from "./src/AsyncWorker.ts";
 import EffectWorker from "./src/EffectWorker.ts";
@@ -24,7 +25,7 @@ export default Alchemy.Stack(
   "CloudflareDev",
   {
     providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
+    state: State.localState(),
   },
   Effect.gen(function* () {
     const asyncWorker = yield* AsyncWorker;

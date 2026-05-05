@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
+import * as Output from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
 import { isWorker } from "../Workers/Worker.ts";
 import { defaultPort, type Hyperdrive } from "./Hyperdrive.ts";
@@ -16,21 +16,6 @@ export const HyperdriveBinding = Effect.gen(function* () {
     }
 
     const dev = hyperdrive.Props.dev;
-    const hyperdrives =
-      ctx.dev && dev
-        ? {
-            [hyperdrive.LogicalId]: {
-              scheme: dev.scheme,
-              host: dev.host,
-              port: dev.port ?? defaultPort(dev.scheme),
-              user: dev.user,
-              database: dev.database,
-              password: Redacted.isRedacted(dev.password)
-                ? Redacted.value(dev.password)
-                : dev.password,
-            },
-          }
-        : undefined;
 
     yield* host.bind`${hyperdrive}`({
       bindings: [
@@ -40,7 +25,20 @@ export const HyperdriveBinding = Effect.gen(function* () {
           id: hyperdrive.hyperdriveId,
         },
       ],
-      hyperdrives,
+      hyperdrives:
+        ctx.dev && dev
+          ? Output.map(hyperdrive.hyperdriveId, (id) => ({
+              [id]: {
+                scheme: dev.scheme,
+                host: dev.host,
+                port: dev.port ?? defaultPort(dev.scheme),
+                user: dev.user,
+                database: dev.database,
+                password: dev.password,
+                sslmode: dev.sslmode ?? "prefer",
+              },
+            }))
+          : undefined,
     });
   });
 });
