@@ -236,77 +236,58 @@ export const HyperdriveProvider = () =>
           }
           return undefined;
         }),
-        create: Effect.fn(function* ({ id, news }) {
-          const name = yield* createConfigName(id, news.name);
+        reconcile: Effect.fn(function* ({ id, news, output }) {
+          const name = output?.name ?? (yield* createConfigName(id, news.name));
 
           const ctx = yield* AlchemyContext;
           if (ctx.dev) {
             return {
               hyperdriveId: "",
               name,
-              accountId,
+              accountId: output?.accountId ?? accountId,
               ...projectOrigin(news.dev ?? news.origin),
             };
           }
 
-          const body = {
-            accountId,
-            name,
+          const requestBody = {
             origin: toRequestOrigin(news.origin),
             caching: news.caching,
             mtls: news.mtls,
             originConnectionLimit: news.originConnectionLimit,
           };
-          const created = yield* createConfig(body).pipe(
-            Effect.catchTag("InvalidHyperdriveConfig", (originalError) =>
-              Effect.gen(function* () {
-                const match = yield* findByName(name);
-                if (!match) {
-                  return yield* Effect.fail(originalError);
-                }
-                return yield* updateConfig({
-                  accountId,
-                  hyperdriveId: match.id,
-                  name,
-                  origin: toRequestOrigin(news.origin),
-                  caching: news.caching,
-                  mtls: news.mtls,
-                  originConnectionLimit: news.originConnectionLimit,
-                });
-              }),
-            ),
-          );
-          return {
-            hyperdriveId: created.id,
-            name: created.name,
-            accountId,
-            ...projectOrigin(news.origin),
-          };
-        }),
-        update: Effect.fn(function* ({ news, output }) {
-          const ctx = yield* AlchemyContext;
-          if (ctx.dev) {
-            return {
-              hyperdriveId: "",
-              name: output.name,
-              accountId,
-              ...projectOrigin(news.dev ?? news.origin),
-            };
-          }
 
-          const updated = yield* updateConfig({
-            accountId: output.accountId,
-            hyperdriveId: output.hyperdriveId,
-            name: output.name,
-            origin: toRequestOrigin(news.origin),
-            caching: news.caching,
-            mtls: news.mtls,
-            originConnectionLimit: news.originConnectionLimit,
-          });
+          // Observe + ensure. When we know the hyperdriveId we go straight
+          // to update; otherwise we createConfig and fall back to "find by
+          // name then update" if Cloudflare reports the name is already in
+          // use (race or a cold-start adoption).
+          const synced = output?.hyperdriveId
+            ? yield* updateConfig({
+                accountId: output.accountId,
+                hyperdriveId: output.hyperdriveId,
+                name: output.name,
+                ...requestBody,
+              })
+            : yield* createConfig({ accountId, name, ...requestBody }).pipe(
+                Effect.catchTag("InvalidHyperdriveConfig", (originalError) =>
+                  Effect.gen(function* () {
+                    const match = yield* findByName(name);
+                    if (!match) {
+                      return yield* Effect.fail(originalError);
+                    }
+                    return yield* updateConfig({
+                      accountId,
+                      hyperdriveId: match.id,
+                      name,
+                      ...requestBody,
+                    });
+                  }),
+                ),
+              );
+
           return {
-            hyperdriveId: updated.id,
-            name: updated.name,
-            accountId: output.accountId,
+            hyperdriveId: synced.id,
+            name: synced.name,
+            accountId: output?.accountId ?? accountId,
             ...projectOrigin(news.origin),
           };
         }),

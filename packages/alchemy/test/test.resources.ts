@@ -518,8 +518,10 @@ export const staticStablesResourceProvider = () =>
       return {
         string: news.string ?? id,
         tags: news.tags ?? {},
-        stableId: output.stableId,
-        stableArn: output.stableArn,
+        stableId: output?.stableId ?? `stable-${id}`,
+        stableArn:
+          output?.stableArn ??
+          (`arn:test:resource:us-east-1:123456789:${id}` as const),
         replaceString: news.replaceString,
       };
     }),
