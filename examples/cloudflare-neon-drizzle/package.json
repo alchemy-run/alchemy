@@ -18,7 +18,7 @@
     "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/sql-pg": "4.0.0-beta.58",
+    "@effect/sql-pg": "catalog:",
     "alchemy": "workspace:*",
     "drizzle-orm": "1.0.0-rc.1",
     "effect": "catalog:",
