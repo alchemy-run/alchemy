@@ -60,15 +60,28 @@ const hashAccountId = (accountId: string) =>
  * attaches `alchemy.cloudflare.account_hash` to whichever span is
  * active. Silently no-ops if the environment isn't resolvable so
  * State-store layer construction still succeeds in degraded paths.
+ *
+ * `noTrack` controls whether the hash is attached:
+ *   - `true`  — never annotate (caller-level opt-out).
+ *   - `false` — always annotate, regardless of env.
+ *   - `undefined` — fall back to the `NO_TRACK` env var; default off.
  */
-const annotateAccountHash = Effect.gen(function* () {
-  const env = yield* Effect.serviceOption(
-    CloudflareEnvironment.CloudflareEnvironment,
-  );
-  if (env._tag !== "Some") return;
-  const hash = yield* hashAccountId(env.value.accountId);
-  yield* Effect.annotateCurrentSpan("alchemy.cloudflare.account_hash", hash);
-}).pipe(Effect.catch(() => Effect.void));
+const annotateAccountHash = (noTrack?: boolean) =>
+  Effect.gen(function* () {
+    if (noTrack === true) return;
+    if (noTrack === undefined) {
+      const fromEnv = yield* Config.boolean("NO_TRACK").pipe(
+        Config.withDefault(false),
+      );
+      if (fromEnv) return;
+    }
+    const env = yield* Effect.serviceOption(
+      CloudflareEnvironment.CloudflareEnvironment,
+    );
+    if (env._tag !== "Some") return;
+    const hash = yield* hashAccountId(env.value.accountId);
+    yield* Effect.annotateCurrentSpan("alchemy.cloudflare.account_hash", hash);
+  }).pipe(Effect.catch(() => Effect.void));
 
 export interface BootstrapOptions {
   /**
@@ -116,7 +129,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       "alchemy.state_store.force": force,
       "alchemy.state_store.ci": isCI,
     });
-    yield* annotateAccountHash;
+    yield* annotateAccountHash();
 
     const localState = yield* makeLocalState();
     const hasLocalStack = yield* Effect.map(
@@ -191,6 +204,25 @@ export const state = (props?: {
    * @default "alchemy-state-store"
    */
   workerName?: string;
+  /**
+   * Suppress the per-deployment Cloudflare account hash on telemetry
+   * spans. Lets a caller opt out of having their state-store's
+   * accountId pseudonymously counted on the maintainer dashboard
+   * without disabling all telemetry.
+   *
+   * - `true`  — always opt out, regardless of env.
+   * - `false` — always opt in, regardless of env.
+   * - `undefined` (default) — fall back to the `NO_TRACK` env var
+   *   (`true`/`1` → opt out). Default-default is opt-in.
+   *
+   * Independent of the global telemetry kill-switch
+   * (`DO_NOT_TRACK` / `ALCHEMY_TELEMETRY_DISABLED`), which kills the
+   * entire OTLP exporter — `noTrack` here only suppresses the
+   * `alchemy.cloudflare.account_hash` attribute on state-store
+   * spans, leaving the rest of the telemetry intact.
+   * @default undefined
+   */
+  noTrack?: boolean;
 }) =>
   Layer.effect(
     State,
@@ -209,7 +241,7 @@ export const state = (props?: {
         "alchemy.state_store.profile": profileName,
         "alchemy.state_store.ci": isCI,
       });
-      yield* annotateAccountHash;
+      yield* annotateAccountHash(props?.noTrack);
 
       // The bootstrap of the Cloudflare State Store is only considered
       // successful once two invariants hold:
@@ -461,7 +493,7 @@ const finishBootstrap = ({
 
 const deployStateStore = (scriptName: string, state?: StateService) =>
   Effect.gen(function* () {
-    yield* annotateAccountHash;
+    yield* annotateAccountHash();
     const localState = state ?? (yield* makeLocalState());
     // deploy it with local state (which we will then hoist into the Cloudflare state store)
     const stateLayer = Layer.succeed(State, localState);
