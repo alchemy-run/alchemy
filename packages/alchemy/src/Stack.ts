@@ -252,17 +252,29 @@ const platform = Layer.mergeAll(
   Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
 );
 // override alchemy state store, CLI/reporting, state, and Config
-const alchemy = Layer.mergeAll(
-  // CLI.inkCLI(),
-  // optional
-  AlchemyContextLive,
-);
+const alchemy = (overrides?: { dev?: boolean }) =>
+  Layer.mergeAll(
+    // CLI.inkCLI(),
+    // optional
+    overrides?.dev
+      ? Layer.provide(
+          Layer.effect(
+            AlchemyContext,
+            AlchemyContext.asEffect().pipe(
+              Effect.map((ctx) => ({ ...ctx, dev: overrides.dev! })),
+            ),
+          ),
+          AlchemyContextLive,
+        )
+      : AlchemyContextLive,
+  );
 
 export const evalStack = <A, B, Err, Req>(
   effect: StackEffect<CompiledStack<A>, Stage | AlchemyContext>,
   fn: (stack: CompiledStack<A>) => Effect.Effect<B, Err, Req>,
   options: {
     stage: string;
+    dev?: boolean;
   },
 ) =>
   Effect.gen(function* () {
@@ -284,6 +296,6 @@ export const evalStack = <A, B, Err, Req>(
       ),
     ),
     Effect.provide(Layer.succeed(Stage, options.stage)),
-    Effect.provide(Layer.provideMerge(alchemy, platform)),
+    Effect.provide(Layer.provideMerge(alchemy({ dev: options.dev }), platform)),
     Effect.scoped,
   );

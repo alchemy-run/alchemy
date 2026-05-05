@@ -83,12 +83,12 @@ You'll also be prompted for a GitHub credential. Pick `gh-cli` if
 you have the GitHub CLI installed, otherwise paste a Personal
 Access Token with the `repo` scope.
 
-## Create the GitHub stack
+## Scaffold the GitHub stack
 
-Create `stacks/github.ts`. This is a one-shot stack you'll deploy
-from your laptop (under the `admin` profile) to provision the
-Cloudflare API token CI will use, and to push it into your repo as
-an encrypted GitHub Actions secret.
+Create `stacks/github.ts` with an empty stack that loads both
+provider layers and reuses your remote state store. This is a
+one-shot stack you'll deploy from your laptop (under the `admin`
+profile) to provision the Cloudflare API token CI will use.
 
 ```typescript
 // stacks/github.ts
@@ -111,61 +111,93 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
-
-    const apiToken = yield* Cloudflare.AccountApiToken("CIToken", {
-      accountId,
-      policies: [
-        {
-          effect: "allow",
-          permissionGroups: [
-            "Workers Scripts Write",
-            "Workers KV Storage Write",
-            "Workers R2 Storage Write",
-            "D1 Write",
-            "Queues Write",
-            "Pages Write",
-            "Account Settings Write",
-            "Workers Tail Read",
-          ],
-          resources: {
-            [`com.cloudflare.api.account.${accountId}`]: "*",
-          },
-        },
-      ],
-    });
-
-    yield* GitHub.Secret("cf-api-token", {
-      owner: "your-org",
-      repository: "your-repo",
-      name: "CLOUDFLARE_API_TOKEN",
-      value: apiToken.value,
-    });
-
-    yield* GitHub.Secret("cf-account-id", {
-      owner: "your-org",
-      repository: "your-repo",
-      name: "CLOUDFLARE_ACCOUNT_ID",
-      value: Redacted.make(accountId),
-    });
   }),
 );
 ```
 
-A few things worth pointing out:
+Reusing the same `Cloudflare.state()` you set up in Part 1 means the
+token's ID is tracked alongside the rest of your infrastructure, so
+any future edit (rename, policy change) produces a clean diff.
 
-- `Cloudflare.AccountApiToken` calls
-  `POST /accounts/{account_id}/tokens` and returns the freshly minted
-  secret. Cloudflare only reveals that value once, so Alchemy stores
-  it in state and pipes it straight into `GitHub.Secret` — the raw
-  token never touches your terminal.
-- The token is **scoped down** to exactly the permissions your app
-  needs. If you don't use D1 or R2, drop those entries.
-- The same stack reuses your remote `Cloudflare.state()`, so the
-  token's ID is tracked and any future edit (rename, policy change)
-  produces a clean diff.
+## Mint a scoped Cloudflare API token
+
+Add an `AccountApiToken` resource. Under the hood it calls
+`POST /accounts/{account_id}/tokens` and returns the freshly minted
+secret. Cloudflare only reveals that value once, so Alchemy stores it
+in state — the raw token never touches your terminal.
+
+```diff lang="typescript"
+  Effect.gen(function* () {
+    const accountId = yield* Config.string("CLOUDFLARE_ACCOUNT_ID");
++
++   const apiToken = yield* Cloudflare.AccountApiToken("CIToken", {
++     accountId,
++     policies: [
++       {
++         effect: "allow",
++         permissionGroups: [
++           "Workers Scripts Write",
++           "Workers KV Storage Write",
++           "Workers R2 Storage Write",
++           "D1 Write",
++           "Queues Write",
++           "Pages Write",
++           "Account Settings Write",
++           "Workers Tail Read",
++         ],
++         resources: {
++           [`com.cloudflare.api.account.${accountId}`]: "*",
++         },
++       },
++     ],
++   });
+  }),
+```
+
+The `permissionGroups` list scopes the token down to exactly what
+your app needs. If you don't use D1 or R2, drop those entries.
+
+## Push the token into GitHub
+
+Pipe `apiToken.value` straight into a `GitHub.Secret` so CI can read
+it without the secret ever round-tripping through your shell.
+
+```diff lang="typescript"
+    });
++
++   yield* GitHub.Secret("cf-api-token", {
++     owner: "your-org",
++     repository: "your-repo",
++     name: "CLOUDFLARE_API_TOKEN",
++     value: apiToken.value,
++   });
+  }),
+```
 
 Replace `your-org` and `your-repo` with your GitHub org and repo
 slug.
+
+## Expose the account ID to CI
+
+The workflow also needs `CLOUDFLARE_ACCOUNT_ID`. It isn't a secret in
+the cryptographic sense, but storing it as a GitHub Actions secret
+keeps all CI configuration in one place and out of your workflow YAML.
+
+```diff lang="typescript"
+      value: apiToken.value,
+    });
++
++   yield* GitHub.Secret("cf-account-id", {
++     owner: "your-org",
++     repository: "your-repo",
++     name: "CLOUDFLARE_ACCOUNT_ID",
++     value: Redacted.make(accountId),
++   });
+  }),
+```
+
+`Redacted.make` wraps the plain string so it gets the same masking
+treatment as the API token.
 
 ## Deploy the GitHub stack
 
