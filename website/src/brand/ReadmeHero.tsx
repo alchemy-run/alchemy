@@ -69,7 +69,7 @@ export function ReadmeHero(): any {
               letterSpacing: -4,
               color: COLORS.fg,
             },
-            children: "alchemy",
+            children: "Alchemy",
           },
         },
       ],
