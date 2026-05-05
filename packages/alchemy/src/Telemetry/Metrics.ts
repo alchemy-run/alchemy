@@ -69,7 +69,7 @@ export const stateStoreInitCounter = Metric.counter(
  *
  * Usage:
  * ```ts
- * provider.create(input).pipe(recordResourceOp(node.resource.Type, "create"))
+ * provider.reconcile(input).pipe(recordResourceOp(node.resource.Type, "create"))
  * ```
  */
 export const recordResourceOp =

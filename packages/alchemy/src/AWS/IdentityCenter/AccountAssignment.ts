@@ -108,8 +108,15 @@ export const AccountAssignmentProvider = () =>
 
           return yield* readAssignment(olds);
         }),
-        create: Effect.fn(function* ({ news, session }) {
-          const existing = yield* readAssignment(news);
+        reconcile: Effect.fn(function* ({ news, output, session }) {
+          // Observe — look up the assignment between (principal,
+          // permissionSet, target). All identifying fields are stable;
+          // diff() forces a replace on any change, so this reconcile is
+          // existence-only.
+          const existing = yield* readAssignment({
+            ...news,
+            instanceArn: output?.instanceArn ?? news.instanceArn,
+          });
           if (existing) {
             yield* session.note(
               `${existing.targetId}:${existing.permissionSetArn}:${existing.principalId}`,
@@ -117,6 +124,7 @@ export const AccountAssignmentProvider = () =>
             return existing;
           }
 
+          // Ensure — create the assignment if missing.
           const instance = yield* resolveInstance(news.instanceArn);
           const response = yield* retryIdentityCenter(
             ssoAdmin.createAccountAssignment({
@@ -149,12 +157,6 @@ export const AccountAssignmentProvider = () =>
             `${created.targetId}:${created.permissionSetArn}:${created.principalId}`,
           );
           return created;
-        }),
-        update: Effect.fn(function* ({ output, session }) {
-          yield* session.note(
-            `${output.targetId}:${output.permissionSetArn}:${output.principalId}`,
-          );
-          return output;
         }),
         delete: Effect.fn(function* ({ output }) {
           if (!(yield* readAssignment(output))) {

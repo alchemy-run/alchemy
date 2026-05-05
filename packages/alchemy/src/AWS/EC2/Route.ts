@@ -149,46 +149,64 @@ export const RouteProvider = () =>
           // Target change can be done via ReplaceRoute (update)
         }),
 
-        create: Effect.fn(function* ({ news, session }) {
-          // Call CreateRoute
-          yield* ec2
-            .createRoute({
-              RouteTableId: news.routeTableId,
-              DestinationCidrBlock: news.destinationCidrBlock,
-              DestinationIpv6CidrBlock: news.destinationIpv6CidrBlock,
-              DestinationPrefixListId: news.destinationPrefixListId,
-              GatewayId: news.gatewayId,
-              NatGatewayId: news.natGatewayId,
-              InstanceId: news.instanceId,
-              NetworkInterfaceId: news.networkInterfaceId,
-              VpcPeeringConnectionId: news.vpcPeeringConnectionId,
-              TransitGatewayId: news.transitGatewayId,
-              LocalGatewayId: news.localGatewayId,
-              CarrierGatewayId: news.carrierGatewayId,
-              EgressOnlyInternetGatewayId: news.egressOnlyInternetGatewayId,
-              CoreNetworkArn: news.coreNetworkArn,
-              VpcEndpointId: news.vpcEndpointId,
-              DryRun: false,
-            })
-            .pipe(
-              Effect.retry({
-                // Retry if route table is not yet available
-                while: (e) => e._tag === "InvalidRouteTableID.NotFound",
-                schedule: Schedule.exponential(100),
-              }),
-            );
-
+        reconcile: Effect.fn(function* ({ news, session }) {
           const dest =
             news.destinationCidrBlock ||
             news.destinationIpv6CidrBlock ||
             news.destinationPrefixListId ||
             "unknown";
-          yield* session.note(`Route created: ${dest}`);
 
-          // Describe to get route details
+          const targetParams = {
+            RouteTableId: news.routeTableId,
+            DestinationCidrBlock: news.destinationCidrBlock,
+            DestinationIpv6CidrBlock: news.destinationIpv6CidrBlock,
+            DestinationPrefixListId: news.destinationPrefixListId,
+            GatewayId: news.gatewayId,
+            NatGatewayId: news.natGatewayId,
+            InstanceId: news.instanceId,
+            NetworkInterfaceId: news.networkInterfaceId,
+            VpcPeeringConnectionId: news.vpcPeeringConnectionId,
+            TransitGatewayId: news.transitGatewayId,
+            LocalGatewayId: news.localGatewayId,
+            CarrierGatewayId: news.carrierGatewayId,
+            EgressOnlyInternetGatewayId: news.egressOnlyInternetGatewayId,
+            CoreNetworkArn: news.coreNetworkArn,
+            DryRun: false,
+          } as const;
+
+          // Observe — Routes are identified by (routeTableId, destination).
+          // Look the route up in the route table to decide between create
+          // (missing) and replaceRoute (target drift).
+          const observed = yield* describeRoute(news.routeTableId, news);
+
+          // Ensure / Sync — CreateRoute when missing, ReplaceRoute swaps the
+          // target on an existing route in-place.
+          if (observed === undefined) {
+            yield* ec2
+              .createRoute({
+                ...targetParams,
+                VpcEndpointId: news.vpcEndpointId,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "InvalidRouteTableID.NotFound",
+                  schedule: Schedule.exponential(100),
+                }),
+              );
+            yield* session.note(`Route created: ${dest}`);
+          } else {
+            yield* ec2.replaceRoute(targetParams).pipe(
+              Effect.tapError(Effect.log),
+              Effect.retry({
+                while: (e) => e._tag === "InvalidRouteTableID.NotFound",
+                schedule: Schedule.exponential(100),
+              }),
+            );
+            yield* session.note(`Route target updated: ${dest}`);
+          }
+
+          // Re-read final state.
           const route = yield* describeRoute(news.routeTableId, news);
-
-          // Return attributes
           return {
             routeTableId: news.routeTableId,
             destinationCidrBlock: news.destinationCidrBlock,
@@ -196,56 +214,6 @@ export const RouteProvider = () =>
             destinationPrefixListId: news.destinationPrefixListId,
             origin: route?.Origin ?? "CreateRoute",
             state: route?.State ?? "active",
-            gatewayId: route?.GatewayId,
-            natGatewayId: route?.NatGatewayId,
-            instanceId: route?.InstanceId,
-            networkInterfaceId: route?.NetworkInterfaceId,
-            vpcPeeringConnectionId: route?.VpcPeeringConnectionId,
-            transitGatewayId: route?.TransitGatewayId,
-            localGatewayId: route?.LocalGatewayId,
-            carrierGatewayId: route?.CarrierGatewayId,
-            egressOnlyInternetGatewayId: route?.EgressOnlyInternetGatewayId,
-            coreNetworkArn: route?.CoreNetworkArn,
-          };
-        }),
-
-        update: Effect.fn(function* ({ news, output, session }) {
-          // Use ReplaceRoute to update the target
-          yield* ec2
-            .replaceRoute({
-              RouteTableId: news.routeTableId,
-              DestinationCidrBlock: news.destinationCidrBlock,
-              DestinationIpv6CidrBlock: news.destinationIpv6CidrBlock,
-              DestinationPrefixListId: news.destinationPrefixListId,
-              GatewayId: news.gatewayId,
-              NatGatewayId: news.natGatewayId,
-              InstanceId: news.instanceId,
-              NetworkInterfaceId: news.networkInterfaceId,
-              VpcPeeringConnectionId: news.vpcPeeringConnectionId,
-              TransitGatewayId: news.transitGatewayId,
-              LocalGatewayId: news.localGatewayId,
-              CarrierGatewayId: news.carrierGatewayId,
-              EgressOnlyInternetGatewayId: news.egressOnlyInternetGatewayId,
-              CoreNetworkArn: news.coreNetworkArn,
-              DryRun: false,
-            })
-            .pipe(
-              Effect.tapError(Effect.log),
-              Effect.retry({
-                while: (e) => e._tag === "InvalidRouteTableID.NotFound",
-                schedule: Schedule.exponential(100),
-              }),
-            );
-
-          yield* session.note("Route target updated");
-
-          // Describe to get updated route details
-          const route = yield* describeRoute(news.routeTableId, news);
-
-          return {
-            ...output,
-            origin: route?.Origin ?? output.origin,
-            state: route?.State ?? output.state,
             gatewayId: route?.GatewayId,
             natGatewayId: route?.NatGatewayId,
             instanceId: route?.InstanceId,

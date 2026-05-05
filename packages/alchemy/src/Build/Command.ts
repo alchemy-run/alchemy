@@ -157,46 +157,46 @@ export const CommandProvider = () =>
           }
           return { ...output, outdir: outputPath };
         }),
-        create: Effect.fnUntraced(function* ({ news, session }) {
-          const hash = yield* hashDirectory(news);
+        reconcile: Effect.fnUntraced(function* ({ news, output, session }) {
+          // Observe — the build artifact is a local directory keyed by the
+          // hash of its inputs. The previous run's `output.hash` is our
+          // cache; recompute against the current sources to detect drift.
+          const desiredHash = yield* hashDirectory(news);
           const outputPath = getOutputPath(news);
+          const cachedExists =
+            output !== undefined && (yield* fs.exists(output.outdir));
+          const reusable =
+            cachedExists &&
+            output!.hash === desiredHash &&
+            output!.outdir === outputPath;
 
-          yield* session.note(`Running build: ${news.command}`);
-          yield* runBuild(news);
-
-          const exists = yield* fs.exists(outputPath);
-          if (!exists) {
-            return yield* Effect.die(
-              `Build completed but output path does not exist: ${outputPath}`,
+          // Ensure — when the cached artifact is missing, stale, or the
+          // output path moved, run the build. The build command itself is
+          // responsible for producing `outputPath`.
+          if (!reusable) {
+            yield* session.note(
+              output === undefined
+                ? `Running build: ${news.command}`
+                : `Rebuilding: ${news.command}`,
+            );
+            yield* runBuild(news);
+            const exists = yield* fs.exists(outputPath);
+            if (!exists) {
+              return yield* Effect.die(
+                `Build completed but output path does not exist: ${outputPath}`,
+              );
+            }
+            yield* session.note(
+              output === undefined
+                ? `Build completed: ${outputPath}`
+                : `Rebuild completed: ${outputPath}`,
             );
           }
 
-          yield* session.note(`Build completed: ${outputPath}`);
-
+          // Return — the artifact location and the hash that produced it.
           return {
             outdir: outputPath,
-            hash,
-          };
-        }),
-        update: Effect.fnUntraced(function* ({ news, session }) {
-          const hash = yield* hashDirectory(news);
-          const outputPath = getOutputPath(news);
-
-          yield* session.note(`Rebuilding: ${news.command}`);
-          yield* runBuild(news);
-
-          const exists = yield* fs.exists(outputPath);
-          if (!exists) {
-            return yield* Effect.die(
-              `Build completed but output path does not exist: ${outputPath}`,
-            );
-          }
-
-          yield* session.note(`Rebuild completed: ${outputPath}`);
-
-          return {
-            outdir: outputPath,
-            hash,
+            hash: desiredHash,
           };
         }),
         delete: Effect.fnUntraced(function* ({ output, session }) {

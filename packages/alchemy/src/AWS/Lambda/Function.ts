@@ -1187,9 +1187,10 @@ export default await Effect.runPromise(handlerEffect)
             roleArn,
           };
         }),
-        create: Effect.fnUntraced(function* ({
+        reconcile: Effect.fnUntraced(function* ({
           id,
           news,
+          olds,
           bindings,
           output,
           session,
@@ -1230,71 +1231,18 @@ export default await Effect.runPromise(handlerEffect)
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,
             url: news.url,
+            oldUrl: olds?.url,
           });
 
           yield* session.note(summary({ code }));
 
           return {
+            ...(output ?? {}),
             functionArn,
             functionName,
             functionUrl: functionUrl as any,
             roleName,
             roleArn,
-            code: {
-              hash,
-            },
-          };
-        }),
-        update: Effect.fnUntraced(function* ({
-          id,
-          news,
-          olds,
-          bindings,
-          output,
-          session,
-        }) {
-          const { roleName, policyName, functionName, functionArn } =
-            yield* createNames(id, news.functionName);
-
-          const env = yield* attachBindings({
-            roleName,
-            policyName,
-            functionArn,
-            functionName,
-            bindings,
-          });
-
-          const { archive, code, hash } = yield* bundleCode(id, news);
-
-          yield* createOrUpdateFunction({
-            id,
-            news,
-            roleArn: output.roleArn,
-            archive,
-            hash,
-            env: {
-              ...env,
-              ...news.env,
-            },
-            functionName,
-            session,
-          });
-
-          const functionUrl = yield* createOrUpdateFunctionUrl({
-            functionName,
-            url: news.url,
-            oldUrl: olds.url,
-          });
-
-          yield* session.note(summary({ code }));
-
-          return {
-            ...output,
-            functionArn,
-            functionName,
-            functionUrl: functionUrl as any,
-            roleName,
-            roleArn: output.roleArn,
             code: {
               hash,
             },

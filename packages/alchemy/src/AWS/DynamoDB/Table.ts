@@ -21,7 +21,6 @@ import {
   createTagsList,
   diffTags,
   hasAlchemyTags,
-  hasTags,
 } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
@@ -672,35 +671,51 @@ export const TableProvider = () =>
             );
           }
 
-          const [tagsResult, continuousBackupsResult] = yield* Effect.all([
-            dynamodb
-              .listTagsOfResource({
-                ResourceArn: table.TableArn,
-              })
-              .pipe(
-                Effect.retry({
-                  while: isRetryableReadError,
-                  schedule: Schedule.exponential(250).pipe(
-                    Schedule.both(Schedule.recurs(30)),
-                  ),
-                }),
-              ),
-            dynamodb
-              .describeContinuousBackups({
-                TableName: tableName,
-              })
-              .pipe(
-                Effect.retry({
-                  while: (e) => e._tag === "InternalServerError",
-                  schedule: Schedule.exponential(250).pipe(
-                    Schedule.both(Schedule.recurs(30)),
-                  ),
-                }),
-                Effect.catchTag("TableNotFoundException", () =>
-                  Effect.succeed({ ContinuousBackupsDescription: undefined }),
+          const [tagsResult, continuousBackupsResult, ttlResult] =
+            yield* Effect.all([
+              dynamodb
+                .listTagsOfResource({
+                  ResourceArn: table.TableArn,
+                })
+                .pipe(
+                  Effect.retry({
+                    while: isRetryableReadError,
+                    schedule: Schedule.exponential(250).pipe(
+                      Schedule.both(Schedule.recurs(30)),
+                    ),
+                  }),
                 ),
-              ),
-          ]);
+              dynamodb
+                .describeContinuousBackups({
+                  TableName: tableName,
+                })
+                .pipe(
+                  Effect.retry({
+                    while: (e) => e._tag === "InternalServerError",
+                    schedule: Schedule.exponential(250).pipe(
+                      Schedule.both(Schedule.recurs(30)),
+                    ),
+                  }),
+                  Effect.catchTag("TableNotFoundException", () =>
+                    Effect.succeed({ ContinuousBackupsDescription: undefined }),
+                  ),
+                ),
+              dynamodb
+                .describeTimeToLive({
+                  TableName: tableName,
+                })
+                .pipe(
+                  Effect.retry({
+                    while: isRetryableReadError,
+                    schedule: Schedule.exponential(250).pipe(
+                      Schedule.both(Schedule.recurs(30)),
+                    ),
+                  }),
+                  Effect.catchTag("ResourceNotFoundException", () =>
+                    Effect.succeed({ TimeToLiveDescription: undefined }),
+                  ),
+                ),
+            ]);
 
           return {
             table,
@@ -710,6 +725,7 @@ export const TableProvider = () =>
             pointInTimeRecoveryDescription:
               continuousBackupsResult.ContinuousBackupsDescription
                 ?.PointInTimeRecoveryDescription,
+            timeToLiveDescription: ttlResult.TimeToLiveDescription,
           };
         }).pipe(
           Effect.catchTag("ResourceNotFoundException", () =>
@@ -772,6 +788,70 @@ export const TableProvider = () =>
         JSON.stringify(normalizeProjection(left.Projection)) ===
           JSON.stringify(normalizeProjection(right.Projection));
 
+      // The describe response includes server-side bookkeeping fields
+      // (`NumberOfDecreasesToday`, `LastIncreaseDateTime`, etc.) that the
+      // request shape doesn't. For PAY_PER_REQUEST tables it also reports
+      // a zero-throughput object. Normalize both sides to the user-settable
+      // fields so we don't fire a phantom UpdateGlobalSecondaryIndex with
+      // `ProvisionedThroughput: undefined` (which AWS rejects with
+      // ValidationException).
+      const normalizeProvisioned = (
+        pt:
+          | { ReadCapacityUnits?: number; WriteCapacityUnits?: number }
+          | undefined,
+      ) => {
+        if (
+          !pt ||
+          ((pt.ReadCapacityUnits ?? 0) === 0 &&
+            (pt.WriteCapacityUnits ?? 0) === 0)
+        ) {
+          return undefined;
+        }
+        return {
+          ReadCapacityUnits: pt.ReadCapacityUnits,
+          WriteCapacityUnits: pt.WriteCapacityUnits,
+        };
+      };
+
+      const normalizeOnDemand = (
+        od:
+          | {
+              MaxReadRequestUnits?: number;
+              MaxWriteRequestUnits?: number;
+            }
+          | undefined,
+      ) => {
+        if (
+          !od ||
+          ((od.MaxReadRequestUnits ?? -1) < 0 &&
+            (od.MaxWriteRequestUnits ?? -1) < 0)
+        ) {
+          return undefined;
+        }
+        return {
+          MaxReadRequestUnits: od.MaxReadRequestUnits,
+          MaxWriteRequestUnits: od.MaxWriteRequestUnits,
+        };
+      };
+
+      const normalizeWarm = (
+        wt:
+          | { ReadUnitsPerSecond?: number; WriteUnitsPerSecond?: number }
+          | undefined,
+      ) => {
+        if (
+          !wt ||
+          ((wt.ReadUnitsPerSecond ?? 0) === 0 &&
+            (wt.WriteUnitsPerSecond ?? 0) === 0)
+        ) {
+          return undefined;
+        }
+        return {
+          ReadUnitsPerSecond: wt.ReadUnitsPerSecond,
+          WriteUnitsPerSecond: wt.WriteUnitsPerSecond,
+        };
+      };
+
       const diffGlobalSecondaryIndexes = (
         olds: readonly DynamoDB.GlobalSecondaryIndex[] | undefined,
         news: readonly DynamoDB.GlobalSecondaryIndex[] | undefined,
@@ -797,14 +877,28 @@ export const TableProvider = () =>
             continue;
           }
 
-          if (
-            JSON.stringify(oldIndex.ProvisionedThroughput) !==
-              JSON.stringify(newIndex.ProvisionedThroughput) ||
-            JSON.stringify(oldIndex.OnDemandThroughput) !==
-              JSON.stringify(newIndex.OnDemandThroughput) ||
-            JSON.stringify(oldIndex.WarmThroughput) !==
-              JSON.stringify(newIndex.WarmThroughput)
-          ) {
+          // Only emit an Update when the user has explicitly set a
+          // throughput value AND it differs from observed. Cloud-side
+          // defaults (AWS auto-assigns ProvisionedThroughput/WarmThroughput
+          // values for PAY_PER_REQUEST tables) should not trigger phantom
+          // updates against an undefined desired value.
+          const provDiff =
+            newIndex.ProvisionedThroughput !== undefined &&
+            JSON.stringify(
+              normalizeProvisioned(oldIndex.ProvisionedThroughput),
+            ) !==
+              JSON.stringify(
+                normalizeProvisioned(newIndex.ProvisionedThroughput),
+              );
+          const odDiff =
+            newIndex.OnDemandThroughput !== undefined &&
+            JSON.stringify(normalizeOnDemand(oldIndex.OnDemandThroughput)) !==
+              JSON.stringify(normalizeOnDemand(newIndex.OnDemandThroughput));
+          const wtDiff =
+            newIndex.WarmThroughput !== undefined &&
+            JSON.stringify(normalizeWarm(oldIndex.WarmThroughput)) !==
+              JSON.stringify(normalizeWarm(newIndex.WarmThroughput));
+          if (provDiff || odDiff || wtDiff) {
             updates.push({
               Update: {
                 IndexName: indexName,
@@ -890,96 +984,85 @@ export const TableProvider = () =>
           // 1. if you change ImportSourceSpecification
         }),
 
-        create: Effect.fn(function* ({ id, news, session, bindings }) {
-          const tableName = yield* createTableName(id, news);
-          const allTags = yield* createTags(id, news.tags);
-          const streamSpecification =
-            yield* resolveStreamSpecification(bindings);
-          yield* session.note(
-            `Table ${tableName}: resolved stream specification ${JSON.stringify(streamSpecification)}`,
-          );
-
-          yield* dynamodb
-            .createTable({
-              TableName: tableName,
-              TableClass: news.tableClass,
-              KeySchema: toKeySchema(news),
-              AttributeDefinitions: toAttributeDefinitions(news.attributes),
-              LocalSecondaryIndexes: news.localSecondaryIndexes,
-              GlobalSecondaryIndexes: news.globalSecondaryIndexes,
-              BillingMode: news.billingMode ?? "PAY_PER_REQUEST",
-              SSESpecification: news.sseSpecification,
-              StreamSpecification: streamSpecification,
-              WarmThroughput: news.warmThroughput,
-              DeletionProtectionEnabled: news.deletionProtectionEnabled,
-              OnDemandThroughput: news.onDemandThroughput,
-              ProvisionedThroughput: news.provisionedThroughput,
-              Tags: createTagsList(allTags),
-            })
-            .pipe(
-              Effect.retry({
-                while: (e) =>
-                  e._tag === "LimitExceededException" ||
-                  e._tag === "InternalServerError",
-                schedule: Schedule.exponential(100),
-              }),
-              Effect.catchTag("ResourceInUseException", () =>
-                adoptExistingTable(tableName),
-              ),
-            );
-
-          yield* waitForTableActive(session, tableName);
-
-          if (news.pointInTimeRecoverySpecification) {
-            yield* updateContinuousBackups(
-              tableName,
-              news.pointInTimeRecoverySpecification,
-            );
-          }
-
-          if (news.timeToLiveSpecification) {
-            yield* updateTimeToLive(tableName, news.timeToLiveSpecification);
-          }
-
-          if ((news.globalSecondaryIndexes?.length ?? 0) > 0) {
-            yield* waitForGlobalSecondaryIndexesStable(
-              session,
-              tableName,
-              news.globalSecondaryIndexes?.map((index) => index.IndexName) ??
-                [],
-            );
-          }
-
-          const state = yield* readTableState(tableName);
-          if (!state) {
-            return yield* Effect.fail(
-              new Error(`Failed to read created table ${tableName}`),
-            );
-          }
-
-          yield* session.note(state.table.TableArn!);
-
-          return {
-            ...toAttrs(state),
-            tags: allTags,
-          };
-        }),
-
-        update: Effect.fn(function* ({
+        reconcile: Effect.fn(function* ({
           id,
           output,
           news,
-          olds,
           session,
           bindings,
         }) {
+          const tableName =
+            output?.tableName ?? (yield* createTableName(id, news));
+          const desiredTags = yield* createTags(id, news.tags);
           const desiredStreamSpecification =
             yield* resolveStreamSpecification(bindings);
+
+          // Observe cloud state. `output` is treated as a cache for the table
+          // name; the table's actual existence and configuration are fetched
+          // fresh so the reconciler converges regardless of drift, adoption,
+          // or a partially-completed prior run.
+          let state = yield* readTableState(tableName);
+
+          if (state === undefined) {
+            yield* session.note(
+              `Table ${tableName}: creating with stream specification ${JSON.stringify(desiredStreamSpecification)}`,
+            );
+            yield* dynamodb
+              .createTable({
+                TableName: tableName,
+                TableClass: news.tableClass,
+                KeySchema: toKeySchema(news),
+                AttributeDefinitions: toAttributeDefinitions(news.attributes),
+                LocalSecondaryIndexes: news.localSecondaryIndexes,
+                GlobalSecondaryIndexes: news.globalSecondaryIndexes,
+                BillingMode: news.billingMode ?? "PAY_PER_REQUEST",
+                SSESpecification: news.sseSpecification,
+                StreamSpecification: desiredStreamSpecification,
+                WarmThroughput: news.warmThroughput,
+                DeletionProtectionEnabled: news.deletionProtectionEnabled,
+                OnDemandThroughput: news.onDemandThroughput,
+                ProvisionedThroughput: news.provisionedThroughput,
+                Tags: createTagsList(desiredTags),
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e) =>
+                    e._tag === "LimitExceededException" ||
+                    e._tag === "InternalServerError",
+                  schedule: Schedule.exponential(100),
+                }),
+                // A peer reconciler created the table between our observe and
+                // create; describe it and continue with the sync path.
+                Effect.catchTag("ResourceInUseException", () =>
+                  adoptExistingTable(tableName),
+                ),
+              );
+
+            yield* waitForTableActive(session, tableName);
+
+            if ((news.globalSecondaryIndexes?.length ?? 0) > 0) {
+              yield* waitForGlobalSecondaryIndexesStable(
+                session,
+                tableName,
+                news.globalSecondaryIndexes?.map((index) => index.IndexName) ??
+                  [],
+              );
+            }
+
+            state = yield* readTableState(tableName);
+            if (!state) {
+              return yield* Effect.fail(
+                new Error(`Failed to read created table ${tableName}`),
+              );
+            }
+          }
+
+          // Sync stream specification — observed ↔ desired.
+          //
+          // SQL of stream changes: changing the StreamViewType requires a
+          // disable→enable sequence; AWS rejects an in-place view-type change.
           const currentStreamSpecification = normalizeStreamSpecification(
-            output.streamSpecification,
-          );
-          yield* session.note(
-            `Table ${output.tableName}: current stream=${JSON.stringify(currentStreamSpecification)} desired stream=${JSON.stringify(desiredStreamSpecification)}`,
+            state.table.StreamSpecification,
           );
           const streamViewTypeChanged =
             currentStreamSpecification?.StreamEnabled === true &&
@@ -989,56 +1072,10 @@ export const TableProvider = () =>
 
           if (streamViewTypeChanged) {
             yield* dynamodb.updateTable({
-              TableName: output.tableName,
-              StreamSpecification: {
-                StreamEnabled: false,
-              },
+              TableName: tableName,
+              StreamSpecification: { StreamEnabled: false },
             });
-            yield* waitForTableActive(session, output.tableName);
-          }
-
-          const { updates: globalSecondaryIndexUpdates } =
-            diffGlobalSecondaryIndexes(
-              olds.globalSecondaryIndexes,
-              news.globalSecondaryIndexes,
-            );
-
-          const hasBaseUpdate = havePropsChanged(
-            {
-              tableClass: olds.tableClass,
-              attributes: olds.attributes,
-              billingMode: olds.billingMode ?? "PAY_PER_REQUEST",
-              sseSpecification: olds.sseSpecification,
-              warmThroughput: olds.warmThroughput,
-              deletionProtectionEnabled: olds.deletionProtectionEnabled,
-              onDemandThroughput: olds.onDemandThroughput,
-              provisionedThroughput: olds.provisionedThroughput,
-            },
-            {
-              tableClass: news.tableClass,
-              attributes: news.attributes,
-              billingMode: news.billingMode ?? "PAY_PER_REQUEST",
-              sseSpecification: news.sseSpecification,
-              warmThroughput: news.warmThroughput,
-              deletionProtectionEnabled: news.deletionProtectionEnabled,
-              onDemandThroughput: news.onDemandThroughput,
-              provisionedThroughput: news.provisionedThroughput,
-            },
-          );
-
-          if (hasBaseUpdate) {
-            yield* dynamodb.updateTable({
-              TableName: output.tableName,
-              TableClass: news.tableClass,
-              AttributeDefinitions: toAttributeDefinitions(news.attributes),
-              BillingMode: news.billingMode ?? "PAY_PER_REQUEST",
-              SSESpecification: news.sseSpecification,
-              WarmThroughput: news.warmThroughput,
-              DeletionProtectionEnabled: news.deletionProtectionEnabled,
-              OnDemandThroughput: news.onDemandThroughput,
-              ProvisionedThroughput: news.provisionedThroughput,
-            });
-            yield* waitForTableActive(session, output.tableName);
+            yield* waitForTableActive(session, tableName);
           }
 
           if (
@@ -1048,16 +1085,29 @@ export const TableProvider = () =>
             )
           ) {
             yield* session.note(
-              `Table ${output.tableName}: updating stream configuration`,
+              `Table ${tableName}: updating stream configuration`,
             );
             yield* dynamodb.updateTable({
-              TableName: output.tableName,
+              TableName: tableName,
               StreamSpecification: desiredStreamSpecification ?? {
                 StreamEnabled: false,
               },
             });
-            yield* waitForTableActive(session, output.tableName);
+            yield* waitForTableActive(session, tableName);
           }
+
+          // Sync GSIs — diff observed cloud state against desired and apply
+          // each delta serially. AWS only accepts one GSI change per
+          // updateTable call. The diff function only reads fields shared
+          // between `GlobalSecondaryIndex` and `GlobalSecondaryIndexDescription`
+          // (IndexName, KeySchema, Projection, throughputs), so the cast is safe.
+          const { updates: globalSecondaryIndexUpdates } =
+            diffGlobalSecondaryIndexes(
+              state.table.GlobalSecondaryIndexes as
+                | readonly DynamoDB.GlobalSecondaryIndex[]
+                | undefined,
+              news.globalSecondaryIndexes,
+            );
 
           for (const globalSecondaryIndexUpdate of globalSecondaryIndexUpdates) {
             const action = globalSecondaryIndexUpdate.Create
@@ -1066,85 +1116,178 @@ export const TableProvider = () =>
                 ? `update ${globalSecondaryIndexUpdate.Update.IndexName}`
                 : `delete ${globalSecondaryIndexUpdate.Delete!.IndexName}`;
             yield* session.note(
-              `Table ${output.tableName}: applying GSI update (${action})`,
+              `Table ${tableName}: applying GSI update (${action})`,
             );
             yield* dynamodb.updateTable({
-              TableName: output.tableName,
+              TableName: tableName,
               AttributeDefinitions: toAttributeDefinitions(news.attributes),
               GlobalSecondaryIndexUpdates: [globalSecondaryIndexUpdate],
             });
-            yield* waitForTableActive(session, output.tableName);
+            yield* waitForTableActive(session, tableName);
           }
 
           if (globalSecondaryIndexUpdates.length > 0) {
+            const expectedNames =
+              news.globalSecondaryIndexes?.map((index) => index.IndexName) ??
+              [];
             yield* session.note(
-              `Table ${output.tableName}: waiting for GSIs to stabilize (${(news.globalSecondaryIndexes?.map((index) => index.IndexName) ?? []).join(", ") || "none"})`,
+              `Table ${tableName}: waiting for GSIs to stabilize (${expectedNames.join(", ") || "none"})`,
             );
             yield* waitForGlobalSecondaryIndexesStable(
               session,
-              output.tableName,
-              news.globalSecondaryIndexes?.map((index) => index.IndexName) ??
-                [],
+              tableName,
+              expectedNames,
             );
-            yield* session.note(`Table ${output.tableName}: GSIs stabilized`);
+            yield* session.note(`Table ${tableName}: GSIs stabilized`);
           }
 
-          if (
-            news.timeToLiveSpecification &&
-            (news.timeToLiveSpecification.AttributeName !==
-              olds.timeToLiveSpecification?.AttributeName ||
-              news.timeToLiveSpecification?.Enabled !==
-                olds.timeToLiveSpecification?.Enabled)
-          ) {
-            // TODO(sam): can this run in parallel?
-            yield* updateTimeToLive(
-              output.tableName,
-              news.timeToLiveSpecification,
-            );
+          // Sync base attributes — observed ↔ desired.
+          const desiredBillingMode = news.billingMode ?? "PAY_PER_REQUEST";
+          const observedBillingMode =
+            state.table.BillingModeSummary?.BillingMode ?? "PAY_PER_REQUEST";
+          const observedProvisionedThroughput = state.table
+            .ProvisionedThroughput
+            ? {
+                ReadCapacityUnits:
+                  state.table.ProvisionedThroughput.ReadCapacityUnits,
+                WriteCapacityUnits:
+                  state.table.ProvisionedThroughput.WriteCapacityUnits,
+              }
+            : undefined;
+          const baseChanged = havePropsChanged(
+            {
+              tableClass: state.table.TableClassSummary?.TableClass,
+              billingMode: observedBillingMode,
+              deletionProtectionEnabled:
+                state.table.DeletionProtectionEnabled ?? false,
+              provisionedThroughput:
+                desiredBillingMode === "PROVISIONED"
+                  ? observedProvisionedThroughput
+                  : undefined,
+            },
+            {
+              tableClass: news.tableClass,
+              billingMode: desiredBillingMode,
+              deletionProtectionEnabled:
+                news.deletionProtectionEnabled ?? false,
+              provisionedThroughput:
+                desiredBillingMode === "PROVISIONED"
+                  ? news.provisionedThroughput
+                  : undefined,
+            },
+          );
+
+          if (baseChanged) {
+            yield* dynamodb.updateTable({
+              TableName: tableName,
+              TableClass: news.tableClass,
+              AttributeDefinitions: toAttributeDefinitions(news.attributes),
+              BillingMode: desiredBillingMode,
+              SSESpecification: news.sseSpecification,
+              WarmThroughput: news.warmThroughput,
+              DeletionProtectionEnabled: news.deletionProtectionEnabled,
+              OnDemandThroughput: news.onDemandThroughput,
+              ProvisionedThroughput: news.provisionedThroughput,
+            });
+            yield* waitForTableActive(session, tableName);
           }
 
+          // Sync TTL — observed ↔ desired.
+          //
+          // updateTimeToLive rejects calls that would not change anything
+          // (e.g. enabling TTL on the same attribute name), so we have to
+          // diff against the current TimeToLiveDescription before calling.
+          const currentTtl = state.timeToLiveDescription;
+          const currentTtlEnabled =
+            currentTtl?.TimeToLiveStatus === "ENABLED" ||
+            currentTtl?.TimeToLiveStatus === "ENABLING";
+          const currentTtlAttribute = currentTtl?.AttributeName;
+          const desiredTtl = news.timeToLiveSpecification;
+          const desiredTtlEnabled = desiredTtl?.Enabled === true;
+          const desiredTtlAttribute = desiredTtl?.AttributeName;
+
           if (
-            JSON.stringify(news.pointInTimeRecoverySpecification) !==
-            JSON.stringify(olds.pointInTimeRecoverySpecification)
+            desiredTtlEnabled !== currentTtlEnabled ||
+            (desiredTtlEnabled && desiredTtlAttribute !== currentTtlAttribute)
           ) {
-            yield* updateContinuousBackups(output.tableName, {
-              PointInTimeRecoveryEnabled:
-                news.pointInTimeRecoverySpecification
-                  ?.PointInTimeRecoveryEnabled ?? false,
-              RecoveryPeriodInDays:
-                news.pointInTimeRecoverySpecification?.RecoveryPeriodInDays,
+            if (desiredTtlEnabled) {
+              if (
+                currentTtlEnabled &&
+                currentTtlAttribute !== desiredTtlAttribute
+              ) {
+                // AWS only allows one TTL attribute. We must disable first
+                // before re-enabling on a different attribute.
+                yield* updateTimeToLive(tableName, {
+                  AttributeName: currentTtlAttribute!,
+                  Enabled: false,
+                });
+              }
+              yield* updateTimeToLive(tableName, {
+                AttributeName: desiredTtlAttribute!,
+                Enabled: true,
+              });
+            } else if (currentTtlEnabled && currentTtlAttribute) {
+              yield* updateTimeToLive(tableName, {
+                AttributeName: currentTtlAttribute,
+                Enabled: false,
+              });
+            }
+          }
+
+          // Sync PITR — observed ↔ desired.
+          const currentPitrEnabled =
+            state.pointInTimeRecoveryDescription?.PointInTimeRecoveryStatus ===
+            "ENABLED";
+          const desiredPitrEnabled =
+            news.pointInTimeRecoverySpecification?.PointInTimeRecoveryEnabled ??
+            false;
+          const currentPitrPeriod =
+            state.pointInTimeRecoveryDescription?.RecoveryPeriodInDays;
+          const desiredPitrPeriod =
+            news.pointInTimeRecoverySpecification?.RecoveryPeriodInDays;
+          if (
+            currentPitrEnabled !== desiredPitrEnabled ||
+            (desiredPitrEnabled && currentPitrPeriod !== desiredPitrPeriod)
+          ) {
+            yield* updateContinuousBackups(tableName, {
+              PointInTimeRecoveryEnabled: desiredPitrEnabled,
+              RecoveryPeriodInDays: desiredPitrPeriod,
             });
           }
 
-          // Use the cloud's actual tags as the "previous state" so an
-          // adoption-takeover rewrites ownership tags on the table.
-          const oldTags = output.tags ?? {};
-          const newTags = yield* createTags(id, news.tags);
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
+          // Sync tags — diff observed cloud tags against desired.
+          //
+          // Adoption may bring us a table that already has its own tag set;
+          // diffing against `state.tags` (fetched fresh) lets the reconciler
+          // converge ownership without fighting whatever was there before.
+          const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (removed.length > 0) {
             yield* dynamodb.untagResource({
-              ResourceArn: output.tableArn,
+              ResourceArn: state.table.TableArn!,
               TagKeys: removed,
             });
           }
           if (upsert.length > 0) {
             yield* dynamodb.tagResource({
-              ResourceArn: output.tableArn,
+              ResourceArn: state.table.TableArn!,
               Tags: upsert,
             });
           }
 
-          const state = yield* readTableState(output.tableName);
-          if (!state) {
+          // Re-read final state after all sync steps so the returned
+          // attributes reflect the post-reconcile cloud state.
+          const final = yield* readTableState(tableName);
+          if (!final) {
             return yield* Effect.fail(
-              new Error(`Failed to read updated table ${output.tableName}`),
+              new Error(`Failed to read reconciled table ${tableName}`),
             );
           }
 
+          yield* session.note(final.table.TableArn!);
+
           return {
-            ...toAttrs(state),
-            tags: newTags,
+            ...toAttrs(final),
+            tags: desiredTags,
           };
         }),
 

@@ -32,14 +32,12 @@ const bucketProvider = () =>
     diff: Effect.fn(function* ({ id, news, output }) {
       if (!isResolved(news)) return undefined;
     }),
-    create: Effect.fn(function* ({ id, news = {} }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+      if (output !== undefined) return output;
       return {
         name: news.name ?? id,
         bucketArn: `arn:test:bucket:us-east-1:123456789:${id}`,
       };
-    }),
-    update: Effect.fn(function* ({ id, news, output }) {
-      return output;
     }),
     delete: Effect.fn(function* ({ output }) {
       return;
@@ -67,14 +65,7 @@ export const queueProvider = () =>
     diff: Effect.fn(function* ({ id, news = {}, output }) {
       if (!isResolved(news)) return undefined;
     }),
-    create: Effect.fn(function* ({ id, news = {} }) {
-      const name = news.name ?? id;
-      return {
-        name,
-        queueUrl: `https://test.queue.com/${name}`,
-      };
-    }),
-    update: Effect.fn(function* ({ id, news = {}, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {} }) {
       const name = news.name ?? id;
       return {
         name,
@@ -106,14 +97,7 @@ export const functionProvider = () =>
     diff: Effect.fn(function* ({ id, news, output }) {
       if (!isResolved(news)) return undefined;
     }),
-    create: Effect.fn(function* ({ id, news = {} }) {
-      return {
-        name: news.name ?? id,
-        env: news.env ?? {},
-        functionArn: `arn:aws:lambda:us-west-2:084828582823:function:${id}`,
-      };
-    }),
-    update: Effect.fn(function* ({ id, news = {}, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {} }) {
       return {
         name: news.name ?? id,
         env: news.env ?? {},
@@ -174,31 +158,24 @@ export const bindingTargetProvider = () =>
             replaceString: news.replaceString,
           };
         }),
-        create: Effect.fn(function* ({ id, news = {}, bindings }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, olds, bindings }) {
+          // The hook routing tracks the engine's create-vs-update intent.
+          // `olds === undefined` covers greenfield AND replacement-create
+          // (engine resets olds when minting a new instance), which is
+          // exactly when the test wants `failOn("X", "create")` to fire.
+          // `output === undefined` would miss replacements with `precreate`
+          // because precreate populates `output` before reconcile runs.
           const hooks = Option.getOrUndefined(
             yield* Effect.serviceOption(TestResourceHooks),
           );
-          if (hooks?.create) {
-            yield* hooks.create(id, news as TestResourceProps);
-          }
-          return {
-            name: news.name ?? id,
-            string: news.string ?? id,
-            env: Object.assign(
-              {},
-              ...bindings.map(
-                (binding: any) => binding.env ?? binding.data?.env ?? {},
-              ),
-            ),
-            replaceString: news.replaceString,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news = {}, bindings }) {
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
-          if (hooks?.update) {
-            yield* hooks.update(id, news as TestResourceProps);
+          if (olds === undefined) {
+            if (hooks?.create) {
+              yield* hooks.create(id, news as TestResourceProps);
+            }
+          } else {
+            if (hooks?.update) {
+              yield* hooks.update(id, news as TestResourceProps);
+            }
           }
           return {
             name: news.name ?? id,
@@ -255,18 +232,7 @@ export const deletedBindingRegressionProvider = () =>
         env: {},
       };
     }),
-    create: Effect.fn(function* ({ id, news = {}, bindings }) {
-      return {
-        name: news.name ?? id,
-        env: Object.assign(
-          {},
-          ...bindings.map(
-            (binding: any) => binding.env ?? binding.data?.env ?? {},
-          ),
-        ),
-      };
-    }),
-    update: Effect.fn(function* ({ id, news = {}, bindings }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, bindings }) {
       return {
         name: news.name ?? id,
         env: Object.assign(
@@ -314,15 +280,7 @@ export const artifactProbeProvider = () =>
         ? { action: "update" as const }
         : undefined;
     }),
-    create: Effect.fn(function* ({ news }) {
-      const props = news as ArtifactProbeProps;
-      const artifacts = yield* Artifacts;
-      return {
-        value: props.value,
-        artifactValue: yield* artifacts.get<string>("memo"),
-      };
-    }),
-    update: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ news }) {
       const props = news as ArtifactProbeProps;
       const artifacts = yield* Artifacts;
       return {
@@ -431,29 +389,21 @@ export const testResourceProvider = () =>
               }
             : undefined;
         }),
-        create: Effect.fn(function* ({ id, news = {} }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, olds }) {
           const hooks = Option.getOrUndefined(
             yield* Effect.serviceOption(TestResourceHooks),
           );
-          if (hooks?.create) {
-            yield* hooks.create(id, news);
-          }
-          return {
-            string: news.string ?? id,
-            stringArray: news.stringArray ?? [],
-            stableString: id,
-            stableArray: [id],
-            replaceString: news.replaceString,
-            redacted: news.redacted,
-            redactedArray: news.redactedArray,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news = {}, output }) {
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
-          if (hooks?.update) {
-            yield* hooks.update(id, news);
+          // Branch on `olds` (engine's create-vs-update intent), not
+          // `output` — replacements arrive with a precreate stub in
+          // `output` but `olds === undefined`.
+          if (olds === undefined) {
+            if (hooks?.create) {
+              yield* hooks.create(id, news);
+            }
+          } else {
+            if (hooks?.update) {
+              yield* hooks.update(id, news);
+            }
           }
           return {
             string: news.string ?? id,
@@ -541,33 +491,37 @@ export const staticStablesResourceProvider = () =>
       // but diff() returns undefined because provider doesn't explicitly handle tags
       return undefined;
     }),
-    create: Effect.fn(function* ({ id, news = {} }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, olds, output }) {
       const hooks = Option.getOrUndefined(
         yield* Effect.serviceOption(StaticStablesResourceHooks),
       );
-      if (hooks?.create) {
-        yield* hooks.create(id, news);
+      // Branch on `olds` (engine create vs update intent). Replacements
+      // pass `output` from the previous generation if any, but engine
+      // resets `olds` to `undefined` for the new instance.
+      if (olds === undefined) {
+        if (hooks?.create) {
+          yield* hooks.create(id, news);
+        }
+        return {
+          string: news.string ?? id,
+          tags: news.tags ?? {},
+          stableId: output?.stableId ?? `stable-${id}`,
+          stableArn:
+            output?.stableArn ??
+            (`arn:test:resource:us-east-1:123456789:${id}` as const),
+          replaceString: news.replaceString,
+        };
       }
-      return {
-        string: news.string ?? id,
-        tags: news.tags ?? {},
-        stableId: `stable-${id}`,
-        stableArn: `arn:test:resource:us-east-1:123456789:${id}`,
-        replaceString: news.replaceString,
-      };
-    }),
-    update: Effect.fn(function* ({ id, news = {}, output }) {
-      const hooks = Option.getOrUndefined(
-        yield* Effect.serviceOption(StaticStablesResourceHooks),
-      );
       if (hooks?.update) {
         yield* hooks.update(id, news);
       }
       return {
         string: news.string ?? id,
         tags: news.tags ?? {},
-        stableId: output.stableId,
-        stableArn: output.stableArn,
+        stableId: output?.stableId ?? `stable-${id}`,
+        stableArn:
+          output?.stableArn ??
+          (`arn:test:resource:us-east-1:123456789:${id}` as const),
         replaceString: news.replaceString,
       };
     }),
@@ -637,32 +591,26 @@ export const phasedTargetProvider = () =>
             replaceKey: news.replaceKey,
           };
         }),
-        create: Effect.fn(function* ({ id, news, bindings }) {
+        reconcile: Effect.fn(function* ({ id, news, olds, bindings }) {
           const hooks = Option.getOrUndefined(
             yield* Effect.serviceOption(TestResourceHooks),
           );
-          if (hooks?.create) {
-            yield* hooks.create(id, {
-              string: news.desired,
-              replaceString: news.replaceKey,
-            });
-          }
-          return {
-            stableId: phasedStableId(news.replaceKey),
-            value: news.desired,
-            env: mergeBindingEnv(bindings),
-            replaceKey: news.replaceKey,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, bindings }) {
-          const hooks = Option.getOrUndefined(
-            yield* Effect.serviceOption(TestResourceHooks),
-          );
-          if (hooks?.update) {
-            yield* hooks.update(id, {
-              string: news.desired,
-              replaceString: news.replaceKey,
-            });
+          // Branch on `olds` not `output`: replacement-create has
+          // precreate-populated `output` but engine-cleared `olds`.
+          if (olds === undefined) {
+            if (hooks?.create) {
+              yield* hooks.create(id, {
+                string: news.desired,
+                replaceString: news.replaceKey,
+              });
+            }
+          } else {
+            if (hooks?.update) {
+              yield* hooks.update(id, {
+                string: news.desired,
+                replaceString: news.replaceKey,
+              });
+            }
           }
           return {
             stableId: phasedStableId(news.replaceKey),
@@ -709,18 +657,7 @@ export const NoPrecreateBindingTarget = Resource<NoPrecreateBindingTarget>(
 export const noPrecreateBindingTargetProvider = () =>
   Provider.succeed(NoPrecreateBindingTarget, {
     diff: Effect.fn(function* () {}),
-    create: Effect.fn(function* ({ id, news = {}, bindings }) {
-      return {
-        string: news.string ?? id,
-        env: Object.assign(
-          {},
-          ...bindings.map(
-            (binding: any) => binding.env ?? binding.data?.env ?? {},
-          ),
-        ),
-      };
-    }),
-    update: Effect.fn(function* ({ id, news = {}, bindings }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, bindings }) {
       return {
         string: news.string ?? id,
         env: Object.assign(

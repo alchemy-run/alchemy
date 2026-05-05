@@ -108,51 +108,57 @@ export const LogGroupProvider = () =>
             tags: output?.tags ?? {},
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const logGroupName = yield* toLogGroupName(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const logGroupName =
+            output?.logGroupName ?? (yield* toLogGroupName(id, news));
+          const arn = (output?.logGroupArn ??
+            `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`) as LogGroupArn;
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
 
-          yield* logs
-            .createLogGroup({
-              logGroupName,
-              kmsKeyId: news.kmsKeyId,
-              tags,
-            })
-            .pipe(
-              Effect.catchTag(
-                "ResourceAlreadyExistsException",
-                () => Effect.void,
-              ),
-            );
+          // Observe — fetch live state. `describeLogGroups` returns
+          // retention/kms info so we can diff against desired without
+          // trusting `olds` or `output`.
+          const described = yield* logs.describeLogGroups({
+            logGroupNamePrefix: logGroupName,
+            limit: 1,
+          });
+          let observed = (described.logGroups ?? []).find(
+            (group) => group.logGroupName === logGroupName,
+          );
 
-          if (news.retentionInDays !== undefined) {
-            yield* logs.putRetentionPolicy({
-              logGroupName,
-              retentionInDays: news.retentionInDays,
+          // Ensure — create if missing. `createLogGroup` accepts tags and
+          // kmsKeyId on first create; tolerate `ResourceAlreadyExistsException`
+          // (race with peer reconciler) and re-read.
+          if (!observed?.arn) {
+            yield* logs
+              .createLogGroup({
+                logGroupName,
+                kmsKeyId: news.kmsKeyId,
+                tags: desiredTags,
+              })
+              .pipe(
+                Effect.catchTag(
+                  "ResourceAlreadyExistsException",
+                  () => Effect.void,
+                ),
+              );
+            const reread = yield* logs.describeLogGroups({
+              logGroupNamePrefix: logGroupName,
+              limit: 1,
             });
+            observed = (reread.logGroups ?? []).find(
+              (group) => group.logGroupName === logGroupName,
+            );
           }
 
-          const arn =
-            `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}` as LogGroupArn;
-          yield* session.note(arn);
-
-          return {
-            logGroupName,
-            logGroupArn: arn,
-            retentionInDays: news.retentionInDays,
-            kmsKeyId: news.kmsKeyId,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          if (news.retentionInDays !== olds.retentionInDays) {
+          // Sync retention — observed ↔ desired.
+          const observedRetention = observed?.retentionInDays;
+          if (news.retentionInDays !== observedRetention) {
             if (news.retentionInDays === undefined) {
               yield* logs
                 .deleteRetentionPolicy({
-                  logGroupName: output.logGroupName,
+                  logGroupName,
                 })
                 .pipe(
                   Effect.catchTag(
@@ -162,24 +168,32 @@ export const LogGroupProvider = () =>
                 );
             } else {
               yield* logs.putRetentionPolicy({
-                logGroupName: output.logGroupName,
+                logGroupName,
                 retentionInDays: news.retentionInDays,
               });
             }
           }
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags — list observed tags then diff against desired so
+          // adoption rewrites ownership tags correctly.
+          const observedTags = yield* logs
+            .listTagsForResource({ resourceArn: arn })
+            .pipe(
+              Effect.map(
+                (r): Record<string, string> =>
+                  Object.fromEntries(
+                    Object.entries(r.tags ?? {}).filter(
+                      (entry): entry is [string, string] =>
+                        typeof entry[1] === "string",
+                    ),
+                  ),
+              ),
+              Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+            );
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* logs.tagResource({
-              resourceArn: output.logGroupArn,
+              resourceArn: arn,
               tags: Object.fromEntries(
                 upsert.map((tag) => [tag.Key, tag.Value]),
               ),
@@ -187,17 +201,19 @@ export const LogGroupProvider = () =>
           }
           if (removed.length > 0) {
             yield* logs.untagResource({
-              resourceArn: output.logGroupArn,
+              resourceArn: arn,
               tagKeys: removed,
             });
           }
 
-          yield* session.note(output.logGroupArn);
+          yield* session.note(arn);
+
           return {
-            ...output,
+            logGroupName,
+            logGroupArn: arn,
             retentionInDays: news.retentionInDays,
             kmsKeyId: news.kmsKeyId,
-            tags: newTags,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

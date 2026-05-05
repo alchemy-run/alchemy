@@ -61,8 +61,16 @@ export const DelegatedAdministratorProvider = () =>
               output?.servicePrincipal ?? olds!.servicePrincipal,
           });
         }),
-        create: Effect.fn(function* ({ news, session }) {
-          if (!(yield* readDelegatedAdministrator(news))) {
+        reconcile: Effect.fn(function* ({ news, session }) {
+          // Observe — look up the live delegation. Replacement-only props
+          // (`accountId`, `servicePrincipal`) mean the diff handles identity
+          // changes; we just check whether the registration exists.
+          let state = yield* readDelegatedAdministrator(news);
+
+          // Ensure — register if missing. Tolerate
+          // `AccountAlreadyRegisteredException` for idempotency under races
+          // between observe and register.
+          if (!state) {
             yield* retryOrganizations(
               organizations
                 .registerDelegatedAdministrator({
@@ -76,23 +84,18 @@ export const DelegatedAdministratorProvider = () =>
                   ),
                 ),
             );
-          }
-
-          const state = yield* readDelegatedAdministrator(news);
-          if (!state) {
-            return yield* Effect.fail(
-              new Error(
-                `delegated administrator '${news.accountId}' for '${news.servicePrincipal}' not found after create`,
-              ),
-            );
+            state = yield* readDelegatedAdministrator(news);
+            if (!state) {
+              return yield* Effect.fail(
+                new Error(
+                  `delegated administrator '${news.accountId}' for '${news.servicePrincipal}' not found after create`,
+                ),
+              );
+            }
           }
 
           yield* session.note(`${state.accountId}:${state.servicePrincipal}`);
           return state;
-        }),
-        update: Effect.fn(function* ({ output, session }) {
-          yield* session.note(`${output.accountId}:${output.servicePrincipal}`);
-          return output;
         }),
         delete: Effect.fn(function* ({ output }) {
           if (

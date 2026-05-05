@@ -527,52 +527,38 @@ export const BucketProvider = () =>
           }
         }),
         precreate: (props) => ensureBucketExists(props),
-        create: Effect.fn(function* ({ id, news = {}, session, bindings }) {
-          const output = yield* ensureBucketExists({ id, news });
-
-          yield* syncBucketTags({
-            bucketName: output.bucketName,
-            newTags: news.tags,
-            session,
-            operation: "create",
-          });
-
-          yield* syncBucketPolicy({
-            bucketName: output.bucketName,
-            bindings,
-            session,
-            operation: "create",
-          });
-
-          yield* session.note(`Ensured bucket: ${output.bucketName}`);
-
-          return output;
-        }),
-        update: Effect.fn(function* ({
+        reconcile: Effect.fn(function* ({
+          id,
           news = {},
-          olds = {},
           output,
           session,
           bindings,
         }) {
+          const operation = output === undefined ? "create" : "update";
+          const resolved = output ?? (yield* ensureBucketExists({ id, news }));
+
           yield* syncBucketTags({
-            bucketName: output.bucketName,
+            bucketName: resolved.bucketName,
             // Omit `oldTags` so syncBucketTags fetches the cloud's actual
             // current tags. This makes drift detection correct even after
             // a cold-start adoption where olds.tags would equal news.tags.
             newTags: news.tags,
             session,
-            operation: "update",
+            operation,
           });
 
           yield* syncBucketPolicy({
-            bucketName: output.bucketName,
+            bucketName: resolved.bucketName,
             bindings,
             session,
-            operation: "update",
+            operation,
           });
 
-          return output;
+          if (operation === "create") {
+            yield* session.note(`Ensured bucket: ${resolved.bucketName}`);
+          }
+
+          return resolved;
         }),
         delete: Effect.fn(function* ({ olds = {}, output, session }) {
           yield* Effect.logInfo(

@@ -96,49 +96,59 @@ export const SSHPublicKeyProvider = () =>
         uploadDate: response.SSHPublicKey.UploadDate,
       };
     }),
-    create: Effect.fn(function* ({ news, session }) {
-      const created = yield* iam.uploadSSHPublicKey({
-        UserName: news.userName,
-        SSHPublicKeyBody: news.sshPublicKeyBody,
-      });
-      if (!created.SSHPublicKey?.SSHPublicKeyId) {
-        return yield* Effect.fail(
-          new Error(`uploadSSHPublicKey returned no key id`),
-        );
+    reconcile: Effect.fn(function* ({ news, output, session }) {
+      // Observe — SSH key ids are AWS-generated; we can only locate the
+      // existing key when we have its id from a prior output. The body
+      // and identity are immutable (`diff` triggers replacement on body
+      // change), so a missing key always means we need to upload.
+      const observed = output
+        ? yield* iam
+            .getSSHPublicKey({
+              UserName: output.userName,
+              SSHPublicKeyId: output.sshPublicKeyId,
+              Encoding: "SSH",
+            })
+            .pipe(
+              Effect.map((r) => r.SSHPublicKey),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
+            )
+        : undefined;
+
+      // Ensure — upload when missing.
+      let key = observed;
+      if (!key?.SSHPublicKeyId) {
+        const uploaded = yield* iam.uploadSSHPublicKey({
+          UserName: news.userName,
+          SSHPublicKeyBody: news.sshPublicKeyBody,
+        });
+        if (!uploaded.SSHPublicKey?.SSHPublicKeyId) {
+          return yield* Effect.fail(
+            new Error(`uploadSSHPublicKey returned no key id`),
+          );
+        }
+        key = uploaded.SSHPublicKey;
       }
-      if (
-        news.status !== undefined &&
-        created.SSHPublicKey.Status !== news.status
-      ) {
+
+      // Sync — apply the desired status when it differs from observed.
+      const desiredStatus = news.status ?? key.Status;
+      if (desiredStatus !== key.Status) {
         yield* iam.updateSSHPublicKey({
           UserName: news.userName,
-          SSHPublicKeyId: created.SSHPublicKey.SSHPublicKeyId,
-          Status: news.status,
+          SSHPublicKeyId: key.SSHPublicKeyId!,
+          Status: desiredStatus,
         });
       }
-      yield* session.note(created.SSHPublicKey.SSHPublicKeyId);
+
+      yield* session.note(key.SSHPublicKeyId!);
       return {
-        userName: created.SSHPublicKey.UserName,
-        sshPublicKeyId: created.SSHPublicKey.SSHPublicKeyId,
-        fingerprint: created.SSHPublicKey.Fingerprint,
-        sshPublicKeyBody: created.SSHPublicKey.SSHPublicKeyBody,
-        status: news.status ?? created.SSHPublicKey.Status,
-        uploadDate: created.SSHPublicKey.UploadDate,
-      };
-    }),
-    update: Effect.fn(function* ({ news, output, session }) {
-      const status = news.status ?? output.status;
-      if (status !== output.status) {
-        yield* iam.updateSSHPublicKey({
-          UserName: output.userName,
-          SSHPublicKeyId: output.sshPublicKeyId,
-          Status: status,
-        });
-      }
-      yield* session.note(output.sshPublicKeyId);
-      return {
-        ...output,
-        status,
+        userName: key.UserName,
+        sshPublicKeyId: key.SSHPublicKeyId!,
+        fingerprint: key.Fingerprint,
+        sshPublicKeyBody: key.SSHPublicKeyBody,
+        status: desiredStatus,
+        uploadDate: key.UploadDate,
       };
     }),
     delete: Effect.fn(function* ({ output }) {

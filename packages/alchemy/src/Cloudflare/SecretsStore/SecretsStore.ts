@@ -75,16 +75,35 @@ export const SecretsStoreProvider = () =>
             accountId: output?.accountId ?? accountId,
           };
         }),
-        create: Effect.fn(function* () {
+        reconcile: Effect.fn(function* ({ output }) {
+          const acct = output?.accountId ?? accountId;
+
+          // Observe — Cloudflare permits exactly one Secrets Store per
+          // account. List the account's stores; reuse the cached one if
+          // it still exists, otherwise reuse the first one.
+          const stores = yield* listStores({ accountId: acct });
+          const observed = output?.storeId
+            ? (stores.result.find((s) => s.id === output.storeId) ??
+              stores.result[0])
+            : stores.result[0];
+
+          if (observed) {
+            return {
+              storeId: observed.id,
+              storeName: observed.name,
+              accountId: acct,
+            };
+          }
+
+          // Ensure — no store yet. Create the default. Cloudflare reports
+          // a concurrent create as `MaximumStoresExceeded`; tolerate by
+          // re-listing and adopting the now-existing store.
           const response = yield* createStore({
-            accountId,
+            accountId: acct,
             // `default_secrets_store` is the name Cloudflare uses for an
             // account's default Secrets Store.
             name: "default_secrets_store",
           }).pipe(
-            // A concurrent process (or a previous partially-failed deploy)
-            // may have raced us between read and create — fall back to
-            // listing the account's existing store.
             Effect.catchTag("MaximumStoresExceeded", () =>
               Effect.succeed(undefined),
             ),
@@ -94,28 +113,25 @@ export const SecretsStoreProvider = () =>
             return {
               storeId: response.id,
               storeName: response.name,
-              accountId,
+              accountId: acct,
             };
           }
 
-          const stores = yield* listStores({ accountId });
-          const first = stores.result[0];
+          const after = yield* listStores({ accountId: acct });
+          const first = after.result[0];
           if (first) {
             return {
               storeId: first.id,
               storeName: first.name,
-              accountId,
+              accountId: acct,
             };
           }
 
           return yield* Effect.die(
             new Error(
-              `Cloudflare reported MaximumStoresExceeded for account ${accountId} but no store could be listed.`,
+              `Cloudflare reported MaximumStoresExceeded for account ${acct} but no store could be listed.`,
             ),
           );
-        }),
-        update: Effect.fn(function* ({ output }) {
-          return output;
         }),
         delete: Effect.fn(function* () {
           // Intentional no-op. Cloudflare only allows one Secrets Store per

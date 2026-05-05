@@ -224,8 +224,8 @@ export const SecurityGroupRuleProvider = () =>
           // Description and tags can be updated
         }),
 
-        create: Effect.fn(function* ({ id, news, session }) {
-          yield* session.note(`Creating Security Group Rule...`);
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const desiredTags = yield* createTags(id, news.tags);
 
           const ipPermission = {
             IpProtocol: news.ipProtocol,
@@ -255,47 +255,56 @@ export const SecurityGroupRuleProvider = () =>
               : undefined,
           };
 
-          let ruleId: string;
-
-          if (news.type === "ingress") {
-            const result = yield* ec2.authorizeSecurityGroupIngress({
-              GroupId: news.groupId as string,
-              IpPermissions: [ipPermission],
-              TagSpecifications: [
-                {
-                  ResourceType: "security-group-rule",
-                  Tags: createTagsList(yield* createTags(id, news.tags)),
-                },
-              ],
-              DryRun: false,
-            });
-            ruleId = result.SecurityGroupRules?.[0]?.SecurityGroupRuleId!;
-          } else {
-            const result = yield* ec2.authorizeSecurityGroupEgress({
-              GroupId: news.groupId as string,
-              IpPermissions: [ipPermission],
-              TagSpecifications: [
-                {
-                  ResourceType: "security-group-rule",
-                  Tags: createTagsList(yield* createTags(id, news.tags)),
-                },
-              ],
-              DryRun: false,
-            });
-            ruleId = result.SecurityGroupRules?.[0]?.SecurityGroupRuleId!;
+          // Observe — find the rule via cached id, else fall through to
+          // create. SG rule identity is the SecurityGroupRuleId.
+          let observed: ec2.SecurityGroupRule | undefined;
+          if (output?.securityGroupRuleId) {
+            const lookup = yield* ec2
+              .describeSecurityGroupRules({
+                SecurityGroupRuleIds: [output.securityGroupRuleId],
+              })
+              .pipe(
+                Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () =>
+                  Effect.succeed({ SecurityGroupRules: [] }),
+                ),
+              );
+            observed = lookup.SecurityGroupRules?.[0];
           }
 
-          yield* session.note(`Security Group Rule created: ${ruleId}`);
+          // Ensure — Authorize{Ingress,Egress} when missing.
+          if (observed === undefined) {
+            yield* session.note("Creating Security Group Rule...");
+            const tagSpec = [
+              {
+                ResourceType: "security-group-rule" as const,
+                Tags: createTagsList(desiredTags),
+              },
+            ];
+            const result =
+              news.type === "ingress"
+                ? yield* ec2.authorizeSecurityGroupIngress({
+                    GroupId: news.groupId as string,
+                    IpPermissions: [ipPermission],
+                    TagSpecifications: tagSpec,
+                    DryRun: false,
+                  })
+                : yield* ec2.authorizeSecurityGroupEgress({
+                    GroupId: news.groupId as string,
+                    IpPermissions: [ipPermission],
+                    TagSpecifications: tagSpec,
+                    DryRun: false,
+                  });
+            const newRuleId =
+              result.SecurityGroupRules?.[0]?.SecurityGroupRuleId!;
+            yield* session.note(`Security Group Rule created: ${newRuleId}`);
+            observed = yield* describeRule(newRuleId);
+          }
 
-          const rule = yield* describeRule(ruleId);
-          return toAttrs(rule);
-        }),
+          const ruleId = observed.SecurityGroupRuleId!;
 
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const ruleId = output.securityGroupRuleId;
-
-          // Update description if changed
-          if (news.description !== olds.description) {
+          // Sync description — modifySecurityGroupRules patches the
+          // mutable description in place when it drifts.
+          if ((observed.Description ?? undefined) !== news.description) {
             yield* ec2.modifySecurityGroupRules({
               GroupId: news.groupId as string,
               SecurityGroupRules: [
@@ -316,30 +325,13 @@ export const SecurityGroupRuleProvider = () =>
                 },
               ],
             });
-            yield* session.note("Updated description");
           }
 
-          // Handle tag updates
-          const newTags = yield* createTags(id, news.tags);
-          const oldTags =
-            (yield* ec2
-              .describeTags({
-                Filters: [
-                  { Name: "resource-id", Values: [ruleId] },
-                  { Name: "resource-type", Values: ["security-group-rule"] },
-                ],
-              })
-              .pipe(
-                Effect.map(
-                  (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
-                ),
-              )) ?? {};
-
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
+          // Sync tags — observed cloud tags vs desired.
+          const currentTags = Object.fromEntries(
+            (observed.Tags ?? []).map((t) => [t.Key!, t.Value!]),
+          ) as Record<string, string>;
+          const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {
             yield* ec2.deleteTags({
               Resources: [ruleId],
@@ -353,11 +345,11 @@ export const SecurityGroupRuleProvider = () =>
               Tags: upsert,
               DryRun: false,
             });
-            yield* session.note("Updated tags");
           }
 
-          const rule = yield* describeRule(ruleId);
-          return toAttrs(rule);
+          // Re-read final state.
+          const final = yield* describeRule(ruleId);
+          return toAttrs(final);
         }),
 
         delete: Effect.fn(function* ({ olds, output, session }) {

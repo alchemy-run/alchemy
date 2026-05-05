@@ -313,18 +313,6 @@ export const ClusterProvider = () =>
         return mapClusterState(cluster, tags, kubernetesObjects ?? []);
       });
 
-      const adoptExistingCluster = Effect.fn(function* (clusterName: string) {
-        const state = yield* readCluster({
-          clusterName,
-        });
-        if (!state) {
-          return yield* Effect.fail(
-            new Error(`cluster '${clusterName}' exists but could not be read`),
-          );
-        }
-        return state;
-      });
-
       const waitForClusterActive = (
         clusterName: string,
         kubernetesObjects: KubernetesObjectRef[] = [],
@@ -456,66 +444,79 @@ export const ClusterProvider = () =>
             ? state
             : Unowned(state);
         }),
-        create: Effect.fn(function* ({ id, news, bindings, session }) {
-          yield* validateProps(news);
-
-          const clusterName = yield* toClusterName(id, news);
-          const desiredObjects = getDesiredKubernetesObjects(bindings);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-
-          // Engine has cleared us via `read` (foreign-tagged clusters are
-          // surfaced as `Unowned`). On a race between read and create,
-          // `ResourceInUseException` is treated as adoption.
-          yield* eks
-            .createCluster({
-              name: clusterName,
-              version: news.version,
-              roleArn: news.roleArn,
-              resourcesVpcConfig: news.resourcesVpcConfig,
-              kubernetesNetworkConfig: news.kubernetesNetworkConfig,
-              logging: news.logging,
-              accessConfig: news.accessConfig,
-              computeConfig: news.computeConfig,
-              storageConfig: news.storageConfig,
-              deletionProtection: news.deletionProtection,
-              upgradePolicy: news.upgradePolicy,
-              tags,
-              clientRequestToken: yield* toClientRequestToken(id, "create"),
-            })
-            .pipe(
-              Effect.catchTag("ResourceInUseException", () =>
-                adoptExistingCluster(clusterName).pipe(Effect.asVoid),
-              ),
-            );
-
-          yield* session.note(`Creating EKS cluster ${clusterName}...`);
-          const cluster = yield* waitForClusterActive(clusterName);
-          const kubernetesObjects = yield* reconcileObjects({
-            connection: getKubernetesConnection(cluster),
-            previousObjects: [],
-            desiredObjects,
-          });
-          return {
-            ...cluster,
-            kubernetesObjects,
-          };
-        }),
-        update: Effect.fn(function* ({
+        reconcile: Effect.fn(function* ({
           id,
           news,
-          olds,
           output,
           bindings,
           session,
         }) {
           yield* validateProps(news);
 
-          if (clusterConfigChanged(olds, news)) {
+          const clusterName = yield* toClusterName(id, news);
+          const desiredObjects = getDesiredKubernetesObjects(bindings);
+          const desiredTags = {
+            ...(yield* createInternalTags(id)),
+            ...news.tags,
+          };
+
+          // Observe — fetch live cloud state. We always fetch fresh so
+          // adoption, drift, and partial-prior-runs all converge.
+          let state = yield* readCluster({
+            clusterName,
+            kubernetesObjects: output?.kubernetesObjects,
+          });
+
+          // Ensure — create cluster if missing. Tolerate
+          // `ResourceInUseException` as a race with a peer reconciler:
+          // re-read and continue with the sync path. The control plane
+          // takes 10+ minutes; we wait for ACTIVE before any sync work.
+          if (!state) {
+            yield* eks
+              .createCluster({
+                name: clusterName,
+                version: news.version,
+                roleArn: news.roleArn,
+                resourcesVpcConfig: news.resourcesVpcConfig,
+                kubernetesNetworkConfig: news.kubernetesNetworkConfig,
+                logging: news.logging,
+                accessConfig: news.accessConfig,
+                computeConfig: news.computeConfig,
+                storageConfig: news.storageConfig,
+                deletionProtection: news.deletionProtection,
+                upgradePolicy: news.upgradePolicy,
+                tags: desiredTags,
+                clientRequestToken: yield* toClientRequestToken(id, "create"),
+              })
+              .pipe(
+                Effect.catchTag("ResourceInUseException", () => Effect.void),
+              );
+
+            yield* session.note(`Creating EKS cluster ${clusterName}...`);
+            state = yield* waitForClusterActive(clusterName);
+          }
+
+          const clusterArn = state.clusterArn;
+
+          // Sync cluster config — diff observed against desired. Each
+          // mutable aspect (vpc, logging, access mode, compute, storage,
+          // upgrade policy, deletion protection) lives behind a single
+          // updateClusterConfig call. We synthesize a `ClusterProps`
+          // shape from observed attributes for the existing diff helper.
+          const observedAsProps: ClusterProps = {
+            roleArn: state.roleArn,
+            resourcesVpcConfig: state.resourcesVpcConfig,
+            accessConfig: state.accessConfig,
+            computeConfig: state.computeConfig,
+            storageConfig: state.storageConfig,
+            kubernetesNetworkConfig: state.kubernetesNetworkConfig,
+            logging: state.logging,
+            upgradePolicy: state.upgradePolicy,
+            deletionProtection: state.deletionProtection,
+          };
+          if (clusterConfigChanged(observedAsProps, news)) {
             const configUpdate = yield* eks.updateClusterConfig({
-              name: output.clusterName,
+              name: clusterName,
               resourcesVpcConfig: news.resourcesVpcConfig,
               logging: news.logging,
               accessConfig: news.accessConfig
@@ -532,47 +533,42 @@ export const ClusterProvider = () =>
             });
             if (configUpdate.update?.id) {
               yield* session.note(
-                `Updating EKS cluster config ${output.clusterName}...`,
+                `Updating EKS cluster config ${clusterName}...`,
               );
-              yield* waitForUpdate(output.clusterName, configUpdate.update.id);
-              yield* waitForClusterActive(
-                output.clusterName,
-                output.kubernetesObjects ?? [],
-              );
+              yield* waitForUpdate(clusterName, configUpdate.update.id);
+              state =
+                (yield* waitForClusterActive(
+                  clusterName,
+                  output?.kubernetesObjects ?? [],
+                )) ?? state;
             }
           }
 
-          if (olds.version !== news.version && news.version) {
+          // Sync version — observed ↔ desired.
+          if (news.version && state.version !== news.version) {
             const versionUpdate = yield* eks.updateClusterVersion({
-              name: output.clusterName,
+              name: clusterName,
               version: news.version,
               clientRequestToken: yield* toClientRequestToken(id, "version"),
             });
             if (versionUpdate.update?.id) {
               yield* session.note(
-                `Updating EKS cluster version ${output.clusterName}...`,
+                `Updating EKS cluster version ${clusterName}...`,
               );
-              yield* waitForUpdate(output.clusterName, versionUpdate.update.id);
-              yield* waitForClusterActive(
-                output.clusterName,
-                output.kubernetesObjects ?? [],
-              );
+              yield* waitForUpdate(clusterName, versionUpdate.update.id);
+              state =
+                (yield* waitForClusterActive(
+                  clusterName,
+                  output?.kubernetesObjects ?? [],
+                )) ?? state;
             }
           }
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
+          // Sync tags — diff observed cloud tags against desired.
+          const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (upsert.length > 0) {
             yield* eks.tagResource({
-              resourceArn: output.clusterArn,
+              resourceArn: clusterArn,
               tags: Object.fromEntries(
                 upsert.map((tag) => [tag.Key, tag.Value] as const),
               ),
@@ -580,36 +576,35 @@ export const ClusterProvider = () =>
           }
           if (removed.length > 0) {
             yield* eks.untagResource({
-              resourceArn: output.clusterArn,
+              resourceArn: clusterArn,
               tagKeys: removed,
             });
           }
 
-          yield* session.note(output.clusterArn);
+          yield* session.note(clusterArn);
 
-          const state = yield* readCluster({
-            clusterName: output.clusterName,
-            kubernetesObjects: output.kubernetesObjects ?? [],
-          }).pipe(
-            Effect.flatMap((state) =>
-              state
-                ? Effect.succeed(state)
-                : Effect.fail(
-                    new Error(
-                      `EKS cluster '${output.clusterName}' could not be read after update`,
-                    ),
-                  ),
-            ),
-          );
+          // Re-read final state so returned attributes reflect the post-
+          // sync cloud state.
+          const final = yield* readCluster({
+            clusterName,
+            kubernetesObjects: output?.kubernetesObjects ?? [],
+          });
+          if (!final) {
+            return yield* Effect.fail(
+              new Error(
+                `EKS cluster '${clusterName}' could not be read after reconcile`,
+              ),
+            );
+          }
 
           const kubernetesObjects = yield* reconcileObjects({
-            connection: getKubernetesConnection(state),
-            previousObjects: output.kubernetesObjects ?? [],
-            desiredObjects: getDesiredKubernetesObjects(bindings),
+            connection: getKubernetesConnection(final),
+            previousObjects: output?.kubernetesObjects ?? [],
+            desiredObjects,
           });
 
           return {
-            ...state,
+            ...final,
             kubernetesObjects,
           };
         }),

@@ -177,56 +177,68 @@ export const EventBusProvider = () =>
             ? attrs
             : Unowned(attrs);
         }),
-        create: Effect.fn(function* ({ id, news = {}, session }) {
-          const eventBusName = yield* createEventBusName(id, news);
+        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+          const eventBusName =
+            output?.eventBusName ?? (yield* createEventBusName(id, news));
+          const eventBusArn = (output?.eventBusArn ??
+            `arn:aws:events:${region}:${accountId}:event-bus/${eventBusName}`) as EventBusArn;
           const internalTags = yield* createInternalTags(id);
-          const allTags = {
+          const desiredTags = {
             ...internalTags,
             ...(news.tags as Record<string, string> | undefined),
           };
 
-          const eventBusArn =
-            `arn:aws:events:${region}:${accountId}:event-bus/${eventBusName}` as const;
-
-          // Engine has cleared us via `read` (foreign-tagged buses are
-          // surfaced as `Unowned`). Treat `ResourceAlreadyExistsException`
-          // on this codepath as a benign race against our own read.
-          yield* eventbridge
-            .createEventBus({
+          // Observe — fetch live cloud state. We don't trust `output`
+          // blindly: a bus deleted out of band shows up as missing and we
+          // recreate. Foreign-tagged buses have already been screened by
+          // `read` upstream.
+          let described = yield* eventbridge
+            .describeEventBus({
               Name: eventBusName,
-              EventSourceName: news.eventSourceName,
-              Description: news.description,
-              KmsKeyIdentifier: news.kmsKeyIdentifier as string | undefined,
-              DeadLetterConfig: news.deadLetterConfig
-                ? { Arn: news.deadLetterConfig.Arn as string | undefined }
-                : undefined,
-              LogConfig: news.logConfig,
-              Tags: createTagsList(allTags),
             })
             .pipe(
-              Effect.catchTag(
-                "ResourceAlreadyExistsException",
-                () => Effect.void,
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed(undefined),
               ),
             );
 
-          yield* session.note(eventBusArn);
+          // Ensure — create the bus if missing. Tolerate
+          // `ResourceAlreadyExistsException` as a race with a peer
+          // reconciler: re-read and continue with the sync path.
+          if (!described?.Arn) {
+            yield* eventbridge
+              .createEventBus({
+                Name: eventBusName,
+                EventSourceName: news.eventSourceName,
+                Description: news.description,
+                KmsKeyIdentifier: news.kmsKeyIdentifier as string | undefined,
+                DeadLetterConfig: news.deadLetterConfig
+                  ? { Arn: news.deadLetterConfig.Arn as string | undefined }
+                  : undefined,
+                LogConfig: news.logConfig,
+                Tags: createTagsList(desiredTags),
+              })
+              .pipe(
+                Effect.catchTag(
+                  "ResourceAlreadyExistsException",
+                  () => Effect.void,
+                ),
+              );
 
-          return {
-            eventBusName,
-            eventBusArn,
-            description: news.description,
-          };
-        }),
-        update: Effect.fn(function* ({
-          id,
-          news = {},
-          olds = {},
-          output,
-          session,
-        }) {
-          const eventBusName = output.eventBusName;
+            described = yield* eventbridge
+              .describeEventBus({
+                Name: eventBusName,
+              })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+          }
 
+          // Sync mutable bus configuration — `updateEventBus` overwrites
+          // `description`, KMS key, DLQ, and log config in one shot, so we
+          // call it unconditionally (idempotent for matching values).
           yield* eventbridge.updateEventBus({
             Name: eventBusName,
             Description: news.description,
@@ -237,34 +249,40 @@ export const EventBusProvider = () =>
             LogConfig: news.logConfig,
           });
 
-          const internalTags = yield* createInternalTags(id);
-          const oldTags = {
-            ...internalTags,
-            ...(olds.tags as Record<string, string> | undefined),
-          };
-          const newTags = {
-            ...internalTags,
-            ...(news.tags as Record<string, string> | undefined),
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags — diff observed cloud tags against desired. Adoption
+          // may bring us a bus with its own tag set; diffing against the
+          // freshly-fetched tags lets the reconciler converge regardless.
+          const observedTagsList = yield* eventbridge
+            .listTagsForResource({
+              ResourceARN: eventBusArn,
+            })
+            .pipe(Effect.map((r) => r.Tags ?? []));
+          const observedTags: Record<string, string> = {};
+          for (const tag of observedTagsList) {
+            if (tag.Key && tag.Value !== undefined) {
+              observedTags[tag.Key] = tag.Value;
+            }
+          }
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
 
           if (removed.length > 0) {
             yield* eventbridge.untagResource({
-              ResourceARN: output.eventBusArn,
+              ResourceARN: eventBusArn,
               TagKeys: removed,
             });
           }
 
           if (upsert.length > 0) {
             yield* eventbridge.tagResource({
-              ResourceARN: output.eventBusArn,
+              ResourceARN: eventBusArn,
               Tags: upsert,
             });
           }
 
-          yield* session.note(output.eventBusArn);
+          yield* session.note(eventBusArn);
           return {
-            ...output,
+            eventBusName,
+            eventBusArn,
             description: news.description,
           };
         }),

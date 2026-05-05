@@ -43,9 +43,7 @@ const getOnce = (url: string) =>
       return yield* Effect.fail(new Error("workers.dev not yet propagated"));
     }
     return response;
-  }).pipe(
-    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
-  );
+  }).pipe(Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }));
 
 test(
   "GET / returns the empty `users` table through Drizzle / Hyperdrive / Neon",

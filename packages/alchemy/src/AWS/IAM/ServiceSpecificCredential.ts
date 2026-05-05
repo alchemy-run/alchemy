@@ -113,56 +113,109 @@ export const ServiceSpecificCredentialProvider = () =>
         serviceCredentialSecret: output.serviceCredentialSecret,
       };
     }),
-    create: Effect.fn(function* ({ news, session }) {
-      const created = yield* iam.createServiceSpecificCredential({
-        UserName: news.userName,
-        ServiceName: news.serviceName,
-        CredentialAgeDays: news.credentialAgeDays,
-      });
-      const credential = created.ServiceSpecificCredential;
-      if (!credential?.ServiceSpecificCredentialId) {
+    reconcile: Effect.fn(function* ({ news, output, session }) {
+      // Observe — credential ids are AWS-generated; we can only locate
+      // the existing record via the prior output. The credential's
+      // identity (userName, serviceName, age) is immutable (`diff`
+      // triggers replacement on change), so a missing credential always
+      // requires recreation.
+      const observed = output
+        ? yield* iam
+            .listServiceSpecificCredentials({
+              UserName: output.userName,
+              ServiceName: output.serviceName,
+            })
+            .pipe(
+              Effect.map((r) =>
+                r.ServiceSpecificCredentials?.find(
+                  (entry) =>
+                    entry.ServiceSpecificCredentialId ===
+                    output.serviceSpecificCredentialId,
+                ),
+              ),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
+            )
+        : undefined;
+
+      // Ensure — create when missing. The secret fields are only
+      // returned on first creation, so adoption preserves the prior
+      // redacted values.
+      let credentialId =
+        observed?.ServiceSpecificCredentialId ??
+        output?.serviceSpecificCredentialId;
+      let userName = observed?.UserName ?? output?.userName ?? news.userName;
+      let serviceName =
+        observed?.ServiceName ?? output?.serviceName ?? news.serviceName;
+      let createDate = observed?.CreateDate ?? output?.createDate;
+      let expirationDate = observed?.ExpirationDate ?? output?.expirationDate;
+      let serviceUserName =
+        observed?.ServiceUserName ?? output?.serviceUserName;
+      let serviceCredentialAlias =
+        observed?.ServiceCredentialAlias ?? output?.serviceCredentialAlias;
+      let servicePassword = output?.servicePassword;
+      let serviceCredentialSecret = output?.serviceCredentialSecret;
+      let observedStatus = observed?.Status ?? output?.status;
+
+      if (!observed) {
+        const created = yield* iam.createServiceSpecificCredential({
+          UserName: news.userName,
+          ServiceName: news.serviceName,
+          CredentialAgeDays: news.credentialAgeDays,
+        });
+        const credential = created.ServiceSpecificCredential;
+        if (!credential?.ServiceSpecificCredentialId) {
+          return yield* Effect.fail(
+            new Error(
+              `createServiceSpecificCredential returned no credential id`,
+            ),
+          );
+        }
+        credentialId = credential.ServiceSpecificCredentialId;
+        userName = credential.UserName;
+        serviceName = credential.ServiceName;
+        createDate = credential.CreateDate;
+        expirationDate = credential.ExpirationDate;
+        serviceUserName = credential.ServiceUserName;
+        serviceCredentialAlias = credential.ServiceCredentialAlias;
+        servicePassword = toRedactedString(credential.ServicePassword);
+        serviceCredentialSecret = toRedactedString(
+          credential.ServiceCredentialSecret,
+        );
+        observedStatus = credential.Status;
+      }
+
+      if (!credentialId) {
         return yield* Effect.fail(
           new Error(
-            `createServiceSpecificCredential returned no credential id`,
+            `ServiceSpecificCredential for user '${news.userName}' has no id`,
           ),
         );
       }
-      if (news.status !== undefined && credential.Status !== news.status) {
+
+      // Sync — apply the desired status when it differs from observed.
+      const desiredStatus = news.status ?? observedStatus ?? "Active";
+      if (desiredStatus !== observedStatus) {
         yield* iam.updateServiceSpecificCredential({
-          UserName: news.userName,
-          ServiceSpecificCredentialId: credential.ServiceSpecificCredentialId,
-          Status: news.status,
+          UserName: userName,
+          ServiceSpecificCredentialId: credentialId,
+          Status: desiredStatus,
         });
       }
-      yield* session.note(credential.ServiceSpecificCredentialId);
+
+      yield* session.note(credentialId);
       return {
-        userName: credential.UserName,
-        serviceName: credential.ServiceName,
-        serviceSpecificCredentialId: credential.ServiceSpecificCredentialId,
-        status: news.status ?? credential.Status,
-        createDate: credential.CreateDate,
-        expirationDate: credential.ExpirationDate,
-        serviceUserName: credential.ServiceUserName,
-        serviceCredentialAlias: credential.ServiceCredentialAlias,
-        servicePassword: toRedactedString(credential.ServicePassword),
-        serviceCredentialSecret: toRedactedString(
-          credential.ServiceCredentialSecret,
-        ),
-      };
-    }),
-    update: Effect.fn(function* ({ news, output, session }) {
-      const status = news.status ?? output.status;
-      if (status !== output.status) {
-        yield* iam.updateServiceSpecificCredential({
-          UserName: output.userName,
-          ServiceSpecificCredentialId: output.serviceSpecificCredentialId,
-          Status: status,
-        });
-      }
-      yield* session.note(output.serviceSpecificCredentialId);
-      return {
-        ...output,
-        status,
+        userName,
+        serviceName,
+        serviceSpecificCredentialId: credentialId,
+        status: desiredStatus,
+        createDate,
+        expirationDate,
+        serviceUserName,
+        serviceCredentialAlias,
+        servicePassword,
+        serviceCredentialSecret,
       };
     }),
     delete: Effect.fn(function* ({ output }) {

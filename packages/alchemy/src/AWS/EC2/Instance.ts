@@ -637,104 +637,9 @@ export const InstanceProvider = () =>
               }
             : undefined;
         }),
-        create: Effect.fn(function* ({ id, news, output, bindings, session }) {
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const runtime = yield* hosted.resolveHostedRuntime({
-            id,
-            news,
-            bindings,
-            output,
-          });
-
-          const existing = output?.instanceId
-            ? yield* describeInstance(output.instanceId).pipe(
-                Effect.catchTag("InvalidInstanceID.NotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-                Effect.catchTag("InstanceNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-              )
-            : yield* findInstanceByTags(id);
-
-          if (existing) {
-            return {
-              ...toAttributes(existing),
-              instanceProfileName:
-                runtime.instanceProfileName ?? output?.instanceProfileName,
-              roleArn: runtime.roleArn,
-              roleName: runtime.roleName,
-              policyName: runtime.policyName,
-              managedIam: runtime.managedIam,
-              runtimeUnitName: runtime.runtimeUnitName,
-              assetPrefix: runtime.assetPrefix,
-              code: runtime.code,
-            };
-          }
-
-          const created = yield* ec2
-            .runInstances(buildRunInstancesRequest(news, runtime, tags))
-            .pipe(
-              Effect.retry({
-                while: isPendingInstanceProfileError,
-                schedule: Schedule.exponential("500 millis").pipe(
-                  Schedule.both(Schedule.recurs(8)),
-                ),
-              }),
-            );
-
-          const instanceId = created.Instances?.[0]?.InstanceId as
-            | InstanceId
-            | undefined;
-          if (!instanceId) {
-            return yield* Effect.fail(
-              new Error(`RunInstances returned no instance ID for '${id}'`),
-            );
-          }
-
-          yield* session.note(instanceId);
-          const instance = yield* waitForState({
-            instanceId,
-            states: ["running"],
-            session,
-          });
-
-          if (news.sourceDestCheck !== undefined) {
-            yield* ec2.modifyInstanceAttribute({
-              InstanceId: instanceId,
-              SourceDestCheck: {
-                Value: news.sourceDestCheck,
-              },
-            });
-          }
-
-          const refreshed = yield* describeInstance(instanceId).pipe(
-            Effect.catchTag("InvalidInstanceID.NotFound", () =>
-              Effect.succeed(undefined),
-            ),
-            Effect.catchTag("InstanceNotFound", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-          return {
-            ...toAttributes(refreshed ?? instance),
-            instanceProfileName: runtime.instanceProfileName,
-            roleArn: runtime.roleArn,
-            roleName: runtime.roleName,
-            policyName: runtime.policyName,
-            managedIam: runtime.managedIam,
-            runtimeUnitName: runtime.runtimeUnitName,
-            assetPrefix: runtime.assetPrefix,
-            code: runtime.code,
-          };
-        }),
-        update: Effect.fn(function* ({
+        reconcile: Effect.fn(function* ({
           id,
           news,
-          olds,
           output,
           bindings,
           session,
@@ -749,54 +654,121 @@ export const InstanceProvider = () =>
             bindings,
             output,
           });
+
+          // Observe — try the cached instanceId first, then fall back to the
+          // alchemy-tag search for recovery from interrupted creates. EC2
+          // assigns instance IDs server-side so we always read the live
+          // record before deciding whether to launch a new one.
+          let instance: ec2.Instance | undefined = output?.instanceId
+            ? yield* describeInstance(output.instanceId).pipe(
+                Effect.catchTag("InvalidInstanceID.NotFound", () =>
+                  Effect.succeed(undefined),
+                ),
+                Effect.catchTag("InstanceNotFound", () =>
+                  Effect.succeed(undefined),
+                ),
+              )
+            : yield* findInstanceByTags(id);
+
+          // A terminated instance is a tombstone; treat as missing so we
+          // launch a fresh one.
+          if (instance && instance.State?.Name === "terminated") {
+            instance = undefined;
+          }
+
+          // Ensure — RunInstances when no live instance was observed. The
+          // initial sourceDestCheck is set here because RunInstances itself
+          // doesn't accept it.
+          if (instance === undefined) {
+            const created = yield* ec2
+              .runInstances(
+                buildRunInstancesRequest(news, runtime, desiredTags),
+              )
+              .pipe(
+                Effect.retry({
+                  while: isPendingInstanceProfileError,
+                  schedule: Schedule.exponential("500 millis").pipe(
+                    Schedule.both(Schedule.recurs(8)),
+                  ),
+                }),
+              );
+            const newInstanceId = created.Instances?.[0]?.InstanceId as
+              | InstanceId
+              | undefined;
+            if (!newInstanceId) {
+              return yield* Effect.fail(
+                new Error(`RunInstances returned no instance ID for '${id}'`),
+              );
+            }
+            yield* session.note(newInstanceId);
+            instance = yield* waitForState({
+              instanceId: newInstanceId,
+              states: ["running"],
+              session,
+            });
+            if (news.sourceDestCheck !== undefined) {
+              yield* ec2.modifyInstanceAttribute({
+                InstanceId: newInstanceId,
+                SourceDestCheck: { Value: news.sourceDestCheck },
+              });
+            }
+          }
+
+          const instanceId = instance.InstanceId as InstanceId;
           let restarted = false;
 
+          // Sync security groups — observed primary-ENI groups vs desired.
+          const observedSecurityGroups = (instance.SecurityGroups ?? [])
+            .map((g) => g.GroupId)
+            .filter((g): g is string => Boolean(g));
+          const desiredSecurityGroups = resolvedSecurityGroups(
+            news.securityGroupIds,
+          );
           if (
-            JSON.stringify(resolvedSecurityGroups(olds.securityGroupIds)) !==
-            JSON.stringify(resolvedSecurityGroups(news.securityGroupIds))
+            desiredSecurityGroups &&
+            JSON.stringify([...observedSecurityGroups].sort()) !==
+              JSON.stringify([...desiredSecurityGroups].sort())
           ) {
             yield* ec2.modifyInstanceAttribute({
-              InstanceId: output.instanceId,
-              Groups: resolvedSecurityGroups(news.securityGroupIds),
+              InstanceId: instanceId,
+              Groups: desiredSecurityGroups,
             });
           }
 
-          if (olds.sourceDestCheck !== news.sourceDestCheck) {
+          // Sync source/dest check — observed flag vs desired (default true).
+          const desiredSourceDestCheck = news.sourceDestCheck ?? true;
+          if ((instance.SourceDestCheck ?? true) !== desiredSourceDestCheck) {
             yield* ec2.modifyInstanceAttribute({
-              InstanceId: output.instanceId,
-              SourceDestCheck: {
-                Value: news.sourceDestCheck ?? true,
-              },
+              InstanceId: instanceId,
+              SourceDestCheck: { Value: desiredSourceDestCheck },
             });
           }
 
-          if (olds.instanceType !== news.instanceType) {
-            const before = yield* describeInstance(output.instanceId);
-            const wasRunning = before.State?.Name === "running";
+          // Sync instance type — observed type vs desired. Type changes need
+          // the instance stopped, then we restart it if it was running.
+          if (
+            news.instanceType &&
+            String(instance.InstanceType ?? "") !== news.instanceType
+          ) {
+            const wasRunning = instance.State?.Name === "running";
             if (wasRunning) {
-              yield* ec2.stopInstances({
-                InstanceIds: [output.instanceId],
-              });
+              yield* ec2.stopInstances({ InstanceIds: [instanceId] });
               yield* waitForState({
-                instanceId: output.instanceId,
+                instanceId,
                 states: ["stopped"],
                 session,
               });
             }
-
             yield* ec2.modifyInstanceAttribute({
-              InstanceId: output.instanceId,
+              InstanceId: instanceId,
               InstanceType: {
                 Value: news.instanceType as ec2.InstanceType,
               },
             });
-
             if (wasRunning) {
-              yield* ec2.startInstances({
-                InstanceIds: [output.instanceId],
-              });
+              yield* ec2.startInstances({ InstanceIds: [instanceId] });
               yield* waitForState({
-                instanceId: output.instanceId,
+                instanceId,
                 states: ["running"],
                 session,
               });
@@ -804,46 +776,53 @@ export const InstanceProvider = () =>
             }
           }
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, desiredTags);
+          // Sync tags — observed cloud tags vs desired.
+          const currentTags = Object.fromEntries(
+            (instance.Tags ?? [])
+              .filter((t): t is { Key: string; Value: string } =>
+                Boolean(t.Key && t.Value !== undefined),
+              )
+              .map((t) => [t.Key, t.Value]),
+          ) as Record<string, string>;
+          const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {
             yield* ec2.deleteTags({
-              Resources: [output.instanceId],
+              Resources: [instanceId],
               Tags: removed.map((key) => ({ Key: key })),
             });
           }
           if (upsert.length > 0) {
             yield* ec2.createTags({
-              Resources: [output.instanceId],
+              Resources: [instanceId],
               Tags: upsert,
             });
           }
 
+          // Hosted-runtime reboot — picks up new bundle/env without an
+          // explicit instance-type cycle. Skip if the type-change path
+          // already restarted us.
           if (news.main && !restarted) {
-            yield* ec2.rebootInstances({
-              InstanceIds: [output.instanceId],
-            });
+            yield* ec2.rebootInstances({ InstanceIds: [instanceId] });
             yield* waitForState({
-              instanceId: output.instanceId,
+              instanceId,
               states: ["running"],
               session,
             });
           }
 
+          // Re-read final state so attributes reflect the post-sync cloud.
+          const final = yield* describeInstance(instanceId);
           return {
-            ...toAttributes(yield* describeInstance(output.instanceId)),
+            ...toAttributes(final),
             instanceProfileName:
-              runtime.instanceProfileName ?? output.instanceProfileName,
-            roleArn: runtime.roleArn ?? output.roleArn,
-            roleName: runtime.roleName ?? output.roleName,
-            policyName: runtime.policyName ?? output.policyName,
-            managedIam: runtime.managedIam ?? output.managedIam,
-            runtimeUnitName: runtime.runtimeUnitName ?? output.runtimeUnitName,
-            assetPrefix: runtime.assetPrefix ?? output.assetPrefix,
-            code: runtime.code ?? output.code,
+              runtime.instanceProfileName ?? output?.instanceProfileName,
+            roleArn: runtime.roleArn ?? output?.roleArn,
+            roleName: runtime.roleName ?? output?.roleName,
+            policyName: runtime.policyName ?? output?.policyName,
+            managedIam: runtime.managedIam ?? output?.managedIam,
+            runtimeUnitName: runtime.runtimeUnitName ?? output?.runtimeUnitName,
+            assetPrefix: runtime.assetPrefix ?? output?.assetPrefix,
+            code: runtime.code ?? output?.code,
           };
         }),
         delete: Effect.fn(function* ({ output, session }) {

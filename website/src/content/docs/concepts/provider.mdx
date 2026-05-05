@@ -1,6 +1,6 @@
 ---
 title: Provider
-description: Providers implement the lifecycle operations for a resource type — create, update, delete, diff, read, and more.
+description: Providers implement the lifecycle operations for a resource type — reconcile, delete, diff, read, and more.
 sidebar:
   order: 4
 ---
@@ -51,44 +51,66 @@ Alchemy.Stack(
 ## Lifecycle operations
 
 A provider is an object implementing some subset of these operations.
-`create`, `update`, and `delete` are required; the rest are optional
-hooks alchemy uses for richer behavior.
+`reconcile` and `delete` are required; the rest are optional hooks
+alchemy uses for richer behavior.
 
-### `create`
+### `reconcile`
 
-Required. Called when a resource is declared but not yet persisted.
-Returns the **output attributes** that downstream resources can
-reference.
+Required. Called for every "make it so" intent — first-time
+provisioning, routine updates, and adoption takeovers. Returns the
+**output attributes** that downstream resources can reference.
+
+A reconciler is a single observe → ensure → sync → return flow:
 
 ```typescript
-create: Effect.fnUntraced(function* ({ id, instanceId, news, bindings }) {
+reconcile: Effect.fnUntraced(function* ({ news, output }) {
   const stripe = yield* StripeClient;
-  const product = yield* Effect.promise(() =>
-    stripe.products.create({ name: news.name }),
-  );
-  return { productId: product.id };
+
+  // Observe — fetch live state if we have a cached id.
+  let product = output?.productId
+    ? yield* Effect.tryPromise(() =>
+        stripe.products.retrieve(output.productId),
+      ).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+    : undefined;
+
+  // Ensure — create if missing.
+  if (!product) {
+    product = yield* Effect.tryPromise(() =>
+      stripe.products.create({ name: news.name }),
+    );
+  }
+
+  // Sync — patch any field that drifted from desired.
+  if (product.name !== news.name) {
+    product = yield* Effect.tryPromise(() =>
+      stripe.products.update(product!.id, { name: news.name }),
+    );
+  }
+
+  return { productId: product.id, name: product.name };
 }),
 ```
 
-`create` must be **idempotent** — alchemy may retry it after a state
-persistence failure. Use deterministic physical names so a retry
-finds the existing resource.
+The provider receives `output: Attributes | undefined` and
+`olds: Props | undefined`:
 
-### `update`
+| `output`    | `olds`      | Meaning                              |
+| ----------- | ----------- | ------------------------------------ |
+| `undefined` | `undefined` | Greenfield — no prior resource       |
+| defined     | defined     | Routine update                       |
+| defined     | `undefined` | Adoption — engine adopted via `read` |
 
-Required. Called when a resource exists and at least one input
-property changed (and the change isn't a replacement). Receives both
-old and new props plus the previous output:
+The reconciler must work for all three combinations. **Do not
+branch the body on `output === undefined`** — that just renames the
+old `create`/`update` split. Trust observed cloud state, not `olds`.
 
-```typescript
-update: Effect.fnUntraced(function* ({ news, olds, output }) {
-  const stripe = yield* StripeClient;
-  yield* Effect.promise(() =>
-    stripe.products.update(output.productId, { name: news.name }),
-  );
-  return output;
-}),
-```
+`reconcile` must be **idempotent**: alchemy may retry it after a
+state persistence failure. Deterministic physical names plus the
+observe step ensure a retry finds the existing resource and re-syncs
+any drifted fields.
+
+See the [custom provider guide](/guides/custom-provider#implement-reconcile)
+for the full walkthrough.
 
 ### `delete`
 
@@ -204,9 +226,9 @@ Resources with tag-based or naming-based ownership (most cloud
 resources) should brand foreign-owned attributes with `Unowned`.
 
 > **Lifecycle methods don't gate on ownership.** Once `read` clears a
-> resource for write, `create`/`update` can assume it's safe to
-> proceed. Don't repeat the ownership check inside `create` — that
-> just hides the policy decision from the engine.
+> resource for write, `reconcile` can assume it's safe to proceed.
+> Don't repeat the ownership check inside `reconcile` — that just
+> hides the policy decision from the engine.
 
 ### `precreate`
 

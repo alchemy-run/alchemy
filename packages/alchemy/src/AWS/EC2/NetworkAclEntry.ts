@@ -186,12 +186,8 @@ export const NetworkAclEntryProvider = () =>
           // Other properties can be updated by replacing the entry
         }),
 
-        create: Effect.fn(function* ({ news, session }) {
-          yield* session.note(
-            `Creating Network ACL Entry (rule ${news.ruleNumber})...`,
-          );
-
-          yield* ec2.createNetworkAclEntry({
+        reconcile: Effect.fn(function* ({ news, session }) {
+          const entryParams = {
             NetworkAclId: news.networkAclId as string,
             RuleNumber: news.ruleNumber,
             Protocol: news.protocol,
@@ -212,58 +208,38 @@ export const NetworkAclEntryProvider = () =>
                 }
               : undefined,
             DryRun: false,
-          });
+          };
 
-          yield* session.note(
-            `Network ACL Entry created: rule ${news.ruleNumber}`,
-          );
-
-          const entry = yield* findEntry(
+          // Observe — entries are identified by (networkAclId, ruleNumber,
+          // egress); look up the live entry to decide between create and
+          // replace.
+          const observed = yield* findEntry(
             news.networkAclId as string,
             news.ruleNumber,
             news.egress ?? false,
           );
-          if (!entry) {
-            return yield* Effect.fail(
-              new Error("Network ACL Entry not found after creation"),
+
+          // Ensure / Sync — if the entry doesn't exist, create it; otherwise
+          // ReplaceNetworkAclEntry overwrites its mutable properties in place.
+          if (observed === undefined) {
+            yield* session.note(
+              `Creating Network ACL Entry (rule ${news.ruleNumber})...`,
+            );
+            yield* ec2.createNetworkAclEntry(entryParams);
+            yield* session.note(
+              `Network ACL Entry created: rule ${news.ruleNumber}`,
+            );
+          } else {
+            yield* session.note(
+              `Updating Network ACL Entry (rule ${news.ruleNumber})...`,
+            );
+            yield* ec2.replaceNetworkAclEntry(entryParams);
+            yield* session.note(
+              `Network ACL Entry updated: rule ${news.ruleNumber}`,
             );
           }
-          return toAttrs(news, entry);
-        }),
 
-        update: Effect.fn(function* ({ news, session }) {
-          // To update a network ACL entry, we need to replace it
-          yield* session.note(
-            `Updating Network ACL Entry (rule ${news.ruleNumber})...`,
-          );
-
-          yield* ec2.replaceNetworkAclEntry({
-            NetworkAclId: news.networkAclId as string,
-            RuleNumber: news.ruleNumber,
-            Protocol: news.protocol,
-            RuleAction: news.ruleAction,
-            Egress: news.egress ?? false,
-            CidrBlock: news.cidrBlock,
-            Ipv6CidrBlock: news.ipv6CidrBlock,
-            IcmpTypeCode: news.icmpTypeCode
-              ? {
-                  Code: news.icmpTypeCode.code,
-                  Type: news.icmpTypeCode.type,
-                }
-              : undefined,
-            PortRange: news.portRange
-              ? {
-                  From: news.portRange.from,
-                  To: news.portRange.to,
-                }
-              : undefined,
-            DryRun: false,
-          });
-
-          yield* session.note(
-            `Network ACL Entry updated: rule ${news.ruleNumber}`,
-          );
-
+          // Re-read final state.
           const entry = yield* findEntry(
             news.networkAclId as string,
             news.ruleNumber,
@@ -271,7 +247,7 @@ export const NetworkAclEntryProvider = () =>
           );
           if (!entry) {
             return yield* Effect.fail(
-              new Error("Network ACL Entry not found after update"),
+              new Error("Network ACL Entry not found after reconcile"),
             );
           }
           return toAttrs(news, entry);

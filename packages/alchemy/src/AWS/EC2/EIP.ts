@@ -166,64 +166,59 @@ export const EIPProvider = () =>
           // Tags can be updated in-place
         }),
 
-        create: Effect.fn(function* ({ id, news = {}, session }) {
-          yield* session.note("Allocating Elastic IP address...");
+        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+          const desiredTags = yield* createTags(id, news.tags);
 
-          const result = yield* ec2.allocateAddress({
-            Domain: news.domain ?? "vpc",
-            PublicIpv4Pool: news.publicIpv4Pool,
-            NetworkBorderGroup: news.networkBorderGroup,
-            CustomerOwnedIpv4Pool: news.customerOwnedIpv4Pool,
-            TagSpecifications: [
-              {
-                ResourceType: "elastic-ip",
-                Tags: createTagsList(yield* createTags(id, news.tags)),
-              },
-            ],
-            DryRun: false,
-          });
-
-          const allocationId = result.AllocationId! as AllocationId;
-          yield* session.note(`Elastic IP allocated: ${allocationId}`);
-
-          return {
-            allocationId,
-            eipArn:
-              `arn:aws:ec2:${region}:${accountId}:elastic-ip/${allocationId}` as EIPArn,
-            publicIp: result.PublicIp!,
-            publicIpv4Pool: result.PublicIpv4Pool,
-            domain: (result.Domain as "vpc" | "standard") ?? "vpc",
-            networkBorderGroup: result.NetworkBorderGroup,
-            customerOwnedIp: result.CustomerOwnedIp,
-            customerOwnedIpv4Pool: result.CustomerOwnedIpv4Pool,
-            carrierIp: result.CarrierIp,
-          } satisfies EIP["Attributes"];
-        }),
-
-        update: Effect.fn(function* ({ id, news = {}, output, session }) {
-          const allocationId = output.allocationId;
-
-          // Handle tag updates
-          const newTags = yield* createTags(id, news.tags);
-          const oldTags =
-            (yield* ec2
-              .describeTags({
-                Filters: [
-                  { Name: "resource-id", Values: [allocationId] },
-                  { Name: "resource-type", Values: ["elastic-ip"] },
-                ],
-              })
+          // Observe — try to find an existing EIP via the cached allocationId.
+          // If it was released out-of-band, fall through to allocate.
+          let address: ec2.Address | undefined;
+          if (output?.allocationId) {
+            const lookup = yield* ec2
+              .describeAddresses({ AllocationIds: [output.allocationId] })
               .pipe(
-                Effect.map(
-                  (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
+                Effect.catchTag("InvalidAllocationID.NotFound", () =>
+                  Effect.succeed({ Addresses: [] }),
                 ),
-              )) ?? {};
+              );
+            address = lookup.Addresses?.[0];
+          }
 
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Ensure — allocate a new EIP when none was observed.
+          if (address === undefined) {
+            yield* session.note("Allocating Elastic IP address...");
+            const result = yield* ec2.allocateAddress({
+              Domain: news.domain ?? "vpc",
+              PublicIpv4Pool: news.publicIpv4Pool,
+              NetworkBorderGroup: news.networkBorderGroup,
+              CustomerOwnedIpv4Pool: news.customerOwnedIpv4Pool,
+              TagSpecifications: [
+                {
+                  ResourceType: "elastic-ip",
+                  Tags: createTagsList(desiredTags),
+                },
+              ],
+              DryRun: false,
+            });
+            const allocationId = result.AllocationId! as AllocationId;
+            yield* session.note(`Elastic IP allocated: ${allocationId}`);
+            const lookup = yield* ec2.describeAddresses({
+              AllocationIds: [allocationId],
+            });
+            address = lookup.Addresses?.[0];
+            if (!address) {
+              return yield* Effect.fail(
+                new Error(`EIP ${allocationId} disappeared after allocation`),
+              );
+            }
+          }
 
+          const allocationId = address.AllocationId! as AllocationId;
+
+          // Sync tags — observed cloud tags vs desired.
+          const currentTags = Object.fromEntries(
+            (address.Tags ?? []).map((t) => [t.Key!, t.Value!]),
+          ) as Record<string, string>;
+          const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {
             yield* ec2.deleteTags({
               Resources: [allocationId],
@@ -237,10 +232,20 @@ export const EIPProvider = () =>
               Tags: upsert,
               DryRun: false,
             });
-            yield* session.note("Updated tags");
           }
 
-          return output;
+          return {
+            allocationId,
+            eipArn:
+              `arn:aws:ec2:${region}:${accountId}:elastic-ip/${allocationId}` as EIPArn,
+            publicIp: address.PublicIp!,
+            publicIpv4Pool: address.PublicIpv4Pool,
+            domain: (address.Domain as "vpc" | "standard") ?? "vpc",
+            networkBorderGroup: address.NetworkBorderGroup,
+            customerOwnedIp: address.CustomerOwnedIp,
+            customerOwnedIpv4Pool: address.CustomerOwnedIpv4Pool,
+            carrierIp: address.CarrierIp,
+          } satisfies EIP["Attributes"];
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

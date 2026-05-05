@@ -162,84 +162,104 @@ export const VirtualMFADeviceProvider = () =>
             tags: toTagRecord(tags.Tags),
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const deviceName = yield* toName(id, news);
-          const tags = {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
-          const created = yield* iam.createVirtualMFADevice({
-            Path: news.path,
-            VirtualMFADeviceName: deviceName,
-            Tags: createTagsList(tags),
-          });
-          if (!created.VirtualMFADevice.SerialNumber) {
+
+          // Observe — virtual MFA devices have AWS-generated serial
+          // numbers, so we can only locate the existing device when we
+          // already have its serial from a prior output.
+          const observed = output
+            ? yield* readDevice({
+                serialNumber: output.serialNumber,
+                userName: output.userName,
+              })
+            : undefined;
+
+          // Ensure — create the device when missing. The seed and QR
+          // code are only returned on creation, so on adoption the best
+          // we can do is preserve the existing redacted values.
+          let serialNumber = observed?.SerialNumber ?? output?.serialNumber;
+          let base32StringSeed = output?.base32StringSeed;
+          let qrCodePNG = output?.qrCodePNG;
+
+          if (!observed?.SerialNumber) {
+            const deviceName = yield* toName(id, news);
+            const created = yield* iam.createVirtualMFADevice({
+              Path: news.path,
+              VirtualMFADeviceName: deviceName,
+              Tags: createTagsList(desiredTags),
+            });
+            if (!created.VirtualMFADevice.SerialNumber) {
+              return yield* Effect.fail(
+                new Error(`createVirtualMFADevice returned no serial number`),
+              );
+            }
+            serialNumber = created.VirtualMFADevice.SerialNumber;
+            base32StringSeed = toRedactedBytes(
+              created.VirtualMFADevice.Base32StringSeed,
+            );
+            qrCodePNG = toRedactedBytes(created.VirtualMFADevice.QRCodePNG);
+
+            // The device was just created, so it is unassigned. Activate
+            // it for the user when activation codes are provided. After
+            // first activation the codes lose their meaning (`diff`
+            // triggers replacement on code change).
+            if (
+              news.userName &&
+              news.authenticationCode1 &&
+              news.authenticationCode2
+            ) {
+              yield* iam.enableMFADevice({
+                UserName: news.userName,
+                SerialNumber: serialNumber,
+                AuthenticationCode1: news.authenticationCode1,
+                AuthenticationCode2: news.authenticationCode2,
+              });
+            }
+          }
+
+          if (!serialNumber) {
             return yield* Effect.fail(
-              new Error(`createVirtualMFADevice returned no serial number`),
+              new Error(`Virtual MFA device has no serial number`),
             );
           }
-          if (
-            news.userName &&
-            news.authenticationCode1 &&
-            news.authenticationCode2
-          ) {
-            yield* iam.enableMFADevice({
-              UserName: news.userName,
-              SerialNumber: created.VirtualMFADevice.SerialNumber,
-              AuthenticationCode1: news.authenticationCode1,
-              AuthenticationCode2: news.authenticationCode2,
-            });
-          }
-          const response = yield* readDevice({
-            serialNumber: created.VirtualMFADevice.SerialNumber,
-            userName: news.userName,
+
+          // Sync tags against the cloud's actual tags.
+          const observedTagsResp = yield* iam.listMFADeviceTags({
+            SerialNumber: serialNumber,
           });
-          yield* session.note(created.VirtualMFADevice.SerialNumber);
-          return {
-            serialNumber: created.VirtualMFADevice.SerialNumber,
-            userName: response?.UserName ?? news.userName,
-            enableDate: response?.EnableDate,
-            base32StringSeed: toRedactedBytes(
-              created.VirtualMFADevice.Base32StringSeed,
-            ),
-            qrCodePNG: toRedactedBytes(created.VirtualMFADevice.QRCodePNG),
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          const observedTags = toTagRecord(observedTagsResp.Tags);
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* iam.tagMFADevice({
-              SerialNumber: output.serialNumber,
+              SerialNumber: serialNumber,
               Tags: upsert,
             });
           }
           if (removed.length > 0) {
             yield* iam.untagMFADevice({
-              SerialNumber: output.serialNumber,
+              SerialNumber: serialNumber,
               TagKeys: removed,
             });
           }
-          const response = yield* readDevice({
-            serialNumber: output.serialNumber,
-            userName: output.userName,
+
+          // Re-read for fresh `EnableDate` / `UserName` after activation.
+          const fresh = yield* readDevice({
+            serialNumber,
+            userName: news.userName ?? output?.userName,
           });
-          yield* session.note(output.serialNumber);
+
+          yield* session.note(serialNumber);
           return {
-            serialNumber: output.serialNumber,
-            userName: response?.UserName ?? output.userName,
-            enableDate: response?.EnableDate ?? output.enableDate,
-            base32StringSeed: output.base32StringSeed,
-            qrCodePNG: output.qrCodePNG,
-            tags: newTags,
+            serialNumber,
+            userName: fresh?.UserName ?? news.userName ?? output?.userName,
+            enableDate: fresh?.EnableDate ?? output?.enableDate,
+            base32StringSeed,
+            qrCodePNG,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

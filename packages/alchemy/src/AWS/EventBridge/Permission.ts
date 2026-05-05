@@ -89,12 +89,31 @@ export const PermissionProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const statementId = yield* toStatementId(id, news);
-          const eventBusName = news.eventBusName ?? "default";
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const statementId =
+            output?.statementId ?? (yield* toStatementId(id, news));
+          const eventBusName =
+            output?.eventBusName ?? news.eventBusName ?? "default";
+          const eventBusParam =
+            eventBusName !== "default" ? eventBusName : undefined;
+
+          // Observe + Ensure for an existence-only resource: there is no
+          // server-side `describePermission` for a single statement, so we
+          // remove-then-put unconditionally. `removePermission` tolerates
+          // missing statements; `putPermission` is idempotent on identical
+          // params and overwrites on different ones — this is the official
+          // recommended update path.
+          yield* eventbridge
+            .removePermission({
+              EventBusName: eventBusParam,
+              StatementId: statementId,
+            })
+            .pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
 
           yield* eventbridge.putPermission({
-            EventBusName: eventBusName !== "default" ? eventBusName : undefined,
+            EventBusName: eventBusParam,
             Action: news.action ?? "events:PutEvents",
             Principal: news.principal,
             StatementId: statementId,
@@ -107,36 +126,6 @@ export const PermissionProvider = () =>
             statementId,
             eventBusName,
           };
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          yield* eventbridge
-            .removePermission({
-              EventBusName:
-                output.eventBusName !== "default"
-                  ? output.eventBusName
-                  : undefined,
-              StatementId: output.statementId,
-            })
-            .pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            );
-
-          yield* eventbridge.putPermission({
-            EventBusName:
-              output.eventBusName !== "default"
-                ? output.eventBusName
-                : undefined,
-            Action: news.action ?? "events:PutEvents",
-            Principal: news.principal,
-            StatementId: output.statementId,
-            Condition: news.condition,
-          });
-
-          yield* session.note(
-            `Updated EventBridge permission ${output.statementId}`,
-          );
-
-          return output;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* eventbridge

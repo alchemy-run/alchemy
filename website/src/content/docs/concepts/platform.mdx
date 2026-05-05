@@ -118,7 +118,7 @@ cases — but the surface is open.
 ```typescript
 export const MyPlatform = Platform<MyConfig, Handlers>(
   "MyPlatform",
-  // ...lifecycle hooks (create / update / delete) that build the
+  // ...lifecycle hooks (reconcile / delete) that build the
   //    infrastructure and upload the bundled handler.
 );
 ```

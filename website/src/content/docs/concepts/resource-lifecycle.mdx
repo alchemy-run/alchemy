@@ -9,25 +9,29 @@ import Terminal from "../../../components/Terminal.astro";
 import DAG from "../../../components/DAG.astro";
 
 Every [Resource](/concepts/resource) goes through the same lifecycle:
-**plan → create → update → (replace) → delete**. This page walks
-through each step, what triggers it, and how alchemy recovers when
-things go wrong. For the CLI flags that drive these operations, see
-the [CLI reference](/guides/cli).
+**plan → reconcile → (replace) → delete**. The plan classifies each
+resource as create, update, replace, delete, or no-op, but the
+provider implements a single `reconcile` function that converges the
+cloud's actual state to what's declared — whether that's the first
+provisioning, a routine update, or an adoption takeover. This page
+walks through each step, what triggers it, and how alchemy recovers
+when things go wrong. For the CLI flags that drive these operations,
+see the [CLI reference](/guides/cli).
 
 ## The lifecycle, end-to-end
 
 <DAG
   nodes={[
     { id: "Plan", tone: "accent" },
-    { id: "Create" },
-    { id: "Update" },
+    { id: "Reconcile (create)" },
+    { id: "Reconcile (update)" },
     { id: "Replace", tone: "warn" },
     { id: "Delete", tone: "danger" },
     { id: "Noop" },
   ]}
   edges={[
-    { from: "Plan", to: "Create", label: "new" },
-    { from: "Plan", to: "Update", label: "changed" },
+    { from: "Plan", to: "Reconcile (create)", label: "new" },
+    { from: "Plan", to: "Reconcile (update)", label: "changed" },
     { from: "Plan", to: "Replace", label: "breaking" },
     { from: "Plan", to: "Delete", label: "removed" },
     { from: "Plan", to: "Noop", label: "unchanged" },
@@ -35,9 +39,10 @@ the [CLI reference](/guides/cli).
   ]}
 />
 
-Each transition is implemented by the resource's
-[Provider](/concepts/provider). The same engine drives `alchemy
-deploy`, `alchemy destroy`, and `alchemy dev`.
+Both create and update intents resolve to the provider's single
+`reconcile` function. Replace runs `reconcile` against a fresh
+instance id and then deletes the old generation. The same engine
+drives `alchemy deploy`, `alchemy destroy`, and `alchemy dev`.
 
 ## Plan
 
@@ -64,24 +69,38 @@ between in-place updates and replacements.
 Use `alchemy plan` (or `alchemy deploy --dry-run`) to see the plan
 without applying it.
 
-## Create
+## Reconcile
 
-When a resource doesn't exist in state, alchemy calls
-`provider.create`. Creates are **idempotent**: physical names are
-deterministic from `stack/stage/logical-id`, so retrying a failed
-create finds the existing resource instead of duplicating it.
+Whether a resource is being created for the first time, updated in
+place, or adopted from existing infrastructure, alchemy calls a
+single function: `provider.reconcile`.
 
-Resources with no dependencies create in parallel. Resources that
-depend on others wait for upstream `Output`s to resolve.
+Reconcile must be **convergent**: given the desired state in `news`,
+it brings the cloud to that state regardless of starting point. It
+receives:
 
-## Update
+- `news` — desired props
+- `output` — current attributes (`undefined` on greenfield, defined
+  after a prior reconcile or after adoption)
+- `olds` — previous props (`undefined` on greenfield AND on adoption;
+  defined only on routine updates)
+- `bindings` — resolved binding payload from upstream policies
 
-When properties change but the resource doesn't need to be replaced,
-alchemy calls `provider.update`. The provider receives both the old
-and new props and applies the diff in-place.
+A reconciler is shaped like **observe → ensure → sync → return**:
+read live cloud state via `getX`/`describeX`, create the resource if
+missing (catching `AlreadyExists`-style errors as races), then for
+each mutable aspect diff observed cloud state against desired and
+apply only the delta.
 
-A second pass — **convergence** — re-runs `update` for any resource
-whose inputs changed because an upstream output changed mid-deploy.
+Because each step is independently idempotent, a partial reconcile
+that crashed midway resumes correctly on the next run. Physical
+names are deterministic from `stack/stage/logical-id`, so the
+"observe" step finds the previous reconcile's output even if state
+persistence failed.
+
+A second pass — **convergence** — re-runs `reconcile` for any
+resource whose inputs changed because an upstream output changed
+mid-deploy.
 
 ## Replace
 
@@ -121,10 +140,12 @@ Proceed?
 
 State persistence can fail after the cloud operation succeeds — the
 network drops between "bucket created" and "state saved". Alchemy
-handles this by requiring `create` and `delete` to be safe to retry:
+handles this by requiring `reconcile` and `delete` to be safe to
+retry:
 
-- **Create**: deterministic physical names mean a retry finds the
-  existing resource instead of creating a duplicate.
+- **Reconcile**: deterministic physical names plus the observe-step
+  mean a retry finds the existing resource instead of creating a
+  duplicate, and re-syncs any aspect that drifted.
 - **Delete**: a missing resource is treated as already deleted.
 - **Read**: providers can implement `read` so alchemy can recover
   state from the live cloud when persistence fails partway, and to

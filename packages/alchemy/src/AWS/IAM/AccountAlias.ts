@@ -59,34 +59,29 @@ export const AccountAliasProvider = () =>
       }
       return { accountAlias };
     }),
-    create: Effect.fn(function* ({ news, session }) {
+    reconcile: Effect.fn(function* ({ news, session }) {
+      // Observe — the account alias is a singleton; the only way to know
+      // which alias is set is to list and take the first entry.
       const existing = yield* readAccountAlias;
-      if (existing && existing !== news.accountAlias) {
-        return yield* Effect.fail(
-          new Error(
-            `Account alias '${existing}' already exists and must be removed before '${news.accountAlias}' can be created`,
-          ),
-        );
-      }
-      if (!existing) {
+
+      // Ensure / Sync — IAM only allows a single alias per account, so
+      // applying the desired alias is just `createAccountAlias`. If a
+      // different alias already exists, replace it by creating the new one
+      // and deleting the old (the API also supports overwriting in a
+      // single call but we keep delete idempotent).
+      if (existing !== news.accountAlias) {
         yield* iam.createAccountAlias({
           AccountAlias: news.accountAlias,
         });
+        if (existing && existing !== news.accountAlias) {
+          yield* iam
+            .deleteAccountAlias({
+              AccountAlias: existing,
+            })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
+        }
       }
-      yield* session.note(news.accountAlias);
-      return { accountAlias: news.accountAlias };
-    }),
-    update: Effect.fn(function* ({ news, olds, session }) {
-      if (olds.accountAlias !== news.accountAlias) {
-        yield* iam.createAccountAlias({
-          AccountAlias: news.accountAlias,
-        });
-        yield* iam
-          .deleteAccountAlias({
-            AccountAlias: olds.accountAlias,
-          })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
-      }
+
       yield* session.note(news.accountAlias);
       return { accountAlias: news.accountAlias };
     }),

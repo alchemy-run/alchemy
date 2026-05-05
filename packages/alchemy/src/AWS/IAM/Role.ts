@@ -11,7 +11,6 @@ import {
   createTagsList,
   diffTags,
   hasAlchemyTags,
-  hasTags,
 } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -297,92 +296,94 @@ export const RoleProvider = () =>
           };
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const roleName = yield* toRoleName(id, news);
-          const tags = {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const roleName = output?.roleName ?? (yield* toRoleName(id, news));
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
 
-          // Engine has cleared us via `read` (foreign-tagged roles are
-          // surfaced as `Unowned`). On a race between read and create,
-          // adopt the existing role.
-          const created = yield* iam
-            .createRole({
-              Path: news.path,
-              RoleName: roleName,
-              AssumeRolePolicyDocument: stringifyPolicyDocument(
-                news.assumeRolePolicyDocument,
-              ),
-              Description: news.description,
-              MaxSessionDuration: news.maxSessionDuration,
-              PermissionsBoundary: news.permissionsBoundary,
-              Tags: createTagsList(tags),
-            })
+          // Observe — read the role from IAM. Absence is signalled by
+          // `NoSuchEntityException`; ownership has already been verified
+          // upstream so adopting a `Unowned` role is the engine's call.
+          let observedRole = yield* iam
+            .getRole({ RoleName: roleName })
             .pipe(
-              Effect.catchTag("EntityAlreadyExistsException", () =>
-                iam.getRole({ RoleName: roleName }),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
               ),
             );
 
-          yield* syncManagedPolicies({
-            roleName,
-            olds: [],
-            news: news.managedPolicyArns ?? [],
-          });
-          yield* syncInlinePolicies({
-            roleName,
-            olds: {},
-            news: news.inlinePolicies ?? {},
-          });
+          // Ensure — create the role when missing. A peer reconciler may
+          // have created it concurrently; tolerate that race by reading
+          // the existing role.
+          if (!observedRole?.Role) {
+            observedRole = yield* iam
+              .createRole({
+                Path: news.path,
+                RoleName: roleName,
+                AssumeRolePolicyDocument: stringifyPolicyDocument(
+                  news.assumeRolePolicyDocument,
+                ),
+                Description: news.description,
+                MaxSessionDuration: news.maxSessionDuration,
+                PermissionsBoundary: news.permissionsBoundary,
+                Tags: createTagsList(desiredTags),
+              })
+              .pipe(
+                Effect.catchTag("EntityAlreadyExistsException", () =>
+                  iam.getRole({ RoleName: roleName }),
+                ),
+              );
+          }
 
-          const roleArn = (created.Role?.Arn ??
-            `arn:aws:iam::${(yield* AWSEnvironment).accountId}:role/${roleName}`) as RoleArn;
-          yield* session.note(roleArn);
+          const observedAssumePolicy = parsePolicyDocument(
+            observedRole.Role?.AssumeRolePolicyDocument,
+          );
+          const observedDescription = observedRole.Role?.Description;
+          const observedMaxSessionDuration =
+            observedRole.Role?.MaxSessionDuration;
+          const observedPermissionsBoundary =
+            observedRole.Role?.PermissionsBoundary?.PermissionsBoundaryArn;
 
-          return {
-            roleArn,
-            roleName,
-            roleId: created.Role?.RoleId,
-            path: created.Role?.Path ?? news.path ?? "/",
-            assumeRolePolicyDocument: news.assumeRolePolicyDocument,
-            managedPolicyArns: news.managedPolicyArns ?? [],
-            inlinePolicies: news.inlinePolicies ?? {},
-            description: news.description,
-            maxSessionDuration: news.maxSessionDuration,
-            permissionsBoundary: news.permissionsBoundary,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* iam.updateAssumeRolePolicy({
-            RoleName: output.roleName,
-            PolicyDocument: stringifyPolicyDocument(
-              news.assumeRolePolicyDocument,
-            ),
-          });
-
+          // Sync assume-role policy — only call updateAssumeRolePolicy
+          // when the document actually differs.
           if (
-            news.description !== olds.description ||
-            news.maxSessionDuration !== olds.maxSessionDuration
+            JSON.stringify(observedAssumePolicy ?? null) !==
+            JSON.stringify(news.assumeRolePolicyDocument)
+          ) {
+            yield* iam.updateAssumeRolePolicy({
+              RoleName: roleName,
+              PolicyDocument: stringifyPolicyDocument(
+                news.assumeRolePolicyDocument,
+              ),
+            });
+          }
+
+          // Sync description / maxSessionDuration via updateRole.
+          if (
+            observedDescription !== news.description ||
+            observedMaxSessionDuration !== news.maxSessionDuration
           ) {
             yield* iam.updateRole({
-              RoleName: output.roleName,
+              RoleName: roleName,
               Description: news.description,
               MaxSessionDuration: news.maxSessionDuration,
             });
           }
 
-          if (news.permissionsBoundary !== olds.permissionsBoundary) {
+          // Sync permissions boundary — put when desired, delete when
+          // cleared, no-op when unchanged.
+          if (news.permissionsBoundary !== observedPermissionsBoundary) {
             if (news.permissionsBoundary) {
               yield* iam.putRolePermissionsBoundary({
-                RoleName: output.roleName,
+                RoleName: roleName,
                 PermissionsBoundary: news.permissionsBoundary,
               });
-            } else if (olds.permissionsBoundary) {
+            } else if (observedPermissionsBoundary) {
               yield* iam
                 .deleteRolePermissionsBoundary({
-                  RoleName: output.roleName,
+                  RoleName: roleName,
                 })
                 .pipe(
                   Effect.catchTag("NoSuchEntityException", () => Effect.void),
@@ -390,50 +391,58 @@ export const RoleProvider = () =>
             }
           }
 
+          // Sync managed and inline policies — observe the live state
+          // and apply only the delta. This is robust to manual edits in
+          // the AWS console and to adoption.
+          const [observedManagedPolicies, observedInlinePolicies] =
+            yield* Effect.all([
+              readManagedPolicies(roleName),
+              readInlinePolicies(roleName),
+            ]);
           yield* syncManagedPolicies({
-            roleName: output.roleName,
-            olds: olds.managedPolicyArns ?? [],
+            roleName,
+            olds: observedManagedPolicies,
             news: news.managedPolicyArns ?? [],
           });
           yield* syncInlinePolicies({
-            roleName: output.roleName,
-            olds: olds.inlinePolicies ?? {},
+            roleName,
+            olds: observedInlinePolicies,
             news: news.inlinePolicies ?? {},
           });
 
-          // Use the cloud's actual tags as the "previous state" so that an
-          // adoption-takeover (where olds.tags == news.tags but the cloud
-          // tags identify a different logical id) correctly rewrites the
-          // ownership tags on the role.
-          const oldTags = output.tags ?? {};
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags against the cloud's actual tags so adoption /
+          // out-of-band tag changes converge.
+          const observedTags = yield* readTags(roleName);
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* iam.tagRole({
-              RoleName: output.roleName,
+              RoleName: roleName,
               Tags: upsert,
             });
           }
           if (removed.length > 0) {
             yield* iam.untagRole({
-              RoleName: output.roleName,
+              RoleName: roleName,
               TagKeys: removed,
             });
           }
 
-          const liveRole = yield* iam.getRole({
-            RoleName: output.roleName,
-          });
+          // Re-read for fresh attributes after all mutations.
+          const liveRole = yield* iam.getRole({ RoleName: roleName });
+          const roleArn = (liveRole.Role?.Arn ??
+            observedRole.Role?.Arn ??
+            `arn:aws:iam::${(yield* AWSEnvironment).accountId}:role/${roleName}`) as RoleArn;
 
-          yield* session.note(output.roleArn);
+          yield* session.note(roleArn);
           return {
-            roleArn: (liveRole.Role?.Arn ?? output.roleArn) as RoleArn,
-            roleName: liveRole.Role?.RoleName ?? output.roleName,
-            roleId: liveRole.Role?.RoleId ?? output.roleId,
-            path: liveRole.Role?.Path ?? output.path,
+            roleArn,
+            roleName: liveRole.Role?.RoleName ?? roleName,
+            roleId: liveRole.Role?.RoleId ?? observedRole.Role?.RoleId,
+            path:
+              liveRole.Role?.Path ??
+              observedRole.Role?.Path ??
+              news.path ??
+              "/",
             assumeRolePolicyDocument: news.assumeRolePolicyDocument,
             managedPolicyArns: news.managedPolicyArns ?? [],
             inlinePolicies: news.inlinePolicies ?? {},
@@ -443,7 +452,7 @@ export const RoleProvider = () =>
             permissionsBoundary:
               liveRole.Role?.PermissionsBoundary?.PermissionsBoundaryArn ??
               news.permissionsBoundary,
-            tags: newTags,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

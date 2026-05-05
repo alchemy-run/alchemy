@@ -101,91 +101,115 @@ export const SAMLProviderProvider = () =>
         tags: toTagRecord(tags.Tags),
       };
     }),
-    create: Effect.fn(function* ({ id, news, session }) {
+    reconcile: Effect.fn(function* ({ id, news, output, session }) {
       const internalTags = yield* createInternalTags(id);
-      const tags = {
+      const desiredTags = {
         ...internalTags,
         ...news.tags,
       };
-      const response = yield* iam
-        .createSAMLProvider({
-          Name: news.name,
-          SAMLMetadataDocument: news.samlMetadataDocument,
-          AssertionEncryptionMode: news.assertionEncryptionMode,
-          AddPrivateKey: news.addPrivateKey
-            ? unwrapRedactedString(news.addPrivateKey)
-            : undefined,
-          Tags: Object.entries(tags).map(([Key, Value]) => ({
-            Key,
-            Value,
-          })),
-        })
+      const accountId = (yield* AWSEnvironment).accountId;
+      const samlProviderArn =
+        output?.samlProviderArn ??
+        `arn:aws:iam::${accountId}:saml-provider/${news.name}`;
+
+      // Observe — `getSAMLProvider` returns the metadata, encryption
+      // mode, and UUID; absence is `NoSuchEntityException`.
+      let observed = yield* iam
+        .getSAMLProvider({ SAMLProviderArn: samlProviderArn })
         .pipe(
-          Effect.catchTag("EntityAlreadyExistsException", () =>
-            Effect.gen(function* () {
-              const accountId = (yield* AWSEnvironment).accountId;
-              const existingArn = `arn:aws:iam::${accountId}:saml-provider/${news.name}`;
-              const existingTags = yield* iam.listSAMLProviderTags({
-                SAMLProviderArn: existingArn,
-              });
-              if (!hasTags(internalTags, existingTags.Tags)) {
-                return yield* Effect.fail(
-                  new Error(
-                    `SAML provider '${news.name}' already exists and is not managed by alchemy`,
-                  ),
-                );
-              }
-              return { SAMLProviderArn: existingArn };
-            }),
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed(undefined),
           ),
         );
-      const samlProviderArn = response.SAMLProviderArn ?? news.name;
-      yield* session.note(samlProviderArn);
-      return {
-        samlProviderArn,
-        name: news.name,
-        samlProviderUUID: undefined,
-        samlMetadataDocument: news.samlMetadataDocument,
-        assertionEncryptionMode: news.assertionEncryptionMode,
-        tags,
-      };
-    }),
-    update: Effect.fn(function* ({ id, news, olds, output, session }) {
-      yield* iam.updateSAMLProvider({
-        SAMLProviderArn: output.samlProviderArn,
-        SAMLMetadataDocument:
-          news.samlMetadataDocument !== olds.samlMetadataDocument
-            ? news.samlMetadataDocument
-            : undefined,
-        AssertionEncryptionMode: news.assertionEncryptionMode,
-        AddPrivateKey: news.addPrivateKey
-          ? unwrapRedactedString(news.addPrivateKey)
-          : undefined,
+
+      // Ensure — create when missing. Race with a peer is recovered by
+      // verifying alchemy ownership tags on the existing provider.
+      if (!observed) {
+        const created = yield* iam
+          .createSAMLProvider({
+            Name: news.name,
+            SAMLMetadataDocument: news.samlMetadataDocument,
+            AssertionEncryptionMode: news.assertionEncryptionMode,
+            AddPrivateKey: news.addPrivateKey
+              ? unwrapRedactedString(news.addPrivateKey)
+              : undefined,
+            Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+              Key,
+              Value,
+            })),
+          })
+          .pipe(
+            Effect.catchTag("EntityAlreadyExistsException", () =>
+              Effect.gen(function* () {
+                const existingTags = yield* iam.listSAMLProviderTags({
+                  SAMLProviderArn: samlProviderArn,
+                });
+                if (!hasTags(internalTags, existingTags.Tags)) {
+                  return yield* Effect.fail(
+                    new Error(
+                      `SAML provider '${news.name}' already exists and is not managed by alchemy`,
+                    ),
+                  );
+                }
+                return { SAMLProviderArn: samlProviderArn };
+              }),
+            ),
+          );
+        observed = yield* iam.getSAMLProvider({
+          SAMLProviderArn: created.SAMLProviderArn ?? samlProviderArn,
+        });
+      } else {
+        // Sync metadata / encryption mode — `updateSAMLProvider` is a
+        // partial update; only push the doc when it actually differs.
+        if (
+          (observed.SAMLMetadataDocument ?? undefined) !==
+            news.samlMetadataDocument ||
+          observed.AssertionEncryptionMode !== news.assertionEncryptionMode ||
+          news.addPrivateKey !== undefined
+        ) {
+          yield* iam.updateSAMLProvider({
+            SAMLProviderArn: samlProviderArn,
+            SAMLMetadataDocument:
+              (observed.SAMLMetadataDocument ?? undefined) !==
+              news.samlMetadataDocument
+                ? news.samlMetadataDocument
+                : undefined,
+            AssertionEncryptionMode: news.assertionEncryptionMode,
+            AddPrivateKey: news.addPrivateKey
+              ? unwrapRedactedString(news.addPrivateKey)
+              : undefined,
+          });
+        }
+      }
+
+      // Sync tags against the cloud's actual tags.
+      const observedTagsResp = yield* iam.listSAMLProviderTags({
+        SAMLProviderArn: samlProviderArn,
       });
-      const internalTags = yield* createInternalTags(id);
-      const oldTags = { ...internalTags, ...(olds.tags ?? {}) };
-      const newTags = { ...internalTags, ...(news.tags ?? {}) };
-      const { removed, upsert } = diffTags(oldTags, newTags);
+      const observedTags = toTagRecord(observedTagsResp.Tags);
+      const { removed, upsert } = diffTags(observedTags, desiredTags);
       if (upsert.length > 0) {
         yield* iam.tagSAMLProvider({
-          SAMLProviderArn: output.samlProviderArn,
+          SAMLProviderArn: samlProviderArn,
           Tags: upsert,
         });
       }
       if (removed.length > 0) {
         yield* iam.untagSAMLProvider({
-          SAMLProviderArn: output.samlProviderArn,
+          SAMLProviderArn: samlProviderArn,
           TagKeys: removed,
         });
       }
-      yield* session.note(output.samlProviderArn);
+
+      yield* session.note(samlProviderArn);
       return {
-        samlProviderArn: output.samlProviderArn,
-        name: output.name,
-        samlProviderUUID: output.samlProviderUUID,
+        samlProviderArn,
+        name: news.name,
+        samlProviderUUID:
+          observed?.SAMLProviderUUID ?? output?.samlProviderUUID,
         samlMetadataDocument: news.samlMetadataDocument,
         assertionEncryptionMode: news.assertionEncryptionMode,
-        tags: newTags,
+        tags: desiredTags,
       };
     }),
     delete: Effect.fn(function* ({ output }) {

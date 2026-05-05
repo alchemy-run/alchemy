@@ -190,12 +190,15 @@ export const InsightRuleProvider = () =>
             ? state
             : Unowned(state);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* createRuleName(id, news);
-          // Engine has cleared us via `read` (foreign-tagged insight rules
-          // are surfaced as `Unowned`). `putInsightRule` is idempotent.
+        reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
+          // Observe — pin the physical name from `output` if present;
+          // otherwise derive from desired props. Read whatever exists in
+          // CloudWatch so we have a baseline for tag-diffing on adoption.
+          const name = output?.ruleName ?? (yield* createRuleName(id, news));
           const existing = yield* readInsightRule(name);
 
+          // Ensure — `putInsightRule` is an upsert; sending the full
+          // desired config every reconcile converges the cloud.
           yield* retryConcurrent(
             cloudwatch.putInsightRule({
               ...toPutInsightRuleInput(news),
@@ -203,10 +206,13 @@ export const InsightRuleProvider = () =>
             }),
           );
 
+          // Sync tags — diff against `olds.tags` when we have prior state,
+          // otherwise fall back to what we observed. Adoption flows take
+          // the latter path.
           const tags = yield* updateResourceTags({
             id,
             resourceArn: ruleArn(name),
-            olds: existing?.tags,
+            olds: olds?.tags ?? existing?.tags,
             news: news.tags,
           });
 
@@ -215,38 +221,7 @@ export const InsightRuleProvider = () =>
           const state = yield* readInsightRule(name);
           if (!state) {
             return yield* Effect.fail(
-              new Error(`failed to read created insight rule '${name}'`),
-            );
-          }
-
-          return {
-            ...state,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* retryConcurrent(
-            cloudwatch.putInsightRule({
-              ...toPutInsightRuleInput(news),
-              RuleName: output.ruleName,
-            }),
-          );
-
-          const tags = yield* updateResourceTags({
-            id,
-            resourceArn: output.ruleArn,
-            olds: olds.tags,
-            news: news.tags,
-          });
-
-          yield* session.note(output.ruleArn);
-
-          const state = yield* readInsightRule(output.ruleName);
-          if (!state) {
-            return yield* Effect.fail(
-              new Error(
-                `failed to read updated insight rule '${output.ruleName}'`,
-              ),
+              new Error(`failed to read reconciled insight rule '${name}'`),
             );
           }
 

@@ -6,12 +6,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  createInternalTags,
-  createTagsList,
-  diffTags,
-  hasAlchemyTags,
-} from "../../Tags.ts";
+import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -172,24 +167,115 @@ export const TopicProvider = () =>
         return { action: "replace" } as const;
       }
     }),
-    create: Effect.fn(function* ({ id, news = {}, session }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, olds, output, session }) {
       const topicName = yield* toTopicName(id, news);
-      const tags = {
-        ...(yield* createInternalTags(id)),
-        ...news.tags,
-      };
+      const internalTags = yield* createInternalTags(id);
+      const desiredTags = { ...internalTags, ...news.tags };
+      const desiredAttributes = toAttributes(news);
+      const isFifo = news.fifo ?? false;
 
-      const response = yield* sns.createTopic({
+      // Observe + ensure — `createTopic` is idempotent for an identical
+      // (name, FifoTopic) pair, so we use it both to ensure-on-greenfield
+      // and to fetch the ARN for adoption. We deliberately pass ONLY the
+      // FifoTopic attribute (which is stable at create time): AWS rejects
+      // createTopic for an existing topic if any other attribute, tag,
+      // or DataProtectionPolicy differs from what's already attached.
+      // Mutable attributes are reconciled below against observed state.
+      const createResponse = yield* sns.createTopic({
         Name: topicName,
-        Attributes: toAttributes(news),
-        Tags: createTagsList(tags),
-        DataProtectionPolicy: news.dataProtectionPolicy,
+        Attributes: isFifo ? { FifoTopic: "true" } : undefined,
       });
-
-      const topicArn = response.TopicArn;
-
+      const topicArn = createResponse.TopicArn;
       if (!topicArn) {
         return yield* Effect.die(new Error(`createTopic returned no ARN`));
+      }
+
+      // Sync attributes — fetch observed cloud attributes and apply only
+      // the delta.
+      const observedState = yield* sns
+        .getTopicAttributes({ TopicArn: topicArn })
+        .pipe(
+          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        );
+      const observedAttributes = toAttributeMap(observedState?.Attributes);
+
+      for (const [name, value] of Object.entries(desiredAttributes)) {
+        if (observedAttributes[name] !== value) {
+          yield* sns.setTopicAttributes({
+            TopicArn: topicArn,
+            AttributeName: name,
+            AttributeValue: value,
+          });
+        }
+      }
+
+      // Reset previously-user-specified attributes that the user no
+      // longer specifies. Use `olds.attributes` (the prior props) — NOT
+      // `output.attributes`, which on adoption holds every attribute SNS
+      // returns and would erroneously try to reset SNS-managed values
+      // like the auto-generated Policy.
+      const previouslyManaged = olds?.attributes ?? {};
+      for (const name of Object.keys(previouslyManaged)) {
+        if (!(name in desiredAttributes) && name !== "FifoTopic") {
+          yield* sns.setTopicAttributes({
+            TopicArn: topicArn,
+            AttributeName: name,
+          });
+        }
+      }
+
+      // Sync tags — diff observed cloud tags against desired so that an
+      // adoption-takeover (cloud tags identify a different logical id)
+      // correctly rewrites ownership tags.
+      const observedTagsResp = yield* sns
+        .listTagsForResource({ ResourceArn: topicArn })
+        .pipe(
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed({ Tags: [] as sns.Tag[] }),
+          ),
+        );
+      const observedTags = toTagMap(observedTagsResp.Tags);
+      const { removed, upsert } = diffTags(observedTags, desiredTags);
+
+      if (upsert.length > 0) {
+        yield* sns.tagResource({
+          ResourceArn: topicArn,
+          Tags: upsert,
+        });
+      }
+
+      if (removed.length > 0) {
+        yield* sns.untagResource({
+          ResourceArn: topicArn,
+          TagKeys: removed,
+        });
+      }
+
+      // Sync data protection policy — observed ↔ desired. SNS rejects
+      // getDataProtectionPolicy on FIFO topics, so we skip it there.
+      let observedPolicy: string | undefined;
+      if (!isFifo) {
+        observedPolicy = yield* sns
+          .getDataProtectionPolicy({ ResourceArn: topicArn })
+          .pipe(
+            Effect.map((r) => r.DataProtectionPolicy),
+            Effect.catchTag("NotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.catchTag("InvalidParameterException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+      }
+      if (
+        !isFifo &&
+        news.dataProtectionPolicy !== undefined &&
+        news.dataProtectionPolicy !== observedPolicy
+      ) {
+        yield* sns.putDataProtectionPolicy({
+          ResourceArn: topicArn,
+          DataProtectionPolicy: news.dataProtectionPolicy,
+        });
       }
 
       yield* session.note(topicArn);
@@ -197,85 +283,10 @@ export const TopicProvider = () =>
       return {
         topicArn: topicArn as TopicArn,
         topicName,
-        fifo: news.fifo ?? false,
-        attributes: toAttributes(news),
-        dataProtectionPolicy: news.dataProtectionPolicy,
-        tags,
-      };
-    }),
-    update: Effect.fn(function* ({
-      id,
-      news = {},
-      olds = {},
-      output,
-      session,
-    }) {
-      const newAttributes = toAttributes(news);
-      const oldAttributes = toAttributes(olds);
-
-      for (const [name, value] of Object.entries(newAttributes)) {
-        if (oldAttributes[name] !== value) {
-          yield* sns.setTopicAttributes({
-            TopicArn: output.topicArn,
-            AttributeName: name,
-            AttributeValue: value,
-          });
-        }
-      }
-
-      for (const name of Object.keys(oldAttributes)) {
-        if (!(name in newAttributes)) {
-          yield* sns.setTopicAttributes({
-            TopicArn: output.topicArn,
-            AttributeName: name,
-          });
-        }
-      }
-
-      const newTags = {
-        ...(yield* createInternalTags(id)),
-        ...news.tags,
-      };
-      // Use the cloud's actual tags as the "previous state" so that an
-      // adoption-takeover (where olds.tags == news.tags but the cloud tags
-      // identify a different logical id) correctly rewrites ownership
-      // tags on the topic.
-      const oldTags = output.tags ?? {};
-      const { removed, upsert } = diffTags(oldTags, newTags);
-
-      if (upsert.length > 0) {
-        yield* sns.tagResource({
-          ResourceArn: output.topicArn,
-          Tags: upsert,
-        });
-      }
-
-      if (removed.length > 0) {
-        yield* sns.untagResource({
-          ResourceArn: output.topicArn,
-          TagKeys: removed,
-        });
-      }
-
-      if (
-        news.dataProtectionPolicy !== undefined &&
-        news.dataProtectionPolicy !== olds.dataProtectionPolicy
-      ) {
-        yield* sns.putDataProtectionPolicy({
-          ResourceArn: output.topicArn,
-          DataProtectionPolicy: news.dataProtectionPolicy,
-        });
-      }
-
-      yield* session.note(output.topicArn);
-
-      return {
-        ...output,
-        fifo: news.fifo ?? false,
-        attributes: newAttributes,
-        dataProtectionPolicy:
-          news.dataProtectionPolicy ?? output.dataProtectionPolicy,
-        tags: newTags,
+        fifo: isFifo,
+        attributes: desiredAttributes,
+        dataProtectionPolicy: news.dataProtectionPolicy ?? observedPolicy,
+        tags: desiredTags,
       };
     }),
     delete: Effect.fn(function* ({ output }) {

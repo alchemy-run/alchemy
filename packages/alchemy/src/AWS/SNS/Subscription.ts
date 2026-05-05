@@ -100,64 +100,119 @@ export const SubscriptionProvider = () =>
         return { action: "replace" } as const;
       }
     }),
-    create: Effect.fn(function* ({ news, session }) {
-      const response = yield* sns.subscribe({
-        TopicArn: news.topicArn as string,
-        Protocol: news.protocol,
-        Endpoint: news.endpoint as string | undefined,
-        Attributes: news.attributes,
-        ReturnSubscriptionArn: news.returnSubscriptionArn ?? true,
-      });
+    reconcile: Effect.fn(function* ({ news, output, session }) {
+      const topicArn = news.topicArn as string;
+      const protocol = news.protocol;
+      const endpoint = news.endpoint as string | undefined;
+      const desiredAttributes = toAttributeMap(news.attributes);
 
-      const subscriptionArn = response.SubscriptionArn;
-
-      if (!subscriptionArn) {
-        return yield* Effect.die(new Error(`subscribe returned no ARN`));
+      // Observe — derive the live SubscriptionArn. We can't trust a
+      // pending-confirmation ARN from `output`, since the user may have
+      // confirmed it out of band. Cached ARN is preferred when concrete;
+      // otherwise we list-and-match by (topicArn, protocol, endpoint).
+      let subscriptionArn: string | undefined;
+      if (
+        output?.subscriptionArn &&
+        !isPendingConfirmation(output.subscriptionArn)
+      ) {
+        const observed = yield* sns
+          .getSubscriptionAttributes({
+            SubscriptionArn: output.subscriptionArn,
+          })
+          .pipe(
+            Effect.catchTag("NotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.catchTag("InvalidParameterException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        if (observed) {
+          subscriptionArn = output.subscriptionArn;
+        }
+      } else {
+        subscriptionArn = yield* findSubscription({
+          topicArn,
+          protocol,
+          endpoint,
+        });
       }
 
-      yield* session.note(subscriptionArn);
+      // Ensure — subscribe if no live subscription matches.
+      if (!subscriptionArn) {
+        const response = yield* sns.subscribe({
+          TopicArn: topicArn,
+          Protocol: protocol,
+          Endpoint: endpoint,
+          Attributes: news.attributes,
+          ReturnSubscriptionArn: news.returnSubscriptionArn ?? true,
+        });
+        if (!response.SubscriptionArn) {
+          return yield* Effect.die(new Error(`subscribe returned no ARN`));
+        }
+        subscriptionArn = response.SubscriptionArn;
+        yield* session.note(subscriptionArn);
+        return {
+          subscriptionArn,
+          topicArn,
+          protocol,
+          endpoint,
+          owner: undefined,
+          pendingConfirmation: isPendingConfirmation(subscriptionArn),
+          attributes: desiredAttributes,
+        };
+      }
 
-      return {
-        subscriptionArn,
-        topicArn: news.topicArn as string,
-        protocol: news.protocol,
-        endpoint: news.endpoint as string | undefined,
-        owner: undefined,
-        pendingConfirmation: isPendingConfirmation(subscriptionArn),
-        attributes: toAttributeMap(news.attributes),
-      };
-    }),
-    update: Effect.fn(function* ({ news, olds, output, session }) {
-      const oldAttributes = toAttributeMap(olds.attributes);
-      const newAttributes = toAttributeMap(news.attributes);
+      // Sync attributes — fetch observed cloud attributes (FilterPolicy,
+      // RawMessageDelivery, etc.) and apply only the delta. We can only
+      // do this once the subscription is confirmed (pending confirmation
+      // returns no real ARN to mutate against).
+      const attrsResponse = yield* sns
+        .getSubscriptionAttributes({ SubscriptionArn: subscriptionArn })
+        .pipe(
+          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("InvalidParameterException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      const observedAttributes = toAttributeMap(attrsResponse?.Attributes);
 
-      for (const [name, value] of Object.entries(newAttributes)) {
-        if (oldAttributes[name] !== value) {
+      for (const [name, value] of Object.entries(desiredAttributes)) {
+        if (observedAttributes[name] !== value) {
           yield* sns.setSubscriptionAttributes({
-            SubscriptionArn: output.subscriptionArn,
+            SubscriptionArn: subscriptionArn,
             AttributeName: name,
             AttributeValue: value,
           });
         }
       }
 
-      for (const name of Object.keys(oldAttributes)) {
-        if (!(name in newAttributes)) {
+      // Reset attributes the user no longer specifies. We only clear
+      // user-specified keys (those present in `news.attributes`/`olds`),
+      // not all observed keys, because SNS exposes many read-only system
+      // attributes we should not touch.
+      const previousKeys = new Set(
+        Object.keys(toAttributeMap(output?.attributes)),
+      );
+      for (const name of previousKeys) {
+        if (!(name in desiredAttributes)) {
           yield* sns.setSubscriptionAttributes({
-            SubscriptionArn: output.subscriptionArn,
+            SubscriptionArn: subscriptionArn,
             AttributeName: name,
           });
         }
       }
 
-      yield* session.note(output.subscriptionArn);
+      yield* session.note(subscriptionArn);
 
       return {
-        ...output,
-        topicArn: news.topicArn as string,
-        protocol: news.protocol,
-        endpoint: news.endpoint as string | undefined,
-        attributes: newAttributes,
+        subscriptionArn,
+        topicArn,
+        protocol,
+        endpoint,
+        owner: output?.owner,
+        pendingConfirmation: isPendingConfirmation(subscriptionArn),
+        attributes: desiredAttributes,
       };
     }),
     delete: Effect.fn(function* ({ olds, output }) {

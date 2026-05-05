@@ -76,64 +76,52 @@ export const AccountProvider = () =>
             managesCloudwatchRoleArn: output?.managesCloudwatchRoleArn ?? false,
           };
         }),
-        create: Effect.fn(function* ({ news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ news: newsIn, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("Account props were not resolved");
           }
           const news = newsIn as AccountProps;
+
+          // Observe — read the current account-level CloudWatch role from
+          // API Gateway. The account settings resource is a singleton per
+          // region, so there is no `ensure` step: we always sync.
+          const observed = yield* ag
+            .getAccount({})
+            .pipe(
+              Effect.catchTag("NotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const observedRoleArn = observed?.cloudwatchRoleArn;
+
+          // Sync the cloudwatchRoleArn — observed ↔ desired. We treat
+          // `undefined` desired as "do not manage the field" so the user
+          // can opt out without us clobbering whatever was already set
+          // out of band.
           const manages = news.cloudwatchRoleArn !== undefined;
-          const patches: ag.PatchOperation[] = [];
           if (manages) {
-            if (news.cloudwatchRoleArn) {
-              patches.push({
-                op: "replace",
-                path: "/cloudwatchRoleArn",
-                value: news.cloudwatchRoleArn,
-              });
-            } else {
-              patches.push({ op: "remove", path: "/cloudwatchRoleArn" });
+            const desired = news.cloudwatchRoleArn;
+            if (desired !== observedRoleArn) {
+              yield* retryOnApiStatusUpdating(
+                ag.updateAccount({
+                  patchOperations: desired
+                    ? [
+                        {
+                          op: "replace",
+                          path: "/cloudwatchRoleArn",
+                          value: desired,
+                        },
+                      ]
+                    : [{ op: "remove", path: "/cloudwatchRoleArn" }],
+                }),
+              );
+              yield* session.note("Updated API Gateway account settings");
             }
           }
-          if (patches.length > 0) {
-            yield* retryOnApiStatusUpdating(
-              ag.updateAccount({ patchOperations: patches }),
-            );
-          }
-          yield* session.note("Updated API Gateway account settings");
-          const a = yield* ag.getAccount({});
+
+          const final = yield* ag.getAccount({});
           return {
-            cloudwatchRoleArn: a.cloudwatchRoleArn,
-            managesCloudwatchRoleArn: manages,
-          };
-        }),
-        update: Effect.fn(function* ({ news: newsIn, output, session }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("Account props were not resolved");
-          }
-          const news = newsIn as AccountProps;
-          let manages = output.managesCloudwatchRoleArn;
-          if (news.cloudwatchRoleArn !== undefined) {
-            manages = true;
-            yield* retryOnApiStatusUpdating(
-              ag.updateAccount({
-                patchOperations: news.cloudwatchRoleArn
-                  ? [
-                      {
-                        op: "replace",
-                        path: "/cloudwatchRoleArn",
-                        value: news.cloudwatchRoleArn,
-                      },
-                    ]
-                  : [{ op: "remove", path: "/cloudwatchRoleArn" }],
-              }),
-            );
-          } else {
-            manages = false;
-          }
-          yield* session.note("Updated API Gateway account settings");
-          const a = yield* ag.getAccount({});
-          return {
-            cloudwatchRoleArn: a.cloudwatchRoleArn,
+            cloudwatchRoleArn: final.cloudwatchRoleArn,
             managesCloudwatchRoleArn: manages,
           };
         }),

@@ -382,30 +382,44 @@ export const RestApiProvider = () =>
           const full = yield* ag.getRestApi({ restApiId: created.id });
           return snapshotFromApi(full);
         }),
-        create: Effect.fn(function* ({ news: newsIn, output, session }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("RestApi props were not resolved");
-          }
-          // Precreate already populated `output`. All children have settled
-          // by now (they appear in `node.bindings`, which upstream resolution
-          // forces us to wait for). Just re-read and return the snapshot so
-          // consumers observe the API only after its bound children exist.
-          if (output?.restApiId) {
-            yield* session.note(`Sealed REST API ${output.restApiId}`);
-            const full = yield* ag.getRestApi({ restApiId: output.restApiId });
-            return snapshotFromApi(full);
-          }
-          // Defensive: shouldn't happen because precreate always runs first.
-          return yield* Effect.die(
-            "RestApi create reached without a precreate output",
-          );
-        }),
-        update: Effect.fn(function* ({ id, news: newsIn, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("RestApi props were not resolved");
           }
           const news = newsIn as RestApiProps;
-          const patches = buildUpdatePatches(news, output);
+
+          // RestApi has a `precreate` that always runs before `reconcile`
+          // for greenfield deployments — it creates the REST API in full
+          // so that `restApi.restApiId` is resolvable and child resources
+          // (Method, Resource, Authorizer) can register themselves back on
+          // the API via `restApi.bind`. By the time `reconcile` runs the id
+          // is populated; we never expect `output === undefined` here, but
+          // we still handle it defensively.
+          if (!output?.restApiId) {
+            return yield* Effect.die(
+              "RestApi reconcile reached without a precreate output",
+            );
+          }
+
+          // Observe — fetch live cloud state. `output` is treated as a
+          // cache for the stable id only.
+          const observed = yield* ag
+            .getRestApi({ restApiId: output.restApiId })
+            .pipe(
+              Effect.catchTag("NotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          if (!observed?.id) {
+            return yield* Effect.die(
+              `RestApi ${output.restApiId} disappeared between precreate and reconcile`,
+            );
+          }
+          const observedSnapshot = snapshotFromApi(observed);
+
+          // Sync mutable scalar fields — diff observed cloud state against
+          // desired and emit only the delta as PATCH operations.
+          const patches = buildUpdatePatches(news, observedSnapshot);
           if (patches.length > 0) {
             yield* retryOnApiStatusUpdating(
               ag.updateRestApi({
@@ -415,24 +429,28 @@ export const RestApiProvider = () =>
             );
           }
 
+          // Sync tags — observed ↔ desired so adoption converges without
+          // fighting the existing tag set.
           const internalTags = yield* createInternalTags(id);
-          const newTags = { ...news.tags, ...internalTags };
-          if (!deepEqual(output.tags, newTags)) {
+          const desiredTags = { ...news.tags, ...internalTags };
+          if (!deepEqual(observedSnapshot.tags, desiredTags)) {
             const arn = restApiArn(awsRegion, output.restApiId);
             yield* syncTags({
               resourceArn: arn,
-              oldTags: output.tags,
-              newTags,
+              oldTags: observedSnapshot.tags,
+              newTags: desiredTags,
             });
           }
 
-          yield* session.note(`Updated REST API ${output.restApiId}`);
+          yield* session.note(`Reconciled REST API ${output.restApiId}`);
 
-          const full = yield* ag.getRestApi({ restApiId: output.restApiId });
-          if (!full.id) {
-            return yield* Effect.die("getRestApi missing id after update");
+          // Re-read so the returned attributes reflect what's actually in
+          // the cloud after all sync steps.
+          const final = yield* ag.getRestApi({ restApiId: output.restApiId });
+          if (!final.id) {
+            return yield* Effect.die("getRestApi missing id after reconcile");
           }
-          return snapshotFromApi(full);
+          return snapshotFromApi(final);
         }),
         delete: Effect.fn(function* ({ output, session }) {
           yield* retryOnApiStatusUpdating(

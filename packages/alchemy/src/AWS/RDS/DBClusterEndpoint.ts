@@ -134,85 +134,86 @@ export const DBClusterEndpointProvider = () =>
           }
           return toAttrs({ endpoint, tags: output?.tags ?? {} });
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const identifier = yield* toIdentifier(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          yield* rds
-            .createDBClusterEndpoint({
-              DBClusterIdentifier: news.dbClusterIdentifier,
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const identifier =
+            output?.dbClusterEndpointIdentifier ??
+            (yield* toIdentifier(id, news));
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
+
+          // Observe — fetch the endpoint's live state.
+          let observed = yield* readEndpoint(identifier);
+
+          // Ensure — create if missing. Tolerate
+          // `DBClusterEndpointAlreadyExistsFault` as a race with a peer
+          // reconciler.
+          if (!observed?.DBClusterEndpointIdentifier) {
+            yield* rds
+              .createDBClusterEndpoint({
+                DBClusterIdentifier: news.dbClusterIdentifier,
+                DBClusterEndpointIdentifier: identifier,
+                EndpointType: news.endpointType,
+                StaticMembers: news.staticMembers,
+                ExcludedMembers: news.excludedMembers,
+                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              })
+              .pipe(
+                Effect.catchTag(
+                  "DBClusterEndpointAlreadyExistsFault",
+                  () => Effect.void,
+                ),
+              );
+            observed = yield* readEndpoint(identifier);
+            if (!observed?.DBClusterEndpointIdentifier) {
+              return yield* Effect.fail(
+                new Error(
+                  `DB cluster endpoint '${identifier}' not found after create`,
+                ),
+              );
+            }
+          } else {
+            // Sync mutable endpoint config — push desired shape.
+            yield* rds.modifyDBClusterEndpoint({
               DBClusterEndpointIdentifier: identifier,
               EndpointType: news.endpointType,
               StaticMembers: news.staticMembers,
               ExcludedMembers: news.excludedMembers,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            })
-            .pipe(
-              Effect.catchTag(
-                "DBClusterEndpointAlreadyExistsFault",
-                () => Effect.void,
-              ),
-            );
-          const endpoint = yield* readEndpoint(identifier);
-          if (!endpoint?.DBClusterEndpointIdentifier) {
-            return yield* Effect.fail(
-              new Error(
-                `DB cluster endpoint '${identifier}' not found after create`,
-              ),
-            );
+            });
+            observed = yield* readEndpoint(identifier);
+            if (!observed?.DBClusterEndpointIdentifier) {
+              return yield* Effect.fail(
+                new Error(
+                  `DB cluster endpoint '${identifier}' not found after update`,
+                ),
+              );
+            }
           }
-          yield* session.note(endpoint.DBClusterEndpointArn ?? identifier);
-          return toAttrs({ endpoint, tags });
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* rds.modifyDBClusterEndpoint({
-            DBClusterEndpointIdentifier: output.dbClusterEndpointIdentifier,
-            EndpointType: news.endpointType,
-            StaticMembers: news.staticMembers,
-            ExcludedMembers: news.excludedMembers,
-          });
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-          if (upsert.length > 0 && output.dbClusterEndpointArn) {
+          const dbClusterEndpointArn = observed.DBClusterEndpointArn;
+
+          // Sync tags — diff observed cloud tags against desired. The
+          // describeDBClusterEndpoints response does not include tags, so we
+          // diff against the previously-recorded tag set on `output`.
+          const observedTags = output?.tags ?? {};
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0 && dbClusterEndpointArn) {
             yield* rds.addTagsToResource({
-              ResourceName: output.dbClusterEndpointArn,
+              ResourceName: dbClusterEndpointArn,
               Tags: upsert,
             });
           }
-          if (removed.length > 0 && output.dbClusterEndpointArn) {
+          if (removed.length > 0 && dbClusterEndpointArn) {
             yield* rds.removeTagsFromResource({
-              ResourceName: output.dbClusterEndpointArn,
+              ResourceName: dbClusterEndpointArn,
               TagKeys: removed,
             });
           }
 
-          const endpoint = yield* readEndpoint(
-            output.dbClusterEndpointIdentifier,
-          );
-          if (!endpoint?.DBClusterEndpointIdentifier) {
-            return yield* Effect.fail(
-              new Error(
-                `DB cluster endpoint '${output.dbClusterEndpointIdentifier}' not found after update`,
-              ),
-            );
-          }
-          yield* session.note(
-            output.dbClusterEndpointArn ?? output.dbClusterEndpointIdentifier,
-          );
-          return toAttrs({ endpoint, tags: newTags });
+          yield* session.note(dbClusterEndpointArn ?? identifier);
+          return toAttrs({ endpoint: observed, tags: desiredTags });
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* rds

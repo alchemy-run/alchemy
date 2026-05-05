@@ -91,8 +91,11 @@ export const LocalWorkerProvider = () =>
 
       return {
         diff: () => Effect.succeed({ action: "update" }),
-        create: ({ id, news, bindings }) => run(id, news, bindings),
-        update: ({ id, news, bindings }) => run(id, news, bindings),
+        // The local sidecar `serve` operation is itself a true upsert:
+        // it tears down any existing process for the worker name and
+        // starts a fresh one with the latest bindings, so observe and
+        // sync collapse into a single sidecar call.
+        reconcile: ({ id, news, bindings }) => run(id, news, bindings),
         delete: ({ output }) => sidecar.stop(output.workerName),
       };
     }),

@@ -124,12 +124,16 @@ export const CompositeAlarmProvider = () =>
             ? state
             : Unowned(state);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* createAlarmName(id, news);
-          // Engine has cleared us via `read` (foreign-tagged composite alarms
-          // are surfaced as `Unowned`). `putCompositeAlarm` is idempotent.
+        reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
+          // Observe — pin the physical name from `output` if present so we
+          // never rename an existing alarm; otherwise derive from desired
+          // props.
+          const name = output?.alarmName ?? (yield* createAlarmName(id, news));
           const existing = yield* readCompositeAlarm(name);
 
+          // Ensure — `putCompositeAlarm` is an upsert. We always send the
+          // full desired config so the cloud converges to `news` whether
+          // the alarm pre-existed or not.
           yield* retryConcurrent(
             cloudwatch.putCompositeAlarm({
               ...news,
@@ -137,10 +141,13 @@ export const CompositeAlarmProvider = () =>
             }),
           );
 
+          // Sync tags — diff observed (or prior) tags against desired.
+          // `olds` is undefined on adoption, so fall back to what we just
+          // observed.
           const tags = yield* updateResourceTags({
             id,
             resourceArn: alarmArn(name),
-            olds: existing?.tags,
+            olds: olds?.tags ?? existing?.tags,
             news: news.tags,
           });
 
@@ -149,38 +156,7 @@ export const CompositeAlarmProvider = () =>
           const state = yield* readCompositeAlarm(name);
           if (!state) {
             return yield* Effect.fail(
-              new Error(`failed to read created composite alarm '${name}'`),
-            );
-          }
-
-          return {
-            ...state,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* retryConcurrent(
-            cloudwatch.putCompositeAlarm({
-              ...news,
-              AlarmName: output.alarmName,
-            }),
-          );
-
-          const tags = yield* updateResourceTags({
-            id,
-            resourceArn: output.alarmArn,
-            olds: olds.tags,
-            news: news.tags,
-          });
-
-          yield* session.note(output.alarmArn);
-
-          const state = yield* readCompositeAlarm(output.alarmName);
-          if (!state) {
-            return yield* Effect.fail(
-              new Error(
-                `failed to read updated composite alarm '${output.alarmName}'`,
-              ),
+              new Error(`failed to read reconciled composite alarm '${name}'`),
             );
           }
 

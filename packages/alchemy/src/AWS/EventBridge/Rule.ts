@@ -341,71 +341,29 @@ export const RuleProvider = () =>
             ? attrs
             : Unowned(attrs);
         }),
-        create: Effect.fn(function* ({ id, news = {}, session }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
           yield* validateRuleProps(news);
-          const ruleName = yield* createRuleName(id, news);
+          const ruleName =
+            output?.ruleName ?? (yield* createRuleName(id, news));
+          const eventBusName =
+            output?.eventBusName ??
+            (news.eventBusName as string | undefined) ??
+            "default";
+          const eventBusParam =
+            eventBusName !== "default" ? eventBusName : undefined;
           const internalTags = yield* createInternalTags(id);
-          const allTags = {
+          const desiredTags = {
             ...internalTags,
             ...(news.tags as Record<string, string> | undefined),
           };
-          const eventBusName =
-            (news.eventBusName as string | undefined) ?? "default";
-          const ruleArn = toRuleArn(region, accountId, eventBusName, ruleName);
 
-          // Engine has cleared us via `read` (foreign-tagged rules are
-          // surfaced as `Unowned`). `putRule` is itself idempotent, so we
-          // skip the redundant pre-existence check here.
-
+          // Ensure + Sync rule definition — `putRule` is the single
+          // create-or-update API for the rule itself. It's idempotent on
+          // matching params and overwrites schedule/eventPattern/state/etc.
+          // on differences, so we call it unconditionally. `Tags` only
+          // applies when creating; tags are reconciled separately below
+          // against observed cloud tags.
           const { RuleArn } = yield* eventbridge.putRule({
-            Name: ruleName,
-            Description: news.description,
-            EventBusName: eventBusName !== "default" ? eventBusName : undefined,
-            EventPattern: news.eventPattern
-              ? JSON.stringify(news.eventPattern)
-              : undefined,
-            ScheduleExpression: news.scheduleExpression,
-            State: news.state ?? "ENABLED",
-            RoleArn: news.roleArn as string | undefined,
-            Tags: createTagsList(allTags),
-          });
-
-          const resolvedTargets =
-            (news.targets as Input.Resolve<RuleTarget>[] | undefined) ?? [];
-          if (resolvedTargets.length > 0) {
-            const response = yield* eventbridge.putTargets({
-              Rule: ruleName,
-              EventBusName:
-                eventBusName !== "default" ? eventBusName : undefined,
-              Targets: resolvedTargets.map(toTarget),
-            });
-            yield* assertPutTargetsSucceeded(response);
-          }
-
-          yield* session.note(ruleArn);
-
-          return {
-            ruleName,
-            ruleArn:
-              (RuleArn as RuleArn | undefined) ??
-              toRuleArn(region, accountId, eventBusName, ruleName),
-            eventBusName,
-          };
-        }),
-        update: Effect.fn(function* ({
-          id,
-          news = {},
-          olds = {},
-          output,
-          session,
-        }) {
-          yield* validateRuleProps(news);
-          const ruleName = output.ruleName;
-          const eventBusName = output.eventBusName;
-          const eventBusParam =
-            eventBusName !== "default" ? eventBusName : undefined;
-
-          yield* eventbridge.putRule({
             Name: ruleName,
             Description: news.description,
             EventBusName: eventBusParam,
@@ -415,28 +373,41 @@ export const RuleProvider = () =>
             ScheduleExpression: news.scheduleExpression,
             State: news.state ?? "ENABLED",
             RoleArn: news.roleArn as string | undefined,
+            Tags: createTagsList(desiredTags),
           });
+          const ruleArn =
+            (RuleArn as RuleArn | undefined) ??
+            toRuleArn(region, accountId, eventBusName, ruleName);
 
-          const oldTargetIds = new Set(
-            (
-              (olds.targets as Input.Resolve<RuleTarget>[] | undefined) ?? []
-            ).map((t) => t.Id),
-          );
-          const newTargetIds = new Set(
-            (
-              (news.targets as Input.Resolve<RuleTarget>[] | undefined) ?? []
-            ).map((t) => t.Id),
-          );
-          const removedIds = [...oldTargetIds].filter(
-            (id) => !newTargetIds.has(id),
-          );
+          // Sync targets — observed cloud targets vs desired. `listTargetsByRule`
+          // gives us the live target ids; we remove anything no longer desired,
+          // and `putTargets` overwrites/upserts the rest.
+          const resolvedTargets =
+            (news.targets as Input.Resolve<RuleTarget>[] | undefined) ?? [];
+          const desiredTargetIds = new Set(resolvedTargets.map((t) => t.Id));
+          const observedTargets = yield* eventbridge
+            .listTargetsByRule({
+              Rule: ruleName,
+              EventBusName: eventBusParam,
+            })
+            .pipe(
+              Effect.map((r) => r.Targets ?? []),
+              Effect.catchTag("ResourceNotFoundException", () =>
+                Effect.succeed([] as eventbridge.Target[]),
+              ),
+            );
+          const removedTargetIds = observedTargets
+            .map((t) => t.Id)
+            .filter(
+              (tid): tid is string => !!tid && !desiredTargetIds.has(tid),
+            );
 
-          if (removedIds.length > 0) {
+          if (removedTargetIds.length > 0) {
             const response = yield* eventbridge
               .removeTargets({
                 Rule: ruleName,
                 EventBusName: eventBusParam,
-                Ids: removedIds,
+                Ids: removedTargetIds,
               })
               .pipe(
                 Effect.catchTag("ResourceNotFoundException", () =>
@@ -449,8 +420,6 @@ export const RuleProvider = () =>
             }
           }
 
-          const resolvedTargets =
-            (news.targets as Input.Resolve<RuleTarget>[] | undefined) ?? [];
           if (resolvedTargets.length > 0) {
             const response = yield* eventbridge.putTargets({
               Rule: ruleName,
@@ -460,33 +429,41 @@ export const RuleProvider = () =>
             yield* assertPutTargetsSucceeded(response);
           }
 
-          const internalTags = yield* createInternalTags(id);
-          const oldTags = {
-            ...internalTags,
-            ...(olds.tags as Record<string, string> | undefined),
-          };
-          const newTags = {
-            ...internalTags,
-            ...(news.tags as Record<string, string> | undefined),
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags — diff observed cloud tags against desired. Adoption
+          // and partial prior runs both converge here.
+          const observedTagsList = yield* eventbridge
+            .listTagsForResource({
+              ResourceARN: ruleArn,
+            })
+            .pipe(Effect.map((r) => r.Tags ?? []));
+          const observedTags: Record<string, string> = {};
+          for (const tag of observedTagsList) {
+            if (tag.Key && tag.Value !== undefined) {
+              observedTags[tag.Key] = tag.Value;
+            }
+          }
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
 
           if (removed.length > 0) {
             yield* eventbridge.untagResource({
-              ResourceARN: output.ruleArn,
+              ResourceARN: ruleArn,
               TagKeys: removed,
             });
           }
 
           if (upsert.length > 0) {
             yield* eventbridge.tagResource({
-              ResourceARN: output.ruleArn,
+              ResourceARN: ruleArn,
               Tags: upsert,
             });
           }
 
-          yield* session.note(output.ruleArn);
-          return output;
+          yield* session.note(ruleArn);
+          return {
+            ruleName,
+            ruleArn,
+            eventBusName,
+          };
         }),
         delete: Effect.fn(function* (input) {
           const ruleName = input.output.ruleName;

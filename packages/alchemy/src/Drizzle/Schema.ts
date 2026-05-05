@@ -248,15 +248,9 @@ export const SchemaProvider = () =>
             migrations,
           };
         }),
-        create: Effect.fn(function* ({ news, session }) {
+        reconcile: Effect.fn(function* ({ news, output, session }) {
           yield* session.note(
-            `Generating drizzle migrations for ${news.schema}`,
-          );
-          return yield* regenerate(news);
-        }),
-        update: Effect.fn(function* ({ news, session }) {
-          yield* session.note(
-            `Regenerating drizzle migrations for ${news.schema}`,
+            `${output ? "Regenerating" : "Generating"} drizzle migrations for ${news.schema}`,
           );
           return yield* regenerate(news);
         }),

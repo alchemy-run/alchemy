@@ -92,80 +92,87 @@ export const BasePathMappingProvider = () =>
             stage: b.stage,
           };
         }),
-        create: Effect.fn(function* ({ news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("BasePathMapping props were not resolved");
           }
           const news = newsIn as Input.ResolveProps<BasePathMappingProps>;
-          const basePath = normalizeBasePath(news.basePath);
-          yield* ag.createBasePathMapping({
-            domainName: news.domainName,
-            domainNameId: news.domainNameId,
-            basePath: basePath === "(none)" ? undefined : news.basePath,
-            restApiId: news.restApiId as string,
-            stage: news.stage,
-          });
-          yield* session.note(
-            `Created base path mapping ${news.domainName} / ${basePath}`,
-          );
-          const b = yield* ag.getBasePathMapping({
-            domainName: news.domainName,
-            basePath,
-            domainNameId: news.domainNameId,
-          });
-          return {
-            domainName: news.domainName,
-            domainNameId: news.domainNameId,
-            basePath,
-            restApiId: b.restApiId!,
-            stage: b.stage,
-          };
-        }),
-        update: Effect.fn(function* ({ news: newsIn, output, session }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("BasePathMapping props were not resolved");
+          const domainName = output?.domainName ?? news.domainName;
+          const domainNameId = output?.domainNameId ?? news.domainNameId;
+          const basePath = output?.basePath ?? normalizeBasePath(news.basePath);
+
+          // Observe — basePathmappings are keyed by (domainName, basePath).
+          // We never trust `output.restApiId`/`output.stage` for diffing; we
+          // re-read the live mapping every time.
+          let observed = yield* ag
+            .getBasePathMapping({
+              domainName,
+              basePath,
+              domainNameId,
+            })
+            .pipe(
+              Effect.catchTag("NotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+
+          // Ensure — create the mapping if it isn't there.
+          if (!observed?.restApiId) {
+            yield* ag.createBasePathMapping({
+              domainName: news.domainName,
+              domainNameId: news.domainNameId,
+              basePath: basePath === "(none)" ? undefined : news.basePath,
+              restApiId: news.restApiId as string,
+              stage: news.stage,
+            });
+            yield* session.note(
+              `Created base path mapping ${news.domainName} / ${basePath}`,
+            );
+            observed = yield* ag.getBasePathMapping({
+              domainName,
+              basePath,
+              domainNameId,
+            });
           }
-          const news = newsIn as Input.ResolveProps<BasePathMappingProps>;
-          const patches: ag.PatchOperation[] = [
-            ...(news.restApiId !== output.restApiId
-              ? [
-                  {
-                    op: "replace" as const,
-                    path: "/restApiId",
-                    value: news.restApiId as string,
-                  },
-                ]
-              : []),
-            ...(news.stage !== output.stage
-              ? [
-                  {
-                    op: "replace" as const,
-                    path: "/stage",
-                    value: news.stage ?? "",
-                  },
-                ]
-              : []),
-          ];
+
+          // Sync mutable fields — diff observed cloud state against desired.
+          const desiredRestApiId = news.restApiId as string;
+          const patches: ag.PatchOperation[] = [];
+          if (desiredRestApiId !== observed.restApiId) {
+            patches.push({
+              op: "replace" as const,
+              path: "/restApiId",
+              value: desiredRestApiId,
+            });
+          }
+          if ((news.stage ?? "") !== (observed.stage ?? "")) {
+            patches.push({
+              op: "replace" as const,
+              path: "/stage",
+              value: news.stage ?? "",
+            });
+          }
           if (patches.length > 0) {
             yield* ag.updateBasePathMapping({
-              domainName: output.domainName,
-              basePath: output.basePath,
-              domainNameId: output.domainNameId,
+              domainName,
+              basePath,
+              domainNameId,
               patchOperations: patches,
             });
           }
-          yield* session.note(`Updated base path mapping`);
-          const b = yield* ag.getBasePathMapping({
-            domainName: output.domainName,
-            basePath: output.basePath,
-            domainNameId: output.domainNameId,
+
+          yield* session.note(`Reconciled base path mapping`);
+          const final = yield* ag.getBasePathMapping({
+            domainName,
+            basePath,
+            domainNameId,
           });
           return {
-            domainName: output.domainName,
-            domainNameId: output.domainNameId,
-            basePath: output.basePath,
-            restApiId: b.restApiId!,
-            stage: b.stage,
+            domainName,
+            domainNameId,
+            basePath,
+            restApiId: final.restApiId!,
+            stage: final.stage,
           };
         }),
         delete: Effect.fn(function* ({ output, session }) {

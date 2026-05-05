@@ -96,12 +96,10 @@ export const NetworkAclAssociationProvider = () =>
           // Network ACL change can be done via replaceNetworkAclAssociation
         }),
 
-        create: Effect.fn(function* ({ news, session }) {
-          yield* session.note(
-            `Creating Network ACL Association for subnet ${news.subnetId}...`,
-          );
-
-          // First, find the current association for this subnet (every subnet has one)
+        reconcile: Effect.fn(function* ({ news, session }) {
+          // Observe — find the subnet's current association. EC2 guarantees
+          // every subnet always has exactly one NACL association, so the
+          // lookup always returns something for a live subnet.
           const currentAssoc = yield* findAssociation(news.subnetId as string);
           if (!currentAssoc) {
             return yield* Effect.fail(
@@ -111,40 +109,28 @@ export const NetworkAclAssociationProvider = () =>
             );
           }
 
-          // Replace the association with the new network ACL
+          // Sync — if the subnet already points at the desired NACL, the
+          // association is already correct and we just report it. Otherwise
+          // ReplaceNetworkAclAssociation atomically swaps it.
+          if (currentAssoc.networkAclId === (news.networkAclId as string)) {
+            return {
+              associationId:
+                currentAssoc.associationId as NetworkAclAssociationId,
+              networkAclId: news.networkAclId as NetworkAclId,
+              subnetId: news.subnetId as SubnetId,
+            };
+          }
+
+          yield* session.note(
+            `Associating subnet ${news.subnetId} with NACL ${news.networkAclId}...`,
+          );
           const result = yield* ec2.replaceNetworkAclAssociation({
             AssociationId: currentAssoc.associationId,
             NetworkAclId: news.networkAclId as string,
             DryRun: false,
           });
-
           const newAssociationId = result.NewAssociationId!;
-          yield* session.note(
-            `Network ACL Association created: ${newAssociationId}`,
-          );
-
-          return {
-            associationId: newAssociationId as NetworkAclAssociationId,
-            networkAclId: news.networkAclId as NetworkAclId,
-            subnetId: news.subnetId as SubnetId,
-          };
-        }),
-
-        update: Effect.fn(function* ({ news, output, session }) {
-          yield* session.note(`Updating Network ACL Association...`);
-
-          // Replace the association with the new network ACL
-          const result = yield* ec2.replaceNetworkAclAssociation({
-            AssociationId: output.associationId,
-            NetworkAclId: news.networkAclId as string,
-            DryRun: false,
-          });
-
-          const newAssociationId = result.NewAssociationId!;
-          yield* session.note(
-            `Network ACL Association updated: ${newAssociationId}`,
-          );
-
+          yield* session.note(`Network ACL Association: ${newAssociationId}`);
           return {
             associationId: newAssociationId as NetworkAclAssociationId,
             networkAclId: news.networkAclId as NetworkAclId,

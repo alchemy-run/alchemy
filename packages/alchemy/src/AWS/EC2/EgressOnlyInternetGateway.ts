@@ -140,36 +140,52 @@ export const EgressOnlyInternetGatewayProvider = () =>
           // Tags can be updated in-place
         }),
 
-        create: Effect.fn(function* ({ id, news, session }) {
-          yield* session.note("Creating Egress-Only Internet Gateway...");
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const desiredTags = yield* createTags(id, news.tags);
 
-          const result = yield* ec2.createEgressOnlyInternetGateway({
-            VpcId: news.vpcId as string,
-            TagSpecifications: [
-              {
-                ResourceType: "egress-only-internet-gateway",
-                Tags: createTagsList(yield* createTags(id, news.tags)),
-              },
-            ],
-            DryRun: false,
-          });
+          // Observe — find the EIGW via cached id, else fall through to create.
+          let gw: ec2.EgressOnlyInternetGateway | undefined;
+          if (output?.egressOnlyInternetGatewayId) {
+            const lookup = yield* ec2
+              .describeEgressOnlyInternetGateways({
+                EgressOnlyInternetGatewayIds: [
+                  output.egressOnlyInternetGatewayId,
+                ],
+              })
+              .pipe(
+                Effect.catchTag(
+                  "InvalidEgressOnlyInternetGatewayId.NotFound",
+                  () => Effect.succeed({ EgressOnlyInternetGateways: [] }),
+                ),
+              );
+            gw = lookup.EgressOnlyInternetGateways?.[0];
+          }
 
-          const eigwId =
-            result.EgressOnlyInternetGateway!.EgressOnlyInternetGatewayId!;
-          yield* session.note(
-            `Egress-Only Internet Gateway created: ${eigwId}`,
-          );
+          // Ensure — create the EIGW if it isn't there yet.
+          if (gw === undefined) {
+            yield* session.note("Creating Egress-Only Internet Gateway...");
+            const result = yield* ec2.createEgressOnlyInternetGateway({
+              VpcId: news.vpcId as string,
+              TagSpecifications: [
+                {
+                  ResourceType: "egress-only-internet-gateway",
+                  Tags: createTagsList(desiredTags),
+                },
+              ],
+              DryRun: false,
+            });
+            const newGwId =
+              result.EgressOnlyInternetGateway!.EgressOnlyInternetGatewayId!;
+            yield* session.note(
+              `Egress-Only Internet Gateway created: ${newGwId}`,
+            );
+            gw = yield* describeEgressOnlyInternetGateway(newGwId);
+          }
 
-          const gw = yield* describeEgressOnlyInternetGateway(eigwId);
-          return toAttrs(gw);
-        }),
+          const eigwId = gw.EgressOnlyInternetGatewayId!;
 
-        update: Effect.fn(function* ({ id, news, output, session }) {
-          const eigwId = output.egressOnlyInternetGatewayId;
-
-          // Handle tag updates
-          const newTags = yield* createTags(id, news.tags);
-          const oldTags =
+          // Sync tags — observed cloud tags vs desired.
+          const currentTags =
             (yield* ec2
               .describeTags({
                 Filters: [
@@ -188,9 +204,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
                     ) as Record<string, string>,
                 ),
               )) ?? {};
-
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
+          const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {
             yield* ec2.deleteTags({
               Resources: [eigwId],
@@ -204,11 +218,11 @@ export const EgressOnlyInternetGatewayProvider = () =>
               Tags: upsert,
               DryRun: false,
             });
-            yield* session.note("Updated tags");
           }
 
-          const gw = yield* describeEgressOnlyInternetGateway(eigwId);
-          return toAttrs(gw);
+          // Re-read to reflect current cloud state in the returned attributes.
+          const final = yield* describeEgressOnlyInternetGateway(eigwId);
+          return toAttrs(final);
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

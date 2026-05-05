@@ -460,164 +460,176 @@ export const DistributionProvider = () =>
 
           return toAttrs(current.distribution, current.etag, current.tags);
         }),
-        create: Effect.fn(function* ({ id, instanceId, news, session }) {
-          const tags = {
+        reconcile: Effect.fn(function* ({
+          id,
+          instanceId,
+          news,
+          output,
+          session,
+        }) {
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
-
           const callerReference = instanceId;
-          const config = toConfig(callerReference, news);
-          yield* Effect.logInfo(
-            `CloudFront Distribution create: callerReference=${callerReference} aliases=${news.aliases?.length ?? 0} origins=${(news.origins as DistributionOrigin[]).length} tags=${Object.keys(tags).length}`,
-          );
-          yield* Effect.logInfo(
-            `CloudFront Distribution create: creating distribution with tags for callerReference=${callerReference}`,
-          );
-          const created = yield* cloudfront
-            .createDistributionWithTags({
-              DistributionConfigWithTags: {
-                DistributionConfig: config,
-                Tags: {
-                  Items: createTagsList(tags),
+
+          // Observe — locate an existing distribution by id (cached on
+          // `output`) or by caller reference, which lets us recover from a
+          // create that succeeded in the cloud but failed to persist its
+          // attributes locally.
+          let observed = output?.distributionId
+            ? yield* getCurrent(output.distributionId)
+            : undefined;
+          if (!observed) {
+            observed = yield* getByCallerReference(callerReference);
+          }
+
+          // Ensure — create the distribution if it's missing. Tolerate
+          // `DistributionAlreadyExists` (race with a peer reconciler) by
+          // re-reading via caller reference. Tags are applied at create
+          // time when permissions allow; otherwise we fall back to
+          // create-then-tag and the sync path below converges them.
+          if (!observed) {
+            const config = toConfig(callerReference, news);
+            yield* Effect.logInfo(
+              `CloudFront Distribution reconcile: callerReference=${callerReference} aliases=${news.aliases?.length ?? 0} origins=${(news.origins as DistributionOrigin[]).length} tags=${Object.keys(desiredTags).length}`,
+            );
+            const created = yield* cloudfront
+              .createDistributionWithTags({
+                DistributionConfigWithTags: {
+                  DistributionConfig: config,
+                  Tags: {
+                    Items: createTagsList(desiredTags),
+                  },
                 },
-              },
-            })
-            .pipe(
-              Effect.catch((error) =>
-                isAccessDenied(error)
-                  ? Effect.gen(function* () {
-                      yield* Effect.logInfo(
-                        `CloudFront Distribution create: createDistributionWithTags denied, retrying without tags for callerReference=${callerReference}`,
-                      );
-                      const created = yield* cloudfront.createDistribution({
-                        DistributionConfig: config,
-                      });
-
-                      if (
-                        created.Distribution?.ARN &&
-                        Object.keys(tags).length > 0
-                      ) {
+              })
+              .pipe(
+                Effect.catch((error) =>
+                  isAccessDenied(error)
+                    ? Effect.gen(function* () {
                         yield* Effect.logInfo(
-                          `CloudFront Distribution create: tagging distribution ${created.Distribution.Id} after fallback`,
+                          `CloudFront Distribution reconcile: createDistributionWithTags denied, retrying without tags for callerReference=${callerReference}`,
                         );
-                        yield* cloudfront.tagResource({
-                          Resource: created.Distribution.ARN,
-                          Tags: {
-                            Items: createTagsList(tags),
-                          },
+                        const created = yield* cloudfront.createDistribution({
+                          DistributionConfig: config,
                         });
-                      }
 
-                      return created;
-                    })
-                  : Effect.gen(function* () {
-                      yield* Effect.logInfo(
-                        `CloudFront Distribution create: createDistributionWithTags failed for callerReference=${callerReference} error=${String(error)}`,
-                      );
-                      return yield* Effect.fail(error);
-                    }),
-              ),
-            )
-            .pipe(
-              Effect.map((created) => ({
-                distributionId: created.Distribution?.Id,
-                etag: created.ETag,
-                tags,
-              })),
-              Effect.catchTag("DistributionAlreadyExists", () =>
-                Effect.gen(function* () {
-                  yield* Effect.logInfo(
-                    `CloudFront Distribution create: callerReference=${callerReference} already exists, attempting recovery`,
-                  );
-                  const recovered =
-                    yield* getByCallerReference(callerReference);
-                  if (!recovered?.distribution.Id) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `CloudFront distribution with caller reference '${callerReference}' already exists but could not be recovered`,
-                      ),
-                    );
-                  }
-                  return {
-                    distributionId: recovered.distribution.Id,
-                    etag: recovered.etag,
-                    tags: recovered.tags,
-                  };
-                }),
-              ),
-              Effect.catchTag(
-                "InvalidArgument",
-                (
-                  error,
-                ): Effect.Effect<
-                  never,
-                  | cloudfront.InvalidArgument
-                  | DistributionFunctionAssociationPending
-                > =>
-                  isFunctionAssociationPending(error)
-                    ? Effect.logInfo(
-                        "CloudFront Distribution create: function association not yet ready, retrying",
-                      ).pipe(
-                        Effect.andThen(
-                          Effect.fail(
-                            new DistributionFunctionAssociationPending({
-                              message:
-                                error.Message ??
-                                "CloudFront function association pending",
-                            }),
-                          ),
-                        ),
-                      )
-                    : Effect.fail(error),
-              ),
-              Effect.retry({
-                while: (error) =>
-                  error instanceof DistributionFunctionAssociationPending,
-                schedule: Schedule.fixed("5 seconds").pipe(
-                  Schedule.both(Schedule.recurs(24)),
+                        if (
+                          created.Distribution?.ARN &&
+                          Object.keys(desiredTags).length > 0
+                        ) {
+                          yield* Effect.logInfo(
+                            `CloudFront Distribution reconcile: tagging distribution ${created.Distribution.Id} after fallback`,
+                          );
+                          yield* cloudfront.tagResource({
+                            Resource: created.Distribution.ARN,
+                            Tags: {
+                              Items: createTagsList(desiredTags),
+                            },
+                          });
+                        }
+
+                        return created;
+                      })
+                    : Effect.gen(function* () {
+                        yield* Effect.logInfo(
+                          `CloudFront Distribution reconcile: createDistributionWithTags failed for callerReference=${callerReference} error=${String(error)}`,
+                        );
+                        return yield* Effect.fail(error);
+                      }),
                 ),
-              }),
-            );
+              )
+              .pipe(
+                Effect.map((created) => ({
+                  distributionId: created.Distribution?.Id,
+                  etag: created.ETag,
+                  tags: desiredTags,
+                })),
+                Effect.catchTag("DistributionAlreadyExists", () =>
+                  Effect.gen(function* () {
+                    yield* Effect.logInfo(
+                      `CloudFront Distribution reconcile: callerReference=${callerReference} already exists, attempting recovery`,
+                    );
+                    const recovered =
+                      yield* getByCallerReference(callerReference);
+                    if (!recovered?.distribution.Id) {
+                      return yield* Effect.fail(
+                        new Error(
+                          `CloudFront distribution with caller reference '${callerReference}' already exists but could not be recovered`,
+                        ),
+                      );
+                    }
+                    return {
+                      distributionId: recovered.distribution.Id,
+                      etag: recovered.etag,
+                      tags: recovered.tags,
+                    };
+                  }),
+                ),
+                Effect.catchTag(
+                  "InvalidArgument",
+                  (
+                    error,
+                  ): Effect.Effect<
+                    never,
+                    | cloudfront.InvalidArgument
+                    | DistributionFunctionAssociationPending
+                  > =>
+                    isFunctionAssociationPending(error)
+                      ? Effect.logInfo(
+                          "CloudFront Distribution reconcile: function association not yet ready, retrying",
+                        ).pipe(
+                          Effect.andThen(
+                            Effect.fail(
+                              new DistributionFunctionAssociationPending({
+                                message:
+                                  error.Message ??
+                                  "CloudFront function association pending",
+                              }),
+                            ),
+                          ),
+                        )
+                      : Effect.fail(error),
+                ),
+                Effect.retry({
+                  while: (error) =>
+                    error instanceof DistributionFunctionAssociationPending,
+                  schedule: Schedule.fixed("5 seconds").pipe(
+                    Schedule.both(Schedule.recurs(24)),
+                  ),
+                }),
+              );
 
-          if (!created.distributionId) {
-            return yield* Effect.fail(
-              new Error("createDistribution returned no distribution"),
+            if (!created.distributionId) {
+              return yield* Effect.fail(
+                new Error("createDistribution returned no distribution"),
+              );
+            }
+
+            yield* Effect.logInfo(
+              `CloudFront Distribution reconcile: created ${created.distributionId} etag=${created.etag ?? "missing"}, waiting for deployment`,
             );
+            const deployed = yield* waitForDeployment(created.distributionId);
+            yield* Effect.logInfo(
+              `CloudFront Distribution reconcile: deployed ${created.distributionId} domain=${deployed.DomainName}`,
+            );
+            yield* session.note(created.distributionId);
+            return toAttrs(deployed, created.etag, created.tags);
           }
 
+          // Sync config — diff observed config against desired and patch
+          // via `updateDistribution` with the freshly observed ETag. We
+          // keep the observed `CallerReference` because CloudFront does
+          // not allow it to change.
           yield* Effect.logInfo(
-            `CloudFront Distribution create: created ${created.distributionId} etag=${created.etag ?? "missing"}, waiting for deployment`,
-          );
-          const deployed = yield* waitForDeployment(created.distributionId);
-          yield* Effect.logInfo(
-            `CloudFront Distribution create: deployed ${created.distributionId} domain=${deployed.DomainName}`,
-          );
-          yield* session.note(created.distributionId);
-          return toAttrs(deployed, created.etag, created.tags);
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* Effect.logInfo(
-            `CloudFront Distribution update: distribution=${output.distributionId} aliases=${news.aliases?.length ?? 0}`,
-          );
-          const current = yield* getCurrent(output.distributionId);
-          if (!current) {
-            return yield* Effect.fail(
-              new Error(
-                `CloudFront distribution '${output.distributionId}' was not found`,
-              ),
-            );
-          }
-
-          yield* Effect.logInfo(
-            `CloudFront Distribution update: updating config for ${output.distributionId} with etag=${current.etag ?? "missing"}`,
+            `CloudFront Distribution reconcile: updating config for ${observed.distribution.Id} with etag=${observed.etag ?? "missing"}`,
           );
           const updated = yield* cloudfront
             .updateDistribution({
-              Id: output.distributionId,
-              IfMatch: current.etag,
+              Id: observed.distribution.Id,
+              IfMatch: observed.etag,
               DistributionConfig: toConfig(
-                current.config.CallerReference,
+                observed.config.CallerReference,
                 news,
               ),
             })
@@ -633,7 +645,7 @@ export const DistributionProvider = () =>
                 > =>
                   isFunctionAssociationPending(error)
                     ? Effect.logInfo(
-                        "CloudFront Distribution update: function association not yet ready, retrying",
+                        "CloudFront Distribution reconcile: function association not yet ready, retrying",
                       ).pipe(
                         Effect.andThen(
                           Effect.fail(
@@ -656,26 +668,26 @@ export const DistributionProvider = () =>
               }),
             );
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          if (!updated.Distribution?.Id) {
+            return yield* Effect.fail(
+              new Error("updateDistribution returned no distribution"),
+            );
+          }
 
+          // Sync tags — diff observed cloud tags against desired and apply
+          // only the delta. `observed.tags` is fetched fresh, so we don't
+          // rely on stale `olds.tags`.
+          const { removed, upsert } = diffTags(observed.tags, desiredTags);
           yield* Effect.logInfo(
-            `CloudFront Distribution update: distribution=${output.distributionId} upsertTags=${upsert.length} removedTags=${removed.length}`,
+            `CloudFront Distribution reconcile: distribution=${observed.distribution.Id} upsertTags=${upsert.length} removedTags=${removed.length}`,
           );
 
           if (upsert.length > 0) {
             yield* Effect.logInfo(
-              `CloudFront Distribution update: tagging ${output.distributionId} with ${upsert.length} tag(s)`,
+              `CloudFront Distribution reconcile: tagging ${observed.distribution.Id} with ${upsert.length} tag(s)`,
             );
             yield* cloudfront.tagResource({
-              Resource: output.distributionArn,
+              Resource: observed.distribution.ARN,
               Tags: {
                 Items: upsert,
               },
@@ -684,31 +696,25 @@ export const DistributionProvider = () =>
 
           if (removed.length > 0) {
             yield* Effect.logInfo(
-              `CloudFront Distribution update: removing ${removed.length} tag(s) from ${output.distributionId}`,
+              `CloudFront Distribution reconcile: removing ${removed.length} tag(s) from ${observed.distribution.Id}`,
             );
             yield* cloudfront.untagResource({
-              Resource: output.distributionArn,
+              Resource: observed.distribution.ARN,
               TagKeys: {
                 Items: removed,
               },
             });
           }
 
-          if (!updated.Distribution?.Id) {
-            return yield* Effect.fail(
-              new Error("updateDistribution returned no distribution"),
-            );
-          }
-
           yield* Effect.logInfo(
-            `CloudFront Distribution update: updated ${output.distributionId} etag=${updated.ETag ?? "missing"}, waiting for deployment`,
+            `CloudFront Distribution reconcile: updated ${observed.distribution.Id} etag=${updated.ETag ?? "missing"}, waiting for deployment`,
           );
           const deployed = yield* waitForDeployment(updated.Distribution.Id);
           yield* Effect.logInfo(
-            `CloudFront Distribution update: deployed ${output.distributionId} domain=${deployed.DomainName}`,
+            `CloudFront Distribution reconcile: deployed ${observed.distribution.Id} domain=${deployed.DomainName}`,
           );
-          yield* session.note(output.distributionId);
-          return toAttrs(deployed, updated.ETag, newTags);
+          yield* session.note(observed.distribution.Id);
+          return toAttrs(deployed, updated.ETag, desiredTags);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* Effect.logInfo(

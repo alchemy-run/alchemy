@@ -6,7 +6,7 @@ import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { createInternalTags, createTagsList } from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
@@ -77,91 +77,60 @@ export const InternetGatewayProvider = () =>
       return {
         stables: ["internetGatewayId", "internetGatewayArn", "ownerId"],
 
-        create: Effect.fn(function* ({ id, news = {}, session }) {
-          // 1. Prepare tags
+        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
           const alchemyTags = yield* createInternalTags(id);
-          const userTags = news.tags ?? {};
-          const allTags = { ...alchemyTags, ...userTags };
+          const desiredTags = { ...alchemyTags, ...(news.tags ?? {}) };
 
-          // 2. Call CreateInternetGateway
-          const createResult = yield* ec2.createInternetGateway({
-            TagSpecifications: [
-              {
-                ResourceType: "internet-gateway",
-                Tags: createTagsList(allTags),
-              },
-            ],
-            DryRun: false,
-          });
-
-          const internetGatewayId = createResult.InternetGateway!
-            .InternetGatewayId! as InternetGatewayId;
-          yield* session.note(`Internet gateway created: ${internetGatewayId}`);
-
-          // 3. Attach to VPC if specified
-          if (news.vpcId) {
-            yield* ec2
-              .attachInternetGateway({
-                InternetGatewayId: internetGatewayId,
-                VpcId: news.vpcId,
+          // Observe — find the IGW via cached id, else fall through to create.
+          let igw: ec2.InternetGateway | undefined;
+          if (output?.internetGatewayId) {
+            const lookup = yield* ec2
+              .describeInternetGateways({
+                InternetGatewayIds: [output.internetGatewayId],
               })
               .pipe(
-                Effect.retry({
-                  // Retry if VPC is not yet available
-                  while: (e) => e._tag === "InvalidVpcID.NotFound",
-                  schedule: Schedule.exponential(100),
-                }),
+                Effect.catchTag("InvalidInternetGatewayID.NotFound", () =>
+                  Effect.succeed({ InternetGateways: [] }),
+                ),
               );
-            yield* session.note(`Attached to VPC: ${news.vpcId}`);
+            igw = lookup.InternetGateways?.[0];
           }
 
-          // 4. Describe to get full details
-          const igw = yield* describeInternetGateway(
-            internetGatewayId,
-            session,
-          );
+          // Ensure — create the IGW if missing.
+          if (igw === undefined) {
+            const createResult = yield* ec2.createInternetGateway({
+              TagSpecifications: [
+                {
+                  ResourceType: "internet-gateway",
+                  Tags: createTagsList(desiredTags),
+                },
+              ],
+              DryRun: false,
+            });
+            const newIgwId = createResult.InternetGateway!
+              .InternetGatewayId! as InternetGatewayId;
+            yield* session.note(`Internet gateway created: ${newIgwId}`);
+            igw = yield* describeInternetGateway(newIgwId, session);
+          }
 
-          // 5. Return attributes
-          return {
-            internetGatewayId,
-            internetGatewayArn: `arn:aws:ec2:${region}:${accountId}:internet-gateway/${internetGatewayId}`,
-            vpcId: news.vpcId,
-            ownerId: igw.OwnerId,
-            attachments: igw.Attachments?.map((a) => ({
-              state: a.State! as
-                | "attaching"
-                | "available"
-                | "detaching"
-                | "detached",
-              vpcId: a.VpcId!,
-            })),
-          };
-        }),
+          const internetGatewayId = igw.InternetGatewayId! as InternetGatewayId;
 
-        update: Effect.fn(function* ({
-          news = {},
-          olds = {},
-          output,
-          session,
-        }) {
-          const internetGatewayId = output.internetGatewayId;
-
-          // Handle VPC attachment changes
-          if (news.vpcId !== olds.vpcId) {
-            // Detach from old VPC if was attached
-            if (olds.vpcId) {
+          // Sync VPC attachment — observed attachment vs desired.
+          const attachedVpcId = igw.Attachments?.find(
+            (a) => a.State === "available" || a.State === "attaching",
+          )?.VpcId;
+          if (attachedVpcId !== news.vpcId) {
+            if (attachedVpcId) {
               yield* ec2
                 .detachInternetGateway({
                   InternetGatewayId: internetGatewayId,
-                  VpcId: olds.vpcId,
+                  VpcId: attachedVpcId,
                 })
                 .pipe(
                   Effect.catchTag("Gateway.NotAttached", () => Effect.void),
                 );
-              yield* session.note(`Detached from VPC: ${olds.vpcId}`);
+              yield* session.note(`Detached from VPC: ${attachedVpcId}`);
             }
-
-            // Attach to new VPC if specified
             if (news.vpcId) {
               yield* ec2
                 .attachInternetGateway({
@@ -178,49 +147,35 @@ export const InternetGatewayProvider = () =>
             }
           }
 
-          // Handle tag updates
-          if (
-            JSON.stringify(news.tags ?? {}) !== JSON.stringify(olds.tags ?? {})
-          ) {
-            const alchemyTags = yield* createInternalTags(
-              output.internetGatewayId,
-            );
-            const userTags = news.tags ?? {};
-            const allTags = { ...alchemyTags, ...userTags };
-
-            // Delete old tags that are no longer present
-            const oldTagKeys = Object.keys(olds.tags ?? {});
-            const newTagKeys = Object.keys(news.tags ?? {});
-            const tagsToDelete = oldTagKeys.filter(
-              (key) => !newTagKeys.includes(key),
-            );
-
-            if (tagsToDelete.length > 0) {
-              yield* ec2.deleteTags({
-                Resources: [internetGatewayId],
-                Tags: tagsToDelete.map((key) => ({ Key: key })),
-              });
-            }
-
-            // Create/update tags
+          // Sync tags — observed cloud tags vs desired.
+          const currentTags = Object.fromEntries(
+            (igw.Tags ?? []).map((t) => [t.Key!, t.Value!]),
+          ) as Record<string, string>;
+          const { removed, upsert } = diffTags(currentTags, desiredTags);
+          if (removed.length > 0) {
+            yield* ec2.deleteTags({
+              Resources: [internetGatewayId],
+              Tags: removed.map((key) => ({ Key: key })),
+            });
+          }
+          if (upsert.length > 0) {
             yield* ec2.createTags({
               Resources: [internetGatewayId],
-              Tags: createTagsList(allTags),
+              Tags: upsert,
             });
-
-            yield* session.note("Updated tags");
           }
 
-          // Re-describe to get current state
-          const igw = yield* describeInternetGateway(
+          // Re-read final state.
+          const final = yield* describeInternetGateway(
             internetGatewayId,
             session,
           );
-
           return {
-            ...output,
+            internetGatewayId,
+            internetGatewayArn: `arn:aws:ec2:${region}:${accountId}:internet-gateway/${internetGatewayId}`,
             vpcId: news.vpcId,
-            attachments: igw.Attachments?.map((a) => ({
+            ownerId: final.OwnerId,
+            attachments: final.Attachments?.map((a) => ({
               state: a.State! as
                 | "attaching"
                 | "available"

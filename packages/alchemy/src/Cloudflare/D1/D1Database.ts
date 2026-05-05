@@ -359,120 +359,145 @@ export const DatabaseProvider = () =>
           }
           return undefined;
         }),
-        create: Effect.fn(function* ({ id, news = {} }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const name = yield* createDatabaseName(id, news.name);
           const jurisdiction = news.jurisdiction ?? "default";
-          const db = yield* createDb({
-            accountId,
-            name,
-            jurisdiction: jurisdiction !== "default" ? jurisdiction : undefined,
-            primaryLocationHint: news.primaryLocationHint,
-          }).pipe(
-            Effect.catchTag("InvalidProperty", () =>
-              Effect.gen(function* () {
-                const dbs = yield* listDbs({ accountId, name });
-                const match = dbs.result.find((db) => db.name === name);
-                if (match) {
-                  return match;
-                }
-                return yield* Effect.die(
-                  `Database with name "${name}" already exists but could not be found`,
-                );
-              }),
-            ),
-          );
+          const acct = output?.accountId ?? accountId;
 
-          const databaseId = db.uuid!;
-
-          if (news.readReplication?.mode) {
-            yield* patchDb({
-              accountId,
-              databaseId,
-              readReplication: news.readReplication,
-            });
+          // Observe — re-fetch the cached database; fall back to a name
+          // lookup so we recover from out-of-band deletes or partial
+          // state-persistence failures (the create call may have written
+          // the database but lost the result before persist).
+          let observed:
+            | {
+                uuid?: string | null;
+                name?: string | null;
+                readReplication?: { mode: "auto" | "disabled" } | null;
+              }
+            | undefined;
+          if (output?.databaseId) {
+            observed = yield* getDb({
+              accountId: acct,
+              databaseId: output.databaseId,
+            }).pipe(
+              Effect.catchTag("DatabaseNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          }
+          if (!observed) {
+            const dbs = yield* listDbs({ accountId: acct, name });
+            observed = dbs.result.find((db) => db.name === name);
           }
 
-          if (news.clone) {
+          // Ensure — create if missing. Cloudflare returns
+          // `InvalidProperty` when a database with the same name already
+          // exists; we tolerate the race by re-listing to find it.
+          let databaseId: string;
+          let databaseName: string;
+          const isFirstCreation = !observed;
+          if (!observed) {
+            const db = yield* createDb({
+              accountId: acct,
+              name,
+              jurisdiction:
+                jurisdiction !== "default" ? jurisdiction : undefined,
+              primaryLocationHint: news.primaryLocationHint,
+            }).pipe(
+              Effect.catchTag("InvalidProperty", () =>
+                Effect.gen(function* () {
+                  const dbs = yield* listDbs({ accountId: acct, name });
+                  const match = dbs.result.find((db) => db.name === name);
+                  if (match) {
+                    return match;
+                  }
+                  return yield* Effect.die(
+                    `Database with name "${name}" already exists but could not be found`,
+                  );
+                }),
+              ),
+            );
+            databaseId = db.uuid!;
+            databaseName = db.name ?? name;
+          } else {
+            databaseId = observed.uuid ?? output!.databaseId;
+            databaseName = observed.name ?? name;
+          }
+
+          // Sync read replication — the only mutable property on the
+          // database resource itself. Always patch with the desired mode
+          // so adoption converges drifted state.
+          const desiredReplicationMode =
+            news.readReplication?.mode ?? "disabled";
+          const observedReplicationMode =
+            observed?.readReplication?.mode ?? "disabled";
+          if (
+            isFirstCreation
+              ? desiredReplicationMode !== "disabled"
+              : observedReplicationMode !== desiredReplicationMode
+          ) {
+            const updated = yield* patchDb({
+              accountId: acct,
+              databaseId,
+              readReplication: { mode: desiredReplicationMode },
+            });
+            databaseId = updated.uuid ?? databaseId;
+            databaseName = updated.name ?? databaseName;
+          }
+
+          // Clone is a one-shot seed performed only on first creation.
+          // Re-running it on an existing database would clobber data.
+          if (isFirstCreation && news.clone) {
             const sourceId = yield* resolveCloneSource(
               news.clone,
-              accountId,
+              acct,
               listDbs,
             );
             yield* cloneD1Database({
-              accountId,
+              accountId: acct,
               sourceDatabaseId: sourceId,
               targetDatabaseId: databaseId,
             });
           }
 
+          // Sync migrations — `applyMigrations` is itself idempotent (it
+          // skips already-applied entries), so this works for both first
+          // create and ongoing updates.
           const migrationsTable =
-            news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE;
+            news.migrationsTable ??
+            output?.migrationsTable ??
+            DEFAULT_MIGRATIONS_TABLE;
           const migrationsHashes = news.migrationsDir
             ? yield* runMigrations(
-                accountId,
+                acct,
                 databaseId,
                 news.migrationsDir,
                 migrationsTable,
               )
-            : {};
+            : isFirstCreation
+              ? {}
+              : (output?.migrationsHashes ?? {});
+
+          // Sync imports — `runImports` skips files whose hash matches
+          // previously-imported state. On first create the previous map
+          // is empty so all listed files import.
           const importHashes = news.importFiles?.length
             ? yield* runImports(
-                accountId,
+                acct,
                 databaseId,
                 news.importFiles,
                 rootDir,
-                {},
+                output?.importHashes ?? {},
               )
             : {};
 
           return {
             databaseId,
-            databaseName: db.name ?? name,
-            jurisdiction,
+            databaseName,
+            jurisdiction: (output?.jurisdiction ??
+              jurisdiction) as Jurisdiction,
             readReplication: news.readReplication,
-            accountId,
-            migrationsDir: news.migrationsDir,
-            migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-            migrationsHashes,
-            importHashes,
-          };
-        }),
-        update: Effect.fn(function* ({ news = {}, output }) {
-          const replicationMode = news.readReplication?.mode ?? "disabled";
-          const updated = yield* patchDb({
-            accountId: output.accountId,
-            databaseId: output.databaseId,
-            readReplication: { mode: replicationMode },
-          });
-
-          const migrationsTable =
-            news.migrationsTable ??
-            output.migrationsTable ??
-            DEFAULT_MIGRATIONS_TABLE;
-          const migrationsHashes = news.migrationsDir
-            ? yield* runMigrations(
-                output.accountId,
-                output.databaseId,
-                news.migrationsDir,
-                migrationsTable,
-              )
-            : output.migrationsHashes;
-          const importHashes = news.importFiles?.length
-            ? yield* runImports(
-                output.accountId,
-                output.databaseId,
-                news.importFiles,
-                rootDir,
-                output.importHashes ?? {},
-              )
-            : {};
-
-          return {
-            databaseId: updated.uuid ?? output.databaseId,
-            databaseName: updated.name ?? output.databaseName,
-            jurisdiction: output.jurisdiction,
-            readReplication: news.readReplication,
-            accountId: output.accountId,
+            accountId: acct,
             migrationsDir: news.migrationsDir,
             migrationsTable: news.migrationsDir ? migrationsTable : undefined,
             migrationsHashes,

@@ -64,49 +64,48 @@ export const OrganizationProvider = () =>
           const org = yield* readOrganization();
           return org?.Id && org.Arn ? toAttrs(org) : undefined;
         }),
-        create: Effect.fn(function* ({ news, session }) {
+        reconcile: Effect.fn(function* ({ news, session }) {
           const desiredFeatureSet = news.featureSet ?? "ALL";
-          const existing = yield* readOrganization();
-          const org = existing
-            ? yield* ensureFeatureSet({
-                desired: desiredFeatureSet,
-                current: existing,
-              })
-            : yield* retryOrganizations(
-                organizations.createOrganization({
-                  FeatureSet: desiredFeatureSet,
-                }),
-              ).pipe(
-                Effect.map((response) => response.Organization),
-                Effect.catchTag("AlreadyInOrganizationException", () =>
-                  readOrganization(),
-                ),
-              );
+
+          // Observe — fetch the live singleton organization. There's at most
+          // one organization per management account, and `read` may have
+          // surfaced an existing one for adoption.
+          let org = yield* readOrganization();
+
+          // Ensure — create the organization if it's missing. Tolerate
+          // `AlreadyInOrganizationException` as a race with a concurrent
+          // creator (e.g. another tool, or a peer reconciler).
+          if (!org) {
+            org = yield* retryOrganizations(
+              organizations.createOrganization({
+                FeatureSet: desiredFeatureSet,
+              }),
+            ).pipe(
+              Effect.map((response) => response.Organization),
+              Effect.catchTag("AlreadyInOrganizationException", () =>
+                readOrganization(),
+              ),
+            );
+          }
 
           if (!org?.Id || !org.Arn) {
             return yield* Effect.fail(
-              new Error("failed to resolve organization after create"),
+              new Error("failed to resolve organization after reconcile"),
             );
           }
 
-          yield* session.note(org.Arn);
-          return toAttrs(org);
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          const current = yield* readOrganization();
-          if (!current?.Id || !current.Arn) {
-            return yield* Effect.fail(
-              new Error("organization not found during update"),
-            );
-          }
+          const orgArn = org.Arn;
 
-          const updated = yield* ensureFeatureSet({
-            desired: news.featureSet,
-            current,
+          // Sync feature set — observed ↔ desired. `ensureFeatureSet`
+          // handles the only legal transition (CONSOLIDATED_BILLING -> ALL)
+          // and rejects anything else.
+          org = yield* ensureFeatureSet({
+            desired: desiredFeatureSet,
+            current: org,
           });
 
-          yield* session.note(output.organizationArn);
-          return toAttrs(updated);
+          yield* session.note(orgArn);
+          return toAttrs(org);
         }),
         delete: Effect.fn(function* () {
           yield* retryOrganizations(

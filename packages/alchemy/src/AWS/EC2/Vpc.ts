@@ -200,115 +200,97 @@ export const VpcProvider = () =>
           }
         }),
 
-        create: Effect.fn(function* ({ id, news = {}, session }) {
-          // 1. Call CreateVpc
-          const createResult = yield* ec2.createVpc({
-            // TODO(sam): add all properties
-            AmazonProvidedIpv6CidrBlock: news.amazonProvidedIpv6CidrBlock,
-            InstanceTenancy: news.instanceTenancy,
-            CidrBlock: news.cidrBlock,
-            Ipv4IpamPoolId: news.ipv4IpamPoolId,
-            Ipv4NetmaskLength: news.ipv4NetmaskLength,
-            Ipv6Pool: news.ipv6Pool,
-            Ipv6CidrBlock: news.ipv6CidrBlock,
-            Ipv6IpamPoolId: news.ipv6IpamPoolId,
-            Ipv6NetmaskLength: news.ipv6NetmaskLength,
-            Ipv6CidrBlockNetworkBorderGroup:
-              news.ipv6CidrBlockNetworkBorderGroup,
-            TagSpecifications: [
-              {
-                ResourceType: "vpc",
-                Tags: createTagsList(yield* createTags(id, news.tags)),
-              },
-            ],
-            DryRun: false,
-          });
+        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+          const desiredTags = yield* createTags(id, news.tags);
 
-          const vpcId = createResult.Vpc!.VpcId! as VpcId;
-          yield* session.note(`VPC created: ${vpcId}`);
+          // Observe — find the VPC if we already have its id, else describe
+          // returns empty and we fall through to create. We don't trust
+          // `output.vpcId` blindly: a VPC deleted out of band shows up as
+          // missing and we recreate.
+          let vpc: EC2.Vpc | undefined;
 
-          // 3. Modify DNS attributes if specified (separate API calls)
-          yield* ec2.modifyVpcAttribute({
+          if (output?.vpcId) {
+            const lookup = yield* ec2
+              .describeVpcs({ VpcIds: [output.vpcId] })
+              .pipe(
+                Effect.catchTag("InvalidVpcID.NotFound", () =>
+                  Effect.succeed({ Vpcs: [] }),
+                ),
+              );
+            vpc = lookup.Vpcs?.[0];
+          }
+
+          if (vpc === undefined) {
+            const createResult = yield* ec2.createVpc({
+              // TODO(sam): add all properties
+              AmazonProvidedIpv6CidrBlock: news.amazonProvidedIpv6CidrBlock,
+              InstanceTenancy: news.instanceTenancy,
+              CidrBlock: news.cidrBlock,
+              Ipv4IpamPoolId: news.ipv4IpamPoolId,
+              Ipv4NetmaskLength: news.ipv4NetmaskLength,
+              Ipv6Pool: news.ipv6Pool,
+              Ipv6CidrBlock: news.ipv6CidrBlock,
+              Ipv6IpamPoolId: news.ipv6IpamPoolId,
+              Ipv6NetmaskLength: news.ipv6NetmaskLength,
+              Ipv6CidrBlockNetworkBorderGroup:
+                news.ipv6CidrBlockNetworkBorderGroup,
+              TagSpecifications: [
+                {
+                  ResourceType: "vpc",
+                  Tags: createTagsList(desiredTags),
+                },
+              ],
+              DryRun: false,
+            });
+            const newVpcId = createResult.Vpc!.VpcId! as VpcId;
+            yield* session.note(`VPC created: ${newVpcId}`);
+            vpc = yield* waitForVpcAvailable(newVpcId, session);
+          }
+
+          const vpcId = vpc.VpcId! as VpcId;
+
+          // Sync DNS attributes — observed cloud state vs desired. The default
+          // values DNS support/hostnames default to differ across new vs
+          // existing VPCs, so we always read first and only modify on a real
+          // delta to avoid pointless API calls.
+          const desiredDnsSupport = news.enableDnsSupport ?? true;
+          const desiredDnsHostnames = news.enableDnsHostnames ?? false;
+
+          const dnsSupportResult = yield* ec2.describeVpcAttribute({
             VpcId: vpcId,
-            EnableDnsSupport: { Value: news.enableDnsSupport ?? true },
+            Attribute: "enableDnsSupport",
           });
-
-          if (news.enableDnsHostnames !== undefined) {
+          const currentDnsSupport =
+            dnsSupportResult.EnableDnsSupport?.Value ?? true;
+          if (currentDnsSupport !== desiredDnsSupport) {
             yield* ec2.modifyVpcAttribute({
               VpcId: vpcId,
-              EnableDnsHostnames: { Value: news.enableDnsHostnames },
+              EnableDnsSupport: { Value: desiredDnsSupport },
             });
+            yield* session.note(`Updated DNS support: ${desiredDnsSupport}`);
           }
 
-          // 4. Wait for VPC to be available
-          const vpc = yield* waitForVpcAvailable(vpcId, session);
-
-          // 6. Return attributes
-          return {
-            vpcId,
-            vpcArn: `arn:aws:ec2:${region}:${accountId}:vpc/${vpcId}` as VpcArn,
-            cidrBlock: vpc.CidrBlock!,
-            dhcpOptionsId: vpc.DhcpOptionsId!,
-            state: vpc.State!,
-            isDefault: vpc.IsDefault ?? false,
-            ownerId: vpc.OwnerId,
-            cidrBlockAssociationSet: vpc.CidrBlockAssociationSet?.map(
-              (assoc) => ({
-                associationId: assoc.AssociationId!,
-                cidrBlock: assoc.CidrBlock!,
-                cidrBlockState: {
-                  state: assoc.CidrBlockState!.State!,
-                  statusMessage: assoc.CidrBlockState!.StatusMessage,
-                },
-              }),
-            ),
-            ipv6CidrBlockAssociationSet: vpc.Ipv6CidrBlockAssociationSet?.map(
-              (assoc) => ({
-                associationId: assoc.AssociationId!,
-                ipv6CidrBlock: assoc.Ipv6CidrBlock!,
-                ipv6CidrBlockState: {
-                  state: assoc.Ipv6CidrBlockState!.State!,
-                  statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
-                },
-                networkBorderGroup: assoc.NetworkBorderGroup,
-                ipv6Pool: assoc.Ipv6Pool,
-              }),
-            ),
-          };
-        }),
-
-        update: Effect.fn(function* ({
-          id,
-          news = {},
-          olds = {},
-          output,
-          session,
-        }) {
-          const vpcId = output.vpcId;
-
-          // Only DNS and metrics settings can be updated
-          // Everything else requires replacement (handled by diff)
-
-          if (news.enableDnsSupport !== olds.enableDnsSupport) {
+          const dnsHostnamesResult = yield* ec2.describeVpcAttribute({
+            VpcId: vpcId,
+            Attribute: "enableDnsHostnames",
+          });
+          const currentDnsHostnames =
+            dnsHostnamesResult.EnableDnsHostnames?.Value ?? false;
+          if (currentDnsHostnames !== desiredDnsHostnames) {
             yield* ec2.modifyVpcAttribute({
               VpcId: vpcId,
-              EnableDnsSupport: { Value: news.enableDnsSupport ?? true },
+              EnableDnsHostnames: { Value: desiredDnsHostnames },
             });
-            yield* session.note("Updated DNS support");
+            yield* session.note(
+              `Updated DNS hostnames: ${desiredDnsHostnames}`,
+            );
           }
 
-          if (news.enableDnsHostnames !== olds.enableDnsHostnames) {
-            yield* ec2.modifyVpcAttribute({
-              VpcId: vpcId,
-              EnableDnsHostnames: { Value: news.enableDnsHostnames ?? false },
-            });
-            yield* session.note("Updated DNS hostnames");
-          }
-
-          // Handle user tag updates
-          const newTags = yield* createTags(id, news.tags);
-          const oldTags = output.tags ?? {};
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags — observed cloud tags vs desired.
+          const currentTags = Object.fromEntries(
+            (vpc.Tags ?? []).map((tag: EC2.Tag) => [tag.Key!, tag.Value!]),
+          ) as Record<string, string>;
+          const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {
             yield* ec2.deleteTags({
               Resources: [vpcId],
@@ -324,10 +306,47 @@ export const VpcProvider = () =>
             });
           }
 
+          // Re-read final state so the returned attributes reflect what's
+          // actually in the cloud after all sync steps.
+          const final = yield* ec2.describeVpcs({ VpcIds: [vpcId] });
+          const finalVpc = final.Vpcs?.[0];
+          if (!finalVpc) {
+            return yield* Effect.fail(
+              new Error(`VPC ${vpcId} disappeared during reconcile`),
+            );
+          }
+
           return {
-            ...output,
-            tags: newTags,
-          }; // VPC attributes don't change from these updates
+            vpcId,
+            vpcArn: `arn:aws:ec2:${region}:${accountId}:vpc/${vpcId}` as VpcArn,
+            cidrBlock: finalVpc.CidrBlock!,
+            dhcpOptionsId: finalVpc.DhcpOptionsId!,
+            state: finalVpc.State!,
+            isDefault: finalVpc.IsDefault ?? false,
+            ownerId: finalVpc.OwnerId,
+            cidrBlockAssociationSet: finalVpc.CidrBlockAssociationSet?.map(
+              (assoc) => ({
+                associationId: assoc.AssociationId!,
+                cidrBlock: assoc.CidrBlock!,
+                cidrBlockState: {
+                  state: assoc.CidrBlockState!.State!,
+                  statusMessage: assoc.CidrBlockState!.StatusMessage,
+                },
+              }),
+            ),
+            ipv6CidrBlockAssociationSet:
+              finalVpc.Ipv6CidrBlockAssociationSet?.map((assoc) => ({
+                associationId: assoc.AssociationId!,
+                ipv6CidrBlock: assoc.Ipv6CidrBlock!,
+                ipv6CidrBlockState: {
+                  state: assoc.Ipv6CidrBlockState!.State!,
+                  statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
+                },
+                networkBorderGroup: assoc.NetworkBorderGroup,
+                ipv6Pool: assoc.Ipv6Pool,
+              })),
+            tags: desiredTags,
+          };
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

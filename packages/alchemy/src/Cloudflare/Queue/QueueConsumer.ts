@@ -131,59 +131,88 @@ export const QueueConsumerProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        create: Effect.fn(function* ({ news }) {
-          const consumer = yield* createConsumer({
-            accountId,
-            queueId: news.queueId!,
-            scriptName: news.scriptName,
-            type: "worker",
-            deadLetterQueue: news.deadLetterQueue,
-            settings: news.settings,
-          }).pipe(
-            Effect.catch(() =>
-              Effect.gen(function* () {
-                // Consumer may already exist -- look it up
-                const existing = yield* listConsumers({
-                  accountId,
-                  queueId: news.queueId!,
-                });
-                const match = existing.result.find(
-                  (c) => "script" in c && c.script === news.scriptName,
-                );
-                if (match && match.consumerId) {
-                  return match as {
-                    consumerId: string;
-                    queueId?: string | null;
-                  };
-                }
-                return yield* Effect.die(
-                  `Consumer for script "${news.scriptName}" on queue "${news.queueId}" already exists but could not be found`,
-                );
-              }),
-            ),
-          );
+        reconcile: Effect.fn(function* ({ news, output }) {
+          const acct = output?.accountId ?? accountId;
+          const queueId =
+            output?.queueId ?? (news.queueId as unknown as string);
+
+          // Observe — re-fetch the cached consumer; fall back to a list
+          // scan filtered by script so we recover from out-of-band
+          // deletes or partial state-persistence failures (the create
+          // call may have written the consumer but lost the response).
+          let observed:
+            | { consumerId?: string | null; script?: string | null }
+            | undefined;
+          if (output?.consumerId) {
+            observed = yield* getConsumer({
+              accountId: acct,
+              queueId: output.queueId,
+              consumerId: output.consumerId,
+            }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+          }
+          if (!observed) {
+            const existing = yield* listConsumers({
+              accountId: acct,
+              queueId,
+            });
+            observed = existing.result.find(
+              (c) => "script" in c && c.script === news.scriptName,
+            );
+          }
+
+          // Ensure — create if missing. The Cloudflare API rejects a
+          // duplicate consumer (same queue + script), so we tolerate
+          // that race by adopting the existing one via list.
+          let consumerId: string;
+          if (!observed) {
+            const created = yield* createConsumer({
+              accountId: acct,
+              queueId,
+              scriptName: news.scriptName,
+              type: "worker",
+              deadLetterQueue: news.deadLetterQueue,
+              settings: news.settings,
+            }).pipe(
+              Effect.catch(() =>
+                Effect.gen(function* () {
+                  const existing = yield* listConsumers({
+                    accountId: acct,
+                    queueId,
+                  });
+                  const match = existing.result.find(
+                    (c) => "script" in c && c.script === news.scriptName,
+                  );
+                  if (match && match.consumerId) {
+                    return match;
+                  }
+                  return yield* Effect.die(
+                    `Consumer for script "${news.scriptName}" on queue "${queueId}" already exists but could not be found`,
+                  );
+                }),
+              ),
+            );
+            consumerId = created.consumerId!;
+          } else {
+            consumerId = observed.consumerId!;
+            // Sync — update settings and dead-letter target on the
+            // existing consumer. The Cloudflare API replaces all mutable
+            // fields per call, so always issue this so adoption converges.
+            yield* updateConsumer({
+              accountId: acct,
+              queueId,
+              consumerId,
+              scriptName: news.scriptName,
+              type: "worker",
+              settings: news.settings,
+              deadLetterQueue: news.deadLetterQueue,
+            });
+          }
+
           return {
-            consumerId: consumer.consumerId!,
-            queueId: news.queueId!,
+            consumerId,
+            queueId,
             scriptName: news.scriptName!,
-            accountId,
-          };
-        }),
-        update: Effect.fn(function* ({ news, output }) {
-          yield* updateConsumer({
-            accountId: output.accountId,
-            queueId: output.queueId,
-            consumerId: output.consumerId,
-            scriptName: news.scriptName,
-            type: "worker",
-            settings: news.settings,
-            deadLetterQueue: news.deadLetterQueue,
-          });
-          return {
-            consumerId: output.consumerId,
-            queueId: output.queueId,
-            scriptName: news.scriptName ?? output.scriptName,
-            accountId: output.accountId,
+            accountId: acct,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

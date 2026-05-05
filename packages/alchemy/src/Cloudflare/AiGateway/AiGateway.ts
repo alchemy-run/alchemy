@@ -480,28 +480,39 @@ export const AiGatewayProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news = {} }) {
-          const request = yield* createRequest(id, news);
-          const gateway = yield* createAiGateway(request).pipe(
-            Effect.catchTag("GatewayAlreadyExists", () =>
-              getAiGateway({
-                accountId,
-                id: request.id,
-              }),
-            ),
+        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+          const acct = output?.accountId ?? accountId;
+          const gatewayId =
+            output?.gatewayId ?? (yield* createGatewayId(id, news.id));
+
+          // Observe — fetch the gateway's current state. The Cloudflare API
+          // returns 404 when the gateway is missing, which we tolerate so the
+          // reconciler can fall through to create.
+          const observed = yield* getAiGateway({
+            accountId: acct,
+            id: gatewayId,
+          }).pipe(
+            Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
           );
-          const update = yield* updateRequest(id, news, accountId);
-          return yield* updateAiGateway(update).pipe(
-            Effect.map((gateway) => mapGateway(gateway, accountId)),
-            Effect.catchTag("GatewayNotFound", () =>
-              Effect.succeed(mapGateway(gateway, accountId)),
-            ),
-          );
-        }),
-        update: Effect.fn(function* ({ id, news = {}, output }) {
-          const request = yield* updateRequest(id, news, output.accountId);
-          const gateway = yield* updateAiGateway(request);
-          return mapGateway(gateway, output.accountId);
+
+          // Ensure — create if missing. Tolerate `GatewayAlreadyExists` for
+          // idempotency: a peer reconciler may have created it concurrently,
+          // or state persistence may have failed after a previous create.
+          if (observed === undefined) {
+            const request = yield* createRequest(id, news);
+            yield* createAiGateway(request).pipe(
+              Effect.catchTag("GatewayAlreadyExists", () =>
+                getAiGateway({ accountId: acct, id: request.id }),
+              ),
+            );
+          }
+
+          // Sync — the Cloudflare AI Gateway update API is a full PATCH that
+          // overwrites all mutable fields. We always apply the desired shape
+          // so adoption, drift, and routine updates all converge.
+          const update = yield* updateRequest(id, news, acct);
+          const gateway = yield* updateAiGateway(update);
+          return mapGateway(gateway, acct);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* deleteAiGateway({

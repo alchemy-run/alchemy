@@ -377,18 +377,10 @@ const readStream = Effect.fn(function* ({
   return toAttrs({
     summary,
     tags: toTagRecord(tagsResponse.Tags),
-    resourcePolicy: policyResponse?.Policy,
+    // Treat an empty policy string as "no policy attached" so the
+    // sync step doesn't try to delete a phantom policy.
+    resourcePolicy: policyResponse?.Policy ? policyResponse.Policy : undefined,
   });
-});
-
-const adoptExistingStream = Effect.fn(function* (streamName: string) {
-  const state = yield* readStream({ streamName });
-  if (!state) {
-    return yield* Effect.fail(
-      new Error(`stream ${streamName} exists but could not be read`),
-    );
-  }
-  return state;
 });
 
 const waitForStreamActive = (streamName: string) =>
@@ -457,125 +449,85 @@ export const StreamProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news = {}, session }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
           yield* assertProvisionedProps(news);
 
-          const streamName = yield* createStreamName(id, news);
-          const internalTags = yield* createInternalTags(id);
-          const allTags = { ...internalTags, ...news.tags };
-
-          // Engine has cleared us via `read` (foreign-tagged streams are
-          // surfaced as `Unowned`). On a race between read and create,
-          // treat `ResourceInUseException` as adoption.
-          yield* kinesis
-            .createStream({
-              StreamName: streamName,
-              ShardCount:
-                news.streamMode === "PROVISIONED" ? news.shardCount : undefined,
-              StreamModeDetails: getStreamMode(news),
-              Tags: allTags,
-              WarmThroughputMiBps: news.warmThroughputMiBps,
-              MaxRecordSizeInKiB: news.maxRecordSizeInKiB,
-            })
-            .pipe(
-              Effect.catchTag("ResourceInUseException", () =>
-                adoptExistingStream(streamName).pipe(Effect.asVoid),
-              ),
-              Effect.retry({
-                while: (e: any) => e._tag === "LimitExceededException",
-                schedule: Schedule.exponential(1000),
-              }),
-            );
-
-          yield* session.note(`Creating stream ${streamName}...`);
-          yield* waitForStreamActive(streamName);
-
-          if (news.encryption) {
-            yield* kinesis.startStreamEncryption({
-              StreamName: streamName,
-              EncryptionType: "KMS",
-              KeyId: news.kmsKeyId ?? "alias/aws/kinesis",
-            });
-            yield* waitForStreamActive(streamName);
-          }
-
-          const retention =
-            news.retentionPeriodHours ?? defaultRetentionPeriodHours;
-          if (retention !== defaultRetentionPeriodHours) {
-            if (retention > defaultRetentionPeriodHours) {
-              yield* kinesis.increaseStreamRetentionPeriod({
-                StreamName: streamName,
-                RetentionPeriodHours: retention,
-              });
-            } else {
-              yield* kinesis.decreaseStreamRetentionPeriod({
-                StreamName: streamName,
-                RetentionPeriodHours: retention,
-              });
-            }
-            yield* waitForStreamActive(streamName);
-          }
-
-          if ((news.shardLevelMetrics?.length ?? 0) > 0) {
-            const shardLevelMetrics = news.shardLevelMetrics ?? [];
-            yield* kinesis.enableEnhancedMonitoring({
-              StreamName: streamName,
-              ShardLevelMetrics: shardLevelMetrics,
-            });
-            yield* waitForStreamActive(streamName);
-          }
-
+          const streamName =
+            output?.streamName ?? (yield* createStreamName(id, news));
           const streamArn =
             `arn:aws:kinesis:${region}:${accountId}:stream/${streamName}` as const;
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
 
-          if (news.resourcePolicy) {
-            yield* kinesis.putResourcePolicy({
-              ResourceARN: streamArn,
-              Policy: news.resourcePolicy,
-            });
+          // Observe — fetch live cloud state. `output` is treated as a cache
+          // for the physical name only; the stream's actual existence and
+          // configuration are fetched fresh so the reconciler converges
+          // regardless of drift, adoption, or a partially-completed prior
+          // run.
+          let state = yield* readStream({ streamName, streamArn });
+
+          // Ensure — create the stream if it's missing. Tolerate
+          // `ResourceInUseException` as a race with a peer reconciler:
+          // re-read and continue with the sync path. Retry transient
+          // `LimitExceededException`.
+          if (state === undefined) {
+            yield* kinesis
+              .createStream({
+                StreamName: streamName,
+                ShardCount:
+                  news.streamMode === "PROVISIONED"
+                    ? news.shardCount
+                    : undefined,
+                StreamModeDetails: getStreamMode(news),
+                Tags: desiredTags,
+                WarmThroughputMiBps: news.warmThroughputMiBps,
+                MaxRecordSizeInKiB: news.maxRecordSizeInKiB,
+              })
+              .pipe(
+                Effect.catchTag("ResourceInUseException", () => Effect.void),
+                Effect.retry({
+                  while: (e: any) => e._tag === "LimitExceededException",
+                  schedule: Schedule.exponential(1000),
+                }),
+              );
+
+            yield* session.note(`Creating stream ${streamName}...`);
+            yield* waitForStreamActive(streamName);
+
+            state = yield* readStream({ streamName, streamArn });
+            if (state === undefined) {
+              return yield* Effect.fail(
+                new Error(`failed to read created stream ${streamName}`),
+              );
+            }
           }
 
-          yield* session.note(streamArn);
-
-          const state = yield* readStream({
-            streamName,
-            streamArn,
-          });
-          if (!state) {
-            return yield* Effect.fail(
-              new Error(`failed to read created stream ${streamName}`),
-            );
-          }
-          return state;
-        }),
-        update: Effect.fn(function* ({
-          id,
-          news = {},
-          olds = {},
-          output,
-          session,
-        }) {
-          yield* assertProvisionedProps(news);
-
-          const streamName = output.streamName;
-
-          const oldMode = olds.streamMode ?? defaultStreamMode;
-          const newMode = news.streamMode ?? defaultStreamMode;
-          if (oldMode !== newMode) {
+          // Sync stream mode — observed ↔ desired.
+          const desiredMode = news.streamMode ?? defaultStreamMode;
+          if (state.streamMode !== desiredMode) {
             yield* kinesis.updateStreamMode({
-              StreamARN: output.streamArn,
+              StreamARN: streamArn,
               StreamModeDetails: getStreamMode(news),
               WarmThroughputMiBps:
-                newMode === "ON_DEMAND" ? news.warmThroughputMiBps : undefined,
+                desiredMode === "ON_DEMAND"
+                  ? news.warmThroughputMiBps
+                  : undefined,
             });
             yield* waitForStreamActive(streamName);
-            yield* session.note(`Updated stream mode to ${newMode}`);
+            yield* session.note(`Updated stream mode to ${desiredMode}`);
+            state = yield* readStream({ streamName, streamArn });
+            if (state === undefined) {
+              return yield* Effect.fail(
+                new Error(`failed to re-read stream ${streamName}`),
+              );
+            }
           }
 
+          // Sync shard count — only meaningful in PROVISIONED mode.
           if (
-            newMode === "PROVISIONED" &&
+            desiredMode === "PROVISIONED" &&
             news.shardCount !== undefined &&
-            news.shardCount !== olds.shardCount
+            state.openShardCount !== news.shardCount
           ) {
             yield* kinesis.updateShardCount({
               StreamName: streamName,
@@ -586,51 +538,52 @@ export const StreamProvider = () =>
             yield* session.note(`Updated shard count to ${news.shardCount}`);
           }
 
-          const oldRetention =
-            olds.retentionPeriodHours ?? defaultRetentionPeriodHours;
-          const newRetention =
+          // Sync retention period — observed ↔ desired.
+          const desiredRetention =
             news.retentionPeriodHours ?? defaultRetentionPeriodHours;
-          if (oldRetention !== newRetention) {
-            if (newRetention > oldRetention) {
+          if (state.retentionPeriodHours !== desiredRetention) {
+            if (desiredRetention > state.retentionPeriodHours) {
               yield* kinesis.increaseStreamRetentionPeriod({
                 StreamName: streamName,
-                RetentionPeriodHours: newRetention,
+                RetentionPeriodHours: desiredRetention,
               });
             } else {
               yield* kinesis.decreaseStreamRetentionPeriod({
                 StreamName: streamName,
-                RetentionPeriodHours: newRetention,
+                RetentionPeriodHours: desiredRetention,
               });
             }
             yield* waitForStreamActive(streamName);
             yield* session.note(
-              `Updated retention period to ${newRetention} hours`,
+              `Updated retention period to ${desiredRetention} hours`,
             );
           }
 
-          const oldEncryption = olds.encryption ?? false;
-          const newEncryption = news.encryption ?? false;
-          if (!oldEncryption && newEncryption) {
+          // Sync encryption — observed ↔ desired.
+          const desiredEncryption = news.encryption ?? false;
+          const desiredKmsKey = news.kmsKeyId ?? "alias/aws/kinesis";
+          const observedEncryption = state.encryptionType === "KMS";
+          if (!observedEncryption && desiredEncryption) {
             yield* kinesis.startStreamEncryption({
               StreamName: streamName,
               EncryptionType: "KMS",
-              KeyId: news.kmsKeyId ?? "alias/aws/kinesis",
+              KeyId: desiredKmsKey,
             });
             yield* waitForStreamActive(streamName);
             yield* session.note("Enabled encryption");
-          } else if (oldEncryption && !newEncryption) {
+          } else if (observedEncryption && !desiredEncryption) {
             yield* kinesis.stopStreamEncryption({
               StreamName: streamName,
               EncryptionType: "KMS",
-              KeyId: olds.kmsKeyId ?? "alias/aws/kinesis",
+              KeyId: state.kmsKeyId ?? desiredKmsKey,
             });
             yield* waitForStreamActive(streamName);
             yield* session.note("Disabled encryption");
           } else if (
-            oldEncryption &&
-            newEncryption &&
-            olds.kmsKeyId !== news.kmsKeyId &&
-            news.kmsKeyId !== undefined
+            observedEncryption &&
+            desiredEncryption &&
+            news.kmsKeyId !== undefined &&
+            state.kmsKeyId !== news.kmsKeyId
           ) {
             yield* kinesis.startStreamEncryption({
               StreamName: streamName,
@@ -641,13 +594,14 @@ export const StreamProvider = () =>
             yield* session.note("Updated KMS key");
           }
 
-          const oldMetrics = new Set(olds.shardLevelMetrics ?? []);
-          const newMetrics = new Set(news.shardLevelMetrics ?? []);
+          // Sync shard-level metrics — observed ↔ desired.
+          const observedMetrics = new Set(state.shardLevelMetrics);
+          const desiredMetrics = new Set(news.shardLevelMetrics ?? []);
           const metricsToEnable = (news.shardLevelMetrics ?? []).filter(
-            (metric) => !oldMetrics.has(metric),
+            (metric) => !observedMetrics.has(metric),
           );
-          const metricsToDisable = (olds.shardLevelMetrics ?? []).filter(
-            (metric) => !newMetrics.has(metric),
+          const metricsToDisable = state.shardLevelMetrics.filter(
+            (metric) => !desiredMetrics.has(metric),
           );
 
           if (metricsToDisable.length > 0) {
@@ -672,14 +626,14 @@ export const StreamProvider = () =>
             );
           }
 
+          // Sync warm throughput — only meaningful in ON_DEMAND mode.
           if (
-            newMode === "ON_DEMAND" &&
+            desiredMode === "ON_DEMAND" &&
             news.warmThroughputMiBps !== undefined &&
-            news.warmThroughputMiBps !== olds.warmThroughputMiBps &&
-            oldMode === newMode
+            state.warmThroughput?.targetMiBps !== news.warmThroughputMiBps
           ) {
             yield* kinesis.updateStreamWarmThroughput({
-              StreamARN: output.streamArn,
+              StreamARN: streamArn,
               WarmThroughputMiBps: news.warmThroughputMiBps,
             });
             yield* waitForStreamActive(streamName);
@@ -688,12 +642,13 @@ export const StreamProvider = () =>
             );
           }
 
+          // Sync max record size — observed ↔ desired.
           if (
             news.maxRecordSizeInKiB !== undefined &&
-            news.maxRecordSizeInKiB !== olds.maxRecordSizeInKiB
+            state.maxRecordSizeInKiB !== news.maxRecordSizeInKiB
           ) {
             yield* kinesis.updateMaxRecordSize({
-              StreamARN: output.streamArn,
+              StreamARN: streamArn,
               MaxRecordSizeInKiB: news.maxRecordSizeInKiB,
             });
             yield* waitForStreamActive(streamName);
@@ -702,13 +657,11 @@ export const StreamProvider = () =>
             );
           }
 
-          const internalTags = yield* createInternalTags(id);
-          // Use the cloud's actual tags as the "previous state" so that an
-          // adoption-takeover correctly rewrites ownership tags on the
-          // stream.
-          const oldTags = output.tags ?? {};
-          const newTags = { ...internalTags, ...news.tags };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags — diff observed cloud tags against desired. Adoption
+          // may bring us a stream that already has its own tag set; diffing
+          // against `state.tags` (fetched fresh) lets the reconciler
+          // converge ownership without fighting whatever was there before.
+          const { removed, upsert } = diffTags(state.tags, desiredTags);
 
           if (removed.length > 0) {
             yield* kinesis.removeTagsFromStream({
@@ -728,30 +681,41 @@ export const StreamProvider = () =>
             });
           }
 
-          if (news.resourcePolicy !== olds.resourcePolicy) {
+          // Sync resource policy — observed ↔ desired. Tolerate the
+          // race where the cloud's policy was already removed (delete
+          // fails with `ResourceNotFoundException`) or where another
+          // reconcile already wrote the same policy.
+          if (state.resourcePolicy !== news.resourcePolicy) {
             if (news.resourcePolicy) {
               yield* kinesis.putResourcePolicy({
-                ResourceARN: output.streamArn,
+                ResourceARN: streamArn,
                 Policy: news.resourcePolicy,
               });
-            } else {
-              yield* kinesis.deleteResourcePolicy({
-                ResourceARN: output.streamArn,
-              });
+            } else if (state.resourcePolicy) {
+              yield* kinesis
+                .deleteResourcePolicy({
+                  ResourceARN: streamArn,
+                })
+                .pipe(
+                  Effect.catchTag(
+                    "ResourceNotFoundException",
+                    () => Effect.void,
+                  ),
+                );
             }
           }
 
-          yield* session.note(output.streamArn);
-          const state = yield* readStream({
-            streamName,
-            streamArn: output.streamArn,
-          });
-          if (!state) {
+          yield* session.note(streamArn);
+
+          // Re-read final state so the returned attributes reflect what's
+          // actually in the cloud after all sync steps.
+          const final = yield* readStream({ streamName, streamArn });
+          if (!final) {
             return yield* Effect.fail(
-              new Error(`failed to read updated stream ${streamName}`),
+              new Error(`failed to read reconciled stream ${streamName}`),
             );
           }
-          return state;
+          return final;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* kinesis

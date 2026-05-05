@@ -200,67 +200,85 @@ export const TunnelProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news = {} }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const name = yield* createTunnelName(id, news.name);
-          const configSrc = news.configSrc ?? "cloudflare";
+          const configSrc = news.configSrc ?? output?.configSrc ?? "cloudflare";
           const tunnelSecret = news.tunnelSecret
             ? Redacted.value(news.tunnelSecret)
             : undefined;
+          const acct = output?.accountId ?? accountId;
 
-          const created = yield* createTunnel({
-            accountId,
-            name,
-            configSrc,
-            tunnelSecret,
-          }).pipe(
-            Effect.catch((err) =>
-              Effect.gen(function* () {
-                if (!news.adopt) return yield* Effect.fail(err);
-                const existing = yield* findTunnelByName(name);
-                if (!existing || !existing.id) {
-                  return yield* Effect.fail(err);
-                }
-                return existing;
-              }),
-            ),
-          );
+          // Observe — re-fetch the cached tunnel; fall back to a name
+          // lookup so we recover from out-of-band deletes or partial
+          // state-persistence failures.
+          let observed:
+            | {
+                id?: string | null;
+                name?: string | null;
+                accountTag?: string | null;
+                createdAt?: string | null;
+                deletedAt?: string | null;
+              }
+            | undefined;
+          if (output?.tunnelId) {
+            observed = yield* getTunnel({
+              accountId: acct,
+              tunnelId: output.tunnelId,
+            }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+          }
+          if (!observed) {
+            observed = yield* findTunnelByName(name);
+          }
 
+          // Ensure — create if missing. Cloudflare rejects a duplicate
+          // name with a generic error; tolerate by adopting the
+          // existing tunnel when the caller opted into adoption.
+          if (!observed || !observed.id) {
+            observed = yield* createTunnel({
+              accountId: acct,
+              name,
+              configSrc,
+              tunnelSecret,
+            }).pipe(
+              Effect.catch((err) =>
+                Effect.gen(function* () {
+                  if (!news.adopt) return yield* Effect.fail(err);
+                  const existing = yield* findTunnelByName(name);
+                  if (!existing || !existing.id) {
+                    return yield* Effect.fail(err);
+                  }
+                  return existing;
+                }),
+              ),
+            );
+          }
+
+          // Sync — when the tunnel is managed in Cloudflare, push the
+          // desired ingress + originRequest configuration. The PUT is
+          // idempotent: equal payloads converge to the same state, so we
+          // always push to apply drift.
           if (configSrc !== "local") {
             yield* writeConfiguration(
-              created.id!,
+              observed.id!,
               news.ingress,
               news.originRequest,
             );
           }
 
           const token = yield* getToken({
-            accountId,
-            tunnelId: created.id!,
+            accountId: acct,
+            tunnelId: observed.id!,
           });
 
           return {
-            tunnelId: created.id!,
-            tunnelName: created.name ?? name,
-            accountTag: created.accountTag ?? undefined,
-            accountId,
-            createdAt: created.createdAt ?? undefined,
-            deletedAt: created.deletedAt ?? undefined,
+            tunnelId: observed.id!,
+            tunnelName: observed.name ?? name,
+            accountTag: observed.accountTag ?? undefined,
+            accountId: acct,
+            createdAt: observed.createdAt ?? undefined,
+            deletedAt: observed.deletedAt ?? undefined,
             configSrc,
             token: Redacted.make(token),
-          };
-        }),
-        update: Effect.fn(function* ({ news = {}, output }) {
-          const configSrc = news.configSrc ?? output.configSrc;
-          if (configSrc !== "local") {
-            yield* writeConfiguration(
-              output.tunnelId,
-              news.ingress,
-              news.originRequest,
-            );
-          }
-          return {
-            ...output,
-            configSrc,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

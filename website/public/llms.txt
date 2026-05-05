@@ -47,7 +47,7 @@ End-to-end AWS tutorials. Read the Lambda page first; the others bind storage an
 Reference pages explaining what each primitive means and how they fit together. Read these when something in a tutorial feels magical, or before designing a new Stack.
 
 - [Resource](https://v2.alchemy.run/concepts/resource) — Resources are named cloud entities with input properties and output attributes.
-- [Provider](https://v2.alchemy.run/concepts/provider) — Providers implement the lifecycle operations for a resource type — create, update, delete, diff, read, and more.
+- [Provider](https://v2.alchemy.run/concepts/provider) — Providers implement the lifecycle operations for a resource type — reconcile, delete, diff, read, and more.
 - [Resource Lifecycle](https://v2.alchemy.run/concepts/resource-lifecycle) — How alchemy plans, applies, replaces, and destroys resources — and how to think about idempotency and recovery.
 - [Stack](https://v2.alchemy.run/concepts/stack) — A Stack is a collection of Resources deployed together as a unit.
 - [Stages](https://v2.alchemy.run/concepts/stages) — Stages are isolated instances of a Stack — dev_sam, staging, prod, pr-42 — each with their own state and physical names.

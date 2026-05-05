@@ -316,76 +316,80 @@ export const ProjectProvider = () =>
             importHashes: {},
           };
         }),
-        create: Effect.fn(function* ({ id, news = {} }) {
-          const name = yield* createProjectName(id, news.name);
-          const created = yield* api.createProject({
-            name,
-            region_id: news.region,
-            pg_version: news.pgVersion,
-            default_branch: {
-              name: news.defaultBranchName,
-              role_name: news.roleName,
-              database_name: news.databaseName,
-            },
-            history_retention_seconds: news.historyRetentionSeconds,
-            org_id: news.orgId,
-          });
-          yield* api.waitForOperations(created.operations);
+        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+          // Ensure — when no prior output exists we create the project
+          // (and let `read` upstream decide adoption); otherwise update
+          // the mutable scalar fields on the existing project.
+          const projectInfo = output
+            ? yield* api
+                .updateProject(output.projectId, {
+                  name: news.name,
+                  history_retention_seconds: news.historyRetentionSeconds,
+                })
+                .pipe(
+                  Effect.map((r) => ({
+                    projectId: output.projectId,
+                    projectName: r.project.name,
+                    region: output.region,
+                    pgVersion: output.pgVersion,
+                    defaultBranchId: output.defaultBranchId,
+                    defaultBranchName: output.defaultBranchName,
+                    databaseName: output.databaseName,
+                    roleName: output.roleName,
+                    connectionUri: output.connectionUri,
+                    pooledConnectionUri: output.pooledConnectionUri,
+                    origin: output.origin,
+                    historyRetentionSeconds:
+                      r.project.history_retention_seconds ??
+                      output.historyRetentionSeconds,
+                  })),
+                )
+            : yield* Effect.gen(function* () {
+                const name = yield* createProjectName(id, news.name);
+                const created = yield* api.createProject({
+                  name,
+                  region_id: news.region,
+                  pg_version: news.pgVersion,
+                  default_branch: {
+                    name: news.defaultBranchName,
+                    role_name: news.roleName,
+                    database_name: news.databaseName,
+                  },
+                  history_retention_seconds: news.historyRetentionSeconds,
+                  org_id: news.orgId,
+                });
+                yield* api.waitForOperations(created.operations);
 
-          const branchId = created.branch.id;
-          const databaseName = getDatabaseName(created);
-          const roleName = getRoleName(created) ?? "neondb_owner";
-          const conn = yield* resolveConnection(
-            created.project.id,
-            branchId,
-            databaseName,
-            roleName,
-          );
-          const connectionUri = Redacted.make(conn.uri);
+                const branchId = created.branch.id;
+                const databaseName = getDatabaseName(created);
+                const roleName = getRoleName(created) ?? "neondb_owner";
+                const conn = yield* resolveConnection(
+                  created.project.id,
+                  branchId,
+                  databaseName,
+                  roleName,
+                );
+                return {
+                  projectId: created.project.id,
+                  projectName: created.project.name,
+                  region: created.project.region_id as NeonRegion,
+                  pgVersion: created.project.pg_version as NeonPgVersion,
+                  defaultBranchId: branchId,
+                  defaultBranchName: created.branch.name,
+                  databaseName,
+                  roleName,
+                  connectionUri: conn.uri,
+                  pooledConnectionUri: conn.pooled,
+                  origin: parsePostgresOrigin(conn.uri),
+                  historyRetentionSeconds:
+                    created.project.history_retention_seconds ?? 86400,
+                };
+              });
 
-          const migrationsTable =
-            news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE;
-          const migrationsHashes = news.migrationsDir
-            ? yield* runMigrations(
-                connectionUri,
-                news.migrationsDir,
-                migrationsTable,
-              )
-            : {};
-          const importHashes = news.importFiles?.length
-            ? yield* runImports(connectionUri, news.importFiles, rootDir, {})
-            : {};
-
-          return {
-            projectId: created.project.id,
-            projectName: created.project.name,
-            region: created.project.region_id as NeonRegion,
-            pgVersion: created.project.pg_version as NeonPgVersion,
-            defaultBranchId: branchId,
-            defaultBranchName: created.branch.name,
-            databaseName,
-            roleName,
-            connectionUri: conn.uri,
-            pooledConnectionUri: conn.pooled,
-            origin: parsePostgresOrigin(conn.uri),
-            historyRetentionSeconds:
-              created.project.history_retention_seconds ?? 86400,
-            migrationsDir: news.migrationsDir,
-            migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-            migrationsHashes,
-            importHashes,
-          };
-        }),
-        update: Effect.fn(function* ({ news = {}, output }) {
-          const updated = yield* api.updateProject(output.projectId, {
-            name: news.name,
-            history_retention_seconds: news.historyRetentionSeconds,
-          });
-
-          const connectionUri = Redacted.make(output.connectionUri);
+          const connectionUri = Redacted.make(projectInfo.connectionUri);
           const migrationsTable =
             news.migrationsTable ??
-            output.migrationsTable ??
+            output?.migrationsTable ??
             DEFAULT_MIGRATIONS_TABLE;
           const migrationsHashes = news.migrationsDir
             ? yield* runMigrations(
@@ -393,21 +397,18 @@ export const ProjectProvider = () =>
                 news.migrationsDir,
                 migrationsTable,
               )
-            : output.migrationsHashes;
+            : (output?.migrationsHashes ?? {});
           const importHashes = news.importFiles?.length
             ? yield* runImports(
                 connectionUri,
                 news.importFiles,
                 rootDir,
-                output.importHashes ?? {},
+                output?.importHashes ?? {},
               )
             : {};
+
           return {
-            ...output,
-            projectName: updated.project.name,
-            historyRetentionSeconds:
-              updated.project.history_retention_seconds ??
-              output.historyRetentionSeconds,
+            ...projectInfo,
             migrationsDir: news.migrationsDir,
             migrationsTable: news.migrationsDir ? migrationsTable : undefined,
             migrationsHashes,

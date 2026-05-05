@@ -201,52 +201,77 @@ export const DatasetProvider = () =>
           }
           return undefined;
         }),
-        create: Effect.fn(function* ({ id, news }) {
+        reconcile: Effect.fn(function* ({ id, news, output }) {
           const stack = yield* Stack;
           const stage = yield* Stage;
           const marker = buildMarker(stack.name, stage, id);
-          // The engine has already cleared us via `read` (foreign datasets are
-          // surfaced as `Unowned` and require `--adopt`). On a race between
-          // read and create, treat a Conflict as adoption: PATCH the existing
-          // dataset to reflect the desired props.
-          const dataset = yield* (
-            create({
-              name: news.name,
-              description: augmentDescription(news.description, marker),
-              kind: news.kind,
-              retentionDays: news.retentionDays,
-              useRetentionPeriod: news.useRetentionPeriod,
-            }) as Effect.Effect<
-              Axiom.CreateDatasetOutput,
-              { readonly _tag: string },
-              never
-            >
-          ).pipe(
-            Effect.catchIf(
-              (e): e is { readonly _tag: "Conflict" | "UnprocessableEntity" } =>
-                e._tag === "Conflict" || e._tag === "UnprocessableEntity",
-              () =>
-                update({
-                  dataset_id: news.name,
-                  description: augmentDescription(news.description, marker),
-                  retentionDays: news.retentionDays,
-                  useRetentionPeriod: news.useRetentionPeriod,
-                }),
-            ),
+
+          // Observe — Axiom's dataset path identifier is `name`, which is
+          // also stable input. Probe for live state by name (preferring the
+          // cached `output.id` when present). `read` upstream has already
+          // surfaced foreign datasets as `Unowned`, so by the time we land
+          // here mutation is safe.
+          const datasetId = output?.id ?? news.name;
+          const observed = yield* get({ dataset_id: datasetId }).pipe(
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
           );
-          return toAttrs(dataset);
-        }),
-        update: Effect.fn(function* ({ id, news, output }) {
-          const stack = yield* Stack;
-          const stage = yield* Stage;
-          const marker = buildMarker(stack.name, stage, id);
-          const dataset = yield* update({
-            dataset_id: output.id,
-            description: augmentDescription(news.description, marker),
+
+          // Ensure — POST creates the dataset. Tolerate Conflict/
+          // UnprocessableEntity as a race with a peer reconciler (or with
+          // upstream read↔create), falling through to the sync path.
+          let current = observed;
+          if (current === undefined) {
+            current = yield* (
+              create({
+                name: news.name,
+                description: augmentDescription(news.description, marker),
+                kind: news.kind,
+                retentionDays: news.retentionDays,
+                useRetentionPeriod: news.useRetentionPeriod,
+              }) as Effect.Effect<
+                Axiom.CreateDatasetOutput,
+                { readonly _tag: string },
+                never
+              >
+            ).pipe(
+              Effect.catchIf(
+                (
+                  e,
+                ): e is { readonly _tag: "Conflict" | "UnprocessableEntity" } =>
+                  e._tag === "Conflict" || e._tag === "UnprocessableEntity",
+                () =>
+                  update({
+                    dataset_id: news.name,
+                    description: augmentDescription(news.description, marker),
+                    retentionDays: news.retentionDays,
+                    useRetentionPeriod: news.useRetentionPeriod,
+                  }),
+              ),
+            );
+            return toAttrs(current);
+          }
+
+          // Sync — the dataset exists. Apply mutable aspects (description,
+          // retentionDays, useRetentionPeriod) via PATCH. `kind` and `name`
+          // are stable and replacement-only via diff above.
+          const desiredDescription = augmentDescription(
+            news.description,
+            marker,
+          );
+          const needsSync =
+            current.description !== desiredDescription ||
+            current.retentionDays !== news.retentionDays ||
+            current.useRetentionPeriod !== news.useRetentionPeriod;
+          if (!needsSync) {
+            return toAttrs(current);
+          }
+          const updated = yield* update({
+            dataset_id: current.id,
+            description: desiredDescription,
             retentionDays: news.retentionDays,
             useRetentionPeriod: news.useRetentionPeriod,
           });
-          return toAttrs(dataset);
+          return toAttrs(updated);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* del({ dataset_id: output.id }).pipe(

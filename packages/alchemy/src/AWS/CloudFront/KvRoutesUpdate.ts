@@ -165,32 +165,6 @@ export const KvRoutesUpdateProvider = () =>
         });
       });
 
-      const createOp = (
-        props: KvRoutesUpdateProps,
-      ): Effect.Effect<
-        void,
-        kvs.UpdateKeysError,
-        Credentials | Region | HttpClient
-      > =>
-        Effect.gen(function* () {
-          const fullKey = `${props.namespace}:${props.key}`;
-          const etag = yield* getKvsEtag(props.store);
-          const { routes, chunkNum } = yield* getRoutes(props.store, fullKey);
-          if (!routes.includes(props.entry)) {
-            routes.push(props.entry);
-          }
-          yield* setRoutes(props.store, etag, fullKey, routes, chunkNum);
-        }).pipe(
-          Effect.retry({
-            while: (error) =>
-              error._tag === "ValidationException" &&
-              isKvsPreconditionFailed(error),
-            schedule: Schedule.exponential("100 millis").pipe(
-              Schedule.both(Schedule.recurs(24)),
-            ),
-          }),
-        );
-
       const deleteOp = (
         props: KvRoutesUpdateProps,
       ): Effect.Effect<
@@ -219,74 +193,80 @@ export const KvRoutesUpdateProvider = () =>
           }),
         );
 
+      const upsertEntry = (
+        store: string,
+        fullKey: string,
+        entryToAdd: string,
+        entryToRemove: string | undefined,
+      ): Effect.Effect<
+        void,
+        kvs.UpdateKeysError,
+        HttpClient | Region | Credentials
+      > =>
+        Effect.gen(function* () {
+          const etag = yield* getKvsEtag(store);
+          const { routes, chunkNum } = yield* getRoutes(store, fullKey);
+          const filtered =
+            entryToRemove !== undefined
+              ? routes.filter((r) => r !== entryToRemove)
+              : routes.slice();
+          if (!filtered.includes(entryToAdd)) {
+            filtered.push(entryToAdd);
+          }
+          yield* setRoutes(store, etag, fullKey, filtered, chunkNum);
+        }).pipe(
+          Effect.retry({
+            while: (error) =>
+              error._tag === "ValidationException" &&
+              isKvsPreconditionFailed(error),
+            schedule: Schedule.exponential("100 millis").pipe(
+              Schedule.both(Schedule.recurs(24)),
+            ),
+          }),
+        );
+
       return {
         read: withKvsRegionFn(
           Effect.fn(function* ({ output }) {
             return output;
           }),
         ),
-        create: withKvsRegionFn(
-          Effect.fn(function* ({ news }) {
+        reconcile: withKvsRegionFn(
+          Effect.fn(function* ({ news, output }) {
             return yield* retryForKvsReadiness(
               Effect.gen(function* () {
-                yield* createOp(news);
-                return {
-                  store: news.store,
-                  namespace: news.namespace,
-                  key: news.key,
-                  entry: news.entry,
-                };
-              }),
-            );
-          }),
-        ),
-        update: withKvsRegionFn(
-          Effect.fn(function* ({ news, olds }) {
-            return yield* retryForKvsReadiness(
-              Effect.gen(function* () {
-                if (
-                  news.store !== olds.store ||
-                  news.namespace !== olds.namespace ||
-                  news.key !== olds.key
-                ) {
-                  yield* deleteOp(olds);
-                  yield* createOp(news);
-                } else {
-                  const fullKey = `${news.namespace}:${news.key}`;
-                  const updateInPlace = (): Effect.Effect<
-                    void,
-                    kvs.UpdateKeysError,
-                    HttpClient | Region | Credentials
-                  > =>
-                    Effect.gen(function* () {
-                      const etag = yield* getKvsEtag(news.store);
-                      const { routes, chunkNum } = yield* getRoutes(
-                        news.store,
-                        fullKey,
-                      );
-                      const filtered = routes.filter((r) => r !== olds.entry);
-                      if (!filtered.includes(news.entry)) {
-                        filtered.push(news.entry);
-                      }
-                      yield* setRoutes(
-                        news.store,
-                        etag,
-                        fullKey,
-                        filtered,
-                        chunkNum,
-                      );
-                    }).pipe(
-                      Effect.retry({
-                        while: (error) =>
-                          error._tag === "ValidationException" &&
-                          isKvsPreconditionFailed(error),
-                        schedule: Schedule.exponential("100 millis").pipe(
-                          Schedule.both(Schedule.recurs(24)),
-                        ),
-                      }),
-                    );
-                  yield* updateInPlace();
+                // Observe — figure out whether the prior entry lived at a
+                // different location. When location changes (or this is
+                // the first reconcile), we strip the old entry from the
+                // old routes array first, then add the new one to the
+                // new array.
+                const movedLocation =
+                  output !== undefined &&
+                  (output.store !== news.store ||
+                    output.namespace !== news.namespace ||
+                    output.key !== news.key);
+
+                if (movedLocation) {
+                  yield* deleteOp(output);
                 }
+
+                // Sync — append the desired entry to the routes array at
+                // the new location. If the entry was previously at the
+                // same location, drop the old value from the in-memory
+                // array before re-appending so a value change is treated
+                // as upsert-by-replace.
+                const fullKey = `${news.namespace}:${news.key}`;
+                const previousEntry =
+                  !movedLocation && output !== undefined
+                    ? output.entry
+                    : undefined;
+                yield* upsertEntry(
+                  news.store,
+                  fullKey,
+                  news.entry,
+                  previousEntry,
+                );
+
                 return {
                   store: news.store,
                   namespace: news.namespace,

@@ -128,106 +128,115 @@ export const PodIdentityAssociationProvider = () =>
             serviceAccount: olds.serviceAccount,
           });
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const tags = {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const clusterName = news.clusterName as string;
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
 
-          // Engine has cleared us via `read` (foreign-tagged associations are
-          // surfaced as `Unowned`). On a race between read and create, treat
-          // `ResourceInUseException` as adoption.
-          yield* eks
-            .createPodIdentityAssociation({
-              clusterName: news.clusterName as string,
+          // Observe — locate the association either by stored
+          // associationId or by listing on (cluster, namespace, sa).
+          let state = output?.associationId
+            ? yield* readAssociationById({
+                clusterName,
+                associationId: output.associationId,
+              })
+            : yield* findAssociation({
+                id,
+                clusterName,
+                namespace: news.namespace,
+                serviceAccount: news.serviceAccount,
+              });
+
+          // Ensure — create if missing. Tolerate `ResourceInUseException`
+          // as a race with a peer reconciler.
+          if (!state) {
+            yield* eks
+              .createPodIdentityAssociation({
+                clusterName,
+                namespace: news.namespace,
+                serviceAccount: news.serviceAccount,
+                roleArn: news.roleArn as string,
+                disableSessionTags: news.disableSessionTags,
+                targetRoleArn: news.targetRoleArn as string | undefined,
+                policy: news.policy,
+                tags: desiredTags,
+                clientRequestToken: yield* toClientRequestToken(id, "create"),
+              })
+              .pipe(
+                Effect.catchTag("ResourceInUseException", () => Effect.void),
+              );
+
+            state = yield* findAssociation({
+              id,
+              clusterName,
               namespace: news.namespace,
               serviceAccount: news.serviceAccount,
-              roleArn: news.roleArn as string,
-              disableSessionTags: news.disableSessionTags,
-              targetRoleArn: news.targetRoleArn as string | undefined,
-              policy: news.policy,
-              tags,
-              clientRequestToken: yield* toClientRequestToken(id, "create"),
-            })
-            .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
+            });
 
-          const state = yield* findAssociation({
-            id,
-            clusterName: news.clusterName as string,
-            namespace: news.namespace,
-            serviceAccount: news.serviceAccount,
-          });
-
-          if (!state) {
-            return yield* Effect.fail(
-              new Error(
-                `PodIdentityAssociation '${news.namespace}/${news.serviceAccount}' could not be read after creation`,
-              ),
-            );
+            if (!state) {
+              return yield* Effect.fail(
+                new Error(
+                  `PodIdentityAssociation '${news.namespace}/${news.serviceAccount}' could not be read after creation`,
+                ),
+              );
+            }
           }
 
-          yield* session.note(state.associationArn);
-          return state;
-        }),
-        update: Effect.fn(function* ({ id, olds, news, output, session }) {
+          // Sync mutable fields — observed ↔ desired.
+          const desiredRoleArn = news.roleArn as string;
+          const desiredTargetRoleArn = news.targetRoleArn as string | undefined;
+          const desiredDisableSessionTags = news.disableSessionTags ?? false;
           if (
-            olds.roleArn !== news.roleArn ||
-            olds.disableSessionTags !== news.disableSessionTags ||
-            olds.targetRoleArn !== news.targetRoleArn ||
-            olds.policy !== news.policy
+            state.roleArn !== desiredRoleArn ||
+            state.disableSessionTags !== desiredDisableSessionTags ||
+            state.targetRoleArn !== desiredTargetRoleArn ||
+            state.policy !== news.policy
           ) {
             yield* eks.updatePodIdentityAssociation({
-              clusterName: output.clusterName,
-              associationId: output.associationId,
-              roleArn: news.roleArn as string,
+              clusterName,
+              associationId: state.associationId,
+              roleArn: desiredRoleArn,
               disableSessionTags: news.disableSessionTags,
-              targetRoleArn: news.targetRoleArn as string | undefined,
+              targetRoleArn: desiredTargetRoleArn,
               policy: news.policy,
               clientRequestToken: yield* toClientRequestToken(id, "update"),
             });
           }
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
+          // Sync tags — diff observed cloud tags against desired.
+          const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (upsert.length > 0) {
             yield* eks.tagResource({
-              resourceArn: output.associationArn,
+              resourceArn: state.associationArn,
               tags: Object.fromEntries(
                 upsert.map((tag) => [tag.Key, tag.Value] as const),
               ),
             });
           }
-
           if (removed.length > 0) {
             yield* eks.untagResource({
-              resourceArn: output.associationArn,
+              resourceArn: state.associationArn,
               tagKeys: removed,
             });
           }
 
-          const state = yield* readAssociationById({
-            clusterName: output.clusterName,
-            associationId: output.associationId,
+          // Re-read final state for fresh attributes.
+          const final = yield* readAssociationById({
+            clusterName,
+            associationId: state.associationId,
           });
-
-          if (!state) {
+          if (!final) {
             return yield* Effect.fail(
               new Error(
-                `PodIdentityAssociation '${output.associationId}' could not be read after update`,
+                `PodIdentityAssociation '${state.associationId}' could not be read after reconcile`,
               ),
             );
           }
 
-          yield* session.note(output.associationArn);
-          return state;
+          yield* session.note(final.associationArn);
+          return final;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* eks

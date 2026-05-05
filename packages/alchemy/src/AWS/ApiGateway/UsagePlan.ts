@@ -265,43 +265,50 @@ export const UsagePlanProvider = () =>
             tags: tagRecord(p.tags),
           };
         }),
-        create: Effect.fn(function* ({ id, news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("UsagePlan props were not resolved");
           }
           const news = newsIn as UsagePlanProps;
           const name = yield* generatedName(id, news);
           const internalTags = yield* createInternalTags(id);
-          const allTags = { ...news.tags, ...internalTags };
+          const desiredTags = { ...news.tags, ...internalTags };
 
-          const p = yield* ag.createUsagePlan({
-            name,
-            description: news.description,
-            apiStages: news.apiStages,
-            throttle: news.throttle,
-            quota: news.quota,
-            tags: allTags,
-          });
-          if (!p.id) return yield* Effect.die("createUsagePlan missing id");
-          yield* session.note(`Created usage plan ${p.id}`);
-          const full = yield* ag.getUsagePlan({ usagePlanId: p.id });
-          return {
-            id: p.id,
-            name: full.name,
-            description: full.description,
-            apiStages: full.apiStages,
-            throttle: full.throttle,
-            quota: full.quota,
-            tags: tagRecord(full.tags),
-          };
-        }),
-        update: Effect.fn(function* ({ id, news: newsIn, output, session }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("UsagePlan props were not resolved");
+          // Observe — fetch live usage plan if we have a cached id. We
+          // never trust `output.apiStages`/`output.throttle`/etc. for
+          // diffing; we re-read every reconcile so adoption converges.
+          let observed = output?.id
+            ? yield* ag
+                .getUsagePlan({ usagePlanId: output.id })
+                .pipe(
+                  Effect.catchTag("NotFoundException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                )
+            : undefined;
+
+          // Ensure — create the usage plan if missing.
+          if (!observed?.id) {
+            const created = yield* ag.createUsagePlan({
+              name,
+              description: news.description,
+              apiStages: news.apiStages,
+              throttle: news.throttle,
+              quota: news.quota,
+              tags: desiredTags,
+            });
+            if (!created.id)
+              return yield* Effect.die("createUsagePlan missing id");
+            yield* session.note(`Created usage plan ${created.id}`);
+            observed = yield* ag.getUsagePlan({ usagePlanId: created.id });
           }
-          const news = newsIn as UsagePlanProps;
+
+          const planId = observed.id!;
+
+          // Sync mutable plan fields — diff observed cloud state against
+          // desired and emit only the delta as PATCH operations.
           const patches: ag.PatchOperation[] = [];
-          if (news.description !== output.description) {
+          if (news.description !== observed.description) {
             patches.push({
               op: "replace",
               path: "/description",
@@ -309,37 +316,39 @@ export const UsagePlanProvider = () =>
             });
           }
           patches.push(
-            ...buildApiStagePatches(output.apiStages, news.apiStages),
+            ...buildApiStagePatches(observed.apiStages, news.apiStages),
           );
-          patches.push(...buildThrottlePatches(output.throttle, news.throttle));
-          patches.push(...buildQuotaPatches(output.quota, news.quota));
+          patches.push(
+            ...buildThrottlePatches(observed.throttle, news.throttle),
+          );
+          patches.push(...buildQuotaPatches(observed.quota, news.quota));
           if (patches.length > 0) {
             yield* ag.updateUsagePlan({
-              usagePlanId: output.id,
+              usagePlanId: planId,
               patchOperations: patches,
             });
           }
 
-          const internalTags = yield* createInternalTags(id);
-          const newTags = { ...news.tags, ...internalTags };
-          if (!deepEqual(output.tags, newTags)) {
+          // Sync tags — observed ↔ desired.
+          const observedTags = tagRecord(observed.tags);
+          if (!deepEqual(observedTags, desiredTags)) {
             yield* syncTags({
-              resourceArn: usagePlanArn(awsRegion, output.id),
-              oldTags: output.tags,
-              newTags,
+              resourceArn: usagePlanArn(awsRegion, planId),
+              oldTags: observedTags,
+              newTags: desiredTags,
             });
           }
 
-          yield* session.note(`Updated usage plan ${output.id}`);
-          const full = yield* ag.getUsagePlan({ usagePlanId: output.id });
+          yield* session.note(`Reconciled usage plan ${planId}`);
+          const final = yield* ag.getUsagePlan({ usagePlanId: planId });
           return {
-            id: output.id,
-            name: full.name,
-            description: full.description,
-            apiStages: full.apiStages,
-            throttle: full.throttle,
-            quota: full.quota,
-            tags: tagRecord(full.tags),
+            id: planId,
+            name: final.name,
+            description: final.description,
+            apiStages: final.apiStages,
+            throttle: final.throttle,
+            quota: final.quota,
+            tags: tagRecord(final.tags),
           };
         }),
         delete: Effect.fn(function* ({ output, session }) {

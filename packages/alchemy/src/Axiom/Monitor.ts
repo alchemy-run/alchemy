@@ -100,11 +100,26 @@ export const MonitorProvider = () =>
           }
           return undefined;
         }),
-        create: Effect.fn(function* ({ news }) {
-          return yield* create(news);
-        }),
-        update: Effect.fn(function* ({ news, output }) {
-          return yield* update({ ...news, id: output.id });
+        reconcile: Effect.fn(function* ({ news, output }) {
+          // Observe — Axiom assigns the monitor id server-side, so the only
+          // handle to a previously-created monitor is the cached
+          // `output.id`. Probe for live state with that id; treat NotFound
+          // (deleted out-of-band) as "no observed state" so we converge by
+          // re-creating.
+          const observed = output?.id
+            ? yield* get({ id: output.id }).pipe(
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
+            : undefined;
+
+          // Ensure — POST mints a new monitor with a fresh id.
+          if (observed === undefined) {
+            return yield* create(news);
+          }
+
+          // Sync — the monitor exists; PATCH against its id with the
+          // desired props. `type` is replacement-only (handled in diff).
+          return yield* update({ ...news, id: observed.id });
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* del({ id: output.id }).pipe(

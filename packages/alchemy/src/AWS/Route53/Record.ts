@@ -276,26 +276,20 @@ export const RecordProvider = () =>
 
           return toAttrs(recordSet, output?.hostedZoneId ?? olds!.hostedZoneId);
         }),
-        create: Effect.fn(function* ({ news, session }) {
+        reconcile: Effect.fn(function* ({ news, session }) {
+          // Route 53 `changeResourceRecordSets` with `UPSERT` is naturally
+          // reconciler-friendly: it creates the record if missing and
+          // overwrites it if present. There's no separate ensure/sync split
+          // — one call converges to the desired record set.
           yield* upsertRecord(news);
+
+          // Re-read so the returned attributes reflect the actual current
+          // record (including server-applied defaults).
           const recordSet = yield* findRecord(news.hostedZoneId, news);
 
           if (!recordSet) {
             return yield* Effect.die(
-              new Error("Route53 record was not found after create"),
-            );
-          }
-
-          yield* session.note(`${news.type} ${normalizeName(news.name)}`);
-          return toAttrs(recordSet, news.hostedZoneId);
-        }),
-        update: Effect.fn(function* ({ news, session }) {
-          yield* upsertRecord(news);
-          const recordSet = yield* findRecord(news.hostedZoneId, news);
-
-          if (!recordSet) {
-            return yield* Effect.die(
-              new Error("Route53 record was not found after update"),
+              new Error("Route53 record was not found after upsert"),
             );
           }
 

@@ -199,83 +199,50 @@ export const CapacityProviderProvider = () =>
           return hasTags(internalTags, existingTags) ? attrs : Unowned(attrs);
         }),
 
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const region = yield* Region;
           const { accountId } = yield* AWSEnvironment;
           const name = yield* toName(id, news);
           const internalTags = yield* createInternalTags(id);
-          const tags = { ...internalTags, ...news.tags };
+          const desiredTags = { ...internalTags, ...news.tags };
+          const autoScalingGroupArn = news.autoScalingGroupArn as string;
 
-          // The engine has already cleared us via `read` (foreign capacity
-          // providers are surfaced as `Unowned` and require `--adopt`). On a
-          // race between read and create, fall back to tagging-the-existing
-          // and updating its config below.
-          const existing = yield* describe(name);
-          if (existing?.name && existing.capacityProviderArn) {
-            yield* session.note(
-              `Adopting existing ECS capacity provider ${name}`,
-            );
-            yield* ecs.tagResource({
-              resourceArn: existing.capacityProviderArn,
-              tags: toEcsTags(tags),
-            });
+          // Observe — fetch live cloud state. We fetch fresh on every
+          // reconcile so adoption, drift, and partial-prior-runs all
+          // converge.
+          let existing = yield* describe(name);
 
-            return {
-              capacityProviderArn:
-                existing.capacityProviderArn as CapacityProviderArn,
-              name: existing.name,
-              status: (existing.status ??
-                "ACTIVE") as ecs.CapacityProviderStatus,
-              updateStatus: existing.updateStatus,
-              autoScalingGroupArn:
-                existing.autoScalingGroupProvider?.autoScalingGroupArn ?? "",
-              managedScaling: existing.autoScalingGroupProvider?.managedScaling,
-              managedTerminationProtection:
-                existing.autoScalingGroupProvider?.managedTerminationProtection,
-              managedDraining:
-                existing.autoScalingGroupProvider?.managedDraining,
-              tags: { ...fromEcsTags(existing.tags), ...tags },
-            };
+          // Ensure — create the capacity provider if missing.
+          if (!existing?.name || !existing.capacityProviderArn) {
+            yield* ecs
+              .createCapacityProvider({
+                name,
+                autoScalingGroupProvider: {
+                  autoScalingGroupArn,
+                  managedScaling: news.managedScaling,
+                  managedTerminationProtection:
+                    news.managedTerminationProtection,
+                  managedDraining: news.managedDraining,
+                },
+                tags: toEcsTags(desiredTags),
+              })
+              .pipe(
+                // ECS may surface concurrent creation either as
+                // `LimitExceededException` or a generic `ClientException`
+                // with name conflict semantics — re-describe and continue.
+                Effect.catchTag("LimitExceededException", () => Effect.void),
+              );
+            existing = yield* describe(name);
           }
 
-          const autoScalingGroupArn = news.autoScalingGroupArn as string;
-          const created = yield* ecs.createCapacityProvider({
-            name,
-            autoScalingGroupProvider: {
-              autoScalingGroupArn,
-              managedScaling: news.managedScaling,
-              managedTerminationProtection: news.managedTerminationProtection,
-              managedDraining: news.managedDraining,
-            },
-            tags: toEcsTags(tags),
-          });
-
-          const provider = created.capacityProvider;
-          const capacityProviderArn = (provider?.capacityProviderArn ??
+          const capacityProviderArn = (existing?.capacityProviderArn ??
             `arn:aws:ecs:${region}:${accountId}:capacity-provider/${name}`) as CapacityProviderArn;
-          yield* session.note(capacityProviderArn);
 
-          return {
-            capacityProviderArn,
-            name,
-            status: (provider?.status ??
-              "ACTIVE") as ecs.CapacityProviderStatus,
-            updateStatus: provider?.updateStatus,
-            autoScalingGroupArn,
-            managedScaling: news.managedScaling,
-            managedTerminationProtection: news.managedTerminationProtection,
-            managedDraining: news.managedDraining,
-            tags,
-          };
-        }),
-
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const internalTags = yield* createInternalTags(id);
-          const newTags = { ...internalTags, ...news.tags };
-          const oldTags = { ...internalTags, ...olds.tags };
-
+          // Sync managed scaling — observed ↔ desired. ECS
+          // updateCapacityProvider only mutates managed* fields; ASG ARN is
+          // immutable (replacement-triggering, handled in diff).
           yield* ecs.updateCapacityProvider({
-            name: output.name,
+            name,
             autoScalingGroupProvider: {
               managedScaling: news.managedScaling,
               managedTerminationProtection: news.managedTerminationProtection,
@@ -283,27 +250,34 @@ export const CapacityProviderProvider = () =>
             },
           });
 
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags — diff observed cloud tags against desired.
+          const observedTags = fromEcsTags(existing?.tags);
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* ecs.tagResource({
-              resourceArn: output.capacityProviderArn,
+              resourceArn: capacityProviderArn,
               tags: upsert.map((t) => ({ key: t.Key, value: t.Value })),
             });
           }
           if (removed.length > 0) {
             yield* ecs.untagResource({
-              resourceArn: output.capacityProviderArn,
+              resourceArn: capacityProviderArn,
               tagKeys: removed,
             });
           }
 
-          const found = yield* describe(output.name);
-          yield* session.note(output.capacityProviderArn);
+          // Re-read to capture status / updateStatus reflecting our changes.
+          const found = yield* describe(name);
+          yield* session.note(capacityProviderArn);
+
           return {
-            ...output,
-            status: (found?.status ??
-              output.status) as ecs.CapacityProviderStatus,
-            updateStatus: found?.updateStatus ?? output.updateStatus,
+            capacityProviderArn,
+            name,
+            status: (found?.status ?? "ACTIVE") as ecs.CapacityProviderStatus,
+            updateStatus: found?.updateStatus,
+            autoScalingGroupArn:
+              found?.autoScalingGroupProvider?.autoScalingGroupArn ??
+              autoScalingGroupArn,
             managedScaling:
               found?.autoScalingGroupProvider?.managedScaling ??
               news.managedScaling,
@@ -313,7 +287,7 @@ export const CapacityProviderProvider = () =>
             managedDraining:
               found?.autoScalingGroupProvider?.managedDraining ??
               news.managedDraining,
-            tags: newTags,
+            tags: desiredTags,
           };
         }),
 

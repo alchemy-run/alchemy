@@ -2288,26 +2288,36 @@ ${[
               ),
             ),
         ),
-        create: Effect.fnUntraced(function* ({
+        reconcile: Effect.fnUntraced(function* ({
           id,
           news,
+          olds,
           bindings,
           output,
           session,
         }) {
-          const name = yield* createWorkerName(id, news.name);
+          const name =
+            output?.workerName ?? (yield* createWorkerName(id, news.name));
           const durableObjects = getDurableObjectBindings(bindings, name).map(
             ({ logicalId, className }) => ({
               logicalId,
               className,
             }),
           );
-          yield* Effect.logInfo(`Cloudflare Worker create: starting ${name}`);
           yield* Effect.logInfo(
-            `Cloudflare Worker create: durable objects ${JSON.stringify(
+            `Cloudflare Worker reconcile: starting ${name}`,
+          );
+          yield* Effect.logInfo(
+            `Cloudflare Worker reconcile: durable objects ${JSON.stringify(
               durableObjects,
             )}`,
           );
+
+          // Observe — fetch the script's current settings if it already exists.
+          // `putWorker` is a true upsert against the Cloudflare API; the
+          // existing settings inform asset/migration decisions and let the
+          // reconciler converge whether the worker is brand-new, adopted, or
+          // an in-place update.
           const existingSettings = yield* getScriptSettings({
             accountId,
             scriptName: name,
@@ -2315,60 +2325,28 @@ ${[
             Effect.catchTag("WorkerNotFound", () => Effect.succeed(undefined)),
           );
           yield* Effect.logInfo(
-            `Cloudflare Worker create: existing durable object tags ${JSON.stringify(
+            `Cloudflare Worker reconcile: existing durable object tags ${JSON.stringify(
               (existingSettings?.tags ?? []).filter((tag) =>
                 tag.startsWith("alchemy:do:"),
               ),
             )}`,
           );
-          if (existingSettings) {
-            // Engine has already cleared this resource for write via
-            // `read` + AdoptPolicy. Tag check is no longer needed here.
-            yield* Effect.logInfo(
-              `Cloudflare Worker create: ${name} already exists, reusing`,
-            );
-          }
-          return yield* putWorker(
-            id,
-            news,
-            bindings,
-            undefined,
-            output,
-            session,
-            existingSettings,
-          );
-        }),
-        update: Effect.fnUntraced(function* ({
-          id,
-          olds,
-          news,
-          output,
-          bindings,
-          session,
-        }) {
-          const durableObjects = getDurableObjectBindings(
-            bindings,
-            output.workerName,
-          ).map(({ logicalId, className }) => ({
-            logicalId,
-            className,
-          }));
           yield* Effect.logInfo(
-            `Cloudflare Worker update: starting ${output.workerName}`,
-          );
-          yield* Effect.logInfo(
-            `Cloudflare Worker update: durable objects ${JSON.stringify(
-              durableObjects,
-            )}`,
-          );
-          yield* Effect.logInfo(
-            `Cloudflare Worker update: previous durable object tags ${JSON.stringify(
-              (output.tags ?? []).filter((tag) =>
+            `Cloudflare Worker reconcile: previous durable object tags ${JSON.stringify(
+              (output?.tags ?? []).filter((tag) =>
                 tag.startsWith("alchemy:do:"),
               ),
             )}`,
           );
-          return yield* putWorker(id, news, bindings, olds, output, session);
+          return yield* putWorker(
+            id,
+            news,
+            bindings,
+            olds,
+            output,
+            session,
+            existingSettings,
+          );
         }),
         delete: Effect.fnUntraced(function* ({ output }) {
           yield* Effect.logInfo(

@@ -101,45 +101,75 @@ export const KVNamespaceProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news = {} }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
           const title = yield* createTitle(id, news.title);
-          // Engine has cleared us via `read`. On a race between read and
-          // create, look up the namespace by title and adopt it.
-          const namespace = yield* createNamespace({
-            accountId,
-            title,
-          }).pipe(
-            Effect.catchTag("NamespaceTitleAlreadyExists", () =>
-              Effect.gen(function* () {
-                const match = yield* findNamespaceByTitle(title);
-                if (match) {
-                  return match;
-                }
-                return yield* Effect.die(
-                  `Namespace with title "${title}" already exists but could not be found`,
-                );
-              }),
-            ),
-          );
+          const acct = output?.accountId ?? accountId;
+
+          // Observe — re-fetch the cached namespace; fall back to a title
+          // scan so we recover from out-of-band deletes or partial state
+          // persistence failures.
+          let observed:
+            | {
+                id: string;
+                title: string;
+                supportsUrlEncoding?: boolean | null | undefined;
+              }
+            | undefined;
+          if (output?.namespaceId) {
+            observed = yield* getNamespaceFn({
+              accountId: acct,
+              namespaceId: output.namespaceId,
+            }).pipe(
+              Effect.catchTag("NamespaceNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          }
+
+          // Ensure — create if missing. Cloudflare returns
+          // `NamespaceTitleAlreadyExists` on a concurrent create; tolerate
+          // by adopting the namespace with the same title.
+          if (!observed) {
+            observed = yield* createNamespace({
+              accountId: acct,
+              title,
+            }).pipe(
+              Effect.catchTag("NamespaceTitleAlreadyExists", () =>
+                Effect.gen(function* () {
+                  const match = yield* findNamespaceByTitle(title);
+                  if (match) {
+                    return match;
+                  }
+                  return yield* Effect.die(
+                    `Namespace with title "${title}" already exists but could not be found`,
+                  );
+                }),
+              ),
+            );
+          }
+
+          // Sync — KV's only mutable property is the title. Rename only
+          // when the observed title drifts from desired so we avoid
+          // unnecessary API calls on every reconcile.
+          let namespaceId = observed.id;
+          let resolvedTitle = observed.title;
+          let supportsUrlEncoding = observed.supportsUrlEncoding ?? undefined;
+          if (observed.title !== title) {
+            const renamed = yield* updateNamespace({
+              accountId: acct,
+              namespaceId: observed.id,
+              title,
+            });
+            namespaceId = renamed.id;
+            resolvedTitle = renamed.title;
+            supportsUrlEncoding = renamed.supportsUrlEncoding ?? undefined;
+          }
+
           return {
-            title: namespace.title,
-            namespaceId: namespace.id,
-            supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
-            accountId,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news = {}, output }) {
-          const title = yield* createTitle(id, news.title);
-          const namespace = yield* updateNamespace({
-            accountId,
-            namespaceId: output.namespaceId,
-            title,
-          });
-          return {
-            title: namespace.title,
-            namespaceId: namespace.id,
-            supportsUrlEncoding: namespace.supportsUrlEncoding ?? undefined,
-            accountId,
+            title: resolvedTitle,
+            namespaceId,
+            supportsUrlEncoding,
+            accountId: acct,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

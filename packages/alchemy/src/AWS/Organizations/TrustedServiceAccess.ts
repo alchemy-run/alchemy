@@ -48,30 +48,32 @@ export const TrustedServiceAccessProvider = () =>
             output?.servicePrincipal ?? olds!.servicePrincipal,
           );
         }),
-        create: Effect.fn(function* ({ news, session }) {
-          if (!(yield* readTrustedServiceAccess(news.servicePrincipal))) {
+        reconcile: Effect.fn(function* ({ news, session }) {
+          // Observe — fetch live trusted-access state. We never trust prior
+          // `output` blindly; if access was disabled out-of-band we re-enable.
+          let state = yield* readTrustedServiceAccess(news.servicePrincipal);
+
+          // Ensure — enable trusted access if it's missing. This API is
+          // effectively idempotent for already-enabled principals, but we
+          // gate the call to avoid unnecessary churn.
+          if (!state) {
             yield* retryOrganizations(
               organizations.enableAWSServiceAccess({
                 ServicePrincipal: news.servicePrincipal,
               }),
             );
-          }
-
-          const state = yield* readTrustedServiceAccess(news.servicePrincipal);
-          if (!state) {
-            return yield* Effect.fail(
-              new Error(
-                `trusted service access '${news.servicePrincipal}' not found after create`,
-              ),
-            );
+            state = yield* readTrustedServiceAccess(news.servicePrincipal);
+            if (!state) {
+              return yield* Effect.fail(
+                new Error(
+                  `trusted service access '${news.servicePrincipal}' not found after create`,
+                ),
+              );
+            }
           }
 
           yield* session.note(state.servicePrincipal);
           return state;
-        }),
-        update: Effect.fn(function* ({ output, session }) {
-          yield* session.note(output.servicePrincipal);
-          return output;
         }),
         delete: Effect.fn(function* ({ output }) {
           if (!(yield* readTrustedServiceAccess(output.servicePrincipal))) {

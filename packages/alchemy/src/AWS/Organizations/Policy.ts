@@ -96,24 +96,32 @@ export const PolicyProvider = () =>
             ? state
             : Unowned(state);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
-          // Engine has cleared us via `read` (foreign-tagged policies are
-          // surfaced as `Unowned`). On a race between read and create,
-          // `DuplicatePolicyException` is treated as adoption.
-          const existing = yield* readPolicyByName({
-            type: news.type,
-            name,
-          });
+          const desiredDescription = news.description ?? "";
+          const desiredContent = JSON.stringify(news.document);
 
-          if (!existing) {
+          // Observe — locate the policy by ID if known, else by type+name.
+          // Both `name` (after generation) and `type` are stable, so `diff`
+          // handles renames as a replacement; here we just look up.
+          let state = output?.policyId
+            ? yield* readPolicyById(output.policyId)
+            : yield* readPolicyByName({
+                type: news.type,
+                name,
+              });
+
+          // Ensure — create the policy if missing. Tolerate
+          // `DuplicatePolicyException` as adoption (a peer reconciler beat
+          // us, or our observation lost a race).
+          if (!state) {
             yield* retryOrganizations(
               organizations
                 .createPolicy({
                   Name: name,
-                  Description: news.description ?? "",
+                  Description: desiredDescription,
                   Type: news.type,
-                  Content: JSON.stringify(news.document),
+                  Content: desiredContent,
                 })
                 .pipe(
                   Effect.catchTag(
@@ -122,56 +130,54 @@ export const PolicyProvider = () =>
                   ),
                 ),
             );
+            state = yield* readPolicyByName({
+              type: news.type,
+              name,
+            });
+            if (!state) {
+              return yield* Effect.fail(
+                new Error(`policy '${name}' not found after create`),
+              );
+            }
           }
 
-          const created = yield* readPolicyByName({
-            type: news.type,
-            name,
-          });
-          if (!created) {
-            return yield* Effect.fail(
-              new Error(`policy '${name}' not found after create`),
+          // Sync description + content — diff observed cloud state against
+          // desired. `updatePolicy` requires `Name`; we keep the existing
+          // policy name (rename triggers replacement at the diff level).
+          const observedDescription = state.description ?? "";
+          const observedContent = JSON.stringify(state.document);
+          if (
+            observedDescription !== desiredDescription ||
+            observedContent !== desiredContent
+          ) {
+            yield* retryOrganizations(
+              organizations.updatePolicy({
+                PolicyId: state.policyId,
+                Name: state.name,
+                Description: desiredDescription,
+                Content: desiredContent,
+              }),
             );
           }
 
+          // Sync tags — diff observed cloud tags against desired. Using
+          // `state.tags` (fetched fresh) keeps the reconciler convergent on
+          // adoption and drift.
           const tags = yield* updateResourceTags({
             id,
-            resourceId: created.policyId,
-            olds: created.tags,
+            resourceId: state.policyId,
+            olds: state.tags,
             news: news.tags,
           });
 
-          yield* session.note(created.policyArn);
-          return {
-            ...created,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* retryOrganizations(
-            organizations.updatePolicy({
-              PolicyId: output.policyId,
-              Name: output.name,
-              Description: news.description ?? "",
-              Content: JSON.stringify(news.document),
-            }),
-          );
-
-          const tags = yield* updateResourceTags({
-            id,
-            resourceId: output.policyId,
-            olds: olds.tags,
-            news: news.tags,
-          });
-
-          const updated = yield* readPolicyById(output.policyId);
+          const updated = yield* readPolicyById(state.policyId);
           if (!updated) {
             return yield* Effect.fail(
-              new Error(`policy '${output.policyId}' not found after update`),
+              new Error(`policy '${state.policyId}' not found after reconcile`),
             );
           }
 
-          yield* session.note(output.policyArn);
+          yield* session.note(updated.policyArn);
           return {
             ...updated,
             tags,

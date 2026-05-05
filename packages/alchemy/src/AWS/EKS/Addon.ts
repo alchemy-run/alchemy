@@ -190,51 +190,66 @@ export const AddonProvider = () =>
             ? state
             : Unowned(state);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const tags = {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
+          const clusterName = news.clusterName as string;
+          const addonName = news.addonName;
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
 
-          // Engine has cleared us via `read` (foreign-tagged addons are
-          // surfaced as `Unowned`). On a race between read and create, treat
-          // `ResourceInUseException` as adoption.
-          yield* eks
-            .createAddon({
-              clusterName: news.clusterName as string,
-              addonName: news.addonName,
-              addonVersion: news.addonVersion,
-              serviceAccountRoleArn: news.serviceAccountRoleArn as
-                | string
-                | undefined,
-              resolveConflicts: news.resolveConflicts,
-              configurationValues: news.configurationValues,
-              podIdentityAssociations: news.podIdentityAssociations,
-              namespaceConfig: news.namespaceConfig,
-              tags,
-              clientRequestToken: yield* toClientRequestToken(id, "create"),
-            })
-            .pipe(Effect.catchTag("ResourceInUseException", () => Effect.void));
-
-          const addon = yield* waitForAddonActive({
-            clusterName: news.clusterName as string,
-            addonName: news.addonName,
+          // Observe — fetch live cloud state by (clusterName, addonName).
+          let state = yield* readAddon({
+            clusterName,
+            addonName,
           });
-          yield* session.note(addon.addonArn);
-          return addon;
-        }),
-        update: Effect.fn(function* ({ id, olds, news, output, session }) {
+
+          // Ensure — create if missing. Tolerate `ResourceInUseException`
+          // as a race with a peer reconciler: re-read and continue with
+          // sync.
+          if (!state) {
+            yield* eks
+              .createAddon({
+                clusterName,
+                addonName,
+                addonVersion: news.addonVersion,
+                serviceAccountRoleArn: news.serviceAccountRoleArn as
+                  | string
+                  | undefined,
+                resolveConflicts: news.resolveConflicts,
+                configurationValues: news.configurationValues,
+                podIdentityAssociations: news.podIdentityAssociations,
+                namespaceConfig: news.namespaceConfig,
+                tags: desiredTags,
+                clientRequestToken: yield* toClientRequestToken(id, "create"),
+              })
+              .pipe(
+                Effect.catchTag("ResourceInUseException", () => Effect.void),
+              );
+
+            state = yield* waitForAddonActive({
+              clusterName,
+              addonName,
+            });
+          }
+
+          // Sync addon version / config — diff observed against desired.
+          // updateAddon handles version, role, resolve conflicts, config
+          // values, and pod identity associations atomically.
+          const podIdentityChanged =
+            JSON.stringify(state.podIdentityAssociations ?? []) !==
+            JSON.stringify(news.podIdentityAssociations ?? []);
           if (
-            olds.addonVersion !== news.addonVersion ||
-            olds.serviceAccountRoleArn !== news.serviceAccountRoleArn ||
-            olds.resolveConflicts !== news.resolveConflicts ||
-            olds.configurationValues !== news.configurationValues ||
-            JSON.stringify(olds.podIdentityAssociations ?? []) !==
-              JSON.stringify(news.podIdentityAssociations ?? [])
+            (news.addonVersion !== undefined &&
+              state.addonVersion !== news.addonVersion) ||
+            state.serviceAccountRoleArn !==
+              (news.serviceAccountRoleArn as string | undefined) ||
+            state.configurationValues !== news.configurationValues ||
+            podIdentityChanged
           ) {
             yield* eks.updateAddon({
-              clusterName: output.clusterName,
-              addonName: output.addonName,
+              clusterName,
+              addonName,
               addonVersion: news.addonVersion,
               serviceAccountRoleArn: news.serviceAccountRoleArn as
                 | string
@@ -244,40 +259,31 @@ export const AddonProvider = () =>
               podIdentityAssociations: news.podIdentityAssociations,
               clientRequestToken: yield* toClientRequestToken(id, "update"),
             });
+            state = yield* waitForAddonActive({
+              clusterName,
+              addonName,
+            });
           }
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
+          // Sync tags — diff observed cloud tags against desired.
+          const { removed, upsert } = diffTags(state.tags, desiredTags);
           if (upsert.length > 0) {
             yield* eks.tagResource({
-              resourceArn: output.addonArn,
+              resourceArn: state.addonArn,
               tags: Object.fromEntries(
                 upsert.map((tag) => [tag.Key, tag.Value] as const),
               ),
             });
           }
-
           if (removed.length > 0) {
             yield* eks.untagResource({
-              resourceArn: output.addonArn,
+              resourceArn: state.addonArn,
               tagKeys: removed,
             });
           }
 
-          const addon = yield* waitForAddonActive({
-            clusterName: output.clusterName,
-            addonName: output.addonName,
-          });
-          yield* session.note(output.addonArn);
-          return addon;
+          yield* session.note(state.addonArn);
+          return state;
         }),
         delete: Effect.fn(function* ({ olds, output }) {
           yield* eks

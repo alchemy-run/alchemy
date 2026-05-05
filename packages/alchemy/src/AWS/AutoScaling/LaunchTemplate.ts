@@ -372,104 +372,18 @@ export const LaunchTemplateProvider = () =>
               })
             : undefined;
         }),
-        create: Effect.fn(function* ({ id, news, output, bindings, session }) {
-          const launchTemplateName = yield* toName(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const runtime = yield* hosted.resolveHostedRuntime({
-            id,
-            news,
-            bindings,
-            output,
-          });
-          const existing =
-            (output?.launchTemplateId &&
-              (yield* describeById(output.launchTemplateId))) ??
-            (yield* describeByName(launchTemplateName));
-
-          if (existing) {
-            if (!hasTags(tags, toTagRecord(existing.Tags))) {
-              return yield* Effect.fail(
-                new Error(
-                  `Launch template '${launchTemplateName}' already exists and is not managed by alchemy`,
-                ),
-              );
-            }
-            yield* createVersion({
-              launchTemplateId: existing.LaunchTemplateId as LaunchTemplateId,
-              news,
-              runtime,
-            });
-            yield* syncTemplateTags({
-              launchTemplateId: existing.LaunchTemplateId as LaunchTemplateId,
-              oldTags: toTagRecord(existing.Tags),
-              newTags: tags,
-            });
-            const refreshed = yield* describeById(existing.LaunchTemplateId!);
-            if (!refreshed) {
-              return yield* Effect.fail(
-                new Error(
-                  `Launch template '${launchTemplateName}' was not readable after update`,
-                ),
-              );
-            }
-            yield* session.note(refreshed.LaunchTemplateId!);
-            return toAttributes(refreshed, runtime);
-          }
-
-          const created = yield* ec2.createLaunchTemplate({
-            LaunchTemplateName: launchTemplateName,
-            VersionDescription: runtime.code?.hash ?? "alchemy-create",
-            TagSpecifications: [
-              {
-                ResourceType: "launch-template",
-                Tags: Object.entries(tags).map(([Key, Value]) => ({
-                  Key,
-                  Value,
-                })),
-              },
-            ],
-            LaunchTemplateData: hosted.buildLaunchTemplateData(
-              {
-                imageId: news.imageId,
-                instanceType: news.instanceType,
-                keyName: news.keyName,
-                securityGroupIds: news.securityGroupIds as string[] | undefined,
-                associatePublicIpAddress: news.associatePublicIpAddress,
-                tags,
-              },
-              runtime,
-            ),
-          } as any);
-          const template = created.LaunchTemplate;
-          if (!template?.LaunchTemplateId || !template.LaunchTemplateName) {
-            return yield* Effect.fail(
-              new Error(
-                `createLaunchTemplate returned no launch template for '${id}'`,
-              ),
-            );
-          }
-
-          yield* session.note(template.LaunchTemplateId);
-          return toAttributes(template as ec2.LaunchTemplate, runtime);
-        }),
-        update: Effect.fn(function* ({
+        reconcile: Effect.fn(function* ({
           id,
           news,
-          olds,
           output,
           bindings,
           session,
         }) {
-          const tags = {
+          const launchTemplateName =
+            output?.launchTemplateName ?? (yield* toName(id, news));
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
-          };
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
           };
           const runtime = yield* hosted.resolveHostedRuntime({
             id,
@@ -478,27 +392,89 @@ export const LaunchTemplateProvider = () =>
             output,
           });
 
-          yield* createVersion({
-            launchTemplateId: output.launchTemplateId,
-            news,
-            runtime,
-          });
-          yield* syncTemplateTags({
-            launchTemplateId: output.launchTemplateId,
-            oldTags,
-            newTags: tags,
-          });
+          // Observe — fetch live cloud state. We try both lookup paths
+          // (id from output, name from desired) so the reconciler
+          // converges whether `output` is fresh, stale, or missing.
+          let existing =
+            (output?.launchTemplateId &&
+              (yield* describeById(output.launchTemplateId))) ||
+            (yield* describeByName(launchTemplateName));
 
-          const refreshed = yield* describeById(output.launchTemplateId);
-          if (!refreshed) {
+          // Ensure — create the launch template if missing. We must
+          // verify alchemy ownership via tags here (since this resource
+          // does not implement `read` adoption gating).
+          if (!existing) {
+            const created = yield* ec2.createLaunchTemplate({
+              LaunchTemplateName: launchTemplateName,
+              VersionDescription: runtime.code?.hash ?? "alchemy-create",
+              TagSpecifications: [
+                {
+                  ResourceType: "launch-template",
+                  Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                    Key,
+                    Value,
+                  })),
+                },
+              ],
+              LaunchTemplateData: hosted.buildLaunchTemplateData(
+                {
+                  imageId: news.imageId,
+                  instanceType: news.instanceType,
+                  keyName: news.keyName,
+                  securityGroupIds: news.securityGroupIds as
+                    | string[]
+                    | undefined,
+                  associatePublicIpAddress: news.associatePublicIpAddress,
+                  tags: desiredTags,
+                },
+                runtime,
+              ),
+            } as any);
+            const template = created.LaunchTemplate;
+            if (!template?.LaunchTemplateId || !template.LaunchTemplateName) {
+              return yield* Effect.fail(
+                new Error(
+                  `createLaunchTemplate returned no launch template for '${id}'`,
+                ),
+              );
+            }
+            yield* session.note(template.LaunchTemplateId);
+            return toAttributes(template as ec2.LaunchTemplate, runtime);
+          }
+
+          if (!hasTags(desiredTags, toTagRecord(existing.Tags))) {
             return yield* Effect.fail(
               new Error(
-                `Launch template '${output.launchTemplateName}' was not readable after update`,
+                `Launch template '${launchTemplateName}' already exists and is not managed by alchemy`,
               ),
             );
           }
 
-          yield* session.note(output.launchTemplateId);
+          // Sync version — each reconcile creates a new version pinned as
+          // the default. ASGs that reference `$Default` automatically
+          // pick up the new version.
+          yield* createVersion({
+            launchTemplateId: existing.LaunchTemplateId as LaunchTemplateId,
+            news,
+            runtime,
+          });
+
+          // Sync tags — diff observed cloud tags against desired.
+          yield* syncTemplateTags({
+            launchTemplateId: existing.LaunchTemplateId as LaunchTemplateId,
+            oldTags: toTagRecord(existing.Tags),
+            newTags: desiredTags,
+          });
+
+          const refreshed = yield* describeById(existing.LaunchTemplateId!);
+          if (!refreshed) {
+            return yield* Effect.fail(
+              new Error(
+                `Launch template '${launchTemplateName}' was not readable after reconcile`,
+              ),
+            );
+          }
+          yield* session.note(refreshed.LaunchTemplateId!);
           return toAttributes(refreshed, runtime);
         }),
         delete: Effect.fn(function* ({ output, session }) {

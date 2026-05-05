@@ -138,54 +138,72 @@ export const AuthorizerProvider = () =>
             type: a.type!,
           };
         }),
-        create: Effect.fn(function* ({ id, news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("Authorizer props were not resolved");
           }
           const news = newsIn as Input.ResolveProps<AuthorizerProps>;
           const name = yield* generatedName(id, news);
-          const a = yield* ag.createAuthorizer({
-            restApiId: news.restApiId as string,
-            name,
-            type: news.type,
-            providerARNs: news.providerARNs,
-            authType: news.authType,
-            authorizerUri: news.authorizerUri,
-            authorizerCredentials: news.authorizerCredentials,
-            identitySource: news.identitySource,
-            identityValidationExpression: news.identityValidationExpression,
-            authorizerResultTtlInSeconds: news.authorizerResultTtlInSeconds,
-          });
-          if (!a.id) return yield* Effect.die("createAuthorizer missing id");
-          yield* session.note(`Created authorizer ${a.id}`);
-          return {
-            authorizerId: a.id,
-            restApiId: news.restApiId as string,
-            name,
-            type: news.type,
-          };
-        }),
-        update: Effect.fn(function* ({ news: newsIn, olds, output, session }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("Authorizer props were not resolved");
+          const restApiId = (output?.restApiId ?? news.restApiId) as string;
+
+          // Observe — fetch the live authorizer if we have a cached id.
+          // The cached id is the only way to find the resource; on a stale
+          // delete out of band we re-create.
+          let observed = output?.authorizerId
+            ? yield* ag
+                .getAuthorizer({
+                  restApiId,
+                  authorizerId: output.authorizerId,
+                })
+                .pipe(
+                  Effect.catchTag("NotFoundException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                )
+            : undefined;
+
+          // Ensure — create if missing.
+          if (!observed?.id) {
+            const created = yield* ag.createAuthorizer({
+              restApiId: news.restApiId as string,
+              name,
+              type: news.type,
+              providerARNs: news.providerARNs,
+              authType: news.authType,
+              authorizerUri: news.authorizerUri,
+              authorizerCredentials: news.authorizerCredentials,
+              identitySource: news.identitySource,
+              identityValidationExpression: news.identityValidationExpression,
+              authorizerResultTtlInSeconds: news.authorizerResultTtlInSeconds,
+            });
+            if (!created.id)
+              return yield* Effect.die("createAuthorizer missing id");
+            yield* session.note(`Created authorizer ${created.id}`);
+            observed = yield* ag.getAuthorizer({
+              restApiId: news.restApiId as string,
+              authorizerId: created.id,
+            });
           }
-          const news = newsIn as Input.ResolveProps<AuthorizerProps>;
+
+          const authorizerId = observed.id!;
+
+          // Sync mutable fields — diff observed cloud state against desired.
           const patches: ag.PatchOperation[] = [];
-          if (news.authorizerUri !== olds.authorizerUri) {
+          if (news.authorizerUri !== observed.authorizerUri) {
             patches.push({
               op: news.authorizerUri === undefined ? "remove" : "replace",
               path: "/authorizerUri",
               value: news.authorizerUri,
             });
           }
-          if (news.identitySource !== olds.identitySource) {
+          if (news.identitySource !== observed.identitySource) {
             patches.push({
               op: news.identitySource === undefined ? "remove" : "replace",
               path: "/identitySource",
               value: news.identitySource,
             });
           }
-          if (news.authorizerCredentials !== olds.authorizerCredentials) {
+          if (news.authorizerCredentials !== observed.authorizerCredentials) {
             patches.push({
               op:
                 news.authorizerCredentials === undefined ? "remove" : "replace",
@@ -195,7 +213,7 @@ export const AuthorizerProvider = () =>
           }
           if (
             news.identityValidationExpression !==
-            olds.identityValidationExpression
+            observed.identityValidationExpression
           ) {
             patches.push({
               op:
@@ -208,7 +226,7 @@ export const AuthorizerProvider = () =>
           }
           if (
             news.authorizerResultTtlInSeconds !==
-            olds.authorizerResultTtlInSeconds
+            observed.authorizerResultTtlInSeconds
           ) {
             patches.push({
               op:
@@ -224,21 +242,22 @@ export const AuthorizerProvider = () =>
           }
           if (patches.length > 0) {
             yield* ag.updateAuthorizer({
-              restApiId: output.restApiId,
-              authorizerId: output.authorizerId,
+              restApiId,
+              authorizerId,
               patchOperations: patches,
             });
           }
-          yield* session.note(`Updated authorizer ${output.authorizerId}`);
-          const a = yield* ag.getAuthorizer({
-            restApiId: output.restApiId,
-            authorizerId: output.authorizerId,
+
+          yield* session.note(`Reconciled authorizer ${authorizerId}`);
+          const final = yield* ag.getAuthorizer({
+            restApiId,
+            authorizerId,
           });
           return {
-            authorizerId: output.authorizerId,
-            restApiId: output.restApiId,
-            name: a.name!,
-            type: a.type!,
+            authorizerId,
+            restApiId,
+            name: final.name!,
+            type: final.type!,
           };
         }),
         delete: Effect.fn(function* ({ output, session }) {

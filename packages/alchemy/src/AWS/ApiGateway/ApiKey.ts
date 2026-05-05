@@ -143,76 +143,91 @@ export const ApiKeyProvider = () =>
             tags: tagRecord(k.tags),
           };
         }),
-        create: Effect.fn(function* ({ id, news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("ApiKey props were not resolved");
           }
           const news = newsIn as ApiKeyProps;
           const name = yield* generatedName(id, news);
           const internalTags = yield* createInternalTags(id);
-          const allTags = { ...news.tags, ...internalTags };
+          const desiredTags = { ...news.tags, ...internalTags };
 
-          const k = yield* ag
-            .createApiKey({
-              name,
-              description: news.description,
-              enabled: news.enabled,
-              generateDistinctId: news.generateDistinctId,
-              value: resolvedValue(news.value),
-              stageKeys: news.stageKeys,
-              customerId: news.customerId,
-              tags: allTags,
-            })
-            .pipe(
-              Effect.catchTag("ConflictException", () =>
-                Effect.gen(function* () {
-                  const existing = yield* readByName(id, name);
-                  if (existing) return existing;
-                  return yield* Effect.fail(
-                    new ag.ConflictException({
-                      message: `API key '${name}' already exists and is not managed by alchemy`,
-                    }),
-                  );
-                }),
-              ),
-            );
-          if (!k.id) return yield* Effect.die("createApiKey missing id");
-          yield* session.note(`Created API key ${k.id}`);
-          const full = yield* ag.getApiKey({
-            apiKey: k.id,
-            includeValue: false,
-          });
-          if (!full.id) return yield* Effect.die("getApiKey missing id");
-          return {
-            id: full.id,
-            name: full.name,
-            enabled: full.enabled,
-            tags: tagRecord(full.tags),
-          };
-        }),
-        update: Effect.fn(function* ({ id, news: newsIn, output, session }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("ApiKey props were not resolved");
+          // Observe — find the API key. We try the cached id first, fall
+          // back to scanning by name with the alchemy ownership filter so
+          // the reconciler converges after an out-of-band recreate or an
+          // adoption that bypassed our id cache.
+          let observed = output?.id
+            ? yield* ag
+                .getApiKey({ apiKey: output.id, includeValue: false })
+                .pipe(
+                  Effect.catchTag("NotFoundException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                )
+            : undefined;
+          if (!observed?.id) {
+            observed = yield* readByName(id, name);
           }
-          const news = newsIn as ApiKeyProps;
+
+          // Ensure — create if missing. Tolerate `ConflictException` as a
+          // race with a peer reconciler or a stray key with the same name:
+          // re-look up by name and treat the alchemy-owned hit as observed.
+          if (!observed?.id) {
+            const created = yield* ag
+              .createApiKey({
+                name,
+                description: news.description,
+                enabled: news.enabled,
+                generateDistinctId: news.generateDistinctId,
+                value: resolvedValue(news.value),
+                stageKeys: news.stageKeys,
+                customerId: news.customerId,
+                tags: desiredTags,
+              })
+              .pipe(
+                Effect.catchTag("ConflictException", () =>
+                  Effect.gen(function* () {
+                    const existing = yield* readByName(id, name);
+                    if (existing) return existing;
+                    return yield* Effect.fail(
+                      new ag.ConflictException({
+                        message: `API key '${name}' already exists and is not managed by alchemy`,
+                      }),
+                    );
+                  }),
+                ),
+              );
+            if (!created.id)
+              return yield* Effect.die("createApiKey missing id");
+            yield* session.note(`Created API key ${created.id}`);
+            observed = yield* ag.getApiKey({
+              apiKey: created.id,
+              includeValue: false,
+            });
+          }
+
+          const apiKeyId = observed.id!;
+
+          // Sync mutable scalar fields — observed ↔ desired patch list.
           const patches: ag.PatchOperation[] = [];
-          // Generated names are stable physical names; only patch when the user
-          // explicitly supplies a new name.
-          if (news.name !== undefined && news.name !== output.name) {
+          if (news.name !== undefined && news.name !== observed.name) {
             patches.push({
               op: "replace",
               path: "/name",
-              value: news.name ?? "",
+              value: news.name,
             });
           }
-          if (news.description !== undefined) {
+          if (
+            news.description !== undefined &&
+            news.description !== observed.description
+          ) {
             patches.push({
               op: "replace",
               path: "/description",
-              value: news.description ?? "",
+              value: news.description,
             });
           }
-          if (news.enabled !== undefined && news.enabled !== output.enabled) {
+          if (news.enabled !== undefined && news.enabled !== observed.enabled) {
             patches.push({
               op: "replace",
               path: "/enabled",
@@ -221,31 +236,33 @@ export const ApiKeyProvider = () =>
           }
           if (patches.length > 0) {
             yield* ag.updateApiKey({
-              apiKey: output.id,
+              apiKey: apiKeyId,
               patchOperations: patches,
             });
           }
 
-          const internalTags = yield* createInternalTags(id);
-          const newTags = { ...news.tags, ...internalTags };
-          if (!deepEqual(output.tags, newTags)) {
+          // Sync tags — diff observed cloud tags against desired so adoption
+          // converges without fighting whatever tag set was already there.
+          const observedTags = tagRecord(observed.tags);
+          if (!deepEqual(observedTags, desiredTags)) {
             yield* syncTags({
-              resourceArn: apiKeyArn(awsRegion, output.id),
-              oldTags: output.tags,
-              newTags,
+              resourceArn: apiKeyArn(awsRegion, apiKeyId),
+              oldTags: observedTags,
+              newTags: desiredTags,
             });
           }
 
-          yield* session.note(`Updated API key ${output.id}`);
-          const full = yield* ag.getApiKey({
-            apiKey: output.id,
+          yield* session.note(`Reconciled API key ${apiKeyId}`);
+          const final = yield* ag.getApiKey({
+            apiKey: apiKeyId,
             includeValue: false,
           });
+          if (!final.id) return yield* Effect.die("getApiKey missing id");
           return {
-            id: output.id,
-            name: full.name,
-            enabled: full.enabled,
-            tags: tagRecord(full.tags),
+            id: final.id,
+            name: final.name,
+            enabled: final.enabled,
+            tags: tagRecord(final.tags),
           };
         }),
         delete: Effect.fn(function* ({ output, session }) {

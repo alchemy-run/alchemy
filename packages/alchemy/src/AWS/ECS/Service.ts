@@ -449,21 +449,104 @@ export const ServiceProvider = () =>
             status: service.status ?? "ACTIVE",
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const serviceName = yield* toServiceName(id, news);
-          const ingress = news.public
-            ? yield* createIngress({ id, news })
-            : undefined;
-          const tags = {
+          const clusterArn = clusterArnOf(news.cluster) as ClusterArn;
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
 
-          const created = yield* ecs.createService({
-            ...serviceInput(news),
-            serviceName,
-            cluster: clusterArnOf(news.cluster),
-            loadBalancers: ingress
+          // Observe — describe service in target cluster. The cluster may
+          // not yet exist on first reconcile, so we tolerate
+          // `ClusterNotFoundException`.
+          const described = yield* ecs
+            .describeServices({
+              cluster: clusterArn,
+              services: [serviceName],
+              include: ["TAGS"],
+            })
+            .pipe(
+              Effect.catchTag("ClusterNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          const observed = described?.services?.find(
+            (s) =>
+              s.serviceName === serviceName &&
+              s.status !== "INACTIVE" &&
+              s.status !== "DRAINING",
+          );
+
+          // Ensure — create if missing. Provision public ingress if
+          // requested and not already in `output`. Replacement (e.g. cluster
+          // change) is handled by diff returning `{ action: "replace" }`,
+          // so within reconcile we trust `output` for ingress identity.
+          let ingress:
+            | {
+                loadBalancerArn?: string;
+                targetGroupArn?: string;
+                listenerArn?: string;
+                url?: string;
+              }
+            | undefined = output?.targetGroupArn
+            ? {
+                loadBalancerArn: output.loadBalancerArn,
+                targetGroupArn: output.targetGroupArn,
+                listenerArn: output.listenerArn,
+                url: output.url,
+              }
+            : undefined;
+
+          if (!observed?.serviceArn) {
+            if (news.public && !ingress) {
+              ingress = yield* createIngress({ id, news });
+            }
+
+            const created = yield* ecs.createService({
+              ...serviceInput(news),
+              serviceName,
+              cluster: clusterArn,
+              loadBalancers: ingress
+                ? [
+                    {
+                      targetGroupArn: ingress.targetGroupArn!,
+                      containerName: news.task.containerName,
+                      containerPort: news.task.port ?? 3000,
+                    },
+                  ]
+                : undefined,
+              tags: toEcsTags(desiredTags),
+              enableECSManagedTags: true,
+            });
+            const service = created.service;
+            if (!service?.serviceArn) {
+              return yield* Effect.die(
+                new Error("createService returned no service"),
+              );
+            }
+            yield* session.note(service.serviceArn);
+            return {
+              serviceArn: service.serviceArn as ServiceArn,
+              serviceName: service.serviceName!,
+              clusterArn: service.clusterArn as ClusterArn,
+              taskDefinitionArn: service.taskDefinition!,
+              status: service.status ?? "ACTIVE",
+              url: ingress?.url,
+              loadBalancerArn: ingress?.loadBalancerArn,
+              targetGroupArn: ingress?.targetGroupArn,
+              listenerArn: ingress?.listenerArn,
+            };
+          }
+
+          // Sync — apply mutable fields (taskDefinition, desiredCount,
+          // network, deployment) via updateService with a forced new
+          // deployment.
+          const updated = yield* ecs.updateService({
+            ...serviceInput(news, output),
+            service: serviceName,
+            cluster: clusterArn,
+            loadBalancers: ingress?.targetGroupArn
               ? [
                   {
                     targetGroupArn: ingress.targetGroupArn,
@@ -472,52 +555,24 @@ export const ServiceProvider = () =>
                   },
                 ]
               : undefined,
-            tags: toEcsTags(tags),
-            enableECSManagedTags: true,
+            forceNewDeployment: true,
           });
-          const service = created.service;
-          if (!service?.serviceArn) {
-            return yield* Effect.die(
-              new Error("createService returned no service"),
-            );
-          }
-          yield* session.note(service.serviceArn);
-
+          const service = updated.service;
+          yield* session.note(observed.serviceArn);
           return {
-            serviceArn: service.serviceArn as ServiceArn,
-            serviceName: service.serviceName!,
-            clusterArn: service.clusterArn as ClusterArn,
-            taskDefinitionArn: service.taskDefinition!,
-            status: service.status ?? "ACTIVE",
+            serviceArn: observed.serviceArn as ServiceArn,
+            serviceName: observed.serviceName!,
+            clusterArn: observed.clusterArn as ClusterArn,
+            taskDefinitionArn:
+              service?.taskDefinition ??
+              observed.taskDefinition ??
+              output?.taskDefinitionArn ??
+              "",
+            status: service?.status ?? observed.status ?? "ACTIVE",
             url: ingress?.url,
             loadBalancerArn: ingress?.loadBalancerArn,
             targetGroupArn: ingress?.targetGroupArn,
             listenerArn: ingress?.listenerArn,
-          };
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          const updated = yield* ecs.updateService({
-            ...serviceInput(news, output),
-            service: output.serviceName,
-            cluster: output.clusterArn,
-            loadBalancers: output.targetGroupArn
-              ? [
-                  {
-                    targetGroupArn: output.targetGroupArn,
-                    containerName: news.task.containerName,
-                    containerPort: news.task.port ?? 3000,
-                  },
-                ]
-              : undefined,
-            forceNewDeployment: true,
-          });
-          const service = updated.service;
-          yield* session.note(output.serviceArn);
-          return {
-            ...output,
-            taskDefinitionArn:
-              service?.taskDefinition ?? output.taskDefinitionArn,
-            status: service?.status ?? output.status,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

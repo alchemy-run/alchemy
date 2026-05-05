@@ -93,44 +93,50 @@ export const GroupMembershipProvider = () =>
           ),
       };
     }),
-    create: Effect.fn(function* ({ news, session }) {
-      for (const userName of news.userNames as string[]) {
-        yield* iam.addUserToGroup({
-          GroupName: news.groupName as string,
-          UserName: userName,
-        });
-      }
-      yield* session.note(news.groupName as string);
-      return {
-        groupName: news.groupName as string,
-        userNames: news.userNames as string[],
-      };
-    }),
-    update: Effect.fn(function* ({ olds, news, output, session }) {
-      const oldSet = new Set(olds.userNames as string[]);
-      const newSet = new Set(news.userNames as string[]);
-      for (const userName of news.userNames as string[]) {
-        if (!oldSet.has(userName)) {
+    reconcile: Effect.fn(function* ({ news, session }) {
+      const groupName = news.groupName as string;
+      const desiredUsers = news.userNames as string[];
+
+      // Observe — read the actual membership of the group. `getGroup`
+      // both confirms the group exists and returns the current user list
+      // in a single call.
+      const response = yield* iam
+        .getGroup({ GroupName: groupName })
+        .pipe(
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      const observedUsers = (response?.Users ?? [])
+        .map((user) => user.UserName)
+        .filter((userName): userName is string => typeof userName === "string");
+
+      // Sync — diff observed against desired and apply only the delta.
+      const observedSet = new Set(observedUsers);
+      const desiredSet = new Set(desiredUsers);
+      for (const userName of desiredUsers) {
+        if (!observedSet.has(userName)) {
           yield* iam.addUserToGroup({
-            GroupName: output.groupName,
+            GroupName: groupName,
             UserName: userName,
           });
         }
       }
-      for (const userName of olds.userNames as string[]) {
-        if (!newSet.has(userName)) {
+      for (const userName of observedUsers) {
+        if (!desiredSet.has(userName)) {
           yield* iam
             .removeUserFromGroup({
-              GroupName: output.groupName,
+              GroupName: groupName,
               UserName: userName,
             })
             .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
         }
       }
-      yield* session.note(output.groupName);
+
+      yield* session.note(groupName);
       return {
-        groupName: output.groupName,
-        userNames: news.userNames as string[],
+        groupName,
+        userNames: desiredUsers,
       };
     }),
     delete: Effect.fn(function* ({ output }) {

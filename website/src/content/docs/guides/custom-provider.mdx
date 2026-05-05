@@ -8,7 +8,7 @@ sidebar:
 A **provider** is what gives meaning to a [Resource](/concepts/resource)
 declaration. When you `yield*` a resource inside a Stack, Alchemy
 looks up the provider for that resource's type and calls the
-appropriate lifecycle method — `create`, `update`, `delete`, and
+appropriate lifecycle method — `reconcile`, `delete`, and
 optionally `diff`, `read`, `precreate`, `tail`, `logs`.
 
 Providers are just Effect `Layer`s, which means **adding support for
@@ -109,7 +109,7 @@ for Stripe.Product`. Let's fix that.
 
 A provider layer is a `Layer<Provider<R>>` produced by
 `Provider.effect(ResourceClass, effect)`. The inner Effect
-constructs a `ProviderService` — an object with `create`, `update`,
+constructs a `ProviderService` — an object with `reconcile`,
 `delete` (required) and optional hooks like `diff`, `read`,
 `precreate`.
 
@@ -131,8 +131,7 @@ export const StripeProduct = Resource<StripeProduct>("Stripe.Product");
 +    StripeProduct,
 +    Effect.gen(function* () {
 +      return StripeProduct.Provider.of({
-+        create: () => Effect.die("not implemented"),
-+        update: () => Effect.die("not implemented"),
++        reconcile: () => Effect.die("not implemented"),
 +        delete: () => Effect.die("not implemented"),
 +      });
 +    }),
@@ -196,8 +195,7 @@ export const StripeProductProvider = () =>
 +      const stripe = new Stripe(Redacted.value(apiKey));
 +
       return StripeProduct.Provider.of({
-        create: () => Effect.die("not implemented"),
-        update: () => Effect.die("not implemented"),
+        reconcile: () => Effect.die("not implemented"),
         delete: () => Effect.die("not implemented"),
       });
     }),
@@ -216,16 +214,40 @@ Alchemy won't let you use it in a stack without supplying
 credentials. We'll provide them via an AuthProvider in a later
 step.
 
-## Implement `create`
+## Implement `reconcile`
 
-`create` is called when a resource is declared but not yet in
-state. It receives `news` (resolved input props), `id` (logical
-ID), `instanceId` (deterministic suffix), and `bindings`. It
-returns the output attributes.
+`reconcile` is the single lifecycle method that converges the
+cloud's actual state to the desired state. It runs on every apply
+— first-time provisioning, routine updates, and adoption
+takeovers — so its body must work correctly for all three.
 
-It **must be idempotent** — Alchemy may retry it if state
-persistence fails. Use `instanceId` as part of any
-externally-visible identifier so retries find the same row.
+It receives `news` (resolved input props), `id` (logical ID),
+`instanceId` (deterministic suffix), `bindings`, plus two
+context-dependent inputs:
+
+- **`output: Attributes | undefined`** — `undefined` on greenfield
+  creates; defined on updates and on adoption (where the engine
+  imported an existing cloud resource via `read`).
+- **`olds: Props | undefined`** — `undefined` on greenfield AND
+  on adoption (the engine has no prior props for a resource it
+  just discovered); defined only on routine updates.
+
+A reconciler is shaped like:
+
+```
+1. Observe   — derive the physical id; read live cloud state
+2. Ensure    — if missing, create it; tolerate AlreadyExists/etc.
+3. Sync      — for each mutable aspect: read observed, diff vs
+                desired, apply only the delta
+4. Return    — fresh Attributes
+```
+
+:::warning[Don't branch the body on `output === undefined`]
+Writing `if (output === undefined) { /* create body */ } else { /* update body */ }`
+just renames the old `create`/`update` split. The reconciler must be a single
+flow that produces correct cloud state regardless of starting point. Trust
+observed cloud state, not `olds`.
+:::
 
 :::tip[Use `Effect.tryPromise`, not `Effect.promise`]
 `Effect.tryPromise` surfaces SDK errors as Effect failures the
@@ -240,61 +262,64 @@ resource type supports being a binding target, read them here. See
 [Binding](/concepts/binding) for the full contract.
 :::
 
+For the Stripe product, the SDK gives us `retrieve`, `create`, and
+`update`. The reconciler observes via `retrieve`, ensures via
+`create` (catching the cached-id case), and syncs the mutable name
++ description + active flag in a single `update` call:
+
 ```diff lang="typescript"
 return StripeProduct.Provider.of({
--  create: () => Effect.die("not implemented"),
-+  create: Effect.fnUntraced(function* ({ news }) {
-+    const product = yield* Effect.tryPromise(() =>
-+      stripe.products.create({
-+        name: news.name,
-+        description: news.description,
-+        active: news.active,
-+      }),
-+    );
+-  reconcile: () => Effect.die("not implemented"),
++  reconcile: Effect.fnUntraced(function* ({ news, output }) {
++    // Observe — fetch live state if we have a cached id.
++    let product = output?.productId
++      ? yield* Effect.tryPromise(() =>
++          stripe.products.retrieve(output.productId),
++        ).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
++      : undefined;
++
++    // Ensure — create if missing.
++    if (!product) {
++      product = yield* Effect.tryPromise(() =>
++        stripe.products.create({
++          name: news.name,
++          description: news.description,
++          active: news.active,
++        }),
++      );
++    }
++
++    // Sync — patch any mutable field that drifted from desired.
++    if (
++      product.name !== news.name ||
++      product.description !== (news.description ?? null) ||
++      product.active !== (news.active ?? true)
++    ) {
++      product = yield* Effect.tryPromise(() =>
++        stripe.products.update(product!.id, {
++          name: news.name,
++          description: news.description,
++          active: news.active,
++        }),
++      );
++    }
++
 +    return {
 +      productId: product.id,
 +      created: product.created,
 +    };
 +  }),
-   update: () => Effect.die("not implemented"),
    delete: () => Effect.die("not implemented"),
  });
 ```
 
-## Implement `update`
-
-`update` runs when the resource exists and at least one input
-property changed (and the diff didn't classify it as a
-replacement). It receives `news`, `olds`, and the previous
-`output`, and returns the new output attributes.
-
-If your update is a partial PATCH, return the merged shape so
-downstream resources see the full attributes:
-
-:::tip[`news` + `olds` enable real PATCH]
-Both the new and old props are passed in. Diff them yourself to
-build a minimal PATCH payload instead of re-sending the entire
-desired state — useful for APIs with strict update semantics or
-audit logs.
-:::
-
-```diff lang="typescript"
-return StripeProduct.Provider.of({
-   create: Effect.fnUntraced(function* ({ news }) { /* ... */ }),
--  update: () => Effect.die("not implemented"),
-+  update: Effect.fnUntraced(function* ({ news, output }) {
-+    yield* Effect.tryPromise(() =>
-+      stripe.products.update(output.productId, {
-+        name: news.name,
-+        description: news.description,
-+        active: news.active,
-+      }),
-+    );
-+    return output;
-+  }),
-   delete: () => Effect.die("not implemented"),
- });
-```
+The reconciler is **idempotent** by construction — running it
+twice with the same `news` and a fresh `output` cache produces
+the same end state. Alchemy may retry it if state persistence
+fails, and the same body recovers gracefully. Adoption (where
+`output` is set but `olds` is `undefined`) goes through the same
+path: `retrieve` finds the resource, the sync step rewrites any
+fields that drifted from `news`, and we're converged.
 
 ## Implement `delete`
 
@@ -309,8 +334,7 @@ being written. Catch "not found" errors and return `Effect.void`.
 
 ```diff lang="typescript"
 return StripeProduct.Provider.of({
-   create: Effect.fnUntraced(function* ({ news }) { /* ... */ }),
-   update: Effect.fnUntraced(function* ({ news, output }) { /* ... */ }),
+   reconcile: Effect.fnUntraced(function* ({ news, output }) { /* ... */ }),
 -  delete: () => Effect.die("not implemented"),
 +  delete: Effect.fnUntraced(function* ({ output }) {
 +    yield* Effect.tryPromise(() =>
@@ -362,8 +386,7 @@ return StripeProduct.Provider.of({
 +    }
 +    return undefined;
 +  }),
-   create: Effect.fnUntraced(function* ({ news }) { /* ... */ }),
-   update: Effect.fnUntraced(function* ({ news, output }) { /* ... */ }),
+   reconcile: Effect.fnUntraced(function* ({ news, output }) { /* ... */ }),
    delete: Effect.fnUntraced(function* ({ output }) { /* ... */ }),
  });
 ```
@@ -383,7 +406,7 @@ return StripeProduct.Provider.of({
 ## Implement `read` (optional, for recovery and adoption)
 
 The engine calls `read` whenever a resource has no prior state, both
-to recover from interrupted creates *and* to import pre-existing
+to recover from interrupted reconciles *and* to import pre-existing
 cloud resources into a fresh state store. Returning `undefined` tells
 Alchemy the resource doesn't exist and should be created.
 
@@ -401,8 +424,7 @@ return StripeProduct.Provider.of({
 +    if (!product) return undefined;
 +    return { productId: product.id, created: product.created };
 +  }),
-   create: Effect.fnUntraced(function* ({ news }) { /* ... */ }),
-   update: Effect.fnUntraced(function* ({ news, output }) { /* ... */ }),
+   reconcile: Effect.fnUntraced(function* ({ news, output }) { /* ... */ }),
    delete: Effect.fnUntraced(function* ({ output }) { /* ... */ }),
  });
 ```

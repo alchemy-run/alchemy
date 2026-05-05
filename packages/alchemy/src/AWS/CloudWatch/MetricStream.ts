@@ -169,27 +169,37 @@ export const MetricStreamProvider = () =>
             ? state
             : Unowned(state);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* createMetricStreamName(id, news);
-          // Engine has cleared us via `read` (foreign-tagged metric streams
-          // are surfaced as `Unowned`). `putMetricStream` is idempotent.
+        reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
+          // Observe — pin the physical name from `output` if present;
+          // otherwise derive from desired props. Read existing so we have
+          // a baseline for tag-diffing on adoption.
+          const name =
+            output?.metricStreamName ??
+            (yield* createMetricStreamName(id, news));
           const existing = yield* readMetricStream(name);
 
+          // Ensure — `putMetricStream` is an upsert; we send the full
+          // desired config every reconcile.
           yield* retryConcurrent(
             cloudwatch.putMetricStream({
               ...news,
               Name: name,
             }),
           );
+
+          // Sync running state — `enabled` drives start/stop independently
+          // of the put call.
           yield* syncMetricStreamState({
             name,
             enabled: news.enabled,
           });
 
+          // Sync tags — diff against `olds.tags` when we have prior state,
+          // otherwise fall back to what we observed (adoption path).
           const tags = yield* updateResourceTags({
             id,
             resourceArn: metricStreamArn(name),
-            olds: existing?.tags,
+            olds: olds?.tags ?? existing?.tags,
             news: news.tags,
           });
 
@@ -198,42 +208,7 @@ export const MetricStreamProvider = () =>
           const state = yield* readMetricStream(name);
           if (!state) {
             return yield* Effect.fail(
-              new Error(`failed to read created metric stream '${name}'`),
-            );
-          }
-
-          return {
-            ...state,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* retryConcurrent(
-            cloudwatch.putMetricStream({
-              ...news,
-              Name: output.metricStreamName,
-            }),
-          );
-          yield* syncMetricStreamState({
-            name: output.metricStreamName,
-            enabled: news.enabled,
-          });
-
-          const tags = yield* updateResourceTags({
-            id,
-            resourceArn: output.metricStreamArn,
-            olds: olds.tags,
-            news: news.tags,
-          });
-
-          yield* session.note(output.metricStreamArn);
-
-          const state = yield* readMetricStream(output.metricStreamName);
-          if (!state) {
-            return yield* Effect.fail(
-              new Error(
-                `failed to read updated metric stream '${output.metricStreamName}'`,
-              ),
+              new Error(`failed to read reconciled metric stream '${name}'`),
             );
           }
 

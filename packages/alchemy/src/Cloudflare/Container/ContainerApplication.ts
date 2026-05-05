@@ -1038,7 +1038,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
             hash: { image: imageHash },
           };
         }),
-        create: Effect.fnUntraced(function* ({
+        reconcile: Effect.fnUntraced(function* ({
           id,
           news = {},
           bindings,
@@ -1047,7 +1047,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
         }) {
           const name = yield* createApplicationName(id, news.name);
           yield* Effect.logInfo(
-            `Cloudflare Container create: starting ${name}`,
+            `Cloudflare Container reconcile: starting ${name}`,
           );
           const durableObjects = yield* getDurableObjects(bindings);
           const { files, imageRef, imageHash } = yield* computeImageHash(
@@ -1056,21 +1056,53 @@ await Effect.runPromise(serverEffect).catch((err) => {
           );
           const configuration = desiredConfiguration(news, imageRef);
 
-          // Engine has cleared us via `read` — adoption decisions are
-          // centralized. The DO-binding branch below handles the precreate
-          // → real-create transition for the durable object circular case.
-          if (output && !deepEqual(output.durableObjects, durableObjects)) {
+          // Observe — re-fetch the cached application to confirm it still
+          // exists. Cloudflare reports a deleted container application as
+          // `ContainerApplicationNotFound`; we fall back to a name lookup
+          // so we can recover from out-of-band deletes or partial state
+          // persistence failures.
+          let existing: ContainerApplication["Attributes"] | undefined;
+          if (output?.applicationId) {
+            existing = yield* getContainerApplication({
+              accountId: output.accountId,
+              applicationId: output.applicationId,
+            }).pipe(
+              Effect.map((app) => ({
+                ...toAttributes(app),
+                hash: output.hash,
+              })),
+              Effect.catchTag("ContainerApplicationNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          }
+          if (!existing) {
+            const found = yield* findApplicationByName(name);
+            if (found) {
+              existing = {
+                ...toAttributes(found),
+                hash: output?.hash,
+              };
+            }
+          }
+
+          // Special case: precreate produced an application without the
+          // durable object attachment, but the real reconcile now has one
+          // (or vice versa). The DO attachment is immutable, so we delete
+          // and recreate. Adoption-by-namespace is preferred when an app
+          // already owns the namespace.
+          if (existing && !deepEqual(existing.durableObjects, durableObjects)) {
             if (durableObjects) {
-              const existing = yield* findApplicationByNamespace(
+              const owner = yield* findApplicationByNamespace(
                 durableObjects.namespaceId,
               );
               const recovery = resolveDurableObjectApplicationRecovery({
                 namespaceId: durableObjects.namespaceId,
                 expectedName: name,
-                existingName: existing?.name,
+                existingName: owner?.name,
               });
               if (recovery.canAdopt) {
-                if (!existing) {
+                if (!owner) {
                   return yield* Effect.fail(
                     new Error(
                       `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
@@ -1080,27 +1112,27 @@ await Effect.runPromise(serverEffect).catch((err) => {
                 return yield* upsertApplication({
                   id,
                   news,
-                  existing: toAttributes(existing),
+                  existing: toAttributes(owner),
                   session,
                 });
               }
             }
             yield* Effect.logInfo(
-              `Cloudflare Container create: recreating pre-created application ${name} with durable object binding`,
+              `Cloudflare Container reconcile: recreating ${name} to attach durable object binding`,
             );
             yield* session.note(
               `Recreating container application ${name} with durable object binding...`,
             );
             yield* deleteContainerApplication({
-              accountId: output.accountId,
-              applicationId: output.applicationId,
+              accountId: existing.accountId,
+              applicationId: existing.applicationId,
             }).pipe(
               Effect.catchTag(
                 "ContainerApplicationNotFound",
                 () => Effect.void,
               ),
             );
-            if (imageHash !== output.hash?.image) {
+            if (imageHash !== existing.hash?.image) {
               yield* buildAndPushImage(id, news, files, imageRef, session);
             }
             const result = yield* createApplication({
@@ -1117,17 +1149,25 @@ await Effect.runPromise(serverEffect).catch((err) => {
             };
           }
 
-          if (output) {
+          // Sync — application exists with correct DO attachment. Apply
+          // the desired configuration (image + scheduling + secrets, etc.)
+          // through the upsert path, which builds and pushes the image
+          // only when the hash changed and creates a rollout if the
+          // configuration drifted.
+          if (existing) {
             return yield* upsertApplication({
               id,
               news,
-              existing: output,
+              existing,
               session,
             });
           }
 
+          // Ensure — no application exists. Build and push the image,
+          // then create. `createApplication` itself tolerates concurrent
+          // creates by adopting an existing application with the same
+          // name or namespace.
           yield* buildAndPushImage(id, news, files, imageRef, session);
-
           const result = yield* createApplication({
             id,
             news,
@@ -1140,22 +1180,6 @@ await Effect.runPromise(serverEffect).catch((err) => {
             ...("applicationId" in result ? result : toAttributes(result)),
             hash: { image: imageHash },
           };
-        }),
-        update: Effect.fnUntraced(function* ({
-          id,
-          news = {},
-          output,
-          session,
-        }) {
-          yield* Effect.logInfo(
-            `Cloudflare Container update: starting ${output.applicationName}`,
-          );
-          return yield* upsertApplication({
-            id,
-            news,
-            existing: output,
-            session,
-          });
         }),
         delete: Effect.fnUntraced(function* ({ output }) {
           yield* Effect.logInfo(

@@ -18,15 +18,14 @@ It includes a core IaC engine built with Effect. Effect provides the foundation 
 A Resource Provider implements the following Lifecycle Operations:
 
 - **Diff** - compares new props with old props and determines if the Resource needs to be updated or replaced. For updates, it can also specify a list of Stable Properties that will not be changed by the update.
-- **Read** - reads the current state of a Resource and returns the current Output Attributes.
-- **Pre-Create** - an optional operation that can be called to create a stub of a Resource before the actual create operation is called. This is useful for resolving circular dependencies since it allows for an empty resoruce to be created and then updated later with its dependencies (e.g. Function A and B depend on each other, so we can create a stub of Function A and then update it with the actual Function B later).
-- **Create** - creates a new Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the create operation is called. There are various techniques for resolving idempotency, such as deterministic physical name generation and resource tagging.
-- **Update** - updates an existing Resource with new Input Properties.
+- **Read** - reads the current state of a Resource and returns the current Output Attributes. May return `Unowned(attrs)` to signal an existing-but-foreign resource that the engine should refuse to take over unless `--adopt` is set.
+- **Pre-Create** - an optional operation that creates a stub of a Resource before reconcile runs. Used to resolve circular dependencies — e.g. Function A and B depend on each other, so we create a stub of Function A first and then `reconcile` later wires up the real dependency.
+- **Reconcile** - converges a Resource's actual cloud state to the desired state described by the new Input Properties. Called for both first-time provisioning and subsequent updates. The provider receives `output` (current Attributes) and `olds` (previous Props) which may both be `undefined` on a greenfield create, both defined on an update, or `output !== undefined && olds === undefined` on an adoption. See the **Reconciler doctrine** section below for the required shape.
 - **Delete** - deletes an existing Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the delete operation is called. If the resource doesn't exist during deletion, it should not be considered an error.
 - **Capability** - a runtime requirement of a Function (e.g. require `SQS.SendMessage` on a `SQS.Queue`). Each Capability is split into two parts: a `Binding.Service` (runtime SDK wrapper) and a `Binding.Policy` (deploy-time IAM/binding attachment).
 - **Binding.Service** - an Effect Service that wraps an SDK client and exposes a `.bind(resource)` method returning a typed callable for runtime use. Provided as a Layer on the **Function** Effect so it gets bundled into the Lambda/Worker. See [Binding](./packages/alchemy/src/Binding.ts).
 - **Binding.Policy** - an Effect Service that runs only at deploy time to attach IAM policies (AWS) or bindings (Cloudflare) to a Function's role/config. At runtime, `Binding.Policy` uses `Effect.serviceOption` so it gracefully becomes a no-op when the layer is not provided. Policy layers are provided on the **Stack** via `AWS.providers()()`, not on the Function.
-- **Binding** - data attached to a Resource via `resource.bind(data)`. A Binding is a `{ context: PolicyContext, data: BindingData }` tuple that is collected on the Stack during plan/deploy. Bindings enable circular references between Resources — the `Binding.Policy` calls `ctx.bind({ policyStatements: [...] })` on the target Function, which records the binding data on the Stack. The Resource Provider then receives the resolved binding data in its `create`/`update` lifecycle operations via the `bindings` parameter.
+- **Binding** - data attached to a Resource via `resource.bind(data)`. A Binding is a `{ context: PolicyContext, data: BindingData }` tuple that is collected on the Stack during plan/deploy. Bindings enable circular references between Resources — the `Binding.Policy` calls `ctx.bind({ policyStatements: [...] })` on the target Function, which records the binding data on the Stack. The Resource Provider then receives the resolved binding data in its `reconcile` lifecycle operation via the `bindings` parameter.
 - **Binding Contract** - the shape of data a Resource accepts from Bindings. For example, a Lambda Function accepts `{ env?: Record<string, any>, policyStatements?: PolicyStatement[] }` because it needs environment variables and IAM policies. A Cloudflare Worker accepts `{ bindings: Worker.Binding[] }` for its native binding system. The Binding Contract is declared as the fourth type parameter on the `Resource` interface. See [Lambda Function](./packages/alchemy/src/AWS/Lambda/Function.ts) and [Cloudflare Worker](./packages/alchemy/src/Cloudflare/Workers/Worker.ts).
 - **Dependency** - Resources depend on other Resources through two mechanisms:
   - Output Properties of one Resource passed as Input Properties to another Resource (non-circular, directed acyclic graph)
@@ -243,11 +242,60 @@ Include the following information:
 You should almost never use `no-op` in the Diff. No-op should be explicitly designed as a way to say "i know this property changed, but i don't want it to trigger an update". This is an edge-case and not the norm. Usually you want diff to return `undefined` or `void` to let the engine apply the default update logic. Diff is usually just use as an optimization or to identify replacement instead of update.
 :::
 
-- **Read** - determine which API calls are required to read the Output Attributes of a Resource from the Cloud Provider state (otherwise known as refresh or synchronize resource state). This is usually a single Get{Resource} API call, but can be a complex set of calls depending on the Service. Read can also be called without the current Output Attributes because of past state persistence failures. These cases are handled by computing the deterministic Physical Name and looking it up or by searching for Resources using tags (if the Cloud Provider supports it).
+- **Read** - determine which API calls are required to read the Output Attributes of a Resource from the Cloud Provider state (otherwise known as refresh or synchronize resource state). This is usually a single Get{Resource} API call, but can be a complex set of calls depending on the Service. Read can also be called without the current Output Attributes because of past state persistence failures. These cases are handled by computing the deterministic Physical Name and looking it up or by searching for Resources using tags (if the Cloud Provider supports it). Read may return `Unowned(attrs)` when the resource exists but lacks our ownership tags, signalling the engine to gate adoption behind `--adopt` or `adopt(true)`.
 - **Pre-Create** - determine if the Resource needs a pre-create operation. This is usually only the case for the special Function/Runtime Resources like AWS Lambda Functions. If it is required, then document which API call(s) should be called and what the empty (unit) input properties are. E.g. a Lambda Function takes a simple script that exports a no-op handler function.
-- **Create** - determine which APIs calls are required to create a new instance of a Resource. This can be one or more API calls in a sequence. Include a section dedicated to idempotency and error handling. Does the resource accept a physical name that we can predict to idempotently create a new resource and recover gracefully if it already exists? Or does the resource generate its own ID, in which case we need to use tags to find it? Document the procedure using if-this-then-that logic. Each API call can return errors that should
-- **Update** - determine which APIs should be called and in what order to update an existing Resource. Document the procedure using if-this-then-that logic. Each API call can return errors that may need to be retried with a specific Retry Policy. The procedure should be defined conditionally in terms of new Input Properties, old Input Properties and the current Output Attributes.
+- **Reconcile** - determine the API calls needed to converge the cloud's actual state to the desired state described by the new Input Properties. Reconcile must be a single flow that works whether the resource is missing (greenfield create), pre-existing under our ownership (update), or freshly adopted (`output` defined but `olds` absent). See the **Reconciler doctrine** section below.
 - **Delete** - determine which APIs should be called and in what order to delete an existing Resource. Delete should be idempotent so that if the resource has already been deleted, it is not considered an error. It is common for deletions to fail because of Dependency Violations or Eventual Consistency Errors. These are not always called Dependency Violations in the API docs, so attention should be paid to investigating each API's possible error codes and how they should be handled by the Delete operation. Should we retry for a period of time, indefinitely, or fail immediately?
+
+# Reconciler doctrine
+
+The provider's `reconcile` function replaces the legacy `create` + `update` pair. It runs every time the engine wants to make the cloud match the desired state — whether that's the first time the resource is being provisioned, a routine update, or a takeover after `read` returned an existing cloud resource.
+
+It receives `output: Attributes | undefined` and `olds: Props | undefined`:
+
+| `output`     | `olds`       | Meaning                                           |
+| ------------ | ------------ | ------------------------------------------------- |
+| `undefined`  | `undefined`  | Greenfield — no prior physical resource           |
+| defined      | defined      | Routine update — engine-owned resource            |
+| defined      | `undefined`  | Adoption — engine adopted via `read`              |
+
+A reconciler MUST work correctly for all three combinations. It MUST NOT branch the body on `output === undefined` and run different code paths for "create" vs "update". That pattern is just rename-and-branch and re-introduces every assumption the old `create`/`update` split made. Instead, write one flow:
+
+```
+1. Observe   — derive the physical identifier; read live cloud state via getX/describeX
+2. Ensure    — if the resource is missing, call createX. Catch AlreadyExists/ConflictException
+                as a race and continue. Wait for active state if applicable.
+3. Sync      — for each mutable aspect (settings, sub-resources, tags, policy):
+                 - read OBSERVED cloud state (not olds)
+                 - compute desired state from news + bindings
+                 - diff observed against desired
+                 - apply only the delta API call (skip the API entirely on no-op)
+4. Return    — re-read final state if needed; return the fresh Attributes shape
+```
+
+Key invariants:
+
+- **Observation > assumption.** Cloud state is authoritative. `olds` is at most a hint to skip a no-op API call; it is never the source of truth for what's actually deployed.
+- **Each sync step is independently idempotent.** Crash mid-reconcile, re-run, you converge.
+- **`output` is treated as a cache** for stable identifiers (physical name, ARN, immutable id). It is NOT a guarantee that the resource still exists. If it doesn't, observation falls through to "missing" and ensure recreates.
+- **`AlreadyExists`/`NotFoundException`/`ResourceInUseException`-style errors are caught**, not propagated — they're races or eventual-consistency, not failures.
+- **Tags use observed cloud tags as the diff baseline**, not `olds.tags` or `output.tags`. Adoption may bring you a resource with foreign tags that need to be reconciled.
+
+:::warning
+**Do not write `if (output === undefined) { /* create body */ } else { /* update body */ }`.** That is rename-and-branch, not reconciliation. The reconciler's body is one observe-ensure-sync flow that produces correct cloud state regardless of starting point.
+:::
+
+The canonical reference reconcilers cover the common shapes:
+
+- [S3 Bucket](./packages/alchemy/src/AWS/S3/Bucket.ts) — uses `ensureBucketExists` + `syncBucketTags` + `syncBucketPolicy` helpers; each helper is itself a tiny reconciler.
+- [SQS Queue](./packages/alchemy/src/AWS/SQS/Queue.ts) — observe via `getQueueUrl`, ensure via `createQueue` (tolerates `QueueNameExists` race), sync attributes by diffing `getQueueAttributes` against desired, sync tags.
+- [Kinesis Stream](./packages/alchemy/src/AWS/Kinesis/Stream.ts) — many mutable aspects (mode, shards, retention, encryption, metrics), each its own observed-vs-desired sync block.
+- [DynamoDB Table](./packages/alchemy/src/AWS/DynamoDB/Table.ts) — multi-API observation (table + tags + PITR + TTL), per-aspect diffing, GSI delta application.
+- [EC2 Vpc](./packages/alchemy/src/AWS/EC2/Vpc.ts) — auto-assigned id, observe via `describeVpcs([output.vpcId])` with NotFound fallback to create, sync DNS attrs by reading `describeVpcAttribute`, sync tags from observed `vpc.Tags`.
+- [Lambda Function](./packages/alchemy/src/AWS/Lambda/Function.ts) — uses `createOrUpdateFunction` / `createOrUpdateFunctionUrl` / `attachBindings` helpers, each idempotent.
+- [Cloudflare Worker](./packages/alchemy/src/Cloudflare/Workers/Worker.ts) — non-AWS API; the underlying `putWorker` is a true upsert, so reconcile observes existing settings and delegates.
+
+Existence-only resources (Lambda Permission, EC2 Route, EC2 RouteTableAssociation, IAM AccessKey, etc.) have nothing mutable beyond their identity. Their reconciler is just observe → if missing, create. There is no sync step.
 
 5. Research and design the test cases for each resource. Test cases can be single or multi-step. Single-step test cases are just testing a single create success or failure mode. Multi-step cases are testing a sequence of operations, starting with create and then updating or replacing the resource multiple times. Test cases should be designed to be exhaustive and cover all possible success and failure modes, starting from simple happy paths to long, complicated aggregate (including other resources) smoke tests.
 6. Implement the Resource contract and Provider in `packages/alchemy/src/{Cloud}/{Service}/{Resource}.ts`.
@@ -366,7 +414,7 @@ const account = yield * Account;
 You should favor getting the region/account INSIDE the lifecycle operations instead of inside the Layer effect like this because then it's scoped to the resource isntead of the resource provider:
 
 ```ts
-create: Effect.fn(function* ({ id, news, session }) {
+reconcile: Effect.fn(function* ({ id, news, output, session }) {
   const region = yield* Region;
   const accountId = yield* Account;
 });
@@ -407,7 +455,7 @@ This applies to **lifecycle operations, helpers, AND tests**. Tests must use `Fi
 If a Resource supports tags, you should always include the internal Alchemy tags to brand the resource with the app, stage and logical ID so that we can "know" that we created it and are responsible for it.
 
 ```ts
-create: Effect.fn(function* ({ id, news, session }) {
+reconcile: Effect.fn(function* ({ id, news, output, session }) {
   const internalTags = yield* createInternalTags(id);
   const userTags = news.tags ?? {};
   const allTags = { ...internalTags, ...userTags };
@@ -417,13 +465,15 @@ create: Effect.fn(function* ({ id, news, session }) {
 :::
 
 :::warning
-Do not roll your own tag diffing logic, always use diffTags from [Tags.ts](./packages/alchemy/src/Tags.ts)
+Do not roll your own tag diffing logic, always use `diffTags` from [Tags.ts](./packages/alchemy/src/Tags.ts), and diff against **observed cloud tags** (not `olds.tags` or `output.tags`). Adoption can hand you a resource whose tags don't match what we last persisted.
 
 ```ts
-update: Effect.fn(function* ({ id, news, olds, output, session }) {
+reconcile: Effect.fn(function* ({ id, news, output, session }) {
   const internalTags = yield* createInternalTags(id);
   const newTags = { ...news.tags, ...internalTags };
-  const oldTags = { ...olds.tags, ...internalTags };
+  // Read tags fresh from the cloud so adoption (where tags may not match
+  // what we last persisted) converges correctly.
+  const oldTags = yield* fetchObservedTags(/* … */);
   // Option 1. use `upsert` if the API expects you to create/update tags in one call
   const { removed, upsert } = diffTags(oldTags, newTags);
   // Option 2. use `added` and `updated` if the API expects you to create/update tags in separate calls
@@ -603,6 +653,19 @@ Dashboard groups projects by kind from these spans (Axiom can't APL-query metric
 - **Outstanding work / testing / review needed**: If there are outstanding steps, manual testing required, or review items, DO NOT leave a comment on the PR and DO NOT include them in the PR description. Instead:
   1. Mark the PR as **draft**.
   2. Tell the user (in the chat that initiated the PR creation) what is outstanding.
+
+:::warning
+**Markdown content must reach GitHub verbatim** — un-escaped backticks, fenced code blocks, etc. The reliable shape is to write the description to a file and pass `--body-file <path>` to `gh pr create` / `gh pr edit`:
+
+```sh
+# write the body to a temp file (use Write tool, not echo/cat heredoc)
+gh pr edit 179 --body-file /tmp/pr-body.md
+```
+
+Do **not** inline the body via `--body "$(cat <<'EOF' ... EOF)"`. Even with a single-quoted heredoc some shells / `gh` versions still mangle backticks and backslashes; the resulting PR body ends up with literal `\`` sequences instead of inline code spans. `--body-file` sidesteps shell quoting entirely.
+
+If you need to update an already-created PR's body, prefer `gh pr edit --body-file ...`. If that silently no-ops (older `gh` versions), fall back to `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@/tmp/pr-body.md`.
+:::
 
 The summary goes at the very top of the description as plain prose — NO heading above it, no `### Summary`, nothing. The PR title already serves as the title; do not repeat or re-title it. Only add `###` subheadings further down if the description genuinely has multiple sections worth separating.
 

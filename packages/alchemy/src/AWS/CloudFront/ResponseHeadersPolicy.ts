@@ -226,60 +226,84 @@ export const ResponseHeadersPolicyProvider = () =>
           if (!found) return undefined;
           return toAttrs(found.id, found.config, found.etag);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
-          const created = yield* cloudfront
-            .createResponseHeadersPolicy({
-              ResponseHeadersPolicyConfig: buildConfig(name, news),
-            })
-            .pipe(
-              Effect.catchTag("ResponseHeadersPolicyAlreadyExists", () =>
-                getByName(name).pipe(
-                  Effect.flatMap((existing) =>
-                    existing
-                      ? Effect.succeed({
-                          ResponseHeadersPolicy: {
-                            Id: existing.id,
-                            LastModifiedTime: new Date(),
-                            ResponseHeadersPolicyConfig: existing.config,
-                          },
-                          ETag: existing.etag,
-                          Location: undefined,
-                        })
-                      : Effect.fail(
-                          new Error(
-                            `Response headers policy '${name}' already exists but could not be recovered`,
+
+          // Observe — locate the policy by id (cached on `output`) or
+          // by name. Trust observed cloud state, not stale `olds`.
+          let observed = output?.responseHeadersPolicyId
+            ? yield* getById(output.responseHeadersPolicyId).pipe(
+                Effect.map((found) =>
+                  found
+                    ? { id: output.responseHeadersPolicyId, ...found }
+                    : undefined,
+                ),
+              )
+            : undefined;
+          if (!observed) {
+            observed = yield* getByName(name);
+          }
+
+          // Ensure — create the policy if it's missing. Tolerate
+          // `ResponseHeadersPolicyAlreadyExists` (race with a peer
+          // reconciler).
+          if (!observed) {
+            const created = yield* cloudfront
+              .createResponseHeadersPolicy({
+                ResponseHeadersPolicyConfig: buildConfig(name, news),
+              })
+              .pipe(
+                Effect.catchTag("ResponseHeadersPolicyAlreadyExists", () =>
+                  getByName(name).pipe(
+                    Effect.flatMap((existing) =>
+                      existing
+                        ? Effect.succeed({
+                            ResponseHeadersPolicy: {
+                              Id: existing.id,
+                              LastModifiedTime: new Date(),
+                              ResponseHeadersPolicyConfig: existing.config,
+                            },
+                            ETag: existing.etag,
+                            Location: undefined,
+                          })
+                        : Effect.fail(
+                            new Error(
+                              `Response headers policy '${name}' already exists but could not be recovered`,
+                            ),
                           ),
-                        ),
+                    ),
                   ),
                 ),
-              ),
-            );
-          if (!created.ResponseHeadersPolicy?.Id) {
-            return yield* Effect.fail(
-              new Error("createResponseHeadersPolicy returned no identifier"),
+              );
+            if (!created.ResponseHeadersPolicy?.Id) {
+              return yield* Effect.fail(
+                new Error("createResponseHeadersPolicy returned no identifier"),
+              );
+            }
+            yield* session.note(created.ResponseHeadersPolicy.Id);
+            return toAttrs(
+              created.ResponseHeadersPolicy.Id,
+              created.ResponseHeadersPolicy.ResponseHeadersPolicyConfig,
+              created.ETag,
             );
           }
-          yield* session.note(created.ResponseHeadersPolicy.Id);
-          return toAttrs(
-            created.ResponseHeadersPolicy.Id,
-            created.ResponseHeadersPolicy.ResponseHeadersPolicyConfig,
-            created.ETag,
-          );
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          const current = yield* getById(output.responseHeadersPolicyId);
+
+          // Sync — patch the observed config to the desired state. The
+          // freshly observed ETag handles optimistic concurrency.
           const updated = yield* cloudfront.updateResponseHeadersPolicy({
-            Id: output.responseHeadersPolicyId,
-            IfMatch: current?.etag ?? output.etag,
-            ResponseHeadersPolicyConfig: buildConfig(output.name, news),
+            Id: observed.id,
+            IfMatch: observed.etag,
+            ResponseHeadersPolicyConfig: buildConfig(
+              observed.config.Name,
+              news,
+            ),
           });
           if (!updated.ResponseHeadersPolicy?.Id) {
             return yield* Effect.fail(
               new Error("updateResponseHeadersPolicy returned no identifier"),
             );
           }
-          yield* session.note(output.responseHeadersPolicyId);
+          yield* session.note(observed.id);
           return toAttrs(
             updated.ResponseHeadersPolicy.Id,
             updated.ResponseHeadersPolicy.ResponseHeadersPolicyConfig,

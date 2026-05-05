@@ -215,9 +215,16 @@ export const DashboardProvider = () =>
             (yield* createDashboardName(id, olds ?? {}));
           return yield* readDashboard(name);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* createDashboardName(id, news);
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          // Observe — pin the physical name from `output` if present so we
+          // never rename an existing dashboard; otherwise derive from
+          // desired props.
+          const name =
+            output?.dashboardName ?? (yield* createDashboardName(id, news));
 
+          // Ensure — `putDashboard` is a pure upsert. The CloudWatch
+          // dashboard API has no separate update path, so we always send
+          // the full body and let the API converge.
           yield* retryConcurrent(
             cloudwatch.putDashboard({
               DashboardName: name,
@@ -230,28 +237,14 @@ export const DashboardProvider = () =>
           const state = yield* readDashboard(name);
           if (!state) {
             return yield* Effect.fail(
-              new Error(`failed to read created dashboard '${name}'`),
+              new Error(`failed to read reconciled dashboard '${name}'`),
             );
           }
 
+          // Dashboards do not support the generic CloudWatch tagging APIs,
+          // so `tags` is always returned as an empty record.
           return {
             ...state,
-            tags: {},
-          };
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          yield* retryConcurrent(
-            cloudwatch.putDashboard({
-              DashboardName: output.dashboardName,
-              DashboardBody: serializeDashboardBody(news.DashboardBody),
-            }),
-          );
-
-          yield* session.note(output.dashboardArn);
-
-          return {
-            ...output,
-            dashboardBody: news.DashboardBody,
             tags: {},
           };
         }),

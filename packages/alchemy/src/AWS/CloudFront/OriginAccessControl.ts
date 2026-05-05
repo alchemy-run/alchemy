@@ -168,54 +168,76 @@ export const OriginAccessControlProvider = () =>
             yield* createName(id, olds ?? {}),
           );
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
-          const created = yield* cloudfront
-            .createOriginAccessControl({
-              OriginAccessControlConfig: {
-                Name: name,
-                Description: news.description,
-                OriginAccessControlOriginType: news.originType ?? "s3",
-                SigningBehavior: news.signingBehavior ?? "always",
-                SigningProtocol: news.signingProtocol ?? "sigv4",
-              },
-            })
-            .pipe(
-              Effect.catchTag("OriginAccessControlAlreadyExists", () =>
-                getByName(name).pipe(
-                  Effect.flatMap((existing) =>
-                    existing
-                      ? Effect.succeed(existing)
-                      : Effect.fail(
-                          new Error(
-                            `Origin access control '${name}' already exists but could not be recovered`,
+
+          // Observe — locate the OAC by id (cached on `output`) or by
+          // name. Trust observed cloud state, not stale `olds`.
+          const observed =
+            (yield* getCurrent(output)) ?? (yield* getByName(name));
+
+          // Ensure — create the OAC if it's missing. Tolerate
+          // `OriginAccessControlAlreadyExists` (race with a peer
+          // reconciler).
+          if (!observed?.OriginAccessControl?.Id) {
+            const created = yield* cloudfront
+              .createOriginAccessControl({
+                OriginAccessControlConfig: {
+                  Name: name,
+                  Description: news.description,
+                  OriginAccessControlOriginType: news.originType ?? "s3",
+                  SigningBehavior: news.signingBehavior ?? "always",
+                  SigningProtocol: news.signingProtocol ?? "sigv4",
+                },
+              })
+              .pipe(
+                Effect.catchTag("OriginAccessControlAlreadyExists", () =>
+                  getByName(name).pipe(
+                    Effect.flatMap((existing) =>
+                      existing
+                        ? Effect.succeed(existing)
+                        : Effect.fail(
+                            new Error(
+                              `Origin access control '${name}' already exists but could not be recovered`,
+                            ),
                           ),
-                        ),
+                    ),
                   ),
                 ),
-              ),
-            );
+              );
 
-          if (!created.OriginAccessControl?.Id) {
-            return yield* Effect.fail(
-              new Error("createOriginAccessControl returned no identifier"),
-            );
+            if (!created.OriginAccessControl?.Id) {
+              return yield* Effect.fail(
+                new Error("createOriginAccessControl returned no identifier"),
+              );
+            }
+
+            yield* session.note(created.OriginAccessControl.Id);
+            return toAttrs(created.OriginAccessControl, created.ETag, name);
           }
 
-          yield* session.note(created.OriginAccessControl.Id);
-          return toAttrs(created.OriginAccessControl, created.ETag, name);
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
+          // Sync — patch the observed config to the desired state. The
+          // freshly observed ETag handles optimistic concurrency.
+          const observedConfig =
+            observed.OriginAccessControl.OriginAccessControlConfig;
           const updated = yield* cloudfront.updateOriginAccessControl({
-            Id: output.originAccessControlId,
-            IfMatch: output.etag,
+            Id: observed.OriginAccessControl.Id,
+            IfMatch: observed.ETag,
             OriginAccessControlConfig: {
-              Name: output.name,
+              Name: observedConfig?.Name ?? name,
               Description: news.description,
               OriginAccessControlOriginType:
-                news.originType ?? output.originType,
-              SigningBehavior: news.signingBehavior ?? output.signingBehavior,
-              SigningProtocol: news.signingProtocol ?? output.signingProtocol,
+                news.originType ??
+                observedConfig?.OriginAccessControlOriginType ??
+                "s3",
+              SigningBehavior:
+                news.signingBehavior ??
+                observedConfig?.SigningBehavior ??
+                "always",
+              SigningProtocol:
+                news.signingProtocol ??
+                observedConfig?.SigningProtocol ??
+                "sigv4",
             },
           });
 
@@ -225,11 +247,11 @@ export const OriginAccessControlProvider = () =>
             );
           }
 
-          yield* session.note(output.originAccessControlId);
+          yield* session.note(observed.OriginAccessControl.Id);
           return toAttrs(
             updated.OriginAccessControl,
             updated.ETag,
-            output.name,
+            observedConfig?.Name ?? name,
           );
         }),
         delete: Effect.fn(function* ({ output }) {

@@ -120,111 +120,141 @@ export const StoreSecretProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news }) {
+        reconcile: Effect.fn(function* ({ id, news, output }) {
           const name = resolveName(id, news.name);
           const scopes = resolveScopes(news.scopes);
+          const accountId = news.store.accountId;
+          const storeId = news.store.storeId;
 
-          // Engine's `read` has already cleared us for adoption (foreign
-          // secrets are surfaced as `Unowned` and require `--adopt`). On a
-          // race between read and create, fall back to lookup-and-PATCH.
-          const created = yield* createStoreSecret({
-            accountId: news.store.accountId,
-            storeId: news.store.storeId,
-            body: [
-              {
-                name,
-                scopes,
-                value: Redacted.value(news.value),
-                comment: news.comment,
-              },
-            ],
-          }).pipe(
-            Effect.catchTag("SecretNameAlreadyExists", () =>
-              Effect.succeed(undefined),
-            ),
-          );
-
-          if (created) {
-            const secret = created.result[0]!;
-            return {
-              secretId: secret.id,
-              secretName: secret.name,
-              storeId: secret.storeId,
-              accountId: news.store.accountId,
-              status: secret.status,
-              scopes,
-              comment: secret.comment ?? undefined,
-            };
+          // Observe — re-fetch the cached secret; fall back to a name
+          // scan over the store so we recover from out-of-band deletes
+          // or partial state-persistence failures.
+          let observed:
+            | {
+                id: string;
+                name: string;
+                storeId: string;
+                status: "pending" | "active" | "deleted";
+                comment?: string | null;
+              }
+            | undefined;
+          if (output?.secretId) {
+            observed = yield* getStoreSecret({
+              accountId: output.accountId,
+              storeId: output.storeId,
+              secretId: output.secretId,
+            }).pipe(
+              Effect.catchTag("SecretNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+              Effect.catchTag("StoreNotFound", () => Effect.succeed(undefined)),
+            );
+          }
+          if (!observed) {
+            observed = yield* listStoreSecrets
+              .items({ accountId, storeId })
+              .pipe(
+                Stream.filter((s) => s.name === name),
+                Stream.runHead,
+                Effect.catchTag("StoreNotFound", () => Effect.succeedNone),
+                Effect.map(Option.getOrUndefined),
+              );
           }
 
-          // The secret already exists server-side (typically a previous
-          // deploy was partially persisted). Re-fetch and reconcile
-          // scopes/comment. The value cannot be read back from the API and
-          // we trust an identically-named secret in the same store reflects
-          // the same intent.
-          const existing = yield* listStoreSecrets
-            .items({
-              accountId: news.store.accountId,
-              storeId: news.store.storeId,
-            })
-            .pipe(
-              Stream.filter((s) => s.name === name),
-              Stream.runHead,
-              Effect.map(Option.getOrUndefined),
-            );
-
-          if (!existing) {
-            return yield* Effect.die(
-              new Error(
-                `Secret '${name}' reported as already existing in store ${news.store.storeId} but could not be found on lookup.`,
+          // Ensure — create if missing. Cloudflare reports a concurrent
+          // create as `SecretNameAlreadyExists`; tolerate by re-listing
+          // the store and adopting the secret with the same name. The
+          // value can't be read back from the API; we trust an
+          // identically-named secret reflects the same intent.
+          if (!observed) {
+            const created = yield* createStoreSecret({
+              accountId,
+              storeId,
+              body: [
+                {
+                  name,
+                  scopes,
+                  value: Redacted.value(news.value),
+                  comment: news.comment,
+                },
+              ],
+            }).pipe(
+              Effect.catchTag("SecretNameAlreadyExists", () =>
+                Effect.succeed(undefined),
               ),
             );
+            if (created) {
+              const secret = created.result[0]!;
+              return {
+                secretId: secret.id,
+                secretName: secret.name,
+                storeId: secret.storeId,
+                accountId,
+                status: secret.status,
+                scopes,
+                comment: secret.comment ?? undefined,
+              };
+            }
+            const existing = yield* listStoreSecrets
+              .items({ accountId, storeId })
+              .pipe(
+                Stream.filter((s) => s.name === name),
+                Stream.runHead,
+                Effect.map(Option.getOrUndefined),
+              );
+            if (!existing) {
+              return yield* Effect.die(
+                new Error(
+                  `Secret '${name}' reported as already existing in store ${storeId} but could not be found on lookup.`,
+                ),
+              );
+            }
+            observed = existing;
           }
 
-          // listStoreSecrets does not surface scopes, so we have no way
-          // to detect drift; reconcile to the requested scopes/comment
-          // unconditionally. PATCH is cheap and idempotent.
-          const patched = yield* patchStoreSecret({
-            accountId: news.store.accountId,
-            storeId: news.store.storeId,
-            secretId: existing.id,
-            scopes,
-            comment: news.comment,
-          }).pipe(
-            Effect.catchTag("SecretNotFound", () => Effect.succeed(undefined)),
-          );
+          // Sync — `listStoreSecrets` does not surface scopes, so we
+          // can't reliably diff them. Issue PATCH only when we have a
+          // record of prior props (`output`) and a difference is
+          // visible; otherwise issue an unconditional PATCH on the
+          // adoption / first-create path so scopes and comment converge.
+          const oldScopes = output ? resolveScopes(output.scopes) : undefined;
+          const scopesChanged = !oldScopes || !arraysEqual(scopes, oldScopes);
+          const commentChanged =
+            !output ||
+            (output.comment ?? undefined) !== (news.comment ?? undefined);
+          if (scopesChanged || commentChanged) {
+            const patched = yield* patchStoreSecret({
+              accountId,
+              storeId,
+              secretId: observed.id,
+              scopes: scopesChanged ? scopes : undefined,
+              comment: commentChanged ? news.comment : undefined,
+            }).pipe(
+              Effect.catchTag("SecretNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+            if (patched) {
+              return {
+                secretId: observed.id,
+                secretName: observed.name,
+                storeId: observed.storeId,
+                accountId,
+                status: patched.status,
+                scopes,
+                comment: patched.comment ?? undefined,
+              };
+            }
+          }
 
           return {
-            secretId: existing.id,
-            secretName: existing.name,
-            storeId: existing.storeId,
-            accountId: news.store.accountId,
-            status: patched?.status ?? existing.status,
+            secretId: observed.id,
+            secretName: observed.name,
+            storeId: observed.storeId,
+            accountId,
+            status: observed.status,
             scopes,
-            comment:
-              patched?.comment ?? news.comment ?? existing.comment ?? undefined,
-          };
-        }),
-        update: Effect.fn(function* ({ news, olds = {} as any, output }) {
-          const newScopes = resolveScopes(news.scopes);
-          const oldScopes = resolveScopes(olds.scopes);
-          const scopesChanged = !arraysEqual(newScopes, oldScopes);
-          const commentChanged = (olds.comment ?? undefined) !== news.comment;
-          if (!scopesChanged && !commentChanged) {
-            return output;
-          }
-          const patched = yield* patchStoreSecret({
-            accountId: output.accountId,
-            storeId: output.storeId,
-            secretId: output.secretId,
-            scopes: scopesChanged ? newScopes : undefined,
-            comment: commentChanged ? news.comment : undefined,
-          });
-          return {
-            ...output,
-            status: patched.status,
-            scopes: newScopes,
-            comment: patched.comment ?? undefined,
+            comment: news.comment ?? observed.comment ?? undefined,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

@@ -171,25 +171,23 @@ export const InvalidationProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        create: Effect.fn(function* ({ news, session }) {
+        reconcile: Effect.fn(function* ({ news, output, session }) {
+          // An invalidation is an immutable ledger entry, not a mutable
+          // resource. If we already issued one for this logical id and
+          // version, return its attributes unchanged. The `diff` above
+          // forces a `replace` whenever `distributionId` or `version`
+          // changes, so the engine creates a fresh invalidation that way.
+          if (output?.invalidationId) {
+            yield* session.note(output.invalidationId);
+            return output;
+          }
+
+          // Ensure — issue the invalidation. CloudFront uses
+          // `CallerReference` (= `version`) for idempotency: the same
+          // version submitted twice returns the same invalidation.
           const invalidation = yield* createInvalidation(news);
           yield* Effect.logInfo(
-            `CloudFront Invalidation create: storing ${invalidation.Id} for distribution=${news.distributionId}`,
-          );
-          yield* session.note(invalidation.Id);
-          return {
-            invalidationId: invalidation.Id,
-            distributionId: news.distributionId,
-            version: news.version,
-            status: invalidation.Status ?? "InProgress",
-            paths: news.paths ?? defaultPaths,
-            createTime: invalidation.CreateTime,
-          };
-        }),
-        update: Effect.fn(function* ({ news, session }) {
-          const invalidation = yield* createInvalidation(news);
-          yield* Effect.logInfo(
-            `CloudFront Invalidation update: storing ${invalidation.Id} for distribution=${news.distributionId}`,
+            `CloudFront Invalidation reconcile: storing ${invalidation.Id} for distribution=${news.distributionId}`,
           );
           yield* session.note(invalidation.Id);
           return {

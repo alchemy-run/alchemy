@@ -384,114 +384,104 @@ export const MethodProvider = () =>
             httpMethod: output.httpMethod,
           });
         }),
-        create: Effect.fn(function* ({ news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("Method props were not resolved");
           }
           const news = newsIn as Input.ResolveProps<MethodProps>;
           const authType = news.authorizationType ?? "NONE";
-          yield* putMethod(news);
-          if (news.integration) {
-            yield* ag.putIntegration(
-              putIntegrationRequest(
-                news.restApiId as string,
-                news.resourceId as string,
-                news.httpMethod,
-                news.integration,
-              ),
-            );
-          }
-          yield* session.note(
-            `Put method ${news.httpMethod} on resource ${news.resourceId}`,
-          );
-          return {
-            restApiId: news.restApiId as string,
-            resourceId: news.resourceId as string,
-            httpMethod: news.httpMethod,
-            authorizationType: authType,
-            authorizerId: news.authorizerId,
-            apiKeyRequired: news.apiKeyRequired,
-            operationName: news.operationName,
-            requestParameters: news.requestParameters,
-            requestModels: news.requestModels,
-            requestValidatorId: news.requestValidatorId,
-            authorizationScopes: news.authorizationScopes,
-            integration: news.integration,
-          };
-        }),
-        update: Effect.fn(function* ({ news: newsIn, output, session }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("Method props were not resolved");
-          }
-          const news = newsIn as Input.ResolveProps<MethodProps>;
-          const authType = news.authorizationType ?? "NONE";
+          // Methods are keyed by (restApiId, resourceId, httpMethod). All
+          // three are stable across the resource's lifetime, so we read
+          // them out of `output` when present and fall back to `news`.
+          const restApiId = (output?.restApiId ?? news.restApiId) as string;
+          const resourceId = (output?.resourceId ?? news.resourceId) as string;
+          const httpMethod = output?.httpMethod ?? news.httpMethod;
 
-          if (
-            news.operationName !== output.operationName ||
-            !deepEqual(news.requestParameters, output.requestParameters) ||
-            !deepEqual(news.requestModels, output.requestModels) ||
-            news.requestValidatorId !== output.requestValidatorId ||
-            !deepEqual(news.authorizationScopes, output.authorizationScopes)
-          ) {
-            yield* deleteIntegrationSafe({
-              restApiId: output.restApiId,
-              resourceId: output.resourceId,
-              httpMethod: output.httpMethod,
-            });
-            yield* deleteMethodSafe({
-              restApiId: output.restApiId,
-              resourceId: output.resourceId,
-              httpMethod: output.httpMethod,
-            });
+          // Observe — read live method + integration as a single snapshot.
+          // `output.*` fields are never trusted as proxies for cloud state;
+          // they're at most a cache for the natural-key tuple above.
+          let observed = yield* readMethodSnapshot({
+            restApiId,
+            resourceId,
+            httpMethod,
+          });
+
+          // Ensure — putMethod creates the method shape (auth type,
+          // request models, scopes, etc.). Some of those fields cannot be
+          // patched in place by `updateMethod`, so on a "recreate-needed"
+          // diff we drop the existing method and re-put. This is also the
+          // path used on first reconcile when nothing exists.
+          const needsRecreate =
+            observed !== undefined &&
+            (news.operationName !== observed.operationName ||
+              !deepEqual(news.requestParameters, observed.requestParameters) ||
+              !deepEqual(news.requestModels, observed.requestModels) ||
+              news.requestValidatorId !== observed.requestValidatorId ||
+              !deepEqual(
+                news.authorizationScopes,
+                observed.authorizationScopes,
+              ));
+
+          if (observed === undefined || needsRecreate) {
+            if (needsRecreate) {
+              yield* deleteIntegrationSafe({
+                restApiId,
+                resourceId,
+                httpMethod,
+              });
+              yield* deleteMethodSafe({ restApiId, resourceId, httpMethod });
+            }
             yield* putMethod({
               ...news,
-              restApiId: output.restApiId,
-              resourceId: output.resourceId,
-              httpMethod: output.httpMethod,
+              restApiId,
+              resourceId,
+              httpMethod,
             });
             if (news.integration) {
               yield* ag.putIntegration(
                 putIntegrationRequest(
-                  output.restApiId,
-                  output.resourceId,
-                  output.httpMethod,
+                  restApiId,
+                  resourceId,
+                  httpMethod,
                   news.integration,
                 ),
               );
             }
-            yield* session.note(`Recreated method ${output.httpMethod}`);
-            return {
-              restApiId: output.restApiId,
-              resourceId: output.resourceId,
-              httpMethod: output.httpMethod,
-              authorizationType: authType,
-              authorizerId: news.authorizerId,
-              apiKeyRequired: news.apiKeyRequired,
-              operationName: news.operationName,
-              requestParameters: news.requestParameters,
-              requestModels: news.requestModels,
-              requestValidatorId: news.requestValidatorId,
-              authorizationScopes: news.authorizationScopes,
-              integration: news.integration,
-            };
+            yield* session.note(
+              needsRecreate
+                ? `Recreated method ${httpMethod}`
+                : `Put method ${httpMethod} on resource ${resourceId}`,
+            );
+            // Re-read to get the canonical observed state for the rest of
+            // the reconciler. After a recreate everything matches `news`,
+            // so the patch step below becomes a no-op.
+            observed = yield* readMethodSnapshot({
+              restApiId,
+              resourceId,
+              httpMethod,
+            });
+            if (!observed) {
+              return yield* Effect.die("getMethod missing after put");
+            }
           }
 
+          // Sync patchable scalar fields — observed ↔ desired.
           const patches: ag.PatchOperation[] = [];
-          if (authType !== output.authorizationType) {
+          if (authType !== observed.authorizationType) {
             patches.push({
               op: "replace",
               path: "/authorizationType",
               value: authType,
             });
           }
-          if (news.authorizerId !== output.authorizerId) {
+          if (news.authorizerId !== observed.authorizerId) {
             patches.push({
               op: "replace",
               path: "/authorizerId",
               value: news.authorizerId ?? "",
             });
           }
-          if (news.apiKeyRequired !== output.apiKeyRequired) {
+          if (news.apiKeyRequired !== observed.apiKeyRequired) {
             patches.push({
               op: "replace",
               path: "/apiKeyRequired",
@@ -500,40 +490,42 @@ export const MethodProvider = () =>
           }
           if (patches.length > 0) {
             yield* ag.updateMethod({
-              restApiId: output.restApiId,
-              resourceId: output.resourceId,
-              httpMethod: output.httpMethod,
+              restApiId,
+              resourceId,
+              httpMethod,
               patchOperations: patches,
             });
           }
 
-          if (!deepEqual(news.integration, output.integration)) {
+          // Sync integration — putIntegration is an upsert; deleteIntegration
+          // tolerates missing integrations.
+          if (!deepEqual(news.integration, observed.integration)) {
             if (news.integration) {
               yield* ag.putIntegration(
                 putIntegrationRequest(
-                  output.restApiId,
-                  output.resourceId,
-                  output.httpMethod,
+                  restApiId,
+                  resourceId,
+                  httpMethod,
                   news.integration,
                 ),
               );
             } else {
               yield* deleteIntegrationSafe({
-                restApiId: output.restApiId,
-                resourceId: output.resourceId,
-                httpMethod: output.httpMethod,
+                restApiId,
+                resourceId,
+                httpMethod,
               });
             }
           }
 
-          yield* session.note(`Updated method ${output.httpMethod}`);
+          yield* session.note(`Reconciled method ${httpMethod}`);
           const snap = yield* readMethodSnapshot({
-            restApiId: output.restApiId,
-            resourceId: output.resourceId,
-            httpMethod: output.httpMethod,
+            restApiId,
+            resourceId,
+            httpMethod,
           });
           if (!snap) {
-            return yield* Effect.die("getMethod missing after update");
+            return yield* Effect.die("getMethod missing after reconcile");
           }
           return snap;
         }),

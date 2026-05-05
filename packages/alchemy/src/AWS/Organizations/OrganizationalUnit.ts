@@ -95,17 +95,24 @@ export const OrganizationalUnitProvider = () =>
             ? state
             : Unowned(state);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
-          // Engine has cleared us via `read` (foreign-tagged OUs are surfaced
-          // as `Unowned`). On a race between read and create, treat the
-          // duplicate-name exception as adoption.
-          const existing = yield* readOUByParentAndName({
-            parentId: news.parentId,
-            name,
-          });
 
-          if (!existing) {
+          // Observe — locate the OU by ID if known, else by parent+name.
+          // We fetch fresh so the reconciler converges over drift, adoption,
+          // and partial prior runs. `output.ouId` is treated only as a
+          // cache.
+          let state = output?.ouId
+            ? yield* readOUById(output.ouId)
+            : yield* readOUByParentAndName({
+                parentId: news.parentId,
+                name,
+              });
+
+          // Ensure — create the OU if missing. Tolerate
+          // `DuplicateOrganizationalUnitException` as adoption when a peer
+          // reconciler created it concurrently.
+          if (!state) {
             yield* retryOrganizations(
               organizations
                 .createOrganizationalUnit({
@@ -119,59 +126,49 @@ export const OrganizationalUnitProvider = () =>
                   ),
                 ),
             );
+            state = yield* readOUByParentAndName({
+              parentId: news.parentId,
+              name,
+            });
+            if (!state) {
+              return yield* Effect.fail(
+                new Error(
+                  `organizational unit '${name}' not found after create`,
+                ),
+              );
+            }
           }
 
-          const created = yield* readOUByParentAndName({
-            parentId: news.parentId,
-            name,
-          });
-          if (!created) {
-            return yield* Effect.fail(
-              new Error(`organizational unit '${name}' not found after create`),
-            );
-          }
-
-          const tags = yield* updateResourceTags({
-            id,
-            resourceId: created.ouId,
-            olds: created.tags,
-            news: news.tags,
-          });
-
-          yield* session.note(created.ouArn);
-          return {
-            ...created,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const newName = yield* toName(id, news);
-          if (output.name !== newName) {
+          // Sync name — observed ↔ desired. `parentId` is replacement-only,
+          // so the diff has handled any cross-parent move.
+          if (state.name !== name) {
             yield* retryOrganizations(
               organizations.updateOrganizationalUnit({
-                OrganizationalUnitId: output.ouId,
-                Name: newName,
+                OrganizationalUnitId: state.ouId,
+                Name: name,
               }),
             );
           }
 
+          // Sync tags — diff observed cloud tags against desired so
+          // adoption and drift converge correctly without trusting `olds`.
           const tags = yield* updateResourceTags({
             id,
-            resourceId: output.ouId,
-            olds: olds.tags,
+            resourceId: state.ouId,
+            olds: state.tags,
             news: news.tags,
           });
 
-          const updated = yield* readOUById(output.ouId);
+          const updated = yield* readOUById(state.ouId);
           if (!updated) {
             return yield* Effect.fail(
               new Error(
-                `organizational unit '${output.ouId}' not found after update`,
+                `organizational unit '${state.ouId}' not found after reconcile`,
               ),
             );
           }
 
-          yield* session.note(output.ouArn);
+          yield* session.note(updated.ouArn);
           return {
             ...updated,
             tags,

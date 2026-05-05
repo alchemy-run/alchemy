@@ -98,60 +98,42 @@ export const DBProxyTargetGroupProvider = () =>
         dbInstanceIdentifiers: props.dbInstanceIdentifiers ?? [],
       });
 
-      const applyTargets = Effect.fn(function* ({
-        olds,
-        news,
+      const readTargets = Effect.fn(function* ({
+        dbProxyName,
+        targetGroupName,
       }: {
-        olds?: DBProxyTargetGroupProps;
-        news: DBProxyTargetGroupProps;
+        dbProxyName: string;
+        targetGroupName: string;
       }) {
-        const oldClusters = new Set(olds?.dbClusterIdentifiers ?? []);
-        const newClusters = new Set(news.dbClusterIdentifiers ?? []);
-        const oldInstances = new Set(olds?.dbInstanceIdentifiers ?? []);
-        const newInstances = new Set(news.dbInstanceIdentifiers ?? []);
-
-        const addClusters = [...newClusters].filter(
-          (id) => !oldClusters.has(id),
-        );
-        const removeClusters = [...oldClusters].filter(
-          (id) => !newClusters.has(id),
-        );
-        const addInstances = [...newInstances].filter(
-          (id) => !oldInstances.has(id),
-        );
-        const removeInstances = [...oldInstances].filter(
-          (id) => !newInstances.has(id),
-        );
-
-        if (news.connectionPoolConfig) {
-          yield* rds.modifyDBProxyTargetGroup({
-            DBProxyName: news.dbProxyName,
-            TargetGroupName: toTargetGroupName(news),
-            ConnectionPoolConfig: news.connectionPoolConfig,
-          });
+        const response = yield* rds
+          .describeDBProxyTargets({
+            DBProxyName: dbProxyName,
+            TargetGroupName: targetGroupName,
+          })
+          .pipe(
+            Effect.catchTag("DBProxyTargetNotFoundFault", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.catchTag("DBProxyTargetGroupNotFoundFault", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.catchTag("DBProxyNotFoundFault", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        const targets = response?.Targets ?? [];
+        const observedClusters: string[] = [];
+        const observedInstances: string[] = [];
+        for (const target of targets) {
+          const id = target.RdsResourceId;
+          if (!id) continue;
+          if (target.Type === "TRACKED_CLUSTER") {
+            observedClusters.push(id);
+          } else if (target.Type === "RDS_INSTANCE") {
+            observedInstances.push(id);
+          }
         }
-
-        if (addClusters.length > 0 || addInstances.length > 0) {
-          yield* rds.registerDBProxyTargets({
-            DBProxyName: news.dbProxyName,
-            TargetGroupName: toTargetGroupName(news),
-            DBClusterIdentifiers:
-              addClusters.length > 0 ? addClusters : undefined,
-            DBInstanceIdentifiers:
-              addInstances.length > 0 ? addInstances : undefined,
-          });
-        }
-
-        if (removeClusters.length > 0 || removeInstances.length > 0) {
-          yield* rds.deregisterDBProxyTargets({
-            DBProxyName: news.dbProxyName,
-            TargetGroupName: toTargetGroupName(news),
-            DBClusterIdentifiers:
-              removeClusters.length > 0 ? removeClusters : undefined,
-            DBInstanceIdentifiers:
-              removeInstances.length > 0 ? removeInstances : undefined,
-          });
-        }
+        return { observedClusters, observedInstances };
       });
 
       return {
@@ -185,37 +167,93 @@ export const DBProxyTargetGroupProvider = () =>
           }
           return toAttrs({ group, props });
         }),
-        create: Effect.fn(function* ({ news, session }) {
-          yield* applyTargets({ news });
-          const group = yield* readGroup({
+        reconcile: Effect.fn(function* ({ news, output, session }) {
+          const targetGroupName = toTargetGroupName(news);
+
+          // Observe — the "default" target group is created automatically
+          // by RDS when the parent DBProxy is created, so we don't `Ensure`
+          // a target group ourselves. We just describe it to confirm the
+          // proxy is ready and to read connection-pool config.
+          let observedGroup = yield* readGroup({
             dbProxyName: news.dbProxyName,
-            targetGroupName: toTargetGroupName(news),
+            targetGroupName,
           });
-          if (!group?.TargetGroupName) {
+
+          // Sync connection pool config — push desired shape if provided.
+          // `modifyDBProxyTargetGroup` is idempotent for unchanged config.
+          if (news.connectionPoolConfig) {
+            yield* rds.modifyDBProxyTargetGroup({
+              DBProxyName: news.dbProxyName,
+              TargetGroupName: targetGroupName,
+              ConnectionPoolConfig: news.connectionPoolConfig,
+            });
+          }
+
+          // Sync registered targets — diff observed live targets against
+          // desired and apply only the delta. We trust live cloud state
+          // over `output`/`olds` so adoption and drift converge.
+          const { observedClusters, observedInstances } = yield* readTargets({
+            dbProxyName: news.dbProxyName,
+            targetGroupName,
+          });
+          const desiredClusters = new Set(news.dbClusterIdentifiers ?? []);
+          const desiredInstances = new Set(news.dbInstanceIdentifiers ?? []);
+          const observedClusterSet = new Set(observedClusters);
+          const observedInstanceSet = new Set(observedInstances);
+
+          const addClusters = [...desiredClusters].filter(
+            (id) => !observedClusterSet.has(id),
+          );
+          const removeClusters = [...observedClusterSet].filter(
+            (id) => !desiredClusters.has(id),
+          );
+          const addInstances = [...desiredInstances].filter(
+            (id) => !observedInstanceSet.has(id),
+          );
+          const removeInstances = [...observedInstanceSet].filter(
+            (id) => !desiredInstances.has(id),
+          );
+
+          if (addClusters.length > 0 || addInstances.length > 0) {
+            yield* rds.registerDBProxyTargets({
+              DBProxyName: news.dbProxyName,
+              TargetGroupName: targetGroupName,
+              DBClusterIdentifiers:
+                addClusters.length > 0 ? addClusters : undefined,
+              DBInstanceIdentifiers:
+                addInstances.length > 0 ? addInstances : undefined,
+            });
+          }
+
+          if (removeClusters.length > 0 || removeInstances.length > 0) {
+            yield* rds.deregisterDBProxyTargets({
+              DBProxyName: news.dbProxyName,
+              TargetGroupName: targetGroupName,
+              DBClusterIdentifiers:
+                removeClusters.length > 0 ? removeClusters : undefined,
+              DBInstanceIdentifiers:
+                removeInstances.length > 0 ? removeInstances : undefined,
+            });
+          }
+
+          // Re-read so returned attrs reflect post-sync state. If the
+          // target group still isn't visible, surface the failure (the
+          // parent DBProxy must be up).
+          observedGroup = yield* readGroup({
+            dbProxyName: news.dbProxyName,
+            targetGroupName,
+          });
+          if (!observedGroup?.TargetGroupName) {
             return yield* Effect.fail(
-              new Error(
-                `DB proxy target group '${toTargetGroupName(news)}' not found`,
-              ),
+              new Error(`DB proxy target group '${targetGroupName}' not found`),
             );
           }
-          yield* session.note(group.TargetGroupArn ?? group.TargetGroupName);
-          return toAttrs({ group, props: news });
-        }),
-        update: Effect.fn(function* ({ olds, news, output, session }) {
-          yield* applyTargets({ olds, news });
-          const group = yield* readGroup({
-            dbProxyName: output.dbProxyName,
-            targetGroupName: output.targetGroupName,
-          });
-          if (!group?.TargetGroupName) {
-            return yield* Effect.fail(
-              new Error(
-                `DB proxy target group '${output.targetGroupName}' not found`,
-              ),
-            );
-          }
-          yield* session.note(output.targetGroupArn ?? output.targetGroupName);
-          return toAttrs({ group, props: news });
+          yield* session.note(
+            observedGroup.TargetGroupArn ??
+              output?.targetGroupArn ??
+              observedGroup.TargetGroupName,
+          );
+          return toAttrs({ group: observedGroup, props: news });
         }),
         delete: Effect.fn(function* ({ output }) {
           if (
