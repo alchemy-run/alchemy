@@ -5,7 +5,6 @@ import * as Neon from "alchemy/Neon";
 import { makeWithDefaults } from "drizzle-orm/effect-postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
 import { relations } from "./schema.ts";
 
 /**
@@ -39,7 +38,6 @@ export const Hyperdrive = Effect.gen(function* () {
   const { branch } = yield* NeonDb;
   return yield* Cloudflare.Hyperdrive("app-hyperdrive", {
     origin: branch.origin,
-    dev: branch.origin,
   });
 });
 
@@ -51,8 +49,6 @@ export const layerPgClient = (
   hyperdrive: Cloudflare.HyperdriveConnectionClient,
 ) =>
   hyperdrive.connectionString.pipe(
-    Effect.map((connectionString) =>
-      PgClient.layer({ url: Redacted.make(connectionString) }),
-    ),
+    Effect.map((url) => PgClient.layer({ url })),
     Layer.unwrap,
   );

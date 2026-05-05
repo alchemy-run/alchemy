@@ -48,17 +48,18 @@ type Db =
  *
  * @binding
  */
-export const postgres = <E, R>(connectionString: Effect.Effect<string, E, R>) =>
+export const postgres = <E, R>(
+  connectionString: Effect.Effect<Redacted.Redacted<string>, E, R>,
+) =>
   Effect.gen(function* () {
     const cached = yield* Effect.cached(
       Effect.gen(function* () {
-        const url = yield* connectionString;
         // TODO: after a few requests to a Cloudflare Worker, this causes requests to fail with:
         // "The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/"
         // We probably need a better solution for request-scoped stuff in runtimes that require it.
         const detachedScope = yield* Scope.make();
         const pgCtx = yield* Layer.buildWithScope(
-          PgClient.layer({ url: Redacted.make(url) }),
+          PgClient.layer({ url: yield* connectionString }),
           detachedScope,
         );
         return yield* PgDrizzle.makeWithDefaults().pipe(

@@ -2,6 +2,7 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Binding from "../../Binding.ts";
 import { WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Hyperdrive } from "./Hyperdrive.ts";
@@ -16,7 +17,7 @@ export interface HyperdriveConnectionClient {
   /**
    * A valid DB connection string for use with a driver/ORM.
    */
-  connectionString: Effect.Effect<string>;
+  connectionString: Effect.Effect<Redacted.Redacted<string>>;
   /**
    * Hostname valid only within the current Worker invocation.
    */
@@ -33,7 +34,7 @@ export interface HyperdriveConnectionClient {
    * Randomly generated password valid only within the current Worker
    * invocation.
    */
-  password: Effect.Effect<string>;
+  password: Effect.Effect<Redacted.Redacted<string>>;
   /**
    * Database name.
    */
@@ -74,11 +75,13 @@ export const HyperdriveConnectionLive = Layer.effect(
 
       return {
         raw: hd,
-        connectionString: hd.pipe(Effect.map((hd) => hd.connectionString)),
+        connectionString: hd.pipe(
+          Effect.map((hd) => Redacted.make(hd.connectionString)),
+        ),
         host: hd.pipe(Effect.map((hd) => hd.host)),
         port: hd.pipe(Effect.map((hd) => hd.port)),
         user: hd.pipe(Effect.map((hd) => hd.user)),
-        password: hd.pipe(Effect.map((hd) => hd.password)),
+        password: hd.pipe(Effect.map((hd) => Redacted.make(hd.password))),
         database: hd.pipe(Effect.map((hd) => hd.database)),
       } satisfies HyperdriveConnectionClient;
     });
