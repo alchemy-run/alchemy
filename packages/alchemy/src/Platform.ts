@@ -7,14 +7,11 @@ import type { Scope } from "effect/Scope";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { SingleShotGen } from "effect/Utils";
 import type { PolicyLike } from "./Binding.ts";
-import {
-  ExecutionContext,
-  type BaseExecutionContext,
-} from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
+import { RuntimeContext, type BaseRuntimeContext } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
@@ -44,7 +41,7 @@ export type Rpc<Shape> = {
 
 // services provided to the Resource
 export type PlatformServices =
-  | ExecutionContext
+  | RuntimeContext
   | HttpClient
   | PolicyLike
   | Provider<any>
@@ -58,10 +55,10 @@ export interface Platform<
   Resource extends ResourceLike<string, PlatformProps>,
   Services,
   MainShape,
-  ExecutionContext extends BaseExecutionContext,
+  RuntimeContext extends BaseRuntimeContext,
   BaseShape = {},
 > extends Effect.Effect<
-  Resource & ExecutionContext,
+  Resource & RuntimeContext,
   never,
   Services | PlatformServices
 > {
@@ -187,7 +184,7 @@ export const Platform = <
 >(
   type: R["Type"],
   hooks: {
-    createExecutionContext: (id: string) => BaseExecutionContext;
+    createRuntimeContext: (id: string) => BaseRuntimeContext;
     onCreate?: (resource: R, props: any) => Effect.Effect<void>;
   },
   methods?: { [key: string]: any },
@@ -196,7 +193,7 @@ export const Platform = <
   type Impl = Effect.Effect<any>;
 
   const resource = Resource(type);
-  const PlatformContext = ExecutionContext(type);
+  const PlatformContext = RuntimeContext(type);
 
   const constructor = (
     id?: string,
@@ -303,12 +300,12 @@ export const Platform = <
           Effect.flatMap(
             Effect.all([
               Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
-              Effect.sync(() => hooks.createExecutionContext(id)),
+              Effect.sync(() => hooks.createRuntimeContext(id)),
               Effect.context<never>(),
             ]),
             Effect.fnUntraced(function* ([
               props,
-              executionContext,
+              runtimeContext,
               outerServices,
             ]) {
               const instance = Object.assign(
@@ -321,22 +318,22 @@ export const Platform = <
                       Effect.succeed(resource),
                   ),
                 ),
-                executionContext,
+                runtimeContext,
               );
 
               yield* impl.pipe(
                 Effect.flatMap((impl) =>
                   impl?.fetch
-                    ? (executionContext.serve?.(impl.fetch) ??
+                    ? (runtimeContext.serve?.(impl.fetch) ??
                       Effect.die("No serve handler"))
                     : Effect.void,
                 ),
                 Effect.provide(
                   Layer.provideMerge(
                     Layer.mergeAll(
-                      Layer.succeed(Platform.Platform, executionContext),
-                      Layer.succeed(PlatformContext, executionContext),
-                      Layer.succeed(ExecutionContext, executionContext),
+                      Layer.succeed(Platform.Platform, runtimeContext),
+                      Layer.succeed(PlatformContext, runtimeContext),
+                      Layer.succeed(RuntimeContext, runtimeContext),
                       Layer.succeed(resource.Self, instance),
                       Layer.succeed(Platform.Self, instance),
                       Layer.succeed(Self, instance),
@@ -350,15 +347,15 @@ export const Platform = <
                 ...props,
                 env: {
                   ...props?.env,
-                  ...executionContext.env,
+                  ...runtimeContext.env,
                 },
-                exports: executionContext.exports
-                  ? yield* executionContext.exports
+                exports: runtimeContext.exports
+                  ? yield* runtimeContext.exports
                   : undefined,
               };
 
               return Object.assign(instance, {
-                ExecutionContext: executionContext,
+                RuntimeContext: runtimeContext,
               }) as R;
             }),
           ),

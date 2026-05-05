@@ -13,9 +13,9 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
+import { Unowned } from "../../AdoptPolicy.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
-import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
@@ -357,7 +357,7 @@ export const Function: Platform<
   FunctionShape,
   Serverless.FunctionContext
 > = Platform(FunctionTypeId, {
-  createExecutionContext: (id: string): Serverless.FunctionContext => {
+  createRuntimeContext: (id: string): Serverless.FunctionContext => {
     const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
     const env: Record<string, any> = {};
 
@@ -683,7 +683,7 @@ const stack = Layer.effect(
 );
 
 const handlerEffect = tag.asEffect().pipe(
-  Effect.flatMap(func => func.ExecutionContext.exports),
+  Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.flatMap(exports => exports.handler),
   Effect.provide(
     layer.pipe(

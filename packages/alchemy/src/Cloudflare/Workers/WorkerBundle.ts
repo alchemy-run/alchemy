@@ -161,7 +161,7 @@ const makeEffectVirtualEntry = (
   );
   
   const exportsEffect = tag.asEffect().pipe(
-  Effect.flatMap(func => func.ExecutionContext.exports),
+  Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.map(exports => exports),
   Effect.provide(
   layer.pipe(

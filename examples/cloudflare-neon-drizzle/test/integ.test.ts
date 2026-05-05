@@ -4,6 +4,7 @@ import * as Drizzle from "alchemy/Drizzle";
 import * as Neon from "alchemy/Neon";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +20,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
     Neon.providers(),
   ),
   state: Alchemy.localState(),
+  dev: false,
 });
 
 const stack = beforeAll(deploy(Stack));
@@ -127,4 +129,31 @@ test(
       false,
     );
   }),
+);
+
+test(
+  "worker handles 100 sequential queries spaced 100-500ms apart",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const baseUrl = url.replace(/\/+$/, "");
+
+    yield* getOnce(baseUrl);
+
+    const queryOnce = Effect.gen(function* () {
+      const response = yield* HttpClient.get(baseUrl);
+      expect(response.status).toBe(200);
+      const body = (yield* response.json) as unknown as { users: User[] };
+      expect(Array.isArray(body.users)).toBe(true);
+    });
+
+    const jitter = Effect.sync(
+      () => Math.floor(Math.random() * 401) + 100,
+    ).pipe(Effect.flatMap((ms) => Effect.sleep(Duration.millis(ms))));
+
+    yield* queryOnce.pipe(
+      Effect.zip(jitter),
+      Effect.repeat(Schedule.recurs(99)),
+    );
+  }),
+  { timeout: 120_000 },
 );

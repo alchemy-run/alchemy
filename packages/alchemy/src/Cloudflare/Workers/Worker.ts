@@ -7,6 +7,7 @@ import type * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -14,6 +15,7 @@ import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import { createRequire } from "node:module";
@@ -31,6 +33,7 @@ import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
+import { ExecutionContext } from "../../ExecutionContext.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
@@ -70,7 +73,6 @@ import {
   type AssetsConfig,
   type AssetsProps,
 } from "./Assets.ts";
-import cloudflare_workers from "./cloudflare_workers.ts";
 import {
   isDurableObjectExport,
   isDurableObjectNamespaceLike,
@@ -96,15 +98,10 @@ export class WorkerEnvironment extends Context.Service<
   Record<string, any>
 >()("Cloudflare.Workers.WorkerEnvironment") {}
 
-export const WorkerEnvironmentLive = Layer.effect(
-  WorkerEnvironment,
-  cloudflare_workers.pipe(Effect.map((m) => m.env)),
-);
-
-export class ExecutionContext extends Context.Service<
-  ExecutionContext,
+export class WorkerExecutionContext extends Context.Service<
+  WorkerExecutionContext,
   cf.ExecutionContext
->()("Cloudflare.Workers.ExecutionContext") {}
+>()("Cloudflare.Workers.WorkerExecutionContext") {}
 
 export type WorkerEvent = Exclude<
   {
@@ -179,7 +176,7 @@ export const ExportedHandlerMethods = [
   "queue",
 ] as const satisfies (keyof cf.ExportedHandler)[];
 
-export interface WorkerExecutionContext extends Serverless.FunctionContext {
+export interface WorkerRuntimeContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
 }
 
@@ -648,7 +645,7 @@ export const Worker: Platform<
   Worker,
   WorkerServices,
   WorkerShape,
-  WorkerExecutionContext
+  WorkerRuntimeContext
 > & {
   <
     const Bindings extends WorkerBindingProps,
@@ -750,7 +747,7 @@ export const Worker: Platform<
       }
     }
   }),
-  createExecutionContext: (id: string): WorkerExecutionContext => {
+  createRuntimeContext: (id: string): WorkerRuntimeContext => {
     const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
     const exports: Record<string, any> = {};
     const env: Record<string, any> = {};
@@ -853,11 +850,28 @@ export const Worker: Platform<
             for (const handler of handlers) {
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
-                return eff.pipe(
-                  Effect.provideContext(services),
-                  Effect.provide(Layer.succeed(ExecutionContext, context)),
-                  Effect.runPromise,
-                );
+                const scope = Scope.makeUnsafe();
+                return eff
+                  .pipe(
+                    Scope.provide(scope),
+                    Effect.provideContext(services),
+                    Effect.provide(
+                      Layer.succeed(WorkerExecutionContext, context),
+                    ),
+                    Effect.provide(
+                      Layer.succeed(ExecutionContext, {
+                        scope,
+                        cache: {},
+                      }),
+                    ),
+                    Effect.runPromise,
+                  )
+                  .finally(() => {
+                    console.log("closing our scope");
+                    return context.waitUntil(
+                      Effect.runPromise(Scope.close(scope, Exit.void)),
+                    );
+                  });
               }
             }
             return Promise.reject(new Error("No event handler found"));
@@ -1430,7 +1444,7 @@ const stack = Layer.succeed(
 );
 
 const exportsEffect = tag.asEffect().pipe(
-  Effect.flatMap(func => func.ExecutionContext.exports),
+  Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.provide(
     layer.pipe(
       Layer.provideMerge(stack),

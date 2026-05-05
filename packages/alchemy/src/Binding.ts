@@ -3,11 +3,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { SingleShotGen } from "effect/Utils";
-import { ExecutionContext } from "./ExecutionContext.ts";
 import * as Namespace from "./Namespace.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import { tryFindProviderByType } from "./Provider.ts";
 import type { ResourceLike } from "./Resource.ts";
+import { RuntimeContext } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
 import { CurrentStack } from "./Stack.ts";
 
@@ -90,7 +90,7 @@ export interface Policy<
   in out Self,
   in out Identifier extends string,
   in out Shape extends (...args: any[]) => Effect.Effect<any, any, any>,
-> extends Effect.Effect<Shape, never, Self | ExecutionContext> {
+> extends Effect.Effect<Shape, never, Self | RuntimeContext> {
   readonly key: Identifier;
   new (_: never): PolicyShape<Identifier, Shape>;
   layer: {
@@ -113,7 +113,7 @@ export interface Policy<
   ): Effect.Effect<
     Effect.Success<ReturnType<Shape>>,
     Effect.Error<ReturnType<Shape>>,
-    Self | ExecutionContext | Effect.Services<ReturnType<Shape>>
+    Self | RuntimeContext | Effect.Services<ReturnType<Shape>>
   >;
 }
 

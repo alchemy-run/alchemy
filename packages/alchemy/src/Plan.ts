@@ -2,6 +2,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import { asEffect } from ".//Util/types.ts";
 import {
   AdoptPolicy,
   OwnedBySomeoneElse,
@@ -9,7 +10,6 @@ import {
   Unowned,
 } from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
-import { asEffect } from ".//Util/types.ts";
 import {
   Artifacts,
   ArtifactStore,
@@ -38,7 +38,6 @@ import {
   type ResourceLike,
 } from "./Resource.ts";
 import { type StackSpec } from "./Stack.ts";
-import { findCycleMembers } from "./Util/scc.ts";
 import {
   State,
   type CreatedResourceState,
@@ -49,6 +48,7 @@ import {
   type UpdatedResourceState,
   type UpdatingReourceState,
 } from "./State/index.ts";
+import { findCycleMembers } from "./Util/scc.ts";
 
 export type PlanError = never;
 
@@ -900,7 +900,7 @@ export const make = <A>(
                     Binding: undefined!,
                     Provider: Provider(resourceType),
                     RemovalPolicy: oldState.removalPolicy,
-                    ExecutionContext: undefined!,
+                    RuntimeContext: undefined!,
                     Providers: undefined,
                   } as ResourceLike,
                   downstream: oldDownstreamDependencies[fqn] ?? [],

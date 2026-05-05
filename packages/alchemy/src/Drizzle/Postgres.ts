@@ -1,19 +1,12 @@
 import * as PgClient from "@effect/sql-pg/PgClient";
+import type { AnyRelations, EmptyRelations } from "drizzle-orm";
+import type { EffectPgDatabase } from "drizzle-orm/effect-postgres";
 import * as PgDrizzle from "drizzle-orm/effect-postgres";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Scope from "effect/Scope";
+import { ExecutionContext } from "../ExecutionContext.ts";
 import { proxyChain } from "../Util/proxy-chain.ts";
-
-type Db =
-  ReturnType<typeof PgDrizzle.makeWithDefaults> extends Effect.Effect<
-    infer A,
-    any,
-    any
-  >
-    ? A
-    : never;
 
 /**
  * Open a Drizzle/Postgres database from a connection URL using the
@@ -48,24 +41,42 @@ type Db =
  *
  * @binding
  */
-export const postgres = <E, R>(
+
+export const postgres = <
+  TRelations extends AnyRelations = EmptyRelations,
+  E = never,
+  R = never,
+>(
   connectionString: Effect.Effect<Redacted.Redacted<string>, E, R>,
+  config?: PgDrizzle.EffectDrizzlePgConfig<TRelations>,
 ) =>
-  Effect.gen(function* () {
-    const cached = yield* Effect.cached(
+  Effect.sync(function () {
+    const symbol = Symbol();
+
+    return proxyChain<
+      EffectPgDatabase<TRelations> & {
+        $client: PgClient.PgClient;
+      }
+    >(
       Effect.gen(function* () {
-        // TODO: after a few requests to a Cloudflare Worker, this causes requests to fail with:
-        // "The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/"
-        // We probably need a better solution for request-scoped stuff in runtimes that require it.
-        const detachedScope = yield* Scope.make();
-        const pgCtx = yield* Layer.buildWithScope(
-          PgClient.layer({ url: yield* connectionString }),
-          detachedScope,
-        );
-        return yield* PgDrizzle.makeWithDefaults().pipe(
-          Effect.provideContext(pgCtx),
-        );
-      }),
+        // this is going to run on every single db.select()
+
+        // RuntimeContext == ctx of the runtime environment
+        // ExecutionContext == ctx of an execution in the runtime?
+        const ctx = yield* ExecutionContext;
+        return yield* (ctx.cache[symbol] ??= yield* Effect.gen(function* () {
+          const pgCtx = yield* Layer.buildWithScope(
+            PgClient.layer({ url: yield* connectionString }),
+            ctx.scope,
+          );
+          return yield* PgDrizzle.makeWithDefaults(config).pipe(
+            Effect.provideContext(pgCtx),
+          );
+        }).pipe(Effect.cached));
+      }) as Effect.Effect<
+        EffectPgDatabase<TRelations> & {
+          $client: PgClient.PgClient;
+        }
+      >,
     );
-    return proxyChain<Db>(cached);
   });

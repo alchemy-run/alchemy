@@ -1,10 +1,12 @@
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle";
 import { eq } from "drizzle-orm";
+import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Hyperdrive, layerPgClient, Postgres } from "./Db.ts";
-import { Users } from "./schema.ts";
+import { Hyperdrive } from "./Db.ts";
+import { relations, Users } from "./schema.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
@@ -13,15 +15,19 @@ export default class Api extends Cloudflare.Worker<Api>()(
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
+    const db = yield* Drizzle.postgres(conn.connectionString, {
+      relations,
+    });
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const db = yield* Postgres;
         switch (request.method) {
           case "GET": {
             if (request.url === "/") {
+              console.log("getting users");
               const users = yield* db.select().from(Users);
+              console.log("users", users);
               return yield* HttpServerResponse.json({ users });
             }
             const id = Number(request.url.split("/").pop());
@@ -69,7 +75,6 @@ export default class Api extends Cloudflare.Worker<Api>()(
           }
         }
       }).pipe(
-        Effect.provide(layerPgClient(conn)),
         Effect.catch((cause: any) => {
           const peel = (e: any): any => (e?.cause ? peel(e.cause) : e);
           const root = peel(cause);
@@ -85,5 +90,5 @@ export default class Api extends Cloudflare.Worker<Api>()(
         }),
       ),
     };
-  }).pipe(Effect.provide(Cloudflare.HyperdriveBindingLive)),
+  }).pipe(Effect.provide(Layer.mergeAll(Cloudflare.HyperdriveBindingLive))),
 ) {}

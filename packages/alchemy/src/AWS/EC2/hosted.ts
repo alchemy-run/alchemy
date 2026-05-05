@@ -73,15 +73,15 @@ export interface Ec2HostedCleanupState {
  * Deploy-time / plan-time host context for EC2-backed platforms that bundle a
  * long-lived program (`exports.program`) and collect background work via `run`.
  */
-export interface Ec2HostExecutionContext extends ProcessContext {
+export interface Ec2HostRuntimeContext extends ProcessContext {
   exports: Effect.Effect<{
     readonly program: Effect.Effect<void, never, any>;
   }>;
 }
 
-export const createEc2HostExecutionContext =
+export const createEc2HostRuntimeContext =
   (type: string) =>
-  (id: string): Ec2HostExecutionContext => {
+  (id: string): Ec2HostRuntimeContext => {
     const runners: Effect.Effect<void, never, any>[] = [];
     const env: Record<string, any> = {};
 
@@ -120,7 +120,7 @@ export const createEc2HostExecutionContext =
       exports: Effect.sync(() => ({
         program: Effect.all(runners, { concurrency: "unbounded" }),
       })),
-    } satisfies Ec2HostExecutionContext;
+    } satisfies Ec2HostRuntimeContext;
   };
 
 export const createEc2HostedSupport = ({
@@ -242,7 +242,7 @@ const platform = Layer.mergeAll(
 );
 
 const program = handler.pipe(
-  Effect.flatMap((instance) => instance.ExecutionContext.exports.program),
+  Effect.flatMap((instance) => instance.RuntimeContext.exports.program),
   Effect.provide(
     Layer.effect(
       Stack,

@@ -31,21 +31,15 @@ async function font(file: string): Promise<Buffer> {
 }
 
 async function main() {
-  const [
-    serifIt,
-    displayLightIt,
-    displaySemiIt,
-    displayReg,
-    mono,
-    caveat,
-  ] = await Promise.all([
-    font("SourceSerif4-It.ttf"),
-    font("SourceSerif4Display-LightIt.ttf"),
-    font("SourceSerif4Display-SemiboldIt.ttf"),
-    font("SourceSerif4Display-Regular.ttf"),
-    font("JetBrainsMono-Regular.ttf"),
-    font("Caveat-Regular.ttf"),
-  ]);
+  const [serifIt, displayLightIt, displaySemiIt, displayReg, mono, caveat] =
+    await Promise.all([
+      font("SourceSerif4-It.ttf"),
+      font("SourceSerif4Display-LightIt.ttf"),
+      font("SourceSerif4Display-SemiboldIt.ttf"),
+      font("SourceSerif4Display-Regular.ttf"),
+      font("JetBrainsMono-Regular.ttf"),
+      font("Caveat-Regular.ttf"),
+    ]);
 
   const fonts = [
     { name: "Source Serif 4", data: serifIt, weight: 400, style: "italic" },

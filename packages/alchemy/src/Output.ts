@@ -5,9 +5,9 @@ import { pipe } from "effect/Function";
 import type { Pipeable } from "effect/Pipeable";
 import * as Redacted from "effect/Redacted";
 import { SingleShotGen } from "effect/Utils";
-import { ExecutionContext } from "./ExecutionContext.ts";
 import { getRefMetadata, isRef, ref as stageRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
+import { RuntimeContext } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import * as State from "./State/State.ts";
@@ -52,7 +52,7 @@ export interface Output<A = any, Req = any> extends Pipeable {
     Accessor<A>,
     void
   >;
-  bind(id: string): Effect.Effect<Effect.Effect<A>, never, ExecutionContext>;
+  bind(id: string): Effect.Effect<Effect.Effect<A>, never, RuntimeContext>;
   asEffect(): Effect.Effect<Accessor<A>, never, Req>;
   as<T>(): Output<T, Req>;
 }
@@ -111,7 +111,7 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
   }
 
   public bind(id: string): any {
-    return ExecutionContext.asEffect().pipe(
+    return RuntimeContext.asEffect().pipe(
       Effect.flatMap((ctx) =>
         Effect.map(ctx.set(id, this), (key) => ctx.get<A>(key)),
       ),

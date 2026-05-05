@@ -562,7 +562,7 @@ const stack = Layer.succeed(Stack, {
 });
 
 const serverEffect = tag.asEffect().pipe(
-  Effect.flatMap(func => func.ExecutionContext.exports),
+  Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.flatMap(exports => exports.default),
   Effect.provide(
     layer.pipe(
