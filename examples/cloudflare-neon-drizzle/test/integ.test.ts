@@ -8,7 +8,9 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
+import type { Post, User } from "../src/schema.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(
@@ -46,34 +48,83 @@ const getOnce = (url: string) =>
   }).pipe(Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }));
 
 test(
-  "GET / returns the empty `users` table through Drizzle / Hyperdrive / Neon",
+  "worker exposes user CRUD through Drizzle / Hyperdrive / Neon",
   Effect.gen(function* () {
     const { url } = yield* stack;
+    const baseUrl = url.replace(/\/+$/, "");
 
-    const response = yield* getOnce(url);
-    expect(response.status).toBe(200);
+    const initialResponse = yield* getOnce(baseUrl);
+    expect(initialResponse.status).toBe(200);
 
-    const body = (yield* response.json) as unknown[];
-    expect(body).toEqual([]);
-  }),
-);
+    const initialBody = (yield* initialResponse.json) as unknown as {
+      users: User[];
+    };
+    expect(Array.isArray(initialBody.users)).toBe(true);
 
-test(
-  "second request reuses the worker-scoped pg pool",
-  Effect.gen(function* () {
-    const { url } = yield* stack;
+    const createResponse = yield* HttpClient.execute(
+      HttpClientRequest.post(baseUrl),
+    );
+    expect(createResponse.status).toBe(200);
 
-    // Regression guard for the Layer.buildWithScope fix: before it, the
-    // first request succeeded but every subsequent request failed with
-    // "Cannot use a pool after calling end on the pool". Hit a few
-    // times and require ≥ 2 of them to be 200 — that's enough to prove
-    // the pool stays alive across requests, while tolerating the
-    // occasional Cloudflare 1101 transient on cold isolates.
-    let ok = 0;
-    for (let i = 0; i < 4; i++) {
-      const response = yield* getOnce(`${url}?n=${i}`);
-      if (response.status === 200) ok += 1;
-    }
-    expect(ok).toBeGreaterThanOrEqual(2);
+    const createBody = (yield* createResponse.json) as unknown as {
+      user: User[];
+    };
+    expect(createBody.user).toHaveLength(1);
+
+    const [createdUser] = createBody.user;
+    expect(createdUser.id).toBeNumber();
+    expect(createdUser.email).toBeString();
+    expect(createdUser.name).toBeString();
+    expect(createdUser.createdAt).toBeString();
+
+    const readResponse = yield* HttpClient.get(`${baseUrl}/${createdUser.id}`);
+    expect(readResponse.status).toBe(200);
+
+    const readBody = (yield* readResponse.json) as unknown as {
+      user: User & { posts: Post[] };
+    };
+    expect(readBody.user).toMatchObject({
+      id: createdUser.id,
+      email: createdUser.email,
+      name: createdUser.name,
+      posts: [],
+    });
+
+    const invalidReadResponse = yield* HttpClient.get(`${baseUrl}/not-a-user`);
+    expect(invalidReadResponse.status).toBe(400);
+    expect(yield* invalidReadResponse.json).toEqual({
+      error: "Invalid user ID",
+    });
+
+    const methodResponse = yield* HttpClient.execute(
+      HttpClientRequest.patch(baseUrl),
+    );
+    expect(methodResponse.status).toBe(405);
+    expect(yield* methodResponse.json).toEqual({
+      error: "Method not allowed",
+    });
+
+    const deleteResponse = yield* HttpClient.execute(
+      HttpClientRequest.delete(`${baseUrl}/${createdUser.id}`),
+    );
+    expect(deleteResponse.status).toBe(200);
+
+    const deleteBody = (yield* deleteResponse.json) as unknown as {
+      user: User;
+    };
+    expect(deleteBody.user).toMatchObject({
+      id: createdUser.id,
+      email: createdUser.email,
+      name: createdUser.name,
+    });
+
+    const finalResponse = yield* HttpClient.get(baseUrl);
+    expect(finalResponse.status).toBe(200);
+    const finalBody = (yield* finalResponse.json) as unknown as {
+      users: User[];
+    };
+    expect(finalBody.users.some((user) => user.id === createdUser.id)).toBe(
+      false,
+    );
   }),
 );

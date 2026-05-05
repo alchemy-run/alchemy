@@ -1,8 +1,9 @@
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle";
+import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Hyperdrive } from "./Db.ts";
+import { Hyperdrive, layerPgClient, Postgres } from "./Db.ts";
 import { Users } from "./schema.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
@@ -12,13 +13,63 @@ export default class Api extends Cloudflare.Worker<Api>()(
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
-    const db = yield* Drizzle.postgres(conn.connectionString);
 
     return {
       fetch: Effect.gen(function* () {
-        const users = yield* db.select().from(Users);
-        return yield* HttpServerResponse.json(users);
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const db = yield* Postgres;
+        switch (request.method) {
+          case "GET": {
+            if (request.url === "/") {
+              const users = yield* db.select().from(Users);
+              return yield* HttpServerResponse.json({ users });
+            }
+            const id = Number(request.url.split("/").pop());
+            if (Number.isNaN(id)) {
+              return yield* HttpServerResponse.json(
+                { error: "Invalid user ID" },
+                { status: 400 },
+              );
+            }
+            const user = yield* db.query.Users.findFirst({
+              where: { id },
+              with: { posts: true },
+            });
+            return yield* HttpServerResponse.json({ user });
+          }
+          case "POST": {
+            const user = yield* db
+              .insert(Users)
+              .values({
+                name: crypto.randomUUID(),
+                email: crypto.randomUUID(),
+              })
+              .returning();
+            return yield* HttpServerResponse.json({ user });
+          }
+          case "DELETE": {
+            const id = Number(request.url.split("/").pop());
+            if (Number.isNaN(id)) {
+              return yield* HttpServerResponse.json(
+                { error: "Invalid user ID" },
+                { status: 400 },
+              );
+            }
+            const [user] = yield* db
+              .delete(Users)
+              .where(eq(Users.id, id))
+              .returning();
+            return yield* HttpServerResponse.json({ user });
+          }
+          default: {
+            return yield* HttpServerResponse.json(
+              { error: "Method not allowed" },
+              { status: 405 },
+            );
+          }
+        }
       }).pipe(
+        Effect.provide(layerPgClient(conn)),
         Effect.catch((cause: any) => {
           const peel = (e: any): any => (e?.cause ? peel(e.cause) : e);
           const root = peel(cause);
