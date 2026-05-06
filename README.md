@@ -18,6 +18,48 @@
 
 ---
 
+A Cloudflare Worker, fronted by Hyperdrive, querying Neon Postgres with Drizzle — provisioned, bound, and queried in one program:
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Drizzle from "alchemy/Drizzle";
+import * as Neon from "alchemy/Neon";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import { Users } from "./schema.ts";
+
+export default Alchemy.Stack("App", {
+  providers: Layer.mergeAll(
+    Cloudflare.providers(),
+    Neon.providers(),
+    Drizzle.providers(),
+  ),
+}, Effect.gen(function* () {
+  const project = yield* Neon.Project("db", { region: "aws-us-east-1" });
+  const branch  = yield* Neon.Branch("main", { project });
+  const pool    = yield* Cloudflare.Hyperdrive("pool", { origin: branch.origin });
+
+  return yield* Cloudflare.Worker("api", { main: import.meta.path },
+    Effect.gen(function* () {
+      const conn = yield* Cloudflare.Hyperdrive.bind(pool);
+      const db   = yield* Drizzle.postgres(conn.connectionString);
+      return {
+        fetch: Effect.gen(function* () {
+          const users = yield* db.select().from(Users);
+          return yield* HttpServerResponse.json(users);
+        }),
+      };
+    }).pipe(Effect.provide(Cloudflare.HyperdriveConnectionLive)),
+  );
+}));
+```
+
+`Cloudflare.Hyperdrive.bind(pool)` is the whole magic: it creates the Worker binding, wires the env var, and hands you a typed connection — at deploy time and at runtime.
+
+---
+
 - **One program, one language.** Resources, Lambdas/Workers, IAM, and SDKs live in the same Effect program — no YAML, no second runtime.
 - **Bindings, not glue code.** `S3.GetObject.bind(bucket)` wires the IAM policy, env var, and a typed SDK call in a single line.
 - **Errors in the type system.** Every cloud API failure is a tagged Effect error you handle — or don't — on purpose.
