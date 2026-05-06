@@ -210,6 +210,82 @@ statements to your branch. Hit your Worker URL and you should see:
 []
 ```
 
+## Define relations for typed `db.query`
+
+The basic client supports the SQL builder (`select`, `insert`, etc.)
+but not the relational query API. To unlock `db.query.*` with typed
+`with` clauses, declare your relations using `defineRelations` and
+export them from `src/schema.ts`:
+
+```diff lang="typescript"
+// src/schema.ts
++import { defineRelations } from "drizzle-orm";
+ import {
+   integer,
+   pgTable,
+   serial,
+   text,
+   timestamp,
+ } from "drizzle-orm/pg-core";
+
+ export const Users = pgTable("users", { /* ... */ });
+ export const Posts = pgTable("posts", { /* ... */ });
+
++export const relations = defineRelations({ Users, Posts }, (t) => ({
++  Users: {
++    posts: t.many.Posts(),
++  },
++  Posts: {
++    user: t.one.Users({
++      from: t.Posts.userId,
++      to: t.Users.id,
++    }),
++  },
++}));
+```
+
+`defineRelations` is purely a type-level + metadata wiring step — it
+doesn't touch the generated migration SQL. The foreign key was
+already declared on `Posts.userId.references(...)`.
+
+## Pass `relations` to `Drizzle.postgres`
+
+Hand the relations object to `Drizzle.postgres` as its second
+argument. The returned `db` now exposes a typed `db.query` namespace
+keyed by your table names:
+
+```diff lang="typescript"
+// src/Api.ts
+ import { Hyperdrive } from "./Db.ts";
+-import { Users } from "./schema.ts";
++import { relations, Users } from "./schema.ts";
+
+ Effect.gen(function* () {
+   const hd = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);
+-  const db = yield* Drizzle.postgres(hd.connectionString);
++  const db = yield* Drizzle.postgres(hd.connectionString, {
++    relations,
++  });
+
+   return {
+     fetch: Effect.gen(function* () {
+-      const users = yield* db.select().from(Users);
+-      return yield* HttpServerResponse.json(users);
++      const user = yield* db.query.Users.findFirst({
++        where: { id: 1 },
++        with: { posts: true },
++      });
++      return yield* HttpServerResponse.json({ user });
+     }),
+   };
+ })
+```
+
+`db.query.Users.findFirst` is fully typed: `where` accepts a typed
+predicate object keyed by `Users` columns, and `with: { posts: true }`
+is only valid because `relations` declared `Users.posts`. The result
+type includes `posts: Post[]` automatically — no manual joins.
+
 ## Iterate on the schema
 
 Add a column or a table to `src/schema.ts` and run
