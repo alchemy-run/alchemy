@@ -21,15 +21,22 @@
 A Worker, fronted by Hyperdrive, querying Postgres with Drizzle — in one program:
 
 ```typescript
-const pool = yield* Cloudflare.Hyperdrive("pool", { origin: branch.origin });
+const Bucket = Cloudflare.R2Bucket("bucket");
 
-return yield* Cloudflare.Worker("api", { main: import.meta.path }, Effect.gen(function* () {
-  const conn = yield* Cloudflare.Hyperdrive.bind(pool);
-  const db   = yield* Drizzle.postgres(conn.connectionString);
-  return {
-    fetch: () => HttpServerResponse.json(db.select().from(Users)),
-  };
-}));
+export default Cloudflare.Worker(
+  "api",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const object = yield* bucket.get(request.url);
+        return HttpServerResponse.stream(object!.body);
+      })
+    };
+  }),
+);
 ```
 
 One `bind()` wires the binding, env var, and typed connection — at deploy time and at runtime.
