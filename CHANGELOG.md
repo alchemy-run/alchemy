@@ -1,3 +1,43 @@
+## v2.0.0-beta.31
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**:
+  - **StateStore**: Wire OTLP traces, metrics, and logs &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/181 [<samp>(14b8a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/14b8ab8c)
+- **aws**:
+  - Harden ApiGateway REST resources (bindings, retries, stage patches) &nbsp;-&nbsp; by **Sam Goodwin** and **Adrian Witaszak** in https://github.com/alchemy-run/alchemy-effect/issues/169 [<samp>(e4b84)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/e4b84a51)
+- **cloudflare**:
+  - Add Tunnel, VpcService, and VpcServiceRef &nbsp;-&nbsp; by **Kotkoroid** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/123 [<samp>(090c1)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/090c14db)
+  - Expose raw durable object sql storage &nbsp;-&nbsp; by **m@s** in https://github.com/alchemy-run/alchemy-effect/issues/188 [<samp>(20c03)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/20c0301b)
+  - Add Hyperdrive resource with dev-mode local DB support &nbsp;-&nbsp; by **Julian Archila** in https://github.com/alchemy-run/alchemy-effect/issues/158 [<samp>(8e651)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/8e651091)
+  - Workers observability traces &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/244 [<samp>(ae531)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ae5319cd)
+- **core**:
+  - Support for adoption in the core engine (using read) &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/167 [<samp>(9914e)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/9914ec03)
+  - Replace create+update with one `reconcile` function &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/179 [<samp>(bfd4f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/bfd4f386)
+- **neon**:
+  - Add Neon serverless Postgres provider &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/134 [<samp>(3b5e8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/3b5e88a8)
+- **test**:
+  - Add dev flag to test harness, toggleable via ALCHEMY_DEV &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/183 [<samp>(7856a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/7856afbb)
+- **website**:
+  - Generate llms.txt from page frontmatter &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/170 [<samp>(9ad47)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/9ad47381)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - Dedupe Container DO bindings by namespaceId &nbsp;-&nbsp; by **Christopher Yovanovitch** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/172 [<samp>(a2c54)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a2c54999)
+  - **SecretsStore**: Adoption opt-in by default &nbsp;-&nbsp; by **Stibbs** in https://github.com/alchemy-run/alchemy-effect/issues/163 [<samp>(d9f22)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d9f22752)
+- **aws**:
+  - **lambda**:
+    - Scope public url invokes &nbsp;-&nbsp; by **José Netto** in https://github.com/alchemy-run/alchemy-effect/issues/162 [<samp>(1e092)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1e092912)
+    - Pass invoked via url permission &nbsp;-&nbsp; by **José Netto** in https://github.com/alchemy-run/alchemy-effect/issues/161 [<samp>(3e978)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/3e978ff7)
+- **cloudflare**:
+  - Enable hyperdrive in dev mode &nbsp;-&nbsp; by **John Royal** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/242 [<samp>(86623)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/8662373d)
+  - **worker**: Make asset hash path-independent and reuse manifest when unchanged &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/165 [<samp>(e1669)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/e1669a77)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.30...HEAD)
+
+---
+
 ## v2.0.0-beta.30
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
