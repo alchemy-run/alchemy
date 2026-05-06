@@ -18,45 +18,21 @@
 
 ---
 
-A Cloudflare Worker, fronted by Hyperdrive, querying Neon Postgres with Drizzle — provisioned, bound, and queried in one program:
+A Worker, fronted by Hyperdrive, querying Postgres with Drizzle — in one program:
 
 ```typescript
-import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle";
-import * as Neon from "alchemy/Neon";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import * as Layer from "effect/Layer";
-import { Users } from "./schema.ts";
+const pool = yield* Cloudflare.Hyperdrive("pool", { origin: branch.origin });
 
-export default Alchemy.Stack("App", {
-  providers: Layer.mergeAll(
-    Cloudflare.providers(),
-    Neon.providers(),
-    Drizzle.providers(),
-  ),
-}, Effect.gen(function* () {
-  const project = yield* Neon.Project("db", { region: "aws-us-east-1" });
-  const branch  = yield* Neon.Branch("main", { project });
-  const pool    = yield* Cloudflare.Hyperdrive("pool", { origin: branch.origin });
-
-  return yield* Cloudflare.Worker("api", { main: import.meta.path },
-    Effect.gen(function* () {
-      const conn = yield* Cloudflare.Hyperdrive.bind(pool);
-      const db   = yield* Drizzle.postgres(conn.connectionString);
-      return {
-        fetch: Effect.gen(function* () {
-          const users = yield* db.select().from(Users);
-          return yield* HttpServerResponse.json(users);
-        }),
-      };
-    }).pipe(Effect.provide(Cloudflare.HyperdriveConnectionLive)),
-  );
+return yield* Cloudflare.Worker("api", { main: import.meta.path }, Effect.gen(function* () {
+  const conn = yield* Cloudflare.Hyperdrive.bind(pool);
+  const db   = yield* Drizzle.postgres(conn.connectionString);
+  return {
+    fetch: () => HttpServerResponse.json(db.select().from(Users)),
+  };
 }));
 ```
 
-`Cloudflare.Hyperdrive.bind(pool)` is the whole magic: it creates the Worker binding, wires the env var, and hands you a typed connection — at deploy time and at runtime.
+One `bind()` wires the binding, env var, and typed connection — at deploy time and at runtime.
 
 ---
 
