@@ -18,7 +18,7 @@
 
 ---
 
-A Worker, fronted by Hyperdrive, querying Postgres with Drizzle — in one program:
+A Worker bound to a R2 bucket and serving objects from it:
 
 ```typescript
 const Bucket = Cloudflare.R2Bucket("bucket");
