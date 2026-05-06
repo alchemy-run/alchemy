@@ -1,5 +1,4 @@
 import { defineRelations } from "drizzle-orm";
-import { makeWithDefaults } from "drizzle-orm/effect-postgres";
 import { integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 
 export const Users = pgTable("users", {
@@ -36,7 +35,3 @@ export const relations = defineRelations({ Users, Posts }, (t) => ({
     }),
   },
 }));
-
-export const Client = makeWithDefaults({
-  relations,
-});

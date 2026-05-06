@@ -1,11 +1,7 @@
-import * as PgClient from "@effect/sql-pg/PgClient";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Drizzle from "alchemy/Drizzle";
 import * as Neon from "alchemy/Neon";
-import { makeWithDefaults } from "drizzle-orm/effect-postgres";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { relations } from "./schema.ts";
 
 /**
  * A Drizzle schema + Neon project + feature branch. The branch's
@@ -40,13 +36,3 @@ export const Hyperdrive = Effect.gen(function* () {
     origin: branch.origin,
   });
 });
-
-export const Postgres = makeWithDefaults({
-  relations,
-});
-
-export const layerPgClient = (hyperdrive: Cloudflare.HyperdriveBindingClient) =>
-  hyperdrive.connectionString.pipe(
-    Effect.map((url) => PgClient.layer({ url })),
-    Layer.unwrap,
-  );
