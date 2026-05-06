@@ -657,9 +657,11 @@ const redeployIfStale = ({
   isCI: boolean;
 }) =>
   Effect.gen(function* () {
-    if (yield* checkStateStoreVersion(url)) return undefined;
+    const { matches, expected, observed } = yield* checkStateStoreVersion(url);
+    if (matches) return undefined;
     yield* Clank.info(
-      `Cloudflare State Store '${scriptName}' is out of date; redeploying...`,
+      `Cloudflare State Store '${scriptName}' is out of date ` +
+        `(expected v${expected}, observed v${observed ?? "unknown"}); redeploying...`,
     );
     return yield* finishBootstrap({
       scriptName,
@@ -704,7 +706,7 @@ const checkStateStoreVersion = (url: string) =>
       "alchemy.state_store.observed_version": result?.version ?? -1,
       "alchemy.state_store.version_match": matches,
     });
-    return matches;
+    return { matches, expected: STATE_STORE_VERSION, observed: result?.version };
   }).pipe(
     Effect.withSpan("state_store.check_version", {
       attributes: { "alchemy.state_store.op": "check_version" },
