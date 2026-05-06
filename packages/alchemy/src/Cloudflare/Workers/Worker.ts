@@ -850,7 +850,6 @@ export const Worker: Platform<
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
                 const scope = Scope.makeUnsafe();
-                console.log("making scope");
                 return eff
                   .pipe(
                     Scope.provide(scope),
@@ -866,12 +865,11 @@ export const Worker: Platform<
                     ),
                     Effect.runPromise,
                   )
-                  .finally(() => {
-                    console.log("closing our scope");
-                    return context.waitUntil(
+                  .finally(() =>
+                    context.waitUntil(
                       Effect.runPromise(Scope.close(scope, Exit.void)),
-                    );
-                  });
+                    ),
+                  );
               }
             }
             return Promise.reject(new Error("No event handler found"));

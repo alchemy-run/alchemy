@@ -20,7 +20,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
     Neon.providers(),
   ),
   state: Alchemy.localState(),
-  dev: !process.env.LIVE,
 });
 
 const stack = beforeAll(deploy(Stack));
@@ -47,13 +46,17 @@ const getOnce = (url: string) =>
       return yield* Effect.fail(new Error("workers.dev not yet propagated"));
     }
     return response;
-  }).pipe(Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }));
+  }).pipe(
+    Effect.tapError((err) =>
+      Effect.logError(`${url} not available: ${err.message}`),
+    ),
+    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
+  );
 
 test(
   "worker exposes user CRUD through Drizzle / Hyperdrive / Neon",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    console.log("url", url);
     const baseUrl = url.replace(/\/+$/, "");
 
     const initialResponse = yield* getOnce(baseUrl);
@@ -130,6 +133,7 @@ test(
       false,
     );
   }),
+  { timeout: 20_000 },
 );
 
 test.skip(

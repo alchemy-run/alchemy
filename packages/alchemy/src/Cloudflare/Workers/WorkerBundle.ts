@@ -202,10 +202,7 @@ const getExport = (name) => getExports().then(exports => exports[name]?.make)
 const worker = () => getExports().then(exports => exports.default)
 
 export default Object.fromEntries(ExportedHandlerMethods.map(
-  method => [method, async (...args) => {
-    console.log("FOOOO", method)
-    return (await worker())[method](...args)
-  }])
+  method => [method, async (...args) => (await worker())[method](...args)])
 );
 
 // export class proxy stubs for Durable Objects and Workflows
