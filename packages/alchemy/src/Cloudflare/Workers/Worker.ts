@@ -1,13 +1,13 @@
 import type * as cf from "@cloudflare/workers-types";
 import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
-import type { HyperdriveOrigin } from "../Hyperdrive/HyperdriveOriginRuntime.ts";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import type * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -15,6 +15,7 @@ import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import { createRequire } from "node:module";
@@ -27,15 +28,12 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
-import {
-  isArtifacts as isArtifactsBinding,
-  type Artifacts as ArtifactsBinding,
-} from "../Artifacts/Artifacts.ts";
 import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
+import { ExecutionContext } from "../../ExecutionContext.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
@@ -49,13 +47,17 @@ import {
 import type { LogLine } from "../../Provider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { AiGateway } from "../AiGateway/AiGateway.ts";
+import {
+  isArtifacts as isArtifactsBinding,
+  type Artifacts as ArtifactsBinding,
+} from "../Artifacts/Artifacts.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
+import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
 import { SidecarLive } from "../Local/Sidecar.ts";
 import { CloudflareLogs } from "../Logs.ts";
@@ -70,7 +72,6 @@ import {
   type AssetsConfig,
   type AssetsProps,
 } from "./Assets.ts";
-import cloudflare_workers from "./cloudflare_workers.ts";
 import {
   isDurableObjectExport,
   isDurableObjectNamespaceLike,
@@ -80,7 +81,7 @@ import { workersHttpHandler } from "./HttpServer.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
 import { makeRpcStub } from "./Rpc.ts";
-import { isWorkflowExport } from "./Workflow.ts";
+import { makeEffectVirtualEntry } from "./WorkerBundle.ts";
 
 const WorkerTypeId = "Cloudflare.Worker";
 type WorkerTypeId = typeof WorkerTypeId;
@@ -96,15 +97,10 @@ export class WorkerEnvironment extends Context.Service<
   Record<string, any>
 >()("Cloudflare.Workers.WorkerEnvironment") {}
 
-export const WorkerEnvironmentLive = Layer.effect(
-  WorkerEnvironment,
-  cloudflare_workers.pipe(Effect.map((m) => m.env)),
-);
-
-export class ExecutionContext extends Context.Service<
-  ExecutionContext,
+export class WorkerExecutionContext extends Context.Service<
+  WorkerExecutionContext,
   cf.ExecutionContext
->()("Cloudflare.Workers.ExecutionContext") {}
+>()("Cloudflare.Workers.WorkerExecutionContext") {}
 
 export type WorkerEvent = Exclude<
   {
@@ -179,7 +175,7 @@ export const ExportedHandlerMethods = [
   "queue",
 ] as const satisfies (keyof cf.ExportedHandler)[];
 
-export interface WorkerExecutionContext extends Serverless.FunctionContext {
+export interface WorkerRuntimeContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
 }
 
@@ -323,7 +319,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   {
     bindings?: WorkerBinding[];
     containers?: { className: string }[];
-    hyperdrives?: Record<string, HyperdriveOrigin>;
+    hyperdrives?: Record<string, Required<HyperdriveDevOrigin>>;
   },
   Providers
 >;
@@ -689,7 +685,7 @@ export const Worker: Platform<
   Worker,
   WorkerServices,
   WorkerShape,
-  WorkerExecutionContext
+  WorkerRuntimeContext
 > & {
   <
     const Bindings extends WorkerBindingProps,
@@ -791,7 +787,7 @@ export const Worker: Platform<
       }
     }
   }),
-  createExecutionContext: (id: string): WorkerExecutionContext => {
+  createRuntimeContext: (id: string): WorkerRuntimeContext => {
     const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
     const exports: Record<string, any> = {};
     const env: Record<string, any> = {};
@@ -894,11 +890,27 @@ export const Worker: Platform<
             for (const handler of handlers) {
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
-                return eff.pipe(
-                  Effect.provideContext(services),
-                  Effect.provide(Layer.succeed(ExecutionContext, context)),
-                  Effect.runPromise,
-                );
+                const scope = Scope.makeUnsafe();
+                return eff
+                  .pipe(
+                    Scope.provide(scope),
+                    Effect.provideContext(services),
+                    Effect.provide(
+                      Layer.succeed(WorkerExecutionContext, context),
+                    ),
+                    Effect.provide(
+                      Layer.succeed(ExecutionContext, {
+                        scope,
+                        cache: {},
+                      }),
+                    ),
+                    Effect.runPromise,
+                  )
+                  .finally(() =>
+                    context.waitUntil(
+                      Effect.runPromise(Scope.close(scope, Exit.void)),
+                    ),
+                  );
               }
             }
             return Promise.reject(new Error("No event handler found"));
@@ -1413,124 +1425,10 @@ export const LiveWorkerProvider = () =>
             return bundle;
           }
 
-          const exportMap = (props.exports ?? {}) as Record<string, unknown>;
-          const allExportNames = Object.keys(exportMap).filter(
-            (id) => id !== "default",
-          );
-          const doClasses: string[] = [];
-          const wfClasses: string[] = [];
-          for (const name of allExportNames) {
-            if (isWorkflowExport(exportMap[name])) {
-              wfClasses.push(name);
-            } else if (isDurableObjectExport(exportMap[name])) {
-              doClasses.push(name);
-            }
-          }
-          const hasDoClasses = doClasses.length > 0;
-          const hasWfClasses = wfClasses.length > 0;
-          const script = (importPath: string) => `
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Console from "effect/Console";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Context from "effect/Context";
-import * as Stream from "effect/Stream";
-
-import { env, DurableObject${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
-import { MinimumLogLevel } from "effect/References";
-import { NodeServices } from "@effect/platform-node";
-import { Stack } from "alchemy/Stack";
-import { WorkerEnvironment, makeDurableObjectBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy/Cloudflare";
-
-import entry from "${importPath}";
-
-const tag = Context.Service("${Self.key}")
-const layer =
-  typeof entry?.build === "function"
-    ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
-
-const platform = Layer.mergeAll(
-  NodeServices.layer,
-  FetchHttpClient.layer,
-  // TODO(sam): wire this up to telemetry more directly
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.succeed(
-  Stack,
-  {
-    name: "${stack.name}",
-    stage: "${stack.stage}",
-    bindings: {},
-    resources: {}
-  }
-);
-
-const exportsEffect = tag.asEffect().pipe(
-  Effect.flatMap(func => func.ExecutionContext.exports),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.orElse(
-            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-            ConfigProvider.fromUnknown(env),
-          ),
-        ),
-      ),
-      Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),
-      Layer.provideMerge(
-        Layer.succeed(MinimumLogLevel, env.DEBUG ? "Debug" : "Info"),
-      ),
-    ),
-  ),
-  Effect.scoped,
-);
-
-// TODO(sam): we could kick this off during module init, but any I/O will break deploy
-// let exportsPromise = Effect.runPromise(exportsEffect);
-
-// for now, we delay initializing the worker until the first request
-let exportsPromise;
-
-// don't initialize the workerEffect during module init because Cloudflare does not allow I/O during module init
-// we cache it synchronously (??=) to guarnatee only one initialization ever happens
-const getExports = () => (exportsPromise ??= Effect.runPromise(exportsEffect))
-const getExport = (name) => getExports().then(exports => exports[name]?.make)
-const worker = () => getExports().then(exports => exports.default)
-
-export default Object.fromEntries(ExportedHandlerMethods.map(
-  method => [method, async (...args) => (await worker())[method](...args)])
-) satisfies Required<cf.ExportedHandler>;
-
-// export class proxy stubs for Durable Objects and Workflows
-${[
-  ...(hasDoClasses
-    ? [
-        "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, getExport);",
-        ...doClasses.map(
-          (id) => `export class ${id} extends DurableObjectBridge("${id}") {}`,
-        ),
-      ]
-    : []),
-  ...(hasWfClasses
-    ? [
-        "const WorkflowBridgeFn = makeWorkflowBridge(WorkflowEntrypoint, getExport);",
-        ...wfClasses.map(
-          (id) => `export class ${id} extends WorkflowBridgeFn("${id}") {}`,
-        ),
-      ]
-    : []),
-].join("\n")}
-`;
-
+          const script = makeEffectVirtualEntry((props.exports ?? {}) as any, {
+            name: stack.name,
+            stage: stack.stage,
+          });
           return yield* buildBundle(virtualEntryPlugin(script));
         }).pipe(Artifacts.cached("build"));
 

@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
-import type { BaseExecutionContext } from "../ExecutionContext.ts";
 import type { HttpEffect } from "../Http.ts";
+import type { BaseRuntimeContext } from "../RuntimeContext.ts";
 
-export interface FunctionContext extends BaseExecutionContext {
+export interface FunctionContext extends BaseRuntimeContext {
   serve<Req = never>(handler: HttpEffect<Req>): Effect.Effect<void, never, Req>;
   listen<A, Req = never>(
     handler: FunctionListener<A, Req>,

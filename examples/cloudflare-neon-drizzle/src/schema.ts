@@ -1,3 +1,4 @@
+import { defineRelations } from "drizzle-orm";
 import { integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 
 export const Users = pgTable("users", {
@@ -8,6 +9,7 @@ export const Users = pgTable("users", {
     .notNull()
     .defaultNow(),
 });
+export type User = typeof Users.$inferSelect;
 
 export const Posts = pgTable("posts", {
   id: serial("id").primaryKey(),
@@ -20,3 +22,16 @@ export const Posts = pgTable("posts", {
     .notNull()
     .defaultNow(),
 });
+export type Post = typeof Posts.$inferSelect;
+
+export const relations = defineRelations({ Users, Posts }, (t) => ({
+  Users: {
+    posts: t.many.Posts(),
+  },
+  Posts: {
+    user: t.one.Users({
+      from: t.Posts.userId,
+      to: t.Users.id,
+    }),
+  },
+}));

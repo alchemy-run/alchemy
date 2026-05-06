@@ -341,7 +341,7 @@
   "peerDependencies": {
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/sql-pg": ">=4.0.0-beta.58",
+    "@effect/sql-pg": "catalog:",
     "drizzle-kit": ">=1.0.0-rc.1",
     "drizzle-orm": ">=1.0.0-rc.1",
     "effect": "catalog:",

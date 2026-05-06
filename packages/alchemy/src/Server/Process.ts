@@ -5,7 +5,7 @@ import type { Path } from "effect/Path";
 import type { Stdio } from "effect/Stdio";
 import type { Terminal } from "effect/Terminal";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import type { BaseExecutionContext } from "../ExecutionContext.ts";
+import type { BaseRuntimeContext } from "../RuntimeContext.ts";
 
 export type ProcessServices =
   | ChildProcessSpawner
@@ -14,7 +14,7 @@ export type ProcessServices =
   | Stdio
   | Terminal;
 
-export interface ProcessContext extends BaseExecutionContext {
+export interface ProcessContext extends BaseRuntimeContext {
   run: <Req = never, RunReq = never>(
     effect: Effect.Effect<void, never, RunReq>,
   ) => Effect.Effect<void, never, Req | RunReq>;

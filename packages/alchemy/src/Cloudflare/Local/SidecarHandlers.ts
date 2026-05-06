@@ -41,7 +41,7 @@ export const SidecarHandlers = Layer.effect(
           hyperdrives: worker.hyperdrives,
           durableObjectNamespaces: worker.durableObjectNamespaces,
           modules,
-        } as any)
+        })
         .pipe(Scope.provide(scope));
       const previous = serverScopes.get(worker.name);
       if (previous) {

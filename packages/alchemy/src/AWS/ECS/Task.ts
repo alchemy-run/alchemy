@@ -168,55 +168,53 @@ export type TaskServices = Credentials | Region | ServerHost;
 
 export type TaskShape = Main<TaskServices>;
 
-export interface TaskExecutionContext extends ProcessContext {
+export interface TaskRuntimeContext extends ProcessContext {
   readonly Type: "AWS.ECS.Task";
 }
 
-export const Task: Platform<
-  Task,
-  TaskServices,
-  TaskShape,
-  TaskExecutionContext
-> = Platform("AWS.ECS.Task", {
-  createExecutionContext: (id): TaskExecutionContext => {
-    const runners: Effect.Effect<void, never, any>[] = [];
-    const env: Record<string, any> = {};
+export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> =
+  Platform("AWS.ECS.Task", {
+    createRuntimeContext: (id): TaskRuntimeContext => {
+      const runners: Effect.Effect<void, never, any>[] = [];
+      const env: Record<string, any> = {};
 
-    return {
-      Type: "AWS.ECS.Task",
-      id,
-      env,
-      set: (bindingId: string, output: Output.Output) =>
-        Effect.sync(() => {
-          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
-          return key;
-        }),
-      get: <T>(key: string) =>
-        Config.string(key)
-          .asEffect()
-          .pipe(
-            Effect.flatMap((value) =>
-              Effect.try({
-                try: () => JSON.parse(value) as T,
-                catch: (error) => error as Error,
-              }),
-            ),
-            Effect.catch((cause) =>
-              Effect.die(
-                new Error(`Failed to get environment variable: ${key}`, {
-                  cause,
+      return {
+        Type: "AWS.ECS.Task",
+        id,
+        env,
+        set: (bindingId: string, output: Output.Output) =>
+          Effect.sync(() => {
+            const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+            env[key] = output.pipe(
+              Output.map((value) => JSON.stringify(value)),
+            );
+            return key;
+          }),
+        get: <T>(key: string) =>
+          Config.string(key)
+            .asEffect()
+            .pipe(
+              Effect.flatMap((value) =>
+                Effect.try({
+                  try: () => JSON.parse(value) as T,
+                  catch: (error) => error as Error,
                 }),
               ),
+              Effect.catch((cause) =>
+                Effect.die(
+                  new Error(`Failed to get environment variable: ${key}`, {
+                    cause,
+                  }),
+                ),
+              ),
             ),
-          ),
-      run: (effect: Effect.Effect<void, never, any>) =>
-        Effect.sync(() => {
-          runners.push(effect);
-        }),
-    };
-  },
-});
+        run: (effect: Effect.Effect<void, never, any>) =>
+          Effect.sync(() => {
+            runners.push(effect);
+          }),
+      };
+    },
+  });
 
 export const TaskProvider = () =>
   Provider.effect(
@@ -505,7 +503,7 @@ const platform = Layer.mergeAll(
 );
 
 const program = handler.pipe(
-  Effect.flatMap((task) => task.ExecutionContext.exports.program),
+  Effect.flatMap((task) => task.RuntimeContext.exports.program),
   Effect.provide(
     Layer.effect(
       Stack,

@@ -36,12 +36,12 @@ export * as Construct from "./Construct.ts";
 // downstream `.d.ts` emissions (fixes TS2883 in user files).
 export { AuthProviders } from "./Auth/AuthProvider.ts";
 export { Cli } from "./Cli/Cli.ts";
-export {
-  ExecutionContext,
-  type BaseExecutionContext,
-  type ExecutionContext as ExecutionContextInterface,
-} from "./ExecutionContext.ts";
 export type * from "./Platform.ts";
 export { Platform } from "./Platform.ts";
 export type { ProviderCollectionLike } from "./Provider.ts";
+export {
+  RuntimeContext,
+  type BaseRuntimeContext,
+  type RuntimeContext as RuntimeContextInterface,
+} from "./RuntimeContext.ts";
 export type * from "./Stack.ts";

@@ -12,20 +12,20 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
-import type { AccountID } from "../Environment.ts";
-import { AWSEnvironment } from "../Environment.ts";
 import { Assets } from "../Assets.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import {
-  createEc2HostExecutionContext,
+  createEc2HostRuntimeContext,
   createEc2HostedSupport,
-  type Ec2HostExecutionContext,
+  type Ec2HostRuntimeContext,
 } from "../EC2/hosted.ts";
+import type { AccountID } from "../Environment.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type LaunchTemplateId = `lt-${string}`;
@@ -134,7 +134,7 @@ export type LaunchTemplateServices = Credentials | Region;
 
 export type LaunchTemplateShape = Main<LaunchTemplateServices>;
 
-export type LaunchTemplateExecutionContext = Ec2HostExecutionContext;
+export type LaunchTemplateRuntimeContext = Ec2HostRuntimeContext;
 
 /**
  * A launch template that preserves the `Host` authoring model used by
@@ -164,9 +164,9 @@ export const LaunchTemplate: Platform<
   LaunchTemplate,
   LaunchTemplateServices,
   LaunchTemplateShape,
-  LaunchTemplateExecutionContext
+  LaunchTemplateRuntimeContext
 > = Platform("AWS.AutoScaling.LaunchTemplate", {
-  createExecutionContext: createEc2HostExecutionContext(
+  createRuntimeContext: createEc2HostRuntimeContext(
     "AWS.AutoScaling.LaunchTemplate",
   ),
 });
