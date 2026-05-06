@@ -255,6 +255,15 @@ export interface WorkerProps<
     memo?: MemoOptions;
   };
   logpush?: boolean;
+  /**
+   * Cloudflare Workers Observability settings. Controls Workers Logs
+   * (`logs`) and Workers Traces (`traces`), each with their own
+   * `enabled`, `headSamplingRate`, and `persist` toggles.
+   *
+   * If omitted, defaults to `{ enabled: true, logs: { enabled: true,
+   * invocationLogs: true } }`. Traces are off by default — opt in via
+   * `traces: { enabled: true, ... }`.
+   */
   observability?: WorkerObservability;
   tags?: string[];
   main: string;
@@ -500,6 +509,38 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * {
  *   main: import.meta.path,
  *   assets: "./public",
+ * }
+ * ```
+ *
+ * @section Observability
+ * Cloudflare Workers Observability is on by default — `logs.enabled` and
+ * `logs.invocationLogs` are turned on if you don't pass an `observability`
+ * prop. Pass the prop yourself to tune sampling, enable persistence, or
+ * turn on the new `traces` channel (the same toggle the dashboard's
+ * Observability tab writes).
+ *
+ * Field names match the Cloudflare API (camelCased): `headSamplingRate`,
+ * `invocationLogs`, etc.
+ *
+ * @example Enabling logs and traces
+ * ```typescript
+ * {
+ *   main: import.meta.path,
+ *   observability: {
+ *     enabled: true,
+ *     headSamplingRate: 1,
+ *     logs: {
+ *       enabled: true,
+ *       invocationLogs: true,
+ *       headSamplingRate: 1,
+ *       persist: true,
+ *     },
+ *     traces: {
+ *       enabled: true,
+ *       headSamplingRate: 1,
+ *       persist: true,
+ *     },
+ *   },
  * }
  * ```
  *
