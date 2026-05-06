@@ -59,10 +59,6 @@ export const postgres = <
       }
     >(
       Effect.gen(function* () {
-        // this is going to run on every single db.select()
-
-        // RuntimeContext == ctx of the runtime environment
-        // ExecutionContext == ctx of an execution in the runtime?
         const ctx = yield* ExecutionContext;
         return yield* (ctx.cache[symbol] ??= yield* Effect.gen(function* () {
           const pgCtx = yield* Layer.buildWithScope(

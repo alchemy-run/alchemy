@@ -25,9 +25,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         switch (request.method) {
           case "GET": {
             if (request.url === "/") {
-              console.log("getting users");
               const users = yield* db.select().from(Users);
-              console.log("users", users);
               return yield* HttpServerResponse.json({ users });
             }
             const id = Number(request.url.split("/").pop());

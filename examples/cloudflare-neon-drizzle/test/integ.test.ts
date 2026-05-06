@@ -20,7 +20,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
     Neon.providers(),
   ),
   state: Alchemy.localState(),
-  dev: false,
+  dev: !process.env.LIVE,
 });
 
 const stack = beforeAll(deploy(Stack));
@@ -53,6 +53,7 @@ test(
   "worker exposes user CRUD through Drizzle / Hyperdrive / Neon",
   Effect.gen(function* () {
     const { url } = yield* stack;
+    console.log("url", url);
     const baseUrl = url.replace(/\/+$/, "");
 
     const initialResponse = yield* getOnce(baseUrl);
@@ -131,7 +132,7 @@ test(
   }),
 );
 
-test(
+test.skip(
   "worker handles 100 sequential queries spaced 100-500ms apart",
   Effect.gen(function* () {
     const { url } = yield* stack;

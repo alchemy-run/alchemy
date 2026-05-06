@@ -156,21 +156,6 @@
         "effect": "catalog:",
       },
     },
-    "examples/cloudflare-hyperdrive": {
-      "name": "cloudflare-hyperdrive",
-      "version": "0.0.0",
-      "dependencies": {
-        "@cloudflare/workers-types": "catalog:",
-        "@effect/platform-bun": "catalog:",
-        "@effect/platform-node": "catalog:",
-        "alchemy": "workspace:*",
-        "effect": "catalog:",
-        "pg": "^8.20.0",
-      },
-      "devDependencies": {
-        "@types/pg": "^8.20.0",
-      },
-    },
     "examples/cloudflare-neon-drizzle": {
       "name": "cloudflare-neon-drizzle",
       "version": "0.0.0",
@@ -2066,8 +2051,6 @@
     "cloudflare-dev": ["cloudflare-dev@workspace:examples/cloudflare-dev"],
 
     "cloudflare-git-artifacts": ["cloudflare-git-artifacts@workspace:examples/cloudflare-git-artifacts"],
-
-    "cloudflare-hyperdrive": ["cloudflare-hyperdrive@workspace:examples/cloudflare-hyperdrive"],
 
     "cloudflare-neon-drizzle": ["cloudflare-neon-drizzle@workspace:examples/cloudflare-neon-drizzle"],
 

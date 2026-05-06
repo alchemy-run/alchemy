@@ -47,7 +47,6 @@ import {
 import type { LogLine } from "../../Provider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import type { AiGateway } from "../AiGateway/AiGateway.ts";
@@ -82,7 +81,7 @@ import { workersHttpHandler } from "./HttpServer.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
 import { makeRpcStub } from "./Rpc.ts";
-import { isWorkflowExport } from "./Workflow.ts";
+import { makeEffectVirtualEntry } from "./WorkerBundle.ts";
 
 const WorkerTypeId = "Cloudflare.Worker";
 type WorkerTypeId = typeof WorkerTypeId;
@@ -851,6 +850,7 @@ export const Worker: Platform<
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
                 const scope = Scope.makeUnsafe();
+                console.log("making scope");
                 return eff
                   .pipe(
                     Scope.provide(scope),
@@ -1386,124 +1386,10 @@ export const LiveWorkerProvider = () =>
             return bundle;
           }
 
-          const exportMap = (props.exports ?? {}) as Record<string, unknown>;
-          const allExportNames = Object.keys(exportMap).filter(
-            (id) => id !== "default",
-          );
-          const doClasses: string[] = [];
-          const wfClasses: string[] = [];
-          for (const name of allExportNames) {
-            if (isWorkflowExport(exportMap[name])) {
-              wfClasses.push(name);
-            } else if (isDurableObjectExport(exportMap[name])) {
-              doClasses.push(name);
-            }
-          }
-          const hasDoClasses = doClasses.length > 0;
-          const hasWfClasses = wfClasses.length > 0;
-          const script = (importPath: string) => `
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Console from "effect/Console";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Context from "effect/Context";
-import * as Stream from "effect/Stream";
-
-import { env, DurableObject${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
-import { MinimumLogLevel } from "effect/References";
-import { NodeServices } from "@effect/platform-node";
-import { Stack } from "alchemy/Stack";
-import { WorkerEnvironment, makeDurableObjectBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy/Cloudflare";
-
-import entry from "${importPath}";
-
-const tag = Context.Service("${Self.key}")
-const layer =
-  typeof entry?.build === "function"
-    ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
-
-const platform = Layer.mergeAll(
-  NodeServices.layer,
-  FetchHttpClient.layer,
-  // TODO(sam): wire this up to telemetry more directly
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.succeed(
-  Stack,
-  {
-    name: "${stack.name}",
-    stage: "${stack.stage}",
-    bindings: {},
-    resources: {}
-  }
-);
-
-const exportsEffect = tag.asEffect().pipe(
-  Effect.flatMap(func => func.RuntimeContext.exports),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.orElse(
-            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-            ConfigProvider.fromUnknown(env),
-          ),
-        ),
-      ),
-      Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),
-      Layer.provideMerge(
-        Layer.succeed(MinimumLogLevel, env.DEBUG ? "Debug" : "Info"),
-      ),
-    ),
-  ),
-  Effect.scoped,
-);
-
-// TODO(sam): we could kick this off during module init, but any I/O will break deploy
-// let exportsPromise = Effect.runPromise(exportsEffect);
-
-// for now, we delay initializing the worker until the first request
-let exportsPromise;
-
-// don't initialize the workerEffect during module init because Cloudflare does not allow I/O during module init
-// we cache it synchronously (??=) to guarnatee only one initialization ever happens
-const getExports = () => (exportsPromise ??= Effect.runPromise(exportsEffect))
-const getExport = (name) => getExports().then(exports => exports[name]?.make)
-const worker = () => getExports().then(exports => exports.default)
-
-export default Object.fromEntries(ExportedHandlerMethods.map(
-  method => [method, async (...args) => (await worker())[method](...args)])
-) satisfies Required<cf.ExportedHandler>;
-
-// export class proxy stubs for Durable Objects and Workflows
-${[
-  ...(hasDoClasses
-    ? [
-        "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, getExport);",
-        ...doClasses.map(
-          (id) => `export class ${id} extends DurableObjectBridge("${id}") {}`,
-        ),
-      ]
-    : []),
-  ...(hasWfClasses
-    ? [
-        "const WorkflowBridgeFn = makeWorkflowBridge(WorkflowEntrypoint, getExport);",
-        ...wfClasses.map(
-          (id) => `export class ${id} extends WorkflowBridgeFn("${id}") {}`,
-        ),
-      ]
-    : []),
-].join("\n")}
-`;
-
+          const script = makeEffectVirtualEntry((props.exports ?? {}) as any, {
+            name: stack.name,
+            stage: stack.stage,
+          });
           return yield* buildBundle(virtualEntryPlugin(script));
         }).pipe(Artifacts.cached("build"));
 
