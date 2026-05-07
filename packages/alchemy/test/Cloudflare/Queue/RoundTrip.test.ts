@@ -118,9 +118,7 @@ test.provider(
       // (Cloudflare may dispatch batches in parallel) so we
       // compare as a multiset.
       expect(snapshot.count).toBeGreaterThanOrEqual(messages.length);
-      expect([...snapshot.lastBodies].sort()).toEqual(
-        [...messages].sort(),
-      );
+      expect([...snapshot.lastBodies].sort()).toEqual([...messages].sort());
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -5,6 +5,8 @@ import * as Command from "effect/unstable/cli/Command";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
+import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
+import { ProfileLive } from "alchemy/Auth/Profile";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import packageJson from "../../package.json" with { type: "json" };
@@ -49,6 +51,8 @@ const cli = Command.run(root, {
 
 const services = Layer.mergeAll(
   Layer.provideMerge(AlchemyContextLive, PlatformServices),
+  Layer.provide(ProfileLive, PlatformServices),
+  Layer.provide(CredentialsStoreLive, PlatformServices),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
   TelemetryLive,

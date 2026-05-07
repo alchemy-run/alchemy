@@ -13,6 +13,8 @@ import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSp
 import { AlchemyContext, AlchemyContextLive } from "./AlchemyContext.ts";
 import { provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
+import { CredentialsStore, CredentialsStoreLive } from "./Auth/Credentials.ts";
+import { Profile, ProfileLive } from "./Auth/Profile.ts";
 import { Cli } from "./Cli/Cli.ts";
 import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
@@ -35,6 +37,8 @@ export type StackServices =
   | HttpClient
   | ChildProcessSpawner
   | AuthProviders
+  | Profile
+  | CredentialsStore
   | Cli;
 
 export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
@@ -46,6 +50,8 @@ export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
   | AuthProviders
   | AlchemyContext
   | Cli
+  | Profile
+  | CredentialsStore
   | State
   | Req
 >;
@@ -250,6 +256,8 @@ const platform = Layer.mergeAll(
   PlatformServices,
   FetchHttpClient.layer,
   Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
+  Layer.provide(ProfileLive, PlatformServices),
+  Layer.provide(CredentialsStoreLive, PlatformServices),
 );
 // override alchemy state store, CLI/reporting, state, and Config
 const alchemy = (overrides?: { dev?: boolean }) =>

@@ -3,9 +3,15 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import type { PlatformError } from "effect/PlatformError";
 import os from "node:os";
 import path from "pathe";
-import type { AuthProvider, ConfigureContext } from "./AuthProvider.ts";
+import type {
+  AuthError,
+  AuthProvider,
+  ConfigureContext,
+} from "./AuthProvider.ts";
 
 export const rootDir = path.join(os.homedir(), ".alchemy");
 export const configFilePath = path.join(rootDir, "profiles.json");
@@ -52,59 +58,126 @@ const emptyConfig = (): AlchemyConfig["Service"] => ({
   profiles: {},
 });
 
-export const readConfig = FileSystem.FileSystem.asEffect().pipe(
-  Effect.flatMap((fs) => fs.readFileString(configFilePath)),
-  Effect.flatMap((data) =>
-    Effect.try({
-      try: () => {
-        const parsed = JSON.parse(data);
-        if (parsed?.version !== CONFIG_VERSION) {
-          // TODO(sam): this is destructive, should we maintain a chain of migrations from 0 to current?
-          return emptyConfig();
-        }
-        return parsed as AlchemyConfig["Service"];
-      },
-      catch: emptyConfig,
-    }),
-  ),
-  Effect.orElseSucceed(emptyConfig),
-);
+/**
+ * Service exposing on-disk profile helpers. All methods have `R = never` —
+ * the {@link FileSystem.FileSystem} requirement is captured by
+ * {@link ProfileLive} when the layer is built, freeing call sites from
+ * having to thread `FileSystem` through their own Effects.
+ *
+ * Use {@link Profile} directly when you need profile helpers — yield it
+ * from your `Effect.gen` and call its methods (each has `R = never`).
+ */
+export interface ProfileService {
+  readonly readConfig: Effect.Effect<AlchemyConfig["Service"]>;
+  readonly writeConfig: (
+    config: AlchemyConfig["Service"],
+  ) => Effect.Effect<void, PlatformError>;
+  readonly getProfile: (
+    name: string,
+  ) => Effect.Effect<AlchemyProfile | undefined>;
+  readonly setProfile: (
+    name: string,
+    profile: AlchemyProfile,
+  ) => Effect.Effect<void, PlatformError>;
+  readonly deleteProfile: (
+    name: string,
+  ) => Effect.Effect<boolean, PlatformError>;
+  readonly loadOrConfigure: <Config extends { method: string }>(
+    auth: AuthProvider<Config>,
+    profileName: string,
+    ctx: ConfigureContext,
+  ) => Effect.Effect<Config, AuthError | PlatformError>;
+}
 
-export const writeConfig = (config: AlchemyConfig["Service"]) =>
-  FileSystem.FileSystem.asEffect().pipe(
-    Effect.tap((fs) =>
-      fs.makeDirectory(path.dirname(configFilePath), { recursive: true }),
-    ),
-    Effect.flatMap((fs) =>
-      fs.writeFileString(configFilePath, JSON.stringify(config, null, 2)),
-    ),
-  );
-
-export const getProfile = (name: string) =>
-  readConfig.pipe(Effect.map((config) => config.profiles[name]));
-
-export const setProfile = (name: string, profile: AlchemyProfile) =>
-  readConfig.pipe(
-    Effect.tap((config) =>
-      Effect.sync(() => (config.profiles[name] = profile)),
-    ),
-    Effect.flatMap(writeConfig),
-  );
+export class Profile extends Context.Service<Profile, ProfileService>()(
+  "Alchemy::Profile",
+) {}
 
 /**
- * Remove `name` and all its provider credentials from the on-disk config.
- * Returns `true` if the profile existed and was removed, `false` otherwise.
+ * Layer that builds the {@link Profile} service. Captures the
+ * {@link FileSystem.FileSystem} dependency at layer-build time, so any
+ * Effect that yields {@link Profile} ends up with `R = Profile` (no
+ * `FileSystem` leak). Provide this once at the top of your runtime
+ * (alongside `PlatformServices` / `NodeContext`).
  */
-export const deleteProfile = (name: string) =>
-  readConfig.pipe(
-    Effect.flatMap((config) => {
-      if (!(name in config.profiles)) {
-        return Effect.succeed(false);
-      }
-      delete config.profiles[name];
-      return writeConfig(config).pipe(Effect.as(true));
-    }),
-  );
+export const ProfileLive = Layer.effect(
+  Profile,
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+
+    const readConfig: Effect.Effect<AlchemyConfig["Service"]> = fs
+      .readFileString(configFilePath)
+      .pipe(
+        Effect.flatMap((data) =>
+          Effect.try({
+            try: () => {
+              const parsed = JSON.parse(data);
+              if (parsed?.version !== CONFIG_VERSION) {
+                // TODO(sam): this is destructive, should we maintain a chain of migrations from 0 to current?
+                return emptyConfig();
+              }
+              return parsed as AlchemyConfig["Service"];
+            },
+            catch: emptyConfig,
+          }),
+        ),
+        Effect.orElseSucceed(emptyConfig),
+      );
+
+    const writeConfig = (config: AlchemyConfig["Service"]) =>
+      fs
+        .makeDirectory(path.dirname(configFilePath), { recursive: true })
+        .pipe(
+          Effect.flatMap(() =>
+            fs.writeFileString(configFilePath, JSON.stringify(config, null, 2)),
+          ),
+        );
+
+    const getProfile = (name: string) =>
+      readConfig.pipe(Effect.map((config) => config.profiles[name]));
+
+    const setProfile = (name: string, profile: AlchemyProfile) =>
+      readConfig.pipe(
+        Effect.tap((config) =>
+          Effect.sync(() => (config.profiles[name] = profile)),
+        ),
+        Effect.flatMap(writeConfig),
+      );
+
+    const deleteProfile = (name: string) =>
+      readConfig.pipe(
+        Effect.flatMap((config) => {
+          if (!(name in config.profiles)) {
+            return Effect.succeed(false);
+          }
+          delete config.profiles[name];
+          return writeConfig(config).pipe(Effect.as(true));
+        }),
+      );
+
+    const loadOrConfigure = <Config extends { method: string }>(
+      auth: AuthProvider<Config>,
+      profileName: string,
+      ctx: ConfigureContext,
+    ) =>
+      Effect.flatMap(getProfile(profileName), (existing) =>
+        existing?.[auth.name]
+          ? Effect.succeed(existing[auth.name] as Config)
+          : Effect.tap(auth.configure(profileName, ctx), (config) =>
+              setProfile(profileName, { ...existing, [auth.name]: config }),
+            ),
+      );
+
+    return {
+      readConfig,
+      writeConfig,
+      getProfile,
+      setProfile,
+      deleteProfile,
+      loadOrConfigure,
+    } satisfies ProfileService;
+  }),
+);
 
 /**
  * Returns a `ConfigProvider` that overrides `ALCHEMY_PROFILE` with the
@@ -129,22 +202,3 @@ export const withProfileOverride = (
   );
   return ConfigProvider.orElse(base)(overrideProvider);
 };
-
-/**
- * Load the stored config for the given AuthProvider in `profileName`.
- * If absent, run the provider's `configure` step (passing through `ctx` so
- * providers can pick a CI-friendly default) and persist the resulting config
- * under the provider's name.
- */
-export const loadOrConfigure = <Config extends { method: string }>(
-  auth: AuthProvider<Config>,
-  profileName: string,
-  ctx: ConfigureContext,
-) =>
-  Effect.flatMap(getProfile(profileName), (existing) =>
-    existing?.[auth.name]
-      ? Effect.succeed(existing?.[auth.name])
-      : Effect.tap(auth.configure(profileName, ctx), (config) =>
-          setProfile(profileName, { ...existing, [auth.name]: config }),
-        ),
-  );

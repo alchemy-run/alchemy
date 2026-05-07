@@ -1,4 +1,6 @@
 import * as Layer from "effect/Layer";
+import { CredentialsStoreLive } from "../Auth/Credentials.ts";
+import { ProfileLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
 import { GitHubAuth } from "./AuthProvider.ts";
 import { Comment, CommentProvider } from "./Comment.ts";
@@ -28,5 +30,7 @@ export const providers = () =>
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(GitHubAuth),
+    Layer.provideMerge(ProfileLive),
+    Layer.provideMerge(CredentialsStoreLive),
     Layer.orDie,
   );
