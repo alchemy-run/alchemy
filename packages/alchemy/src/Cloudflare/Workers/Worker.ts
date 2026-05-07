@@ -1923,12 +1923,26 @@ export const LiveWorkerProvider = () =>
             name,
             expectedDurableObjectClassNames,
           );
-        if (!olds || news.url !== olds.url) {
-          const enable = news.url !== false;
+        // Reconcile workers.dev subdomain against observed cloud state.
+        // We can't diff `news.url` against `olds.url` here because both
+        // default to `undefined` (meaning "enable") — that comparison
+        // would skip the API call on every deploy where the user never
+        // explicitly set `url`, leaving the subdomain in whatever state
+        // Cloudflare currently has it (disabled by default, or whatever
+        // a previous failed/external action left it as).
+        const desiredSubdomainEnabled = news.url !== false;
+        const observedSubdomainEnabled = yield* getScriptSubdomain({
+          accountId,
+          scriptName: name,
+        }).pipe(
+          Effect.map((s) => s.enabled === true),
+          Effect.catch(() => Effect.succeed(false)),
+        );
+        if (desiredSubdomainEnabled !== observedSubdomainEnabled) {
           yield* session.note(
-            `${enable ? "Enabling" : "Disabling"} workers.dev subdomain...`,
+            `${desiredSubdomainEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
           );
-          yield* setWorkerSubdomain(name, enable);
+          yield* setWorkerSubdomain(name, desiredSubdomainEnabled);
         }
         const desiredDomains = normalizeDomains(news.domain);
         const previousDomains = output?.domains ?? [];

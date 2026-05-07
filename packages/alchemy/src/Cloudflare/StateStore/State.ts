@@ -758,9 +758,20 @@ const waitForStateStoreVersion = (url: string) =>
 const checkStateStoreVersion = (url: string) =>
   Effect.gen(function* () {
     const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
-    const result = yield* client.version
-      .getVersion()
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    // The /version route may 404 transiently after a fresh deploy
+    // while Cloudflare propagates the new script to the edge, and may
+    // also surface transport-level blips on cold workers.dev hosts.
+    // Retry the probe itself for ~10s before giving up — only after
+    // exhausting that budget do we collapse to `undefined` and let
+    // the caller treat it as a version mismatch.
+    const result = yield* client.version.getVersion().pipe(
+      Effect.retry({
+        schedule: Schedule.spaced("250 millis").pipe(
+          Schedule.both(Schedule.recurs(40)),
+        ),
+      }),
+      Effect.catch(() => Effect.succeed(undefined)),
+    );
     const matches = result?.version === STATE_STORE_VERSION;
     yield* Effect.annotateCurrentSpan({
       "alchemy.state_store.expected_version": STATE_STORE_VERSION,

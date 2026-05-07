@@ -68,10 +68,17 @@ test.provider("create, update, delete worker", (stack) =>
       "alchemy:id:TestWorker",
     );
 
-    // Verify the worker is accessible via URL
-    if (worker.url) {
-      yield* Effect.logInfo(`Worker URL: ${worker.url}`);
-    }
+    // Verify the workers.dev subdomain is enabled on Cloudflare
+    // (rather than just trusting the resource's output attributes).
+    expect(worker.url).toBeDefined();
+    const initialSubdomain = yield* workers.getScriptSubdomain({
+      accountId,
+      scriptName: worker.workerName,
+    });
+    expect(initialSubdomain).toEqual({
+      enabled: true,
+      previewsEnabled: true,
+    });
 
     // Update the worker
     const updatedWorker = yield* stack.deploy(
@@ -141,10 +148,17 @@ test.provider("create, update, delete worker with assets", (stack) =>
     // Verify the worker has assets
     expect(worker.hash?.assets).toBeDefined();
 
-    // Verify the worker is accessible via URL
-    if (worker.url) {
-      yield* Effect.logInfo(`Worker with Assets URL: ${worker.url}`);
-    }
+    // Verify the workers.dev subdomain is enabled on Cloudflare
+    // (rather than just trusting the resource's output attributes).
+    expect(worker.url).toBeDefined();
+    const assetsWorkerSubdomain = yield* workers.getScriptSubdomain({
+      accountId,
+      scriptName: worker.workerName,
+    });
+    expect(assetsWorkerSubdomain).toEqual({
+      enabled: true,
+      previewsEnabled: true,
+    });
 
     // Update the worker
     const updatedWorker = yield* stack.deploy(
@@ -596,4 +610,129 @@ test.provider("adopt(true) takes over a foreign-tagged worker", (stack) =>
     yield* stack.destroy();
     yield* waitForWorkerToBeDeleted(physicalName, accountId);
   }).pipe(logLevel),
+);
+
+// Regression: the workers.dev subdomain must reconcile against
+// observed cloud state, not against `olds.url`. Previously the
+// reconciler skipped the `setWorkerSubdomain` call whenever
+// `news.url === olds.url` (both `undefined` on the default path),
+// so an externally-disabled subdomain (or a subdomain that never
+// got enabled because of a previous failure mid-deploy) would stay
+// disabled forever even though the default behaviour is to enable.
+test.provider(
+  "redeploy re-enables a workers.dev subdomain that drifted to disabled",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const deploy = () =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("SubdomainDriftWorker", {
+              main,
+              compatibility: { date: "2024-01-01" },
+            });
+          }),
+        );
+
+      const v1 = yield* deploy();
+      expect(v1.url).toBeDefined();
+
+      const enabledBefore = yield* workers.getScriptSubdomain({
+        accountId,
+        scriptName: v1.workerName,
+      });
+      expect(enabledBefore.enabled).toBe(true);
+
+      // Simulate drift: disable the subdomain out of band (e.g. a user
+      // toggled it in the dashboard, or a previous deploy crashed
+      // between `putScript` and `setWorkerSubdomain`). The next deploy
+      // passes the same props, so `news.url === olds.url === undefined`.
+      yield* workers.createScriptSubdomain({
+        accountId,
+        scriptName: v1.workerName,
+        enabled: false,
+      });
+      const disabled = yield* workers.getScriptSubdomain({
+        accountId,
+        scriptName: v1.workerName,
+      });
+      expect(disabled.enabled).toBe(false);
+
+      const v2 = yield* deploy();
+      expect(v2.url).toBeDefined();
+
+      const enabledAfter = yield* workers.getScriptSubdomain({
+        accountId,
+        scriptName: v2.workerName,
+      });
+      expect(enabledAfter.enabled).toBe(true);
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+    }).pipe(logLevel),
+);
+
+// Symmetric regression: `url: false` must reliably disable the
+// workers.dev subdomain on first deploy, on a redeploy after the
+// subdomain drifted back to enabled, and stay a no-op when nothing
+// changed. The same observed-vs-desired diff covers all three.
+test.provider(
+  "url: false disables the workers.dev subdomain and reconciles drift",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const deploy = (url: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("SubdomainDisabledWorker", {
+              main,
+              url,
+              compatibility: { date: "2024-01-01" },
+            });
+          }),
+        );
+
+      // First deploy with `url: false` — the subdomain must come up
+      // disabled on Cloudflare and `worker.url` must be undefined.
+      const v1 = yield* deploy(false);
+      expect(v1.url).toBeUndefined();
+      const initial = yield* workers.getScriptSubdomain({
+        accountId,
+        scriptName: v1.workerName,
+      });
+      expect(initial.enabled).toBe(false);
+
+      // Simulate drift in the other direction: someone enabled the
+      // subdomain out of band. A redeploy with the same `url: false`
+      // props would have skipped the API call under the old
+      // `news.url !== olds.url` guard. The observed-vs-desired diff
+      // must catch this and disable it again.
+      yield* workers.createScriptSubdomain({
+        accountId,
+        scriptName: v1.workerName,
+        enabled: true,
+      });
+      const drifted = yield* workers.getScriptSubdomain({
+        accountId,
+        scriptName: v1.workerName,
+      });
+      expect(drifted.enabled).toBe(true);
+
+      const v2 = yield* deploy(false);
+      expect(v2.url).toBeUndefined();
+      const reconciled = yield* workers.getScriptSubdomain({
+        accountId,
+        scriptName: v2.workerName,
+      });
+      expect(reconciled.enabled).toBe(false);
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+    }).pipe(logLevel),
 );
