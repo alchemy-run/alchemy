@@ -73,8 +73,9 @@ const maybeStartRpcServer = Effect.fn(function* (main: string) {
     yield* ChildProcess.make("bun", ["run", main], {
       stdout: "inherit",
       stderr: "inherit",
-      detached: true,
       extendEnv: true,
+      // Effect's default behavior is detached: true on posix and false on Windows.
+      // Ideally we would set detached: true on Windows, but that would create a separate console window for every server instance.
     });
   } else {
     yield* Effect.logDebug("[RpcClient] RPC server already running", main);
