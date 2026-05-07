@@ -96,16 +96,12 @@ export default Alchemy.Stack(
 
     // Role ARN + region are not secret — publish as repo-level Variables
     // so workflows can reference `vars.AWS_ROLE_ARN` / `vars.AWS_REGION`.
-    yield* GitHub.Variable("aws-role-arn", {
+    yield* GitHub.Variables({
       ...REPO,
-      name: "AWS_ROLE_ARN",
-      value: role.roleArn,
-    });
-
-    yield* GitHub.Variable("aws-region", {
-      ...REPO,
-      name: "AWS_REGION",
-      value: region,
+      variables: {
+        AWS_ROLE_ARN: role.roleArn,
+        AWS_REGION: region,
+      },
     });
 
     return {

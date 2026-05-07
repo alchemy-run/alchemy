@@ -25,7 +25,6 @@ permissions:
 env:
   PKGING_HOST: pkg.ing
   NODE_VERSION: "24"
-  AWS_REGION: us-west-2
 
 concurrency:
   group: test-${{ github.ref }}
@@ -65,8 +64,8 @@ jobs:
       # picks the env path automatically when AWS_ACCESS_KEY_ID is set.
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_TEST_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
           output-credentials: true
 
       - name: Smoke
