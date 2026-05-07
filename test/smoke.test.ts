@@ -21,7 +21,7 @@
  * Run with: `bun test ./test/smoke.test.ts`.
  */
 import { $ } from "bun";
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 
@@ -30,10 +30,15 @@ const TIMEOUT = 10 * 60 * 1000;
 
 const DEFAULT_EXAMPLES = [
   "aws-lambda",
+  "aws-lambda-httpapi",
+  "aws-lambda-rpc",
   "cloudflare-git-artifacts",
   "cloudflare-neon-drizzle",
   "cloudflare-secrets-store",
   "cloudflare-tanstack",
+  "cloudflare-vue",
+  // "cloudflare-solidstart",
+  // "cloudflare-solidjs-ssr",
   "cloudflare-worker-async",
   "cloudflare-worker",
 ];
@@ -110,31 +115,26 @@ if (canary) {
       if (!tgz) throw new Error(`no tgz produced in ${pkgDir}`);
       const abs = path.join(pkgDir, tgz);
       console.log(`→ publish ${name} (${tgz})`);
-      expect(
-        await run(
-          [
-            "curl",
-            "-fsSL",
-            "--show-error",
-            "-X",
-            "PUT",
-            `https://${host}/projects/${name}/packages`,
-            "-H",
-            `Authorization: Bearer ${token}`,
-            "-H",
-            `X-Tags: ${tags}`,
-            "-H",
-            "X-TTL: 1 week",
-            "-H",
-            "Content-Type: application/gzip",
-            "--data-binary",
-            `@${abs}`,
-          ],
-          ROOT,
-        ),
-      ).toBe(0);
+      const res = await fetch(`https://${host}/projects/${name}/packages`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Tags": tags,
+          "X-TTL": "1 hour",
+          "Content-Type": "application/gzip",
+        },
+        body: Bun.file(abs),
+      });
+      if (!res.ok) {
+        throw new Error(
+          `publish ${name} failed: ${res.status} ${res.statusText}\n${await res.text()}`,
+        );
+      }
     }
 
+    // `bun add` mutates the root `bun.lock` and the shared install cache —
+    // running them in parallel across examples races on both. Keep
+    // sequential.
     for (const example of examples) {
       const exampleDir = path.join(ROOT, "examples", example);
       const pkg = JSON.parse(
@@ -155,28 +155,61 @@ if (canary) {
       }
     }
   }, TIMEOUT);
+}
 
-  afterAll(async () => {
-    for (const example of examples) {
-      const exampleDir = path.join(ROOT, "examples", example);
-      const pkg = JSON.parse(
+/**
+ * Restore every example's published-package deps (alchemy / better-auth /
+ * pr-package) back to `workspace:*`. Idempotent — only emits a `bun add`
+ * when something is actually pointing at a non-workspace source, so this is
+ * a no-op for the non-canary path that never mutates anything in the first
+ * place.
+ */
+const restoreWorkspaceDeps = async () => {
+  // Sequential — concurrent `bun add` calls race on the root `bun.lock`.
+  for (const example of examples) {
+    const exampleDir = path.join(ROOT, "examples", example);
+    let pkg: {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    try {
+      pkg = JSON.parse(
         await fs.readFile(path.join(exampleDir, "package.json"), "utf8"),
       );
-      const adds: string[] = [];
-      for (const k of ["dependencies", "devDependencies"] as const) {
-        const deps = pkg[k];
-        if (!deps) continue;
-        for (const n of Object.keys(deps)) {
-          if (PUBLISHED.some((p) => p.name === n)) {
-            adds.push(`${n}@workspace:*`);
-          }
+    } catch {
+      continue;
+    }
+    const adds: string[] = [];
+    for (const k of ["dependencies", "devDependencies"] as const) {
+      const deps = pkg[k];
+      if (!deps) continue;
+      for (const [n, v] of Object.entries(deps)) {
+        if (PUBLISHED.some((p) => p.name === n) && v !== "workspace:*") {
+          adds.push(`${n}@workspace:*`);
         }
       }
-      if (adds.length > 0) {
-        await run(["bun", "add", ...adds], exampleDir);
-      }
     }
-  }, TIMEOUT);
+    if (adds.length > 0) {
+      console.log(`→ restoring ${example}: ${adds.join(" ")}`);
+      await run(["bun", "add", ...adds], exampleDir);
+    }
+  }
+};
+
+// Always restore on a normal end-of-suite, regardless of canary mode.
+afterAll(restoreWorkspaceDeps, TIMEOUT);
+
+// Also restore if the suite is interrupted (Ctrl+C / SIGTERM) so a half-
+// finished canary run never leaves the workspace pinned to pkg.ing URLs.
+let restoring = false;
+for (const sig of ["SIGINT", "SIGTERM"] as const) {
+  process.on(sig, () => {
+    if (restoring) return;
+    restoring = true;
+    restoreWorkspaceDeps()
+      .catch((err) => console.error("restore failed:", err))
+      .finally(() => process.exit(130));
+  });
 }
 
 // One `test.concurrent` per (example, runtime) so failures point at the
