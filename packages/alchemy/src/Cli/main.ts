@@ -23,7 +23,7 @@ import { logsCommand } from "./commands/logs.ts";
 import { profileCommand } from "./commands/profile.ts";
 import { stateCommand } from "./commands/state.ts";
 import { tailCommand } from "./commands/tail.ts";
-import { inkCLI } from "./tui/InkCLI.tsx";
+import { selectCli } from "./selectCli.ts";
 
 const root = Command.make("alchemy", {}).pipe(
   Command.withSubcommands([
@@ -50,7 +50,7 @@ const services = Layer.mergeAll(
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
   TelemetryLive,
-  inkCLI(),
+  selectCli(),
 );
 
 const program = Effect.gen(function* () {

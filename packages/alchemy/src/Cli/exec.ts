@@ -7,13 +7,13 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AlchemyContextLive } from "../AlchemyContext";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { execStack, ExecStackOptions } from "./commands/deploy.ts";
-import { inkCLI } from "./tui/InkCLI.tsx";
+import { selectCli } from "./selectCli.ts";
 
 const services = Layer.mergeAll(
   Layer.provideMerge(AlchemyContextLive, PlatformServices),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
-  inkCLI(),
+  selectCli(),
 );
 
 export const exec = () =>
