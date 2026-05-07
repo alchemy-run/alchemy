@@ -227,12 +227,6 @@ export const R2BucketProvider = () =>
       const updateBucketDomainCustom = yield* r2.updateBucketDomainCustom;
       const deleteBucketDomainCustom = yield* r2.deleteBucketDomainCustom;
 
-      // Drain every object in the bucket, then bulk-delete in batches of
-      // 1000. Cloudflare's `deleteBucket` rejects non-empty buckets, so
-      // this must run before delete. Streams over `listObjects.items()`
-      // so cursor pagination is implicit. Each batch is independently
-      // idempotent — a crash mid-drain converges on retry. `NoSuchBucket`
-      // short-circuits for idempotent re-deletes.
       const emptyBucket = (
         bucketName: string,
         jurisdiction: R2Bucket.Jurisdiction,

@@ -194,9 +194,6 @@ test.provider("destroying a bucket empties its objects first", (stack) =>
     yield* putObject("hello.txt", "hello");
     yield* putObject("nested/world.txt", "world");
 
-    // Sanity: the objects are listable through the new distilled op.
-    // R2 list-after-write can lag briefly on a fresh bucket; retry until
-    // the two keys land or we run out of attempts.
     const before = yield* r2
       .listObjects({
         accountId,
@@ -221,8 +218,6 @@ test.provider("destroying a bucket empties its objects first", (stack) =>
       );
     expect(before.sort()).toEqual(["hello.txt", "nested/world.txt"]);
 
-    // Destroy must succeed even though the bucket is non-empty — the
-    // delete handler drains objects via listObjects + deleteObjects.
     yield* stack.destroy();
 
     yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
