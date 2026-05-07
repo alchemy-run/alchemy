@@ -20,3 +20,69 @@ test(
     expect(url).toBeString();
   }),
 );
+
+/**
+ * Native (async) queue handler round-trip. The async worker exports
+ * a plain `queue(batch, env)` handler that writes each message body
+ * to R2 at `/queue/<id>`. POST /queue/send enqueues a message;
+ * GET /<path> reads from R2, so we read /queue/<id> back.
+ *
+ * Pairs with the cloudflare-worker example, which exercises the
+ * Effect-style `Cloudflare.messages(Queue).subscribe(...)` path
+ * against the same producer/consumer round-trip.
+ */
+test(
+  "native queue() handler round-trip",
+  Effect.gen(function* () {
+    const out = (yield* stack) as unknown;
+    const url =
+      typeof out === "string" ? out : (out as { url: string }).url;
+    const text = `hello-${Date.now()}`;
+
+    const sendResponse = yield* Effect.tryPromise({
+      try: () =>
+        fetch(`${url}/queue/send?text=${encodeURIComponent(text)}`, {
+          method: "POST",
+        }),
+      catch: (cause) =>
+        cause instanceof Error ? cause : new Error(String(cause)),
+    });
+    expect(sendResponse.status).toBe(202);
+    const { sent } = yield* Effect.tryPromise({
+      try: () =>
+        sendResponse.json() as Promise<{
+          sent: { id: string; text: string; sentAt: number };
+        }>,
+      catch: (cause) =>
+        cause instanceof Error ? cause : new Error(String(cause)),
+    });
+    expect(sent.id).toBeString();
+
+    const deadline = Date.now() + 60_000;
+    let consumed: { id: string; text: string; sentAt: number } | undefined;
+    while (Date.now() < deadline) {
+      const resultResponse = yield* Effect.tryPromise({
+        try: () => fetch(`${url}/queue/${sent.id}`),
+        catch: (cause) =>
+          cause instanceof Error ? cause : new Error(String(cause)),
+      });
+      if (resultResponse.status === 200) {
+        const body = yield* Effect.tryPromise({
+          try: () => resultResponse.text(),
+          catch: (cause) =>
+            cause instanceof Error ? cause : new Error(String(cause)),
+        });
+        if (body) {
+          consumed = JSON.parse(body);
+          break;
+        }
+      }
+      yield* Effect.sleep("2 seconds");
+    }
+
+    expect(consumed).toBeDefined();
+    expect(consumed!.id).toBe(sent.id);
+    expect(consumed!.text).toBe(text);
+  }),
+  { timeout: 120_000 },
+);

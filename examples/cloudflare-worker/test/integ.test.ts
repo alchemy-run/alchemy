@@ -117,3 +117,76 @@ test(
   }),
   { timeout: 120_000 },
 );
+
+/**
+ * Queue producer→consumer round-trip via the Effect-style
+ * `Cloudflare.messages(Queue).subscribe(...)` API.
+ *
+ * Producer: `POST /queue/send` returns `{ sent: { id, text, sentAt } }`
+ * after enqueuing a message.
+ *
+ * Consumer: the worker's queue() handler (registered via subscribe in
+ * src/Api.ts) writes the message body to R2 at `/queue/<id>`. The
+ * route `GET /queue/result/<id>` reads it back. Cloudflare's queue
+ * dispatch is async and best-effort, so we poll for up to 60s.
+ */
+test(
+  "queue producer→consumer round-trip via messages().subscribe()",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const text = `hello-${Date.now()}`;
+
+    const sendResponse = yield* Effect.tryPromise({
+      try: () =>
+        fetch(`${url}/queue/send`, { method: "POST", body: text }),
+      catch: (cause) =>
+        cause instanceof Error ? cause : new Error(String(cause)),
+    });
+    expect(sendResponse.status).toBe(202);
+    const { sent } = yield* Effect.tryPromise({
+      try: () =>
+        sendResponse.json() as Promise<{
+          sent: { id: string; text: string; sentAt: number };
+        }>,
+      catch: (cause) =>
+        cause instanceof Error ? cause : new Error(String(cause)),
+    });
+    expect(sent.id).toBeString();
+
+    const deadline = Date.now() + 60_000;
+    let consumed:
+      | { id: string; text: string; sentAt: number }
+      | undefined;
+    while (Date.now() < deadline) {
+      const resultResponse = yield* Effect.tryPromise({
+        try: () => fetch(`${url}/queue/result/${sent.id}`),
+        catch: (cause) =>
+          cause instanceof Error ? cause : new Error(String(cause)),
+      });
+      if (resultResponse.status === 200) {
+        consumed = yield* Effect.tryPromise({
+          try: () => resultResponse.json() as Promise<typeof consumed>,
+          catch: (cause) =>
+            cause instanceof Error ? cause : new Error(String(cause)),
+        });
+        break;
+      }
+      yield* Effect.sleep("2 seconds");
+    }
+
+    expect(consumed).toBeDefined();
+    expect(consumed!.id).toBe(sent.id);
+    expect(consumed!.text).toBe(text);
+
+    // Clean up the consumed R2 entry so afterAll's stack.destroy()
+    // can delete the bucket — otherwise Cloudflare rejects the
+    // bucket delete with "bucket is not empty".
+    yield* Effect.tryPromise({
+      try: () =>
+        fetch(`${url}/queue/result/${sent.id}`, { method: "DELETE" }),
+      catch: (cause) =>
+        cause instanceof Error ? cause : new Error(String(cause)),
+    });
+  }),
+  { timeout: 120_000 },
+);
