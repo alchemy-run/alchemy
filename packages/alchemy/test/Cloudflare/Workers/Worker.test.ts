@@ -743,35 +743,24 @@ describe.concurrent("Cloudflare.Worker", () => {
       );
 
       expect(worker.url).toBeDefined();
-      // Body shape: { NUM, BOOL, OBJ, ARR, STR, types: {...} }
-      // Each marker proves the runtime saw a *typed* value, not a
-      // stringified one (which would render `"NUM":"42"` etc.).
-      yield* expectUrlContains(worker.url!, '"NUM":42', {
+      const body = yield* expectUrlContains(worker.url!, '"types"', {
         timeout: "60 seconds",
-        label: "number env binding",
+        label: "env-worker response",
       });
-      yield* expectUrlContains(worker.url!, '"BOOL":true', {
-        timeout: "60 seconds",
-        label: "boolean env binding",
+      expect(JSON.parse(body)).toMatchObject({
+        STR: "hello",
+        NUM: 42,
+        BOOL: true,
+        OBJ: { nested: { value: "ok" }, count: 7 },
+        ARR: [1, 2, 3],
+        types: {
+          STR: "string",
+          NUM: "number",
+          BOOL: "boolean",
+          OBJ: "object",
+          ARR: "array",
+        },
       });
-      yield* expectUrlContains(worker.url!, '"ARR":[1,2,3]', {
-        timeout: "60 seconds",
-        label: "array env binding",
-      });
-      yield* expectUrlContains(
-        worker.url!,
-        '"OBJ":{"nested":{"value":"ok"},"count":7}',
-        { timeout: "60 seconds", label: "object env binding" },
-      );
-      yield* expectUrlContains(worker.url!, '"STR":"hello"', {
-        timeout: "60 seconds",
-        label: "string env binding",
-      });
-      yield* expectUrlContains(
-        worker.url!,
-        '"NUM":"number","BOOL":"boolean","OBJ":"object","ARR":"array","STR":"string"',
-        { timeout: "60 seconds", label: "runtime typeof matches" },
-      );
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
