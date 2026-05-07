@@ -66,7 +66,7 @@ export const layer = <Self, T extends RpcHandlers>(
 const maybeStartRpcServer = Effect.fn(function* (main: string) {
   const lock = yield* Lock.Lock;
   if (!(yield* lock.check)) {
-    main = RpcPaths.sanitizeMain(main);
+    main = RpcPaths.sanitizeSidecarMain(main);
     const bin = typeof globalThis.Bun !== "undefined" ? "bun" : "node";
     yield* Effect.logDebug("[RpcClient] Starting RPC server", main);
     yield* ChildProcess.make(bin, { bun: ["run", main], node: [main] }[bin], {
