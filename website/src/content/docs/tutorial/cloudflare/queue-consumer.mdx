@@ -13,6 +13,12 @@ docs. This tutorial focuses on the *consumer* side: receiving
 batches with the Effect-style
 `Cloudflare.messages(queue).subscribe(...)` API.
 
+`subscribe(...)` does both halves in one call: it registers a
+runtime queue listener on the Worker, and it auto-creates the
+`Cloudflare.QueueConsumer` resource that tells Cloudflare to
+dispatch messages from the queue to this Worker. No separate
+deploy-time wiring is needed.
+
 By the end you'll have a Worker that:
 
 - Sends a JSON message via `POST /queue/send`.
@@ -126,35 +132,6 @@ alongside the other binding lives.
 
 Without the live layer, the subscribe call fails at deploy with
 `Service not found: Cloudflare.Queue.QueueEventSource`.
-
-## Register the QueueConsumer
-
-Cloudflare needs to know *which* Worker is the queue's consumer —
-that's a deploy-time piece of infrastructure, configured via
-`Cloudflare.QueueConsumer`. Yield it in `alchemy.run.ts` after
-both the queue and the worker.
-
-```diff lang="typescript"
-// alchemy.run.ts
-  Effect.gen(function* () {
-    const api = yield* Api;
-    const queue = yield* Queue;
-+
-+   yield* Cloudflare.QueueConsumer("ApiQueueConsumer", {
-+     queueId: queue.queueId,
-+     scriptName: api.workerName,
-+     settings: { batchSize: 10, maxRetries: 3, maxWaitTimeMs: 5000 },
-+   });
-    return { url: api.url.as<string>() };
-  }),
-```
-
-`scriptName: api.workerName` ties the consumer to the deployed
-worker. The reconciler waits until the worker's real script is
-uploaded before completing — placeholder uploads from the
-worker's pre-create phase don't expose a `queue` handler yet, so
-Cloudflare would otherwise return code `11001` ("Queue handler is
-missing").
 
 ## Add the producer route
 

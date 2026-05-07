@@ -5,7 +5,6 @@ import * as Effect from "effect/Effect";
 import { Gateway } from "./src/AiGateway.ts";
 import Api from "./src/Api.ts";
 import { Bucket } from "./src/Bucket.ts";
-import { Queue } from "./src/Queue.ts";
 import SecondaryApiLive, { SecondaryApi } from "./src/SecondaryApi.ts";
 import WorkerTagLive, { WorkerTag } from "./src/WorkerTag.ts";
 
@@ -17,7 +16,6 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const api = yield* Api;
-    const queue = yield* Queue;
     const bucket = yield* Bucket;
     const gateway = yield* Gateway;
     const workerTag = yield* WorkerTag;
@@ -25,14 +23,9 @@ export default Alchemy.Stack(
     // a single Container DO namespace appears in multiple bindings on the
     // Sandbox ContainerApplication. See SecondaryApi.ts for details.
     const secondaryApi = yield* SecondaryApi;
-
-    // Register the Api worker as the consumer of Queue. Pairs with
-    // `Cloudflare.messages(Queue).subscribe(...)` in src/Api.ts.
-    yield* Cloudflare.QueueConsumer("ApiQueueConsumer", {
-      queueId: queue.queueId,
-      scriptName: api.workerName,
-      settings: { batchSize: 10, maxRetries: 3, maxWaitTimeMs: 5000 },
-    });
+    // The Queue consumer is wired automatically by
+    // `Cloudflare.messages(Queue).subscribe(...)` inside src/Api.ts —
+    // no explicit `Cloudflare.QueueConsumer(...)` is needed here.
 
     return {
       url: api.url.as<string>(),
