@@ -16,6 +16,7 @@
  *   SMOKE_RUNTIMES   comma-separated subset of: bun, pnpm   (default: both)
  *   SMOKE_EXAMPLES   comma-separated example dir names      (default: 4 default)
  *   SMOKE_CANARY     "1" to enable canary mode              (default: off)
+ *   SMOKE_STAGE      stage prefix, e.g. `pr-123` or `main`  (default: "smoke")
  *   PKGING_HOST      pkg.ing host                           (default: pkg.ing)
  *
  * Run with: `bun test ./test/smoke.test.ts`.
@@ -233,7 +234,13 @@ for (const example of examples) {
   const cwd = path.join(ROOT, "examples", example);
   let prev: Promise<unknown> = Promise.resolve();
   for (const runtime of runtimes) {
-    const stage = `smoke-${runtime}-${example}`
+    // Prefix the stage with $SMOKE_STAGE when provided so PR runs
+    // (`pr-<n>-…`) and main runs (`main-…`) never collide on the same
+    // cloud resource. Locally falls back to a fixed `smoke` prefix.
+    const stagePrefix = (process.env.SMOKE_STAGE ?? "smoke")
+      .replace(/[^a-zA-Z0-9-]/g, "-")
+      .toLowerCase();
+    const stage = `${stagePrefix}-${runtime}-${example}`
       .replace(/[^a-zA-Z0-9-]/g, "-")
       .toLowerCase();
     const cmd = (action: "destroy" | "deploy") =>

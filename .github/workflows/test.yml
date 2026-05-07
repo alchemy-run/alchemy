@@ -7,6 +7,8 @@ name: test
 on:
   push:
     branches: [main]
+  pull_request:
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
     inputs:
       runtime:
@@ -25,10 +27,19 @@ permissions:
 env:
   PKGING_HOST: pkg.ing
   NODE_VERSION: "24"
+  # PR runs use `pr-<n>` so each PR has its own isolated cloud namespace;
+  # main pushes use `main`; manual `workflow_dispatch` runs use the branch
+  # name. Forwarded to the smoke test as $SMOKE_STAGE.
+  SMOKE_STAGE: ${{ github.event_name == 'pull_request' && format('pr-{0}',
+    github.event.number) || (github.ref == 'refs/heads/main' && 'main' ||
+    github.ref_name) }}
 
 concurrency:
+  # Cancel an in-progress run for the same PR (or branch) when a new push
+  # arrives — the smoke suite mutates real cloud state, so two parallel
+  # runs against the same SMOKE_STAGE would race.
   group: test-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   smoke:
@@ -83,5 +94,6 @@ jobs:
           PR_PACKAGE_TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
           PKGING_HOST: ${{ env.PKGING_HOST }}
           SMOKE_CANARY: "1"
+          SMOKE_STAGE: ${{ env.SMOKE_STAGE }}
           SMOKE_RUNTIMES: ${{ inputs.runtime == 'both' && '' || inputs.runtime }}
         run: bun test:smoke
