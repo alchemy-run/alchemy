@@ -164,8 +164,6 @@ const stack = Layer.succeed(
 );
 
 const exportsEffect = tag.asEffect().pipe(
-  Effect.tap(() => Console.log("BARR")),
-  Effect.tapError(() => Console.log("BARR")),
   Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.provide(
     layer.pipe(

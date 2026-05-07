@@ -159,13 +159,12 @@ const isTransient = (e: any): boolean => {
 const retryTransient = <A, Err, Req>(eff: Effect.Effect<A, Err, Req>) =>
   Effect.retry(eff, {
     while: isTransient,
-    // Exponential backoff capped at 2s, no attempt limit. The state
-    // store is on the deploy critical path; we'd rather block than
-    // surface a transient blip as a hard failure (which historically
-    // stranded `syncState` mid-flight, leaving the remote store
-    // partially populated).
+    // Exponential backoff capped at 2s, max 5 attempts. Beyond that
+    // the issue isn't transient and we'd rather surface a hard
+    // failure than block the deploy indefinitely.
     schedule: Schedule.exponential(100).pipe(
       Schedule.either(Schedule.spaced("2 seconds")),
+      Schedule.both(Schedule.recurs(5)),
     ),
   });
 

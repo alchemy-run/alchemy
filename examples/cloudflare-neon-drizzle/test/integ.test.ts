@@ -136,7 +136,7 @@ test(
   { timeout: 20_000 },
 );
 
-test.skip(
+test(
   "worker handles 100 sequential queries spaced 100-500ms apart",
   Effect.gen(function* () {
     const { url } = yield* stack;

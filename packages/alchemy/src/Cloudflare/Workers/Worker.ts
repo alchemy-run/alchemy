@@ -893,8 +893,8 @@ export const Worker: Platform<
                 const scope = Scope.makeUnsafe();
                 return eff
                   .pipe(
-                    Scope.provide(scope),
                     Effect.provideContext(services),
+                    Scope.provide(scope),
                     Effect.provide(
                       Layer.succeed(WorkerExecutionContext, context),
                     ),
@@ -1091,11 +1091,18 @@ export const LiveWorkerProvider = () =>
           accountId,
         }).pipe(Effect.map((result) => result.subdomain));
 
+      // Toggle the workers.dev subdomain via `POST /subdomain` with
+      // `enabled: true | false`. Mirrors the upstream Alchemy
+      // implementation in `.vendor/alchemy/.../worker-subdomain.ts`.
+      // When enabling we also set `previewsEnabled: true` so the
+      // script is reachable both at its stable workers.dev URL and at
+      // version-preview URLs; on disable we send just `enabled: false`.
       const setWorkerSubdomain = (name: string, enabled: boolean) =>
         createScriptSubdomain({
           accountId,
           scriptName: name,
           enabled,
+          previewsEnabled: enabled ? true : undefined,
         });
 
       const createWorkerName = (id: string, name: string | undefined) =>
@@ -1923,12 +1930,26 @@ export const LiveWorkerProvider = () =>
             name,
             expectedDurableObjectClassNames,
           );
-        if (!olds || news.url !== olds.url) {
-          const enable = news.url !== false;
+        // Reconcile workers.dev subdomain against observed cloud state.
+        // We can't diff `news.url` against `olds.url` here because both
+        // default to `undefined` (meaning "enable") — that comparison
+        // would skip the API call on every deploy where the user never
+        // explicitly set `url`, leaving the subdomain in whatever state
+        // Cloudflare currently has it (disabled by default, or whatever
+        // a previous failed/external action left it as).
+        const desiredSubdomainEnabled = news.url !== false;
+        const observedSubdomainEnabled = yield* getScriptSubdomain({
+          accountId,
+          scriptName: name,
+        }).pipe(
+          Effect.map((s) => s.enabled === true),
+          Effect.catch(() => Effect.succeed(false)),
+        );
+        if (desiredSubdomainEnabled !== observedSubdomainEnabled) {
           yield* session.note(
-            `${enable ? "Enabling" : "Disabling"} workers.dev subdomain...`,
+            `${desiredSubdomainEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
           );
-          yield* setWorkerSubdomain(name, enable);
+          yield* setWorkerSubdomain(name, desiredSubdomainEnabled);
         }
         const desiredDomains = normalizeDomains(news.domain);
         const previousDomains = output?.domains ?? [];
