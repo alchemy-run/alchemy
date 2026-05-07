@@ -1455,9 +1455,6 @@ export const LiveWorkerProvider = () =>
                   },
                 },
               },
-              builder: {
-                sharedConfigBuild: true,
-              },
               plugins: [
                 cloudflareVite({
                   compatibilityDate,
