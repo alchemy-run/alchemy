@@ -48,6 +48,7 @@ export const devCommand = Command.make(
         ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
       },
       extendEnv: true,
+      detached: false,
     });
     yield* child.exitCode;
   }),
