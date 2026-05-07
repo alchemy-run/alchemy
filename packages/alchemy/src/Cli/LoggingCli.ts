@@ -75,12 +75,12 @@ const formatPlanLines = (plan: Plan): string[] => {
   const lines = [`${bold("Plan:")} ${summary}`];
   for (const item of sorted) {
     const action = actionColor[item.action](item.action);
-    lines.push(`${tag(item.resource.LogicalId)} ${action} ${dim(item.resource.Type)}`);
+    lines.push(`${tag(item.resource.LogicalId)} ${action}`);
     for (const binding of item.bindings) {
       if (binding.action === "noop") continue;
       const bindingAction = actionColor[binding.action](binding.action);
       lines.push(
-        `${tag(`${item.resource.LogicalId}/${binding.sid}`)} ${bindingAction} ${dim("binding")}`,
+        `${tag(`${item.resource.LogicalId}/${binding.sid}`)} ${bindingAction}`,
       );
     }
   }
@@ -119,9 +119,8 @@ export const LoggingCli = Layer.succeed(
                 ? `${event.id}/${event.bindingId}`
                 : event.id;
               const status = statusColor(event.status)(event.status);
-              const type = dim(event.type);
               const msg = event.message ? ` ${dim("—")} ${event.message}` : "";
-              console.log(`${tag(id)} ${status} ${type}${msg}`);
+              console.log(`${tag(id)} ${status}${msg}`);
               if (isTerminal(event.status)) {
                 if (event.status === "fail") counts.fail++;
                 else counts.ok++;
