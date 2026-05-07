@@ -1,3 +1,14 @@
+## v2.0.0-beta.34
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Upgrade to distilled 0.17.0 consistently &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(d681f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d681f72f)
+- **cli**: Correct args for dev command in node &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/250 [<samp>(4859d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/4859dc95)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.33...HEAD)
+
+---
+
 ## v2.0.0-beta.33
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
