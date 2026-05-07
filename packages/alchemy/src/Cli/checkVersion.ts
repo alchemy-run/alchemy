@@ -40,9 +40,13 @@ export const checkLatestVersion = Effect.gen(function* () {
   const current = packageJson.version;
   const latest = pickDistTag(current, distTags);
   if (typeof latest !== "string" || latest === current) return;
+  const installCmd =
+    typeof process !== "undefined" && (process as any).versions?.bun
+      ? "bun add -g alchemy@latest"
+      : "pnpm add -g alchemy@latest";
   yield* Effect.logWarning(
     `alchemy ${latest} is available (you're on ${current}). ` +
-      "Run `npm install -g alchemy@latest` (or your package manager equivalent) to upgrade.",
+      `Run \`${installCmd}\` to upgrade.`,
   );
 }).pipe(
   Effect.timeout(Duration.seconds(5)),
