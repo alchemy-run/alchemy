@@ -75,6 +75,14 @@ export type ProjectProps = {
    */
   orgId?: string;
   /**
+   * Enable Postgres logical replication on the project. Once enabled,
+   * Neon does not support disabling it again.
+   *
+   * @default false
+   * @see https://neon.tech/docs/guides/logical-replication-neon
+   */
+  enableLogicalReplication?: boolean;
+  /**
    * Directory containing `.sql` migration files. Files are sorted by their
    * numeric prefix (e.g. `0001_init.sql`) and applied in order against the
    * default branch's primary database.
@@ -118,6 +126,7 @@ export type Project = Resource<
      */
     origin: PostgresOrigin;
     historyRetentionSeconds: number;
+    enableLogicalReplication: boolean;
     migrationsDir: string | undefined;
     migrationsTable: string | undefined;
     migrationsHashes: Record<string, string>;
@@ -145,6 +154,13 @@ export type Project = Resource<
  * const project = yield* Neon.Project("my-project", {
  *   region: "aws-eu-central-1",
  *   pgVersion: 17,
+ * });
+ * ```
+ *
+ * @example Project with logical replication enabled
+ * ```typescript
+ * const project = yield* Neon.Project("my-project", {
+ *   enableLogicalReplication: true,
  * });
  * ```
  *
@@ -242,6 +258,12 @@ export const ProjectProvider = () =>
           ) {
             return { action: "update" } as const;
           }
+          if (
+            (news.enableLogicalReplication ?? false) !==
+            (output?.enableLogicalReplication ?? false)
+          ) {
+            return { action: "update" } as const;
+          }
           if (news.migrationsDir) {
             const newHashes = yield* hashMigrations(news.migrationsDir);
             if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
@@ -269,6 +291,8 @@ export const ProjectProvider = () =>
                 ...output,
                 projectName: project.name,
                 historyRetentionSeconds: project.history_retention_seconds,
+                enableLogicalReplication:
+                  project.settings?.enable_logical_replication === true,
               })),
               Effect.catchTag("ProjectNotFound", () =>
                 Effect.succeed(undefined),
@@ -310,6 +334,8 @@ export const ProjectProvider = () =>
             pooledConnectionUri: conn.pooled,
             origin: parsePostgresOrigin(conn.uri),
             historyRetentionSeconds: match.history_retention_seconds,
+            enableLogicalReplication:
+              match.settings?.enable_logical_replication === true,
             migrationsDir: olds?.migrationsDir,
             migrationsTable: olds?.migrationsTable,
             migrationsHashes: {},
@@ -325,6 +351,14 @@ export const ProjectProvider = () =>
                 .updateProject(output.projectId, {
                   name: news.name,
                   history_retention_seconds: news.historyRetentionSeconds,
+                  settings:
+                    (news.enableLogicalReplication ?? false) !==
+                    (output.enableLogicalReplication ?? false)
+                      ? {
+                          enable_logical_replication:
+                            news.enableLogicalReplication ?? false,
+                        }
+                      : undefined,
                 })
                 .pipe(
                   Effect.map((r) => ({
@@ -342,6 +376,8 @@ export const ProjectProvider = () =>
                     historyRetentionSeconds:
                       r.project.history_retention_seconds ??
                       output.historyRetentionSeconds,
+                    enableLogicalReplication:
+                      r.project.settings?.enable_logical_replication === true,
                   })),
                 )
             : yield* Effect.gen(function* () {
@@ -357,6 +393,9 @@ export const ProjectProvider = () =>
                   },
                   history_retention_seconds: news.historyRetentionSeconds,
                   org_id: news.orgId,
+                  settings: news.enableLogicalReplication
+                    ? { enable_logical_replication: true }
+                    : undefined,
                 });
                 yield* api.waitForOperations(created.operations);
 
@@ -383,6 +422,9 @@ export const ProjectProvider = () =>
                   origin: parsePostgresOrigin(conn.uri),
                   historyRetentionSeconds:
                     created.project.history_retention_seconds ?? 86400,
+                  enableLogicalReplication:
+                    created.project.settings?.enable_logical_replication ===
+                    true,
                 };
               });
 

@@ -146,6 +146,7 @@ export interface CreateProjectInput {
   };
   history_retention_seconds?: number;
   org_id?: string;
+  settings?: Record<string, unknown>;
 }
 
 export interface CreateProjectOutput {
@@ -288,6 +289,7 @@ export const createProject = (input: CreateProjectInput) =>
           : undefined),
       history_retention_seconds: input.history_retention_seconds,
       org_id: input.org_id,
+      settings: input.settings,
     },
   });
 
