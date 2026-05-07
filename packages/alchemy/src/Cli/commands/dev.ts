@@ -36,8 +36,14 @@ export const devCommand = Command.make(
     const child = yield* ChildProcess.make(
       bin,
       {
-        bun: ["run", "--watch", "--no-clear-screen", main],
-        node: ["--watch", "--watch-preserve-output", main],
+        bun: ["run", ...process.execArgv, "--watch", "--no-clear-screen", main],
+        node: [
+          ...process.execArgv,
+          "--experimental-transform-types",
+          "--watch",
+          "--watch-preserve-output",
+          main,
+        ],
       }[bin],
       {
         stdin: "inherit",
