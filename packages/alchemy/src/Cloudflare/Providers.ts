@@ -8,6 +8,8 @@ import * as Schedule from "effect/Schedule";
 import { Command } from "../Build/Command.ts";
 import * as Build from "../Build/index.ts";
 import * as Provider from "../Provider.ts";
+import { CredentialsStoreLive } from "../Auth/Credentials.ts";
+import { ProfileLive } from "../Auth/Profile.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as Access from "./Access.ts";
 import * as AiGateway from "./AiGateway/index.ts";
@@ -112,6 +114,8 @@ export const providers = () =>
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
     Layer.provideMerge(CloudflareAuth),
     Layer.provideMerge(Access.AccessLive),
+    Layer.provideMerge(ProfileLive),
+    Layer.provideMerge(CredentialsStoreLive),
     // Apply a blanket retry policy to every Cloudflare API call. Extends
     // `Retry.makeDefault`'s transient detection (throttling / 5xx /
     // network) with one Cloudflare-specific misleadingly-tagged

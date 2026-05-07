@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import { getAuthProvider } from "../Auth/AuthProvider.ts";
-import { ALCHEMY_PROFILE, loadOrConfigure } from "../Auth/Profile.ts";
+import { ALCHEMY_PROFILE, Profile } from "../Auth/Profile.ts";
 import {
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   type CloudflareAuthConfig,
@@ -29,15 +29,15 @@ export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
+      const profile = yield* Profile;
       const auth = yield* getAuthProvider<
         CloudflareAuthConfig,
         CloudflareResolvedCredentials
       >(CLOUDFLARE_AUTH_PROVIDER_NAME);
       const profileName = yield* ALCHEMY_PROFILE;
       const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-      const ctx = yield* Effect.context<never>();
 
-      return loadOrConfigure(auth, profileName, { ci }).pipe(
+      return profile.loadOrConfigure(auth, profileName, { ci }).pipe(
         Effect.flatMap((config) =>
           auth.read(profileName, config as CloudflareAuthConfig),
         ),
@@ -69,7 +69,6 @@ export const fromAuthProvider = () =>
               message: `Failed to resolve Cloudflare credentials for profile '${profileName}': ${(e as { message?: string }).message ?? String(e)}`,
             }),
         ),
-        Effect.provide(ctx),
       );
     }),
   );

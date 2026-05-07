@@ -21,6 +21,7 @@ import { Random, RandomProvider } from "../Random.ts";
 import * as ACM from "./ACM/index.ts";
 import * as ApiGateway from "./ApiGateway/index.ts";
 import * as Assets from "./Assets.ts";
+import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { AwsAuth } from "./AuthProvider.ts";
 import * as AutoScaling from "./AutoScaling/index.ts";
 import * as CloudFront from "./CloudFront/index.ts";
@@ -578,6 +579,7 @@ export const providers = () =>
     Layer.provideMerge(Endpoint.fromEnvironment),
     Layer.provideMerge(DefaultEnvironment),
     Layer.provideMerge(AwsAuth),
+    Layer.provideMerge(CredentialsStoreLive),
     // Apply a blanket retry policy to every AWS SDK call. Like distilled's
     // `makeDefault` it retries throttling, 5xx, and Smithy `@retryable`
     // errors with exponential backoff + jitter + `RetryAfter` header

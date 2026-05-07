@@ -52,9 +52,7 @@ test.provider("create, update, delete namespace", (stack) =>
 
     const namespace = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* KV.KVNamespace("TestNamespace", {
-          title: "test-namespace-initial",
-        });
+        return yield* KV.KVNamespace("TestNamespace");
       }),
     );
 
@@ -68,7 +66,7 @@ test.provider("create, update, delete namespace", (stack) =>
     const updatedNamespace = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* KV.KVNamespace("TestNamespace", {
-          title: "test-namespace-updated",
+          title: namespace.title + "-updated",
         });
       }),
     );
@@ -77,7 +75,7 @@ test.provider("create, update, delete namespace", (stack) =>
       accountId,
       namespaceId: updatedNamespace.namespaceId,
     });
-    expect(actualUpdatedNamespace.title).toEqual("test-namespace-updated");
+    expect(actualUpdatedNamespace.title).toEqual(namespace.title + "-updated");
     expect(actualUpdatedNamespace.id).toEqual(updatedNamespace.namespaceId);
 
     yield* stack.destroy();
