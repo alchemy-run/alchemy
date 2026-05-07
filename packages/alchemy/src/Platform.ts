@@ -243,7 +243,10 @@ export const Platform = <
             )
         ).pipe(
           Effect.tap(
-            (resource) => hooks.onCreate?.(resource as R, props) ?? Effect.void,
+            (resource) => {
+              const resolved = resource as R;
+              return hooks.onCreate?.(resolved, resolved.Props) ?? Effect.void;
+            },
           ),
         );
       return Object.assign(

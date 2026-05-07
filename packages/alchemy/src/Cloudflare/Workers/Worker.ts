@@ -180,6 +180,7 @@ export type WorkerShape = Main<WorkerServices | WorkerEnvironment>;
 
 export type WorkerBindingResource =
   | Assets
+  | Worker
   | R2Bucket
   | D1Database
   | KVNamespace
@@ -212,6 +213,69 @@ type NormalizedBindings<
 } & (undefined extends AssetsConfig ? {} : { ASSETS: Assets });
 
 export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
+
+export const toWorkerBinding = (
+  bindingName: string,
+  binding: WorkerBindingResource,
+): InputProps<WorkerBinding> | undefined =>
+  isAssets(binding)
+    ? {
+        type: "assets",
+        name: bindingName,
+      }
+    : isArtifactsBinding(binding)
+      ? ({
+          type: "artifacts",
+          name: bindingName,
+          namespace: binding.namespace,
+        } as any)
+      : isDurableObjectNamespaceLike(binding)
+        ? {
+            type: "durable_object_namespace",
+            name: bindingName,
+            className: binding.className ?? binding.name,
+          }
+        : isWorker(binding)
+          ? {
+              type: "service",
+              name: bindingName,
+              service: binding.workerName,
+            }
+          : binding.Type === "Cloudflare.D1Database"
+            ? {
+                type: "d1",
+                id: binding.databaseId,
+                name: bindingName,
+              }
+            : binding.Type === "Cloudflare.R2Bucket"
+              ? {
+                  type: "r2_bucket",
+                  name: bindingName,
+                  bucketName: binding.bucketName,
+                  jurisdiction: binding.jurisdiction.pipe(
+                    Output.map((jurisdiction) =>
+                      jurisdiction === "default" ? undefined : jurisdiction,
+                    ),
+                  ),
+                }
+              : binding.Type === "Cloudflare.KVNamespace"
+                ? {
+                    type: "kv_namespace",
+                    name: bindingName,
+                    namespaceId: binding.namespaceId,
+                  }
+                : binding.Type === "Cloudflare.Queue"
+                  ? {
+                      type: "queue",
+                      name: bindingName,
+                      queueName: binding.queueName,
+                    }
+                  : binding.Type === "Cloudflare.AiGateway"
+                    ? {
+                        type: "ai",
+                        name: bindingName,
+                      }
+                    : undefined;
 
 export interface WorkerProps<
   Bindings extends WorkerBindingProps = any,
@@ -716,61 +780,7 @@ export const Worker: Platform<
           ? yield* bindingEff
           : bindingEff;
 
-        const bindingMeta: InputProps<WorkerBinding> | undefined = isAssets(
-          binding,
-        )
-          ? {
-              type: "assets",
-              name: bindingName,
-            }
-          : isArtifactsBinding(binding)
-            ? ({
-                type: "artifacts",
-                name: bindingName,
-                namespace: binding.namespace,
-              } as any)
-            : isDurableObjectNamespaceLike(binding)
-              ? {
-                  type: "durable_object_namespace",
-                  name: bindingName,
-                  className: binding.className ?? binding.name,
-                }
-              : binding.Type === "Cloudflare.D1Database"
-                ? {
-                    type: "d1",
-                    id: binding.databaseId,
-                    name: bindingName,
-                  }
-                : binding.Type === "Cloudflare.R2Bucket"
-                  ? {
-                      type: "r2_bucket",
-                      name: bindingName,
-                      bucketName: binding.bucketName,
-                      jurisdiction: binding.jurisdiction.pipe(
-                        Output.map((jurisdiction) =>
-                          jurisdiction === "default" ? undefined : jurisdiction,
-                        ),
-                      ),
-                    }
-                  : binding.Type === "Cloudflare.KVNamespace"
-                    ? {
-                        type: "kv_namespace",
-                        name: bindingName,
-                        namespaceId: binding.namespaceId,
-                      }
-                    : binding.Type === "Cloudflare.Queue"
-                      ? {
-                          type: "queue",
-                          name: bindingName,
-                          queueName: binding.queueName,
-                        }
-                      : binding.Type === "Cloudflare.AiGateway"
-                        ? {
-                            type: "ai",
-                            name: bindingName,
-                          }
-                        : // TODO(sam): handle others
-                          undefined;
+        const bindingMeta = toWorkerBinding(bindingName, binding);
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({

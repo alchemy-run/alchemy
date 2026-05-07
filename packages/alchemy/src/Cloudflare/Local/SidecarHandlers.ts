@@ -10,9 +10,17 @@ import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import type * as vite from "vite";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { WorkerBundle } from "../Workers/WorkerBundle.ts";
-import { Sidecar, type ServeOptions } from "./Sidecar.ts";
+import {
+  Sidecar,
+  type ServeOptions,
+  type ServeViteOptions,
+} from "./Sidecar.ts";
 
 export const SidecarHandlers = Layer.effect(
   Sidecar,
@@ -22,6 +30,14 @@ export const SidecarHandlers = Layer.effect(
 
     const rootScope = yield* Effect.scope;
     const serverScopes = new Map<string, Scope.Closeable>();
+    const viteServers = new Map<
+      string,
+      {
+        hash: string;
+        address: string;
+        server: vite.ViteDevServer;
+      }
+    >();
 
     const serveScoped = Effect.fnUntraced(function* (
       worker: ServeOptions,
@@ -49,6 +65,76 @@ export const SidecarHandlers = Layer.effect(
       }
       serverScopes.set(worker.name, scope);
       return result;
+    });
+
+    const closeViteServer = (name: string) =>
+      Effect.gen(function* () {
+        const existing = viteServers.get(name);
+        if (!existing) return;
+        viteServers.delete(name);
+        yield* Effect.tryPromise({
+          try: () => existing.server.close(),
+          catch: (cause) =>
+            new Bundle.BundleError({
+              message: `Failed to stop Vite dev server for ${name}`,
+              cause,
+            }),
+        });
+      });
+
+    const serveVite = Effect.fnUntraced(function* (worker: ServeViteOptions) {
+      const existing = viteServers.get(worker.name);
+      if (existing?.hash === worker.configHash) {
+        yield* Effect.log(`[${worker.id}] No Vite config changes`);
+        return { name: worker.name, address: existing.address };
+      }
+
+      yield* closeViteServer(worker.name);
+
+      const server = yield* Effect.tryPromise({
+        try: async () => {
+          const vite = await loadVite(worker.rootDir);
+          const previousConfigPath =
+            process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH;
+          process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH =
+            worker.wranglerConfigPath;
+          try {
+            const server = await vite.createServer({
+              root: worker.rootDir,
+              clearScreen: false,
+              server: {
+                host: "127.0.0.1",
+                port: 0,
+              },
+            });
+            await server.listen();
+            server.printUrls();
+            return server;
+          } finally {
+            if (previousConfigPath === undefined) {
+              delete process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH;
+            } else {
+              process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH =
+                previousConfigPath;
+            }
+          }
+        },
+        catch: (cause) =>
+          new Bundle.BundleError({
+            message: `Failed to start Vite dev server for ${worker.name}`,
+            cause,
+          }),
+      });
+      const address =
+        server.resolvedUrls?.local?.[0]?.replace(/\/$/, "") ??
+        `http://127.0.0.1:${server.config.server.port}`;
+      viteServers.set(worker.name, {
+        hash: worker.configHash,
+        address,
+        server,
+      });
+      yield* Effect.log(`[${worker.id}] Vite dev server started at ${address}`);
+      return { name: worker.name, address };
     });
 
     const watchers = new Map<
@@ -157,7 +243,9 @@ export const SidecarHandlers = Layer.effect(
           ),
         );
       }),
+      serveVite,
       stop: Effect.fn(function* (name: string) {
+        yield* closeViteServer(name).pipe(Effect.ignore);
         const watcher = watchers.get(name);
         if (watcher) {
           yield* Fiber.interrupt(watcher.fiber);
@@ -184,4 +272,17 @@ function bundleOutputToWorkerModules(
     });
   }
   return modules;
+}
+
+type ViteModule = typeof import("vite");
+
+async function loadVite(projectRoot: string): Promise<ViteModule> {
+  try {
+    const require = createRequire(path.join(projectRoot, "package.json"));
+    const vitePath = require.resolve("vite");
+    const viteUrl = pathToFileURL(vitePath);
+    return await import(/* @vite-ignore */ viteUrl.href);
+  } catch {
+    return await import("vite");
+  }
 }

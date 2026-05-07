@@ -22,8 +22,23 @@ export interface ServeOptions extends WorkerBundleOptions {
   durableObjectNamespaces: Worker.DurableObjectNamespace[];
 }
 
+export interface ServeViteOptions {
+  id: string;
+  name: string;
+  rootDir: string;
+  wranglerConfigPath: string;
+  configHash: string;
+}
+
 export const SidecarSchema = defineSchema<Sidecar["Service"]>({
   serve: {
+    success: Schema.Struct({
+      name: Schema.String,
+      address: Schema.String,
+    }),
+    error: Schema.Union([ServeError, BundleError]),
+  },
+  serveVite: {
     success: Schema.Struct({
       name: Schema.String,
       address: Schema.String,
@@ -38,6 +53,9 @@ export class Sidecar extends RpcClient.RpcClientService<
   {
     readonly serve: (
       options: ServeOptions,
+    ) => Effect.Effect<ServeResult, ServeError | BundleError>;
+    readonly serveVite: (
+      options: ServeViteOptions,
     ) => Effect.Effect<ServeResult, ServeError | BundleError>;
     readonly stop: (name: string) => Effect.Effect<void>;
   }

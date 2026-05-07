@@ -1,4 +1,6 @@
 import { AdoptPolicy, Unowned } from "@/AdoptPolicy";
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import { workerBindingsToWranglerConfig } from "@/Cloudflare/Workers/LocalWorkerProvider";
 import * as Construct from "@/Construct";
 import type { Input, InputProps } from "@/Input";
 import * as Output from "@/Output";
@@ -113,6 +115,142 @@ const makePlanWithCustomStack =
         Effect.provide(TestLayers()),
       );
     });
+
+const compileStack = <A, Err = never, Req = never>(
+  effect: Effect.Effect<A, Err, Req>,
+): Effect.Effect<Stack.CompiledStack<A>, Err, never> =>
+  effect.pipe(
+    // @ts-expect-error - these tests only inspect stack registration; providers are not used.
+    Stack.make({
+      name: TEST_STACK,
+      providers: Layer.empty,
+      state: inMemoryState(),
+    }),
+    Effect.provideService(Stage, TEST_STAGE),
+  );
+
+test(
+  "Cloudflare.Vite records bindings from Effect props",
+  Effect.gen(function* () {
+    const stack = yield* compileStack(
+      Effect.gen(function* () {
+        const db = yield* Cloudflare.D1Database("DB");
+        return yield* Cloudflare.Vite(
+          "App",
+          Effect.succeed({
+            rootDir: ".",
+            bindings: { DB: db },
+          }),
+        );
+      }),
+    );
+
+    expect(stack.bindings.App).toMatchObject([
+      {
+        sid: "DB",
+        data: {
+          bindings: [
+            {
+              type: "d1",
+              name: "DB",
+            },
+          ],
+        },
+      },
+    ]);
+  }),
+);
+
+test(
+  "Cloudflare.Worker props bindings support service bindings",
+  Effect.gen(function* () {
+    const stack = yield* compileStack(
+      Effect.gen(function* () {
+        const api = yield* Cloudflare.Worker("API", {
+          main: "./api.ts",
+        });
+        return yield* Cloudflare.Worker("Web", {
+          main: "./web.ts",
+          bindings: { API: api },
+        });
+      }),
+    );
+
+    expect(stack.bindings.Web).toMatchObject([
+      {
+        sid: "API",
+        data: {
+          bindings: [
+            {
+              type: "service",
+              name: "API",
+            },
+          ],
+        },
+      },
+    ]);
+  }),
+);
+
+test(
+  "Cloudflare Vite dev wrangler config uses remote bindings",
+  Effect.sync(() => {
+    expect(
+      workerBindingsToWranglerConfig({
+        name: "app",
+        compatibility: { date: "2026-03-17", flags: ["nodejs_compat"] },
+        bindings: [
+          { type: "d1", name: "DB", id: "database-id" },
+          { type: "kv_namespace", name: "KV", namespaceId: "namespace-id" },
+          { type: "r2_bucket", name: "BUCKET", bucketName: "bucket" },
+          { type: "queue", name: "QUEUE", queueName: "queue" },
+          { type: "service", name: "API", service: "api-worker" },
+        ] as any,
+      }),
+    ).toMatchObject({
+      name: "app",
+      compatibility_date: "2026-03-17",
+      compatibility_flags: ["nodejs_compat"],
+      d1_databases: [
+        {
+          binding: "DB",
+          database_id: "database-id",
+          remote: true,
+        },
+      ],
+      kv_namespaces: [
+        {
+          binding: "KV",
+          id: "namespace-id",
+          remote: true,
+        },
+      ],
+      r2_buckets: [
+        {
+          binding: "BUCKET",
+          bucket_name: "bucket",
+          remote: true,
+        },
+      ],
+      queues: {
+        producers: [
+          {
+            binding: "QUEUE",
+            queue: "queue",
+            remote: true,
+          },
+        ],
+      },
+      services: [
+        {
+          binding: "API",
+          service: "api-worker",
+          remote: true,
+        },
+      ],
+    });
+  }),
+);
 
 test(
   "artifacts are isolated by FQN during plan diff for namespaced resources",

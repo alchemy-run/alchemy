@@ -1,6 +1,9 @@
 import type { HyperdriveOrigin } from "@distilled.cloud/cloudflare-runtime/Worker";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Provider from "../../Provider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
@@ -10,6 +13,90 @@ import { getCompatibility } from "./Compatibility.ts";
 import { Worker, type WorkerBinding, type WorkerProps } from "./Worker.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
+export const workerBindingsToWranglerConfig = (input: {
+  name: string;
+  compatibility: { date: string; flags: string[] };
+  bindings: WorkerBinding[];
+}) => {
+  const config: any = {
+    name: input.name,
+    compatibility_date: input.compatibility.date,
+    compatibility_flags: input.compatibility.flags,
+  };
+
+  for (const binding of input.bindings) {
+    switch (binding.type) {
+      case "plain_text":
+      case "secret_text": {
+        config.vars ??= {};
+        config.vars[binding.name] = binding.text;
+        break;
+      }
+      case "d1": {
+        (config.d1_databases ??= []).push({
+          binding: binding.name,
+          database_id: binding.id,
+          database_name: binding.name,
+          remote: true,
+        });
+        break;
+      }
+      case "kv_namespace": {
+        (config.kv_namespaces ??= []).push({
+          binding: binding.name,
+          id: binding.namespaceId,
+          remote: true,
+        });
+        break;
+      }
+      case "r2_bucket": {
+        (config.r2_buckets ??= []).push({
+          binding: binding.name,
+          bucket_name: binding.bucketName,
+          jurisdiction: binding.jurisdiction,
+          remote: true,
+        });
+        break;
+      }
+      case "queue": {
+        config.queues ??= {};
+        (config.queues.producers ??= []).push({
+          binding: binding.name,
+          queue: binding.queueName,
+          remote: true,
+        });
+        break;
+      }
+      case "service": {
+        (config.services ??= []).push({
+          binding: binding.name,
+          service: binding.service,
+          remote: true,
+        });
+        break;
+      }
+      case "ai": {
+        config.ai = {
+          binding: binding.name,
+          remote: true,
+        };
+        break;
+      }
+      case "durable_object_namespace": {
+        config.durable_objects ??= {};
+        (config.durable_objects.bindings ??= []).push({
+          name: binding.name,
+          class_name: binding.className,
+          script_name: "scriptName" in binding ? binding.scriptName : undefined,
+        });
+        break;
+      }
+    }
+  }
+
+  return config;
+};
+
 export const LocalWorkerProvider = () =>
   Provider.effect(
     Worker,
@@ -17,6 +104,9 @@ export const LocalWorkerProvider = () =>
       const { accountId } = yield* CloudflareEnvironment;
       const stack = yield* Stack;
       const sidecar = yield* Sidecar;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { dotAlchemy } = yield* AlchemyContext;
 
       const run = Effect.fn(function* (
         id: string,
@@ -65,11 +155,53 @@ export const LocalWorkerProvider = () =>
             });
           }
         }
+        const compatibility = getCompatibility(props);
+        if (props.vite) {
+          const rootDir =
+            props.vite.rootDir ?? (yield* Effect.sync(() => process.cwd()));
+          const wranglerConfig = workerBindingsToWranglerConfig({
+            name,
+            compatibility,
+            bindings: workerBindings,
+          });
+          const configHash = JSON.stringify({ rootDir, wranglerConfig });
+          const configPath = path.join(
+            dotAlchemy,
+            "local",
+            "vite",
+            name,
+            "wrangler.json",
+          );
+          yield* fs.makeDirectory(path.dirname(configPath), {
+            recursive: true,
+          });
+          yield* fs.writeFileString(
+            configPath,
+            JSON.stringify(wranglerConfig, null, 2),
+          );
+          const result = yield* sidecar.serveVite({
+            id,
+            name,
+            rootDir,
+            wranglerConfigPath: configPath,
+            configHash,
+          });
+          return {
+            workerId: name,
+            workerName: name,
+            logpush: undefined,
+            url: result.address,
+            tags: [],
+            durableObjectNamespaces,
+            domains: [],
+            accountId,
+          } satisfies Worker["Attributes"];
+        }
         const result = yield* sidecar.serve({
           id,
           name,
           main: props.main,
-          compatibility: getCompatibility(props),
+          compatibility,
           entry: props.isExternal
             ? {
                 kind: "external",
