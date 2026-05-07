@@ -260,16 +260,6 @@ export interface WorkerProps<
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
-  /**
-   * Environment variables exposed on the Worker's `env` object.
-   *
-   * - `string` values become `plain_text` bindings.
-   * - `Redacted<string>` values become `secret_text` bindings.
-   * - Any other JSON value (`number`, `boolean`, plain object, array, `null`)
-   *   becomes a `json` binding and is delivered to the Worker as the parsed
-   *   JS value rather than a string. See
-   *   https://developers.cloudflare.com/workers/configuration/environment-variables/
-   */
   env?: Record<
     string,
     | string
