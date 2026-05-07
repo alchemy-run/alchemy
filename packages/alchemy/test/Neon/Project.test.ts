@@ -36,41 +36,39 @@ test.provider("create and delete project with default props", (stack) =>
   }).pipe(logLevel),
 );
 
-test.provider(
-  "enable logical replication on update",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+test.provider("enable logical replication on update", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Neon.Project("LogicalReplicationProject", {
-            name: "alchemy-test-logical-replication",
-            region: "aws-us-east-1",
-          });
-        }),
-      );
-      expect(initial.enableLogicalReplication).toEqual(false);
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Neon.Project("LogicalReplicationProject", {
+          name: "alchemy-test-logical-replication",
+          region: "aws-us-east-1",
+        });
+      }),
+    );
+    expect(initial.enableLogicalReplication).toEqual(false);
 
-      const enabled = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Neon.Project("LogicalReplicationProject", {
-            name: "alchemy-test-logical-replication",
-            region: "aws-us-east-1",
-            enableLogicalReplication: true,
-          });
-        }),
-      );
-      expect(enabled.projectId).toEqual(initial.projectId);
-      expect(enabled.enableLogicalReplication).toEqual(true);
+    const enabled = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Neon.Project("LogicalReplicationProject", {
+          name: "alchemy-test-logical-replication",
+          region: "aws-us-east-1",
+          enableLogicalReplication: true,
+        });
+      }),
+    );
+    expect(enabled.projectId).toEqual(initial.projectId);
+    expect(enabled.enableLogicalReplication).toEqual(true);
 
-      const fetched = yield* api.getProject(enabled.projectId);
-      expect(fetched.project.settings).toMatchObject({
-        enable_logical_replication: true,
-      });
+    const fetched = yield* api.getProject(enabled.projectId);
+    expect(fetched.project.settings).toMatchObject({
+      enable_logical_replication: true,
+    });
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 test.provider(

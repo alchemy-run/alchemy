@@ -16,7 +16,8 @@ export class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
       let count = (yield* state.storage.get<number>("count")) ?? 0;
-      const lastBodies = (yield* state.storage.get<string[]>("lastBodies")) ?? [];
+      const lastBodies =
+        (yield* state.storage.get<string[]>("lastBodies")) ?? [];
       return {
         record: Effect.fn(function* (body: string) {
           count += 1;

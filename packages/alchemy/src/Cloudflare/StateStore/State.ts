@@ -13,8 +13,11 @@ import * as Output from "../../Output.ts";
 import * as Config from "effect/Config";
 import { adopt } from "../../AdoptPolicy.ts";
 import { AuthError } from "../../Auth/AuthProvider.ts";
-import { readCredentials, writeCredentials } from "../../Auth/Credentials.ts";
-import { ALCHEMY_PROFILE } from "../../Auth/Profile.ts";
+import {
+  CredentialsStore,
+  CredentialsStoreLive,
+} from "../../Auth/Credentials.ts";
+import { ALCHEMY_PROFILE, ProfileLive } from "../../Auth/Profile.ts";
 import * as Cloudflare from "../../Cloudflare/Providers.ts";
 import { deploy } from "../../Deploy.ts";
 import * as Alchemy from "../../Stack.ts";
@@ -162,7 +165,8 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       );
       const credentials = yield* loginWithCloudflare();
       if (!isCI) {
-        yield* writeCredentials<HttpStateStoreCredentials>(
+        const store = yield* CredentialsStore;
+        yield* store.write<HttpStateStoreCredentials>(
           profileName,
           CREDENTIALS_FILE,
           credentials,
@@ -206,7 +210,8 @@ export const state = () =>
       const isCI = yield* Config.boolean("CI").pipe(Config.withDefault(false));
       const alchemyContext = yield* AlchemyContext;
       const profileName = yield* ALCHEMY_PROFILE;
-      const credentials = yield* readCredentials<HttpStateStoreCredentials>(
+      const store = yield* CredentialsStore;
+      const credentials = yield* store.read<HttpStateStoreCredentials>(
         profileName,
         CREDENTIALS_FILE,
       );
@@ -293,7 +298,7 @@ export const state = () =>
         // it exists, so fetch the secret token
         const credentials = yield* loginWithCloudflare();
         if (!isCI) {
-          yield* writeCredentials<HttpStateStoreCredentials>(
+          yield* store.write<HttpStateStoreCredentials>(
             profileName,
             CREDENTIALS_FILE,
             credentials,
@@ -348,6 +353,8 @@ export const state = () =>
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
     Layer.provideMerge(CloudflareAuth),
     Layer.provideMerge(Access.AccessLive),
+    Layer.provideMerge(ProfileLive),
+    Layer.provideMerge(CredentialsStoreLive),
     Layer.orDie,
   );
 
@@ -584,19 +591,21 @@ export const loginWithCloudflare = () =>
     if (!isCI) {
       // 4. Persist credentials. The profile entry is managed by
       //    `loadOrConfigure` when this is invoked through `configure`.
-      yield* writeCredentials<HttpStateStoreCredentials>(
-        profileName,
-        CREDENTIALS_FILE,
-        {
+      const credStore = yield* CredentialsStore;
+      yield* credStore
+        .write<HttpStateStoreCredentials>(profileName, CREDENTIALS_FILE, {
           url,
           authToken: authToken.trim(),
-        },
-      ).pipe(
-        Effect.mapError(
-          (e) =>
-            new AuthError({ message: "Failed to write credentials", cause: e }),
-        ),
-      );
+        })
+        .pipe(
+          Effect.mapError(
+            (e) =>
+              new AuthError({
+                message: "Failed to write credentials",
+                cause: e,
+              }),
+          ),
+        );
 
       yield* Clank.success(
         `HTTP state store credentials saved for '${profileName}'.`,
