@@ -74,6 +74,7 @@ const maybeStartRpcServer = Effect.fn(function* (main: string) {
       stdout: "inherit",
       stderr: "inherit",
       detached: true,
+      extendEnv: true,
     });
   } else {
     yield* Effect.logDebug("[RpcClient] RPC server already running", main);
