@@ -42,8 +42,8 @@ export const checkLatestVersion = Effect.gen(function* () {
   if (typeof latest !== "string" || latest === current) return;
   const installCmd =
     typeof process !== "undefined" && (process as any).versions?.bun
-      ? "bun add -g alchemy@latest"
-      : "pnpm add -g alchemy@latest";
+      ? "bun add alchemy@latest"
+      : "pnpm add alchemy@latest";
   yield* Effect.logWarning(
     `alchemy ${latest} is available (you're on ${current}). ` +
       `Run \`${installCmd}\` to upgrade.`,
