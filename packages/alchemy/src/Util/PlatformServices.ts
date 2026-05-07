@@ -65,7 +65,7 @@ export const runMain = <E, A>(
 
 export const httpServer = (
   port: number = 0,
-  host: string = "localhost",
+  host: string = "127.0.0.1",
 ): Layer.Layer<HttpServer, ServeError> =>
   Effect.promise(async () => {
     if (isBun) {
