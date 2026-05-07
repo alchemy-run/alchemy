@@ -115,10 +115,13 @@ function makeNodeWebSocketRpcServer<T extends RpcCompatible<T>>(main: () => T) {
   return server;
 }
 
-function toNodeMessage(message: WebSocket.RawData): string | Buffer<ArrayBuffer> {
+function toNodeMessage(
+  message: WebSocket.RawData,
+): string | Buffer<ArrayBuffer> {
   if (typeof message === "string") return message;
   if (Buffer.isBuffer(message)) return message as Buffer<ArrayBuffer>;
-  if (Array.isArray(message)) return Buffer.concat(message) as Buffer<ArrayBuffer>;
+  if (Array.isArray(message))
+    return Buffer.concat(message) as Buffer<ArrayBuffer>;
   return Buffer.from(message) as Buffer<ArrayBuffer>;
 }
 

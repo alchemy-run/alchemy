@@ -242,12 +242,10 @@ export const Platform = <
               }),
             )
         ).pipe(
-          Effect.tap(
-            (resource) => {
-              const resolved = resource as R;
-              return hooks.onCreate?.(resolved, resolved.Props) ?? Effect.void;
-            },
-          ),
+          Effect.tap((resource) => {
+            const resolved = resource as R;
+            return hooks.onCreate?.(resolved, resolved.Props) ?? Effect.void;
+          }),
         );
       return Object.assign(
         function (impl: Impl) {

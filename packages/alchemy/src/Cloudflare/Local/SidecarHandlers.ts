@@ -286,10 +286,7 @@ async function getCloudflareVitePlugins(
   vite: ViteModule,
   worker: ServeViteOptions,
 ): Promise<vite.PluginOption[]> {
-  const resolved = await vite.resolveConfig(
-    { root: worker.rootDir },
-    "serve",
-  );
+  const resolved = await vite.resolveConfig({ root: worker.rootDir }, "serve");
   if (
     resolved.plugins.some((plugin) => plugin.name === "vite-plugin-cloudflare")
   ) {

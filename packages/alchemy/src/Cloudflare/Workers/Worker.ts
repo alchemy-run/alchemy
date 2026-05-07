@@ -76,10 +76,7 @@ import { workersHttpHandler } from "./HttpServer.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
 import { makeRpcStub } from "./Rpc.ts";
-import {
-  makeEffectVirtualEntry,
-  normalizeWorkerMain,
-} from "./WorkerBundle.ts";
+import { makeEffectVirtualEntry, normalizeWorkerMain } from "./WorkerBundle.ts";
 
 const WorkerTypeId = "Cloudflare.Worker";
 type WorkerTypeId = typeof WorkerTypeId;
