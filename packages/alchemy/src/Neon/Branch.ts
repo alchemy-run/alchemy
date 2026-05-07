@@ -1,26 +1,81 @@
+import { API } from "@distilled.cloud/neon/Client";
 import {
+  CreateProjectBranchOutput,
   deleteProjectBranch,
   getConnectionURI,
   getProjectBranch,
   listProjectBranchDatabases,
+  listProjectBranches,
+  type ListProjectBranchesOutput,
   updateProjectBranch,
 } from "@distilled.cloud/neon/Operations";
+import * as T from "@distilled.cloud/neon/Traits";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
-import {
-  createProjectBranch,
-  findBranchByName,
-  waitForOperations,
-} from "./Operations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
-import type { Project } from "./Project.ts";
+import { type Project, waitForOperations } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import { listSqlFiles, readSqlFile } from "./SqlFile.ts";
+
+// The generated SDK input schema for createProjectBranch only declares
+// the `project_id` path parameter and omits the `branch` / `endpoints`
+// body fields. Redefine the input here while reusing the SDK's output
+// schema. Remove once @distilled.cloud/neon ships the regenerated op.
+const CreateProjectBranchInput = Schema.Struct({
+  project_id: Schema.String.pipe(T.PathParam()),
+  branch: Schema.optional(
+    Schema.Struct({
+      name: Schema.optional(Schema.String),
+      parent_id: Schema.optional(Schema.String),
+      parent_lsn: Schema.optional(Schema.String),
+      parent_timestamp: Schema.optional(Schema.String),
+      init_source: Schema.optional(
+        Schema.Literals(["schema-only", "parent-data"]),
+      ),
+      protected: Schema.optional(Schema.Boolean),
+      expires_at: Schema.optional(Schema.String),
+    }),
+  ),
+  endpoints: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        type: Schema.Literals(["read_only", "read_write"]),
+        autoscaling_limit_min_cu: Schema.optional(Schema.Number),
+        autoscaling_limit_max_cu: Schema.optional(Schema.Number),
+        suspend_timeout_seconds: Schema.optional(Schema.Number),
+      }),
+    ),
+  ),
+}).pipe(T.Http({ method: "POST", path: "/projects/{project_id}/branches" }));
+
+const createProjectBranch = API.make(() => ({
+  inputSchema: CreateProjectBranchInput,
+  outputSchema: CreateProjectBranchOutput,
+}));
+
+const findBranchByName = (projectId: string, name: string) =>
+  Effect.gen(function* () {
+    const matches: ListProjectBranchesOutput["branches"][number][] = [];
+    let cursor: string | undefined;
+    do {
+      const page = yield* listProjectBranches({
+        project_id: projectId,
+        search: name,
+        ...(cursor !== undefined ? { cursor } : {}),
+      });
+      for (const b of page.branches) {
+        if (b.name === name) matches.push(b);
+      }
+      cursor = page.pagination?.next;
+    } while (cursor);
+    return matches;
+  });
 
 const DEFAULT_MIGRATIONS_TABLE = "neon_migrations";
 

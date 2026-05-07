@@ -3,22 +3,145 @@ import {
   deleteProject,
   getConnectionURI,
   getProject,
+  getProjectOperation,
   listProjectBranchDatabases,
   listProjectBranches,
+  type ListProjectsOutput,
+  listProjects,
   createProject as sdkCreateProject,
   updateProject,
 } from "@distilled.cloud/neon/Operations";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
-import { findProjectByName, waitForOperations } from "./Operations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
 import type { Providers } from "./Providers.ts";
 import { listSqlFiles, readSqlFile } from "./SqlFile.ts";
+
+type NeonOperationStatus =
+  | "scheduling"
+  | "running"
+  | "finished"
+  | "failed"
+  | "error"
+  | "cancelling"
+  | "cancelled"
+  | "skipped";
+
+export class OperationFailed extends Data.TaggedError("OperationFailed")<{
+  operationId: string;
+  action: string;
+  status: NeonOperationStatus;
+  error?: string;
+}> {}
+
+class OperationPending extends Data.TaggedError("OperationPending")<{
+  operationId: string;
+}> {}
+
+const isOperationComplete = (status: NeonOperationStatus): boolean =>
+  status === "finished" ||
+  status === "failed" ||
+  status === "error" ||
+  status === "cancelled" ||
+  status === "skipped";
+
+/**
+ * Wait for the given operations to reach a terminal state. Polls every
+ * 500ms with exponential backoff up to ~30s per operation.
+ */
+export const waitForOperations = (
+  operations: ReadonlyArray<{
+    readonly id: string;
+    readonly project_id: string;
+    readonly action: string;
+    readonly status: NeonOperationStatus;
+    readonly error?: string;
+  }>,
+) =>
+  Effect.gen(function* () {
+    for (const op of operations) {
+      if (isOperationComplete(op.status)) {
+        if (op.status === "failed" || op.status === "error") {
+          return yield* new OperationFailed({
+            operationId: op.id,
+            action: op.action,
+            status: op.status,
+            error: op.error,
+          });
+        }
+        continue;
+      }
+      yield* getProjectOperation({
+        project_id: op.project_id,
+        operation_id: op.id,
+      }).pipe(
+        Effect.flatMap(
+          ({
+            operation,
+          }): Effect.Effect<void, OperationFailed | OperationPending> => {
+            const status = operation.status as NeonOperationStatus;
+            if (status === "failed" || status === "error") {
+              return Effect.fail(
+                new OperationFailed({
+                  operationId: operation.id,
+                  action: operation.action,
+                  status,
+                  error: operation.error,
+                }),
+              );
+            }
+            if (!isOperationComplete(status)) {
+              return Effect.fail(new OperationPending({ operationId: op.id }));
+            }
+            return Effect.void;
+          },
+        ),
+        Effect.retry({
+          while: (e: unknown) => {
+            const tag = (e as { _tag?: string })._tag;
+            return (
+              tag === "OperationPending" ||
+              tag === "TooManyRequests" ||
+              tag === "ServiceUnavailable" ||
+              tag === "InternalServerError" ||
+              tag === "BadGateway" ||
+              tag === "GatewayTimeout"
+            );
+          },
+          schedule: Schedule.both(
+            Schedule.exponential(Duration.millis(500), 1.5),
+            Schedule.recurs(60),
+          ),
+        }),
+        Effect.catchTag("OperationPending", () => Effect.void),
+      );
+    }
+  });
+
+const findProjectByName = (name: string) =>
+  Effect.gen(function* () {
+    const matches: ListProjectsOutput["projects"][number][] = [];
+    let cursor: string | undefined;
+    do {
+      const page = yield* listProjects({
+        search: name,
+        ...(cursor !== undefined ? { cursor } : {}),
+      });
+      for (const p of page.projects) {
+        if (p.name === name) matches.push(p);
+      }
+      cursor = page.pagination?.cursor;
+    } while (cursor);
+    return matches;
+  });
 
 export type NeonRegion =
   | "aws-us-east-1"
