@@ -1,3 +1,13 @@
+## v2.0.0-beta.33
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**: Fix I/O error in state store &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/251 [<samp>(ec430)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ec430ad2)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.32...HEAD)
+
+---
+
 ## v2.0.0-beta.32
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
