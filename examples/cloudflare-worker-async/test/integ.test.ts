@@ -2,6 +2,8 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -39,39 +41,23 @@ test(
       typeof out === "string" ? out : (out as { url: string }).url;
     const text = `hello-${Date.now()}`;
 
-    const sendResponse = yield* Effect.tryPromise({
-      try: () =>
-        fetch(`${url}/queue/send?text=${encodeURIComponent(text)}`, {
-          method: "POST",
-        }),
-      catch: (cause) =>
-        cause instanceof Error ? cause : new Error(String(cause)),
-    });
+    const sendResponse = yield* HttpClient.execute(
+      HttpClientRequest.post(
+        `${url}/queue/send?text=${encodeURIComponent(text)}`,
+      ),
+    );
     expect(sendResponse.status).toBe(202);
-    const { sent } = yield* Effect.tryPromise({
-      try: () =>
-        sendResponse.json() as Promise<{
-          sent: { id: string; text: string; sentAt: number };
-        }>,
-      catch: (cause) =>
-        cause instanceof Error ? cause : new Error(String(cause)),
-    });
-    expect(sent.id).toBeString();
+    const { sent } = (yield* sendResponse.json) as {
+      sent: { id: string; text: string; sentAt: number };
+    };
+    expect(sent.id).toBeTypeOf("string");
 
     const deadline = Date.now() + 60_000;
     let consumed: { id: string; text: string; sentAt: number } | undefined;
     while (Date.now() < deadline) {
-      const resultResponse = yield* Effect.tryPromise({
-        try: () => fetch(`${url}/queue/${sent.id}`),
-        catch: (cause) =>
-          cause instanceof Error ? cause : new Error(String(cause)),
-      });
+      const resultResponse = yield* HttpClient.get(`${url}/queue/${sent.id}`);
       if (resultResponse.status === 200) {
-        const body = yield* Effect.tryPromise({
-          try: () => resultResponse.text(),
-          catch: (cause) =>
-            cause instanceof Error ? cause : new Error(String(cause)),
-        });
+        const body = yield* resultResponse.text;
         if (body) {
           consumed = JSON.parse(body);
           break;

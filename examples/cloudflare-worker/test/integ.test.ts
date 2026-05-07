@@ -2,6 +2,9 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -136,39 +139,25 @@ test(
     const { url } = yield* stack;
     const text = `hello-${Date.now()}`;
 
-    const sendResponse = yield* Effect.tryPromise({
-      try: () =>
-        fetch(`${url}/queue/send`, { method: "POST", body: text }),
-      catch: (cause) =>
-        cause instanceof Error ? cause : new Error(String(cause)),
-    });
+    const sendResponse = yield* HttpClient.execute(
+      HttpClientRequest.post(`${url}/queue/send`).pipe(
+        HttpClientRequest.setBody(HttpBody.text(text)),
+      ),
+    );
     expect(sendResponse.status).toBe(202);
-    const { sent } = yield* Effect.tryPromise({
-      try: () =>
-        sendResponse.json() as Promise<{
-          sent: { id: string; text: string; sentAt: number };
-        }>,
-      catch: (cause) =>
-        cause instanceof Error ? cause : new Error(String(cause)),
-    });
-    expect(sent.id).toBeString();
+    const { sent } = (yield* sendResponse.json) as {
+      sent: { id: string; text: string; sentAt: number };
+    };
+    expect(sent.id).toBeTypeOf("string");
 
     const deadline = Date.now() + 60_000;
-    let consumed:
-      | { id: string; text: string; sentAt: number }
-      | undefined;
+    let consumed: { id: string; text: string; sentAt: number } | undefined;
     while (Date.now() < deadline) {
-      const resultResponse = yield* Effect.tryPromise({
-        try: () => fetch(`${url}/queue/result/${sent.id}`),
-        catch: (cause) =>
-          cause instanceof Error ? cause : new Error(String(cause)),
-      });
+      const resultResponse = yield* HttpClient.get(
+        `${url}/queue/result/${sent.id}`,
+      );
       if (resultResponse.status === 200) {
-        consumed = yield* Effect.tryPromise({
-          try: () => resultResponse.json() as Promise<typeof consumed>,
-          catch: (cause) =>
-            cause instanceof Error ? cause : new Error(String(cause)),
-        });
+        consumed = (yield* resultResponse.json) as typeof consumed;
         break;
       }
       yield* Effect.sleep("2 seconds");
@@ -181,12 +170,9 @@ test(
     // Clean up the consumed R2 entry so afterAll's stack.destroy()
     // can delete the bucket — otherwise Cloudflare rejects the
     // bucket delete with "bucket is not empty".
-    yield* Effect.tryPromise({
-      try: () =>
-        fetch(`${url}/queue/result/${sent.id}`, { method: "DELETE" }),
-      catch: (cause) =>
-        cause instanceof Error ? cause : new Error(String(cause)),
-    });
+    yield* HttpClient.execute(
+      HttpClientRequest.make("DELETE")(`${url}/queue/result/${sent.id}`),
+    );
   }),
   { timeout: 120_000 },
 );
