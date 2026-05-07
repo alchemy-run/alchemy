@@ -37,7 +37,7 @@ export const devCommand = Command.make(
       bin,
       {
         bun: ["run", "--watch", "--no-clear-screen", main],
-        node: ["--watch", main],
+        node: ["--watch", "--watch-preserve-output", main],
       }[bin],
       {
         stdin: "inherit",
