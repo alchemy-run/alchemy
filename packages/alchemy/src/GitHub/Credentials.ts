@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { AuthError, getAuthProvider } from "../Auth/AuthProvider.ts";
-import { ALCHEMY_PROFILE, loadOrConfigure } from "../Auth/Profile.ts";
+import { ALCHEMY_PROFILE, Profile } from "../Auth/Profile.ts";
 import {
   GITHUB_AUTH_PROVIDER_NAME,
   type GitHubAuthConfig,
@@ -74,15 +74,15 @@ export const fromAuthProvider = () =>
   Layer.effect(
     GitHubCredentials,
     Effect.gen(function* () {
+      const profile = yield* Profile;
       const auth = yield* getAuthProvider<
         GitHubAuthConfig,
         GitHubResolvedCredentials
       >(GITHUB_AUTH_PROVIDER_NAME);
       const profileName = yield* ALCHEMY_PROFILE;
       const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-      const ctx = yield* Effect.context<never>();
 
-      return yield* loadOrConfigure(auth, profileName, { ci }).pipe(
+      return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
         Effect.flatMap((config) =>
           auth.read(profileName, config as GitHubAuthConfig),
         ),
@@ -93,7 +93,6 @@ export const fromAuthProvider = () =>
               message: `Failed to resolve GitHub credentials for profile '${profileName}': ${(e as { message?: string }).message ?? String(e)}`,
             }),
         ),
-        Effect.provide(ctx),
       );
     }).pipe(Effect.orDie),
   );

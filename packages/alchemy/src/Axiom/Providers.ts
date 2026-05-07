@@ -1,5 +1,7 @@
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import { CredentialsStoreLive } from "../Auth/Credentials.ts";
+import { ProfileLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
 import { Annotation, AnnotationProvider } from "./Annotation.ts";
 import { ApiToken, ApiTokenProvider } from "./ApiToken.ts";
@@ -54,5 +56,7 @@ export const providers = () =>
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(AxiomAuth),
+    Layer.provideMerge(ProfileLive),
+    Layer.provideMerge(CredentialsStoreLive),
     Layer.orDie,
   );

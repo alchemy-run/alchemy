@@ -8,11 +8,7 @@ import * as Logger from "effect/Logger";
 import { Command, Flag } from "effect/unstable/cli";
 
 import { AuthProviders } from "../..//Auth/AuthProvider";
-import {
-  getProfile,
-  setProfile,
-  withProfileOverride,
-} from "../..//Auth/Profile";
+import { Profile, withProfileOverride } from "../..//Auth/Profile";
 import { Stage } from "../..//Stage";
 import * as State from "../..//State/index";
 import { loadConfigProvider } from "../..//Util/ConfigProvider";
@@ -73,6 +69,7 @@ export const loginCommand = Command.make(
       );
 
       yield* Effect.gen(function* () {
+        const profiles = yield* Profile;
         yield* Effect.catchCause(stackEffect, (cause) =>
           Console.warn(
             `Ignoring error while building stack for login (likely due to missing or broken credentials):\n${Cause.pretty(cause)}`,
@@ -93,13 +90,13 @@ export const loginCommand = Command.make(
           providers,
           (provider) =>
             Effect.gen(function* () {
-              const existing = yield* getProfile(profile);
+              const existing = yield* profiles.getProfile(profile);
               const stored = existing?.[provider.name];
 
               let cfg: { method: string };
               if (configure || stored == null) {
                 cfg = yield* provider.configure(profile, { ci });
-                yield* setProfile(profile, {
+                yield* profiles.setProfile(profile, {
                   ...existing,
                   [provider.name]: cfg,
                 });

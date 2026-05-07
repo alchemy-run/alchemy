@@ -726,7 +726,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { getAuthProvider } from "alchemy/Auth/AuthProvider";
-import { ALCHEMY_PROFILE, loadOrConfigure } from "alchemy/Auth/Profile";
+import { ALCHEMY_PROFILE, Profile } from "alchemy/Auth/Profile";
 import {
   STRIPE_AUTH_PROVIDER_NAME,
   type StripeAuthConfig,
@@ -737,6 +737,7 @@ export const fromAuthProvider = () =>
   Layer.effect(
     StripeCredentials,
     Effect.gen(function* () {
+      const profile = yield* Profile;
       const auth = yield* getAuthProvider<
         StripeAuthConfig,
         StripeResolvedCredentials
@@ -744,14 +745,14 @@ export const fromAuthProvider = () =>
       const profileName = yield* ALCHEMY_PROFILE;
       const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
 
-      const config = yield* loadOrConfigure(auth, profileName, { ci });
+      const config = yield* profile.loadOrConfigure(auth, profileName, { ci });
       const creds = yield* auth.read(profileName, config as StripeAuthConfig);
       return { apiKey: creds.apiKey };
     }),
   );
 ```
 
-`loadOrConfigure` reads any existing config for the profile, and
+`Profile.loadOrConfigure` reads any existing config for the profile, and
 falls back to `configure` (interactive in TTYs, env in CI) if
 nothing is stored yet. `ALCHEMY_PROFILE` resolves the active
 profile name (`default` unless `ALCHEMY_PROFILE` is set).

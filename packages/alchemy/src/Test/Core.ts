@@ -9,7 +9,8 @@ import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
 import { apply } from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
-import { withProfileOverride } from "../Auth/Profile.ts";
+import { CredentialsStoreLive } from "../Auth/Credentials.ts";
+import { ProfileLive, withProfileOverride } from "../Auth/Profile.ts";
 import { LoggingCli } from "../Cli/LoggingCli.ts";
 import { deploy as _deploy } from "../Deploy.ts";
 import { destroy as _destroy } from "../Destroy.ts";
@@ -72,7 +73,12 @@ const overrideAlchemyContext = (overrides: { dev: boolean }) =>
 
 export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
 
-const platformLayer = Layer.mergeAll(PlatformServices, FetchHttpClient.layer);
+const platformLayer = Layer.mergeAll(
+  PlatformServices,
+  FetchHttpClient.layer,
+  Layer.provide(ProfileLive, PlatformServices),
+  Layer.provide(CredentialsStoreLive, PlatformServices),
+);
 
 const alchemyLayer = Layer.mergeAll(LoggingCli, AlchemyContextLive);
 
