@@ -1,22 +1,17 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Etag from "effect/unstable/http/Etag";
+import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
+import crypto from "node:crypto";
 import {
   BearerTokenValidator,
   StateApi,
   StateAuthLive,
 } from "../../State/HttpStateApi.ts";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Path from "effect/Path";
-import * as Etag from "effect/unstable/http/Etag";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
-import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
-import * as HttpApiError from "effect/unstable/httpapi/HttpApiError";
-import * as OtlpLogger from "effect/unstable/observability/OtlpLogger";
-import * as OtlpMetrics from "effect/unstable/observability/OtlpMetrics";
-import * as OtlpSerialization from "effect/unstable/observability/OtlpSerialization";
-import * as OtlpTracer from "effect/unstable/observability/OtlpTracer";
-import crypto from "node:crypto";
 import * as Secret from "../SecretsStore/Secret.ts";
 import { SecretBindingLive } from "../SecretsStore/SecretBinding.ts";
 import { Worker } from "../Workers/Worker.ts";
@@ -34,7 +29,7 @@ export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
-export const STATE_STORE_VERSION = 2 as const;
+export const STATE_STORE_VERSION = 3 as const;
 
 /**
  * Hard-coded OTLP/HTTP endpoints. Point at the public ingest relay
@@ -43,9 +38,9 @@ export const STATE_STORE_VERSION = 2 as const;
  * coded on purpose: the worker has no env-var plumbing and the relay
  * is account-level infra that lives outside any single deploy.
  */
-const OTEL_TRACES_URL = "https://otel.alchemy.run/v1/traces";
-const OTEL_METRICS_URL = "https://otel.alchemy.run/v1/metrics";
-const OTEL_LOGS_URL = "https://otel.alchemy.run/v1/logs";
+// const OTEL_TRACES_URL = "https://otel.alchemy.run/v1/traces";
+// const OTEL_METRICS_URL = "https://otel.alchemy.run/v1/metrics";
+// const OTEL_LOGS_URL = "https://otel.alchemy.run/v1/logs";
 
 /**
  * OTLP traces + metrics + logs Layer for the state-store worker.
@@ -55,38 +50,38 @@ const OTEL_LOGS_URL = "https://otel.alchemy.run/v1/logs";
  * brand each signal with the worker's service name + contract version
  * so they're easy to slice in Axiom.
  */
-const otelResource = {
-  serviceName: STATE_STORE_SCRIPT_NAME,
-  serviceVersion: String(STATE_STORE_VERSION),
-  attributes: {
-    "alchemy.state_store.script_name": STATE_STORE_SCRIPT_NAME,
-    "alchemy.state_store.version": STATE_STORE_VERSION,
-  },
-} as const;
+// const otelResource = {
+//   serviceName: STATE_STORE_SCRIPT_NAME,
+//   serviceVersion: String(STATE_STORE_VERSION),
+//   attributes: {
+//     "alchemy.state_store.script_name": STATE_STORE_SCRIPT_NAME,
+//     "alchemy.state_store.version": STATE_STORE_VERSION,
+//   },
+// } as const;
 
-const TelemetryLive = Layer.mergeAll(
-  OtlpTracer.layer({
-    url: OTEL_TRACES_URL,
-    resource: otelResource,
-    exportInterval: "1 second",
-  }),
-  OtlpMetrics.layer({
-    url: OTEL_METRICS_URL,
-    resource: otelResource,
-    exportInterval: "1 second",
-  }),
-  // Replace (don't merge with) the default stdout logger so worker logs
-  // ship to Axiom instead of just `wrangler tail`.
-  OtlpLogger.layer({
-    url: OTEL_LOGS_URL,
-    resource: otelResource,
-    exportInterval: "1 second",
-    mergeWithExisting: false,
-  }),
-).pipe(
-  Layer.provide(OtlpSerialization.layerJson),
-  Layer.provide(FetchHttpClient.layer),
-);
+// const TelemetryLive = Layer.mergeAll(
+//   OtlpTracer.layer({
+//     url: OTEL_TRACES_URL,
+//     resource: otelResource,
+//     exportInterval: "1 second",
+//   }),
+//   OtlpMetrics.layer({
+//     url: OTEL_METRICS_URL,
+//     resource: otelResource,
+//     exportInterval: "1 second",
+//   }),
+//   // Replace (don't merge with) the default stdout logger so worker logs
+//   // ship to Axiom instead of just `wrangler tail`.
+//   OtlpLogger.layer({
+//     url: OTEL_LOGS_URL,
+//     resource: otelResource,
+//     exportInterval: "1 second",
+//     mergeWithExisting: false,
+//   }),
+// ).pipe(
+//   Layer.provide(OtlpSerialization.layerJson),
+//   Layer.provide(FetchHttpClient.layer),
+// );
 
 /**
  * Path on disk to *this* file, used as the worker's bundling entry.
@@ -288,7 +283,7 @@ export default Worker(
         // file-response surface is stubbed.
         Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
         HttpRouter.toHttpEffect,
-        Effect.provide(TelemetryLive),
+        // Effect.provide(TelemetryLive),
       ),
     };
   }).pipe(Effect.provide(Layer.mergeAll(SecretBindingLive))),
