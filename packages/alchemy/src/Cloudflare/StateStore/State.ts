@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Output from "../../Output.ts";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
@@ -529,6 +530,16 @@ const deployStateStore = (scriptName: string, state?: StateService) =>
       // TODO(sam): we should not need to do this, but types do complain. fix deploy
       Effect.provide(stateLayer),
     );
+    // Cloudflare's worker upload is eventually consistent: the deploy
+    // call returns as soon as the script upload is accepted, but the
+    // edge can keep serving the previous version for several seconds
+    // afterwards. Block here until `/version` reports the version this
+    // CLI was built against — otherwise downstream steps (syncing
+    // local state into the deployed store, version probes during
+    // adoption) end up talking to the old worker and may either
+    // observe stale data or trip the staleness check and recurse into
+    // another redeploy.
+    yield* waitForStateStoreVersion(url);
     return { url, authToken, localState };
   }).pipe(
     Effect.withSpan("state_store.deploy", {
@@ -694,6 +705,56 @@ const redeployIfStale = ({
  * since the caller's response in every case is the same: fall
  * through to the idempotent bootstrap flow.
  */
+/**
+ * Block until the worker at `url` reports the {@link STATE_STORE_VERSION}
+ * this CLI was built against, with bounded exponential retry. Used
+ * post-deploy to wait out Cloudflare's edge cache so any subsequent
+ * read or write goes to the new worker.
+ *
+ * Failures (transport errors, 404 from a pre-`/version` build, schema
+ * mismatch, version mismatch) all collapse to "not ready yet" and are
+ * retried; once the budget is exhausted we surface a hard failure
+ * since continuing would talk to the wrong worker.
+ */
+class StateStoreVersionNotReady extends Error {
+  readonly _tag = "StateStoreVersionNotReady";
+  constructor(
+    readonly expected: number,
+    readonly observed: number | undefined,
+  ) {
+    super(
+      `Cloudflare State Store version not ready (expected v${expected}, observed v${observed ?? "unknown"}).`,
+    );
+  }
+}
+
+const waitForStateStoreVersion = (url: string) =>
+  Effect.gen(function* () {
+    const { matches, expected, observed } = yield* checkStateStoreVersion(url);
+    if (!matches) {
+      return yield* Effect.fail(
+        new StateStoreVersionNotReady(expected, observed),
+      );
+    }
+  }).pipe(
+    Effect.retry({
+      while: (error) => error instanceof StateStoreVersionNotReady,
+      // Edge propagation is usually sub-second; poll fast and cap the
+      // overall wait at ~10s so we fail loudly if something is really
+      // wrong rather than silently hanging.
+      schedule: Schedule.spaced("200 millis").pipe(
+        Schedule.both(Schedule.recurs(50)),
+      ),
+    }),
+    Effect.withSpan("state_store.wait_for_version", {
+      attributes: {
+        "alchemy.state_store.op": "wait_for_version",
+        "alchemy.state_store.url": url,
+        "alchemy.state_store.expected_version": STATE_STORE_VERSION,
+      },
+    }),
+  );
+
 const checkStateStoreVersion = (url: string) =>
   Effect.gen(function* () {
     const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
