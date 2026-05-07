@@ -9,6 +9,7 @@ import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -38,6 +39,7 @@ export const SidecarHandlers = Layer.effect(
         server: vite.ViteDevServer;
       }
     >();
+    const viteConfigPathSemaphore = yield* Semaphore.make(1);
 
     const serveScoped = Effect.fnUntraced(function* (
       worker: ServeOptions,
@@ -91,40 +93,42 @@ export const SidecarHandlers = Layer.effect(
 
       yield* closeViteServer(worker.name);
 
-      const server = yield* Effect.tryPromise({
-        try: async () => {
-          const vite = await loadVite(worker.rootDir);
-          const previousConfigPath =
-            process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH;
-          process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH =
-            worker.wranglerConfigPath;
-          try {
-            const server = await vite.createServer({
-              root: worker.rootDir,
-              clearScreen: false,
-              server: {
-                host: "127.0.0.1",
-                port: 0,
-              },
-            });
-            await server.listen();
-            server.printUrls();
-            return server;
-          } finally {
-            if (previousConfigPath === undefined) {
-              delete process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH;
-            } else {
-              process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH =
-                previousConfigPath;
+      const server = yield* viteConfigPathSemaphore.withPermit(
+        Effect.tryPromise({
+          try: async () => {
+            const vite = await loadVite(worker.rootDir);
+            const previousConfigPath =
+              process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH;
+            process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH =
+              worker.wranglerConfigPath;
+            try {
+              const server = await vite.createServer({
+                root: worker.rootDir,
+                clearScreen: false,
+                server: {
+                  host: "127.0.0.1",
+                  port: 0,
+                },
+              });
+              await server.listen();
+              server.printUrls();
+              return server;
+            } finally {
+              if (previousConfigPath === undefined) {
+                delete process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH;
+              } else {
+                process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH =
+                  previousConfigPath;
+              }
             }
-          }
-        },
-        catch: (cause) =>
-          new Bundle.BundleError({
-            message: `Failed to start Vite dev server for ${worker.name}`,
-            cause,
-          }),
-      });
+          },
+          catch: (cause) =>
+            new Bundle.BundleError({
+              message: `Failed to start Vite dev server for ${worker.name}`,
+              cause,
+            }),
+        }),
+      );
       const address =
         server.resolvedUrls?.local?.[0]?.replace(/\/$/, "") ??
         `http://127.0.0.1:${server.config.server.port}`;

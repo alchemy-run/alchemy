@@ -205,7 +205,19 @@ test(
           { type: "r2_bucket", name: "BUCKET", bucketName: "bucket" },
           { type: "queue", name: "QUEUE", queueName: "queue" },
           { type: "service", name: "API", service: "api-worker" },
+          { type: "hyperdrive", name: "HYPERDRIVE", id: "hyperdrive-id" },
         ] as any,
+        hyperdrives: {
+          "hyperdrive-id": {
+            scheme: "postgres",
+            host: "localhost",
+            port: 5432,
+            user: "app",
+            password: "secret",
+            database: "app",
+            sslmode: "prefer",
+          },
+        },
       }),
     ).toMatchObject({
       name: "app",
@@ -246,6 +258,14 @@ test(
           binding: "API",
           service: "api-worker",
           remote: true,
+        },
+      ],
+      hyperdrive: [
+        {
+          binding: "HYPERDRIVE",
+          id: "hyperdrive-id",
+          localConnectionString:
+            "postgres://app:secret@localhost:5432/app?sslmode=prefer",
         },
       ],
     });

@@ -17,6 +17,7 @@ export const workerBindingsToWranglerConfig = (input: {
   name: string;
   compatibility: { date: string; flags: string[] };
   bindings: WorkerBinding[];
+  hyperdrives?: Record<string, Required<HyperdriveOrigin>>;
 }) => {
   const config: any = {
     name: input.name,
@@ -82,6 +83,17 @@ export const workerBindingsToWranglerConfig = (input: {
         };
         break;
       }
+      case "hyperdrive": {
+        const origin = input.hyperdrives?.[binding.id];
+        (config.hyperdrive ??= []).push({
+          binding: binding.name,
+          id: binding.id,
+          localConnectionString: origin
+            ? hyperdriveOriginToConnectionString(origin)
+            : undefined,
+        });
+        break;
+      }
       case "durable_object_namespace": {
         config.durable_objects ??= {};
         (config.durable_objects.bindings ??= []).push({
@@ -95,6 +107,21 @@ export const workerBindingsToWranglerConfig = (input: {
   }
 
   return config;
+};
+
+const hyperdriveOriginToConnectionString = (
+  origin: Required<HyperdriveOrigin>,
+) => {
+  const url = new URL(`${origin.scheme}://localhost`);
+  url.username = origin.user;
+  url.password = origin.password;
+  url.hostname = origin.host;
+  url.port = String(origin.port);
+  url.pathname = `/${origin.database}`;
+  if (origin.sslmode) {
+    url.searchParams.set("sslmode", origin.sslmode);
+  }
+  return url.toString();
 };
 
 export const LocalWorkerProvider = () =>
@@ -163,6 +190,7 @@ export const LocalWorkerProvider = () =>
             name,
             compatibility,
             bindings: workerBindings,
+            hyperdrives,
           });
           const configHash = JSON.stringify({ rootDir, wranglerConfig });
           const configPath = path.join(
