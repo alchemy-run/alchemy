@@ -1657,7 +1657,7 @@ export const LiveWorkerProvider = () =>
               metadataBindings.push({
                 type: "json",
                 name: key,
-                json: JSON.stringify(value),
+                json: value,
               });
             }
           }
