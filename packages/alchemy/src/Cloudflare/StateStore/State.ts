@@ -1,7 +1,6 @@
 import * as SecretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
-import * as Output from "../../Output.ts";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -9,6 +8,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import crypto from "node:crypto";
+import * as Output from "../../Output.ts";
 
 import * as Config from "effect/Config";
 import { adopt } from "../../AdoptPolicy.ts";
@@ -199,32 +199,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
     }),
   );
 
-export const state = (props?: {
-  /**
-   * The name of the script to use for the state store.
-   * @default "alchemy-state-store"
-   */
-  workerName?: string;
-  /**
-   * Suppress the per-deployment Cloudflare account hash on telemetry
-   * spans. Lets a caller opt out of having their state-store's
-   * accountId pseudonymously counted on the maintainer dashboard
-   * without disabling all telemetry.
-   *
-   * - `true`  — always opt out, regardless of env.
-   * - `false` — always opt in, regardless of env.
-   * - `undefined` (default) — fall back to the `NO_TRACK` env var
-   *   (`true`/`1` → opt out). Default-default is opt-in.
-   *
-   * Independent of the global telemetry kill-switch
-   * (`DO_NOT_TRACK` / `ALCHEMY_TELEMETRY_DISABLED`), which kills the
-   * entire OTLP exporter — `noTrack` here only suppresses the
-   * `alchemy.cloudflare.account_hash` attribute on state-store
-   * spans, leaving the rest of the telemetry intact.
-   * @default undefined
-   */
-  noTrack?: boolean;
-}) =>
+export const state = () =>
   Layer.effect(
     State,
     Effect.gen(function* () {
@@ -236,13 +211,15 @@ export const state = (props?: {
         CREDENTIALS_FILE,
       );
 
-      const scriptName = props?.workerName ?? STATE_STORE_SCRIPT_NAME;
+      const scriptName = STATE_STORE_SCRIPT_NAME;
       yield* Effect.annotateCurrentSpan({
         "alchemy.state_store.script_name": scriptName,
         "alchemy.state_store.profile": profileName,
         "alchemy.state_store.ci": isCI,
       });
-      yield* annotateAccountHash(props?.noTrack);
+      yield* annotateAccountHash(
+        yield* Config.boolean("NO_TRACK").pipe(Config.withDefault(false)),
+      );
 
       // The bootstrap of the Cloudflare State Store is only considered
       // successful once two invariants hold:
