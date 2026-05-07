@@ -1,6 +1,7 @@
 name: Deploy Website
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -81,7 +82,9 @@ jobs:
           # global key is provisioned.
           CLOUDFLARE_API_KEY: ${{ secrets.ADMIN_CLOUDFLARE_API_KEY }}
           CLOUDFLARE_EMAIL: ${{ secrets.ADMIN_CLOUDFLARE_EMAIL }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ env.STAGE == 'prod' && secrets.PROD_CLOUDFLARE_ACCOUNT_ID || secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ env.STAGE == 'prod' &&
+            secrets.PROD_CLOUDFLARE_ACCOUNT_ID ||
+            secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
           PULL_REQUEST: ${{ github.event.number }}
           # On `pull_request` events GitHub Actions' built-in
           # `GITHUB_SHA` is the synthetic merge commit (PR head merged
@@ -94,8 +97,7 @@ jobs:
 
   cleanup:
     runs-on: ubuntu-latest
-    if:
-      ${{ github.event_name == 'pull_request' && github.event.action == 'closed'
+    if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed'
       }}
     permissions:
       contents: read
