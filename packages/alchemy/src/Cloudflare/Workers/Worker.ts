@@ -260,7 +260,26 @@ export interface WorkerProps<
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
-  env?: Record<string, string | Redacted.Redacted<string>>;
+  /**
+   * Environment variables exposed on the Worker's `env` object.
+   *
+   * - `string` values become `plain_text` bindings.
+   * - `Redacted<string>` values become `secret_text` bindings.
+   * - Any other JSON value (`number`, `boolean`, plain object, array, `null`)
+   *   becomes a `json` binding and is delivered to the Worker as the parsed
+   *   JS value rather than a string. See
+   *   https://developers.cloudflare.com/workers/configuration/environment-variables/
+   */
+  env?: Record<
+    string,
+    | string
+    | number
+    | boolean
+    | null
+    | readonly unknown[]
+    | { readonly [key: string]: unknown }
+    | Redacted.Redacted<string>
+  >;
   exports?: string[];
   bindings?: Bindings;
   /**
@@ -1631,18 +1650,24 @@ export const LiveWorkerProvider = () =>
         // Add environment variables as metadata bindings
         if (news.env) {
           for (const [key, value] of Object.entries(news.env)) {
-            if (value == null) continue;
+            if (value === undefined) continue;
             if (Redacted.isRedacted(value)) {
               metadataBindings.push({
                 type: "secret_text",
                 name: key,
                 text: Redacted.value(value),
               });
-            } else {
+            } else if (typeof value === "string") {
               metadataBindings.push({
                 type: "plain_text",
                 name: key,
-                text: typeof value === "string" ? value : String(value),
+                text: value,
+              });
+            } else {
+              metadataBindings.push({
+                type: "json",
+                name: key,
+                json: JSON.stringify(value),
               });
             }
           }

@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { Command, type CommandProps } from "../../Build/Command.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
@@ -135,7 +136,16 @@ export const StaticSite = <
         cwd: props.cwd,
         memo: props.memo,
         outdir: props.outdir,
-        env: props.env,
+        env: props.env
+          ? Object.fromEntries(
+              Object.entries(props.env).flatMap(([k, v]) => {
+                if (v === undefined) return [];
+                if (typeof v === "string" || Redacted.isRedacted(v))
+                  return [[k, v]];
+                return [[k, JSON.stringify(v)]];
+              }),
+            )
+          : undefined,
       })),
     );
 
