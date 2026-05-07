@@ -7,12 +7,16 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { AuthProviders } from "../..//Auth/AuthProvider";
-import { Profile, withProfileOverride } from "../..//Auth/Profile";
-import { Stage } from "../..//Stage";
-import * as State from "../..//State/index";
-import { loadConfigProvider } from "../..//Util/ConfigProvider";
-import { fileLogger } from "../..//Util/FileLogger";
+import { AuthProviders } from "../../Auth/AuthProvider.ts";
+import {
+  getProfile,
+  setProfile,
+  withProfileOverride,
+} from "../../Auth/Profile.ts";
+import { Stage } from "../../Stage.ts";
+import * as State from "../../State/index.ts";
+import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
+import { fileLogger } from "../../Util/FileLogger.ts";
 
 import {
   envFile,
@@ -69,7 +73,6 @@ export const loginCommand = Command.make(
       );
 
       yield* Effect.gen(function* () {
-        const profiles = yield* Profile;
         yield* Effect.catchCause(stackEffect, (cause) =>
           Console.warn(
             `Ignoring error while building stack for login (likely due to missing or broken credentials):\n${Cause.pretty(cause)}`,
@@ -90,13 +93,13 @@ export const loginCommand = Command.make(
           providers,
           (provider) =>
             Effect.gen(function* () {
-              const existing = yield* profiles.getProfile(profile);
+              const existing = yield* getProfile(profile);
               const stored = existing?.[provider.name];
 
               let cfg: { method: string };
               if (configure || stored == null) {
                 cfg = yield* provider.configure(profile, { ci });
-                yield* profiles.setProfile(profile, {
+                yield* setProfile(profile, {
                   ...existing,
                   [provider.name]: cfg,
                 });

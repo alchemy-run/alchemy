@@ -14,7 +14,7 @@ import { ExecStackOptions } from "./deploy.ts";
 const selfPath = fileURLToPath(import.meta.url);
 const isInstalled =
   selfPath.includes("/node_modules/") || selfPath.includes("\\node_modules\\");
-const execEntry = isInstalled ? "alchemy/bin/exec.js" : "alchemy/bin/exec.ts";
+const execEntry = isInstalled ? "alchemy/bin/exec.js" : "alchemy/bin/exec.js";
 
 export const devCommand = Command.make(
   "dev",
