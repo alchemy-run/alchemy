@@ -88,13 +88,20 @@ test.provider("create, update settings, replace script, delete", (stack) =>
     expect(liveUpdated.settings?.batchSize).toEqual(25);
     expect(liveUpdated.settings?.maxRetries).toEqual(7);
 
-    // Script change is a replace — consumerId must change. Cloudflare
-    // allows only one worker consumer per queue, so the engine deletes
-    // the old before creating the new (or vice versa, both are fine
-    // because reconcile observes the live state on each attempt).
+    // Script change is a delete-first replace: Cloudflare's
+    // updateConsumer silently ignores script_name on an existing
+    // consumer, and the platform allows only one Worker consumer
+    // per queue, so the engine must tear the old consumer down
+    // before creating the new one. WorkerA stays yielded across
+    // the deploy so it isn't garbage-collected mid-replace and
+    // race the Worker.delete with Cloudflare's queue↔script sync.
     const replaced = yield* stack.deploy(
       Effect.gen(function* () {
         const queue = yield* Cloudflare.Queue("Q");
+        yield* Cloudflare.Worker("WorkerA", {
+          main,
+          compatibility: { date: "2024-01-01" },
+        });
         const workerB = yield* Cloudflare.Worker("WorkerB", {
           main,
           compatibility: { date: "2024-01-01" },
@@ -113,9 +120,28 @@ test.provider("create, update settings, replace script, delete", (stack) =>
     );
     expect(replaced.consumer.scriptName).toEqual(replaced.workerB.workerName);
 
+    const liveReplaced = yield* queues.getConsumer({
+      accountId,
+      queueId: replaced.queue.queueId,
+      consumerId: replaced.consumer.consumerId,
+    });
+    expect(
+      "script" in liveReplaced ? liveReplaced.script : undefined,
+    ).toEqual(replaced.workerB.workerName);
+
+    // The original consumer must be gone after the replace.
+    const oldExit = yield* Effect.exit(
+      queues.getConsumer({
+        accountId,
+        queueId: replaced.queue.queueId,
+        consumerId: initial.consumer.consumerId,
+      }),
+    );
+    expect(Exit.isFailure(oldExit)).toBe(true);
+
     yield* stack.destroy();
 
-    // Post-destroy: the consumer must be gone on Cloudflare too.
+    // Post-destroy: the new consumer must be gone on Cloudflare too.
     const exit = yield* Effect.exit(
       queues.getConsumer({
         accountId,
@@ -128,10 +154,15 @@ test.provider("create, update settings, replace script, delete", (stack) =>
 );
 
 /**
- * Recovery from out-of-band consumer deletion. The user deletes the
- * consumer via the Cloudflare API directly, then redeploys. The
- * reconciler must observe that the consumer is missing and recreate
- * it instead of failing on a stale `output.consumerId`.
+ * Recovery from out-of-band consumer deletion. After a manual
+ * `deleteConsumer` via the API, the reconciler must observe that
+ * the consumer is missing and recreate it instead of failing on a
+ * stale `output.consumerId` from local state.
+ *
+ * The redeploy bumps `settings` so the diff returns `update` and
+ * the engine actually invokes reconcile (a no-prop redeploy is a
+ * `noop` and skips drift detection by design — drift correction
+ * only happens when something the user-controlled changes).
  */
 test.provider("recreates consumer after out-of-band delete", (stack) =>
   Effect.gen(function* () {
@@ -149,6 +180,7 @@ test.provider("recreates consumer after out-of-band delete", (stack) =>
         const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
           queueId: queue.queueId,
           scriptName: worker.workerName,
+          settings: { batchSize: 5 },
         });
         return { queue, worker, consumer };
       }),
@@ -171,6 +203,7 @@ test.provider("recreates consumer after out-of-band delete", (stack) =>
         const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
           queueId: queue.queueId,
           scriptName: worker.workerName,
+          settings: { batchSize: 11 },
         });
         return { queue, worker, consumer };
       }),

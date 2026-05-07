@@ -1,12 +1,38 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+/**
+ * Cloudflare returns this code when the target worker exists but its
+ * deployed script doesn't export a `queue` handler. The reconciler
+ * almost always hits this transiently when a sibling Worker
+ * resource's pre-create stub is live (no queue handler) and the real
+ * reconcile hasn't replaced it yet — so we retry with backoff. If
+ * the user genuinely forgot to export a queue handler we eventually
+ * surface the failure after `recurs` is exhausted.
+ */
+const QUEUE_HANDLER_MISSING_CODE = 11001;
+
+const isQueueHandlerMissing = (e: unknown): boolean =>
+  typeof e === "object" &&
+  e !== null &&
+  "_tag" in e &&
+  (e as { _tag: unknown })._tag === "UnknownCloudflareError" &&
+  "code" in e &&
+  (e as { code?: unknown }).code === QUEUE_HANDLER_MISSING_CODE;
+
+// ~60s budget — Worker reconcile uploads typically land in 2–10s,
+// but a fresh container/asset deploy can stretch that.
+const queueHandlerReadinessSchedule = Schedule.spaced("2 seconds").pipe(
+  Schedule.both(Schedule.recurs(30)),
+);
 
 export type QueueConsumerProps = {
   /**
@@ -150,18 +176,29 @@ export const QueueConsumerProvider = () =>
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" } as const;
           }
-          // Queue change requires replacement
+          // Queue change requires replacement — consumerId is bound
+          // to a queue and the API has no "move consumer" verb.
           if (output?.queueId && news.queueId !== output.queueId) {
-            return { action: "replace" } as const;
+            return { action: "replace", deleteFirst: true } as const;
           }
-          // Script change requires replacement
-          if (output?.scriptName && news.scriptName !== output.scriptName) {
-            return { action: "replace" } as const;
-          }
-          // Settings change is an update
+          // Settings / DLQ / script drift is an update. We DON'T
+          // escalate scriptName changes to `replace` because the
+          // engine resolves cross-resource Output<string> refs (a
+          // sibling Worker's `workerName`) lazily — when the upstream
+          // Worker is created in the same plan, `news` is partially
+          // unresolved at diff time and `isResolved(news)` short-
+          // circuits up top. Falling through to "update" lets the
+          // engine call reconcile with fully-resolved `news`, where
+          // we detect script drift and rebuild the consumer in
+          // place (Cloudflare's PUT silently ignores `script_name`
+          // changes, so reconcile does delete-then-create).
           if (
             JSON.stringify(olds.settings ?? {}) !==
-            JSON.stringify(news.settings ?? {})
+              JSON.stringify(news.settings ?? {}) ||
+            (olds.deadLetterQueue ?? undefined) !==
+              (news.deadLetterQueue ?? undefined) ||
+            (output?.scriptName !== undefined &&
+              news.scriptName !== output.scriptName)
           ) {
             return { action: "update" } as const;
           }
@@ -173,10 +210,14 @@ export const QueueConsumerProvider = () =>
 
           // Observe — prefer the cached consumerId, then fall back to
           // listConsumers (paginated) to recover from out-of-band
-          // deletes or partial state-persistence failures. The list
-          // scan also surfaces a different-script worker consumer so
-          // we can fail with a useful error before a duplicate create.
+          // deletes or partial state-persistence failures. Track
+          // whether the observation came from the cached id or the
+          // list scan: a different-script worker consumer found via
+          // the list scan is potentially foreign (state was lost,
+          // someone else attached the consumer), and silently
+          // updating it could clobber another team's wiring.
           let observed: ObservedConsumer | undefined;
+          let owned = false;
           if (output?.consumerId) {
             const fetched = yield* getConsumer({
               accountId: acct,
@@ -187,28 +228,73 @@ export const QueueConsumerProvider = () =>
                 Effect.succeed(undefined),
               ),
             );
-            observed = fetched ? toObserved(fetched) : undefined;
+            if (fetched) {
+              observed = toObserved(fetched);
+              owned = observed !== undefined;
+            }
           }
           if (!observed) {
             observed = yield* findWorkerConsumer(acct, queueId);
           }
 
-          // If a worker consumer exists but for a different script,
-          // surface that explicitly. Silent adoption would mean we'd
-          // start managing a consumer the operator created for a
-          // different worker — almost never what they want.
+          // Owned consumer pointing at a different script: rebuild
+          // it in place. Cloudflare's PUT consumer silently ignores
+          // `script_name` changes on existing consumers (the live
+          // record stays pinned to the original worker), and the
+          // platform allows only one Worker consumer per queue, so
+          // the only path to re-point is delete-then-create.
+          if (
+            owned &&
+            observed &&
+            observed.script !== undefined &&
+            observed.script !== news.scriptName
+          ) {
+            yield* deleteConsumer({
+              accountId: acct,
+              queueId,
+              consumerId: observed.consumerId,
+            }).pipe(Effect.catchTag("ConsumerNotFound", () => Effect.void));
+            // Wait for Cloudflare's worker subsystem to drop its
+            // claim on the old script so createConsumer below
+            // doesn't race the queue↔script propagation lag.
+            yield* getConsumer({
+              accountId: acct,
+              queueId,
+              consumerId: observed.consumerId,
+            }).pipe(
+              Effect.flatMap(() => Effect.fail("still-attached" as const)),
+              Effect.catchTag("ConsumerNotFound", () => Effect.void),
+              Effect.retry({
+                while: (e) => e === "still-attached",
+                schedule: Schedule.spaced("1 second").pipe(
+                  Schedule.both(Schedule.recurs(30)),
+                ),
+              }),
+              Effect.ignore,
+            );
+            observed = undefined;
+            owned = false;
+          }
+
+          // Refuse to take over a foreign consumer on the state-loss
+          // path. With `owned=false` we found this via the list scan
+          // and the script mismatch means it belongs to another
+          // resource or was created out-of-band — silent adoption
+          // would clobber that.
           if (
             observed &&
+            !owned &&
             observed.script !== undefined &&
             observed.script !== news.scriptName
           ) {
             return yield* Effect.die(
               `Cloudflare queue "${queueId}" already has a worker ` +
                 `consumer for script "${observed.script}", but this ` +
-                `resource is configured for "${news.scriptName}". Each ` +
-                `queue can have only one worker consumer — delete the ` +
-                `existing one or update scriptName to match before ` +
-                `redeploying.`,
+                `resource is configured for "${news.scriptName}" and ` +
+                `local state for the consumer was missing. Each queue ` +
+                `can have only one worker consumer — delete the ` +
+                `existing one, update scriptName to match, or restore ` +
+                `the consumer's state entry before redeploying.`,
             );
           }
 
@@ -227,6 +313,24 @@ export const QueueConsumerProvider = () =>
               deadLetterQueue: news.deadLetterQueue,
               settings: news.settings,
             }).pipe(
+              // The sibling Worker resource pre-creates a placeholder
+              // script with no `queue` handler; Cloudflare returns
+              // code 11001 until the real reconcile uploads the
+              // handler. Retry until the upload propagates (capped),
+              // then surface a real failure if it never does.
+              Effect.tapError((e) =>
+                isQueueHandlerMissing(e)
+                  ? Effect.logDebug(
+                      `QueueConsumer create: worker ` +
+                        `"${news.scriptName}" has no queue handler ` +
+                        `yet (code 11001), retrying`,
+                    )
+                  : Effect.void,
+              ),
+              Effect.retry({
+                while: isQueueHandlerMissing,
+                schedule: queueHandlerReadinessSchedule,
+              }),
               Effect.catchTag("ConsumerAlreadyExists", (cause) =>
                 Effect.gen(function* () {
                   const match = yield* findWorkerConsumer(acct, queueId);
@@ -264,6 +368,9 @@ export const QueueConsumerProvider = () =>
           // Sync — Cloudflare replaces all mutable fields on
           // updateConsumer, so always issue this so adoption converges
           // and settings drift gets corrected on every reconcile.
+          // updateConsumer hits the same "queue handler missing" race
+          // window as create when the worker is mid-upload, so apply
+          // the same bounded retry.
           yield* updateConsumer({
             accountId: acct,
             queueId,
@@ -272,7 +379,12 @@ export const QueueConsumerProvider = () =>
             type: "worker",
             settings: news.settings,
             deadLetterQueue: news.deadLetterQueue,
-          });
+          }).pipe(
+            Effect.retry({
+              while: isQueueHandlerMissing,
+              schedule: queueHandlerReadinessSchedule,
+            }),
+          );
 
           return {
             consumerId,
@@ -287,6 +399,27 @@ export const QueueConsumerProvider = () =>
             queueId: output.queueId,
             consumerId: output.consumerId,
           }).pipe(Effect.catchTag("ConsumerNotFound", () => Effect.void));
+
+          // Block until Cloudflare's worker subsystem stops claiming
+          // the script as a queue consumer. Without this the
+          // sibling Worker.delete races on `QueueConsumerConflict`
+          // (code 10064) — `deleteConsumer` returns success on the
+          // queue subsystem before the script-side view propagates.
+          yield* getConsumer({
+            accountId: output.accountId,
+            queueId: output.queueId,
+            consumerId: output.consumerId,
+          }).pipe(
+            Effect.flatMap(() => Effect.fail("still-attached" as const)),
+            Effect.catchTag("ConsumerNotFound", () => Effect.void),
+            Effect.retry({
+              while: (e) => e === "still-attached",
+              schedule: Schedule.spaced("1 second").pipe(
+                Schedule.both(Schedule.recurs(30)),
+              ),
+            }),
+            Effect.ignore,
+          );
         }),
         read: Effect.fn(function* ({ output }) {
           if (output?.consumerId) {
