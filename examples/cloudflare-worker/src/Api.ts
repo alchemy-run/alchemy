@@ -1,6 +1,7 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -13,6 +14,12 @@ import NotifyWorkflow from "./NotifyWorkflow.ts";
 import { Queue } from "./Queue.ts";
 import { Repos } from "./Repos.ts";
 import Room from "./Room.ts";
+
+interface QueueMessageBody {
+  id: string;
+  text: string;
+  sentAt: number;
+}
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
@@ -34,9 +41,25 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const loader = yield* Cloudflare.DynamicWorkerLoader("Loader");
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
     const kv = yield* Cloudflare.KVNamespace.bind(KV);
-    const queue = yield* Cloudflare.QueueBinding.bind(Queue);
+    const queueResource = yield* Queue;
+    const queue = yield* Cloudflare.QueueBinding.bind(queueResource);
     const repos = yield* Cloudflare.Artifacts.bind(Repos);
     const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+
+    // Effect-style queue consumer. Each batch is piped through the
+    // handler; success ack()s every message in the batch, failure
+    // retry()s. The persisted JSON at /queue/<id> on R2 lets the
+    // integ test verify the producer→consumer round-trip.
+    yield* Cloudflare.messages<QueueMessageBody>(queueResource).subscribe(
+      (stream) =>
+        Stream.runForEach(stream, (msg) =>
+          bucket
+            .put(`/queue/${msg.body.id}`, JSON.stringify(msg.body), {
+              httpMetadata: { contentType: "application/json" },
+            })
+            .pipe(Effect.asVoid),
+        ),
+    );
 
     return {
       fetch: Effect.gen(function* () {
@@ -324,12 +347,16 @@ export default class Api extends Cloudflare.Worker<Api>()(
             ),
           );
         }
-        // Queue producer smoke test — POST /queue/send?text=...
+        // Queue producer + consumer smoke test.
         //
-        // Exercises Cloudflare.QueueBinding by calling `queue.send(...)`.
-        // The consumer side runs in examples/cloudflare-worker-async (Effect-
-        // based workers currently only expose a `fetch` handler via `Main`,
-        // so `queue()` handler support here is a follow-up).
+        // POST /queue/send       sends a message with a generated id.
+        // GET  /queue/result/:id reads the bucket entry the consumer
+        //                        wrote when it processed that message.
+        //
+        // Producer side: `Cloudflare.QueueBinding`. Consumer side:
+        // `Cloudflare.messages(Queue).subscribe(...)` registered in
+        // the init phase (above), with `QueueEventSourceLive` on the
+        // worker layer.
         // AI Gateway smoke test — POST /ai with { prompt }.
         //
         // Routes a Workers AI inference call through the gateway resource so
@@ -356,11 +383,54 @@ export default class Api extends Cloudflare.Worker<Api>()(
         }
         if (request.url === "/queue/send" && request.method === "POST") {
           const text = yield* request.text;
-          yield* queue.send({ text, sentAt: Date.now() }).pipe(Effect.orDie);
-          return yield* HttpServerResponse.json(
-            { sent: { text } },
-            { status: 202 },
-          );
+          const msg: QueueMessageBody = {
+            id: crypto.randomUUID(),
+            text,
+            sentAt: Date.now(),
+          };
+          yield* queue.send(msg).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ sent: msg }, { status: 202 });
+        }
+        if (request.url.startsWith("/queue/result/")) {
+          const id = request.url.split("/queue/result/")[1];
+          if (!id) {
+            return HttpServerResponse.text("missing id", { status: 400 });
+          }
+          if (request.method === "GET") {
+            return yield* bucket.get(`/queue/${id}`).pipe(
+              Effect.flatMap((object) =>
+                object === null
+                  ? Effect.succeed(
+                      HttpServerResponse.text("not yet", { status: 404 }),
+                    )
+                  : object.text().pipe(
+                      Effect.map((body) =>
+                        HttpServerResponse.text(body, {
+                          headers: { "content-type": "application/json" },
+                        }),
+                      ),
+                    ),
+              ),
+              Effect.catchTag("R2Error", (error) =>
+                Effect.succeed(
+                  HttpServerResponse.text(error.message, { status: 500 }),
+                ),
+              ),
+            );
+          }
+          // DELETE — used by the integ test to clear consumed
+          // entries before stack.destroy(), so R2Bucket delete
+          // doesn't fail with "bucket not empty".
+          if (request.method === "DELETE") {
+            return yield* bucket.delete(`/queue/${id}`).pipe(
+              Effect.map(() => HttpServerResponse.empty({ status: 204 })),
+              Effect.catchTag("R2Error", (error) =>
+                Effect.succeed(
+                  HttpServerResponse.text(error.message, { status: 500 }),
+                ),
+              ),
+            );
+          }
         }
         return HttpServerResponse.text("Not Found", { status: 404 });
       }).pipe(
@@ -379,6 +449,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
         Cloudflare.R2BucketBindingLive,
         Cloudflare.KVNamespaceBindingLive,
         Cloudflare.QueueBindingLive,
+        Cloudflare.QueueEventSourceLive,
         Cloudflare.ArtifactsBindingLive,
         Cloudflare.AiGatewayBindingLive,
       ),

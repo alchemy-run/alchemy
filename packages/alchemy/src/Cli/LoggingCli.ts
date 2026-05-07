@@ -8,7 +8,8 @@ import type { ApplyEvent, ApplyStatus } from "./Event.ts";
 const ESC = "\x1b[";
 const RESET = `${ESC}0m`;
 const useColor = process.stdout.hasColors?.() ?? !!process.stdout.isTTY;
-const c = (code: string, s: string) => (useColor ? `${ESC}${code}m${s}${RESET}` : s);
+const c = (code: string, s: string) =>
+  useColor ? `${ESC}${code}m${s}${RESET}` : s;
 const dim = (s: string) => c("2", s);
 const bold = (s: string) => c("1", s);
 const red = (s: string) => c("31", s);

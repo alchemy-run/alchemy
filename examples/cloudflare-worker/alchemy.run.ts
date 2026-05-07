@@ -23,6 +23,9 @@ export default Alchemy.Stack(
     // a single Container DO namespace appears in multiple bindings on the
     // Sandbox ContainerApplication. See SecondaryApi.ts for details.
     const secondaryApi = yield* SecondaryApi;
+    // The Queue consumer is wired automatically by
+    // `Cloudflare.messages(Queue).subscribe(...)` inside src/Api.ts —
+    // no explicit `Cloudflare.QueueConsumer(...)` is needed here.
 
     return {
       url: api.url.as<string>(),
