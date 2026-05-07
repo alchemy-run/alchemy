@@ -179,29 +179,47 @@ if (canary) {
   }, TIMEOUT);
 }
 
-describe.concurrent("examples", () => {
-  for (const example of examples) {
-    describe(`${example}`, () => {
-      for (const runtime of runtimes) {
-        const cwd = path.join(ROOT, "examples", example);
-        const stage = `smoke-${runtime}-${example}`
-          .replace(/[^a-zA-Z0-9-]/g, "-")
-          .toLowerCase();
-        const cmd = (action: "destroy" | "deploy") =>
-          runtime === "bun"
-            ? ["bun", "alchemy", action, "--stage", stage, "--yes"]
-            : ["pnpm", "exec", "alchemy", action, "--stage", stage, "--yes"];
+// One `test.concurrent` per (example, runtime) so failures point at the
+// specific runtime that broke. Examples run in parallel, but within a
+// single example the runtimes are chained on a per-example promise so bun
+// finishes its destroy → deploy → destroy before pnpm starts in the same
+// directory (otherwise both runs race on shared build outputs like
+// vite's `dist/` and `.alchemy/`).
+for (const example of examples) {
+  const cwd = path.join(ROOT, "examples", example);
+  let prev: Promise<unknown> = Promise.resolve();
+  for (const runtime of runtimes) {
+    const stage = `smoke-${runtime}-${example}`
+      .replace(/[^a-zA-Z0-9-]/g, "-")
+      .toLowerCase();
+    const cmd = (action: "destroy" | "deploy") =>
+      runtime === "bun"
+        ? ["bun", "alchemy", action, "--stage", stage, "--yes"]
+        : ["pnpm", "exec", "alchemy", action, "--stage", stage, "--yes"];
 
-        test(
-          `${example} (${runtime}): destroy → deploy → destroy`,
-          async () => {
-            expect(await run(cmd("destroy"), cwd)).toBe(0);
-            expect(await run(cmd("deploy"), cwd)).toBe(0);
-            expect(await run(cmd("destroy"), cwd)).toBe(0);
-          },
-          TIMEOUT,
-        );
-      }
+    const myPrev = prev;
+    let release!: () => void;
+    prev = new Promise<void>((r) => {
+      release = r;
     });
+
+    test.concurrent(
+      `${example} (${runtime}): destroy → deploy → destroy`,
+      async () => {
+        // Wait for the previous runtime in this example to release the
+        // shared working directory. `catch(() => {})` so a failed earlier
+        // runtime doesn't cascade-fail every later runtime — the failure
+        // is already attributed to the right test.
+        await myPrev.catch(() => {});
+        try {
+          expect(await run(cmd("destroy"), cwd)).toBe(0);
+          expect(await run(cmd("deploy"), cwd)).toBe(0);
+          expect(await run(cmd("destroy"), cwd)).toBe(0);
+        } finally {
+          release();
+        }
+      },
+      TIMEOUT,
+    );
   }
-});
+}

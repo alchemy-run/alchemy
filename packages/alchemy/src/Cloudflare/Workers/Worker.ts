@@ -1238,12 +1238,24 @@ export const LiveWorkerProvider = () =>
             }
 
             const zoneId = yield* inferZoneIdForHostname(hostname, zoneCache);
+            // Same eventual-consistency window as `setWorkerSubdomain`:
+            // PUT /accounts/.../workers/domains right after `putScript`
+            // can return `WorkerNotFound` until Cloudflare's script
+            // registry has propagated. Retry on that specific tag.
             const res = yield* putDomain({
               accountId,
               hostname,
               service: scriptName,
               zoneId,
-            });
+            }).pipe(
+              Effect.retry({
+                while: (error: { _tag?: string }) =>
+                  error?._tag === "WorkerNotFound",
+                schedule: Schedule.exponential(200).pipe(
+                  Schedule.both(Schedule.recurs(15)),
+                ),
+              }),
+            );
             return {
               hostname,
               id: res.id ?? "",
@@ -1884,7 +1896,21 @@ export const LiveWorkerProvider = () =>
           yield* session.note(
             `${desiredSubdomainEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
           );
-          yield* setWorkerSubdomain(name, desiredSubdomainEnabled);
+          // Cloudflare's script registry is eventually consistent — for the
+          // first few hundred ms after `putScript` returns, POST /subdomain
+          // can still get back `WorkerNotFound` (a generic "unknown error"
+          // body). Bigger uploads race harder. Retry the subdomain toggle on
+          // that specific tag with a short exponential backoff; same pattern
+          // we use elsewhere in this provider for DO-namespace propagation.
+          yield* setWorkerSubdomain(name, desiredSubdomainEnabled).pipe(
+            Effect.retry({
+              while: (error: { _tag?: string }) =>
+                error?._tag === "WorkerNotFound",
+              schedule: Schedule.exponential(200).pipe(
+                Schedule.both(Schedule.recurs(15)),
+              ),
+            }),
+          );
         }
         const desiredDomains = normalizeDomains(news.domain);
         const previousDomains = output?.domains ?? [];
