@@ -76,7 +76,10 @@ import { workersHttpHandler } from "./HttpServer.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
 import { makeRpcStub } from "./Rpc.ts";
-import { makeEffectVirtualEntry } from "./WorkerBundle.ts";
+import {
+  makeEffectVirtualEntry,
+  normalizeWorkerMain,
+} from "./WorkerBundle.ts";
 
 const WorkerTypeId = "Cloudflare.Worker";
 type WorkerTypeId = typeof WorkerTypeId;
@@ -321,6 +324,7 @@ export interface WorkerProps<
    */
   observability?: WorkerObservability;
   tags?: string[];
+  /** Worker entrypoint path. File URLs from `import.meta.url` are supported. */
   main: string;
   compatibility?: {
     date?: string;
@@ -1401,7 +1405,7 @@ export const LiveWorkerProvider = () =>
 
       const prepareBundle = (id: string, props: WorkerProps) =>
         Effect.gen(function* () {
-          const main = yield* fs.realPath(props.main);
+          const main = yield* fs.realPath(normalizeWorkerMain(props.main));
           const cwd = yield* findCwdForBundle(main);
           const { compatibilityDate, compatibilityFlags } =
             getCompatibility(props);
@@ -1449,56 +1453,66 @@ export const LiveWorkerProvider = () =>
           getCompatibility(props);
 
         yield* Effect.promise(async () => {
-          const vite = await loadVite(props.vite?.rootDir);
-          const builder = await vite.createBuilder(
-            {
-              root: props.vite?.rootDir,
-              // Declare the ssr environment so Vite 8+ creates it.
-              // The cloudflare-vite-plugin config hook merges its
-              // SSR-specific settings on top of this stub.
-              environments: {
-                ssr: {
-                  build: {
-                    // Prevent the SSR build from wiping the client
-                    // build's output (both share the dist/ directory).
-                    emptyOutDir: false,
+          const previousAlchemyBuild = process.env.ALCHEMY_BUILD;
+          process.env.ALCHEMY_BUILD = "1";
+          try {
+            const vite = await loadVite(props.vite?.rootDir);
+            const builder = await vite.createBuilder(
+              {
+                root: props.vite?.rootDir,
+                // Declare the ssr environment so Vite 8+ creates it.
+                // The cloudflare-vite-plugin config hook merges its
+                // SSR-specific settings on top of this stub.
+                environments: {
+                  ssr: {
+                    build: {
+                      // Prevent the SSR build from wiping the client
+                      // build's output (both share the dist/ directory).
+                      emptyOutDir: false,
+                    },
                   },
                 },
+                builder: {
+                  sharedConfigBuild: true,
+                },
+                plugins: [
+                  cloudflareVite({
+                    compatibilityDate,
+                    compatibilityFlags,
+                  }),
+                  {
+                    name: "output:ssr",
+                    applyToEnvironment(environment) {
+                      return environment.name === "ssr";
+                    },
+                    generateBundle(_outputOptions, bundle) {
+                      serverBundle = bundle;
+                    },
+                  },
+                  {
+                    name: "output:client",
+                    applyToEnvironment(environment) {
+                      return environment.name === "client";
+                    },
+                    generateBundle(outputOptions) {
+                      assetsDirectory = outputOptions.dir;
+                    },
+                  },
+                ],
               },
-              builder: {
-                sharedConfigBuild: true,
-              },
-              plugins: [
-                cloudflareVite({
-                  compatibilityDate,
-                  compatibilityFlags,
-                }),
-                {
-                  name: "output:ssr",
-                  applyToEnvironment(environment) {
-                    return environment.name === "ssr";
-                  },
-                  generateBundle(_outputOptions, bundle) {
-                    serverBundle = bundle;
-                  },
-                },
-                {
-                  name: "output:client",
-                  applyToEnvironment(environment) {
-                    return environment.name === "client";
-                  },
-                  generateBundle(outputOptions) {
-                    assetsDirectory = outputOptions.dir;
-                  },
-                },
-              ],
-            },
-            // This is the `useLegacyBuilder` option. The Vite CLI implementation uses `null` here.
-            // Originally we used `undefined` here, but this caused the static site build to fail.
-            // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
-            null,
-          );
-          await builder.buildApp();
+              // This is the `useLegacyBuilder` option. The Vite CLI implementation uses `null` here.
+              // Originally we used `undefined` here, but this caused the static site build to fail.
+              // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
+              null,
+            );
+            await builder.buildApp();
+          } finally {
+            if (previousAlchemyBuild === undefined) {
+              delete process.env.ALCHEMY_BUILD;
+            } else {
+              process.env.ALCHEMY_BUILD = previousAlchemyBuild;
+            }
+          }
         });
         if (!assetsDirectory && !serverBundle) {
           return yield* Effect.die(
@@ -2386,7 +2400,7 @@ async function loadVite(
   projectRoot: string = process.cwd(),
 ): Promise<ViteModule> {
   try {
-    const require = createRequire(path.join(projectRoot, "package.json"));
+    const require = createRequire(path.resolve(projectRoot, "package.json"));
     const vitePath = require.resolve("vite");
     // On Windows, absolute paths must be file:// URLs for ESM import().
     const viteUrl = pathToFileURL(vitePath);

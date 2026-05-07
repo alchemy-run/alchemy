@@ -102,9 +102,11 @@ export const SidecarHandlers = Layer.effect(
             process.env.CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH =
               worker.wranglerConfigPath;
             try {
+              const plugins = await getCloudflareVitePlugins(vite, worker);
               const server = await vite.createServer({
                 root: worker.rootDir,
                 clearScreen: false,
+                plugins,
                 server: {
                   host: "127.0.0.1",
                   port: 0,
@@ -280,9 +282,54 @@ function bundleOutputToWorkerModules(
 
 type ViteModule = typeof import("vite");
 
+async function getCloudflareVitePlugins(
+  vite: ViteModule,
+  worker: ServeViteOptions,
+): Promise<vite.PluginOption[]> {
+  const resolved = await vite.resolveConfig(
+    { root: worker.rootDir },
+    "serve",
+  );
+  if (
+    resolved.plugins.some((plugin) => plugin.name === "vite-plugin-cloudflare")
+  ) {
+    return [];
+  }
+
+  let plugin: {
+    cloudflare?: (options: {
+      configPath: string;
+      remoteBindings: boolean;
+      viteEnvironment: { name: string };
+    }) => vite.PluginOption[];
+  };
+  try {
+    const packageName = "@cloudflare/vite-plugin";
+    plugin = (await import(packageName)) as typeof plugin;
+  } catch (cause) {
+    throw new Bundle.BundleError({
+      message:
+        "Cloudflare.Vite dev requires @cloudflare/vite-plugin when the project Vite config does not include it.",
+      cause,
+    });
+  }
+
+  if (typeof plugin.cloudflare !== "function") {
+    throw new Bundle.BundleError({
+      message: "Invalid @cloudflare/vite-plugin export: missing cloudflare()",
+    });
+  }
+
+  return plugin.cloudflare({
+    configPath: worker.wranglerConfigPath,
+    remoteBindings: false,
+    viteEnvironment: { name: "ssr" },
+  });
+}
+
 async function loadVite(projectRoot: string): Promise<ViteModule> {
   try {
-    const require = createRequire(path.join(projectRoot, "package.json"));
+    const require = createRequire(path.resolve(projectRoot, "package.json"));
     const vitePath = require.resolve("vite");
     const viteUrl = pathToFileURL(vitePath);
     return await import(/* @vite-ignore */ viteUrl.href);

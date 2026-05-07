@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import nodePath from "node:path";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Provider from "../../Provider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
@@ -188,8 +189,9 @@ export const LocalWorkerProvider = () =>
         }
         const compatibility = getCompatibility(props);
         if (props.vite) {
-          const rootDir =
-            props.vite.rootDir ?? (yield* Effect.sync(() => process.cwd()));
+          const rootDir = nodePath.resolve(
+            props.vite.rootDir ?? (yield* Effect.sync(() => process.cwd())),
+          );
           const wranglerConfig = workerBindingsToWranglerConfig({
             name,
             main: props.main,

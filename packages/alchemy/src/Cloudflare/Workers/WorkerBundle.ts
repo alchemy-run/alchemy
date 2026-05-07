@@ -4,6 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
+import { fileURLToPath } from "node:url";
 import type * as rolldown from "rolldown";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
@@ -41,7 +42,7 @@ export const WorkerBundle = Effect.gen(function* () {
   const makeOptions = Effect.fnUntraced(function* (
     options: WorkerBundleOptions,
   ) {
-    const realMain = yield* fs.realPath(options.main).pipe(
+    const realMain = yield* fs.realPath(normalizeWorkerMain(options.main)).pipe(
       Effect.mapError(
         (cause) =>
           new Bundle.BundleError({
@@ -105,6 +106,9 @@ export const WorkerBundle = Effect.gen(function* () {
     ),
   };
 });
+
+export const normalizeWorkerMain = (main: string) =>
+  main.startsWith("file:") ? fileURLToPath(main) : main;
 
 export const makeEffectVirtualEntry = (
   exports: Record<string, DurableObjectExport | WorkflowExport>,
