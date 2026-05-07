@@ -63,9 +63,10 @@ export type R2BucketProps = {
    */
   locationHint?: R2Bucket.Location;
   /**
-   * Custom domain or domains to attach to the bucket.
+   * Custom domains to attach to the bucket. Pass an empty array (or omit)
+   * to remove all custom domains.
    */
-  domain?: R2BucketCustomDomain | R2BucketCustomDomain[];
+  domains?: R2BucketCustomDomain[];
 };
 
 export type R2Bucket = Resource<
@@ -137,16 +138,14 @@ export type R2Bucket = Resource<
  * @example Single custom domain
  * ```typescript
  * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
- *   domain: {
- *     name: "assets.example.com",
- *   },
+ *   domains: [{ name: "assets.example.com" }],
  * });
  * ```
  *
  * @example Multiple custom domains
  * ```typescript
  * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
- *   domain: [
+ *   domains: [
  *     { name: "assets.example.com" },
  *     { name: "static.example.com" },
  *   ],
@@ -156,10 +155,7 @@ export type R2Bucket = Resource<
  * @example Disable a custom domain without removing it
  * ```typescript
  * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
- *   domain: {
- *     name: "assets.example.com",
- *     enabled: false,
- *   },
+ *   domains: [{ name: "assets.example.com", enabled: false }],
  * });
  * ```
  *
@@ -170,11 +166,13 @@ export type R2Bucket = Resource<
  * });
  *
  * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
- *   domain: {
- *     name: "assets.example.com",
- *     zone,
- *     minTLS: "1.2",
- *   },
+ *   domains: [
+ *     {
+ *       name: "assets.example.com",
+ *       zone,
+ *       minTLS: "1.2",
+ *     },
+ *   ],
  * });
  * ```
  */
@@ -411,7 +409,7 @@ export const R2BucketProvider = () =>
               stables: oldName === name ? ["bucketName"] : undefined,
             } as const;
           }
-          if (!deepEqual(olds.domain, news.domain)) {
+          if (!deepEqual(olds.domains, news.domains)) {
             return { action: "update" } as const;
           }
         }),
@@ -479,7 +477,7 @@ export const R2BucketProvider = () =>
           const domains = yield* reconcileCustomDomains(
             attrs.bucketName,
             attrs.jurisdiction,
-            normalizeDomains(news.domain),
+            news.domains ?? [],
             output?.domains ?? [],
           );
 
@@ -535,11 +533,6 @@ export const R2BucketProvider = () =>
 const r2CustomDomainConsistencySchedule = Schedule.exponential(100).pipe(
   Schedule.both(Schedule.recurs(5)),
 );
-
-const normalizeDomains = (
-  domains: R2BucketProps["domain"],
-): R2BucketCustomDomain[] =>
-  domains === undefined ? [] : Array.isArray(domains) ? domains : [domains];
 
 type CustomDomainResponse = {
   domain: string;
