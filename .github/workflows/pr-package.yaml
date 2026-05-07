@@ -76,21 +76,25 @@ jobs:
           echo "short=$short" >> "$GITHUB_OUTPUT"
           echo "Tags: $json"
 
+      # PR builds expire after 1 week; pushes to main omit the header and
+      # fall back to the worker's defaultTtl (3 weeks).
       - name: Publish alchemy
         env:
           TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
           TAGS: ${{ steps.tags.outputs.tags }}
+          TTL: ${{ github.event_name == 'pull_request' && '1 week' || '' }}
         working-directory: packages/alchemy
         run: |
           set -euo pipefail
           rm -f *.tgz
           bun pm pack --destination .
           tgz=$(ls *.tgz)
-          echo "Publishing $tgz with tags $TAGS"
+          echo "Publishing $tgz with tags $TAGS ttl=${TTL:-default}"
           curl -fsSL --show-error -X PUT \
             "https://${PR_PACKAGE_HOST}/projects/alchemy/packages" \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "X-Tags: ${TAGS}" \
+            ${TTL:+-H "X-TTL: ${TTL}"} \
             -H "Content-Type: application/gzip" \
             --data-binary "@${tgz}"
 
@@ -98,17 +102,19 @@ jobs:
         env:
           TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
           TAGS: ${{ steps.tags.outputs.tags }}
+          TTL: ${{ github.event_name == 'pull_request' && '1 week' || '' }}
         working-directory: packages/better-auth
         run: |
           set -euo pipefail
           rm -f *.tgz
           bun pm pack --destination .
           tgz=$(ls *.tgz)
-          echo "Publishing $tgz with tags $TAGS"
+          echo "Publishing $tgz with tags $TAGS ttl=${TTL:-default}"
           curl -fsSL --show-error -X PUT \
             "https://${PR_PACKAGE_HOST}/projects/@alchemy.run/better-auth/packages" \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "X-Tags: ${TAGS}" \
+            ${TTL:+-H "X-TTL: ${TTL}"} \
             -H "Content-Type: application/gzip" \
             --data-binary "@${tgz}"
 
@@ -116,17 +122,19 @@ jobs:
         env:
           TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
           TAGS: ${{ steps.tags.outputs.tags }}
+          TTL: ${{ github.event_name == 'pull_request' && '1 week' || '' }}
         working-directory: packages/pr-package
         run: |
           set -euo pipefail
           rm -f *.tgz
           bun pm pack --destination .
           tgz=$(ls *.tgz)
-          echo "Publishing $tgz with tags $TAGS"
+          echo "Publishing $tgz with tags $TAGS ttl=${TTL:-default}"
           curl -fsSL --show-error -X PUT \
             "https://${PR_PACKAGE_HOST}/projects/@alchemy.run/pr-package/packages" \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "X-Tags: ${TAGS}" \
+            ${TTL:+-H "X-TTL: ${TTL}"} \
             -H "Content-Type: application/gzip" \
             --data-binary "@${tgz}"
 
@@ -170,47 +178,3 @@ jobs:
           else
             gh api -X POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="$BODY"
           fi
-
-  # ── Cleanup on PR close (merged or not). ──────────────────────────────────
-  # Deletes the branch tag, pr-<number> tag, and short+long sha tags for every
-  # commit in the PR. 404s are ignored (tag may have been TTL'd or never set).
-  cleanup:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Delete tags
-        env:
-          TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          BRANCH: ${{ github.event.pull_request.head.ref }}
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          # Collect every commit sha that appeared in the PR (paginated).
-          shas=$(gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/commits" --jq '.[].sha')
-
-          tags=()
-          while IFS= read -r sha; do
-            [ -z "$sha" ] && continue
-            tags+=("$sha" "${sha:0:7}")
-          done <<< "$shas"
-          tags+=("$BRANCH" "pr-${PR_NUMBER}")
-
-          # Dedupe.
-          unique=$(printf '%s\n' "${tags[@]}" | sort -u)
-
-          # Project names match npm package names; scopes stay literal in the
-          # URL (the API route accepts /projects/@scope/name/...).
-          for project in alchemy "@alchemy.run/better-auth" "@alchemy.run/pr-package"; do
-            while IFS= read -r tag; do
-              [ -z "$tag" ] && continue
-              # URL-encode the tag (branch names can contain `/`).
-              encoded=$(jq -rn --arg t "$tag" '$t|@uri')
-              code=$(curl -sS -o /dev/null -w "%{http_code}" -X DELETE \
-                "https://${PR_PACKAGE_HOST}/projects/${project}/tags/${encoded}" \
-                -H "Authorization: Bearer ${TOKEN}")
-              echo "DELETE ${project}:${tag} → ${code}"
-            done <<< "$unique"
-          done
