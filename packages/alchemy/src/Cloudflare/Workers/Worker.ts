@@ -1795,11 +1795,13 @@ export const LiveWorkerProvider = () =>
           }),
         );
 
-        const metadata = {
+        const compatibility = getCompatibility(news);
+        const metadata: workers.PutScriptRequest["metadata"] = {
           assets: metadataAssets,
           bindings: metadataBindings,
           bodyPart: undefined,
-          ...getCompatibility(news),
+          compatibilityDate: compatibility.date,
+          compatibilityFlags: compatibility.flags,
           containers:
             metadataContainers.length > 0 ? metadataContainers : undefined,
           keepAssets,
