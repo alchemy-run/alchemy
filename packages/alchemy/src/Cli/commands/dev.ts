@@ -32,14 +32,13 @@ export const devCommand = Command.make(
       dev: true,
     });
     const bin = typeof globalThis.Bun !== "undefined" ? "bun" : "node";
+    const main = fileURLToPath(import.meta.resolve(execEntry));
     const child = yield* ChildProcess.make(
       bin,
-      [
-        "run",
-        "--watch",
-        "--no-clear-screen",
-        fileURLToPath(import.meta.resolve(execEntry)),
-      ],
+      {
+        bun: ["run", "--watch", "--no-clear-screen", main],
+        node: ["--watch", main],
+      }[bin],
       {
         stdin: "inherit",
         stdout: "inherit",
