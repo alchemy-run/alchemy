@@ -7,17 +7,17 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { AuthProviders } from "../../Auth/AuthProvider";
-import { withProfileOverride } from "../../Auth/Profile";
+import { AuthProviders } from "../../Auth/AuthProvider.ts";
+import { withProfileOverride } from "../../Auth/Profile.ts";
 import * as CloudflareAccess from "../../Cloudflare/Access.ts";
-import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider";
-import * as CloudflareEnvironment from "../../Cloudflare/CloudflareEnvironment";
-import * as CloudflareCredentials from "../../Cloudflare/Credentials";
+import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
+import * as CloudflareEnvironment from "../../Cloudflare/CloudflareEnvironment.ts";
+import * as CloudflareCredentials from "../../Cloudflare/Credentials.ts";
 import { CloudflareLogs } from "../../Cloudflare/Logs.ts";
 import { STATE_STORE_SCRIPT_NAME } from "../../Cloudflare/StateStore/Api.ts";
-import { bootstrap as bootstrapCloudflare } from "../../Cloudflare/StateStore/State";
-import { loadConfigProvider } from "../../Util/ConfigProvider";
-import { fileLogger } from "../../Util/FileLogger";
+import { bootstrap as bootstrapCloudflare } from "../../Cloudflare/StateStore/State.ts";
+import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
+import { fileLogger } from "../../Util/FileLogger.ts";
 
 import {
   envFile,

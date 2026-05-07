@@ -8,6 +8,7 @@ import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../../Auth/Credentials.ts";
 import { ProfileLive } from "../../Auth/Profile.ts";
 import * as RpcServer from "../../Sidecar/RpcServer.ts";
+import * as RpcServices from "../../Sidecar/RpcServices.ts";
 import {
   httpServer,
   PlatformServices,
@@ -50,7 +51,7 @@ const runtimeServices = SidecarHandlers.pipe(
 );
 
 const services = Layer.provideMerge(
-  Layer.provideMerge(runtimeServices, RpcServer.layerServices(import.meta.url)),
+  Layer.provideMerge(runtimeServices, RpcServices.layer(import.meta.url)),
   PlatformServices,
 );
 

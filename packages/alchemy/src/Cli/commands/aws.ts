@@ -14,12 +14,12 @@ import type { HttpClient } from "effect/unstable/http/HttpClient";
 import {
   bootstrap as bootstrapAws,
   destroyBootstrap as destroyBootstrapAws,
-} from "../../AWS/Bootstrap";
-import * as AWSCredentials from "../../AWS/Credentials";
-import * as AWSEnvironment from "../../AWS/Environment";
-import * as AWSRegion from "../../AWS/Region";
-import { loadConfigProvider } from "../../Util/ConfigProvider";
-import { fileLogger } from "../../Util/FileLogger";
+} from "../../AWS/Bootstrap.ts";
+import * as AWSCredentials from "../../AWS/Credentials.ts";
+import * as AWSEnvironment from "../../AWS/Environment.ts";
+import * as AWSRegion from "../../AWS/Region.ts";
+import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
+import { fileLogger } from "../../Util/FileLogger.ts";
 
 import { envFile, instrumentCommand } from "./_shared.ts";
 

@@ -329,6 +329,7 @@
     "@types/picomatch": "^4.0.0",
     "@types/proper-lockfile": "^4.1.4",
     "@types/react": "^19.2.2",
+    "@types/ws": "^8.18.1",
     "better-auth": "catalog:",
     "effect": "catalog:",
     "react-devtools-core": "^7.0.1",
@@ -336,7 +337,8 @@
     "tsconfig-paths": "^4.2.0",
     "tsdown": "^0.15.4",
     "tsx": "^4.20.6",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "ws": "catalog:"
   },
   "peerDependencies": {
     "@effect/platform-bun": "catalog:",
@@ -345,7 +347,8 @@
     "drizzle-kit": ">=1.0.0-rc.1",
     "drizzle-orm": ">=1.0.0-rc.1",
     "effect": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "ws": "catalog:"
   },
   "peerDependenciesMeta": {
     "@effect/platform-node": {
@@ -364,6 +367,9 @@
       "optional": true
     },
     "vite": {
+      "optional": true
+    },
+    "ws": {
       "optional": true
     }
   }
