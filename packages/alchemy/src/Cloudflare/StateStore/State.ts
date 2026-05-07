@@ -778,7 +778,11 @@ const checkStateStoreVersion = (url: string) =>
       "alchemy.state_store.observed_version": result?.version ?? -1,
       "alchemy.state_store.version_match": matches,
     });
-    return { matches, expected: STATE_STORE_VERSION, observed: result?.version };
+    return {
+      matches,
+      expected: STATE_STORE_VERSION,
+      observed: result?.version,
+    };
   }).pipe(
     Effect.withSpan("state_store.check_version", {
       attributes: { "alchemy.state_store.op": "check_version" },

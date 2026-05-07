@@ -1091,11 +1091,18 @@ export const LiveWorkerProvider = () =>
           accountId,
         }).pipe(Effect.map((result) => result.subdomain));
 
+      // Toggle the workers.dev subdomain via `POST /subdomain` with
+      // `enabled: true | false`. Mirrors the upstream Alchemy
+      // implementation in `.vendor/alchemy/.../worker-subdomain.ts`.
+      // When enabling we also set `previewsEnabled: true` so the
+      // script is reachable both at its stable workers.dev URL and at
+      // version-preview URLs; on disable we send just `enabled: false`.
       const setWorkerSubdomain = (name: string, enabled: boolean) =>
         createScriptSubdomain({
           accountId,
           scriptName: name,
           enabled,
+          previewsEnabled: enabled ? true : undefined,
         });
 
       const createWorkerName = (id: string, name: string | undefined) =>
