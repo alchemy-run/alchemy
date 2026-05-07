@@ -33,9 +33,7 @@ test.provider("creates, updates, and deletes a bucket custom domain", (stack) =>
     const bucket = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2Bucket("DomainBucket", {
-          domain: {
-            name: domain!,
-          },
+          domains: [{ name: domain! }],
         });
       }),
     );
@@ -55,10 +53,7 @@ test.provider("creates, updates, and deletes a bucket custom domain", (stack) =>
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
         return yield* Cloudflare.R2Bucket("DomainBucket", {
-          domain: {
-            name: domain!,
-            enabled: false,
-          },
+          domains: [{ name: domain!, enabled: false }],
         });
       }),
     );
@@ -96,7 +91,7 @@ test.provider(
       const bucket = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.R2Bucket("MultiDomainBucket", {
-            domain: [{ name: domain! }, { name: domain2! }],
+            domains: [{ name: domain! }, { name: domain2! }],
           });
         }),
       );
@@ -119,7 +114,7 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.R2Bucket("MultiDomainBucket", {
-            domain: [{ name: domain!, enabled: false }, { name: domain2! }],
+            domains: [{ name: domain!, enabled: false }, { name: domain2! }],
           });
         }),
       );
@@ -133,7 +128,7 @@ test.provider(
       const removed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.R2Bucket("MultiDomainBucket", {
-            domain: [{ name: domain2! }],
+            domains: [{ name: domain2! }],
           });
         }),
       );
