@@ -6,6 +6,7 @@ import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { fileURLToPath } from "node:url";
 import type * as rolldown from "rolldown";
+import Sonda from "sonda/rolldown";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
@@ -14,6 +15,7 @@ import {
   isDurableObjectExport,
   type DurableObjectExport,
 } from "./DurableObjectNamespace.ts";
+import type { WorkerProps } from "./Worker.ts";
 import { isWorkflowExport, type WorkflowExport } from "./Workflow.ts";
 
 export interface WorkerBundleOptions {
@@ -32,6 +34,7 @@ export interface WorkerBundleOptions {
         exports: Record<string, DurableObjectExport | WorkflowExport>;
       };
   stack: { name: string; stage: string };
+  userOptions: WorkerProps["build"] | undefined;
 }
 
 export const WorkerBundle = Effect.gen(function* () {
@@ -65,6 +68,7 @@ export const WorkerBundle = Effect.gen(function* () {
               makeEffectVirtualEntry(options.entry.exports, options.stack),
             )
           : undefined,
+        ...(options.userOptions?.metafile ? [Sonda({ open: false })] : []),
       ],
       checks: {
         // Suppress unresolved import warnings for unrelated AWS packages
@@ -78,7 +82,10 @@ export const WorkerBundle = Effect.gen(function* () {
       keepNames: true,
       dir: `.alchemy/bundles/${options.id}`,
     };
-    return { inputOptions, outputOptions };
+    const extraOptions: Bundle.BundleExtraOptions = {
+      pure: options.userOptions?.pure,
+    };
+    return { inputOptions, outputOptions, extraOptions };
   });
 
   const sanitizeMain = (main: string) =>
@@ -103,7 +110,11 @@ export const WorkerBundle = Effect.gen(function* () {
     build: flow(
       makeOptions,
       Effect.flatMap((resolved) =>
-        Bundle.build(resolved.inputOptions, resolved.outputOptions),
+        Bundle.build(
+          resolved.inputOptions,
+          resolved.outputOptions,
+          resolved.extraOptions,
+        ),
       ),
       Artifacts.cached("build"),
     ),
@@ -111,7 +122,11 @@ export const WorkerBundle = Effect.gen(function* () {
       makeOptions,
       Stream.fromEffect,
       Stream.flatMap((resolved) =>
-        Bundle.watch(resolved.inputOptions, resolved.outputOptions),
+        Bundle.watch(
+          resolved.inputOptions,
+          resolved.outputOptions,
+          resolved.extraOptions,
+        ),
       ),
     ),
   };

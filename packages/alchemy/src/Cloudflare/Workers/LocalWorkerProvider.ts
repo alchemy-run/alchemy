@@ -88,6 +88,7 @@ export const LocalWorkerProvider = () =>
               sql: true,
             }),
           ),
+          userOptions: props.build,
         });
         return {
           workerId: name,
