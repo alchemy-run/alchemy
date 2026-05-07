@@ -9,6 +9,7 @@ import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import packageJson from "../../package.json" with { type: "json" };
 
+import { checkLatestVersion } from "./checkVersion.ts";
 import { handleCancellation } from "./commands/_shared.ts";
 import { bootstrapCommand } from "./commands/bootstrap.ts";
 import {
@@ -52,7 +53,15 @@ const services = Layer.mergeAll(
   inkCLI(),
 );
 
-export const main = cli.pipe(
+const program = Effect.gen(function* () {
+  // Best-effort, non-blocking check for a newer published version. If the
+  // CLI command finishes before the registry responds, the fiber is
+  // interrupted on scope close — that's intentional.
+  yield* checkLatestVersion.pipe(Effect.forkScoped);
+  return yield* cli;
+});
+
+export const main = program.pipe(
   // $USER and $STAGE are set by the environment
   Effect.provide(services),
   Effect.scoped,
