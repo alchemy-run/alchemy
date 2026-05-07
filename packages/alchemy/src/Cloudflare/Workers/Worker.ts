@@ -3,7 +3,6 @@ import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
-import type * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -12,12 +11,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Queue from "effect/Queue";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
-import * as Socket from "effect/unstable/socket/Socket";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -44,7 +40,6 @@ import {
   type PlatformProps,
   type Rpc,
 } from "../../Platform.ts";
-import type { LogLine } from "../../Provider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import * as Serverless from "../../Serverless/index.ts";
@@ -1067,9 +1062,7 @@ export const LiveWorkerProvider = () =>
       const stack = yield* Stack;
 
       const createScriptSubdomain = yield* workers.createScriptSubdomain;
-      const createScriptTail = yield* workers.createScriptTail;
       const deleteScript = yield* workers.deleteScript;
-      const deleteScriptTail = yield* workers.deleteScriptTail;
       const getScriptSubdomain = yield* workers.getScriptSubdomain;
       const getScriptSettings = yield* workers.getScriptScriptAndVersionSetting;
       const getSubdomain = yield* workers.getSubdomain;
@@ -2328,80 +2321,11 @@ export const LiveWorkerProvider = () =>
             scriptName: output.workerName,
           }).pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
         }),
-        tail: ({ output }) => {
-          const runTailSession = Effect.gen(function* () {
-            const { id: tailId, url } = yield* createScriptTail({
-              scriptName: output.workerName,
-              accountId: output.accountId,
-              body: { filters: [] },
-            });
-
-            const socket = yield* Socket.makeWebSocket(url, {
-              protocols: ["trace-v1"],
-            });
-
-            const queue = yield* Queue.make<LogLine, Cause.Done>();
-
-            yield* socket
-              .runRaw((raw) => {
-                const text =
-                  typeof raw === "string" ? raw : new TextDecoder().decode(raw);
-                const data: TailEventMessage = JSON.parse(text);
-                const eventTs = new Date(data.eventTimestamp ?? Date.now());
-
-                if (data.event && "request" in data.event) {
-                  const reqEvent = data.event;
-                  const pathname = (() => {
-                    try {
-                      return new URL(reqEvent.request.url).pathname;
-                    } catch {
-                      return reqEvent.request.url;
-                    }
-                  })();
-                  const status = reqEvent.response?.status ?? 500;
-                  Queue.offerUnsafe(queue, {
-                    timestamp: eventTs,
-                    message: `${reqEvent.request.method} ${pathname} > ${status} (cpu: ${Math.round(data.cpuTime)}ms, wall: ${Math.round(data.wallTime)}ms)`,
-                  });
-                }
-
-                for (const log of data.logs) {
-                  const msg = log.message.join(" ");
-                  Queue.offerUnsafe(queue, {
-                    timestamp: new Date(log.timestamp),
-                    message: log.level === "log" ? msg : `${log.level}: ${msg}`,
-                  });
-                }
-
-                for (const exception of data.exceptions) {
-                  Queue.offerUnsafe(queue, {
-                    timestamp: new Date(exception.timestamp),
-                    message: `${exception.name} ${exception.message}\n${exception.stack}`,
-                  });
-                }
-              })
-              .pipe(
-                Effect.ensuring(
-                  Effect.all([
-                    deleteScriptTail({
-                      scriptName: output.workerName,
-                      id: tailId,
-                      accountId: output.accountId,
-                    }).pipe(Effect.ignore),
-                    Queue.end(queue),
-                  ]),
-                ),
-                Effect.ignore,
-                Effect.forkChild(),
-              );
-
-            return Stream.fromQueue(queue);
-          });
-
-          return Stream.unwrap(runTailSession).pipe(
-            Stream.repeat(Schedule.spaced("1 second")),
-          );
-        },
+        tail: ({ output }) =>
+          telemetry.tailScript({
+            accountId: output.accountId,
+            scriptName: output.workerName,
+          }),
         logs: ({ output, options }) =>
           telemetry.queryLogs({
             accountId: output.accountId,
@@ -2418,33 +2342,6 @@ export const LiveWorkerProvider = () =>
       });
     }),
   );
-
-interface TailEventMessage {
-  eventTimestamp?: number;
-  wallTime: number;
-  cpuTime: number;
-  truncated: boolean;
-  outcome: string;
-  scriptName: string;
-  exceptions: {
-    name: string;
-    message: string;
-    stack: string;
-    timestamp: string;
-  }[];
-  logs: {
-    message: string[];
-    level: string;
-    timestamp: string;
-  }[];
-  event:
-    | {
-        request: { method: string; url: string };
-        response?: { status: number };
-      }
-    | null
-    | undefined;
-}
 
 const contentTypeFromExtension = (extension: string) => {
   switch (extension) {

@@ -680,6 +680,8 @@ export const DEFAULT_SCOPES = [
   "user:read",
   "vectorize:write",
   "workers_kv:write",
+  "workers_observability:read",
+  "workers_observability_telemetry:write",
   "workers_routes:write",
   "workers_scripts:write",
   "workers_tail:read",

@@ -18,17 +18,10 @@ import {
 import * as AWSCredentials from "../../AWS/Credentials";
 import * as AWSEnvironment from "../../AWS/Environment";
 import * as AWSRegion from "../../AWS/Region";
-import { AuthProviders } from "../../Auth/AuthProvider";
-import { withProfileOverride } from "../../Auth/Profile";
-import * as CloudflareAccess from "../../Cloudflare/Access.ts";
-import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider";
-import * as CloudflareEnvironment from "../../Cloudflare/CloudflareEnvironment";
-import * as CloudflareCredentials from "../../Cloudflare/Credentials";
-import { bootstrap as bootstrapCloudflare } from "../../Cloudflare/StateStore/State";
 import { loadConfigProvider } from "../../Util/ConfigProvider";
 import { fileLogger } from "../../Util/FileLogger";
 
-import { envFile, instrumentCommand, profile } from "./_shared.ts";
+import { envFile, instrumentCommand } from "./_shared.ts";
 
 const awsProfile = Flag.string("profile").pipe(
   Flag.withDescription("AWS profile to use for credentials"),
@@ -49,8 +42,8 @@ const bootstrapDestroy = Flag.boolean("destroy").pipe(
   Flag.withDefault(false),
 );
 
-const bootstrapAwsCommand = Command.make(
-  "aws",
+const bootstrapCommand = Command.make(
+  "bootstrap",
   {
     envFile,
     profile: awsProfile,
@@ -58,7 +51,7 @@ const bootstrapAwsCommand = Command.make(
     destroy: bootstrapDestroy,
   },
   instrumentCommand(
-    "bootstrap.aws",
+    "aws.bootstrap",
     (a: { profile: string; region: string | undefined; destroy: boolean }) => ({
       "alchemy.profile": a.profile,
       "alchemy.region": a.region ?? "",
@@ -78,11 +71,6 @@ const bootstrapAwsCommand = Command.make(
           );
         }
 
-        // Build a single AWSEnvironment, then derive Region/Credentials from
-        // it so resource providers downstream see a consistent view. The
-        // credentials Effect captures FileSystem/Path/HttpClient via the
-        // ambient context; AWSEnvironment expects R=never, so we provide it
-        // here.
         const ambient = yield* Effect.context<FileSystem | Path | HttpClient>();
         const environment = AWSEnvironment.makeEnvironment({
           accountId: ssoProfile.sso_account_id,
@@ -134,83 +122,6 @@ const bootstrapAwsCommand = Command.make(
   ),
 );
 
-const cloudflareForce = Flag.boolean("force").pipe(
-  Flag.withDescription(
-    "Force a full redeploy even if the state-store worker already exists. " +
-      "Without this flag, an existing worker is adopted and only its credentials are refreshed.",
-  ),
-  Flag.withDefault(false),
-);
-
-const cloudflareWorkerName = Flag.string("worker-name").pipe(
-  Flag.withDescription(
-    "Override the default state-store worker name (advanced; only needed for multiple state stores per account).",
-  ),
-  Flag.optional,
-  Flag.map(Option.getOrUndefined),
-);
-
-const bootstrapCloudflareCommand = Command.make(
-  "cloudflare",
-  {
-    envFile,
-    profile,
-    force: cloudflareForce,
-    workerName: cloudflareWorkerName,
-  },
-  instrumentCommand(
-    "bootstrap.cloudflare",
-    (a: {
-      profile: string;
-      force: boolean;
-      workerName: string | undefined;
-    }) => ({
-      "alchemy.profile": a.profile,
-      "alchemy.force": a.force,
-      "alchemy.worker_name": a.workerName ?? "",
-    }),
-  )(
-    Effect.fnUntraced(function* ({ envFile, profile, force, workerName }) {
-      const logger = Logger.layer([fileLogger("bootstrap.txt")], {
-        mergeWithExisting: true,
-      });
-
-      // Wire up the same Cloudflare auth chain that
-      // `Cloudflare.state(...)` uses internally. CloudflareAuth is an
-      // `effectDiscard` layer that registers itself into the
-      // `AuthProviders` registry at build time, and downstream layers
-      // (`fromProfile`, `fromAuthProvider`) plus the deploy stack all
-      // look the registry back up through `getAuthProvider`. We need
-      // the registry to remain visible all the way through, so the
-      // composition uses `provideMerge` (provides + re-exports) rather
-      // than `provide` (provides + hides).
-      const authProviders: AuthProviders["Service"] = {};
-      const authRegistry = Layer.succeed(AuthProviders, authProviders);
-      const authLayer = Layer.provideMerge(CloudflareAuth, authRegistry);
-      const cloudflareLayers = Layer.provideMerge(
-        Layer.mergeAll(
-          CloudflareCredentials.fromAuthProvider(),
-          CloudflareEnvironment.fromProfile(),
-          CloudflareAccess.AccessLive,
-        ),
-        authLayer,
-      );
-
-      const services = Layer.mergeAll(
-        cloudflareLayers,
-        ConfigProvider.layer(
-          withProfileOverride(yield* loadConfigProvider(envFile), profile),
-        ),
-        logger,
-      );
-
-      yield* bootstrapCloudflare({ workerName, force }).pipe(
-        Effect.provide(services),
-      );
-    }),
-  ),
-);
-
-export const bootstrapCommand = Command.make("bootstrap", {}).pipe(
-  Command.withSubcommands([bootstrapAwsCommand, bootstrapCloudflareCommand]),
+export const awsCommand = Command.make("aws", {}).pipe(
+  Command.withSubcommands([bootstrapCommand]),
 );
