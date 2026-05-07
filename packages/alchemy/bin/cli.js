@@ -21,9 +21,9 @@
 //
 // foreground-child forwards stdio + signals and exits with the child's code,
 // so the launcher is transparent to the invoking shell / npm script.
+import { foregroundChild } from "foreground-child";
 import { fileURLToPath } from "node:url";
 import path from "pathe";
-import { foregroundChild } from "foreground-child";
 
 const execpath = (process.env.npm_execpath ?? "").toLowerCase();
 const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
@@ -38,17 +38,17 @@ const binDir = path.dirname(fileURLToPath(import.meta.url));
 const jsEntry = path.join(binDir, "alchemy.js");
 const tsEntry = path.join(binDir, "alchemy.ts");
 
-// Treat any install-tree path as published; only a raw checkout uses .ts.
-const useTs = !(
+// Treat any install-tree path as published.
+const isDev = !(
   binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\")
 );
 
-// .ts only runs under bun. Force bun in dev even if node was the invoker.
-const runtime = useTs || invokedByBun ? "bun" : "node";
+// We no longer force bun in dev when node is the invoker because this prevents us from testing in node.
+const runtime = invokedByBun ? "bun" : "node";
 
 const args = [];
 
-if (runtime === "bun" && useTs) {
+if (runtime === "bun" && isDev) {
   // Pin bun's tsconfig to alchemy's, not whatever happens to be in the
   // invoking workspace's cwd. Bun's default is `$cwd/tsconfig.json`, which
   // means invoking `alchemy` from e.g. `examples/cloudflare-solidstart`
@@ -58,7 +58,8 @@ if (runtime === "bun" && useTs) {
   args.push(`--tsconfig-override=${path.join(binDir, "..", "tsconfig.json")}`);
 }
 
-args.push(useTs ? tsEntry : jsEntry, ...process.argv.slice(2));
+// .ts only runs under bun.
+args.push(runtime === "bun" ? tsEntry : jsEntry, ...process.argv.slice(2));
 
 process.on("uncaughtException", (error) => {
   if (
