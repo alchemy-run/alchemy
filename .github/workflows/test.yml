@@ -15,18 +15,17 @@ on:
         default: "both"
         type: choice
         options: ["both", "bun", "pnpm"]
-      canary:
-        description: "Test against a freshly published pkg.ing canary"
-        required: false
-        default: true
-        type: boolean
 
 permissions:
   contents: read
+  # Required for aws-actions/configure-aws-credentials to mint a session
+  # via OIDC instead of long-lived AWS_ACCESS_KEY_ID secrets.
+  id-token: write
 
 env:
   PKGING_HOST: pkg.ing
   NODE_VERSION: "24"
+  AWS_REGION: us-west-2
 
 concurrency:
   group: test-${{ github.ref }}
@@ -59,22 +58,31 @@ jobs:
 
       - run: bun install
 
+      # OIDC → short-lived AWS session. Exports AWS_ACCESS_KEY_ID,
+      # AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_REGION; the
+      # `output-credentials: true` flag also surfaces AWS_ACCOUNT_ID.
+      # Alchemy's AWS env loader (packages/alchemy/src/AWS/Environment.ts)
+      # picks the env path automatically when AWS_ACCESS_KEY_ID is set.
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TEST_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          output-credentials: true
+
       - name: Smoke
         env:
-          # Forward whichever cloud creds are needed by the chosen examples.
-          # The default test set covers Cloudflare Workers and AWS Lambda.
+          # Cloudflare creds for the cloudflare-* examples.
           CLOUDFLARE_API_KEY: ${{ secrets.ADMIN_CLOUDFLARE_API_KEY }}
           CLOUDFLARE_EMAIL: ${{ secrets.ADMIN_CLOUDFLARE_EMAIL }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          # The smoke test reads the pkg.ing token via Doppler in canary mode;
-          # the PR workflow uses the secret directly, so DOPPLER_TOKEN here
-          # gives Doppler an auth path inside CI.
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          # AWS_* (ACCESS_KEY_ID / SECRET / SESSION_TOKEN / ACCOUNT_ID /
+          # REGION) are already exported by configure-aws-credentials, so
+          # nothing more to plumb through here.
+          # pkg.ing publish token for the canary path. Locally the smoke
+          # test falls back to `doppler secrets get`; in CI we set it
+          # directly so Doppler isn't needed on the runner.
+          PR_PACKAGE_TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
           PKGING_HOST: ${{ env.PKGING_HOST }}
-          SMOKE_CANARY: ${{ inputs.canary == false && '' || '1' }}
-          SMOKE_RUNTIMES: ${{ inputs.runtime == 'both' && '' || inputs.runtime
-            }}
-        run: bun test ./test/smoke.test.ts
+          SMOKE_CANARY: "1"
+          SMOKE_RUNTIMES: ${{ inputs.runtime == 'both' && '' || inputs.runtime }}
+        run: bun test:smoke

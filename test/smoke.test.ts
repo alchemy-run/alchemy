@@ -81,14 +81,25 @@ async function run(cmd: string[], cwd: string): Promise<number> {
 
 if (canary) {
   beforeAll(async () => {
-    const token = (
-      await $`doppler secrets get PR_PACKAGE_TOKEN --plain -p alchemy-v2 -c dev`
-        .quiet()
-        .text()
-    ).trim();
+    // CI passes PR_PACKAGE_TOKEN directly via env (matches pr-package.yaml);
+    // locally we fall back to `doppler` so contributors don't have to export
+    // the secret manually. Either path works.
+    let token = process.env.PR_PACKAGE_TOKEN?.trim() ?? "";
+    if (!token) {
+      try {
+        token = (
+          await $`doppler secrets get PR_PACKAGE_TOKEN --plain -p alchemy-v2 -c dev`
+            .quiet()
+            .text()
+        ).trim();
+      } catch {
+        // doppler not installed / not authed — leave token empty, error below
+      }
+    }
     if (!token) {
       throw new Error(
-        "PR_PACKAGE_TOKEN is empty (doppler -p alchemy-v2 -c dev returned nothing)",
+        "PR_PACKAGE_TOKEN is not set in env and `doppler -p alchemy-v2 -c dev` did not return one. " +
+          "Either export PR_PACKAGE_TOKEN, run `bun download:env`, or invoke via `doppler run`.",
       );
     }
 
