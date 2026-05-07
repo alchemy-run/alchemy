@@ -1,3 +1,6 @@
 [submodule "vendor/alchemy"]
 	path = .vendor/alchemy
 	url = git@github.com:alchemy-run/alchemy.git
+[submodule ".vendor/distilled"]
+	path = .vendor/distilled
+	url = git@github.com:alchemy-run/distilled.git

@@ -12,7 +12,7 @@ import Agent from "./Agent.ts";
 export class SecondaryApi extends Cloudflare.Worker<SecondaryApi>()(
   "SecondaryApi",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
     observability: { enabled: true },
   },
 ) {}

@@ -1,0 +1,80 @@
+name: test
+
+# Smoke-tests `alchemy destroy → deploy → destroy` against each example with
+# both bun and pnpm. SMOKE_CANARY=1 makes the test publish tarballs to pkg.ing
+# under a fresh tag and install them into the examples before running.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      runtime:
+        description: "Runtime to test (bun, pnpm, or both)"
+        required: false
+        default: "both"
+        type: choice
+        options: ["both", "bun", "pnpm"]
+      canary:
+        description: "Test against a freshly published pkg.ing canary"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  PKGING_HOST: pkg.ing
+  NODE_VERSION: "24"
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - run: bun install
+
+      - name: Smoke
+        env:
+          # Forward whichever cloud creds are needed by the chosen examples.
+          # The default test set covers Cloudflare Workers and AWS Lambda.
+          CLOUDFLARE_API_KEY: ${{ secrets.ADMIN_CLOUDFLARE_API_KEY }}
+          CLOUDFLARE_EMAIL: ${{ secrets.ADMIN_CLOUDFLARE_EMAIL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          # The smoke test reads the pkg.ing token via Doppler in canary mode;
+          # the PR workflow uses the secret directly, so DOPPLER_TOKEN here
+          # gives Doppler an auth path inside CI.
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          PKGING_HOST: ${{ env.PKGING_HOST }}
+          SMOKE_CANARY: ${{ inputs.canary == false && '' || '1' }}
+          SMOKE_RUNTIMES: ${{ inputs.runtime == 'both' && '' || inputs.runtime
+            }}
+        run: bun test ./test/smoke.test.ts
