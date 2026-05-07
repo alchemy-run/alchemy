@@ -1,6 +1,7 @@
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -220,10 +221,45 @@ export const R2BucketProvider = () =>
       const patchBucket = yield* r2.patchBucket;
       const deleteBucket = yield* r2.deleteBucket;
       const getBucket = yield* r2.getBucket;
+      const deleteObjects = yield* r2.deleteObjects;
       const listBucketDomainCustoms = yield* r2.listBucketDomainCustoms;
       const createBucketDomainCustom = yield* r2.createBucketDomainCustom;
       const updateBucketDomainCustom = yield* r2.updateBucketDomainCustom;
       const deleteBucketDomainCustom = yield* r2.deleteBucketDomainCustom;
+
+      // Drain every object in the bucket, then bulk-delete in batches of
+      // 1000. Cloudflare's `deleteBucket` rejects non-empty buckets, so
+      // this must run before delete. Streams over `listObjects.items()`
+      // so cursor pagination is implicit. Each batch is independently
+      // idempotent — a crash mid-drain converges on retry. `NoSuchBucket`
+      // short-circuits for idempotent re-deletes.
+      const emptyBucket = (
+        bucketName: string,
+        jurisdiction: R2Bucket.Jurisdiction,
+      ) =>
+        r2.listObjects
+          .items({
+            accountId,
+            bucketName,
+            cfR2Jurisdiction: jurisdiction,
+            perPage: 1000,
+          })
+          .pipe(
+            Stream.filter(
+              (o): o is typeof o & { key: string } =>
+                typeof o.key === "string" && o.key !== "",
+            ),
+            Stream.map((o) => o.key),
+            Stream.runForEachArray((chunk) =>
+              deleteObjects({
+                accountId,
+                bucketName,
+                cfR2Jurisdiction: jurisdiction,
+                body: [...chunk],
+              }),
+            ),
+            Effect.catchTag("NoSuchBucket", () => Effect.void),
+          );
 
       const createBucketName = (id: string, name: string | undefined) =>
         Effect.gen(function* () {
@@ -497,6 +533,7 @@ export const R2BucketProvider = () =>
               Effect.catchIf(isMissingCustomDomainOrBucket, () => Effect.void),
             );
           }
+          yield* emptyBucket(output.bucketName, output.jurisdiction);
           yield* deleteBucket({
             accountId: output.accountId,
             bucketName: output.bucketName,

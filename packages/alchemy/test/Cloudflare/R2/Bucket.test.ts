@@ -152,6 +152,83 @@ test.provider(
     }).pipe(logLevel),
 );
 
+test.provider("destroying a bucket empties its objects first", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const bucket = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2Bucket("BucketWithObjects");
+      }),
+    );
+
+    // Upload two objects via the Cloudflare REST API directly. The
+    // distilled putObject codegen currently treats binary uploads as
+    // multipart/form-data which the SDK runtime doesn't implement, so
+    // this test bypasses the SDK and signs raw fetch with the API token.
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+    if (!apiToken) {
+      return yield* Effect.fail(
+        new Error("CLOUDFLARE_API_TOKEN is required for this test"),
+      );
+    }
+    const putObject = (key: string, body: string) =>
+      Effect.tryPromise(async () => {
+        const res = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucket.bucketName}/objects/${encodeURIComponent(key)}`,
+          {
+            method: "PUT",
+            headers: {
+              authorization: `Bearer ${apiToken}`,
+              "content-type": "text/plain",
+            },
+            body,
+          },
+        );
+        if (!res.ok) {
+          throw new Error(`putObject ${key} failed: ${res.status} ${await res.text()}`);
+        }
+      });
+    yield* putObject("hello.txt", "hello");
+    yield* putObject("nested/world.txt", "world");
+
+    // Sanity: the objects are listable through the new distilled op.
+    // R2 list-after-write can lag briefly on a fresh bucket; retry until
+    // the two keys land or we run out of attempts.
+    const before = yield* r2
+      .listObjects({
+        accountId,
+        bucketName: bucket.bucketName,
+        perPage: 1000,
+      })
+      .pipe(
+        Effect.flatMap((page) => {
+          const keys = (page.result ?? [])
+            .map((o) => o.key)
+            .filter((k): k is string => typeof k === "string");
+          return keys.length === 2
+            ? Effect.succeed(keys)
+            : Effect.fail(new ListLagError());
+        }),
+        Effect.retry({
+          while: (e): e is ListLagError => e instanceof ListLagError,
+          schedule: Schedule.exponential(200).pipe(
+            Schedule.both(Schedule.recurs(8)),
+          ),
+        }),
+      );
+    expect(before.sort()).toEqual(["hello.txt", "nested/world.txt"]);
+
+    // Destroy must succeed even though the bucket is non-empty — the
+    // delete handler drains objects via listObjects + deleteObjects.
+    yield* stack.destroy();
+
+    yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+  }).pipe(logLevel),
+);
+
 const waitForBucketToBeDeleted = Effect.fn(function* (
   bucketName: string,
   accountId: string,
@@ -172,3 +249,5 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
 });
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
+
+class ListLagError extends Data.TaggedError("ListLagError") {}
