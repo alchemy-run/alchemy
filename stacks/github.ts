@@ -1,4 +1,5 @@
 import * as Alchemy from "alchemy";
+import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
 import * as Output from "alchemy/Output";
@@ -12,7 +13,11 @@ const REPO = { owner: "alchemy-run", repository: "alchemy-effect" } as const;
 export default Alchemy.Stack(
   "AlchemyGitHubSecrets",
   {
-    providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()),
+    providers: Layer.mergeAll(
+      AWS.providers(),
+      Cloudflare.providers(),
+      GitHub.providers(),
+    ),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
@@ -29,6 +34,54 @@ export default Alchemy.Stack(
       accountId: prodAccountId,
     });
 
+    // GitHub OIDC trust for AWS — lets `.github/workflows/test.yml` (and any
+    // future workflow) assume an IAM role via `aws-actions/configure-aws-credentials`
+    // with no long-lived AWS_ACCESS_KEY_ID secrets in the repo.
+    const oidc = yield* AWS.IAM.OpenIDConnectProvider("GitHubOidc", {
+      url: "https://token.actions.githubusercontent.com",
+      clientIDList: ["sts.amazonaws.com"],
+      // GitHub's well-known OIDC thumbprint. AWS auto-discovers thumbprints
+      // for github.com these days, but our `iam.updateOpenIDConnectProviderThumbprint`
+      // sync still requires a non-empty list when comparing against the
+      // cloud-observed value.
+      // https://aws.amazon.com/blogs/security/use-iam-roles-to-connect-github-actions-to-actions-in-aws/
+      thumbprintList: ["6938fd4d98bab03faadb97b34396831e3780aea1"],
+    });
+
+    const role = yield* AWS.IAM.Role("GitHubActionsRole", {
+      roleName: "alchemy-github-actions",
+      assumeRolePolicyDocument: {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Principal: {
+              Federated: oidc.openIDConnectProviderArn,
+            },
+            Action: ["sts:AssumeRoleWithWebIdentity"],
+            Condition: {
+              StringEquals: {
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+              },
+              // Restrict to any branch / PR / tag inside this repo. Tighten
+              // further (e.g. `repo:.../environment:prod`) once we wire up
+              // GitHub Environments.
+              StringLike: {
+                "token.actions.githubusercontent.com:sub": `repo:${REPO.owner}/${REPO.repository}:*`,
+              },
+            },
+          },
+        ],
+      },
+      // The smoke suite deploys real Cloudflare workers, AWS Lambdas, S3
+      // buckets, DynamoDB tables, etc., so it needs broad access. Swap for
+      // a custom-managed policy enumerating `lambda:*`, `dynamodb:*`, … if
+      // you want least-privilege CI.
+      managedPolicyArns: ["arn:aws:iam::aws:policy/AdministratorAccess"],
+    });
+
+    const region = yield* AWS.Region;
+
     yield* GitHub.Secrets({
       ...REPO,
       secrets: {
@@ -41,6 +94,20 @@ export default Alchemy.Stack(
       },
     });
 
+    // Role ARN + region are not secret — publish as repo-level Variables
+    // so workflows can reference `vars.AWS_ROLE_ARN` / `vars.AWS_REGION`.
+    yield* GitHub.Variable("aws-role-arn", {
+      ...REPO,
+      name: "AWS_ROLE_ARN",
+      value: role.roleArn,
+    });
+
+    yield* GitHub.Variable("aws-region", {
+      ...REPO,
+      name: "AWS_REGION",
+      value: region,
+    });
+
     return {
       TEST_CLOUDFLARE_API_TOKEN: testApiToken.value.pipe(
         Output.map(Redacted.value),
@@ -51,6 +118,8 @@ export default Alchemy.Stack(
       ),
       PROD_CLOUDFLARE_ACCOUNT_ID: prodAccountId,
       DISCORD_WEBHOOK_URL: discordWebhookUrl,
+      AWS_ROLE_ARN: role.roleArn,
+      AWS_REGION: region,
     };
   }).pipe(Effect.orDie),
 );

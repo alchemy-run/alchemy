@@ -181,10 +181,15 @@ export const OpenIDConnectProviderProvider = () =>
 
           // Sync thumbprints — `updateOpenIDConnectProviderThumbprint`
           // replaces the entire list, so call it whenever the set differs.
-          const desiredThumbprints = news.thumbprintList ?? [];
+          // Skip when the user didn't request a list: AWS auto-manages
+          // thumbprints for well-known providers (e.g. GitHub Actions) and
+          // the API rejects an empty `ThumbprintList`.
+          const desiredThumbprints = news.thumbprintList;
           if (
+            desiredThumbprints !== undefined &&
+            desiredThumbprints.length > 0 &&
             JSON.stringify([...observedThumbprints].sort()) !==
-            JSON.stringify([...desiredThumbprints].sort())
+              JSON.stringify([...desiredThumbprints].sort())
           ) {
             yield* iam.updateOpenIDConnectProviderThumbprint({
               OpenIDConnectProviderArn: providerArn,
