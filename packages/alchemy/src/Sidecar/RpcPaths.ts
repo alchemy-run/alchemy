@@ -4,6 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { fileURLToPath } from "node:url";
 import * as AlchemyContext from "../AlchemyContext.ts";
 
 export class RpcPaths extends Context.Service<
@@ -18,7 +19,7 @@ export const layer = (main: string) =>
       const { dotAlchemy } = yield* AlchemyContext.AlchemyContext;
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
-      const id = Math.abs(Hash.string(main));
+      const id = Math.abs(Hash.string(sanitizeMain(main)));
       const dir = path.resolve(dotAlchemy, "local");
       yield* fs.makeDirectory(dir, { recursive: true });
       return RpcPaths.of({
@@ -27,3 +28,11 @@ export const layer = (main: string) =>
       });
     }),
   );
+
+export const sanitizeMain = (url: string) => {
+  let main = fileURLToPath(url);
+  if (import.meta.url.endsWith(".js")) {
+    main = main.replace(".ts", ".js");
+  }
+  return main;
+};
