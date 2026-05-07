@@ -5,13 +5,46 @@ import type { CRUD, Plan } from "../Plan.ts";
 import { Cli } from "./Cli.ts";
 import type { ApplyEvent, ApplyStatus } from "./Event.ts";
 
-const actionIcon: Record<CRUD["action"], string> = {
-  create: "+",
-  update: "~",
-  replace: "!",
-  delete: "-",
-  noop: "•",
+const ESC = "\x1b[";
+const RESET = `${ESC}0m`;
+const useColor = process.stdout.hasColors?.() ?? !!process.stdout.isTTY;
+const c = (code: string, s: string) => (useColor ? `${ESC}${code}m${s}${RESET}` : s);
+const dim = (s: string) => c("2", s);
+const bold = (s: string) => c("1", s);
+const red = (s: string) => c("31", s);
+const green = (s: string) => c("32", s);
+const yellow = (s: string) => c("33", s);
+const blue = (s: string) => c("34", s);
+const magenta = (s: string) => c("35", s);
+const cyan = (s: string) => c("36", s);
+
+const actionColor: Record<CRUD["action"], (s: string) => string> = {
+  create: green,
+  update: yellow,
+  replace: magenta,
+  delete: red,
+  noop: dim,
 };
+
+const statusColor = (status: ApplyStatus): ((s: string) => string) => {
+  switch (status) {
+    case "created":
+    case "updated":
+    case "replaced":
+      return green;
+    case "deleted":
+      return dim;
+    case "fail":
+      return red;
+    case "attaching":
+    case "post-attach":
+      return cyan;
+    default:
+      return yellow;
+  }
+};
+
+const tag = (id: string) => bold(`[${id}]`);
 
 const isTerminal = (status: ApplyStatus): boolean =>
   status === "created" ||
@@ -25,30 +58,29 @@ const formatPlanLines = (plan: Plan): string[] => {
     ...Object.values(plan.resources),
     ...Object.values(plan.deletions),
   ] as CRUD[];
-  if (items.length === 0) return ["Plan: no changes"];
+  if (items.length === 0) return [bold("Plan:") + " no changes"];
 
   const counts = items.reduce(
     (acc, item) => ((acc[item.action] = (acc[item.action] ?? 0) + 1), acc),
     {} as Record<CRUD["action"], number>,
   );
-  const summary = (
-    ["create", "update", "replace", "delete", "noop"] as const
-  )
+  const summary = (["create", "update", "replace", "delete", "noop"] as const)
     .filter((a) => counts[a])
-    .map((a) => `${counts[a]} to ${a}`)
-    .join(", ");
+    .map((a) => actionColor[a](`${counts[a]} to ${a}`))
+    .join(dim(", "));
 
   const sorted = [...items].sort((a, b) =>
     a.resource.LogicalId.localeCompare(b.resource.LogicalId),
   );
-  const lines = [`Plan: ${summary}`];
+  const lines = [`${bold("Plan:")} ${summary}`];
   for (const item of sorted) {
-    lines.push(
-      `  ${actionIcon[item.action]} ${item.resource.LogicalId} (${item.resource.Type})`,
-    );
+    const action = actionColor[item.action](item.action);
+    lines.push(`${tag(item.resource.LogicalId)} ${action} ${dim(item.resource.Type)}`);
     for (const binding of item.bindings) {
+      if (binding.action === "noop") continue;
+      const bindingAction = actionColor[binding.action](binding.action);
       lines.push(
-        `      ${actionIcon[binding.action]} ${binding.sid}`,
+        `${tag(`${item.resource.LogicalId}/${binding.sid}`)} ${bindingAction} ${dim("binding")}`,
       );
     }
   }
@@ -62,7 +94,7 @@ export const LoggingCli = Layer.succeed(
       Effect.gen(function* () {
         for (const line of formatPlanLines(plan)) yield* Console.log(line);
         yield* Console.log(
-          "\nNon-interactive terminal detected — pass --yes to approve, or unset ALCHEMY_PLAIN to use the interactive UI.",
+          `\n${yellow("Non-interactive terminal detected.")} Pass ${bold("--yes")} to approve, or set ${bold("ALCHEMY_TUI=1")} for the interactive UI.`,
         );
         return false;
       }),
@@ -80,13 +112,16 @@ export const LoggingCli = Layer.succeed(
           emit: (event: ApplyEvent) =>
             Effect.sync(() => {
               if (event.kind === "annotate") {
-                console.log(`  ${event.id}: ${event.message}`);
+                console.log(`${tag(event.id)} ${blue(event.message)}`);
                 return;
               }
-              const suffix = event.message ? ` — ${event.message}` : "";
-              console.log(
-                `  ${event.status} ${event.id} (${event.type})${suffix}`,
-              );
+              const id = event.bindingId
+                ? `${event.id}/${event.bindingId}`
+                : event.id;
+              const status = statusColor(event.status)(event.status);
+              const type = dim(event.type);
+              const msg = event.message ? ` ${dim("—")} ${event.message}` : "";
+              console.log(`${tag(id)} ${status} ${type}${msg}`);
               if (isTerminal(event.status)) {
                 if (event.status === "fail") counts.fail++;
                 else counts.ok++;
@@ -94,7 +129,7 @@ export const LoggingCli = Layer.succeed(
             }),
           done: () =>
             Console.log(
-              `\nDone: ${counts.ok} succeeded${counts.fail ? `, ${counts.fail} failed` : ""}`,
+              `\n${bold("Done:")} ${green(`${counts.ok} succeeded`)}${counts.fail ? dim(", ") + red(`${counts.fail} failed`) : ""}`,
             ),
         };
       }),
