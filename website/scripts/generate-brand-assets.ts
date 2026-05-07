@@ -59,7 +59,7 @@ function appleTouchSvg(): string {
   const innerBody = inner.replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 32 32">
     <rect width="32" height="32" fill="${YANTRA_COLORS.bg}"/>
-    <g transform="translate(4 4)">${innerBody}</g>
+    <g transform="translate(4 4)" fill="none" stroke="${YANTRA_COLORS.stroke}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">${innerBody}</g>
   </svg>`;
 }
 
