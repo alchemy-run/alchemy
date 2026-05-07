@@ -338,7 +338,7 @@
     "tsdown": "^0.15.4",
     "tsx": "^4.20.6",
     "typescript": "catalog:",
-    "ws": "^8.20.0"
+    "ws": "catalog:"
   },
   "peerDependencies": {
     "@effect/platform-bun": "catalog:",
@@ -348,7 +348,7 @@
     "drizzle-orm": ">=1.0.0-rc.1",
     "effect": "catalog:",
     "vite": "catalog:",
-    "ws": "^8.20.0"
+    "ws": "catalog:"
   },
   "peerDependenciesMeta": {
     "@effect/platform-node": {
