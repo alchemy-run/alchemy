@@ -170,10 +170,12 @@ export const SchemaProvider = () =>
         });
 
       /**
-       * Generate a new migration directory if the schema has drifted from
-       * the latest snapshot. Returns the new state regardless.
+       * Run drizzle-kit's diff against the latest stored snapshot and
+       * return whether any SQL statements would be emitted. Used by both
+       * `diff` (to decide whether the resource actually needs an update)
+       * and `regenerate` (to decide whether to write a new migration dir).
        */
-      const regenerate = (props: SchemaProps) =>
+      const detectDrift = (props: SchemaProps) =>
         Effect.gen(function* () {
           const out = resolveOut(props);
           const dialect = props.dialect ?? "postgres";
@@ -203,6 +205,16 @@ export const SchemaProvider = () =>
             catch: (cause) =>
               new Error(`drizzle-kit generateMigration failed: ${cause}`),
           });
+          return { out, cur, prevEntry, sqlStatements };
+        });
+
+      /**
+       * Generate a new migration directory if the schema has drifted from
+       * the latest snapshot. Returns the new state regardless.
+       */
+      const regenerate = (props: SchemaProps) =>
+        Effect.gen(function* () {
+          const { out, cur, sqlStatements } = yield* detectDrift(props);
 
           if (sqlStatements.length > 0) {
             yield* fs.makeDirectory(out, { recursive: true });
@@ -231,8 +243,12 @@ export const SchemaProvider = () =>
         diff: Effect.fn(function* ({ news, output }) {
           if (!isResolved(news)) return undefined;
           if (!output) return undefined;
-          // Force `update` so the provider runs `regenerate` on every deploy.
-          // `regenerate` itself is a no-op when nothing has drifted.
+          // Only flag an update when drizzle-kit would emit new SQL —
+          // otherwise downstream resources (e.g. Neon.Branch) would see
+          // `schema.out` as an unresolved Output during plan and cascade
+          // into spurious updates of their own.
+          const { sqlStatements } = yield* detectDrift(news);
+          if (sqlStatements.length === 0) return undefined;
           return { action: "update" } as const;
         }),
         read: Effect.fn(function* ({ olds, output }) {
