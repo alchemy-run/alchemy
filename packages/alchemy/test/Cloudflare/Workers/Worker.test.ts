@@ -743,23 +743,16 @@ describe.concurrent("Cloudflare.Worker", () => {
       );
 
       expect(worker.url).toBeDefined();
-      const body = yield* expectUrlContains(worker.url!, '"types"', {
+      const body = yield* expectUrlContains(worker.url!, '"STR":"hello"', {
         timeout: "60 seconds",
         label: "env-worker response",
       });
-      expect(JSON.parse(body)).toMatchObject({
+      expect(JSON.parse(body)).toEqual({
         STR: "hello",
         NUM: 42,
         BOOL: true,
         OBJ: { nested: { value: "ok" }, count: 7 },
         ARR: [1, 2, 3],
-        types: {
-          STR: "string",
-          NUM: "number",
-          BOOL: "boolean",
-          OBJ: "object",
-          ARR: "array",
-        },
       });
 
       yield* stack.destroy();

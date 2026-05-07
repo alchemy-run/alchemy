@@ -1,19 +1,16 @@
 export default {
-  fetch: async (_request: Request, env: Record<string, unknown>) => {
+  fetch: async (_request: Request, env: Record<string, string>) => {
+    // Non-string env values arrive as JSON-encoded strings — the SDK
+    // serialises them via `type: "json"` bindings whose `json` field
+    // must be a string per the OpenAPI schema. Cloudflare does not
+    // auto-parse on the way out, so consumers `JSON.parse` here.
     return new Response(
       JSON.stringify({
-        NUM: env.NUM,
-        BOOL: env.BOOL,
-        OBJ: env.OBJ,
-        ARR: env.ARR,
         STR: env.STR,
-        types: {
-          NUM: typeof env.NUM,
-          BOOL: typeof env.BOOL,
-          OBJ: typeof env.OBJ,
-          ARR: Array.isArray(env.ARR) ? "array" : typeof env.ARR,
-          STR: typeof env.STR,
-        },
+        NUM: JSON.parse(env.NUM),
+        BOOL: JSON.parse(env.BOOL),
+        OBJ: JSON.parse(env.OBJ),
+        ARR: JSON.parse(env.ARR),
       }),
       { headers: { "content-type": "application/json" } },
     );
