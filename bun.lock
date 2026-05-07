@@ -298,7 +298,7 @@
     },
     "packages/alchemy": {
       "name": "alchemy",
-      "version": "2.0.0-beta.33",
+      "version": "2.0.0-beta.34",
       "bin": {
         "alchemy": "./bin/cli.js",
       },
@@ -344,8 +344,10 @@
         "react": "^19.2.0",
         "rolldown": "catalog:",
         "sonda": "catalog:",
+        "tsx": "^4.20.6",
         "web-tree-sitter": "catalog:",
         "workerd": "catalog:",
+        "ws": "^8.18.0",
         "yaml": "catalog:",
       },
       "devDependencies": {
@@ -362,6 +364,7 @@
         "@types/picomatch": "^4.0.0",
         "@types/proper-lockfile": "^4.1.4",
         "@types/react": "^19.2.2",
+        "@types/ws": "^8.5.13",
         "better-auth": "catalog:",
         "effect": "catalog:",
         "react-devtools-core": "^7.0.1",
@@ -391,7 +394,7 @@
     },
     "packages/better-auth": {
       "name": "@alchemy.run/better-auth",
-      "version": "2.0.0-beta.33",
+      "version": "2.0.0-beta.34",
       "dependencies": {
         "alchemy": "workspace:*",
         "better-auth": "catalog:",
@@ -400,7 +403,7 @@
     },
     "packages/pr-package": {
       "name": "@alchemy.run/pr-package",
-      "version": "2.0.0-beta.33",
+      "version": "2.0.0-beta.34",
       "dependencies": {
         "alchemy": "workspace:*",
         "effect": "catalog:",
@@ -3941,6 +3944,8 @@
     "@vue/language-core/@vue/compiler-dom": ["@vue/compiler-dom@3.5.33", "", { "dependencies": { "@vue/compiler-core": "3.5.33", "@vue/shared": "3.5.33" } }, "sha512-PXq0yrfCLzzL07rbXO4awtXY1Z06LG2eu6Adg3RJFa/j3Cii217XxxLXG22N330gw7GmALCY0Z8RgXEviwgpjA=="],
 
     "@vue/language-core/@vue/shared": ["@vue/shared@3.5.33", "", {}, "sha512-5vR2QIlmaLG77Ygd4pMP6+SGQ5yox9VhtnbDWTy9DzMzdmeLxZ1QqxrywEZ9sa1AVubfIJyaCG3ytyWU81ufcQ=="],
+
+    "alchemy/@types/node": ["@types/node@25.6.1", "", { "dependencies": { "undici-types": "~7.19.0" } }, "sha512-coJCN8O1q4AGyyqCAUSP06P+SrMTu18BkEj3NVAK07q6QUneD2wzj3CLv9+yP+BMeZQlMvneXqqvDe3w+xcq7g=="],
 
     "ansi-align/string-width": ["string-width@4.2.3", "", { "dependencies": { "emoji-regex": "^8.0.0", "is-fullwidth-code-point": "^3.0.0", "strip-ansi": "^6.0.1" } }, "sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g=="],
 

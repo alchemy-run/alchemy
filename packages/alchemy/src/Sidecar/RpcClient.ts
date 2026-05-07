@@ -70,7 +70,17 @@ const maybeStartRpcServer = Effect.fn(function* (main: string) {
   const lock = yield* Lock.Lock;
   if (!(yield* lock.check)) {
     yield* Effect.logDebug("[RpcClient] Starting RPC server", main);
-    yield* ChildProcess.make("bun", ["run", main], {
+    const command = main.endsWith(".ts")
+      ? "node"
+      : typeof Bun === "undefined"
+        ? process.execPath
+        : "bun";
+    const args = main.endsWith(".ts")
+      ? ["--conditions=worker", "--import", "tsx", main]
+      : typeof Bun === "undefined"
+        ? [...process.execArgv, main]
+        : ["run", main];
+    yield* ChildProcess.make(command, args, {
       stdout: "inherit",
       stderr: "inherit",
       detached: true,

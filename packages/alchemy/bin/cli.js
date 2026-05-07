@@ -27,7 +27,13 @@ import { foregroundChild } from "foreground-child";
 
 const execpath = (process.env.npm_execpath ?? "").toLowerCase();
 const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
-const invokedByBun = execpath.includes("bun") || userAgent.startsWith("bun/");
+const lifecycleScript = (process.env.npm_lifecycle_script ?? "").toLowerCase();
+const runningUnderBun = typeof globalThis.Bun === "object";
+const invokedByBun =
+  runningUnderBun ||
+  execpath.includes("bun") ||
+  userAgent.startsWith("bun/") ||
+  /\bbun(?:\s+--bun)?\s+alchemy\b/.test(lifecycleScript);
 
 // Derive the bin dir from this launcher's own location rather than
 // require.resolve("alchemy/bin/alchemy.js"). The bundled alchemy.js is a

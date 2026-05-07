@@ -15,6 +15,7 @@ import { createWorkerName } from "./WorkerName.ts";
 
 export const workerBindingsToWranglerConfig = (input: {
   name: string;
+  main?: string;
   compatibility: { date: string; flags: string[] };
   bindings: WorkerBinding[];
   hyperdrives?: Record<string, Required<HyperdriveOrigin>>;
@@ -24,6 +25,9 @@ export const workerBindingsToWranglerConfig = (input: {
     compatibility_date: input.compatibility.date,
     compatibility_flags: input.compatibility.flags,
   };
+  if (input.main) {
+    config.main = input.main;
+  }
 
   for (const binding of input.bindings) {
     switch (binding.type) {
@@ -188,6 +192,7 @@ export const LocalWorkerProvider = () =>
             props.vite.rootDir ?? (yield* Effect.sync(() => process.cwd()));
           const wranglerConfig = workerBindingsToWranglerConfig({
             name,
+            main: props.main,
             compatibility,
             bindings: workerBindings,
             hyperdrives,

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Build/Memo.ts";
-import type { InputProps } from "../../Input.ts";
+import type { Input, InputProps } from "../../Input.ts";
 import {
   Worker,
   type WorkerAssetsConfig,
@@ -11,6 +11,11 @@ import {
 export interface ViteProps<
   Bindings extends WorkerBindingProps = {},
 > extends Omit<WorkerProps<Bindings>, "vite" | "main"> {
+  /**
+   * Worker entrypoint used by Vite integrations that require an explicit
+   * Wrangler `main` field during dev (for example TanStack Start).
+   */
+  main?: string;
   /**
    * Root directory passed to Vite's `root` option.
    * Defaults to the current working directory (`process.cwd()`).
@@ -25,6 +30,13 @@ export interface ViteProps<
    */
   memo?: MemoOptions;
 }
+
+type ViteInputProps<Bindings extends WorkerBindingProps = {}> = Omit<
+  InputProps<ViteProps<Bindings>>,
+  "main"
+> & {
+  main?: Input<string>;
+};
 
 /**
  * A Cloudflare Worker deployed from a Vite project.
@@ -113,8 +125,8 @@ export const Vite = <
 >(
   id: string,
   propsEff?:
-    | InputProps<ViteProps<Bindings>>
-    | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
+    | ViteInputProps<Bindings>
+    | Effect.Effect<ViteInputProps<Bindings>, never, Req>,
 ) =>
   Worker<Bindings, WorkerAssetsConfig, Req>(
     id,
@@ -122,7 +134,7 @@ export const Vite = <
       Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
       (props) => ({
         ...props,
-        main: undefined!,
+        main: props?.main ?? undefined!,
         vite: {
           rootDir: props?.rootDir,
           memo: props?.memo,
