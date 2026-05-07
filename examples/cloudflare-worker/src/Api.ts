@@ -389,10 +389,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
             sentAt: Date.now(),
           };
           yield* queue.send(msg).pipe(Effect.orDie);
-          return yield* HttpServerResponse.json(
-            { sent: msg },
-            { status: 202 },
-          );
+          return yield* HttpServerResponse.json({ sent: msg }, { status: 202 });
         }
         if (request.url.startsWith("/queue/result/")) {
           const id = request.url.split("/queue/result/")[1];

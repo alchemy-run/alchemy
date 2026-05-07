@@ -33,7 +33,10 @@ import {
  * `Cloudflare.state(...)` so the command can talk to the user's
  * account out-of-band.
  */
-const cloudflareLayers = (envFileOpt: Option.Option<string>, profileName: string) =>
+const cloudflareLayers = (
+  envFileOpt: Option.Option<string>,
+  profileName: string,
+) =>
   Effect.gen(function* () {
     const authProviders: AuthProviders["Service"] = {};
     const authRegistry = Layer.succeed(AuthProviders, authProviders);
@@ -166,7 +169,8 @@ const stateLogsCommand = Command.make(
       const scriptName = workerName ?? STATE_STORE_SCRIPT_NAME;
 
       yield* Effect.gen(function* () {
-        const { accountId } = yield* CloudflareEnvironment.CloudflareEnvironment;
+        const { accountId } =
+          yield* CloudflareEnvironment.CloudflareEnvironment;
         const telemetry = yield* CloudflareLogs;
 
         const formatLine = (line: { timestamp: Date; message: string }) =>

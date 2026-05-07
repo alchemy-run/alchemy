@@ -37,8 +37,7 @@ test(
   "native queue() handler round-trip",
   Effect.gen(function* () {
     const out = (yield* stack) as unknown;
-    const url =
-      typeof out === "string" ? out : (out as { url: string }).url;
+    const url = typeof out === "string" ? out : (out as { url: string }).url;
     const text = `hello-${Date.now()}`;
 
     const sendResponse = yield* HttpClient.execute(

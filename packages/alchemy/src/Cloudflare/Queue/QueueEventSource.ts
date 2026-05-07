@@ -85,9 +85,7 @@ export const messages = <Body = unknown>(
       stream: Stream.Stream<QueueMessage<Body>>,
     ) => Effect.Effect<void, unknown, Req>,
   ) =>
-    QueueEventSource.use((source) =>
-      source<Body, Req>(queue, props, process),
-    ),
+    QueueEventSource.use((source) => source<Body, Req>(queue, props, process)),
 });
 
 // `Req` is the handler's requirements. The service registers the

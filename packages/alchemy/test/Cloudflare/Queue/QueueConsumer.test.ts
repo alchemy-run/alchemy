@@ -125,9 +125,9 @@ test.provider("create, update settings, replace script, delete", (stack) =>
       queueId: replaced.queue.queueId,
       consumerId: replaced.consumer.consumerId,
     });
-    expect(
-      "script" in liveReplaced ? liveReplaced.script : undefined,
-    ).toEqual(replaced.workerB.workerName);
+    expect("script" in liveReplaced ? liveReplaced.script : undefined).toEqual(
+      replaced.workerB.workerName,
+    );
 
     // The original consumer must be gone after the replace.
     const oldExit = yield* Effect.exit(
@@ -310,83 +310,83 @@ test.provider("adopts existing consumer after local state loss", (stack) =>
  * a clear, actionable error naming both the existing script and the
  * desired one.
  */
-test.provider("fails clearly when queue has consumer for different script", (
-  stack,
-) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "fails clearly when queue has consumer for different script",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    // Phase 1: deploy worker A as the queue's consumer, then wipe just
-    // the QueueConsumer state so the next deploy thinks it's a
-    // greenfield create.
-    const initial = yield* stack.deploy(
-      Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queue("Q");
-        const workerA = yield* Cloudflare.Worker("WorkerA", {
-          main,
-          compatibility: { date: "2024-01-01" },
-        });
-        const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
-          queueId: queue.queueId,
-          scriptName: workerA.workerName,
-        });
-        return { queue, workerA, consumer };
-      }),
-    );
-
-    yield* Effect.gen(function* () {
-      const state = yield* State;
-      yield* state.delete({
-        stack: stack.name,
-        stage: "test",
-        fqn: "Consumer",
-      });
-    }).pipe(Effect.provide(stack.state));
-
-    // Phase 2: redeploy with a different scriptName under the same
-    // logical id. Cloudflare's queue still has worker A as consumer.
-    const exit = yield* Effect.exit(
-      stack.deploy(
+      // Phase 1: deploy worker A as the queue's consumer, then wipe just
+      // the QueueConsumer state so the next deploy thinks it's a
+      // greenfield create.
+      const initial = yield* stack.deploy(
         Effect.gen(function* () {
           const queue = yield* Cloudflare.Queue("Q");
-          const workerB = yield* Cloudflare.Worker("WorkerB", {
+          const workerA = yield* Cloudflare.Worker("WorkerA", {
             main,
             compatibility: { date: "2024-01-01" },
           });
           const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
             queueId: queue.queueId,
-            scriptName: workerB.workerName,
+            scriptName: workerA.workerName,
           });
-          return { queue, workerB, consumer };
+          return { queue, workerA, consumer };
         }),
-      ),
-    );
+      );
 
-    expect(Exit.isFailure(exit)).toBe(true);
-    const message = JSON.stringify(exit);
-    // The error must name both the colliding existing script and the
-    // requested one — that is the difference between "user can fix
-    // this" and "what does this mean".
-    expect(message).toContain(initial.workerA.workerName);
-    expect(message).toContain("only one worker consumer");
-
-    // Cleanup: re-introduce the Consumer entry pointing at workerA so
-    // destroy can remove the cloud consumer.
-    yield* stack.deploy(
-      Effect.gen(function* () {
-        const queue = yield* Cloudflare.Queue("Q");
-        const workerA = yield* Cloudflare.Worker("WorkerA", {
-          main,
-          compatibility: { date: "2024-01-01" },
+      yield* Effect.gen(function* () {
+        const state = yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: "test",
+          fqn: "Consumer",
         });
-        yield* Cloudflare.QueueConsumer("Consumer", {
-          queueId: queue.queueId,
-          scriptName: workerA.workerName,
-        });
-        return queue;
-      }),
-    );
+      }).pipe(Effect.provide(stack.state));
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      // Phase 2: redeploy with a different scriptName under the same
+      // logical id. Cloudflare's queue still has worker A as consumer.
+      const exit = yield* Effect.exit(
+        stack.deploy(
+          Effect.gen(function* () {
+            const queue = yield* Cloudflare.Queue("Q");
+            const workerB = yield* Cloudflare.Worker("WorkerB", {
+              main,
+              compatibility: { date: "2024-01-01" },
+            });
+            const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+              queueId: queue.queueId,
+              scriptName: workerB.workerName,
+            });
+            return { queue, workerB, consumer };
+          }),
+        ),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      const message = JSON.stringify(exit);
+      // The error must name both the colliding existing script and the
+      // requested one — that is the difference between "user can fix
+      // this" and "what does this mean".
+      expect(message).toContain(initial.workerA.workerName);
+      expect(message).toContain("only one worker consumer");
+
+      // Cleanup: re-introduce the Consumer entry pointing at workerA so
+      // destroy can remove the cloud consumer.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const queue = yield* Cloudflare.Queue("Q");
+          const workerA = yield* Cloudflare.Worker("WorkerA", {
+            main,
+            compatibility: { date: "2024-01-01" },
+          });
+          yield* Cloudflare.QueueConsumer("Consumer", {
+            queueId: queue.queueId,
+            scriptName: workerA.workerName,
+          });
+          return queue;
+        }),
+      );
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );
