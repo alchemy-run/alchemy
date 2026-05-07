@@ -893,8 +893,8 @@ export const Worker: Platform<
                 const scope = Scope.makeUnsafe();
                 return eff
                   .pipe(
-                    Scope.provide(scope),
                     Effect.provideContext(services),
+                    Scope.provide(scope),
                     Effect.provide(
                       Layer.succeed(WorkerExecutionContext, context),
                     ),
