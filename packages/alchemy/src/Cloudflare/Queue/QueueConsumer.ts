@@ -1,5 +1,7 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -68,6 +70,11 @@ export type QueueConsumer = Resource<
  * Register a Worker as a consumer of a Queue. The Worker's `queue()`
  * handler will be invoked with batches of messages.
  *
+ * Cloudflare allows at most one Worker consumer per queue (HTTP-pull
+ * consumers can coexist). The reconciler enforces this: if the queue
+ * already has a Worker consumer pointing at a different script, the
+ * deploy fails with a clear error rather than silently adopting it.
+ *
  * @section Registering a Consumer
  * @example Basic consumer
  * ```typescript
@@ -97,6 +104,20 @@ export const QueueConsumer = Resource<QueueConsumer>(
   "Cloudflare.QueueConsumer",
 );
 
+type ObservedConsumer = {
+  consumerId: string;
+  script: string | undefined;
+};
+
+const toObserved = (c: {
+  consumerId?: string | null;
+  script?: string | null;
+  type?: "worker" | "http_pull" | null;
+}): ObservedConsumer | undefined =>
+  c.consumerId && c.type === "worker"
+    ? { consumerId: c.consumerId, script: c.script ?? undefined }
+    : undefined;
+
 export const QueueConsumerProvider = () =>
   Provider.effect(
     QueueConsumer,
@@ -106,7 +127,21 @@ export const QueueConsumerProvider = () =>
       const getConsumer = yield* queues.getConsumer;
       const updateConsumer = yield* queues.updateConsumer;
       const deleteConsumer = yield* queues.deleteConsumer;
-      const listConsumers = yield* queues.listConsumers;
+
+      // Cloudflare allows a single Worker consumer per queue, so the
+      // first match in the paginated stream is the only one. Using
+      // `.items` defeats single-page lookups that would otherwise
+      // miss late-arriving consumers under eventual consistency.
+      const findWorkerConsumer = (
+        acct: string,
+        queueId: string,
+      ): Effect.Effect<ObservedConsumer | undefined, any, any> =>
+        queues.listConsumers.items({ accountId: acct, queueId }).pipe(
+          Stream.map(toObserved),
+          Stream.filter((c): c is ObservedConsumer => c !== undefined),
+          Stream.runHead,
+          Effect.map(Option.getOrUndefined),
+        );
 
       return {
         stables: ["consumerId", "accountId"],
@@ -136,33 +171,52 @@ export const QueueConsumerProvider = () =>
           const queueId =
             output?.queueId ?? (news.queueId as unknown as string);
 
-          // Observe — re-fetch the cached consumer; fall back to a list
-          // scan filtered by script so we recover from out-of-band
-          // deletes or partial state-persistence failures (the create
-          // call may have written the consumer but lost the response).
-          let observed:
-            | { consumerId?: string | null; script?: string | null }
-            | undefined;
+          // Observe — prefer the cached consumerId, then fall back to
+          // listConsumers (paginated) to recover from out-of-band
+          // deletes or partial state-persistence failures. The list
+          // scan also surfaces a different-script worker consumer so
+          // we can fail with a useful error before a duplicate create.
+          let observed: ObservedConsumer | undefined;
           if (output?.consumerId) {
-            observed = yield* getConsumer({
-              accountId: acct,
-              queueId: output.queueId,
-              consumerId: output.consumerId,
-            }).pipe(Effect.catch(() => Effect.succeed(undefined)));
-          }
-          if (!observed) {
-            const existing = yield* listConsumers({
+            const fetched = yield* getConsumer({
               accountId: acct,
               queueId,
-            });
-            observed = existing.result.find(
-              (c) => "script" in c && c.script === news.scriptName,
+              consumerId: output.consumerId,
+            }).pipe(
+              Effect.catchTag("ConsumerNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+            observed = fetched ? toObserved(fetched) : undefined;
+          }
+          if (!observed) {
+            observed = yield* findWorkerConsumer(acct, queueId);
+          }
+
+          // If a worker consumer exists but for a different script,
+          // surface that explicitly. Silent adoption would mean we'd
+          // start managing a consumer the operator created for a
+          // different worker — almost never what they want.
+          if (
+            observed &&
+            observed.script !== undefined &&
+            observed.script !== news.scriptName
+          ) {
+            return yield* Effect.die(
+              `Cloudflare queue "${queueId}" already has a worker ` +
+                `consumer for script "${observed.script}", but this ` +
+                `resource is configured for "${news.scriptName}". Each ` +
+                `queue can have only one worker consumer — delete the ` +
+                `existing one or update scriptName to match before ` +
+                `redeploying.`,
             );
           }
 
-          // Ensure — create if missing. The Cloudflare API rejects a
-          // duplicate consumer (same queue + script), so we tolerate
-          // that race by adopting the existing one via list.
+          // Ensure — create if missing. ConsumerAlreadyExists is the
+          // race signal: another reconcile or peer beat us to it.
+          // Re-run the lookup; the paginated stream tolerates the
+          // single-page eventual-consistency window the previous
+          // implementation missed.
           let consumerId: string;
           if (!observed) {
             const created = yield* createConsumer({
@@ -173,40 +227,52 @@ export const QueueConsumerProvider = () =>
               deadLetterQueue: news.deadLetterQueue,
               settings: news.settings,
             }).pipe(
-              Effect.catch(() =>
+              Effect.catchTag("ConsumerAlreadyExists", (cause) =>
                 Effect.gen(function* () {
-                  const existing = yield* listConsumers({
-                    accountId: acct,
-                    queueId,
-                  });
-                  const match = existing.result.find(
-                    (c) => "script" in c && c.script === news.scriptName,
-                  );
-                  if (match && match.consumerId) {
-                    return match;
+                  const match = yield* findWorkerConsumer(acct, queueId);
+                  if (!match) {
+                    return yield* Effect.die(
+                      `Cloudflare reported a worker consumer already ` +
+                        `exists on queue "${queueId}", but listConsumers ` +
+                        `returned none. Retry the deploy; if this ` +
+                        `persists, the queue is in an inconsistent ` +
+                        `state. Underlying error: ${cause.message}`,
+                    );
                   }
-                  return yield* Effect.die(
-                    `Consumer for script "${news.scriptName}" on queue "${queueId}" already exists but could not be found`,
-                  );
+                  if (
+                    match.script !== undefined &&
+                    match.script !== news.scriptName
+                  ) {
+                    return yield* Effect.die(
+                      `Cloudflare queue "${queueId}" already has a ` +
+                        `worker consumer for script "${match.script}", ` +
+                        `but this resource is configured for ` +
+                        `"${news.scriptName}". Each queue can have only ` +
+                        `one worker consumer — delete the existing one ` +
+                        `or update scriptName to match before redeploying.`,
+                    );
+                  }
+                  return match;
                 }),
               ),
             );
             consumerId = created.consumerId!;
           } else {
-            consumerId = observed.consumerId!;
-            // Sync — update settings and dead-letter target on the
-            // existing consumer. The Cloudflare API replaces all mutable
-            // fields per call, so always issue this so adoption converges.
-            yield* updateConsumer({
-              accountId: acct,
-              queueId,
-              consumerId,
-              scriptName: news.scriptName,
-              type: "worker",
-              settings: news.settings,
-              deadLetterQueue: news.deadLetterQueue,
-            });
+            consumerId = observed.consumerId;
           }
+
+          // Sync — Cloudflare replaces all mutable fields on
+          // updateConsumer, so always issue this so adoption converges
+          // and settings drift gets corrected on every reconcile.
+          yield* updateConsumer({
+            accountId: acct,
+            queueId,
+            consumerId,
+            scriptName: news.scriptName,
+            type: "worker",
+            settings: news.settings,
+            deadLetterQueue: news.deadLetterQueue,
+          });
 
           return {
             consumerId,
@@ -220,26 +286,48 @@ export const QueueConsumerProvider = () =>
             accountId: output.accountId,
             queueId: output.queueId,
             consumerId: output.consumerId,
-          }).pipe(Effect.catch(() => Effect.void));
+          }).pipe(Effect.catchTag("ConsumerNotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ output }) {
           if (output?.consumerId) {
-            return yield* getConsumer({
+            const fetched = yield* getConsumer({
               accountId: output.accountId,
               queueId: output.queueId,
               consumerId: output.consumerId,
             }).pipe(
-              Effect.map((consumer) => ({
-                consumerId: consumer.consumerId!,
+              Effect.catchTag("ConsumerNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+            if (fetched) {
+              return {
+                consumerId: fetched.consumerId!,
                 queueId: output.queueId,
                 scriptName:
-                  ("script" in consumer
-                    ? (consumer.script as string)
+                  ("script" in fetched && typeof fetched.script === "string"
+                    ? fetched.script
                     : output.scriptName) ?? output.scriptName,
                 accountId: output.accountId,
-              })),
-              Effect.catch(() => Effect.succeed(undefined)),
+              };
+            }
+          }
+          // Fallback: a state loss can leave us without a consumerId
+          // even though the consumer is still alive on Cloudflare. The
+          // queue allows only one worker consumer, so finding it via
+          // listConsumers is unambiguous.
+          if (output?.queueId && output?.accountId) {
+            const match = yield* findWorkerConsumer(
+              output.accountId,
+              output.queueId,
             );
+            if (match) {
+              return {
+                consumerId: match.consumerId,
+                queueId: output.queueId,
+                scriptName: match.script ?? output.scriptName,
+                accountId: output.accountId,
+              };
+            }
           }
           return undefined;
         }),
