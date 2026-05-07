@@ -4,6 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
+import { fileURLToPath } from "node:url";
 import type * as rolldown from "rolldown";
 import * as Artifacts from "../../Artifacts.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
@@ -41,15 +42,7 @@ export const WorkerBundle = Effect.gen(function* () {
   const makeOptions = Effect.fnUntraced(function* (
     options: WorkerBundleOptions,
   ) {
-    const realMain = yield* fs.realPath(options.main).pipe(
-      Effect.mapError(
-        (cause) =>
-          new Bundle.BundleError({
-            message: `Failed to find real path for bundle: ${options.main}`,
-            cause,
-          }),
-      ),
-    );
+    const realMain = yield* sanitizeMain(options.main);
     const inputOptions: rolldown.InputOptions = {
       input: realMain,
       cwd: yield* findCwdForBundle(realMain).pipe(
@@ -87,6 +80,24 @@ export const WorkerBundle = Effect.gen(function* () {
     };
     return { inputOptions, outputOptions };
   });
+
+  const sanitizeMain = (main: string) =>
+    Effect.sync(() => {
+      try {
+        return fileURLToPath(main);
+      } catch {
+        return main;
+      }
+    }).pipe(
+      Effect.flatMap((path) => fs.realPath(path)),
+      Effect.mapError(
+        (cause) =>
+          new Bundle.BundleError({
+            message: `Failed to find real path for bundle: ${main}`,
+            cause,
+          }),
+      ),
+    );
 
   return {
     build: flow(
