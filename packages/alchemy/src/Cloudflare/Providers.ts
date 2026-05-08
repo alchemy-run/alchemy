@@ -20,6 +20,7 @@ import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Containers from "./Container/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as D1 from "./D1/index.ts";
+import * as Email from "./Email/index.ts";
 import * as Hyperdrive from "./Hyperdrive/index.ts";
 import * as KV from "./KV/index.ts";
 import * as Queue from "./Queue/index.ts";
@@ -54,6 +55,7 @@ export const providers = () =>
       Containers.Container,
       D1.D1ConnectionPolicy,
       D1.D1Database,
+      Email.SendEmailPolicy,
       Hyperdrive.Hyperdrive,
       Hyperdrive.HyperdriveBindingPolicy,
       KV.KVNamespace,
@@ -86,6 +88,7 @@ export const providers = () =>
         Containers.ContainerProvider(),
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
+        Email.SendEmailPolicyLive,
         Hyperdrive.HyperdriveBindingPolicyLive,
         Hyperdrive.HyperdriveProvider(),
         KV.KVNamespaceBindingPolicyLive,
