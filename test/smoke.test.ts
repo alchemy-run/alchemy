@@ -13,6 +13,7 @@
  *                          package.json files and reinstall on the way out.
  *
  * Env vars:
+ *   SMOKE_RUNTIME    `bun` or `pnpm`                        (default: "bun")
  *   SMOKE_CANARY     "1" to enable canary mode              (default: off)
  *   SMOKE_STAGE      stage prefix, e.g. `pr-123` or `main`  (default: "smoke")
  *   PKGING_HOST      pkg.ing host                           (default: pkg.ing)
@@ -41,7 +42,22 @@ const examples = [
   "cloudflare-worker-async",
   "cloudflare-worker",
 ];
-const RUNTIMES = ["bun", "pnpm"] as const;
+const ALL_RUNTIMES = ["bun", "pnpm"] as const;
+type Runtime = (typeof ALL_RUNTIMES)[number];
+
+// `SMOKE_RUNTIME` is the CI escape hatch — the matrix workflow runs one
+// job per runtime so each can do its own `<runtime> install` and isolate
+// from the other. Unset locally, the test runs both runtimes against
+// each example with `bun` going first so it doesn't race `pnpm` on
+// shared build outputs (vite `dist/`, `.alchemy/`).
+const RUNTIMES: readonly Runtime[] = (() => {
+  const filter = process.env.SMOKE_RUNTIME?.trim();
+  if (!filter) return ALL_RUNTIMES;
+  if (filter !== "bun" && filter !== "pnpm") {
+    throw new Error(`SMOKE_RUNTIME must be "bun" or "pnpm" (got: ${filter})`);
+  }
+  return [filter];
+})();
 
 const PUBLISHED = [
   { dir: "alchemy", name: "alchemy" },
