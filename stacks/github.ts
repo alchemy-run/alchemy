@@ -135,15 +135,29 @@ const token = (
       {
         effect: "allow",
         permissionGroups: [
+          // Worker / runtime data plane
           "Workers Scripts Write",
           "Workers KV Storage Write",
           "Workers R2 Storage Write",
+          "Workers Routes Write",
+          "Workers Tail Read",
+          "Workers Observability Write",
+          // Storage / data services
           "D1 Write",
           "Queues Write",
+          "Hyperdrive Write",
+          "Pipelines Write",
+          "Vectorize Write",
+          // Higher-level Worker features used by examples
+          "AI Gateway Write",
+          "Cloudchamber Write", // Cloudflare Containers
+          "Browser Rendering Write",
+          // Static assets / sites
           "Pages Write",
+          // Misc
           "Account Settings Write",
           "Secrets Store Write",
-          "Workers Tail Read",
+          "Logs Write",
         ],
         resources: {
           [`com.cloudflare.api.account.${props.accountId}`]: "*",

@@ -63,10 +63,11 @@ jobs:
 
       # OIDC → short-lived AWS session. Exports AWS_ACCESS_KEY_ID,
       # AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_REGION; the
-      # `output-credentials: true` flag also surfaces AWS_ACCOUNT_ID.
-      # Alchemy's AWS env loader (packages/alchemy/src/AWS/Environment.ts)
-      # picks the env path automatically when AWS_ACCESS_KEY_ID is set.
-      - uses: aws-actions/configure-aws-credentials@v4
+      # `output-credentials: true` flag also surfaces aws-account-id as a
+      # step output (which we forward as `AWS_ACCOUNT_ID` below — the
+      # action does NOT set it as an env var on its own).
+      - id: aws-creds
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
@@ -74,8 +75,14 @@ jobs:
 
       - name: Smoke
         env:
+          # AWS — `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+          # `AWS_SESSION_TOKEN`, `AWS_REGION` are already exported by
+          # configure-aws-credentials; we only need to forward the account
+          # id, which Alchemy's `loadFromEnv` requires when CI=true.
+          AWS_ACCOUNT_ID: ${{ steps.aws-creds.outputs.aws-account-id }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.TEST_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           PR_PACKAGE_TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
           PKGING_HOST: ${{ env.PKGING_HOST }}
           SMOKE_CANARY: "1"
