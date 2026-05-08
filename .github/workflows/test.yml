@@ -74,16 +74,8 @@ jobs:
 
       - name: Smoke
         env:
-          # Cloudflare creds for the cloudflare-* examples.
-          CLOUDFLARE_API_KEY: ${{ secrets.ADMIN_CLOUDFLARE_API_KEY }}
-          CLOUDFLARE_EMAIL: ${{ secrets.ADMIN_CLOUDFLARE_EMAIL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.TEST_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
-          # AWS_* (ACCESS_KEY_ID / SECRET / SESSION_TOKEN / ACCOUNT_ID /
-          # REGION) are already exported by configure-aws-credentials, so
-          # nothing more to plumb through here.
-          # pkg.ing publish token for the canary path. Locally the smoke
-          # test falls back to `doppler secrets get`; in CI we set it
-          # directly so Doppler isn't needed on the runner.
           PR_PACKAGE_TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
           PKGING_HOST: ${{ env.PKGING_HOST }}
           SMOKE_CANARY: "1"
