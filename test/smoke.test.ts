@@ -85,8 +85,14 @@ async function run(cmd: string[], cwd: string): Promise<number> {
 // otherwise (local: both runtimes) fall back to bun, which writes the
 // shared `node_modules` once for both subsequent runs.
 const PRIMARY_RUNTIME: Runtime = RUNTIMES[0];
+// Canary mode mutates example package.json files at runtime, so the
+// lockfile is intentionally stale during the run — `--no-frozen-lockfile`
+// lets the install resolve the new `catalog:` refs. CI defaults pnpm to
+// frozen-lockfile, which would otherwise fail with ERR_PNPM_OUTDATED_LOCKFILE.
 const installCmd = (): string[] =>
-  PRIMARY_RUNTIME === "bun" ? ["bun", "install"] : ["pnpm", "install"];
+  PRIMARY_RUNTIME === "bun"
+    ? ["bun", "install", "--no-frozen-lockfile"]
+    : ["pnpm", "install", "--no-frozen-lockfile"];
 
 const ROOT_PKG_PATH = path.join(ROOT, "package.json");
 const examplePkgPath = (e: string) =>
