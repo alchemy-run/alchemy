@@ -2099,7 +2099,7 @@ export const LiveWorkerProvider = () =>
             newDomains.length !== oldDomains.length ||
             newDomains.some((d, i) => d !== oldDomains[i]);
           const newCrons = normalizeCrons(news.crons).sort();
-          const oldCrons = (output?.crons ?? []).sort();
+          const oldCrons = [...(output?.crons ?? [])].sort();
           const cronsChanged =
             newCrons.length !== oldCrons.length ||
             newCrons.some((cron, index) => cron !== oldCrons[index]);
