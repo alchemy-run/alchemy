@@ -12,7 +12,12 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { WorkerBundle } from "../Workers/WorkerBundle.ts";
-import { Sidecar, type ServeOptions } from "./Sidecar.ts";
+import {
+  Sidecar,
+  type ServeError,
+  type ServeOptions,
+  type ServeResult,
+} from "./Sidecar.ts";
 
 export const SidecarHandlers = Layer.effect(
   Sidecar,
@@ -51,19 +56,13 @@ export const SidecarHandlers = Layer.effect(
       string,
       {
         hash: number;
-        fiber: Fiber.Fiber<
-          Server.ServeResult,
-          Server.ServeError | Bundle.BundleError
-        >;
+        fiber: Fiber.Fiber<ServeResult, ServeError>;
         scope: Scope.Closeable;
       }
     >();
 
     const serveFiber = Effect.fnUntraced(function* (worker: ServeOptions) {
-      const result = yield* Deferred.make<
-        Server.ServeResult,
-        Server.ServeError | Bundle.BundleError
-      >();
+      const result = yield* Deferred.make<ServeResult, ServeError>();
       let start = Date.now();
       yield* bundle.watch(worker).pipe(
         Stream.mapEffect((event) =>
