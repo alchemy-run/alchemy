@@ -2,7 +2,7 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { CRUD, Plan } from "../Plan.ts";
-import { Cli } from "./Cli.ts";
+import { type PlanStatusSession, Cli } from "./Cli.ts";
 import type { ApplyEvent, ApplyStatus } from "./Event.ts";
 
 const ESC = "\x1b[";
@@ -88,6 +88,39 @@ const formatPlanLines = (plan: Plan): string[] => {
   return lines;
 };
 
+export const startLoggingApplySession = (
+  plan: Plan,
+): Effect.Effect<PlanStatusSession> =>
+  Effect.gen(function* () {
+    for (const line of formatPlanLines(plan)) yield* Console.log(line);
+    yield* Console.log("");
+
+    const counts = { ok: 0, fail: 0 };
+    return {
+      emit: (event: ApplyEvent) =>
+        Effect.sync(() => {
+          if (event.kind === "annotate") {
+            console.log(`${tag(event.id)} ${blue(event.message)}`);
+            return;
+          }
+          const id = event.bindingId
+            ? `${event.id}/${event.bindingId}`
+            : event.id;
+          const status = statusColor(event.status)(event.status);
+          const msg = event.message ? ` ${dim("—")} ${event.message}` : "";
+          console.log(`${tag(id)} ${status}${msg}`);
+          if (isTerminal(event.status)) {
+            if (event.status === "fail") counts.fail++;
+            else counts.ok++;
+          }
+        }),
+      done: () =>
+        Console.log(
+          `\n${bold("Done:")} ${green(`${counts.ok} succeeded`)}${counts.fail ? dim(", ") + red(`${counts.fail} failed`) : ""}`,
+        ),
+    };
+  });
+
 export const LoggingCli = Layer.succeed(
   Cli,
   Cli.of({
@@ -103,35 +136,6 @@ export const LoggingCli = Layer.succeed(
       Effect.gen(function* () {
         for (const line of formatPlanLines(plan)) yield* Console.log(line);
       }),
-    startApplySession: (plan) =>
-      Effect.gen(function* () {
-        for (const line of formatPlanLines(plan)) yield* Console.log(line);
-        yield* Console.log("");
-
-        const counts = { ok: 0, fail: 0 };
-        return {
-          emit: (event: ApplyEvent) =>
-            Effect.sync(() => {
-              if (event.kind === "annotate") {
-                console.log(`${tag(event.id)} ${blue(event.message)}`);
-                return;
-              }
-              const id = event.bindingId
-                ? `${event.id}/${event.bindingId}`
-                : event.id;
-              const status = statusColor(event.status)(event.status);
-              const msg = event.message ? ` ${dim("—")} ${event.message}` : "";
-              console.log(`${tag(id)} ${status}${msg}`);
-              if (isTerminal(event.status)) {
-                if (event.status === "fail") counts.fail++;
-                else counts.ok++;
-              }
-            }),
-          done: () =>
-            Console.log(
-              `\n${bold("Done:")} ${green(`${counts.ok} succeeded`)}${counts.fail ? dim(", ") + red(`${counts.fail} failed`) : ""}`,
-            ),
-        };
-      }),
+    startApplySession: startLoggingApplySession,
   }),
 );

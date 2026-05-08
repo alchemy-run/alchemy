@@ -5,9 +5,28 @@ import { render } from "ink";
 import type { Plan } from "../../Plan.ts";
 import { type PlanStatusSession, Cli } from "../Cli.ts";
 import type { ApplyEvent } from "../Event.ts";
+import { startLoggingApplySession } from "../LoggingCli.ts";
 import { ApprovePlan } from "./components/ApprovePlan.tsx";
 import { Plan as PlanComponent } from "./components/Plan.tsx";
-import { PlanProgress } from "./components/PlanProgress.tsx";
+import { buildProgressRows, PlanProgress } from "./components/PlanProgress.tsx";
+
+/**
+ * Lines we reserve at the bottom of the viewport for the shell prompt and a
+ * little headroom. Ink redraws by moving the cursor up by the previous frame's
+ * line count; if the live region is taller than the viewport, the cursor can't
+ * reach the top of the frame and each tick gets appended to scrollback rather
+ * than overwriting in place. Stricter terminals like Ghostty preserve those
+ * orphaned frames, producing visible duplication.
+ *
+ * See ink#382, ink#621, ink#907.
+ */
+const VIEWPORT_RESERVED_LINES = 4;
+
+const fitsInViewport = (rowCount: number): boolean => {
+  const viewportRows = process.stdout.rows;
+  if (!viewportRows) return true; // unknown size, assume it fits
+  return rowCount + VIEWPORT_RESERVED_LINES <= viewportRows;
+};
 
 export const inkCLI = () =>
   Layer.succeed(
@@ -35,6 +54,9 @@ const displayPlan = <P extends Plan>(plan: P): Effect.Effect<void> =>
   });
 
 const startApplySession = Effect.fn(function* <P extends Plan>(plan: P) {
+  if (!fitsInViewport(buildProgressRows(plan).length)) {
+    return yield* startLoggingApplySession(plan);
+  }
   const listeners = new Set<(event: ApplyEvent) => void>();
   const { unmount } = render(
     <PlanProgress
