@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { AnalyticsEngineDatasetBinding } from "./AnalyticsEngineDatasetBinding.ts";
 
 type AnalyticsEngineDatasetTypeId = typeof AnalyticsEngineDatasetTypeId;
 const AnalyticsEngineDatasetTypeId =
@@ -23,7 +24,7 @@ export type AnalyticsEngineDatasetProps = {
  * @section Binding to a Worker
  * @example Basic Analytics Engine binding
  * ```typescript
- * const Analytics = yield* Cloudflare.AnalyticsEngineDataset("Analytics", {
+ * const Analytics = Cloudflare.AnalyticsEngineDataset("Analytics", {
  *   dataset: "app-events",
  * });
  *
@@ -31,6 +32,12 @@ export type AnalyticsEngineDatasetProps = {
  *   main: "./src/worker.ts",
  *   bindings: { Analytics },
  * });
+ * ```
+ *
+ * @example Effect-style worker
+ * ```typescript
+ * const analytics = yield* Cloudflare.AnalyticsEngineDataset.bind(Analytics);
+ * yield* analytics.writeDataPoint({ blobs: ["signup"] });
  * ```
  */
 export type AnalyticsEngineDataset = {
@@ -47,13 +54,29 @@ export const isAnalyticsEngineDataset = (
   "kind" in value &&
   (value as AnalyticsEngineDataset).kind === AnalyticsEngineDatasetTypeId;
 
-export const AnalyticsEngineDataset = Effect.fnUntraced(function* (
-  name: string,
-  props?: AnalyticsEngineDatasetProps,
-) {
-  return {
-    kind: AnalyticsEngineDatasetTypeId,
-    name,
-    dataset: props?.dataset ?? name,
-  } satisfies AnalyticsEngineDataset;
-});
+export const AnalyticsEngineDataset: {
+  (
+    name: string,
+    props?: AnalyticsEngineDatasetProps,
+  ): Effect.Effect<AnalyticsEngineDataset>;
+  /**
+   * Bind Analytics Engine to the surrounding Worker, returning an
+   * Effect-native client with access to the native Workers runtime binding.
+   */
+  bind: typeof AnalyticsEngineDatasetBinding.bind;
+} = Object.assign(
+  Effect.fnUntraced(function* (
+    name: string,
+    props?: AnalyticsEngineDatasetProps,
+  ) {
+    return {
+      kind: AnalyticsEngineDatasetTypeId,
+      name,
+      dataset: props?.dataset ?? name,
+    } satisfies AnalyticsEngineDataset;
+  }),
+  {
+    bind: (...args: Parameters<typeof AnalyticsEngineDatasetBinding.bind>) =>
+      AnalyticsEngineDatasetBinding.bind(...args),
+  },
+);
