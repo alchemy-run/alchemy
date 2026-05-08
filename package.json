@@ -92,8 +92,6 @@
       "ai": "^6.0.62",
       "aws4fetch": "^1.0.20",
       "better-auth": "^1.6.2",
-      "capnp-es": "^0.0.14",
-      "cloudflare": "^5.2.0",
       "drizzle-orm": ">=1.0.0-rc.1",
       "drizzle-kit": ">=1.0.0-rc.1",
       "effect": ">=4.0.0-beta.60 || >=4.0.0",
@@ -104,8 +102,6 @@
       "typescript": "^6.0.3",
       "vite": "^8.0.7",
       "web-tree-sitter": "0.25.10",
-      "workerd": "1.20260417.1",
-      "wrangler": "^4.42.2",
       "ws": "^8.20.0",
       "yaml": "^2.0.0"
     }
