@@ -2083,7 +2083,13 @@ export const LiveWorkerProvider = () =>
 
       return Worker.Provider.of({
         stables: ["workerId", "workerName"],
-        diff: Effect.fnUntraced(function* ({ id, news, olds, output }) {
+        diff: Effect.fnUntraced(function* ({
+          id,
+          news,
+          olds,
+          output,
+          newBindings,
+        }) {
           if (!isResolved(news)) return undefined;
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" };
@@ -2105,7 +2111,14 @@ export const LiveWorkerProvider = () =>
           const domainsChanged =
             newDomains.length !== oldDomains.length ||
             newDomains.some((d, i) => d !== oldDomains[i]);
-          const newCrons = normalizeCrons(news.crons).sort();
+          const newCrons = normalizeCrons([
+            ...(Array.isArray(newBindings)
+              ? getCronBindings(
+                  newBindings as ResourceBinding<Worker["Binding"]>[],
+                )
+              : []),
+            ...(news.crons ?? []),
+          ]).sort();
           const oldCrons = [...(output?.crons ?? [])].sort();
           const cronsChanged =
             newCrons.length !== oldCrons.length ||
