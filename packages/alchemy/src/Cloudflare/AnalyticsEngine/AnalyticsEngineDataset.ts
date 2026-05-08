@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 
-type AnalyticsEngineDatasetTypeId = "Cloudflare.AnalyticsEngineDataset";
-const AnalyticsEngineDatasetTypeId: AnalyticsEngineDatasetTypeId =
-  "Cloudflare.AnalyticsEngineDataset";
+type AnalyticsEngineDatasetTypeId = typeof AnalyticsEngineDatasetTypeId;
+const AnalyticsEngineDatasetTypeId =
+  "Cloudflare.AnalyticsEngineDataset" as const;
 
 export type AnalyticsEngineDatasetProps = {
   /**
@@ -34,7 +34,7 @@ export type AnalyticsEngineDatasetProps = {
  * ```
  */
 export type AnalyticsEngineDataset = {
-  Type: AnalyticsEngineDatasetTypeId;
+  kind: AnalyticsEngineDatasetTypeId;
   name: string;
   dataset: string;
 };
@@ -44,15 +44,15 @@ export const isAnalyticsEngineDataset = (
 ): value is AnalyticsEngineDataset =>
   typeof value === "object" &&
   value !== null &&
-  "Type" in value &&
-  (value as AnalyticsEngineDataset).Type === AnalyticsEngineDatasetTypeId;
+  "kind" in value &&
+  (value as AnalyticsEngineDataset).kind === AnalyticsEngineDatasetTypeId;
 
 export const AnalyticsEngineDataset = Effect.fnUntraced(function* (
   name: string,
   props?: AnalyticsEngineDatasetProps,
 ) {
   return {
-    Type: AnalyticsEngineDatasetTypeId,
+    kind: AnalyticsEngineDatasetTypeId,
     name,
     dataset: props?.dataset ?? name,
   } satisfies AnalyticsEngineDataset;

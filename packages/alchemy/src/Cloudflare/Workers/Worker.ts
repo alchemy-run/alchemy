@@ -745,45 +745,47 @@ export const Worker: Platform<
                   name: bindingName,
                   className: binding.className ?? binding.name,
                 }
-              : binding.Type === "Cloudflare.D1Database"
+              : isAnalyticsEngineDataset(binding)
                 ? {
-                    type: "d1",
-                    id: binding.databaseId,
+                    type: "analytics_engine",
                     name: bindingName,
+                    dataset: binding.dataset,
                   }
-                : binding.Type === "Cloudflare.R2Bucket"
+                : binding.Type === "Cloudflare.D1Database"
                   ? {
-                      type: "r2_bucket",
+                      type: "d1",
+                      id: binding.databaseId,
                       name: bindingName,
-                      bucketName: binding.bucketName,
-                      jurisdiction: binding.jurisdiction.pipe(
-                        Output.map((jurisdiction) =>
-                          jurisdiction === "default" ? undefined : jurisdiction,
-                        ),
-                      ),
                     }
-                  : binding.Type === "Cloudflare.KVNamespace"
+                  : binding.Type === "Cloudflare.R2Bucket"
                     ? {
-                        type: "kv_namespace",
+                        type: "r2_bucket",
                         name: bindingName,
-                        namespaceId: binding.namespaceId,
+                        bucketName: binding.bucketName,
+                        jurisdiction: binding.jurisdiction.pipe(
+                          Output.map((jurisdiction) =>
+                            jurisdiction === "default"
+                              ? undefined
+                              : jurisdiction,
+                          ),
+                        ),
                       }
-                    : binding.Type === "Cloudflare.Queue"
+                    : binding.Type === "Cloudflare.KVNamespace"
                       ? {
-                          type: "queue",
+                          type: "kv_namespace",
                           name: bindingName,
-                          queueName: binding.queueName,
+                          namespaceId: binding.namespaceId,
                         }
-                      : binding.Type === "Cloudflare.AiGateway"
+                      : binding.Type === "Cloudflare.Queue"
                         ? {
-                            type: "ai",
+                            type: "queue",
                             name: bindingName,
+                            queueName: binding.queueName,
                           }
-                        : isAnalyticsEngineDataset(binding)
+                        : binding.Type === "Cloudflare.AiGateway"
                           ? {
-                              type: "analytics_engine",
+                              type: "ai",
                               name: bindingName,
-                              dataset: binding.dataset,
                             }
                           : // TODO(sam): handle others
                             undefined;
