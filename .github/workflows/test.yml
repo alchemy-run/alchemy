@@ -10,13 +10,6 @@ on:
   pull_request:
     types: [opened, reopened, synchronize]
   workflow_dispatch:
-    inputs:
-      runtime:
-        description: "Runtime to test (bun, pnpm, or both)"
-        required: false
-        default: "both"
-        type: choice
-        options: ["both", "bun", "pnpm"]
 
 permissions:
   contents: read
@@ -95,5 +88,4 @@ jobs:
           PKGING_HOST: ${{ env.PKGING_HOST }}
           SMOKE_CANARY: "1"
           SMOKE_STAGE: ${{ env.SMOKE_STAGE }}
-          SMOKE_RUNTIMES: ${{ inputs.runtime == 'both' && '' || inputs.runtime }}
         run: bun test:smoke

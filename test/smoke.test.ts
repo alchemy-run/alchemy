@@ -13,8 +13,6 @@
  *                          package.json files and reinstall on the way out.
  *
  * Env vars:
- *   SMOKE_RUNTIMES   comma-separated subset of: bun, pnpm   (default: both)
- *   SMOKE_EXAMPLES   comma-separated example dir names      (default: 4 default)
  *   SMOKE_CANARY     "1" to enable canary mode              (default: off)
  *   SMOKE_STAGE      stage prefix, e.g. `pr-123` or `main`  (default: "smoke")
  *   PKGING_HOST      pkg.ing host                           (default: pkg.ing)
@@ -29,7 +27,7 @@ import * as path from "node:path";
 const ROOT = path.resolve(import.meta.dir, "..");
 const TIMEOUT = 10 * 60 * 1000;
 
-const DEFAULT_EXAMPLES = [
+const examples = [
   "aws-lambda",
   "aws-lambda-httpapi",
   "aws-lambda-rpc",
@@ -43,29 +41,13 @@ const DEFAULT_EXAMPLES = [
   "cloudflare-worker-async",
   "cloudflare-worker",
 ];
-const DEFAULT_RUNTIMES = ["bun", "pnpm"] as const;
-type Runtime = (typeof DEFAULT_RUNTIMES)[number];
+const RUNTIMES = ["bun", "pnpm"] as const;
 
 const PUBLISHED = [
   { dir: "alchemy", name: "alchemy" },
   { dir: "better-auth", name: "@alchemy.run/better-auth" },
   { dir: "pr-package", name: "@alchemy.run/pr-package" },
 ] as const;
-
-const examples =
-  process.env.SMOKE_EXAMPLES?.split(",")
-    .map((s) => s.trim())
-    .filter(Boolean) ?? DEFAULT_EXAMPLES;
-
-const runtimes = (process.env.SMOKE_RUNTIMES?.split(",")
-  .map((s) => s.trim())
-  .filter(Boolean) ?? [...DEFAULT_RUNTIMES]) as Runtime[];
-
-for (const r of runtimes) {
-  if (r !== "bun" && r !== "pnpm") {
-    throw new Error(`SMOKE_RUNTIMES contains unknown runtime: ${r}`);
-  }
-}
 
 const canary = process.env.SMOKE_CANARY === "1";
 const host = process.env.PKGING_HOST ?? "pkg.ing";
@@ -233,7 +215,7 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 for (const example of examples) {
   const cwd = path.join(ROOT, "examples", example);
   let prev: Promise<unknown> = Promise.resolve();
-  for (const runtime of runtimes) {
+  for (const runtime of RUNTIMES) {
     // Prefix the stage with $SMOKE_STAGE when provided so PR runs
     // (`pr-<n>-…`) and main runs (`main-…`) never collide on the same
     // cloud resource. Locally falls back to a fixed `smoke` prefix.
