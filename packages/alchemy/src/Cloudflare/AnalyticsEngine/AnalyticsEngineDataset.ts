@@ -24,7 +24,7 @@ export type AnalyticsEngineDatasetProps = {
  * @section Binding to a Worker
  * @example Basic Analytics Engine binding
  * ```typescript
- * const Analytics = Cloudflare.AnalyticsEngineDataset("Analytics", {
+ * const Analytics = yield* Cloudflare.AnalyticsEngineDataset("Analytics", {
  *   dataset: "app-events",
  * });
  *
