@@ -1,7 +1,4 @@
-import {
-  ServeError,
-  type ServeResult,
-} from "@distilled.cloud/cloudflare-runtime/Server";
+import { RuntimeError } from "@distilled.cloud/cloudflare-runtime/RuntimeError";
 import * as Worker from "@distilled.cloud/cloudflare-runtime/Worker";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -22,13 +19,19 @@ export interface ServeOptions extends WorkerBundleOptions {
   durableObjectNamespaces: Worker.DurableObjectNamespace[];
 }
 
+export const ServeResult = Schema.Struct({
+  name: Schema.String,
+  address: Schema.String,
+});
+export type ServeResult = typeof ServeResult.Type;
+
+export const ServeError = Schema.Union([RuntimeError, BundleError]);
+export type ServeError = typeof ServeError.Type;
+
 export const SidecarSchema = defineSchema<Sidecar["Service"]>({
   serve: {
-    success: Schema.Struct({
-      name: Schema.String,
-      address: Schema.String,
-    }),
-    error: Schema.Union([ServeError, BundleError]),
+    success: ServeResult,
+    error: ServeError,
   },
   stop: { success: Schema.Void, error: Schema.Never },
 });
@@ -38,7 +41,7 @@ export class Sidecar extends RpcClient.RpcClientService<
   {
     readonly serve: (
       options: ServeOptions,
-    ) => Effect.Effect<ServeResult, ServeError | BundleError>;
+    ) => Effect.Effect<ServeResult, ServeError>;
     readonly stop: (name: string) => Effect.Effect<void>;
   }
 >()("Sidecar") {}

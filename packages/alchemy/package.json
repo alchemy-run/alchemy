@@ -294,9 +294,7 @@
     "@types/libsodium-wrappers": "^0.8.2",
     "ai": "catalog:",
     "aws4fetch": "catalog:",
-    "capnp-es": "catalog:",
     "capnweb": "^0.6.1",
-    "cloudflare": "catalog:",
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
     "foreground-child": "^4.0.3",
@@ -312,7 +310,6 @@
     "rolldown": "catalog:",
     "sonda": "catalog:",
     "web-tree-sitter": "catalog:",
-    "workerd": "catalog:",
     "yaml": "catalog:"
   },
   "devDependencies": {
@@ -344,8 +341,8 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
-    "drizzle-kit": ">=1.0.0-rc.1",
-    "drizzle-orm": ">=1.0.0-rc.1",
+    "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "vite": "catalog:",
     "ws": "catalog:"
