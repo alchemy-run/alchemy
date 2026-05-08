@@ -10,8 +10,8 @@ name: test
 on:
   push:
     branches: [main]
-  # pull_request:
-  #   types: [opened, reopened, synchronize]
+  pull_request:
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
 
 permissions:
@@ -110,4 +110,4 @@ jobs:
           # Each matrix leg pins to one runtime so the test only spawns
           # `<matrix.runtime> alchemy ...` for each example.
           SMOKE_RUNTIME: ${{ matrix.runtime }}
-        run: bun test:smoke
+        run: bun test:canary
