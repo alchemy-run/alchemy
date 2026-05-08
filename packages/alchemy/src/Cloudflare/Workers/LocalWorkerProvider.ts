@@ -105,6 +105,7 @@ export const LocalWorkerProvider = () =>
           tags: [],
           durableObjectNamespaces,
           domains: [],
+          crons: props.crons ?? [],
           accountId,
         } satisfies Worker["Attributes"];
       });
