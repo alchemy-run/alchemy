@@ -51,17 +51,24 @@ export const LocalWorkerProvider = () =>
           }
         }
         for (const [key, value] of Object.entries(props.env ?? {})) {
+          if (value === undefined) continue;
           if (Redacted.isRedacted(value)) {
             workerBindings.push({
               type: "secret_text",
               name: key,
               text: Redacted.value(value),
             });
-          } else {
+          } else if (typeof value === "string") {
             workerBindings.push({
               type: "plain_text",
               name: key,
               text: value,
+            });
+          } else {
+            workerBindings.push({
+              type: "json",
+              name: key,
+              json: value,
             });
           }
         }
@@ -88,6 +95,7 @@ export const LocalWorkerProvider = () =>
               sql: true,
             }),
           ),
+          userOptions: props.build,
         });
         return {
           workerId: name,

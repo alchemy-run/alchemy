@@ -7,12 +7,12 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { AuthProviders } from "../..//Auth/AuthProvider";
-import { Profile, withProfileOverride } from "../..//Auth/Profile";
-import { Stage } from "../..//Stage";
-import * as State from "../..//State/index";
-import { loadConfigProvider } from "../..//Util/ConfigProvider";
-import { fileLogger } from "../..//Util/FileLogger";
+import { AuthProviders } from "../../Auth/AuthProvider.ts";
+import { Profile, withProfileOverride } from "../../Auth/Profile.ts";
+import { Stage } from "../../Stage.ts";
+import * as State from "../../State/index.ts";
+import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
+import { fileLogger } from "../../Util/FileLogger.ts";
 
 import {
   envFile,

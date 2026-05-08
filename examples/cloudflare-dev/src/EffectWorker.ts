@@ -7,7 +7,7 @@ export const KV = Cloudflare.KVNamespace("KV");
 export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
   "EffectWorker",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
   },
   Effect.gen(function* () {
     const kv = yield* Cloudflare.KVNamespace.bind(KV);

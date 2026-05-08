@@ -1,5 +1,4 @@
 import type * as cf from "@cloudflare/workers-types";
-import cloudflareRolldown from "@distilled.cloud/cloudflare-rolldown-plugin";
 import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
@@ -17,23 +16,18 @@ import * as Scope from "effect/Scope";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type * as rolldown from "rolldown";
-import Sonda from "sonda/rolldown";
 import type * as vite from "vite";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
 import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
-import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import { ExecutionContext } from "../../ExecutionContext.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
-import { createPhysicalName } from "../../PhysicalName.ts";
 import {
   Platform,
   type Main,
@@ -52,7 +46,10 @@ import {
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
-import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
+import type {
+  Hyperdrive,
+  HyperdriveDevOrigin,
+} from "../Hyperdrive/Hyperdrive.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
 import { SidecarLive } from "../Local/Sidecar.ts";
 import { CloudflareLogs } from "../Logs.ts";
@@ -67,6 +64,7 @@ import {
   type AssetsConfig,
   type AssetsProps,
 } from "./Assets.ts";
+import { getCompatibility } from "./Compatibility.ts";
 import {
   isDurableObjectExport,
   isDurableObjectNamespaceLike,
@@ -76,7 +74,8 @@ import { workersHttpHandler } from "./HttpServer.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
 import { makeRpcStub } from "./Rpc.ts";
-import { makeEffectVirtualEntry } from "./WorkerBundle.ts";
+import { WorkerBundle } from "./WorkerBundle.ts";
+import { createWorkerName } from "./WorkerName.ts";
 
 const WorkerTypeId = "Cloudflare.Worker";
 type WorkerTypeId = typeof WorkerTypeId;
@@ -186,6 +185,7 @@ export type WorkerBindingResource =
   | CloudflareQueue
   | AiGateway
   | ArtifactsBinding
+  | Hyperdrive
   | DurableObjectNamespaceLike<any>;
 
 export type WorkerBindings = {
@@ -264,7 +264,16 @@ export interface WorkerProps<
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
-  env?: Record<string, string | Redacted.Redacted<string>>;
+  env?: Record<
+    string,
+    | string
+    | number
+    | boolean
+    | null
+    | readonly unknown[]
+    | { readonly [key: string]: unknown }
+    | Redacted.Redacted<string>
+  >;
   exports?: string[];
   bindings?: Bindings;
   /**
@@ -406,7 +415,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```typescript
  * export default class MyWorker extends Cloudflare.Worker<MyWorker>()(
  *   "MyWorker",
- *   { main: import.meta.path },
+ *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     // init: bind resources
  *     const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
@@ -441,7 +450,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * // src/WorkerB.ts
  * export default class WorkerB extends Cloudflare.Worker<WorkerB>()(
  *   "WorkerB",
- *   { main: import.meta.path },
+ *   { main: import.meta.filename },
  * ) {}
  *
  * export default WorkerB.make(
@@ -468,7 +477,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *
  * export default class WorkerA extends Cloudflare.Worker<WorkerA>()(
  *   "WorkerA",
- *   { main: import.meta.path },
+ *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const b = yield* Cloudflare.Worker.bind(WorkerB);
  *     return {
@@ -487,7 +496,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Enabling Node.js compatibility
  * ```typescript
  * {
- *   main: import.meta.path,
+ *   main: import.meta.filename,
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *     date: "2026-03-17",
@@ -498,7 +507,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Serving static assets
  * ```typescript
  * {
- *   main: import.meta.path,
+ *   main: import.meta.filename,
  *   assets: "./public",
  * }
  * ```
@@ -516,7 +525,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Enabling logs and traces
  * ```typescript
  * {
- *   main: import.meta.path,
+ *   main: import.meta.filename,
  *   observability: {
  *     enabled: true,
  *     headSamplingRate: 1,
@@ -769,8 +778,14 @@ export const Worker: Platform<
                             type: "ai",
                             name: bindingName,
                           }
-                        : // TODO(sam): handle others
-                          undefined;
+                        : binding.Type === "Cloudflare.Hyperdrive"
+                          ? {
+                              type: "hyperdrive",
+                              name: bindingName,
+                              id: binding.hyperdriveId,
+                            }
+                          : // TODO(sam): handle others
+                            undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
@@ -1059,6 +1074,7 @@ export const LiveWorkerProvider = () =>
 
       const { accountId } = yield* CloudflareEnvironment;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+      const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
 
       const createScriptSubdomain = yield* workers.createScriptSubdomain;
@@ -1072,12 +1088,6 @@ export const LiveWorkerProvider = () =>
       const deleteDomain = yield* workers.deleteDomain;
       const listZones = yield* zones.listZones;
       const telemetry = yield* CloudflareLogs;
-      // TODO(sam): figure out why the later one from workerd breaks
-      const defaultCompatibilityDate = "2026-03-17";
-      // const defaultCompatibilityDate = yield* Effect.promise(() =>
-      //   // @ts-expect-error no types for workerd
-      //   import("workerd").then((m) => m.compatibilityDate as string),
-      // );
 
       const getAccountSubdomain = (accountId: string) =>
         getSubdomain({
@@ -1097,14 +1107,6 @@ export const LiveWorkerProvider = () =>
           enabled,
           previewsEnabled: enabled ? true : undefined,
         });
-
-      const createWorkerName = (id: string, name: string | undefined) =>
-        name
-          ? Effect.succeed(name)
-          : createPhysicalName({
-              id,
-              maxLength: 54,
-            }).pipe(Effect.map((name) => name.toLowerCase()));
 
       // Convert non-ASCII hostnames (emoji, IDN, etc.) to punycode so the
       // Cloudflare API receives the form it stores domains in. `new URL(...)`
@@ -1255,12 +1257,24 @@ export const LiveWorkerProvider = () =>
             }
 
             const zoneId = yield* inferZoneIdForHostname(hostname, zoneCache);
+            // Same eventual-consistency window as `setWorkerSubdomain`:
+            // PUT /accounts/.../workers/domains right after `putScript`
+            // can return `WorkerNotFound` until Cloudflare's script
+            // registry has propagated. Retry on that specific tag.
             const res = yield* putDomain({
               accountId,
               hostname,
               service: scriptName,
               zoneId,
-            });
+            }).pipe(
+              Effect.retry({
+                while: (error: { _tag?: string }) =>
+                  error?._tag === "WorkerNotFound",
+                schedule: Schedule.exponential(200).pipe(
+                  Schedule.both(Schedule.recurs(15)),
+                ),
+              }),
+            );
             return {
               hostname,
               id: res.id ?? "",
@@ -1376,67 +1390,27 @@ export const LiveWorkerProvider = () =>
         );
       });
 
-      const getCompatibility = (props: WorkerProps) => ({
-        compatibilityDate:
-          props.compatibility?.date ?? defaultCompatibilityDate,
-        compatibilityFlags: props.compatibility?.flags
-          ? [
-              ...props.compatibility.flags,
-              ...(props.isExternal ? [] : ["nodejs_compat"]),
-            ].filter((value, index, self) => self.indexOf(value) === index)
-          : props.isExternal
-            ? []
-            : ["nodejs_compat"],
-      });
-
       const prepareBundle = (id: string, props: WorkerProps) =>
-        Effect.gen(function* () {
-          const main = yield* fs.realPath(props.main);
-          const cwd = yield* findCwdForBundle(main);
-          const { compatibilityDate, compatibilityFlags } =
-            getCompatibility(props);
-          const buildBundle = (plugins?: rolldown.RolldownPluginOption) =>
-            Bundle.build(
-              {
-                input: main,
-                cwd,
-                plugins: [
-                  cloudflareRolldown({ compatibilityDate, compatibilityFlags }),
-                  plugins,
-                  ...(props.build?.metafile ? [Sonda({ open: false })] : []),
-                ],
-                checks: {
-                  // Suppress unresolved import warnings for unrelated AWS packages
-                  unresolvedImport: false,
-                },
+        bundler.build({
+          id,
+          main: props.main,
+          compatibility: getCompatibility(props),
+          entry: props.isExternal
+            ? {
+                kind: "external",
+              }
+            : {
+                kind: "effect",
+                exports: (props.exports ?? {}) as any,
               },
-              {
-                format: "esm",
-                sourcemap: "hidden",
-                minify: true,
-                keepNames: true,
-                dir: `.alchemy/bundles/${id}`,
-              },
-              { pure: props.build?.pure },
-            );
-
-          if (props.isExternal) {
-            const bundle = yield* buildBundle();
-            return bundle;
-          }
-
-          const script = makeEffectVirtualEntry((props.exports ?? {}) as any, {
-            name: stack.name,
-            stage: stack.stage,
-          });
-          return yield* buildBundle(virtualEntryPlugin(script));
-        }).pipe(Artifacts.cached("build"));
+          stack: { name: stack.name, stage: stack.stage },
+          userOptions: props.build,
+        });
 
       const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
         let assetsDirectory: string | undefined;
         let serverBundle: vite.Rolldown.OutputBundle | undefined;
-        const { compatibilityDate, compatibilityFlags } =
-          getCompatibility(props);
+        const compatibility = getCompatibility(props);
 
         yield* Effect.promise(async () => {
           const vite = await loadVite(props.vite?.rootDir);
@@ -1457,8 +1431,8 @@ export const LiveWorkerProvider = () =>
               },
               plugins: [
                 cloudflareVite({
-                  compatibilityDate,
-                  compatibilityFlags,
+                  compatibilityDate: compatibility.date,
+                  compatibilityFlags: compatibility.flags,
                 }),
                 {
                   name: "output:ssr",
@@ -1688,18 +1662,24 @@ export const LiveWorkerProvider = () =>
         // Add environment variables as metadata bindings
         if (news.env) {
           for (const [key, value] of Object.entries(news.env)) {
-            if (value == null) continue;
+            if (value === undefined) continue;
             if (Redacted.isRedacted(value)) {
               metadataBindings.push({
                 type: "secret_text",
                 name: key,
                 text: Redacted.value(value),
               });
-            } else {
+            } else if (typeof value === "string") {
               metadataBindings.push({
                 type: "plain_text",
                 name: key,
-                text: typeof value === "string" ? value : String(value),
+                text: value,
+              });
+            } else {
+              metadataBindings.push({
+                type: "json",
+                name: key,
+                json: value,
               });
             }
           }
@@ -1852,11 +1832,13 @@ export const LiveWorkerProvider = () =>
           }),
         );
 
-        const metadata = {
+        const compatibility = getCompatibility(news);
+        const metadata: workers.PutScriptRequest["metadata"] = {
           assets: metadataAssets,
           bindings: metadataBindings,
           bodyPart: undefined,
-          ...getCompatibility(news),
+          compatibilityDate: compatibility.date,
+          compatibilityFlags: compatibility.flags,
           containers:
             metadataContainers.length > 0 ? metadataContainers : undefined,
           keepAssets,
@@ -1939,7 +1921,21 @@ export const LiveWorkerProvider = () =>
           yield* session.note(
             `${desiredSubdomainEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
           );
-          yield* setWorkerSubdomain(name, desiredSubdomainEnabled);
+          // Cloudflare's script registry is eventually consistent — for the
+          // first few hundred ms after `putScript` returns, POST /subdomain
+          // can still get back `WorkerNotFound` (a generic "unknown error"
+          // body). Bigger uploads race harder. Retry the subdomain toggle on
+          // that specific tag with a short exponential backoff; same pattern
+          // we use elsewhere in this provider for DO-namespace propagation.
+          yield* setWorkerSubdomain(name, desiredSubdomainEnabled).pipe(
+            Effect.retry({
+              while: (error: { _tag?: string }) =>
+                error?._tag === "WorkerNotFound",
+              schedule: Schedule.exponential(200).pipe(
+                Schedule.both(Schedule.recurs(15)),
+              ),
+            }),
+          );
         }
         const desiredDomains = normalizeDomains(news.domain);
         const previousDomains = output?.domains ?? [];

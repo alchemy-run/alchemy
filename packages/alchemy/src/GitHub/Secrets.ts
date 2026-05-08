@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
 import type { Input } from "../Input.ts";
+import * as Output from "../Output.ts";
 import { Secret } from "./Secret.ts";
 
 export interface SecretsProps {
@@ -60,7 +61,30 @@ export const Secrets = ({
         repository,
         environment,
         name,
-        value: Redacted.make(value),
+        value: liftValue(value),
       }),
     ),
   );
+
+// Accepts a plain string, an existing `Redacted<string>`, or an `Output`
+// of either. We must lift via `Output.map` for the `Output` case so the
+// inner string gets wrapped after the engine resolves it — otherwise the
+// `Redacted.make(output)` path produces `Redacted<Output<...>>`, which
+// later double-wraps to `Redacted<Redacted<string>>` and stringifies to
+// `<redacted>` inside `sodium.from_string`.
+const liftValue = (
+  value: Input<string | Redacted.Redacted<string>>,
+): Input<Redacted.Redacted<string>> =>
+  Output.isOutput(value)
+    ? Output.map(
+        value as Output.Output<string | Redacted.Redacted<string>>,
+        toRedacted,
+      )
+    : toRedacted(value as string | Redacted.Redacted<string>);
+
+const toRedacted = (
+  value: string | Redacted.Redacted<string>,
+): Redacted.Redacted<string> =>
+  Redacted.isRedacted(value)
+    ? (value as Redacted.Redacted<string>)
+    : Redacted.make(value);

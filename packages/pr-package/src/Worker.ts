@@ -33,7 +33,7 @@ const bindings = Layer.mergeAll(
  * Init effect for a pr-package worker. Pass as the third argument to
  * `Cloudflare.Worker<X>()(...)` in your stack file.
  *
- * The user's stack file must be the worker entry (`main: import.meta.path`)
+ * The user's stack file must be the worker entry (`main: import.meta.filename`)
  * because `parseAliasUrl` is a closure that has to live in the bundle.
  *
  * @example
@@ -42,7 +42,7 @@ const bindings = Layer.mergeAll(
  *
  * class Api extends Cloudflare.Worker<Api>()(
  *   "Api",
- *   { main: import.meta.path, url: true, ... },
+ *   { main: import.meta.filename, url: true, ... },
  *   PrPackage.handler({
  *     parseAliasUrl: (url) => ({ pkgName: "...", tag: "..." }),
  *   }),

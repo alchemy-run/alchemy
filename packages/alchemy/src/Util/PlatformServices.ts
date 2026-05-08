@@ -9,6 +9,7 @@ import type { HttpServer } from "effect/unstable/http/HttpServer";
 import type { ServeError } from "effect/unstable/http/HttpServerError";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import type { WebSocketConstructor } from "effect/unstable/socket/Socket";
+import { installLocalhostDns } from "./LocalhostDns.ts";
 
 const isBun = typeof Bun !== "undefined";
 
@@ -52,6 +53,7 @@ export const runMain = <E, A>(
     readonly teardown?: Teardown | undefined;
   },
 ): void => {
+  installLocalhostDns();
   if (isBun) {
     void import("@effect/platform-bun/BunRuntime").then((BunRuntime) =>
       BunRuntime.runMain(effect, options),
@@ -65,7 +67,7 @@ export const runMain = <E, A>(
 
 export const httpServer = (
   port: number = 0,
-  host: string = "localhost",
+  host: string = "127.0.0.1",
 ): Layer.Layer<HttpServer, ServeError> =>
   Effect.promise(async () => {
     if (isBun) {

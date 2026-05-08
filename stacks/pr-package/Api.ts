@@ -42,7 +42,7 @@ const parseAliasUrl: PrPackage.ParseAliasUrl = (url) => {
 export default class Api extends Cloudflare.Worker<Api>()(
   "PrPackageWorker",
   Stack.useSync(({ stage }) => ({
-    main: import.meta.path,
+    main: import.meta.filename,
     url: true,
     domain:
       stage === "prod"
