@@ -309,6 +309,7 @@
     "react": "^19.2.0",
     "rolldown": "catalog:",
     "sonda": "catalog:",
+    "undici": "^7.16.0",
     "web-tree-sitter": "catalog:",
     "yaml": "catalog:"
   },
