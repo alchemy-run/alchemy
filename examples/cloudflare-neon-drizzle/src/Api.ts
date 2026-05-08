@@ -11,7 +11,7 @@ import { relations, Users } from "./schema.ts";
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);

@@ -9,25 +9,6 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
-/**
- * Cloudflare returns this code when the target worker exists but its
- * deployed script doesn't export a `queue` handler. The reconciler
- * almost always hits this transiently when a sibling Worker
- * resource's pre-create stub is live (no queue handler) and the real
- * reconcile hasn't replaced it yet — so we retry with backoff. If
- * the user genuinely forgot to export a queue handler we eventually
- * surface the failure after `recurs` is exhausted.
- */
-const QUEUE_HANDLER_MISSING_CODE = 11001;
-
-const isQueueHandlerMissing = (e: unknown): boolean =>
-  typeof e === "object" &&
-  e !== null &&
-  "_tag" in e &&
-  (e as { _tag: unknown })._tag === "UnknownCloudflareError" &&
-  "code" in e &&
-  (e as { code?: unknown }).code === QUEUE_HANDLER_MISSING_CODE;
-
 // ~60s budget — Worker reconcile uploads typically land in 2–10s,
 // but a fresh container/asset deploy can stretch that.
 const queueHandlerReadinessSchedule = Schedule.spaced("2 seconds").pipe(
@@ -319,7 +300,7 @@ export const QueueConsumerProvider = () =>
               // handler. Retry until the upload propagates (capped),
               // then surface a real failure if it never does.
               Effect.tapError((e) =>
-                isQueueHandlerMissing(e)
+                e._tag === "QueueHandlerMissing"
                   ? Effect.logDebug(
                       `QueueConsumer create: worker ` +
                         `"${news.scriptName}" has no queue handler ` +
@@ -328,7 +309,7 @@ export const QueueConsumerProvider = () =>
                   : Effect.void,
               ),
               Effect.retry({
-                while: isQueueHandlerMissing,
+                while: (e) => e._tag === "QueueHandlerMissing",
                 schedule: queueHandlerReadinessSchedule,
               }),
               Effect.catchTag("ConsumerAlreadyExists", (cause) =>
@@ -381,7 +362,7 @@ export const QueueConsumerProvider = () =>
             deadLetterQueue: news.deadLetterQueue,
           }).pipe(
             Effect.retry({
-              while: isQueueHandlerMissing,
+              while: (e) => e._tag === "QueueHandlerMissing",
               schedule: queueHandlerReadinessSchedule,
             }),
           );

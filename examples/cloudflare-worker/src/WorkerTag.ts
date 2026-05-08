@@ -6,7 +6,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 // then provide the runtime implementation in a second `.make()` call.
 // This mirrors the pattern in the README/docstring on Cloudflare.Worker.
 export class WorkerTag extends Cloudflare.Worker<WorkerTag>()("WorkerTag", {
-  main: import.meta.path,
+  main: import.meta.filename,
   compatibility: {
     flags: ["nodejs_compat"],
     date: "2026-04-26",

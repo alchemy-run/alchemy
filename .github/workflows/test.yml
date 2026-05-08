@@ -1,0 +1,113 @@
+name: test
+
+# Smoke-tests `alchemy destroy → deploy → destroy` against each example.
+# CI runs one matrix job per package manager so each one exercises its
+# own native install path (bun's lockfile + catalog, or pnpm's lockfile +
+# `pnpm-workspace.yaml`) — they never share `node_modules` state.
+# SMOKE_CANARY=1 makes the test publish tarballs to pkg.ing under a fresh
+# tag and install them into the examples before running.
+
+on:
+  push:
+    branches: [main]
+  # pull_request:
+  #   types: [opened, reopened, synchronize]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Required for aws-actions/configure-aws-credentials to mint a session
+  # via OIDC instead of long-lived AWS_ACCESS_KEY_ID secrets.
+  id-token: write
+
+env:
+  PKGING_HOST: pkg.ing
+  NODE_VERSION: "24"
+  # PR runs use `pr-<n>` so each PR has its own isolated cloud namespace;
+  # main pushes use `main`; manual `workflow_dispatch` runs use the branch
+  # name. Forwarded to the smoke test as $SMOKE_STAGE.
+  SMOKE_STAGE: ${{ github.event_name == 'pull_request' && format('pr-{0}',
+    github.event.number) || (github.ref == 'refs/heads/main' && 'main' ||
+    github.ref_name) }}
+
+concurrency:
+  # Cancel an in-progress run for the same PR (or branch) when a new push
+  # arrives — the smoke suite mutates real cloud state, so two parallel
+  # runs against the same SMOKE_STAGE would race.
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [bun, pnpm]
+    name: smoke (${{ matrix.runtime }})
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      # bun is required regardless of `matrix.runtime` — the test runner
+      # itself is `bun test`, the canary publish path uses `bun pm pack`,
+      # and `Bun.spawn` powers `run()`.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      # `bun install` happens for *both* matrix legs because the smoke
+      # test imports `alchemy` source from the workspace and calls into
+      # `bun pm pack`. The pnpm leg layers a separate `pnpm install` on
+      # top so its examples have a real pnpm-managed `node_modules`.
+      - run: bun install
+
+      - if: matrix.runtime == 'pnpm'
+        name: Generate pnpm-workspace.yaml + pnpm install
+        run: |
+          bun ./scripts/pnpm-workspace.ts
+          pnpm install --no-frozen-lockfile
+
+      # OIDC → short-lived AWS session. Exports AWS_ACCESS_KEY_ID,
+      # AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_REGION; the
+      # `output-credentials: true` flag also surfaces aws-account-id as a
+      # step output (which we forward as `AWS_ACCOUNT_ID` below — the
+      # action does NOT set it as an env var on its own).
+      - id: aws-creds
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          output-credentials: true
+
+      - name: Smoke
+        env:
+          # AWS — `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+          # `AWS_SESSION_TOKEN`, `AWS_REGION` are already exported by
+          # configure-aws-credentials; we only need to forward the account
+          # id, which Alchemy's `loadFromEnv` requires when CI=true.
+          AWS_ACCOUNT_ID: ${{ steps.aws-creds.outputs.aws-account-id }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.TEST_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.TEST_CLOUDFLARE_ACCOUNT_ID }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          PR_PACKAGE_TOKEN: ${{ secrets.PR_PACKAGE_TOKEN }}
+          PKGING_HOST: ${{ env.PKGING_HOST }}
+          SMOKE_CANARY: "1"
+          SMOKE_STAGE: ${{ env.SMOKE_STAGE }}
+          # Each matrix leg pins to one runtime so the test only spawns
+          # `<matrix.runtime> alchemy ...` for each example.
+          SMOKE_RUNTIME: ${{ matrix.runtime }}
+        run: bun test:smoke

@@ -3,9 +3,9 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { diffTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./common.ts";
 
 export interface OpenIDConnectProviderProps {
@@ -14,13 +14,17 @@ export interface OpenIDConnectProviderProps {
    */
   url: string;
   /**
-   * Client IDs allowed for the provider.
+   * Client IDs allowed for the provider. AWS rejects requests with an
+   * empty list, so the prop is typed as a non-empty tuple.
    */
-  clientIDList?: string[];
+  clientIDList?: [string, ...string[]];
   /**
-   * Certificate thumbprints for the provider.
+   * Certificate thumbprints for the provider. AWS auto-manages thumbprints
+   * for well-known IdPs (e.g. GitHub Actions), so this is optional — but
+   * `iam.updateOpenIDConnectProviderThumbprint` rejects an empty list, so
+   * the prop is typed as a non-empty tuple when supplied.
    */
-  thumbprintList?: string[];
+  thumbprintList?: [string, ...string[]];
   /**
    * User-defined tags to apply to the provider.
    */
@@ -34,7 +38,11 @@ export interface OpenIDConnectProvider extends Resource<
     openIDConnectProviderArn: string;
     url: string;
     clientIDList: string[];
-    thumbprintList: string[];
+    /**
+     * Reflects the desired state — `undefined` when the user opted out of
+     * managing thumbprints (AWS auto-manages them for well-known IdPs).
+     */
+    thumbprintList: string[] | undefined;
     tags: Record<string, string>;
   },
   never,
@@ -181,10 +189,13 @@ export const OpenIDConnectProviderProvider = () =>
 
           // Sync thumbprints — `updateOpenIDConnectProviderThumbprint`
           // replaces the entire list, so call it whenever the set differs.
-          const desiredThumbprints = news.thumbprintList ?? [];
+          // When the user didn't request a list we leave the cloud-managed
+          // thumbprints alone (AWS auto-manages for well-known IdPs).
+          const desiredThumbprints = news.thumbprintList;
           if (
+            desiredThumbprints &&
             JSON.stringify([...observedThumbprints].sort()) !==
-            JSON.stringify([...desiredThumbprints].sort())
+              JSON.stringify([...desiredThumbprints].sort())
           ) {
             yield* iam.updateOpenIDConnectProviderThumbprint({
               OpenIDConnectProviderArn: providerArn,
