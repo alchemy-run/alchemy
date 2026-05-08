@@ -46,9 +46,18 @@ const lines: string[] = [
   // explicitly approved. Whitelist only the ones our examples actually
   // need to build (workerd binary download, esbuild's optional native
   // binaries, sharp's libvips, etc.).
+  //
+  // pnpm 11 renamed `onlyBuiltDependencies` (list) → `allowBuilds`
+  // (dict). Emit both so the file works on pnpm 10 and pnpm 11; pnpm
+  // silently ignores unknown keys.
   "onlyBuiltDependencies:",
   ...["@parcel/watcher", "esbuild", "msgpackr-extract", "sharp", "workerd"].map(
     (name) => `  - ${JSON.stringify(name)}`,
+  ),
+  "",
+  "allowBuilds:",
+  ...["@parcel/watcher", "esbuild", "msgpackr-extract", "sharp", "workerd"].map(
+    (name) => `  ${JSON.stringify(name)}: true`,
   ),
   "",
   "packages:",
