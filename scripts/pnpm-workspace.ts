@@ -41,6 +41,16 @@ const lines: string[] = [
   "# `package.json#workspaces.catalog`; pnpm only reads them from this",
   "# file).",
   "",
+  // pnpm 11 fails the install with `ERR_PNPM_IGNORED_BUILDS` whenever
+  // a transitive dep has a postinstall script that hasn't been
+  // explicitly approved. Whitelist only the ones our examples actually
+  // need to build (workerd binary download, esbuild's optional native
+  // binaries, sharp's libvips, etc.).
+  "onlyBuiltDependencies:",
+  ...["@parcel/watcher", "esbuild", "msgpackr-extract", "sharp", "workerd"].map(
+    (name) => `  - ${JSON.stringify(name)}`,
+  ),
+  "",
   "packages:",
   ...packages.map((p) => `  - ${JSON.stringify(p)}`),
 ];

@@ -78,6 +78,16 @@ async function run(cmd: string[], cwd: string): Promise<number> {
   return await proc.exited;
 }
 
+// When the matrix is pinned to a single runtime (CI), use that runtime's
+// own `add` command so its install path gets exercised end-to-end —
+// otherwise (local: both runtimes) fall back to bun, which writes the
+// shared `node_modules` once for both subsequent runs.
+const PRIMARY_RUNTIME: Runtime = RUNTIMES[0];
+const addCmd = (specs: string[]): string[] =>
+  PRIMARY_RUNTIME === "bun"
+    ? ["bun", "add", ...specs]
+    : ["pnpm", "add", ...specs];
+
 const PNPM_WORKSPACE_PATH = path.join(ROOT, "pnpm-workspace.yaml");
 
 /**
@@ -184,9 +194,8 @@ if (canary) {
       }
     }
 
-    // `bun add` mutates the root `bun.lock` and the shared install cache —
-    // running them in parallel across examples races on both. Keep
-    // sequential.
+    // `<runtime> add` mutates the root lockfile + install cache — running
+    // them in parallel across examples races on both. Keep sequential.
     for (const example of examples) {
       const exampleDir = path.join(ROOT, "examples", example);
       const pkg = JSON.parse(
@@ -203,7 +212,7 @@ if (canary) {
         }
       }
       if (adds.length > 0) {
-        expect(await run(["bun", "add", ...adds], exampleDir)).toBe(0);
+        expect(await run(addCmd(adds), exampleDir)).toBe(0);
       }
     }
   }, TIMEOUT);
@@ -211,13 +220,13 @@ if (canary) {
 
 /**
  * Restore every example's published-package deps (alchemy / better-auth /
- * pr-package) back to `workspace:*`. Idempotent — only emits a `bun add`
- * when something is actually pointing at a non-workspace source, so this is
- * a no-op for the non-canary path that never mutates anything in the first
- * place.
+ * pr-package) back to `workspace:*`. Idempotent — only emits an `add`
+ * command when something is actually pointing at a non-workspace source,
+ * so this is a no-op for the non-canary path that never mutates anything
+ * in the first place.
  */
 const restoreWorkspaceDeps = async () => {
-  // Sequential — concurrent `bun add` calls race on the root `bun.lock`.
+  // Sequential — concurrent add calls race on the root lockfile.
   for (const example of examples) {
     const exampleDir = path.join(ROOT, "examples", example);
     let pkg: {
