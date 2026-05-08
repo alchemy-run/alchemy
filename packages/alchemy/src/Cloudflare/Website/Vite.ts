@@ -22,6 +22,11 @@ export interface ViteProps<
    */
   rootDir?: string;
   /**
+   * Whether local Vite dev should proxy supported bindings to Cloudflare.
+   * Defaults to `true` so dev uses the same remote resources Alchemy manages.
+   */
+  remoteBindings?: boolean;
+  /**
    * Controls which files are hashed to decide whether a rebuild is needed.
    * By default every non-gitignored file in `cwd` is hashed, plus the nearest
    * lockfile. Provide explicit globs to narrow the scope.
@@ -137,6 +142,7 @@ export const Vite = <
         main: props?.main ?? undefined!,
         vite: {
           rootDir: props?.rootDir,
+          remoteBindings: props?.remoteBindings ?? true,
           memo: props?.memo,
         },
       }),

@@ -307,6 +307,7 @@ export interface WorkerProps<
   /** @internal used by Cloudflare.Vite resource */
   vite?: {
     rootDir?: string;
+    remoteBindings?: boolean;
     memo?: MemoOptions;
   };
   logpush?: boolean;

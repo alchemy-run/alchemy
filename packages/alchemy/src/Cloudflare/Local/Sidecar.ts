@@ -28,6 +28,7 @@ export interface ServeViteOptions {
   rootDir: string;
   wranglerConfigPath: string;
   configHash: string;
+  remoteBindings: boolean;
 }
 
 export const SidecarSchema = defineSchema<Sidecar["Service"]>({

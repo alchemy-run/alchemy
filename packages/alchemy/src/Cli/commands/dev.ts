@@ -49,6 +49,7 @@ export const devCommand = Command.make(
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",
+        detached: false,
         env: {
           ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
         },

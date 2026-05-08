@@ -83,7 +83,7 @@ const maybeStartRpcServer = Effect.fn(function* (main: string) {
     yield* ChildProcess.make(command, args, {
       stdout: "inherit",
       stderr: "inherit",
-      detached: true,
+      detached: false,
     });
   } else {
     yield* Effect.logDebug("[RpcClient] RPC server already running", main);

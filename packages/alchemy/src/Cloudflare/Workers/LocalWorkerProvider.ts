@@ -1,6 +1,7 @@
 import type { HyperdriveOrigin } from "@distilled.cloud/cloudflare-runtime/Worker";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Hash from "effect/Hash";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import nodePath from "node:path";
@@ -140,6 +141,26 @@ export const LocalWorkerProvider = () =>
       const path = yield* Path.Path;
       const { dotAlchemy } = yield* AlchemyContext;
 
+      const readViteConfigInputHash = Effect.fn(function* (rootDir: string) {
+        const files = yield* Effect.all(
+          viteConfigInputFiles.map((file) => {
+            const filePath = path.join(rootDir, file);
+            return fs.readFileString(filePath).pipe(
+              Effect.map((content) => [file, Hash.string(content)] as const),
+              Effect.catch(() => Effect.succeed(undefined)),
+            );
+          }),
+        );
+        const entries: Array<readonly [string, number]> = [];
+        for (const file of files) {
+          if (file !== undefined) {
+            entries.push(file);
+          }
+        }
+
+        return Object.fromEntries(entries);
+      });
+
       const run = Effect.fn(function* (
         id: string,
         props: WorkerProps,
@@ -199,7 +220,14 @@ export const LocalWorkerProvider = () =>
             bindings: workerBindings,
             hyperdrives,
           });
-          const configHash = JSON.stringify({ rootDir, wranglerConfig });
+          const remoteBindings = props.vite.remoteBindings ?? true;
+          const viteConfigInputHash = yield* readViteConfigInputHash(rootDir);
+          const configHash = JSON.stringify({
+            rootDir,
+            wranglerConfig,
+            remoteBindings,
+            viteConfigInputHash,
+          });
           const configPath = path.join(
             dotAlchemy,
             "local",
@@ -220,6 +248,7 @@ export const LocalWorkerProvider = () =>
             rootDir,
             wranglerConfigPath: configPath,
             configHash,
+            remoteBindings,
           });
           return {
             workerId: name,
@@ -279,3 +308,18 @@ export const LocalWorkerProvider = () =>
       };
     }),
   );
+
+const viteConfigInputFiles = [
+  "vite.config.ts",
+  "vite.config.mts",
+  "vite.config.cts",
+  "vite.config.js",
+  "vite.config.mjs",
+  "vite.config.cjs",
+  "package.json",
+  "bun.lock",
+  "bun.lockb",
+  "package-lock.json",
+  "pnpm-lock.yaml",
+  "yarn.lock",
+] as const;

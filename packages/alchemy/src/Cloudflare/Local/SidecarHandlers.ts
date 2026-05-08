@@ -319,7 +319,7 @@ async function getCloudflareVitePlugins(
 
   return plugin.cloudflare({
     configPath: worker.wranglerConfigPath,
-    remoteBindings: false,
+    remoteBindings: worker.remoteBindings,
     viteEnvironment: { name: "ssr" },
   });
 }
