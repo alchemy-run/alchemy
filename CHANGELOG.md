@@ -1,3 +1,36 @@
+## v2.0.0-beta.35
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**:
+  - **R2**: Add bucket custom domains &nbsp;-&nbsp; by **Alex** and **sam** in https://github.com/alchemy-run/alchemy-effect/issues/241 [<samp>(a782a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a782a449)
+- **Neon**:
+  - **Project**: Add enableLogicalReplication option &nbsp;-&nbsp; by **Baptiste Arnaud** in https://github.com/alchemy-run/alchemy-effect/issues/268 [<samp>(c4945)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c49451c6)
+- **cli**:
+  - Warn when a newer alchemy version is on npm &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/253 [<samp>(7e701)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/7e701205)
+  - Use plain-text renderer in non-interactive terminals &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/258 [<samp>(16485)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/16485403)
+  - Cloudflare/aws namespaces + cloudflare state logs &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/256 [<samp>(335ab)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/335ab26c)
+- **cloudflare**:
+  - Worker support non-string env bindings &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/269 [<samp>(220c3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/220c358c)
+  - **queue**: Cloudflare.messages(queue).subscribe(...) Effect consumer API &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/260 [<samp>(59c01)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/59c01867)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Move Auth Providers into layers to keep requirements never &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/271 [<samp>(38319)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/38319fa0)
+- Dev mode node compatibility and profiles &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/273 [<samp>(9f402)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/9f4026b6)
+- **Cloudflare**:
+  - **QueueConsumer**: Paginate listConsumers, surface conflicts clearly &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/257 [<samp>(11d06)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/11d06201)
+  - **R2**: Simplify r2 custom domain interface to just an array &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/259 [<samp>(8953d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/8953dfc2)
+- **Drizzle**:
+  - Only flag Schema as updated when migrations actually drift &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/261 [<samp>(8f2e3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/8f2e33e7)
+- **cloudflare**:
+  - Disable builder.sharedConfigBuild for vite build &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/176 [<samp>(2fb34)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/2fb34c2b)
+  - Update runtime to 0.3.1 &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/278 [<samp>(426e8)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/426e83f6)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.34...HEAD)
+
+---
+
 ## v2.0.0-beta.34
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
