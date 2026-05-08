@@ -25,6 +25,7 @@
   "dependencies": {
     "alchemy": "workspace:*",
     "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
     "effect": "catalog:"
   },
   "publishConfig": {
