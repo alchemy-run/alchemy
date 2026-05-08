@@ -344,8 +344,8 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
-    "drizzle-kit": ">=1.0.0-rc.1",
-    "drizzle-orm": ">=1.0.0-rc.1",
+    "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "vite": "catalog:",
     "ws": "catalog:"
