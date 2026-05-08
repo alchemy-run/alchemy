@@ -412,6 +412,36 @@ curl https://myapp-worker-dev-you-abc123.workers.dev/hello.txt
 # → Hello, world!
 ```
 
+## Need secrets or env vars?
+
+Most real Workers also need configuration that isn't an upstream
+resource — an API key, a DSN, a feature flag. Bind those into the
+Worker's `env` with `Alchemy.Secret` (for redacted values) or
+`Alchemy.Variable` (for plain values). Both read from the active
+[ConfigProvider](https://effect.website/docs/configuration) when
+called with just a name:
+
+```typescript
+import * as Alchemy from "alchemy";
+
+Effect.gen(function* () {
+  const apiKey = yield* Alchemy.Secret("OPENAI_API_KEY");
+
+  return {
+    fetch: Effect.gen(function* () {
+      const key = yield* apiKey; // Redacted<string>
+      // ...
+    }),
+  };
+});
+```
+
+The deploy-time `yield*` records the binding (Cloudflare deploys it
+as `secret_text`); the runtime `yield*` returns the value. See
+[Concepts › Secrets and Variables](/concepts/secrets) for the full
+picture and [Guides › Secrets and env vars](/guides/secrets) for a
+step-by-step walkthrough.
+
 ## Recap
 
 You now have:
