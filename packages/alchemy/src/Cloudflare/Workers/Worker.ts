@@ -46,7 +46,10 @@ import {
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
-import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
+import type {
+  Hyperdrive,
+  HyperdriveDevOrigin,
+} from "../Hyperdrive/Hyperdrive.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
 import { SidecarLive } from "../Local/Sidecar.ts";
 import { CloudflareLogs } from "../Logs.ts";
@@ -182,6 +185,7 @@ export type WorkerBindingResource =
   | CloudflareQueue
   | AiGateway
   | ArtifactsBinding
+  | Hyperdrive
   | DurableObjectNamespaceLike<any>;
 
 export type WorkerBindings = {
@@ -774,8 +778,14 @@ export const Worker: Platform<
                             type: "ai",
                             name: bindingName,
                           }
-                        : // TODO(sam): handle others
-                          undefined;
+                        : binding.Type === "Cloudflare.Hyperdrive"
+                          ? {
+                              type: "hyperdrive",
+                              name: bindingName,
+                              id: binding.hyperdriveId,
+                            }
+                          : // TODO(sam): handle others
+                            undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
