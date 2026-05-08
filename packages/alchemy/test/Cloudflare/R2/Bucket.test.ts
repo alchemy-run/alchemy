@@ -152,6 +152,95 @@ test.provider(
     }).pipe(logLevel),
 );
 
+test.provider("lifecycle rules are added, updated, and removed", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    // Create with one rule.
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2Bucket("LifecycleBucket", {
+          lifecycleRules: [
+            {
+              id: "expire-after-30d",
+              deleteObjectsTransition: {
+                condition: { type: "Age", maxAge: 60 * 60 * 24 * 30 },
+              },
+            },
+          ],
+        });
+      }),
+    );
+
+    const initialRules = yield* r2.getBucketLifecycle({
+      accountId,
+      bucketName: initial.bucketName,
+    });
+    expect(initialRules.rules).toHaveLength(1);
+    expect(initialRules.rules?.[0]?.id).toEqual("expire-after-30d");
+    expect(initialRules.rules?.[0]?.enabled).toEqual(true);
+    expect(initialRules.rules?.[0]?.deleteObjectsTransition?.condition).toEqual(
+      { type: "Age", maxAge: 60 * 60 * 24 * 30 },
+    );
+
+    // Update: change the prefix and add a storage class transition.
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2Bucket("LifecycleBucket", {
+          lifecycleRules: [
+            {
+              id: "expire-after-30d",
+              prefix: "logs/",
+              storageClassTransitions: [
+                {
+                  condition: { type: "Age", maxAge: 60 * 60 * 24 * 7 },
+                  storageClass: "InfrequentAccess",
+                },
+              ],
+              deleteObjectsTransition: {
+                condition: { type: "Age", maxAge: 60 * 60 * 24 * 30 },
+              },
+            },
+          ],
+        });
+      }),
+    );
+
+    const updatedRules = yield* r2.getBucketLifecycle({
+      accountId,
+      bucketName: initial.bucketName,
+    });
+    expect(updatedRules.rules).toHaveLength(1);
+    expect(updatedRules.rules?.[0]?.conditions.prefix).toEqual("logs/");
+    expect(updatedRules.rules?.[0]?.storageClassTransitions).toEqual([
+      {
+        condition: { type: "Age", maxAge: 60 * 60 * 24 * 7 },
+        storageClass: "InfrequentAccess",
+      },
+    ]);
+
+    // Clear all rules.
+    yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2Bucket("LifecycleBucket", {
+          lifecycleRules: [],
+        });
+      }),
+    );
+
+    const clearedRules = yield* r2.getBucketLifecycle({
+      accountId,
+      bucketName: initial.bucketName,
+    });
+    expect(clearedRules.rules ?? []).toEqual([]);
+
+    yield* stack.destroy();
+    yield* waitForBucketToBeDeleted(initial.bucketName, accountId);
+  }).pipe(logLevel),
+);
+
 const waitForBucketToBeDeleted = Effect.fn(function* (
   bucketName: string,
   accountId: string,

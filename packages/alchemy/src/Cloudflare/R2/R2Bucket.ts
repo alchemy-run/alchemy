@@ -42,6 +42,60 @@ export type R2BucketCustomDomain = {
   minTLS?: "1.0" | "1.1" | "1.2" | "1.3";
 };
 
+export type R2BucketLifecycleCondition =
+  | {
+      type: "Age";
+      /**
+       * Maximum age of an object, in seconds, before the rule's action applies.
+       */
+      maxAge: number;
+    }
+  | {
+      type: "Date";
+      /**
+       * Absolute date (ISO 8601) at which the rule's action applies.
+       */
+      date: string;
+    };
+
+export type R2BucketLifecycleRule = {
+  /**
+   * Unique identifier for the rule within the bucket.
+   */
+  id: string;
+  /**
+   * Whether the rule is enabled.
+   * @default true
+   */
+  enabled?: boolean;
+  /**
+   * Object key prefix the rule applies to. Use `""` (or omit) to match all
+   * objects in the bucket.
+   * @default ""
+   */
+  prefix?: string;
+  /**
+   * Abort incomplete multipart uploads after the configured age.
+   */
+  abortMultipartUploadsTransition?: {
+    condition?: { type: "Age"; maxAge: number };
+  };
+  /**
+   * Delete matching objects after the configured age or on a specific date.
+   */
+  deleteObjectsTransition?: {
+    condition?: R2BucketLifecycleCondition;
+  };
+  /**
+   * Transition matching objects to a different storage class. Cloudflare R2
+   * only supports transitioning to `InfrequentAccess` today.
+   */
+  storageClassTransitions?: {
+    condition: R2BucketLifecycleCondition;
+    storageClass: "InfrequentAccess";
+  }[];
+};
+
 export type R2BucketProps = {
   /**
    * Name of the bucket. If omitted, a unique name will be generated.
@@ -67,6 +121,12 @@ export type R2BucketProps = {
    * to remove all custom domains.
    */
   domains?: R2BucketCustomDomain[];
+  /**
+   * Object lifecycle rules applied to the bucket. Pass an empty array (or
+   * omit) to clear all lifecycle rules. See the Cloudflare R2 docs for
+   * supported transitions.
+   */
+  lifecycleRules?: R2BucketLifecycleRule[];
 };
 
 export type R2Bucket = Resource<
@@ -79,6 +139,7 @@ export type R2Bucket = Resource<
     location: R2Bucket.Location | undefined;
     accountId: string;
     domains: R2Bucket.CustomDomain[];
+    lifecycleRules: R2Bucket.LifecycleRule[];
   },
   never,
   Cloudflare.Providers
@@ -175,6 +236,63 @@ export type R2Bucket = Resource<
  *   ],
  * });
  * ```
+ *
+ * @section Object Lifecycle Rules
+ *
+ * Configure lifecycle rules to automatically delete objects, abort
+ * incomplete multipart uploads, or transition objects to InfrequentAccess
+ * storage. Pass an empty array (or omit) to clear all rules. See the
+ * [Cloudflare R2 docs](https://developers.cloudflare.com/r2/buckets/object-lifecycles/)
+ * for details and limits (max 1000 rules per bucket).
+ *
+ * @example Delete objects 30 days after upload
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
+ *   lifecycleRules: [
+ *     {
+ *       id: "expire-old-objects",
+ *       deleteObjectsTransition: {
+ *         condition: { type: "Age", maxAge: 60 * 60 * 24 * 30 },
+ *       },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @example Transition to InfrequentAccess after 60 days, delete after 365
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
+ *   lifecycleRules: [
+ *     {
+ *       id: "archive-then-delete",
+ *       prefix: "logs/",
+ *       storageClassTransitions: [
+ *         {
+ *           condition: { type: "Age", maxAge: 60 * 60 * 24 * 60 },
+ *           storageClass: "InfrequentAccess",
+ *         },
+ *       ],
+ *       deleteObjectsTransition: {
+ *         condition: { type: "Age", maxAge: 60 * 60 * 24 * 365 },
+ *       },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @example Abort incomplete multipart uploads after 7 days
+ * ```typescript
+ * const bucket = yield* Cloudflare.R2Bucket("MyBucket", {
+ *   lifecycleRules: [
+ *     {
+ *       id: "abort-stale-uploads",
+ *       abortMultipartUploadsTransition: {
+ *         condition: { type: "Age", maxAge: 60 * 60 * 24 * 7 },
+ *       },
+ *     },
+ *   ],
+ * });
+ * ```
  */
 export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket")({
   bind: R2BucketBinding.bind,
@@ -184,6 +302,23 @@ export declare namespace R2Bucket {
   export type StorageClass = "Standard" | "InfrequentAccess";
   export type Jurisdiction = "default" | "eu" | "fedramp";
   export type Location = "apac" | "eeur" | "enam" | "weur" | "wnam" | "oc";
+  export type LifecycleRule = {
+    id: string;
+    enabled: boolean;
+    prefix: string;
+    abortMultipartUploadsTransition:
+      | { condition: { type: "Age"; maxAge: number } | undefined }
+      | undefined;
+    deleteObjectsTransition:
+      | { condition: R2BucketLifecycleCondition | undefined }
+      | undefined;
+    storageClassTransitions:
+      | {
+          condition: R2BucketLifecycleCondition;
+          storageClass: "InfrequentAccess";
+        }[]
+      | undefined;
+  };
   export type CustomDomain = {
     domain: string;
     zoneId: string | undefined;
@@ -224,6 +359,8 @@ export const R2BucketProvider = () =>
       const createBucketDomainCustom = yield* r2.createBucketDomainCustom;
       const updateBucketDomainCustom = yield* r2.updateBucketDomainCustom;
       const deleteBucketDomainCustom = yield* r2.deleteBucketDomainCustom;
+      const getBucketLifecycle = yield* r2.getBucketLifecycle;
+      const putBucketLifecycle = yield* r2.putBucketLifecycle;
 
       const createBucketName = (id: string, name: string | undefined) =>
         Effect.gen(function* () {
@@ -252,7 +389,7 @@ export const R2BucketProvider = () =>
         }).pipe(
           Effect.retry({
             while: isNoSuchBucket,
-            schedule: r2CustomDomainConsistencySchedule,
+            schedule: r2BucketEndpointConsistencySchedule,
           }),
           Effect.map((response) =>
             response.domains.map(toCustomDomainAttributes),
@@ -351,7 +488,7 @@ export const R2BucketProvider = () =>
                   }).pipe(
                     Effect.retry({
                       while: isNoSuchBucket,
-                      schedule: r2CustomDomainConsistencySchedule,
+                      schedule: r2BucketEndpointConsistencySchedule,
                     }),
                   );
                   return toCustomDomainAttributes({ ...created, zoneId });
@@ -368,7 +505,7 @@ export const R2BucketProvider = () =>
                 }).pipe(
                   Effect.retry({
                     while: isNoSuchBucket,
-                    schedule: r2CustomDomainConsistencySchedule,
+                    schedule: r2BucketEndpointConsistencySchedule,
                   }),
                 );
                 return toCustomDomainAttributes({
@@ -381,6 +518,45 @@ export const R2BucketProvider = () =>
           );
 
           return applied.sort((a, b) => a.domain.localeCompare(b.domain));
+        });
+
+      const reconcileLifecycleRules = (
+        bucketName: string,
+        jurisdiction: R2Bucket.Jurisdiction,
+        desired: R2BucketLifecycleRule[],
+      ) =>
+        Effect.gen(function* () {
+          const observed = yield* getBucketLifecycle({
+            accountId,
+            bucketName,
+            jurisdiction,
+          }).pipe(
+            Effect.retry({
+              while: isNoSuchBucket,
+              schedule: r2BucketEndpointConsistencySchedule,
+            }),
+          );
+
+          const observedRules = (observed.rules ?? []).map(toLifecycleRule);
+          const desiredRules = desired.map(normalizeLifecycleRule);
+
+          if (deepEqual(observedRules, desiredRules)) {
+            return desiredRules;
+          }
+
+          yield* putBucketLifecycle({
+            accountId,
+            bucketName,
+            jurisdiction,
+            rules: desired.map(toLifecyclePutPayload),
+          }).pipe(
+            Effect.retry({
+              while: isNoSuchBucket,
+              schedule: r2BucketEndpointConsistencySchedule,
+            }),
+          );
+
+          return desiredRules;
         });
 
       return {
@@ -410,6 +586,9 @@ export const R2BucketProvider = () =>
             } as const;
           }
           if (!deepEqual(olds.domains, news.domains)) {
+            return { action: "update" } as const;
+          }
+          if (!deepEqual(olds.lifecycleRules, news.lifecycleRules)) {
             return { action: "update" } as const;
           }
         }),
@@ -481,9 +660,16 @@ export const R2BucketProvider = () =>
             output?.domains ?? [],
           );
 
+          const lifecycleRules = yield* reconcileLifecycleRules(
+            attrs.bucketName,
+            attrs.jurisdiction,
+            news.lifecycleRules ?? [],
+          );
+
           return {
             ...attrs,
             domains,
+            lifecycleRules,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -519,6 +705,7 @@ export const R2BucketProvider = () =>
               location: normalizeLocation(bucket.location),
               accountId: acct,
               domains: output?.domains ?? [],
+              lifecycleRules: output?.lifecycleRules ?? [],
             })),
             Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
           );
@@ -527,10 +714,11 @@ export const R2BucketProvider = () =>
     }),
   );
 
-// R2 can make a newly-created bucket visible to `getBucket` before the custom
-// domain endpoints accept it. Retry only that narrow `NoSuchBucket` lag here;
-// not-found domains are still treated as terminal for idempotent deletes.
-const r2CustomDomainConsistencySchedule = Schedule.exponential(100).pipe(
+// R2 can make a newly-created bucket visible to `getBucket` before its
+// sub-resource endpoints (custom domains, lifecycle) accept it. Retry only
+// that narrow `NoSuchBucket` lag here; not-found sub-resources are still
+// treated as terminal for idempotent deletes.
+const r2BucketEndpointConsistencySchedule = Schedule.exponential(100).pipe(
   Schedule.both(Schedule.recurs(5)),
 );
 
@@ -572,6 +760,51 @@ const isMissingCustomDomainOrBucket = (error: unknown): boolean =>
     ("_tag" in error &&
       ((error as { _tag: unknown })._tag === "DomainNotFound" ||
         (error as { _tag: unknown })._tag === "NoSuchBucket")));
+
+type LifecycleRuleResponse = NonNullable<
+  r2.GetBucketLifecycleResponse["rules"]
+>[number];
+
+const toLifecycleRule = (
+  rule: LifecycleRuleResponse,
+): R2Bucket.LifecycleRule => ({
+  id: rule.id,
+  enabled: rule.enabled,
+  prefix: rule.conditions.prefix ?? "",
+  abortMultipartUploadsTransition: rule.abortMultipartUploadsTransition
+    ? { condition: rule.abortMultipartUploadsTransition.condition ?? undefined }
+    : undefined,
+  deleteObjectsTransition: rule.deleteObjectsTransition
+    ? { condition: rule.deleteObjectsTransition.condition ?? undefined }
+    : undefined,
+  storageClassTransitions: rule.storageClassTransitions ?? undefined,
+});
+
+const normalizeLifecycleRule = (
+  rule: R2BucketLifecycleRule,
+): R2Bucket.LifecycleRule => ({
+  id: rule.id,
+  enabled: rule.enabled ?? true,
+  prefix: rule.prefix ?? "",
+  abortMultipartUploadsTransition: rule.abortMultipartUploadsTransition
+    ? { condition: rule.abortMultipartUploadsTransition.condition }
+    : undefined,
+  deleteObjectsTransition: rule.deleteObjectsTransition
+    ? { condition: rule.deleteObjectsTransition.condition }
+    : undefined,
+  storageClassTransitions: rule.storageClassTransitions,
+});
+
+const toLifecyclePutPayload = (
+  rule: R2BucketLifecycleRule,
+): NonNullable<r2.PutBucketLifecycleRequest["rules"]>[number] => ({
+  id: rule.id,
+  enabled: rule.enabled ?? true,
+  conditions: { prefix: rule.prefix ?? "" },
+  abortMultipartUploadsTransition: rule.abortMultipartUploadsTransition,
+  deleteObjectsTransition: rule.deleteObjectsTransition,
+  storageClassTransitions: rule.storageClassTransitions,
+});
 
 const isNoSuchBucket = (error: unknown): boolean =>
   typeof error === "object" &&
