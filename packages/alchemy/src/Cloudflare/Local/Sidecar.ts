@@ -31,7 +31,7 @@ export type ServeError = typeof ServeError.Type;
 export const SidecarSchema = defineSchema<Sidecar["Service"]>({
   serve: {
     success: ServeResult,
-    error: Schema.Union([RuntimeError, BundleError]),
+    error: ServeError,
   },
   stop: { success: Schema.Void, error: Schema.Never },
 });
@@ -41,7 +41,7 @@ export class Sidecar extends RpcClient.RpcClientService<
   {
     readonly serve: (
       options: ServeOptions,
-    ) => Effect.Effect<ServeResult, RuntimeError | BundleError>;
+    ) => Effect.Effect<ServeResult, ServeError>;
     readonly stop: (name: string) => Effect.Effect<void>;
   }
 >()("Sidecar") {}
