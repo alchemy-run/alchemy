@@ -40,6 +40,10 @@ import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import type { AiGateway } from "../AiGateway/AiGateway.ts";
 import {
+  isAnalyticsEngineDataset,
+  type AnalyticsEngineDataset,
+} from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
+import {
   isArtifacts as isArtifactsBinding,
   type Artifacts as ArtifactsBinding,
 } from "../Artifacts/Artifacts.ts";
@@ -181,6 +185,7 @@ export type WorkerBindingResource =
   | KVNamespace
   | CloudflareQueue
   | AiGateway
+  | AnalyticsEngineDataset
   | ArtifactsBinding
   | DurableObjectNamespaceLike<any>;
 
@@ -774,8 +779,14 @@ export const Worker: Platform<
                             type: "ai",
                             name: bindingName,
                           }
-                        : // TODO(sam): handle others
-                          undefined;
+                        : isAnalyticsEngineDataset(binding)
+                          ? {
+                              type: "analytics_engine",
+                              name: bindingName,
+                              dataset: binding.dataset,
+                            }
+                          : // TODO(sam): handle others
+                            undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
