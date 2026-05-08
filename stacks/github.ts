@@ -150,7 +150,9 @@ const token = (
           "Vectorize Write",
           // Higher-level Worker features used by examples
           "AI Gateway Write",
-          "Cloudchamber Write", // Cloudflare Containers
+          // Containers
+          "Workers Containers Write",
+          "Cloudchamber Write",
           "Browser Rendering Write",
           // Static assets / sites
           "Pages Write",
