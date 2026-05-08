@@ -68,7 +68,7 @@
       "@distilled.cloud/aws": "^0.19.0",
       "@distilled.cloud/axiom": "^0.19.0",
       "@distilled.cloud/cloudflare-rolldown-plugin": "0.3.0",
-      "@distilled.cloud/cloudflare-runtime": "0.2.1",
+      "@distilled.cloud/cloudflare-runtime": "0.3.1",
       "@distilled.cloud/cloudflare-vite-plugin": "0.2.0",
       "@distilled.cloud/cloudflare": "^0.19.0",
       "@distilled.cloud/core": "^0.19.0",
