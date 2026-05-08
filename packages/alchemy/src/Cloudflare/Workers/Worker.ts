@@ -326,6 +326,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   {
     bindings?: WorkerBinding[];
     containers?: { className: string }[];
+    crons?: string[];
     hyperdrives?: Record<string, Required<HyperdriveDevOrigin>>;
   },
   Providers
@@ -1023,6 +1024,12 @@ function getDurableObjectBindings(
         : [],
     ),
   );
+}
+
+export function getCronBindings(
+  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
+) {
+  return Array.from(new Set(bindings.flatMap((b) => b.data.crons ?? [])));
 }
 
 function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
@@ -2004,7 +2011,7 @@ export const LiveWorkerProvider = () =>
         );
         const crons = yield* reconcileCrons(
           name,
-          normalizeCrons(news.crons),
+          normalizeCrons([...getCronBindings(bindings), ...(news.crons ?? [])]),
           output?.crons ?? [],
           session,
         );
