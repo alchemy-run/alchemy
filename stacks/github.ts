@@ -2,6 +2,7 @@ import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as GitHub from "alchemy/GitHub";
+import * as Neon from "alchemy/Neon";
 import * as Output from "alchemy/Output";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -17,6 +18,7 @@ export default Alchemy.Stack(
       AWS.providers(),
       Cloudflare.providers(),
       GitHub.providers(),
+      Neon.providers(),
     ),
     state: Cloudflare.state(),
   },
@@ -91,6 +93,7 @@ export default Alchemy.Stack(
         PROD_CLOUDFLARE_ACCOUNT_ID: prodAccountId,
         DISCORD_WEBHOOK_URL: discordWebhookUrl,
         PR_PACKAGE_TOKEN: prPackageAuthToken,
+        NEON_API_KEY: (yield* Neon.NeonEnvironment).apiKey,
       },
     });
 
