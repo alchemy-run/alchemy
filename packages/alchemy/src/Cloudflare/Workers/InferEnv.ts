@@ -25,8 +25,10 @@ type GetBindingType<T> = T extends Cloudflare.Assets
           ? Queue<unknown>
           : T extends Cloudflare.AiGateway
             ? Ai
-            : T extends Cloudflare.Artifacts
-              ? Artifacts
-              : T extends Cloudflare.DurableObjectNamespaceLike
-                ? DurableObjectNamespace<Exclude<T["Shape"], undefined>>
-                : never;
+            : T extends Cloudflare.RateLimit
+              ? RateLimit
+              : T extends Cloudflare.Artifacts
+                ? Artifacts
+                : T extends Cloudflare.DurableObjectNamespaceLike
+                  ? DurableObjectNamespace<Exclude<T["Shape"], undefined>>
+                  : never;

@@ -53,6 +53,7 @@ import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import type { Queue as CloudflareQueue } from "../Queue/Queue.ts";
 import type { R2Bucket } from "../R2/R2Bucket.ts";
+import { isRateLimit, type RateLimit } from "../RateLimit/RateLimit.ts";
 import {
   isAssets,
   readAssets,
@@ -181,6 +182,7 @@ export type WorkerBindingResource =
   | KVNamespace
   | CloudflareQueue
   | AiGateway
+  | RateLimit
   | ArtifactsBinding
   | DurableObjectNamespaceLike<any>;
 
@@ -774,8 +776,20 @@ export const Worker: Platform<
                             type: "ai",
                             name: bindingName,
                           }
-                        : // TODO(sam): handle others
-                          undefined;
+                        : isRateLimit(binding)
+                          ? {
+                              type: "ratelimit",
+                              name: bindingName,
+                              namespaceId: binding.namespaceId,
+                              simple: {
+                                limit: binding.simple.limit,
+                                period: String(binding.simple.period) as
+                                  | "10"
+                                  | "60",
+                              },
+                            }
+                          : // TODO(sam): handle others
+                            undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
