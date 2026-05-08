@@ -1901,7 +1901,6 @@ export const LiveWorkerProvider = () =>
         // a previous failed/external action left it as).
         const desiredSubdomain = {
           enabled: news.url !== false,
-          previewsEnabled: news.url !== false,
         };
         const observedSubdomain = yield* getScriptSubdomain({
           accountId,
@@ -1915,10 +1914,11 @@ export const LiveWorkerProvider = () =>
             Effect.succeed({ enabled: false, previewsEnabled: false }),
           ),
         );
-        if (
+        const shouldUpdateSubdomain =
           desiredSubdomain.enabled !== observedSubdomain.enabled ||
-          desiredSubdomain.previewsEnabled !== observedSubdomain.previewsEnabled
-        ) {
+          (desiredSubdomain.enabled &&
+            observedSubdomain.previewsEnabled !== true);
+        if (shouldUpdateSubdomain) {
           yield* session.note(
             `${desiredSubdomain.enabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
           );
