@@ -582,6 +582,13 @@ export const loginWithCloudflare = () =>
       STATE_STORE_SCRIPT_NAME,
       store.id,
       AuthTokenSecretName,
+    ).pipe(
+      Effect.retry({
+        while: isWorkersPreviewConfigurationError,
+        schedule: Schedule.exponential(200).pipe(
+          Schedule.both(Schedule.recurs(15)),
+        ),
+      }),
     );
 
     // 3. Derive the deployed worker URL.
@@ -633,6 +640,11 @@ export const loginWithCloudflare = () =>
       },
     }),
   );
+
+const isWorkersPreviewConfigurationError = (error: unknown) =>
+  error instanceof EdgeSessionError &&
+  (error.message.includes("Invalid Workers Preview configuration") ||
+    error.message.includes("Error 1031"));
 
 /**
  * Run {@link finishBootstrap} iff the worker at `url` fails the

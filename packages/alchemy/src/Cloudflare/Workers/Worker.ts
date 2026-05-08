@@ -1899,17 +1899,28 @@ export const LiveWorkerProvider = () =>
         // explicitly set `url`, leaving the subdomain in whatever state
         // Cloudflare currently has it (disabled by default, or whatever
         // a previous failed/external action left it as).
-        const desiredSubdomainEnabled = news.url !== false;
-        const observedSubdomainEnabled = yield* getScriptSubdomain({
+        const desiredSubdomain = {
+          enabled: news.url !== false,
+          previewsEnabled: news.url !== false,
+        };
+        const observedSubdomain = yield* getScriptSubdomain({
           accountId,
           scriptName: name,
         }).pipe(
-          Effect.map((s) => s.enabled === true),
-          Effect.catch(() => Effect.succeed(false)),
+          Effect.map((s) => ({
+            enabled: s.enabled === true,
+            previewsEnabled: s.previewsEnabled === true,
+          })),
+          Effect.catch(() =>
+            Effect.succeed({ enabled: false, previewsEnabled: false }),
+          ),
         );
-        if (desiredSubdomainEnabled !== observedSubdomainEnabled) {
+        if (
+          desiredSubdomain.enabled !== observedSubdomain.enabled ||
+          desiredSubdomain.previewsEnabled !== observedSubdomain.previewsEnabled
+        ) {
           yield* session.note(
-            `${desiredSubdomainEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
+            `${desiredSubdomain.enabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
           );
           // Cloudflare's script registry is eventually consistent — for the
           // first few hundred ms after `putScript` returns, POST /subdomain
@@ -1917,7 +1928,7 @@ export const LiveWorkerProvider = () =>
           // body). Bigger uploads race harder. Retry the subdomain toggle on
           // that specific tag with a short exponential backoff; same pattern
           // we use elsewhere in this provider for DO-namespace propagation.
-          yield* setWorkerSubdomain(name, desiredSubdomainEnabled).pipe(
+          yield* setWorkerSubdomain(name, desiredSubdomain.enabled).pipe(
             Effect.retry({
               while: (error: { _tag?: string }) =>
                 error?._tag === "WorkerNotFound",
