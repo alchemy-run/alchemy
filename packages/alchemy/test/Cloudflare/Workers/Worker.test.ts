@@ -10,6 +10,7 @@ import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
@@ -711,5 +712,51 @@ describe.concurrent("Cloudflare.Worker", () => {
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
       }).pipe(logLevel),
+  );
+
+  // Cloudflare supports `json` env bindings — number, boolean, array,
+  // object — that arrive in the worker as the parsed JS value rather
+  // than a string. Redacted strings still go via `secret_text`.
+  test.provider("env supports non-string values via json bindings", (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const worker = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Worker("EnvJsonWorker", {
+            main: pathe.resolve(import.meta.dirname, "env-worker.ts"),
+            url: true,
+            subdomain: { enabled: true, previewsEnabled: true },
+            compatibility: { date: "2024-01-01" },
+            env: {
+              STR: "hello",
+              NUM: 42,
+              BOOL: true,
+              OBJ: { nested: { value: "ok" }, count: 7 },
+              ARR: [1, 2, 3],
+              SECRET: Redacted.make("shh"),
+            },
+          });
+        }),
+      );
+
+      expect(worker.url).toBeDefined();
+      const body = yield* expectUrlContains(worker.url!, '"STR":"hello"', {
+        timeout: "60 seconds",
+        label: "env-worker response",
+      });
+      expect(JSON.parse(body)).toEqual({
+        STR: "hello",
+        NUM: 42,
+        BOOL: true,
+        OBJ: { nested: { value: "ok" }, count: 7 },
+        ARR: [1, 2, 3],
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+    }).pipe(logLevel),
   );
 });
