@@ -21,6 +21,7 @@ import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 
 import {
+  assertValidStage,
   dryRun as dryRunFlag,
   envFile,
   force,
@@ -79,6 +80,7 @@ export const execStack = Effect.fn(function* ({
   adopt = false,
 }: ExecStackOptions) {
   const stackEffect = yield* importStack(main);
+  yield* assertValidStage(stackEffect, stage);
 
   const services = Layer.mergeAll(
     Layer.effect(

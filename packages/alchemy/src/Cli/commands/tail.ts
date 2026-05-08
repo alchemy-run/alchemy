@@ -15,6 +15,7 @@ import { fileLogger } from "../../Util/FileLogger.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
 import {
+  assertValidStage,
   envFile,
   formatLocalTimestamp,
   importStack,
@@ -47,6 +48,7 @@ export const tailCommand = Command.make(
   )(
     Effect.fnUntraced(function* ({ main, stage, envFile, profile, filter }) {
       const stackEffect = yield* importStack(main);
+      yield* assertValidStage(stackEffect, stage);
 
       const services = Layer.mergeAll(
         ConfigProvider.layer(

@@ -10,7 +10,7 @@ import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
 
 import { AuthError } from "../../Auth/AuthProvider.ts";
-import type * as Stack from "../../Stack.ts";
+import * as Stack from "../../Stack.ts";
 import { recordCli } from "../../Telemetry/Metrics.ts";
 import { PromptCancelled } from "../../Util/Clank.ts";
 
@@ -270,4 +270,25 @@ export const importStack = Effect.fn(function* (main: string) {
     );
   }
   return stackEffect;
+});
+
+/**
+ * If the stack declared a `stages: [...]` whitelist, fail loudly when
+ * the resolved `--stage` value isn't a member. No-op when `stages` is
+ * absent (back-compat with stacks that haven't opted in).
+ */
+export const assertValidStage = Effect.fn(function* (
+  stackEffect: unknown,
+  stage: string,
+) {
+  const meta = Stack.readStagesMeta(stackEffect);
+  if (!meta?.stages || meta.stages.length === 0) return;
+  if (!meta.stages.includes(stage as never)) {
+    return yield* Effect.die(
+      new Error(
+        `Invalid stage "${stage}" for stack "${meta.name}". ` +
+          `Allowed stages: ${meta.stages.map((s) => `"${s}"`).join(", ")}.`,
+      ),
+    );
+  }
 });

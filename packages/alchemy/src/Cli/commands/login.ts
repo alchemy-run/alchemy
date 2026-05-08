@@ -15,6 +15,7 @@ import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 
 import {
+  assertValidStage,
   envFile,
   importStack,
   instrumentCommand,
@@ -55,6 +56,7 @@ export const loginCommand = Command.make(
   )(
     Effect.fnUntraced(function* ({ main, stage, envFile, profile, configure }) {
       const stackEffect = yield* importStack(main);
+      yield* assertValidStage(stackEffect, stage);
 
       const authProviders: AuthProviders["Service"] = {};
 

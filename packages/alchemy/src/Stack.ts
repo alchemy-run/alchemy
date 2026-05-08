@@ -20,7 +20,7 @@ import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
 import { ref } from "./Ref.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
-import { Stage } from "./Stage.ts";
+import { Stage, type StageName } from "./Stage.ts";
 import type { State } from "./State/State.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
 import { taggedFunction } from "./Util/effect.ts";
@@ -64,7 +64,45 @@ export type Stack = Context.ServiceClass.Shape<
 export interface StackProps<Req> {
   providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
   state: Layer.Layer<State, never, StackServices>;
+  /**
+   * Whitelist of stage names this stack accepts. When provided, the
+   * `--stage` flag is validated against this list at runtime, and the
+   * `alchemy types` command reads it to emit a `Stages` augmentation
+   * that narrows `yield* Stage` to the union of these literals.
+   *
+   * Use `as const` so the literal types survive into the emitted
+   * declaration:
+   *
+   * ```ts
+   * Alchemy.Stack("Typebot", {
+   *   stages: ["dev", "staging", "prod"] as const,
+   *   providers: ...,
+   *   state: ...,
+   * }, body);
+   * ```
+   */
+  stages?: readonly StageName[];
 }
+
+/**
+ * Stage metadata attached to the `Effect` returned by `Alchemy.Stack(...)`.
+ * The `alchemy types` CLI reads this off the imported default export to
+ * emit the consumer-side type augmentation without compiling the stack.
+ */
+export interface StagesMeta {
+  name: string;
+  stages: readonly StageName[] | undefined;
+}
+
+export const STAGES_META: unique symbol = Symbol.for("alchemy.stages");
+
+export const readStagesMeta = (value: unknown): StagesMeta | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const meta = (value as { [STAGES_META]?: unknown })[STAGES_META];
+  return typeof meta === "object" && meta !== null
+    ? (meta as StagesMeta)
+    : undefined;
+};
 
 export const Stack: Context.ServiceClass<
   Stack,
@@ -118,6 +156,7 @@ export const Stack: Context.ServiceClass<
       options: {
         providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
         state: Layer.Layer<State, never, StackServices>;
+        stages?: readonly StageName[];
       },
       eff: Effect.Effect<A, never, Req>,
     ) =>
@@ -139,6 +178,14 @@ export const Stack: Context.ServiceClass<
                   }),
               },
             ),
+            // Surfaces the stages declared on the stack so the
+            // `alchemy types` CLI can read them after `import()`-ing
+            // the user's `alchemy.run.ts`, without compiling the
+            // stack effect.
+            [STAGES_META]: {
+              name: stackName,
+              stages: options.stages,
+            } as StagesMeta,
           }),
       ),
   ),

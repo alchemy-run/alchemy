@@ -16,6 +16,7 @@ import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 
 import {
+  assertValidStage,
   envFile,
   importStack,
   instrumentCommand,
@@ -70,6 +71,7 @@ const withStateService = <A, E>(
 ) =>
   Effect.gen(function* () {
     const stackEffect = yield* importStack(args.main);
+    yield* assertValidStage(stackEffect, args.stage);
 
     const services = Layer.mergeAll(
       Layer.succeed(AuthProviders, {}),
