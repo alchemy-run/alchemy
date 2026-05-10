@@ -1,5 +1,5 @@
 {
-  "name": "example-monorepo",
+  "name": "example-monorepo-single-stack",
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",

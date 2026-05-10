@@ -199,20 +199,15 @@ const bucketOut = Output.of(bucket);          // Output<R2BucketAttrs>
 const refOut    = Output.of(Ref({ id: "B" })); // for cross-stack refs
 ```
 
-Use `Output.of(Ref(...))` (or [`Output.ref`](#cross-stack-references))
+Use `Output.of(Ref(...))` (or [`Output.ref`](#ref))
 to read a resource's attributes from another stack — see below.
 
 ## `ref`
 
-`Output.ref` reads a deployed resource's attributes from a different
-stack or stage. The reference is resolved at evaluation time
-against the persisted state store — no shared runtime, no shared
-state file, just a typed read of values another stack has already
-persisted.
+`Output.ref` produces an `Output` referencing a deployed
+resource's attributes in another stack or stage:
 
 ```typescript
-import * as Output from "alchemy/Output";
-
 const sharedBucket = Output.ref<typeof Bucket>("Bucket", {
   stack: "shared-infra",
   stage: "prod",
@@ -221,19 +216,14 @@ const sharedBucket = Output.ref<typeof Bucket>("Bucket", {
 sharedBucket.bucketName; // Output<string>
 ```
 
-The returned value behaves like any other `Output` — you can pass
-it as a prop, interpolate it, or `pipe` it through `map`. Alchemy
-records the dependency and resolves the reference during plan by
-looking up `{ stack, stage, id }` in the state store.
+Resolved at plan time against the persisted state store, fails
+with `InvalidReferenceError` when the target is missing. In
+day-to-day code prefer `Resource.ref` — same primitive, more
+ergonomic surface.
 
-If the target hasn't been deployed yet (or the stage doesn't exist),
-evaluation fails with `InvalidReferenceError`. Deploy the upstream
-stack first, then the downstream one.
-
-For whole-stack references — pulling a stack's outputs into another
-stack — see [Cross-stack references](/guides/cross-stack-references),
-which walks through a typed monorepo setup using
-`Alchemy.Stack<Self, Outputs>` and `Stack.stage[name]`.
+See [References](/concepts/references) for the full reference
+surface (`Output.ref`, `Resource.ref`, `Output.stackRef`,
+`Stack.stage`) and how each is resolved.
 
 ## How Outputs compose in props
 

@@ -1,21 +1,25 @@
 {
-  "name": "monorepo-frontend",
+  "name": "@monorepo-single-stack/backend",
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
   "repository": {
     "type": "git",
     "url": "https://github.com/alchemy-run/alchemy-effect"
   },
   "dependencies": {
-    "@types/react-dom": "^19.2.3",
-    "@types/react": "^19.2.14",
     "alchemy": "workspace:*",
-    "backend": "workspace:*",
-    "effect": "catalog:",
-    "react-dom": "^19.2.6",
-    "react": "^19.2.6",
-    "vite": "catalog:"
+    "effect": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    }
   },
   "scripts": {
     "deploy": "alchemy deploy",

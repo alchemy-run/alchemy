@@ -109,10 +109,10 @@ modules `yield*` it, it registers on the stack exactly once.
 
 ## `ref` — reference a deployed resource {#ref}
 
-Every resource constructor exposes a static `ref` that returns a
-typed reference to a resource that has already been deployed
-**elsewhere** — in another [stage](/concepts/stages) of this
-stack, or in a different stack entirely.
+Every resource constructor exposes a static `ref` returning a
+typed reference to a resource that's already been deployed
+**elsewhere** — another stage of this stack, or a different
+stack entirely:
 
 ```typescript
 const project = yield* Neon.Project.ref("app-db", {
@@ -121,35 +121,14 @@ const project = yield* Neon.Project.ref("app-db", {
 // project: Neon.Project — same shape, same typed attributes
 ```
 
-The signature is:
+Lookup keyed by `{ stack, stage, id }`; both options default to
+the current stack/stage. Lazy — no cloud calls at declaration
+time. Typed — the result has the same interface as a freshly
+deployed resource. Strict — fails fast with
+`InvalidReferenceError` when the target is missing.
 
-```ts
-Resource.ref(
-  id: string,
-  options?: { stage?: string; stack?: string },
-): Effect<Resource>
-```
-
-The lookup is keyed by `{ stack, stage, id }`. Both `stack` and
-`stage` default to the current stack/stage, so omitting both
-points at the same resource the local stack would create — useful
-for opting into "create OR adopt".
-
-Three things to know:
-
-- **Lazy.** Like every other Output expression, the ref doesn't
-  call any cloud API at declaration time. Plan-time evaluation
-  reads the persisted attributes from the state store.
-- **Typed.** `Neon.Project.ref(...)` returns a `Neon.Project`. You
-  can pass it to anything that accepts a `Neon.Project` — the
-  rest of the graph doesn't know (or care) whether it's a real
-  resource or a reference.
-- **Strict.** If the target hasn't been deployed yet, evaluation
-  fails with `InvalidReferenceError`. Deploy the upstream stage
-  first, then the dependent one.
-
-A typical pattern: long-lived `staging` and `prod` own the
-expensive resources, ephemeral `pr-*` stages reference them:
+A typical pattern: PR-preview stages reference long-lived
+`staging` resources instead of provisioning their own:
 
 ```typescript
 const project = stage.startsWith("pr-")
@@ -157,11 +136,10 @@ const project = stage.startsWith("pr-")
   : yield* Neon.Project("app-db", { region: "aws-us-east-1" });
 ```
 
-For walkthroughs see
-[Cross-stage references](/guides/cross-stage-references) (per-resource,
-same stack, different stage) and
-[Cross-stack references](/guides/cross-stack-references) (whole-stack
-typed handles).
+See [References](/concepts/references) for the full reference
+surface and the [Shared database across
+stages](/guides/shared-database) guide for the canonical
+walkthrough.
 
 ## Logical ID
 

@@ -61,7 +61,8 @@
       "website",
       "packages/*",
       "examples/*",
-      "examples/monorepo/*"
+      "examples/monorepo-single-stack/*",
+      "examples/monorepo-split-stack/*"
     ],
     "catalog": {
       "@aws-sdk/credential-providers": "^3.0.0",

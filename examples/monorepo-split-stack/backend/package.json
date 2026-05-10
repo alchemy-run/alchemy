@@ -1,5 +1,5 @@
 {
-  "name": "backend",
+  "name": "@monorepo-split-stack/backend",
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
