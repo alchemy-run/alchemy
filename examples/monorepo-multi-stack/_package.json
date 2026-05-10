@@ -1,5 +1,5 @@
 {
-  "name": "example-monorepo-split-stack",
+  "name": "example-monorepo-multi-stack",
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",

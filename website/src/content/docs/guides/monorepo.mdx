@@ -11,7 +11,7 @@ it. In a monorepo, you have two ways to organize the deploy:
 1. **Single-stack** — one `alchemy.run.ts` at the workspace root
    that deploys both packages together. **Recommended** for most
    projects.
-2. **Split-stack** — each package owns its own `alchemy.run.ts`
+2. **Multi-stack** — each package owns its own `alchemy.run.ts`
    and the frontend reads the backend's deployed outputs through
    a typed cross-stack reference.
 
@@ -25,19 +25,19 @@ Start with **single-stack**. It's simpler, faster to iterate on,
 and avoids the deploy-ordering and reference-resolution gotchas
 that come with cross-stack references.
 
-| Situation                                                                  | Use         |
-| -------------------------------------------------------------------------- | ----------- |
+| Situation                                                                  | Use          |
+| -------------------------------------------------------------------------- | ------------ |
 | One team owns both packages, ships them together                           | Single-stack |
 | You want one `deploy` / `destroy` command per environment                  | Single-stack |
 | Just starting out                                                          | Single-stack |
-| Backend and frontend deploy on different cadences (different teams, CI)    | Split-stack |
-| Backend has consumers besides the frontend, with their own deploy lifecycle | Split-stack |
-| You want to be able to `destroy` the frontend without touching the backend | Split-stack |
+| Backend and frontend deploy on different cadences (different teams, CI)    | Multi-stack  |
+| Backend has consumers besides the frontend, with their own deploy lifecycle | Multi-stack |
+| You want to be able to `destroy` the frontend without touching the backend | Multi-stack  |
 
 The two example projects:
 
 - [`examples/monorepo-single-stack`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/monorepo-single-stack)
-- [`examples/monorepo-split-stack`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/monorepo-split-stack)
+- [`examples/monorepo-multi-stack`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/monorepo-multi-stack)
 
 ## Shared layout
 
@@ -59,7 +59,7 @@ Set up the workspace `package.json`:
 ```
 
 Workspaces let `frontend` import from `backend` by package name
-— that's the channel the runtime client (and, in the split-stack
+— that's the channel the runtime client (and, in the multi-stack
 shape, the typed stack handle) flow through.
 
 ### Backend package
@@ -320,7 +320,7 @@ That's it. No subpath-versus-barrel for the stack handle, no
 deploy ordering, no `Output.stackRef`. The single-stack shape is
 the one to reach for unless you have a reason not to.
 
-## Option 2 — Split-stack
+## Option 2 — Multi-stack
 
 Each package owns its own `alchemy.run.ts`. The frontend reads
 the backend's deployed outputs through a **cross-stack
@@ -484,7 +484,7 @@ const backend = yield* Backend.stage["pr-42"];
 
 ## Comparison
 
-| Concern                           | Single-stack                | Split-stack                              |
+| Concern                           | Single-stack                | Multi-stack                              |
 | --------------------------------- | --------------------------- | ---------------------------------------- |
 | Number of `alchemy.run.ts` files  | 1                           | 2                                        |
 | Number of state files per stage   | 1                           | 2                                        |

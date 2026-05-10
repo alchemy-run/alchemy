@@ -1,5 +1,5 @@
 {
-  "name": "@monorepo-split-stack/frontend",
+  "name": "@monorepo-multi-stack/frontend",
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
@@ -11,7 +11,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/react": "^19.2.14",
     "alchemy": "workspace:*",
-    "@monorepo-split-stack/backend": "workspace:*",
+    "@monorepo-multi-stack/backend": "workspace:*",
     "effect": "catalog:",
     "react-dom": "^19.2.6",
     "react": "^19.2.6",
