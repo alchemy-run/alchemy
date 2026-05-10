@@ -4227,3 +4227,74 @@ describe("Redacted props/outputs survive deploy", () => {
     }),
   );
 });
+
+describe("stack output persistence", () => {
+  const getStackOutput = (stack: string, stage: string) =>
+    Effect.gen(function* () {
+      const state = yield* State;
+      return yield* state.getOutput({ stack, stage });
+    });
+
+  test.provider(
+    "apply persists the resolved stack output via state.setOutput",
+    (stack) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "hello" });
+          return { url: A.string };
+        }).pipe(stack.deploy);
+        expect(result).toEqual({ url: "hello" });
+
+        const persisted = yield* getStackOutput(stack.name, "test").pipe(
+          Effect.provide(stack.state),
+        );
+        expect(persisted).toEqual({ url: "hello" });
+      }),
+  );
+
+  test.provider(
+    "redeploys overwrite the persisted stack output with the new value",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "v1" });
+          return { url: A.string };
+        }).pipe(stack.deploy);
+
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "v2" });
+          return { url: A.string };
+        }).pipe(stack.deploy);
+
+        const persisted = yield* getStackOutput(stack.name, "test").pipe(
+          Effect.provide(stack.state),
+        );
+        expect(persisted).toEqual({ url: "v2" });
+      }),
+  );
+
+  test.provider(
+    "another stack can read the persisted output via Output.stackRef",
+    (stack) =>
+      Effect.gen(function* () {
+        // First deploy: write the stack output we'll later reference.
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "shared" });
+          return { url: A.string };
+        }).pipe(stack.deploy);
+
+        // Second deploy: a downstream resource consumes the previously
+        // persisted stack output via Output.stackRef. The deploy
+        // succeeds because state.getOutput finds it.
+        const result = yield* Effect.gen(function* () {
+          const upstream = yield* Output.stackRef<{ url: string }>(stack.name);
+          const B = yield* TestResource("B", {
+            string: (upstream as any).url,
+          });
+          return { downstream: B.string };
+        }).pipe(stack.deploy);
+
+        expect(result).toEqual({ downstream: "shared" });
+      }),
+  );
+});

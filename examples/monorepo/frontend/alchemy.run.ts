@@ -11,7 +11,7 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     // reference the prod stage of the backend
-    const backend = yield* Backend.stage.prod;
+    const backend = yield* Backend;
 
     const website = yield* Cloudflare.Vite("Website", {
       env: {

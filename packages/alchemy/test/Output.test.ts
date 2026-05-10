@@ -6,6 +6,7 @@ import { Stage } from "@/Stage";
 import { inMemoryState } from "@/State/InMemoryState";
 import type { ResourceState } from "@/State/ResourceState";
 import { describe, expect, it } from "@effect/vitest";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -340,7 +341,7 @@ describe("Output.evaluate", () => {
             },
           },
         };
-        const r = makeRef<ResourceLike>({ id: "myResource" });
+        const r = makeRef<ResourceLike>("myResource");
         const expr = Output.of(r);
         const result = yield* provideStackStage(
           Output.evaluate(expr, {}).pipe(
@@ -363,8 +364,7 @@ describe("Output.evaluate", () => {
             },
           },
         };
-        const r = makeRef<ResourceLike>({
-          id: "someResource",
+        const r = makeRef<ResourceLike>("someResource", {
           stack: "otherStack",
           stage: "otherStage",
         });
@@ -381,8 +381,7 @@ describe("Output.evaluate", () => {
       "fails with InvalidReferenceError when ref target is missing",
       () =>
         Effect.gen(function* () {
-          const r = makeRef<ResourceLike>({
-            id: "ghost",
+          const r = makeRef<ResourceLike>("ghost", {
             stack: "s",
             stage: "t",
           });
@@ -395,6 +394,113 @@ describe("Output.evaluate", () => {
             expect(JSON.stringify(exit.cause.toJSON())).toContain(
               "InvalidReferenceError",
             );
+          }
+        }),
+    );
+
+    it.effect(
+      "PropExpr on a Ref reads the attribute from persisted state",
+      () =>
+        Effect.gen(function* () {
+          const initial = {
+            myStack: {
+              myStage: {
+                shared: {
+                  fqn: "shared",
+                  attr: { url: "https://example.com", name: "shared" },
+                } as unknown as ResourceState,
+              },
+            },
+          };
+          const r = makeRef<ResourceLike>("shared");
+          const expr = (Output.of(r) as any).url as Output.Output<string>;
+          const result = yield* provideStackStage(
+            Output.evaluate(expr, {}).pipe(
+              Effect.provide(inMemoryState(initial)),
+            ),
+          );
+          expect(result).toBe("https://example.com");
+        }),
+    );
+  });
+
+  describe("StackRefExpr", () => {
+    const provideStage = <A, E, R>(
+      effect: Effect.Effect<A, E, R>,
+      stage = "myStage",
+    ) => effect.pipe(Effect.provide(Layer.succeed(Stage, stage)));
+
+    it.effect("Output.stackRef resolves to the persisted stack output", () =>
+      Effect.gen(function* () {
+        const expr = yield* Output.stackRef<{ url: string }>("Backend");
+        const result = yield* provideStage(
+          Output.evaluate(expr, {}).pipe(
+            Effect.provide(
+              inMemoryState(
+                {},
+                { Backend: { myStage: { url: "https://api.example.com" } } },
+              ),
+            ),
+          ),
+        );
+        expect(result).toEqual({ url: "https://api.example.com" });
+      }),
+    );
+
+    it.effect("explicit stage overrides the ambient Stage", () =>
+      Effect.gen(function* () {
+        const expr = yield* Output.stackRef<{ url: string }>("Backend", {
+          stage: "prod",
+        });
+        // No Stage layer is provided — the ref carries it explicitly.
+        const result = yield* Output.evaluate(expr, {}).pipe(
+          Effect.provide(
+            inMemoryState(
+              {},
+              { Backend: { prod: { url: "https://prod.example.com" } } },
+            ),
+          ),
+        );
+        expect(result).toEqual({ url: "https://prod.example.com" });
+      }),
+    );
+
+    it.effect("PropExpr off a stackRef reads a single attribute", () =>
+      Effect.gen(function* () {
+        const backend = yield* Output.stackRef<{ url: string }>("Backend");
+        const expr = (backend as any).url as Output.Output<string>;
+        const result = yield* provideStage(
+          Output.evaluate(expr, {}).pipe(
+            Effect.provide(
+              inMemoryState(
+                {},
+                { Backend: { myStage: { url: "https://api.example.com" } } },
+              ),
+            ),
+          ),
+        );
+        expect(result).toBe("https://api.example.com");
+      }),
+    );
+
+    it.effect(
+      "fails with InvalidReferenceError when the target stack/stage has no persisted output",
+      () =>
+        Effect.gen(function* () {
+          const expr = yield* Output.stackRef<{ url: string }>("Backend", {
+            stage: "ghost",
+          });
+          const exit = yield* Effect.exit(
+            Output.evaluate(expr, {}).pipe(Effect.provide(inMemoryState())),
+          );
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            const err = Cause.squash(
+              exit.cause,
+            ) as Output.InvalidReferenceError;
+            expect(err._tag).toBe("InvalidReferenceError");
+            expect(err.stack).toBe("Backend");
+            expect(err.stage).toBe("ghost");
           }
         }),
     );

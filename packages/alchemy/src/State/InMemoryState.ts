@@ -13,14 +13,18 @@ export const inMemoryState = (
     StackId,
     Record<StageId, Record<Fqn, ResourceState>>
   > = {},
+  initialOutputs: Record<StackId, Record<StageId, unknown>> = {},
 ) =>
   Layer.effect(
     State,
-    Effect.succeed(InMemoryService(initialState)).pipe(recordStateStoreInit),
+    Effect.succeed(InMemoryService(initialState, initialOutputs)).pipe(
+      recordStateStoreInit,
+    ),
   );
 
 export const InMemoryService = (
   state: Record<StackId, Record<StageId, Record<Fqn, ResourceState>>> = {},
+  outputs: Record<StackId, Record<StageId, unknown>> = {},
 ) =>
   State.of({
     id: "inmemory",
@@ -87,4 +91,19 @@ export const InMemoryService = (
       Effect.succeed(
         Array.from(Object.keys(state[stack]?.[stage] ?? {}) ?? []),
       ),
+    getOutput: ({ stack, stage }: { stack: string; stage: string }) =>
+      Effect.succeed(outputs[stack]?.[stage]),
+    setOutput: ({
+      stack,
+      stage,
+      value,
+    }: {
+      stack: string;
+      stage: string;
+      value: unknown;
+    }) => {
+      const stackOutputs = (outputs[stack] ??= {});
+      stackOutputs[stage] = value;
+      return Effect.succeed(value);
+    },
   });
