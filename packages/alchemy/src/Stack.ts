@@ -98,6 +98,7 @@ export const Stack: Context.ServiceClass<
     (stackName: string): Effect.Effect<Self> & {
       new (_: never): Output.ToOutput<Shape>;
       make: <A, Req>(
+        options: StackProps<NoInfer<Req>>,
         effect: Effect.Effect<A, never, Req>,
       ) => Effect.Effect<CompiledStack<A>>;
       stage: {

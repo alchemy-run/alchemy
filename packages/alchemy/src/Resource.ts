@@ -56,6 +56,10 @@ export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
   Effect.Effect<ResourceConstructor<R>> & {
     Self: Self<R>;
     Provider: Provider<R>;
+    ref(
+      id: string,
+      options?: { stage?: string; stack?: string },
+    ): Effect.Effect<R>;
   };
 
 export type LogicalId = string;

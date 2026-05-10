@@ -133,6 +133,47 @@ export const Traces = Axiom.Dataset(
 The function runs once at plan time, after the stage is resolved.
 Use it anywhere a resource accepts a `props` object.
 
+## Cross-stack references
+
+A stack can read the deployed outputs of another stack. Declare a
+typed handle once, deploy with it on one side, reference its stage
+on the other:
+
+```typescript
+// backend/src/Stack.ts — shared between both stacks
+export class Backend extends Alchemy.Stack<
+  Backend,
+  { url: string }
+>()("Backend") {}
+```
+
+```typescript
+// backend/alchemy.run.ts — uses .make to deploy
+export default Backend.make(
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const api = yield* Service;
+    return { url: api.url.as<string>() };
+  }),
+);
+```
+
+```typescript
+// frontend/alchemy.run.ts — reads a deployed stage
+const backend = yield* Backend.stage.prod;
+yield* Cloudflare.Vite("Website", {
+  env: { VITE_API_URL: backend.url },
+});
+```
+
+`Backend.stage.<name>` resolves the named stage's outputs from the
+state store at plan time. Each stack keeps its own state file,
+deploys, and destroys independently.
+
+For the full monorepo walkthrough — package layout, sharing the
+HTTP API schema, deploy order — see
+[Cross-stack references](/guides/cross-stack-references).
+
 ## Stack and stages — the engine
 
 After every deploy, alchemy persists the state of each resource so

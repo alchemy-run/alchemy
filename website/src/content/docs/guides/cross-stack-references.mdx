@@ -1,0 +1,367 @@
+---
+title: Cross-stack references
+description: Set up an Alchemy monorepo where one stack references the deployed outputs of another — typed end-to-end, deployed independently.
+sidebar:
+  order: 3
+---
+
+A real app usually has more than one stack. A backend API and a
+frontend website. A shared data plane and a per-tenant control
+plane. Each ships on its own cadence, has its own state file, and
+gets destroyed independently — but the frontend still needs to know
+the backend's URL.
+
+This guide walks through the canonical setup: a monorepo with two
+packages — `backend` and `frontend` — where the frontend reads
+the backend's deployed outputs through a typed cross-stack
+reference. The full working example lives at
+[`examples/monorepo`](https://github.com/alchemy-run/alchemy-effect/tree/main/examples/monorepo).
+
+## Set up the workspace
+
+Start with a workspace `package.json` at the monorepo root that
+declares two packages:
+
+```json
+{
+  "name": "example-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": ["frontend", "backend"]
+}
+```
+
+Workspaces let `frontend` import from `backend` by package name —
+that's the channel the cross-stack reference will travel through.
+
+## Declare the backend package
+
+Create `backend/package.json`. The exports field points at the
+package's `src/index.ts` so other workspace packages get the typed
+source directly under Bun, and the compiled JS otherwise:
+
+```json
+{
+  "name": "backend",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    }
+  }
+}
+```
+
+The `"name": "backend"` is what `frontend` will `import` from later.
+
+## Define the API schema
+
+Put the `HttpApi` schema in its own file so it's importable from
+both the backend Worker (which serves it) and the frontend (which
+calls it through a typed client):
+
+```typescript
+// backend/src/Spec.ts
+import * as Schema from "effect/Schema";
+import * as HttpApi from "effect/unstable/httpapi/HttpApi";
+import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
+
+export class Greeting extends Schema.Class<Greeting>("Greeting")({
+  message: Schema.String,
+}) {}
+
+export const hello = HttpApiEndpoint.get("hello", "/", {
+  success: Greeting,
+});
+
+export class HelloGroup extends HttpApiGroup.make("Hello").add(hello) {}
+
+export class BackendApi extends HttpApi.make("BackendApi").add(HelloGroup) {}
+```
+
+Pure value-level descriptions — nothing executes yet. Both sides of
+the wire share the same `BackendApi` constant.
+
+## Implement the Worker
+
+Implement the schema as a `Cloudflare.Worker`. This is the
+runtime — it'll be deployed by the backend stack:
+
+```typescript
+// backend/src/Service.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Etag from "effect/unstable/http/Etag";
+import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import { BackendApi, Greeting } from "./Spec.ts";
+
+export default class Service extends Cloudflare.Worker<Service>()(
+  "Service",
+  { main: import.meta.filename },
+  Effect.gen(function* () {
+    const helloGroup = HttpApiBuilder.group(BackendApi, "Hello", (handlers) =>
+      handlers.handle("hello", () =>
+        Effect.succeed(new Greeting({ message: "Hello World" })),
+      ),
+    );
+    return {
+      fetch: HttpApiBuilder.layer(BackendApi).pipe(
+        Layer.provide(helloGroup),
+        Layer.provide([HttpPlatform.layer, Etag.layer]),
+        HttpRouter.toHttpEffect,
+      ),
+    };
+  }),
+) {}
+```
+
+Standard `HttpApi` plumbing — see
+[Effect HTTP API](/guides/effect-http-api) for the long-form
+walkthrough.
+
+## Declare the typed Stack handle
+
+Now the key piece. Create `backend/src/Stack.ts` — a typed handle
+that names the stack and declares its output shape:
+
+```typescript
+// backend/src/Stack.ts
+import * as Alchemy from "alchemy";
+
+export class Backend extends Alchemy.Stack<
+  Backend,
+  {
+    url: string;
+  }
+>()("Backend") {}
+```
+
+`Alchemy.Stack<Self, Outputs>()(name)` produces a class that:
+
+1. Names the stack (`"Backend"`) — must match across both stacks.
+2. Declares the output shape — TypeScript enforces it on both sides.
+3. Exposes `.make(...)` to deploy the stack.
+4. Exposes `.stage[name]` to reference a deployed stage.
+
+It's the contract the two stacks negotiate over.
+
+## Re-export from the package entry
+
+Have `backend/src/index.ts` re-export everything the frontend will
+need — schema, client, and stack handle:
+
+```typescript
+// backend/src/index.ts
+export * from "./Client.ts";
+export * from "./Spec.ts";
+export * from "./Stack.ts";
+```
+
+`import { Backend, BackendApi, BackendClient } from "backend"` now
+works from anywhere in the workspace.
+
+## Deploy the backend with `Backend.make`
+
+The backend's `alchemy.run.ts` calls `Backend.make` instead of
+`Alchemy.Stack(...)`. The output shape declared on the handle is
+type-checked against what the generator returns:
+
+```typescript
+// backend/alchemy.run.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import Service from "./src/Service.ts";
+import { Backend } from "./src/Stack.ts";
+
+export default Backend.make(
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Service;
+    return {
+      url: api.url.as<string>(),
+    };
+  }),
+);
+```
+
+If the returned object doesn't match `{ url: string }`, the file
+fails to typecheck. The same handle that documents the contract
+also enforces it.
+
+## Wire `backend` into the frontend package
+
+Create `frontend/package.json` and add `backend` as a workspace
+dependency so the frontend can import from it:
+
+```diff lang="json"
+ {
+   "name": "monorepo-frontend",
+   "private": true,
+   "dependencies": {
+     "alchemy": "workspace:*",
++    "backend": "workspace:*",
+     "effect": "catalog:",
+     "react": "^19.2.6",
+     "react-dom": "^19.2.6",
+     "vite": "catalog:"
+   }
+ }
+```
+
+Now `import { Backend } from "backend"` resolves to the typed stack
+handle declared above.
+
+## Start the frontend stack
+
+Create `frontend/alchemy.run.ts` with an empty Frontend stack —
+no resources yet, just the scaffolding:
+
+```typescript
+// frontend/alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "Frontend",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {}),
+);
+```
+
+The Frontend stack has its own state file and its own deploy
+cycle, completely separate from Backend.
+
+## Reference a deployed stage
+
+Import the `Backend` handle and `yield*` the stage you want:
+
+```diff lang="typescript"
+ import * as Alchemy from "alchemy";
+ import * as Cloudflare from "alchemy/Cloudflare";
++import { Backend } from "backend";
+ import * as Effect from "effect/Effect";
+
+ export default Alchemy.Stack(
+   "Frontend",
+   {
+     providers: Cloudflare.providers(),
+     state: Cloudflare.state(),
+   },
+-  Effect.gen(function* () {}),
++  Effect.gen(function* () {
++    const backend = yield* Backend.stage.prod;
++  }),
+ );
+```
+
+`Backend.stage.prod` is sugar for [`Output.ref`](/concepts/outputs#ref).
+At plan time, Alchemy looks up the persisted state for stack
+`"Backend"`, stage `"prod"`, and reads its outputs from the state
+store. `backend.url` has type `Output<string>` — exactly the shape
+declared on the `Backend` class.
+
+## Pass it into a downstream resource
+
+Now use `backend.url` like any other Output. Wire it into the
+Vite-built website's env so the React app can call the API:
+
+```diff lang="typescript"
+   Effect.gen(function* () {
+     const backend = yield* Backend.stage.prod;
++
++    const website = yield* Cloudflare.Vite("Website", {
++      env: {
++        VITE_API_URL: backend.url,
++      },
++    });
++
++    return {
++      url: website.url.as<string>(),
++    };
+   }),
+```
+
+Alchemy walks the props, sees `backend.url` is an Output sourced
+from the Backend stack's state, resolves it, and bakes the value
+into Vite's build. The dependency graph is wired automatically.
+
+## Use the typed client at runtime
+
+The same `backend` package exports a typed `HttpApiClient`. The
+React app imports it and calls the API the schema described:
+
+```typescript
+// frontend/src/main.tsx
+import { BackendClient } from "backend";
+import * as Effect from "effect/Effect";
+import { FetchHttpClient } from "effect/unstable/http";
+
+const client = BackendClient(import.meta.env.VITE_API_URL).pipe(
+  Effect.provide(FetchHttpClient.layer),
+);
+
+// client.Hello.hello() → Effect<Greeting, …>
+```
+
+So the same `backend` package serves two distinct timescales:
+
+- **Deploy time** — `Backend` (typed stack handle) flows the
+  deployed URL into the frontend stack.
+- **Runtime** — `BackendClient` + `BackendApi` schema validates
+  HTTP calls in the browser.
+
+## Deploy
+
+Deploy in dependency order — backend first, then frontend:
+
+```sh
+cd backend && alchemy deploy --stage prod
+cd frontend && alchemy deploy --stage prod
+```
+
+The frontend's plan resolves `Backend.stage.prod` against the
+state store, so the backend must be deployed (to the same stage
+you're referencing) before the frontend plan can succeed. If it
+isn't, evaluation fails with `InvalidReferenceError`.
+
+Destroy in reverse — frontend first, then backend.
+
+## Other stages
+
+`Backend.stage` is just a proxy keyed by stage name. Any string
+works:
+
+```typescript
+const backend = yield* Backend.stage.staging;
+const backend = yield* Backend.stage["pr-42"];
+```
+
+Pair this with the [Stages](/concepts/stages) convention
+(`dev_$USER`, `pr-N`, `prod`) to wire frontend stages to the
+matching backend stage.
+
+## Related
+
+- [Stack](/concepts/stack) — defining stacks and stack outputs.
+- [Inputs and Outputs](/concepts/outputs#ref) — the underlying
+  `Output.ref` operator.
+- [Stages](/concepts/stages) — naming and isolating per-environment
+  deploys.

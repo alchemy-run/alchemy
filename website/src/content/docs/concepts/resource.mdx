@@ -107,6 +107,62 @@ Importing the same `Bucket` from multiple files is safe. Alchemy
 keys resources by their fully qualified name, so even if two
 modules `yield*` it, it registers on the stack exactly once.
 
+## `ref` — reference a deployed resource {#ref}
+
+Every resource constructor exposes a static `ref` that returns a
+typed reference to a resource that has already been deployed
+**elsewhere** — in another [stage](/concepts/stages) of this
+stack, or in a different stack entirely.
+
+```typescript
+const project = yield* Neon.Project.ref("app-db", {
+  stage: "staging",
+});
+// project: Neon.Project — same shape, same typed attributes
+```
+
+The signature is:
+
+```ts
+Resource.ref(
+  id: string,
+  options?: { stage?: string; stack?: string },
+): Effect<Resource>
+```
+
+The lookup is keyed by `{ stack, stage, id }`. Both `stack` and
+`stage` default to the current stack/stage, so omitting both
+points at the same resource the local stack would create — useful
+for opting into "create OR adopt".
+
+Three things to know:
+
+- **Lazy.** Like every other Output expression, the ref doesn't
+  call any cloud API at declaration time. Plan-time evaluation
+  reads the persisted attributes from the state store.
+- **Typed.** `Neon.Project.ref(...)` returns a `Neon.Project`. You
+  can pass it to anything that accepts a `Neon.Project` — the
+  rest of the graph doesn't know (or care) whether it's a real
+  resource or a reference.
+- **Strict.** If the target hasn't been deployed yet, evaluation
+  fails with `InvalidReferenceError`. Deploy the upstream stage
+  first, then the dependent one.
+
+A typical pattern: long-lived `staging` and `prod` own the
+expensive resources, ephemeral `pr-*` stages reference them:
+
+```typescript
+const project = stage.startsWith("pr-")
+  ? yield* Neon.Project.ref("app-db", { stage: "staging" })
+  : yield* Neon.Project("app-db", { region: "aws-us-east-1" });
+```
+
+For walkthroughs see
+[Cross-stage references](/guides/cross-stage-references) (per-resource,
+same stack, different stage) and
+[Cross-stack references](/guides/cross-stack-references) (whole-stack
+typed handles).
+
 ## Logical ID
 
 The first argument you pass to a resource constructor is its

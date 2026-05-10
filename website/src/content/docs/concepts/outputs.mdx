@@ -206,7 +206,9 @@ to read a resource's attributes from another stack — see below.
 
 `Output.ref` reads a deployed resource's attributes from a different
 stack or stage. The reference is resolved at evaluation time
-against the persisted state store.
+against the persisted state store — no shared runtime, no shared
+state file, just a typed read of values another stack has already
+persisted.
 
 ```typescript
 import * as Output from "alchemy/Output";
@@ -216,12 +218,22 @@ const sharedBucket = Output.ref<typeof Bucket>("Bucket", {
   stage: "prod",
 });
 
-// later — typed access just like any Output
 sharedBucket.bucketName; // Output<string>
 ```
 
-If the target hasn't been deployed yet, evaluation fails with
-`InvalidReferenceError`.
+The returned value behaves like any other `Output` — you can pass
+it as a prop, interpolate it, or `pipe` it through `map`. Alchemy
+records the dependency and resolves the reference during plan by
+looking up `{ stack, stage, id }` in the state store.
+
+If the target hasn't been deployed yet (or the stage doesn't exist),
+evaluation fails with `InvalidReferenceError`. Deploy the upstream
+stack first, then the downstream one.
+
+For whole-stack references — pulling a stack's outputs into another
+stack — see [Cross-stack references](/guides/cross-stack-references),
+which walks through a typed monorepo setup using
+`Alchemy.Stack<Self, Outputs>` and `Stack.stage[name]`.
 
 ## How Outputs compose in props
 
