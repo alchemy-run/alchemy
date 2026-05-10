@@ -170,6 +170,15 @@ yield* Cloudflare.Vite("Website", {
 state store at plan time. Each stack keeps its own state file,
 deploys, and destroys independently.
 
+Yielding the bare handle defaults to the **current stage** of the
+referencing stack — `dev_sam` of the frontend reads `dev_sam` of
+the backend, `pr-42` reads `pr-42`, and so on:
+
+```typescript
+const backend = yield* Backend; // current stage
+const backend = yield* Backend.stage.prod; // pinned stage
+```
+
 For the full monorepo walkthrough — package layout, sharing the
 HTTP API schema, deploy order — see
 [Cross-stack references](/guides/cross-stack-references).

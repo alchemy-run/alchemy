@@ -344,19 +344,55 @@ isn't, evaluation fails with `InvalidReferenceError`.
 
 Destroy in reverse — frontend first, then backend.
 
+## Match the current stage
+
+Hard-coding `Backend.stage.prod` is rarely what you actually want.
+A `pr-42` deploy of the frontend should talk to the `pr-42` deploy
+of the backend; a `dev_sam` frontend should talk to `dev_sam`'s
+backend. Yielding the **bare** `Backend` handle does exactly that
+— it resolves to whichever stage the current stack is being
+deployed to:
+
+```diff lang="typescript"
+   Effect.gen(function* () {
+-    const backend = yield* Backend.stage.prod;
++    const backend = yield* Backend;
+     // ...
+   })
+```
+
+`yield* Backend` is sugar for "the same stack name, the same
+stage". If the frontend is being deployed with
+`alchemy deploy --stage dev_sam`, the lookup resolves against
+`{ stack: "Backend", stage: "dev_sam" }` — and fails with
+`InvalidReferenceError` if `dev_sam` of the backend hasn't been
+deployed yet.
+
+This is the right default for stage-symmetric setups: each
+developer, each PR, and each environment runs both stacks under
+the same stage name, and the cross-stack reference follows along
+automatically.
+
 ## Other stages
 
-`Backend.stage` is just a proxy keyed by stage name. Any string
-works:
+`Backend.stage` is the explicit form. It's a proxy keyed by stage
+name, so any string works — useful when you want to *break* stage
+symmetry (e.g. all PR previews share `staging`'s backend):
 
 ```typescript
 const backend = yield* Backend.stage.staging;
 const backend = yield* Backend.stage["pr-42"];
 ```
 
-Pair this with the [Stages](/concepts/stages) convention
-(`dev_$USER`, `pr-N`, `prod`) to wire frontend stages to the
-matching backend stage.
+| You want…                                              | Use                          |
+| ------------------------------------------------------ | ---------------------------- |
+| Frontend's stage maps 1:1 to the backend's stage       | `yield* Backend`             |
+| Always pin to a specific backend stage                 | `yield* Backend.stage.prod`  |
+| Branch on the current stage (e.g. PR previews → staging) | a conditional, see [Cross-stage references](/guides/cross-stage-references) |
+
+Pair the bare form with the [Stages](/concepts/stages) convention
+(`dev_$USER`, `pr-N`, `prod`) to wire each frontend stage to the
+matching backend stage with zero glue.
 
 ## Related
 
