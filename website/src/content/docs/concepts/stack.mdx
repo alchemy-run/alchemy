@@ -167,8 +167,8 @@ yield* Cloudflare.Vite("Website", {
 ```
 
 `yield* Backend` resolves the **same stage** of the named stack
-that the referencing stack is being deployed to — `dev_sam`
-frontend reads `dev_sam` backend, `pr-42` reads `pr-42`, and so
+that the referencing stack is being deployed to — `sam`
+frontend reads `sam` backend, `pr-42` reads `pr-42`, and so
 on. Each stack keeps its own state file, deploys, and destroys
 independently.
 

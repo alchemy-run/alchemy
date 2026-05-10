@@ -6,7 +6,7 @@ sidebar:
 ---
 
 [Stages](/concepts/stages) make it cheap to spin up isolated copies
-of a stack — `dev_sam`, `pr-42`, `prod`. Most resources should be
+of a stack — per-developer, `pr-42`, `prod`. Most resources should be
 isolated. But some — a Neon Postgres project, a shared S3 bucket,
 a global rate limiter — are too expensive or too stateful to
 re-provision per stage. PR-preview stages should *point at* the

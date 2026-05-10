@@ -273,8 +273,8 @@ Import the `Backend` handle and `yield*` it:
 ```
 
 `yield* Backend` resolves to whichever stage the **frontend** is
-being deployed to. Deploy frontend with `--stage dev_sam` and
-the lookup is `{ stack: "Backend", stage: "dev_sam" }`. Deploy with
+being deployed to. Deploy frontend with `--stage sam` and the
+lookup is `{ stack: "Backend", stage: "sam" }`. Deploy with
 `--stage pr-42` and it's `{ stack: "Backend", stage: "pr-42" }`.
 Each stage of the frontend talks to the matching stage of the
 backend with zero glue.
@@ -340,13 +340,13 @@ Deploy in dependency order — backend first, then frontend, **with
 matching stage flags**:
 
 ```sh
-cd backend && alchemy deploy --stage dev_sam
-cd frontend && alchemy deploy --stage dev_sam
+cd backend && alchemy deploy --stage sam
+cd frontend && alchemy deploy --stage sam
 ```
 
 The frontend's plan resolves `Backend` against the state store
-under the current stage (`dev_sam`). The backend must be deployed
-to the same stage first; otherwise evaluation fails with
+under the current stage (`sam`). The backend must be deployed to
+the same stage first; otherwise evaluation fails with
 `InvalidReferenceError`. The same shape works for any stage —
 `prod`, `staging`, `pr-42` — as long as both stacks deploy to it.
 
@@ -381,8 +381,8 @@ const backend = yield* Backend.stage["pr-42"];
 | Branch on the current stage (e.g. PR previews → staging) | a conditional, see [Cross-stage references](/guides/cross-stage-references) |
 
 Pair the bare form with the [Stages](/concepts/stages) convention
-(`dev_$USER`, `pr-N`, `prod`) and you rarely need the explicit
-form at all.
+(per-developer name, `pr-N`, `prod`) and you rarely need the
+explicit form at all.
 
 ## Related
 
