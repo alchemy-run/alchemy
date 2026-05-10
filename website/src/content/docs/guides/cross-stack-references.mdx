@@ -169,7 +169,54 @@ export * from "./Stack.ts";
 ```
 
 `import { Backend, BackendApi, BackendClient } from "backend"` now
-works from anywhere in the workspace.
+works from anywhere in the workspace — but only for callers that
+run in Node. We need one more piece for the **browser** to import
+the client without dragging in the IaC graph.
+
+## Add a `./Client` subpath for the browser
+
+The `backend` barrel re-exports `Stack.ts`, which transitively
+imports `alchemy` — which imports state stores, the Cloudflare
+Worker plumbing, and (transitively) AWS credential providers.
+None of that should ship to a browser. Even tree-shakeable bundlers
+(Rolldown/Rollup/Vite) can't reliably prune the IaC graph when the
+TypeScript source is resolved through the `bun` export condition.
+
+The fix is structural: expose the runtime client through its own
+package subpath, separate from the IaC-bearing barrel.
+
+```diff lang="json"
+   "exports": {
+     ".": {
+       "bun": "./src/index.ts",
+       "import": "./lib/index.js",
+       "default": "./lib/index.js"
++    },
++    "./Client": {
++      "bun": "./src/Client.ts",
++      "import": "./lib/Client.js",
++      "default": "./lib/Client.js"
+     }
+   }
+```
+
+Two import paths, two completely separate dependency graphs:
+
+- `import { ... } from "backend"` — full barrel, used by Node-side
+  code (`frontend/alchemy.run.ts`) where pulling in `alchemy` is
+  fine and intended.
+- `import { BackendClient } from "backend/Client"` — runtime client
+  only, used by `frontend/src/main.tsx` so the Vite build never
+  walks `Stack.ts`.
+
+:::tip
+You can apply the same pattern to anything else you want isolated
+— a `./Spec` subpath for the schema, a `./Types` subpath for
+shared types. The golden rule: **whatever the browser imports
+must not transitively touch `alchemy`'s root entry**, and a
+dedicated subpath is the most reliable way to enforce that at the
+package boundary.
+:::
 
 ## Deploy the backend with `Backend.make`
 
@@ -311,12 +358,13 @@ into Vite's build. The dependency graph is wired automatically.
 
 ## Use the typed client at runtime
 
-The same `backend` package exports a typed `HttpApiClient`. The
-React app imports it and calls the API the schema described:
+The React app imports the typed `HttpApiClient` from the
+`backend/Client` subpath we set up earlier — so Vite only bundles
+the runtime client, not the IaC graph:
 
 ```typescript
 // frontend/src/main.tsx
-import { BackendClient } from "backend";
+import { BackendClient } from "backend/Client";
 import * as Effect from "effect/Effect";
 import { FetchHttpClient } from "effect/unstable/http";
 
@@ -327,12 +375,14 @@ const client = BackendClient(import.meta.env.VITE_API_URL).pipe(
 // client.Hello.hello() → Effect<Greeting, …>
 ```
 
-So the same `backend` package serves two distinct timescales:
+So the same `backend` package serves two distinct timescales
+through two distinct entry points:
 
-- **Deploy time** — `Backend` (typed stack handle) flows the
-  deployed URL into the frontend stack.
-- **Runtime** — `BackendClient` + `BackendApi` schema validates
-  HTTP calls in the browser.
+- **Deploy time** — `import { Backend } from "backend"` in
+  `alchemy.run.ts` flows the deployed URL into the frontend stack.
+- **Runtime** — `import { BackendClient } from "backend/Client"`
+  in the React app validates HTTP calls in the browser without
+  dragging in the IaC graph.
 
 ## Deploy
 

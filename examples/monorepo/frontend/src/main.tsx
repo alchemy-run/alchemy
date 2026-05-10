@@ -1,4 +1,4 @@
-import { BackendClient } from "backend";
+import { BackendClient } from "backend/Client";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import React from "react";
