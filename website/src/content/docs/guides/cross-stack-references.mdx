@@ -249,9 +249,9 @@ export default Alchemy.Stack(
 The Frontend stack has its own state file and its own deploy
 cycle, completely separate from Backend.
 
-## Reference a deployed stage
+## Reference the backend
 
-Import the `Backend` handle and `yield*` the stage you want:
+Import the `Backend` handle and `yield*` it:
 
 ```diff lang="typescript"
  import * as Alchemy from "alchemy";
@@ -267,16 +267,22 @@ Import the `Backend` handle and `yield*` the stage you want:
    },
 -  Effect.gen(function* () {}),
 +  Effect.gen(function* () {
-+    const backend = yield* Backend.stage.prod;
++    const backend = yield* Backend;
 +  }),
  );
 ```
 
-`Backend.stage.prod` is sugar for [`Output.ref`](/concepts/outputs#ref).
-At plan time, Alchemy looks up the persisted state for stack
-`"Backend"`, stage `"prod"`, and reads its outputs from the state
-store. `backend.url` has type `Output<string>` — exactly the shape
-declared on the `Backend` class.
+`yield* Backend` resolves to whichever stage the **frontend** is
+being deployed to. Deploy frontend with `--stage dev_sam` and
+the lookup is `{ stack: "Backend", stage: "dev_sam" }`. Deploy with
+`--stage pr-42` and it's `{ stack: "Backend", stage: "pr-42" }`.
+Each stage of the frontend talks to the matching stage of the
+backend with zero glue.
+
+Under the hood it's [`Output.ref`](/concepts/outputs#ref) reading
+the backend's persisted state. `backend.url` has type
+`Output<string>` — exactly the shape declared on the `Backend`
+class.
 
 ## Pass it into a downstream resource
 
@@ -285,7 +291,7 @@ Vite-built website's env so the React app can call the API:
 
 ```diff lang="typescript"
    Effect.gen(function* () {
-     const backend = yield* Backend.stage.prod;
+     const backend = yield* Backend;
 +
 +    const website = yield* Cloudflare.Vite("Website", {
 +      env: {
@@ -330,54 +336,38 @@ So the same `backend` package serves two distinct timescales:
 
 ## Deploy
 
-Deploy in dependency order — backend first, then frontend:
+Deploy in dependency order — backend first, then frontend, **with
+matching stage flags**:
 
 ```sh
-cd backend && alchemy deploy --stage prod
-cd frontend && alchemy deploy --stage prod
+cd backend && alchemy deploy --stage dev_sam
+cd frontend && alchemy deploy --stage dev_sam
 ```
 
-The frontend's plan resolves `Backend.stage.prod` against the
-state store, so the backend must be deployed (to the same stage
-you're referencing) before the frontend plan can succeed. If it
-isn't, evaluation fails with `InvalidReferenceError`.
+The frontend's plan resolves `Backend` against the state store
+under the current stage (`dev_sam`). The backend must be deployed
+to the same stage first; otherwise evaluation fails with
+`InvalidReferenceError`. The same shape works for any stage —
+`prod`, `staging`, `pr-42` — as long as both stacks deploy to it.
 
 Destroy in reverse — frontend first, then backend.
 
-## Match the current stage
+## Pin to a specific stage
 
-Hard-coding `Backend.stage.prod` is rarely what you actually want.
-A `pr-42` deploy of the frontend should talk to the `pr-42` deploy
-of the backend; a `dev_sam` frontend should talk to `dev_sam`'s
-backend. Yielding the **bare** `Backend` handle does exactly that
-— it resolves to whichever stage the current stack is being
-deployed to:
+The bare `yield* Backend` is the right default. Sometimes you want
+to **break** stage symmetry — e.g. the production frontend always
+points at the production backend even when deployed from a feature
+branch. Use `Backend.stage.<name>` to pin:
 
 ```diff lang="typescript"
    Effect.gen(function* () {
--    const backend = yield* Backend.stage.prod;
-+    const backend = yield* Backend;
+-    const backend = yield* Backend;
++    const backend = yield* Backend.stage.prod;
      // ...
    })
 ```
 
-`yield* Backend` is sugar for "the same stack name, the same
-stage". If the frontend is being deployed with
-`alchemy deploy --stage dev_sam`, the lookup resolves against
-`{ stack: "Backend", stage: "dev_sam" }` — and fails with
-`InvalidReferenceError` if `dev_sam` of the backend hasn't been
-deployed yet.
-
-This is the right default for stage-symmetric setups: each
-developer, each PR, and each environment runs both stacks under
-the same stage name, and the cross-stack reference follows along
-automatically.
-
-## Other stages
-
-`Backend.stage` is the explicit form. It's a proxy keyed by stage
-name, so any string works — useful when you want to *break* stage
-symmetry (e.g. all PR previews share `staging`'s backend):
+`Backend.stage` is a proxy keyed by stage name. Any string works:
 
 ```typescript
 const backend = yield* Backend.stage.staging;
@@ -391,8 +381,8 @@ const backend = yield* Backend.stage["pr-42"];
 | Branch on the current stage (e.g. PR previews → staging) | a conditional, see [Cross-stage references](/guides/cross-stage-references) |
 
 Pair the bare form with the [Stages](/concepts/stages) convention
-(`dev_$USER`, `pr-N`, `prod`) to wire each frontend stage to the
-matching backend stage with zero glue.
+(`dev_$USER`, `pr-N`, `prod`) and you rarely need the explicit
+form at all.
 
 ## Related
 

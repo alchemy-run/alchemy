@@ -159,24 +159,24 @@ export default Backend.make(
 ```
 
 ```typescript
-// frontend/alchemy.run.ts — reads a deployed stage
-const backend = yield* Backend.stage.prod;
+// frontend/alchemy.run.ts — reads the matching stage of Backend
+const backend = yield* Backend;
 yield* Cloudflare.Vite("Website", {
   env: { VITE_API_URL: backend.url },
 });
 ```
 
-`Backend.stage.<name>` resolves the named stage's outputs from the
-state store at plan time. Each stack keeps its own state file,
-deploys, and destroys independently.
+`yield* Backend` resolves the **same stage** of the named stack
+that the referencing stack is being deployed to — `dev_sam`
+frontend reads `dev_sam` backend, `pr-42` reads `pr-42`, and so
+on. Each stack keeps its own state file, deploys, and destroys
+independently.
 
-Yielding the bare handle defaults to the **current stage** of the
-referencing stack — `dev_sam` of the frontend reads `dev_sam` of
-the backend, `pr-42` reads `pr-42`, and so on:
+To pin to a specific stage instead — e.g. always read `prod` —
+use `Backend.stage.<name>`:
 
 ```typescript
-const backend = yield* Backend; // current stage
-const backend = yield* Backend.stage.prod; // pinned stage
+const backend = yield* Backend.stage.prod;
 ```
 
 For the full monorepo walkthrough — package layout, sharing the
