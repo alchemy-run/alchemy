@@ -2,6 +2,7 @@ import { ConfigProvider } from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import { AdoptPolicy } from "../AdoptPolicy.ts";
@@ -90,14 +91,22 @@ const alchemyLayer = Layer.mergeAll(LoggingCli, AlchemyContextLive);
  * registry that the user's `providers` layer populates, the platform layers,
  * and the configured state store. Adapters wrap this into runner-specific
  * thunks (`bun.test` -> `runPromise`, `it.live` -> as-is).
+ *
+ * When `scope` is provided, scoped resources (like the Cloudflare dev
+ * sidecar) survive past this effect and are tied to the lifetime of the
+ * provided scope instead. The runner is responsible for closing it.
+ *
+ * When `scope` is omitted, the effect runs with `Effect.scoped` and any
+ * scoped resources are torn down as soon as it resolves.
  */
 export const toEffect = <A>(
   effect: TestEffect<A>,
   options: MakeOptions,
-): Effect.Effect<A, any, never> =>
-  Effect.gen(function* () {
-    const base = yield* loadConfigProvider(Option.none());
-    const configProvider = withProfileOverride(base, options.profile);
+  scope?: Scope.Scope,
+): Effect.Effect<A, any, never> => {
+  const base = Effect.gen(function* () {
+    const cfg = yield* loadConfigProvider(Option.none());
+    const configProvider = withProfileOverride(cfg, options.profile);
     return yield* effect.pipe(
       provideFreshArtifactStore,
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
@@ -112,14 +121,19 @@ export const toEffect = <A>(
     Effect.provide(options.state ?? State.localState()),
     Effect.provideService(AuthProviders, {}),
     Effect.provide(Layer.provideMerge(alchemyLayer, platformLayer)),
-    Effect.scoped,
+  );
+
+  return (
+    scope === undefined ? Effect.scoped(base) : Scope.provide(base, scope)
   ) as Effect.Effect<A, any, never>;
+};
 
 /** Promise wrapper around {@link toEffect} for `bun.test`-style runners. */
 export const run = <A>(
   effect: TestEffect<A>,
   options: MakeOptions,
-): Promise<A> => Effect.runPromise(toEffect(effect, options));
+  scope?: Scope.Scope,
+): Promise<A> => Effect.runPromise(toEffect(effect, options, scope));
 
 /**
  * Wrap an effect so it runs with `options.providers` + a placeholder Stack +
@@ -148,27 +162,34 @@ export const withProviders = <A, E, R, ROut>(
  * Curried `deploy` for the test factory: bakes in the configured stage and
  * adds the telemetry layer the CLI uses, so `beforeAll(deploy(Stack))` works
  * the same way as `alchemy deploy`.
+ *
+ * `scope`, when supplied, is forwarded down so the dev sidecar (and other
+ * scoped resources) lives until the caller closes it instead of dying as
+ * soon as `deploy` resolves. The test harness uses this to keep workerd
+ * alive across `beforeAll` → tests → `afterAll`.
  */
 export const deploy = <A>(
   options: MakeOptions,
   stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
-  callOptions?: { stage?: string },
+  callOptions?: { stage?: string; scope?: Scope.Scope },
 ) =>
   _deploy({
     stack: stack as Effect.Effect<CompiledStack<A>, never, any>,
     stage: callOptions?.stage ?? options.stage ?? "test",
     dev: resolveDev(options),
+    scope: callOptions?.scope,
   }).pipe(Effect.provide(TelemetryLive));
 
 export const destroy = (
   options: MakeOptions,
   stack: TestEffect<CompiledStack, Stage | AlchemyContext>,
-  callOptions?: { stage?: string },
+  callOptions?: { stage?: string; scope?: Scope.Scope },
 ) =>
   _destroy({
     stack: stack as Effect.Effect<CompiledStack, never, any>,
     stage: callOptions?.stage ?? options.stage ?? "test",
     dev: resolveDev(options),
+    scope: callOptions?.scope,
   }).pipe(Effect.provide(TelemetryLive));
 
 /**

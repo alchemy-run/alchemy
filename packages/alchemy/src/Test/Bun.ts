@@ -1,11 +1,16 @@
 import bun from "bun:test";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
 import type { HookOptions } from "node:test";
 
 import type { AlchemyContext } from "../AlchemyContext.ts";
 import type { CompiledStack } from "../Stack.ts";
 import type { Stage } from "../Stage.ts";
+import { installLocalhostDns } from "../Util/LocalhostDns.ts";
 import * as Core from "./Core.ts";
+
+installLocalhostDns();
 
 export type MakeOptions<ROut = any> = Core.MakeOptions<ROut>;
 export type ScratchStack = Core.ScratchStack;
@@ -106,7 +111,15 @@ const DEFAULT_HOOK_TIMEOUT: HookOptions = { timeout: 120_000 };
  * ```
  */
 export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
-  const runEff = <A>(eff: TestEffect<A>) => Core.run(eff, options);
+  // Single scope shared across `beforeAll`, every `test`, and `afterAll`.
+  // Scoped resources in dev mode (the Cloudflare sidecar process and its
+  // workerd children) must outlive a single `Effect.runPromise` boundary,
+  // otherwise the proxy is killed the moment `beforeAll(deploy(Stack))`
+  // resolves and every later `HttpClient.get(workerUrl)` hits a dead port.
+  // The scope is closed by `destroy(...)` (or never — the next test run
+  // reclaims any leaked sidecar via the lock file).
+  const sharedScope = Scope.makeUnsafe("sequential");
+  const runEff = <A>(eff: TestEffect<A>) => Core.run(eff, options, sharedScope);
 
   const test = ((name, eff, opts) => {
     bun.test(name, () => runEff(eff), opts);
@@ -130,10 +143,11 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
   ) => {
     const scratch = Core.scratchStack(options, name);
-    return Core.run(Core.withProviders(fn(scratch), options, scratch.name), {
-      ...options,
-      state: scratch.state,
-    });
+    return Core.run(
+      Core.withProviders(fn(scratch), options, scratch.name),
+      { ...options, state: scratch.state },
+      sharedScope,
+    );
   };
 
   const provider = ((name, fn, opts) => {
@@ -175,13 +189,35 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     bun.afterEach(() => runEff(eff), hookOptions);
   };
 
+  // `destroy(Stack)` needs the dev sidecar alive so it can call `sidecar.stop`
+  // for each worker. We close the shared scope only AFTER destroy completes.
+  // `Scope.close` on an already-closed scope is a no-op, so it's safe for both
+  // the destroy wrapper AND the fallback cleanup hook below to call it.
+  const closeScope = Effect.suspend(() =>
+    Scope.close(sharedScope, Exit.void),
+  ).pipe(Effect.ignore);
+
+  // Fallback cleanup: if the user never calls `destroy(Stack)` (e.g.
+  // `NO_DESTROY=1`), nothing else closes the shared scope and the sidecar
+  // child process leaks past the test process. Register an `afterAll` that
+  // closes it. We defer registration to a microtask so it runs AFTER any
+  // user-registered `afterAll` (including `destroy(Stack)`); bun runs
+  // afterAll hooks in registration order.
+  queueMicrotask(() => {
+    bun.afterAll(() => Effect.runPromise(closeScope), DEFAULT_HOOK_TIMEOUT);
+  });
+
   return {
     test,
     beforeAll,
     beforeEach,
     afterAll,
     afterEach,
-    deploy: (stack, callOpts) => Core.deploy(options, stack, callOpts),
-    destroy: (stack, callOpts) => Core.destroy(options, stack, callOpts),
+    deploy: (stack, callOpts) =>
+      Core.deploy(options, stack, { ...callOpts, scope: sharedScope }),
+    destroy: (stack, callOpts) =>
+      Core.destroy(options, stack, { ...callOpts, scope: sharedScope }).pipe(
+        Effect.ensuring(closeScope),
+      ),
   };
 };
