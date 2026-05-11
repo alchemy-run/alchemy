@@ -8,12 +8,12 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  * `Cloudflare.D1Connection.bind(...)`. The handlers below exercise
  * the full surface area of the Effect-native D1 client:
  *
- *   POST /init                       — `db.exec("CREATE TABLE ...")`
- *   POST /seed                       — `db.batch(prepare(...).bind(...))`
- *   POST /users { name }             — `db.prepare(...).bind(...).run()`
- *   GET  /users                      — `db.prepare(...).all()`
- *   GET  /users/:id                  — `db.prepare(...).bind(id).first()`
- *   GET  /raw                        — `db.raw` -> `db.dump`-style read
+ *   POST /init       — `db.exec("CREATE TABLE ...")`
+ *   POST /seed       — `db.batch([prepare(...).bind(...), ...])`
+ *   POST /users      — `db.prepare(...).bind(...).run()`
+ *   GET  /users      — `db.prepare(...).all()`
+ *   GET  /users/:id  — `db.prepare(...).bind(id).first()`
+ *   GET  /raw        — `db.raw` -> direct runtime D1Database access
  */
 export const TestDatabase = Cloudflare.D1Database("D1WorkerDatabase");
 
@@ -44,7 +44,7 @@ export default class D1Worker extends Cloudflare.Worker<D1Worker>()(
         }
 
         if (request.method === "POST" && url.pathname === "/seed") {
-          const insert = yield* db.prepare(
+          const insert = db.prepare(
             "INSERT INTO users (id, name) VALUES (?, ?)",
           );
           const results = yield* db.batch([
@@ -60,11 +60,10 @@ export default class D1Worker extends Cloudflare.Worker<D1Worker>()(
 
         if (request.method === "POST" && url.pathname === "/users") {
           const body = (yield* request.json) as { id: number; name: string };
-          const stmt = yield* db.prepare(
-            "INSERT INTO users (id, name) VALUES (?, ?)",
-          );
-          const bound = stmt.bind(body.id, body.name);
-          const result = yield* Effect.promise(() => bound.run());
+          const result = yield* db
+            .prepare("INSERT INTO users (id, name) VALUES (?, ?)")
+            .bind(body.id, body.name)
+            .run();
           return yield* HttpServerResponse.json({
             success: result.success,
             meta: { changes: result.meta.changes },
@@ -72,12 +71,9 @@ export default class D1Worker extends Cloudflare.Worker<D1Worker>()(
         }
 
         if (request.method === "GET" && url.pathname === "/users") {
-          const stmt = yield* db.prepare(
-            "SELECT id, name FROM users ORDER BY id",
-          );
-          const result = yield* Effect.promise(() =>
-            stmt.all<{ id: number; name: string }>(),
-          );
+          const result = yield* db
+            .prepare("SELECT id, name FROM users ORDER BY id")
+            .all<{ id: number; name: string }>();
           return yield* HttpServerResponse.json({
             success: result.success,
             results: result.results,
@@ -87,21 +83,19 @@ export default class D1Worker extends Cloudflare.Worker<D1Worker>()(
         const userMatch = url.pathname.match(/^\/users\/(\d+)$/);
         if (request.method === "GET" && userMatch) {
           const id = Number(userMatch[1]);
-          const stmt = yield* db.prepare(
-            "SELECT id, name FROM users WHERE id = ?",
-          );
-          const row = yield* Effect.promise(() =>
-            stmt.bind(id).first<{ id: number; name: string }>(),
-          );
+          const row = yield* db
+            .prepare("SELECT id, name FROM users WHERE id = ?")
+            .bind(id)
+            .first<{ id: number; name: string }>();
           return yield* HttpServerResponse.json({ row });
         }
 
         if (request.method === "GET" && url.pathname === "/raw") {
-          const raw = yield* db.raw;
           // `db.raw` returns the underlying Cloudflare D1Database.
           // Run a prepared statement directly on it to prove `raw`
           // resolves to a working binding (this is the escape hatch
           // libraries like Better Auth/Drizzle rely on).
+          const raw = yield* db.raw;
           const result = yield* Effect.promise(() =>
             raw.prepare("SELECT COUNT(*) as count FROM users").first<{
               count: number;
