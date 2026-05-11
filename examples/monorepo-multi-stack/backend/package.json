@@ -10,6 +10,8 @@
     "url": "https://github.com/alchemy-run/alchemy-effect"
   },
   "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },

@@ -25,6 +25,7 @@
 import { $ } from "bun";
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 
 const ROOT = path.resolve(import.meta.dir, "..");
@@ -289,6 +290,260 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 // finishes its destroy → deploy → destroy before pnpm starts in the same
 // directory (otherwise both runs race on shared build outputs like
 // vite's `dist/` and `.alchemy/`).
+// ────────────────────────────────────────────────────────────────────────
+// Monorepo smoke tests
+//
+// The monorepo examples (`monorepo-single-stack`, `monorepo-multi-stack`)
+// can't be tested in-place like the flat examples above — they ship with
+// a `_package.json` instead of `package.json` so the root workspace
+// install doesn't try to wire them in as nested workspaces with their
+// own `workspace:*` graphs.
+//
+// For each (monorepo, runtime) pair we:
+//   1. `bun pm pack` `packages/alchemy` once → tarball
+//   2. copy the example to a fresh temp dir (skipping build artifacts)
+//   3. rename `_package.json` → `package.json`
+//   4. rewrite every `alchemy: workspace:*` ref to `file:<tarball>`
+//      and substitute `catalog:` refs against the root catalog
+//   5. write `pnpm-workspace.yaml` when running under pnpm
+//   6. install with the runtime, then run destroy → deploy → destroy
+//
+// `monorepo-single-stack` has one `alchemy.run.ts` at the root.
+// `monorepo-multi-stack` has one per package; deploy backend → frontend,
+// destroy frontend → backend.
+// ────────────────────────────────────────────────────────────────────────
+
+type Monorepo = {
+  name: "monorepo-single-stack" | "monorepo-multi-stack";
+  // The directories (relative to the monorepo root) where `alchemy
+  // {deploy,destroy}` must run, in deploy order. Destroy runs in
+  // reverse.
+  deployDirs: readonly string[];
+};
+
+const monorepos: readonly Monorepo[] = [
+  { name: "monorepo-single-stack", deployDirs: ["."] },
+  { name: "monorepo-multi-stack", deployDirs: ["backend", "frontend"] },
+];
+
+let alchemyTarball: string | undefined;
+
+beforeAll(async () => {
+  const pkgDir = path.join(ROOT, "packages", "alchemy");
+  for (const f of await fs.readdir(pkgDir)) {
+    if (f.endsWith(".tgz")) await fs.rm(path.join(pkgDir, f));
+  }
+  // pnpm resolves `alchemy` via `lib/` (node import condition) so it
+  // must reflect current `src/`; bun pm pack does not run a build.
+  expect(await run(["bun", "run", "build"], pkgDir)).toBe(0);
+  expect(await run(["bun", "pm", "pack", "--destination", "."], pkgDir)).toBe(
+    0,
+  );
+  const tgz = (await fs.readdir(pkgDir)).find((f) => f.endsWith(".tgz"));
+  if (!tgz) throw new Error(`bun pm pack produced no tarball in ${pkgDir}`);
+  alchemyTarball = path.join(pkgDir, tgz);
+}, TIMEOUT);
+
+const SKIP_COPY = new Set([
+  "node_modules",
+  "dist",
+  ".alchemy",
+  ".turbo",
+  ".wrangler",
+  "tsconfig.tsbuildinfo",
+  // The examples' tsconfigs `extends "../../../tsconfig.base.json"`
+  // which doesn't exist in the temp checkout. Rolldown's TS plugin
+  // chokes on the broken extends chain and aborts subpath resolution
+  // (`effect/Effect` → "Tsconfig not found"). The deploy/destroy
+  // smoke check doesn't type-check, so dropping them is fine.
+  "tsconfig.json",
+]);
+
+const copyMonorepo = async (src: string, dst: string): Promise<void> => {
+  await fs.mkdir(dst, { recursive: true });
+  for (const entry of await fs.readdir(src, { withFileTypes: true })) {
+    if (SKIP_COPY.has(entry.name)) continue;
+    const s = path.join(src, entry.name);
+    const d = path.join(dst, entry.name);
+    if (entry.isDirectory()) {
+      await copyMonorepo(s, d);
+    } else if (entry.isSymbolicLink()) {
+      // Skip — likely a workspace symlink that won't exist in the copy.
+    } else {
+      await fs.copyFile(s, d);
+    }
+  }
+};
+
+const resolveCatalog = (rootCatalog: Record<string, string>) => {
+  return (deps: Record<string, string> | undefined): boolean => {
+    if (!deps) return false;
+    let mutated = false;
+    for (const [name, version] of Object.entries(deps)) {
+      if (
+        name === "alchemy" &&
+        (version === "workspace:*" || version === "catalog:")
+      ) {
+        if (!alchemyTarball) throw new Error("alchemy tarball not built");
+        deps[name] = `file:${alchemyTarball}`;
+        mutated = true;
+      } else if (version === "catalog:") {
+        const resolved = rootCatalog[name];
+        if (!resolved) {
+          throw new Error(
+            `dependency ${name} is "catalog:" but no entry in root catalog`,
+          );
+        }
+        deps[name] = resolved;
+        mutated = true;
+      }
+    }
+    return mutated;
+  };
+};
+
+const rewritePackageJson = async (
+  pkgPath: string,
+  resolve: (deps: Record<string, string> | undefined) => boolean,
+): Promise<void> => {
+  const pkg = await readJson<
+    Pkg & { peerDependencies?: Record<string, string> }
+  >(pkgPath);
+  const a = resolve(pkg.dependencies);
+  const b = resolve(pkg.devDependencies);
+  const c = resolve(pkg.peerDependencies);
+  if (a || b || c) await writeJson(pkgPath, pkg);
+};
+
+const setupMonorepo = async (
+  m: Monorepo,
+  runtime: Runtime,
+): Promise<string> => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), `alchemy-${m.name}-`));
+  const dst = path.join(tmp, m.name);
+  await copyMonorepo(path.join(ROOT, "examples", m.name), dst);
+
+  // _package.json → package.json at root
+  const tmpRootPkg = path.join(dst, "_package.json");
+  const finalRootPkg = path.join(dst, "package.json");
+  await fs.rename(tmpRootPkg, finalRootPkg);
+
+  // Resolve `catalog:` refs using the example's own catalog first (it's
+  // the source of truth — `examples/monorepo-*/_package.json#workspaces.catalog`),
+  // falling back to the repo-root catalog for anything the example doesn't
+  // pin. Drop the example's `alchemy` catalog entry — it points at
+  // `file:../packages/alchemy` which doesn't exist in the temp checkout;
+  // we rewrite `alchemy: workspace:*` refs to the packed tarball directly.
+  const rootPkg = await readJson<Pkg>(ROOT_PKG_PATH);
+  const rootCatalog = rootPkg.workspaces?.catalog ?? {};
+  const copyRootPkg = await readJson<Pkg>(finalRootPkg);
+  const exampleCatalog = copyRootPkg.workspaces?.catalog ?? {};
+  delete exampleCatalog.alchemy;
+  if (copyRootPkg.workspaces) {
+    copyRootPkg.workspaces.catalog = exampleCatalog;
+    await writeJson(finalRootPkg, copyRootPkg);
+  }
+  const mergedCatalog: Record<string, string> = {
+    ...rootCatalog,
+    ...exampleCatalog,
+  };
+  const resolve = resolveCatalog(mergedCatalog);
+
+  // Root may declare deps too (single-stack runs `alchemy` from the
+  // root, so it needs `node_modules/.bin/alchemy` hoisted there).
+  await rewritePackageJson(finalRootPkg, resolve);
+  for (const sub of ["backend", "frontend"] as const) {
+    await rewritePackageJson(path.join(dst, sub, "package.json"), resolve);
+  }
+
+  if (runtime === "pnpm") {
+    // Mirror scripts/pnpm-workspace.ts — pnpm 11 fails install
+    // (`ERR_PNPM_IGNORED_BUILDS`) on `workerd` / `msgpackr-extract` /
+    // `esbuild` / `sharp` unless their build scripts are explicitly
+    // allowlisted.
+    const builds = [
+      "@parcel/watcher",
+      "esbuild",
+      "msgpackr-extract",
+      "sharp",
+      "workerd",
+    ];
+    const yaml = [
+      "onlyBuiltDependencies:",
+      ...builds.map((n) => `  - ${JSON.stringify(n)}`),
+      "",
+      "allowBuilds:",
+      ...builds.map((n) => `  ${JSON.stringify(n)}: true`),
+      "",
+      "packages:",
+      "  - backend",
+      "  - frontend",
+      "",
+    ].join("\n");
+    await fs.writeFile(path.join(dst, "pnpm-workspace.yaml"), yaml);
+  }
+
+  expect(
+    await run(
+      runtime === "bun"
+        ? ["bun", "install"]
+        : ["pnpm", "install", "--no-frozen-lockfile"],
+      dst,
+    ),
+  ).toBe(0);
+
+  return dst;
+};
+
+for (const m of monorepos) {
+  let prev: Promise<unknown> = Promise.resolve();
+  for (const runtime of RUNTIMES) {
+    const stagePrefix = (process.env.SMOKE_STAGE ?? "smoke")
+      .replace(/[^a-zA-Z0-9-]/g, "-")
+      .toLowerCase();
+    const stage = `${stagePrefix}-${runtime}-${m.name}`
+      .replace(/[^a-zA-Z0-9-]/g, "-")
+      .toLowerCase();
+    const cmd = (action: "destroy" | "deploy") =>
+      runtime === "bun"
+        ? ["bun", "alchemy", action, "--stage", stage, "--yes"]
+        : ["pnpm", "exec", "alchemy", action, "--stage", stage, "--yes"];
+
+    const myPrev = prev;
+    let release!: () => void;
+    prev = new Promise<void>((r) => {
+      release = r;
+    });
+
+    test.concurrent(
+      `${m.name} (${runtime}): destroy → deploy → destroy`,
+      async () => {
+        await myPrev.catch(() => {});
+        const dst = await setupMonorepo(m, runtime);
+        try {
+          const deployOrder = m.deployDirs.map((d) => path.join(dst, d));
+          const destroyOrder = [...deployOrder].reverse();
+          for (const d of destroyOrder) {
+            expect(await run(cmd("destroy"), d)).toBe(0);
+          }
+          for (const d of deployOrder) {
+            expect(await run(cmd("deploy"), d)).toBe(0);
+          }
+          for (const d of destroyOrder) {
+            expect(await run(cmd("destroy"), d)).toBe(0);
+          }
+        } finally {
+          release();
+          // Best-effort cleanup of the temp checkout; leave it on
+          // failure so a developer can inspect.
+          await fs.rm(path.dirname(dst), { recursive: true, force: true });
+        }
+      },
+      TIMEOUT,
+    );
+  }
+}
+
 for (const example of examples) {
   const cwd = path.join(ROOT, "examples", example);
   let prev: Promise<unknown> = Promise.resolve();

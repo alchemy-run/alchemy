@@ -8,6 +8,8 @@
     "url": "https://github.com/alchemy-run/alchemy-effect"
   },
   "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@types/react-dom": "^19.2.3",
     "@types/react": "^19.2.14",
     "alchemy": "workspace:*",

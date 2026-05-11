@@ -10,6 +10,8 @@
     "url": "https://github.com/alchemy-run/alchemy-effect"
   },
   "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
@@ -19,6 +21,12 @@
       "types": "./lib/index.d.ts",
       "import": "./lib/index.js",
       "default": "./lib/index.js"
+    },
+    "./Client": {
+      "bun": "./src/Client.ts",
+      "types": "./lib/Client.d.ts",
+      "import": "./lib/Client.js",
+      "default": "./lib/Client.js"
     }
   },
   "scripts": {
