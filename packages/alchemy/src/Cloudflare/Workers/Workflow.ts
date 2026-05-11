@@ -50,12 +50,21 @@ export class WorkflowStep extends Context.Service<
  * Execute a named, durable workflow step. The effect is run inside the
  * Cloudflare step transaction so its result is automatically persisted
  * and replayed on retries.
+ *
+ * Any services the inner effect requires (e.g. `WorkerEnvironment` from a
+ * binding like `kv.put` / `kv.get`) are threaded through automatically by
+ * capturing the surrounding workflow body's context and providing it to
+ * the inner effect before it runs inside `step.do`.
  */
-export const task = <T>(
+export const task = <T, R = never>(
   name: string,
-  effect: Effect.Effect<T>,
-): Effect.Effect<T, never, WorkflowStep> =>
-  WorkflowStep.asEffect().pipe(Effect.flatMap((step) => step.do(name, effect)));
+  effect: Effect.Effect<T, never, R>,
+): Effect.Effect<T, never, WorkflowStep | R> =>
+  Effect.gen(function* () {
+    const step = yield* WorkflowStep;
+    const context = yield* Effect.context<R>();
+    return yield* step.do(name, effect.pipe(Effect.provide(context)));
+  });
 
 /**
  * Pause the workflow for the given duration.
@@ -244,29 +253,31 @@ export class WorkflowScope extends Context.Service<
  * yield* Cloudflare.sleep("cooldown", "30 seconds");
  * ```
  *
- * @example Accessing env bindings inside a step
- * `Cloudflare.WorkerEnvironment` is the same service available
- * inside a Worker — it gives you typed access to env bindings (KV,
- * R2, etc.) from inside a workflow body. Wrap any side-effecting
- * call in `task` so the result is persisted across replays.
+ * @example Accessing env bindings inside a task
+ * Bind a resource (e.g. `KVNamespace`, `R2Bucket`) in the workflow's
+ * outer init phase to get a typed Effect-native client, then use it
+ * directly inside `task`. `task` threads the binding's service
+ * requirement (`WorkerEnvironment`) through automatically so the inner
+ * Effect needs no extra plumbing.
  *
  * ```typescript
- * Effect.fn(function* (input: { roomId: string; message: string }) {
- *   const env = yield* Cloudflare.WorkerEnvironment;
- *   const { roomId, message } = input;
+ * Effect.gen(function* () {
+ *   const kv = yield* Cloudflare.KVNamespace.bind(KV);
  *
- *   const stored = yield* Cloudflare.task(
- *     "kv-roundtrip",
- *     Effect.tryPromise({
- *       try: async () => {
- *         await env.KV.put(`workflow:${roomId}`, message);
- *         return await env.KV.get(`workflow:${roomId}`);
- *       },
- *       catch: (cause) =>
- *         cause instanceof Error ? cause : new Error(String(cause)),
- *     }).pipe(Effect.orDie),
- *   );
- *   return stored;
+ *   return Effect.fn(function* (input: { roomId: string; message: string }) {
+ *     const { roomId, message } = input;
+ *
+ *     const stored = yield* Cloudflare.task(
+ *       "kv-roundtrip",
+ *       Effect.gen(function* () {
+ *         const key = `workflow:${roomId}`;
+ *         yield* kv.put(key, message);
+ *         return yield* kv.get(key);
+ *       }).pipe(Effect.orDie),
+ *     );
+ *
+ *     return stored;
+ *   });
  * });
  * ```
  *
