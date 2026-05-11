@@ -110,13 +110,15 @@ export const makeLocalState = () =>
       list: (request) =>
         fs.readDirectory(stageDir(request)).pipe(
           recover,
-          Effect.map(
-            (files) =>
-              files?.map((file) => decodeFqn(file.replace(/\.json$/, ""))) ??
-              [],
-          ),
-          Effect.map((fqns) =>
-            fqns.filter((fqn) => fqn !== "__stack_output__"),
+          Effect.map((files) =>
+            (files ?? [])
+              // Filter the bookkeeping file before decoding — `decodeFqn`
+              // replaces `__` with `/`, which would turn the literal name
+              // `__stack_output__` into `/stack_output/` and slip past the
+              // filter, leaving the engine to look up a non-existent
+              // resource.
+              .filter((file) => file !== "__stack_output__.json")
+              .map((file) => decodeFqn(file.replace(/\.json$/, ""))),
           ),
         ),
       getOutput: (request) =>
