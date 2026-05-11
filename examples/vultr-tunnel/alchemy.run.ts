@@ -31,7 +31,19 @@ export default Alchemy.Stack(
     const tunnelHostname = yield* Config.string("TUNNEL_HOSTNAME");
     const zoneName = yield* Config.string("CLOUDFLARE_ZONE_NAME");
 
-    // 1) Named Cloudflare Tunnel with an ingress rule for our host.
+    // 1) Vultr Managed Postgres. Runs migrations against the seeded
+    //    `defaultdb` once the cluster reaches `running`.
+    //    trustedIps is wide open here so (a) alchemy can run migrations
+    //    from this dev machine and (b) the VM can connect once it
+    //    boots. Tighten in prod.
+    const db = yield* Vultr.Database.Postgres("AppDb", {
+      region: "EWR",
+      plan: "vultr-dbaas-hobbyist-cc-1-25-1",
+      trustedIps: ["0.0.0.0/0"],
+      migrationsDir: "./migrations",
+    });
+
+    // 2) Named Cloudflare Tunnel pointing at the VM's :8080.
     const tunnel = yield* Cloudflare.Tunnel("HelloTunnel", {
       ingress: [
         { hostname: tunnelHostname, service: "http://localhost:8080" },
@@ -39,7 +51,7 @@ export default Alchemy.Stack(
       ],
     });
 
-    // 2) Proxied CNAME on the zone:
+    // 3) Proxied CNAME on the zone:
     //    vultr-demo.ktarz.com → <tunnel-id>.cfargotunnel.com
     const dns = yield* DnsRecord("HelloDns", {
       zoneName,
@@ -50,17 +62,21 @@ export default Alchemy.Stack(
       comment: "vultr-demo stack — managed by alchemy",
     });
 
-    // 3) Vultr shared-CPU VM. cloud-init installs Caddy (:8080) and
-    //    cloudflared bound to the tunnel token.
+    // 4) Vultr shared-CPU VM. cloud-init installs Bun, drops a tiny
+    //    HTTP server that queries the messages table via
+    //    `import { sql } from "bun"`, and registers it as a systemd
+    //    service. cloudflared connects this VM's :8080 to the tunnel.
     const tunnelTokenPlain = Output.map(tunnel.token, Redacted.value);
+    const databaseUrlPlain = Output.map(db.connectionUri, Redacted.value);
     const vm = yield* Vultr.Instance("HelloVm", {
       region: "ewr",
       plan: "vc2-1c-1gb",
-      osId: 1743, // Ubuntu 22.04 x64 — adjust via Vultr's /v2/os listing if you want a different image
+      osId: 1743, // Ubuntu 22.04 x64
       tags: ["app:vultr-demo"],
       userData: buildUserData({
         hostname: tunnelHostname,
         tunnelToken: tunnelTokenPlain,
+        databaseUrl: databaseUrlPlain,
       }),
     });
 
@@ -70,6 +86,8 @@ export default Alchemy.Stack(
       dnsRecordId: dns.recordId,
       instanceId: vm.instanceId,
       mainIp: vm.mainIp,
+      databaseId: db.databaseId,
+      databaseHost: db.host,
     };
   }).pipe(Effect.orDie),
 );

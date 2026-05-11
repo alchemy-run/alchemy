@@ -1,38 +1,99 @@
 import * as Output from "alchemy/Output";
 
 /**
- * cloud-init bash script run on first boot of the Vultr instance.
+ * cloud-init bash script run on first boot of the Vultr VM.
  *
- * Returns an `Output<string>` because the tunnel token only resolves
- * after the `Cloudflare.Tunnel` resource is reconciled. `Output.interpolate`
- * weaves it into the script.
+ * Installs Bun, drops a small HTTP server at `/opt/app/index.ts` that
+ * queries the Vultr Managed Postgres `messages` table, runs it under
+ * systemd with `DATABASE_URL` in the environment, then installs
+ * cloudflared bound to the named tunnel token. The Cloudflare Tunnel's
+ * ingress points `vultr-demo.ktarz.com` → `http://localhost:8080`.
+ *
+ * Both `tunnelToken` and `databaseUrl` arrive as `Output<string>`
+ * because they come from resources reconciled earlier in the stack —
+ * `Output.interpolate` weaves the resolved values into the script.
  */
 export const buildUserData = (params: {
   hostname: string;
   tunnelToken: Output.Output<string>;
+  databaseUrl: Output.Output<string>;
 }) =>
   Output.interpolate`#!/bin/bash
 set -euxo pipefail
 
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y \
-  debian-keyring debian-archive-keyring apt-transport-https curl gnupg ca-certificates
+  curl ca-certificates unzip
 
-# --- caddy -----------------------------------------------------------
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
-  | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
-  > /etc/apt/sources.list.d/caddy-stable.list
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y caddy
+# --- bun -------------------------------------------------------------
+# install for root so the systemd unit (User=root) can invoke it.
+# The installer reads $HOME, which cloud-init does NOT set — without
+# this export, \`set -u\` kills the script at "HOME: unbound variable"
+# and the rest (app + cloudflared) never runs.
+export HOME=/root
+export BUN_INSTALL=/root/.bun
+curl -fsSL https://bun.sh/install | bash
+ln -sf /root/.bun/bin/bun /usr/local/bin/bun
 
-cat > /etc/caddy/Caddyfile <<'CADDY'
-:8080 {
-  respond "Hello from ${params.hostname} via Vultr + Cloudflare Tunnel!"
-}
-CADDY
-systemctl restart caddy
-systemctl enable caddy
+# --- app source ------------------------------------------------------
+mkdir -p /opt/app
+cat > /opt/app/index.ts <<'APP'
+import { sql } from "bun";
+
+const PORT = 8080;
+
+type Row = { id: number; body: string; created_at: Date };
+
+Bun.serve({
+  port: PORT,
+  async fetch(req) {
+    const url = new URL(req.url);
+    try {
+      if (url.pathname === "/") {
+        const rows = (await sql\`SELECT id, body, created_at FROM messages ORDER BY id\`) as Row[];
+        return Response.json({
+          host: "${params.hostname}",
+          count: rows.length,
+          messages: rows,
+        }, { headers: { "content-type": "application/json" } });
+      }
+      if (url.pathname === "/health") {
+        const [{ now }] = (await sql\`SELECT NOW() as now\`) as Array<{ now: Date }>;
+        return Response.json({ ok: true, db_now: now });
+      }
+      return new Response("not found", { status: 404 });
+    } catch (err) {
+      return Response.json({ ok: false, error: String(err) }, { status: 500 });
+    }
+  },
+});
+
+console.log(\`listening on :\${PORT}\`);
+APP
+
+# --- systemd unit ----------------------------------------------------
+cat > /etc/systemd/system/app.service <<APPSVC
+[Unit]
+Description=Bun app for vultr-demo
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/app
+Environment=DATABASE_URL=${params.databaseUrl}
+ExecStart=/usr/local/bin/bun run /opt/app/index.ts
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+APPSVC
+
+systemctl daemon-reload
+systemctl enable app
+systemctl start app
 
 # --- cloudflared -----------------------------------------------------
 ARCH=$(dpkg --print-architecture)
