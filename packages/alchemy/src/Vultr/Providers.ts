@@ -3,6 +3,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Provider from "../Provider.ts";
 import { Instance, InstanceProvider } from "./Compute/Instance.ts";
 import { fromEnv } from "./Credentials.ts";
+import { Postgres, PostgresProvider } from "./Database/Postgres/Postgres.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
   "Vultr",
@@ -29,19 +30,23 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  *     state: Alchemy.localState(),
  *   },
  *   Effect.gen(function* () {
+ *     const db = yield* Vultr.Database.Postgres("app-db", {
+ *       region: "EWR",
+ *       plan: "vultr-dbaas-hobbyist-cc-1-25-1",
+ *     });
  *     const vm = yield* Vultr.Instance("api", {
  *       region: "ewr",
  *       plan: "vc2-1c-1gb",
  *       osId: 1743,
  *     });
- *     return { ip: vm.mainIp };
+ *     return { ip: vm.mainIp, dbHost: db.host };
  *   }),
  * );
  * ```
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([Instance])).pipe(
-    Layer.provide(InstanceProvider()),
+  Layer.effect(Providers, Provider.collection([Instance, Postgres])).pipe(
+    Layer.provide(Layer.mergeAll(InstanceProvider(), PostgresProvider())),
     Layer.provideMerge(fromEnv()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.orDie,
