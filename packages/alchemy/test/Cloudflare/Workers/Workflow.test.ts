@@ -6,7 +6,7 @@ import {
   WorkflowEvent,
   WorkflowStep,
   type WorkflowExport,
-  type WorkflowBody,
+  type WorkflowImpl,
 } from "@/Cloudflare/Workers/Workflow";
 import { makeWorkflowBridge } from "@/Cloudflare/Workers/Rpc";
 import { describe, expect, it } from "@effect/vitest";
@@ -21,7 +21,7 @@ describe("isWorkflowExport", () => {
     Effect.gen(function* () {
       const valid: WorkflowExport = {
         kind: "workflow",
-        make: () => Effect.succeed(Effect.void as any),
+        make: () => Effect.succeed((() => Effect.void) as any),
       };
       expect(isWorkflowExport(valid)).toBe(true);
     }),
@@ -60,8 +60,9 @@ const fakeStep = () => ({
   sleepUntil: async () => {},
 });
 
-const makeGetExport = (body: WorkflowBody) => async () => (_env: unknown) =>
-  Effect.succeed(body);
+const makeGetExport =
+  (impl: WorkflowImpl<any, any>) => async () => (_env: unknown) =>
+    Effect.succeed(impl);
 
 // ---------------------------------------------------------------------------
 // makeWorkflowBridge
@@ -70,18 +71,15 @@ const makeGetExport = (body: WorkflowBody) => async () => (_env: unknown) =>
 describe("makeWorkflowBridge", () => {
   it.effect("delegates run() to the Effect body with services", () =>
     Effect.gen(function* () {
-      const body: WorkflowBody = Effect.gen(function* () {
-        const event = yield* WorkflowEvent;
-        const result = yield* task(
-          "greet",
-          Effect.succeed(`Hello ${event.payload}`),
-        );
-        return result;
-      });
+      const impl: WorkflowImpl<string, string> = (input) =>
+        Effect.gen(function* () {
+          const result = yield* task("greet", Effect.succeed(`Hello ${input}`));
+          return result;
+        });
 
       const BridgeClass = makeWorkflowBridge(
         FakeEntrypoint as any,
-        makeGetExport(body),
+        makeGetExport(impl),
       )("TestWorkflow");
 
       const instance = new BridgeClass({}, {});
@@ -99,14 +97,15 @@ describe("makeWorkflowBridge", () => {
     Effect.gen(function* () {
       let sleepCalledWith: [string, unknown] | undefined;
 
-      const body: WorkflowBody = Effect.gen(function* () {
-        yield* sleep("pause", "5 seconds");
-        return "done";
-      });
+      const impl: WorkflowImpl = () =>
+        Effect.gen(function* () {
+          yield* sleep("pause", "5 seconds");
+          return "done";
+        });
 
       const BridgeClass = makeWorkflowBridge(
         FakeEntrypoint as any,
-        makeGetExport(body),
+        makeGetExport(impl),
       )("TestWorkflow");
 
       const instance = new BridgeClass({}, {});
@@ -135,14 +134,15 @@ describe("makeWorkflowBridge", () => {
       let sleepUntilCalledWith: [string, unknown] | undefined;
       const target = new Date("2025-06-01T00:00:00Z");
 
-      const body: WorkflowBody = Effect.gen(function* () {
-        yield* sleepUntil("wait", target);
-        return "done";
-      });
+      const impl: WorkflowImpl = () =>
+        Effect.gen(function* () {
+          yield* sleepUntil("wait", target);
+          return "done";
+        });
 
       const BridgeClass = makeWorkflowBridge(
         FakeEntrypoint as any,
-        makeGetExport(body),
+        makeGetExport(impl),
       )("TestWorkflow");
 
       const instance = new BridgeClass({}, {});
@@ -172,17 +172,18 @@ describe("makeWorkflowBridge", () => {
       let receivedTimestamp: Date | undefined;
       let receivedInstanceId: string | undefined;
 
-      const body: WorkflowBody = Effect.gen(function* () {
-        const event = yield* WorkflowEvent;
-        receivedPayload = event.payload;
-        receivedTimestamp = event.timestamp;
-        receivedInstanceId = event.instanceId;
-        return "ok";
-      });
+      const impl: WorkflowImpl = (input) =>
+        Effect.gen(function* () {
+          const event = yield* WorkflowEvent;
+          receivedPayload = input;
+          receivedTimestamp = event.timestamp;
+          receivedInstanceId = event.instanceId;
+          return "ok";
+        });
 
       const BridgeClass = makeWorkflowBridge(
         FakeEntrypoint as any,
-        makeGetExport(body),
+        makeGetExport(impl),
       )("TestWorkflow");
 
       const instance = new BridgeClass({}, {});
@@ -206,15 +207,16 @@ describe("makeWorkflowBridge", () => {
       let receivedTimestamp: Date | undefined;
       const tsNum = 1735689600000;
 
-      const body: WorkflowBody = Effect.gen(function* () {
-        const event = yield* WorkflowEvent;
-        receivedTimestamp = event.timestamp;
-        return "ok";
-      });
+      const impl: WorkflowImpl = () =>
+        Effect.gen(function* () {
+          const event = yield* WorkflowEvent;
+          receivedTimestamp = event.timestamp;
+          return "ok";
+        });
 
       const BridgeClass = makeWorkflowBridge(
         FakeEntrypoint as any,
-        makeGetExport(body),
+        makeGetExport(impl),
       )("TestWorkflow");
 
       const instance = new BridgeClass({}, {});

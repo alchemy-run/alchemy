@@ -15,20 +15,20 @@ progress back to the chat `Room` you built two parts ago.
 
 ## How a Workflow looks
 
-The shape mirrors what you've seen for Workers and Durable Objects —
-two `Effect.gen` blocks. The outer one resolves shared dependencies;
-the inner one is the workflow body, executed step-by-step by the
-Cloudflare Workflows runtime:
+The shape mirrors what you've seen for Workers and Durable Objects.
+The outer `Effect.gen` resolves shared dependencies; the returned
+`Effect.fn` is the workflow body — a typed function from an `input`
+payload to an Effect that the Cloudflare Workflows runtime steps
+through:
 
 ```typescript
 Effect.gen(function* () {
   // Phase 1: init — runs at deploy and once per workflow instance.
   const room = yield* Room;
 
-  return Effect.gen(function* () {
+  return Effect.fn(function* (input: { orderId: string }) {
     // Phase 2: workflow body — runs as durable steps.
-    const event = yield* Cloudflare.WorkflowEvent;
-    const result = yield* Cloudflare.task("process", doWork(event.payload));
+    const result = yield* Cloudflare.task("process", doWork(input.orderId));
     yield* Cloudflare.sleep("cooldown", "10 seconds");
     return result;
   });
@@ -41,9 +41,10 @@ code is _not_ retried, the persisted result is.
 
 ## Create the workflow file
 
-Create `src/NotifyWorkflow.ts` with an empty workflow body. The
-inner Effect reads the `WorkflowEvent` service to get the payload
-you'll pass when starting an instance:
+Create `src/NotifyWorkflow.ts` with a typed workflow body. The
+`Effect.fn` takes the `input` payload directly, so `notifier.create({
+roomId, message })` is type-checked end to end — and the workflow's
+return value flows through to `instance.status().output`:
 
 ```typescript
 // src/NotifyWorkflow.ts
@@ -56,12 +57,8 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
   Effect.gen(function* () {
     const rooms = yield* Room;
 
-    return Effect.gen(function* () {
-      const event = yield* Cloudflare.WorkflowEvent;
-      const { roomId, message } = event.payload as {
-        roomId: string;
-        message: string;
-      };
+    return Effect.fn(function* (input: { roomId: string; message: string }) {
+      const { roomId, message } = input;
       return { roomId, message };
     });
   }),
@@ -70,7 +67,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
 
 The outer init resolves shared dependencies — here, the `Room` DO
 namespace from the previous tutorial so we can broadcast back to
-it. The inner Effect is the workflow body that the Cloudflare
+it. The inner `Effect.fn` is the workflow body that the Cloudflare
 runtime steps through.
 
 ## Add a step
@@ -82,13 +79,9 @@ effect — HTTP calls, env-binding access, file writes. Add a step
 that roundtrips a value through KV:
 
 ```diff lang="typescript"
-return Effect.gen(function* () {
+return Effect.fn(function* (input: { roomId: string; message: string }) {
 + const env = yield* Cloudflare.WorkerEnvironment;
-  const event = yield* Cloudflare.WorkflowEvent;
-  const { roomId, message } = event.payload as {
-    roomId: string;
-    message: string;
-  };
+  const { roomId, message } = input;
 
 + const stored = yield* Cloudflare.task(
 +   "kv-roundtrip",

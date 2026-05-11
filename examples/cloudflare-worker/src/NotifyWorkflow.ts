@@ -7,7 +7,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
   Effect.gen(function* () {
     const rooms = yield* Room;
 
-    return Effect.gen(function* () {
+    return Effect.fn(function* (input: { roomId: string; message: string }) {
       // Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/71
       //
       // Accessing `Cloudflare.WorkerEnvironment` inside the workflow body
@@ -17,11 +17,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
       // itself in `Workflow.ts`. Keeping this yield + the KV roundtrip below
       // ensures the integ test catches any future regression of that fix.
       const env = yield* Cloudflare.WorkerEnvironment;
-      const event = yield* Cloudflare.WorkflowEvent;
-      const { roomId, message } = event.payload as {
-        roomId: string;
-        message: string;
-      };
+      const { roomId, message } = input;
 
       // Exercise an env binding from inside a workflow step — the real-world
       // pattern users follow (`env.<binding>.put(...)` / `.get(...)` etc).
