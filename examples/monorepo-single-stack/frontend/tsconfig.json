@@ -1,17 +1,10 @@
 {
-  "extends": "../../../tsconfig.base.json",
+  "extends": "../tsconfig.base.json",
   "include": ["src"],
-  "references": [
-    {
-      "path": "../../../packages/alchemy/tsconfig.json"
-    },
-    {
-      "path": "../backend/tsconfig.json"
-    }
-  ],
+  "references": [{ "path": "../backend" }],
   "compilerOptions": {
+    "types": ["bun", "vite/client"],
     "composite": true,
-    "noEmit": true,
-    "types": ["vite/client"]
+    "noEmit": true
   }
 }

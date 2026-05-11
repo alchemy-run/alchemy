@@ -351,12 +351,6 @@ const SKIP_COPY = new Set([
   ".turbo",
   ".wrangler",
   "tsconfig.tsbuildinfo",
-  // The examples' tsconfigs `extends "../../../tsconfig.base.json"`
-  // which doesn't exist in the temp checkout. Rolldown's TS plugin
-  // chokes on the broken extends chain and aborts subpath resolution
-  // (`effect/Effect` → "Tsconfig not found"). The deploy/destroy
-  // smoke check doesn't type-check, so dropping them is fine.
-  "tsconfig.json",
 ]);
 
 const copyMonorepo = async (src: string, dst: string): Promise<void> => {
@@ -375,17 +369,35 @@ const copyMonorepo = async (src: string, dst: string): Promise<void> => {
   }
 };
 
+const PUBLISHED_NAMES = new Set<string>(PUBLISHED.map((p) => p.name));
+
 const resolveCatalog = (rootCatalog: Record<string, string>) => {
   return (deps: Record<string, string> | undefined): boolean => {
     if (!deps) return false;
     let mutated = false;
     for (const [name, version] of Object.entries(deps)) {
+      const isPublished = PUBLISHED_NAMES.has(name);
       if (
-        name === "alchemy" &&
+        isPublished &&
         (version === "workspace:*" || version === "catalog:")
       ) {
-        if (!alchemyTarball) throw new Error("alchemy tarball not built");
-        deps[name] = `file:${alchemyTarball}`;
+        // In canary mode the root catalog has been rewritten with
+        // pkg.ing URLs (see canary `beforeAll`); resolve through it
+        // so the monorepo install actually exercises the canary
+        // install path. Otherwise fall back to the locally-packed
+        // tarball for `alchemy` so monorepos still test against the
+        // workspace's current source on a non-canary run.
+        const fromCatalog = rootCatalog[name];
+        if (canary && fromCatalog) {
+          deps[name] = fromCatalog;
+        } else if (name === "alchemy") {
+          if (!alchemyTarball) throw new Error("alchemy tarball not built");
+          deps[name] = `file:${alchemyTarball}`;
+        } else {
+          throw new Error(
+            `dependency ${name} is "${version}" but no entry in root catalog (canary=${canary})`,
+          );
+        }
         mutated = true;
       } else if (version === "catalog:") {
         const resolved = rootCatalog[name];
@@ -432,8 +444,10 @@ const setupMonorepo = async (
   // the source of truth — `examples/monorepo-*/_package.json#workspaces.catalog`),
   // falling back to the repo-root catalog for anything the example doesn't
   // pin. Drop the example's `alchemy` catalog entry — it points at
-  // `file:../packages/alchemy` which doesn't exist in the temp checkout;
-  // we rewrite `alchemy: workspace:*` refs to the packed tarball directly.
+  // `file:../packages/alchemy` which doesn't exist in the temp checkout.
+  // `resolveCatalog` then rewrites `alchemy` (and other PUBLISHED refs)
+  // to either the canary pkg.ing URL (canary mode) or the locally-packed
+  // tarball (default).
   const rootPkg = await readJson<Pkg>(ROOT_PKG_PATH);
   const rootCatalog = rootPkg.workspaces?.catalog ?? {};
   const copyRootPkg = await readJson<Pkg>(finalRootPkg);
@@ -493,12 +507,13 @@ const setupMonorepo = async (
   ).toBe(0);
 
   // The frontend's Vite build resolves the backend via its `import`
-  // condition (`./lib/*.js`), so the backend must be compiled before
-  // any deploy runs.
+  // condition (`./lib/*.js`), so the workspace must be compiled
+  // (`tsc -b` at the root walks the project references) before any
+  // deploy runs.
   expect(
     await run(
       runtime === "bun" ? ["bun", "run", "build"] : ["pnpm", "run", "build"],
-      path.join(dst, "backend"),
+      dst,
     ),
   ).toBe(0);
 

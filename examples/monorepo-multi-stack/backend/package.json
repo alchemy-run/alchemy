@@ -37,8 +37,5 @@
     "logs": "alchemy logs",
     "tail": "alchemy tail",
     "test": "bun test"
-  },
-  "devDependencies": {
-    "typescript": "catalog:"
   }
 }
