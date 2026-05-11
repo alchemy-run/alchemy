@@ -190,6 +190,7 @@ export type WorkerBindingResource =
   | ArtifactsBinding
   | ImagesBinding
   | Hyperdrive
+  | Worker
   | DurableObjectNamespaceLike<any>;
 
 export type WorkerBindings = {
