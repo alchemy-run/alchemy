@@ -30,11 +30,15 @@
     }
   },
   "scripts": {
+    "build": "tsc -b",
     "deploy": "alchemy deploy",
     "dev": "alchemy dev",
     "destroy": "alchemy destroy",
     "logs": "alchemy logs",
     "tail": "alchemy tail",
     "test": "bun test"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
   }
 }

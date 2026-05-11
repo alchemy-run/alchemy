@@ -492,6 +492,16 @@ const setupMonorepo = async (
     ),
   ).toBe(0);
 
+  // The frontend's Vite build resolves the backend via its `import`
+  // condition (`./lib/*.js`), so the backend must be compiled before
+  // any deploy runs.
+  expect(
+    await run(
+      runtime === "bun" ? ["bun", "run", "build"] : ["pnpm", "run", "build"],
+      path.join(dst, "backend"),
+    ),
+  ).toBe(0);
+
   return dst;
 };
 
