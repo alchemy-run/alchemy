@@ -1,3 +1,26 @@
+// ─────────────────────────────────────────────────────────────────────
+// TODO(upstream): this file is a workaround, not the right shape.
+//
+// alchemy/Cloudflare ships providers for Tunnel, Worker, Zone, R2, …
+// but no DNS Record resource — the moment you go off the all-Workers
+// path (a Cloudflare Tunnel, an external origin, a static A record)
+// you need one. This shim covers the bare minimum for this example
+// (proxied CNAME, hand-rolled HTTP, custom `CfApi` Context.Service).
+//
+// A proper `Cloudflare.Dns.Record` should:
+//   - Live at `packages/alchemy/src/Cloudflare/Dns/Record.ts`
+//   - Reuse `Cloudflare.Credentials.fromAuthProvider()` + the existing
+//     `@distilled.cloud/cloudflare` SDK's `createRecord` / `getRecord`
+//     / `updateRecord` / `deleteRecord` (already there, all four verbs).
+//   - Support A / AAAA / CNAME / TXT / MX / SRV / CAA via a
+//     discriminated `type` field, not CNAME-only.
+//   - Accept either `zoneId: string` or `zoneName: string` and cache
+//     the resolved zone id in attrs.
+//   - Adopt by `(zoneId, name, type)` (uniquely identifies a record
+//     on CF) instead of always-creating on state loss.
+//
+// Tracked separately so this PR doesn't tangle with that conversation.
+// ─────────────────────────────────────────────────────────────────────
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
