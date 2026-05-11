@@ -48,6 +48,10 @@ export type ResourceClassWithMethods<
   Effect.Effect<ResourceConstructor<R>> & {
     Self: Self<R>;
     Provider: Provider<R>;
+    ref(
+      id: string,
+      options?: { stage?: string; stack?: string },
+    ): Effect.Effect<R>;
   } & Methods;
 
 export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
