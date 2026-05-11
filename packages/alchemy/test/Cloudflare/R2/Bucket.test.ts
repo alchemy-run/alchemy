@@ -152,6 +152,59 @@ test.provider(
     }).pipe(logLevel),
 );
 
+test.provider("destroying a bucket empties its objects first", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const bucket = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.R2Bucket("BucketWithObjects");
+      }),
+    );
+
+    const putObject = (key: string, body: string) =>
+      r2.putObject({
+        accountId,
+        bucketName: bucket.bucketName,
+        objectName: key,
+        contentType: "text/plain",
+        body: new Blob([body], { type: "text/plain" }),
+      });
+    yield* putObject("hello.txt", "hello");
+    yield* putObject("nested/world.txt", "world");
+
+    const before = yield* r2
+      .listObjects({
+        accountId,
+        bucketName: bucket.bucketName,
+        perPage: 1000,
+      })
+      .pipe(
+        Effect.flatMap((page) => {
+          const keys = (page.result ?? [])
+            .map((o) => o.key)
+            .filter((k): k is string => typeof k === "string");
+          return keys.length === 2
+            ? Effect.succeed(keys)
+            : Effect.fail(new ListLagError());
+        }),
+        Effect.retry({
+          while: (e): e is ListLagError => e instanceof ListLagError,
+          schedule: Schedule.exponential(200).pipe(
+            Schedule.both(Schedule.recurs(8)),
+          ),
+        }),
+      );
+    expect(before.sort()).toEqual(["hello.txt", "nested/world.txt"]);
+
+    yield* stack.destroy();
+
+    yield* waitForBucketToBeDeleted(bucket.bucketName, accountId);
+  }).pipe(logLevel),
+);
+
 test.provider("lifecycle rules are added, updated, and removed", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
@@ -261,3 +314,5 @@ const waitForBucketToBeDeleted = Effect.fn(function* (
 });
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
+
+class ListLagError extends Data.TaggedError("ListLagError") {}
