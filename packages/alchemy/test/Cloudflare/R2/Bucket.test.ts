@@ -164,34 +164,13 @@ test.provider("destroying a bucket empties its objects first", (stack) =>
       }),
     );
 
-    // Upload two objects via the Cloudflare REST API directly. The
-    // distilled putObject codegen currently treats binary uploads as
-    // multipart/form-data which the SDK runtime doesn't implement, so
-    // this test bypasses the SDK and signs raw fetch with the API token.
-    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
-    if (!apiToken) {
-      return yield* Effect.fail(
-        new Error("CLOUDFLARE_API_TOKEN is required for this test"),
-      );
-    }
     const putObject = (key: string, body: string) =>
-      Effect.tryPromise(async () => {
-        const res = await fetch(
-          `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${bucket.bucketName}/objects/${encodeURIComponent(key)}`,
-          {
-            method: "PUT",
-            headers: {
-              authorization: `Bearer ${apiToken}`,
-              "content-type": "text/plain",
-            },
-            body,
-          },
-        );
-        if (!res.ok) {
-          throw new Error(
-            `putObject ${key} failed: ${res.status} ${await res.text()}`,
-          );
-        }
+      r2.putObject({
+        accountId,
+        bucketName: bucket.bucketName,
+        objectName: key,
+        contentType: "text/plain",
+        body: new Blob([body], { type: "text/plain" }),
       });
     yield* putObject("hello.txt", "hello");
     yield* putObject("nested/world.txt", "world");
