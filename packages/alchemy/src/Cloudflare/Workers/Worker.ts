@@ -6,7 +6,6 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -46,7 +45,14 @@ import {
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
-import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
+import type {
+  Hyperdrive,
+  HyperdriveDevOrigin,
+} from "../Hyperdrive/Hyperdrive.ts";
+import {
+  isImages as isImagesBinding,
+  type Images as ImagesBinding,
+} from "../Images/Images.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
 import { SidecarLive } from "../Local/Sidecar.ts";
 import { CloudflareLogs } from "../Logs.ts";
@@ -182,6 +188,8 @@ export type WorkerBindingResource =
   | CloudflareQueue
   | AiGateway
   | ArtifactsBinding
+  | ImagesBinding
+  | Hyperdrive
   | DurableObjectNamespaceLike<any>;
 
 export type WorkerBindings = {
@@ -260,7 +268,16 @@ export interface WorkerProps<
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
-  env?: Record<string, string | Redacted.Redacted<string>>;
+  env?: Record<
+    string,
+    | string
+    | number
+    | boolean
+    | null
+    | readonly unknown[]
+    | { readonly [key: string]: unknown }
+    | Redacted.Redacted<string>
+  >;
   exports?: string[];
   bindings?: Bindings;
   /**
@@ -402,7 +419,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```typescript
  * export default class MyWorker extends Cloudflare.Worker<MyWorker>()(
  *   "MyWorker",
- *   { main: import.meta.path },
+ *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     // init: bind resources
  *     const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
@@ -437,7 +454,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * // src/WorkerB.ts
  * export default class WorkerB extends Cloudflare.Worker<WorkerB>()(
  *   "WorkerB",
- *   { main: import.meta.path },
+ *   { main: import.meta.filename },
  * ) {}
  *
  * export default WorkerB.make(
@@ -464,7 +481,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *
  * export default class WorkerA extends Cloudflare.Worker<WorkerA>()(
  *   "WorkerA",
- *   { main: import.meta.path },
+ *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const b = yield* Cloudflare.Worker.bind(WorkerB);
  *     return {
@@ -483,7 +500,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Enabling Node.js compatibility
  * ```typescript
  * {
- *   main: import.meta.path,
+ *   main: import.meta.filename,
  *   compatibility: {
  *     flags: ["nodejs_compat"],
  *     date: "2026-03-17",
@@ -494,7 +511,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Serving static assets
  * ```typescript
  * {
- *   main: import.meta.path,
+ *   main: import.meta.filename,
  *   assets: "./public",
  * }
  * ```
@@ -512,7 +529,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Enabling logs and traces
  * ```typescript
  * {
- *   main: import.meta.path,
+ *   main: import.meta.filename,
  *   observability: {
  *     enabled: true,
  *     headSamplingRate: 1,
@@ -725,48 +742,61 @@ export const Worker: Platform<
                 name: bindingName,
                 namespace: binding.namespace,
               } as any)
-            : isDurableObjectNamespaceLike(binding)
+            : isImagesBinding(binding)
               ? {
-                  type: "durable_object_namespace",
+                  type: "images",
                   name: bindingName,
-                  className: binding.className ?? binding.name,
                 }
-              : binding.Type === "Cloudflare.D1Database"
+              : isDurableObjectNamespaceLike(binding)
                 ? {
-                    type: "d1",
-                    id: binding.databaseId,
+                    type: "durable_object_namespace",
                     name: bindingName,
+                    className: binding.className ?? binding.name,
                   }
-                : binding.Type === "Cloudflare.R2Bucket"
+                : binding.Type === "Cloudflare.D1Database"
                   ? {
-                      type: "r2_bucket",
+                      type: "d1",
+                      id: binding.databaseId,
                       name: bindingName,
-                      bucketName: binding.bucketName,
-                      jurisdiction: binding.jurisdiction.pipe(
-                        Output.map((jurisdiction) =>
-                          jurisdiction === "default" ? undefined : jurisdiction,
-                        ),
-                      ),
                     }
-                  : binding.Type === "Cloudflare.KVNamespace"
+                  : binding.Type === "Cloudflare.R2Bucket"
                     ? {
-                        type: "kv_namespace",
+                        type: "r2_bucket",
                         name: bindingName,
-                        namespaceId: binding.namespaceId,
+                        bucketName: binding.bucketName,
+                        jurisdiction: binding.jurisdiction.pipe(
+                          Output.map((jurisdiction) =>
+                            jurisdiction === "default"
+                              ? undefined
+                              : jurisdiction,
+                          ),
+                        ),
                       }
-                    : binding.Type === "Cloudflare.Queue"
+                    : binding.Type === "Cloudflare.KVNamespace"
                       ? {
-                          type: "queue",
+                          type: "kv_namespace",
                           name: bindingName,
-                          queueName: binding.queueName,
+                          namespaceId: binding.namespaceId,
                         }
-                      : binding.Type === "Cloudflare.AiGateway"
+                      : binding.Type === "Cloudflare.Queue"
                         ? {
-                            type: "ai",
+                            type: "queue",
                             name: bindingName,
+                            queueName: binding.queueName,
                           }
-                        : // TODO(sam): handle others
-                          undefined;
+                        : binding.Type === "Cloudflare.AiGateway"
+                          ? {
+                              type: "ai",
+                              name: bindingName,
+                            }
+                          : binding.Type === "Cloudflare.Hyperdrive"
+                            ? {
+                                type: "hyperdrive",
+                                name: bindingName,
+                                id: binding.hyperdriveId,
+                              }
+                            : // TODO(sam): handle others
+                              undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
@@ -1050,11 +1080,9 @@ export const LiveWorkerProvider = () =>
   Provider.effect(
     Worker,
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
       const { accountId } = yield* CloudflareEnvironment;
-      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
 
@@ -1238,12 +1266,24 @@ export const LiveWorkerProvider = () =>
             }
 
             const zoneId = yield* inferZoneIdForHostname(hostname, zoneCache);
+            // Same eventual-consistency window as `setWorkerSubdomain`:
+            // PUT /accounts/.../workers/domains right after `putScript`
+            // can return `WorkerNotFound` until Cloudflare's script
+            // registry has propagated. Retry on that specific tag.
             const res = yield* putDomain({
               accountId,
               hostname,
               service: scriptName,
               zoneId,
-            });
+            }).pipe(
+              Effect.retry({
+                while: (error: { _tag?: string }) =>
+                  error?._tag === "WorkerNotFound",
+                schedule: Schedule.exponential(200).pipe(
+                  Schedule.both(Schedule.recurs(15)),
+                ),
+              }),
+            );
             return {
               hostname,
               id: res.id ?? "",
@@ -1631,18 +1671,24 @@ export const LiveWorkerProvider = () =>
         // Add environment variables as metadata bindings
         if (news.env) {
           for (const [key, value] of Object.entries(news.env)) {
-            if (value == null) continue;
+            if (value === undefined) continue;
             if (Redacted.isRedacted(value)) {
               metadataBindings.push({
                 type: "secret_text",
                 name: key,
                 text: Redacted.value(value),
               });
-            } else {
+            } else if (typeof value === "string") {
               metadataBindings.push({
                 type: "plain_text",
                 name: key,
-                text: typeof value === "string" ? value : String(value),
+                text: value,
+              });
+            } else {
+              metadataBindings.push({
+                type: "json",
+                name: key,
+                json: value,
               });
             }
           }
@@ -1884,7 +1930,21 @@ export const LiveWorkerProvider = () =>
           yield* session.note(
             `${desiredSubdomainEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
           );
-          yield* setWorkerSubdomain(name, desiredSubdomainEnabled);
+          // Cloudflare's script registry is eventually consistent — for the
+          // first few hundred ms after `putScript` returns, POST /subdomain
+          // can still get back `WorkerNotFound` (a generic "unknown error"
+          // body). Bigger uploads race harder. Retry the subdomain toggle on
+          // that specific tag with a short exponential backoff; same pattern
+          // we use elsewhere in this provider for DO-namespace propagation.
+          yield* setWorkerSubdomain(name, desiredSubdomainEnabled).pipe(
+            Effect.retry({
+              while: (error: { _tag?: string }) =>
+                error?._tag === "WorkerNotFound",
+              schedule: Schedule.exponential(200).pipe(
+                Schedule.both(Schedule.recurs(15)),
+              ),
+            }),
+          );
         }
         const desiredDomains = normalizeDomains(news.domain);
         const previousDomains = output?.domains ?? [];

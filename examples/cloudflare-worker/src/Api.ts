@@ -24,7 +24,7 @@ interface QueueMessageBody {
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
     observability: {
       enabled: true,
     },

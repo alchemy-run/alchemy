@@ -67,7 +67,7 @@ export type Queue = Resource<
  *
  * export default Cloudflare.Worker(
  *   "Worker",
- *   { main: import.meta.path },
+ *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const queue = yield* Cloudflare.QueueBinding.bind(Queue);
  *

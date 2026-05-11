@@ -5,3 +5,4 @@ export * from "./Providers.ts";
 export * from "./Secret.ts";
 export * from "./Secrets.ts";
 export * from "./Variable.ts";
+export * from "./Variables.ts";
