@@ -50,12 +50,21 @@ export class WorkflowStep extends Context.Service<
  * Execute a named, durable workflow step. The effect is run inside the
  * Cloudflare step transaction so its result is automatically persisted
  * and replayed on retries.
+ *
+ * Any services the inner effect requires (e.g. `WorkerEnvironment` from a
+ * binding like `kv.put` / `kv.get`) are threaded through automatically by
+ * capturing the surrounding workflow body's context and providing it to
+ * the inner effect before it runs inside `step.do`.
  */
-export const task = <T>(
+export const task = <T, R = never>(
   name: string,
-  effect: Effect.Effect<T>,
-): Effect.Effect<T, never, WorkflowStep> =>
-  WorkflowStep.asEffect().pipe(Effect.flatMap((step) => step.do(name, effect)));
+  effect: Effect.Effect<T, never, R>,
+): Effect.Effect<T, never, WorkflowStep | R> =>
+  Effect.gen(function* () {
+    const step = yield* WorkflowStep;
+    const context = yield* Effect.context<R>();
+    return yield* step.do(name, effect.pipe(Effect.provide(context)));
+  });
 
 /**
  * Pause the workflow for the given duration.
@@ -103,20 +112,17 @@ export type WorkflowServices = WorkerServices | PlatformServices;
  */
 export interface WorkflowExport {
   readonly kind: "workflow";
-  readonly make: (
-    env: unknown,
-  ) => Effect.Effect<Effect.Effect<unknown, never, WorkflowRunServices>>;
+  readonly make: (env: unknown) => Effect.Effect<WorkflowImpl<any, any>>;
 }
 
 /**
- * A workflow body is an Effect that requires WorkflowRunServices
- * (event + step) to execute.
+ * A workflow implementation is a function from a typed `Input` payload to
+ * an Effect that produces the workflow's `Result`. The Effect requires
+ * `WorkflowRunServices` (event + step + env) to execute.
  */
-export type WorkflowBody<Result = unknown> = Effect.Effect<
-  Result,
-  never,
-  WorkflowRunServices
->;
+export type WorkflowImpl<Input = unknown, Result = unknown> = (
+  input: Input,
+) => Effect.Effect<Result, never, WorkflowRunServices>;
 
 export const isWorkflowExport = (value: unknown): value is WorkflowExport =>
   typeof value === "object" &&
@@ -141,24 +147,24 @@ export const isWorkflowBinding = (binding: {
  * Handle returned to the caller at deploy/bind time. Allows starting
  * workflow instances and checking their status from the Api layer.
  */
-export interface WorkflowHandle<Params = unknown> {
+export interface WorkflowHandle<Input = unknown, Result = unknown> {
   Type: WorkflowTypeId;
   name: string;
-  create(params?: Params): Effect.Effect<WorkflowInstance>;
-  get(instanceId: string): Effect.Effect<WorkflowInstance>;
+  create(input: Input): Effect.Effect<WorkflowInstance<Result>>;
+  get(instanceId: string): Effect.Effect<WorkflowInstance<Result>>;
 }
 
-export interface WorkflowInstance {
+export interface WorkflowInstance<Result = unknown> {
   id: string;
-  status(): Effect.Effect<WorkflowInstanceStatus>;
+  status(): Effect.Effect<WorkflowInstanceStatus<Result>>;
   pause(): Effect.Effect<void>;
   resume(): Effect.Effect<void>;
   terminate(): Effect.Effect<void>;
 }
 
-export interface WorkflowInstanceStatus {
+export interface WorkflowInstanceStatus<Result = unknown> {
   status: string;
-  output?: unknown;
+  output?: Result;
   error?: { name: string; message: string } | null;
 }
 
@@ -168,22 +174,22 @@ export interface WorkflowClass extends Effect.Effect<
   WorkflowHandle
 > {
   <_Self>(): {
-    <Result = unknown, InitReq = never>(
+    <Input = unknown, Result = unknown, InitReq = never>(
       name: string,
-      impl: Effect.Effect<WorkflowBody<Result>, never, InitReq>,
+      impl: Effect.Effect<WorkflowImpl<Input, Result>, never, InitReq>,
     ): Effect.Effect<
-      WorkflowHandle,
+      WorkflowHandle<Input, Result>,
       never,
       Worker | Exclude<InitReq, WorkflowServices>
     > & {
-      new (_: never): WorkflowBody<Result>;
+      new (_: never): WorkflowImpl<Input, Result>;
     };
   };
-  <Result = unknown, InitReq = never>(
+  <Input = unknown, Result = unknown, InitReq = never>(
     name: string,
-    impl: Effect.Effect<WorkflowBody<Result>, never, InitReq>,
+    impl: Effect.Effect<WorkflowImpl<Input, Result>, never, InitReq>,
   ): Effect.Effect<
-    WorkflowHandle,
+    WorkflowHandle<Input, Result>,
     never,
     Worker | Exclude<InitReq, WorkflowServices>
   >;
@@ -200,18 +206,18 @@ export class WorkflowScope extends Context.Service<
  *
  * A Workflow follows the same two-phase pattern as Workers and Durable
  * Objects. The outer `Effect.gen` resolves shared dependencies. The inner
- * `Effect.gen` is the workflow body — it reads the triggering event and
- * runs steps using `task`, `sleep`, and `sleepUntil`.
+ * `Effect.fn` is the workflow body — a function from a typed `input`
+ * payload to an Effect that runs steps using `task`, `sleep`, and
+ * `sleepUntil`.
  *
  * ```typescript
  * Effect.gen(function* () {
  *   // Phase 1: resolve dependencies
  *   const notifier = yield* NotificationService;
  *
- *   return Effect.gen(function* () {
+ *   return Effect.fn(function* (input: { orderId: string }) {
  *     // Phase 2: workflow body (durable steps)
- *     const event = yield* Cloudflare.WorkflowEvent;
- *     const result = yield* Cloudflare.task("process", doWork(event.payload));
+ *     const result = yield* Cloudflare.task("process", doWork(input.orderId));
  *     yield* Cloudflare.sleep("cooldown", "10 seconds");
  *     return result;
  *   });
@@ -226,9 +232,8 @@ export class WorkflowScope extends Context.Service<
  * export default class MyWorkflow extends Cloudflare.Workflow<MyWorkflow>()(
  *   "MyWorkflow",
  *   Effect.gen(function* () {
- *     return Effect.gen(function* () {
- *       const event = yield* Cloudflare.WorkflowEvent;
- *       return { received: event.payload };
+ *     return Effect.fn(function* (input: { name: string }) {
+ *       return { received: input.name };
  *     });
  *   }),
  * ) {}
@@ -248,33 +253,31 @@ export class WorkflowScope extends Context.Service<
  * yield* Cloudflare.sleep("cooldown", "30 seconds");
  * ```
  *
- * @example Accessing env bindings inside a step
- * `Cloudflare.WorkerEnvironment` is the same service available
- * inside a Worker — it gives you typed access to env bindings (KV,
- * R2, etc.) from inside a workflow body. Wrap any side-effecting
- * call in `task` so the result is persisted across replays.
+ * @example Accessing env bindings inside a task
+ * Bind a resource (e.g. `KVNamespace`, `R2Bucket`) in the workflow's
+ * outer init phase to get a typed Effect-native client, then use it
+ * directly inside `task`. `task` threads the binding's service
+ * requirement (`WorkerEnvironment`) through automatically so the inner
+ * Effect needs no extra plumbing.
  *
  * ```typescript
  * Effect.gen(function* () {
- *   const env = yield* Cloudflare.WorkerEnvironment;
- *   const event = yield* Cloudflare.WorkflowEvent;
- *   const { roomId, message } = event.payload as {
- *     roomId: string;
- *     message: string;
- *   };
+ *   const kv = yield* Cloudflare.KVNamespace.bind(KV);
  *
- *   const stored = yield* Cloudflare.task(
- *     "kv-roundtrip",
- *     Effect.tryPromise({
- *       try: async () => {
- *         await env.KV.put(`workflow:${roomId}`, message);
- *         return await env.KV.get(`workflow:${roomId}`);
- *       },
- *       catch: (cause) =>
- *         cause instanceof Error ? cause : new Error(String(cause)),
- *     }).pipe(Effect.orDie),
- *   );
- *   return stored;
+ *   return Effect.fn(function* (input: { roomId: string; message: string }) {
+ *     const { roomId, message } = input;
+ *
+ *     const stored = yield* Cloudflare.task(
+ *       "kv-roundtrip",
+ *       Effect.gen(function* () {
+ *         const key = `workflow:${roomId}`;
+ *         yield* kv.put(key, message);
+ *         return yield* kv.get(key);
+ *       }).pipe(Effect.orDie),
+ *     );
+ *
+ *     return stored;
+ *   });
  * });
  * ```
  *
@@ -357,7 +360,7 @@ export class WorkflowScope extends Context.Service<
  * ```
  */
 export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
-  ...args: [] | [name: string, impl: Effect.Effect<WorkflowBody>]
+  ...args: [] | [name: string, impl: Effect.Effect<WorkflowImpl<any, any>>]
 ) =>
   args.length === 0
     ? Workflow
@@ -404,11 +407,11 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
             }),
           );
 
-          const self: WorkflowHandle = {
+          const self: WorkflowHandle<any, any> = {
             Type: WorkflowTypeId,
             name,
-            create: (params?: unknown) =>
-              Effect.tryPromise(() => binding.create({ params })).pipe(
+            create: (input: unknown) =>
+              Effect.tryPromise(() => binding.create({ params: input })).pipe(
                 Effect.map(wrapInstance),
                 Effect.orDie,
               ),
@@ -419,21 +422,22 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
               ),
           };
 
-          const body = yield* impl.pipe(
+          const fn = yield* impl.pipe(
             Effect.provideService(WorkflowScope, self as any),
           );
 
           yield* worker.export(name, {
             kind: "workflow",
             make: (env: unknown) =>
-              Effect.succeed(
-                body.pipe(
+              Effect.succeed(((input: unknown) =>
+                fn(input).pipe(
                   Effect.provideService(
                     WorkerEnvironment,
                     env as Record<string, any>,
                   ),
-                ),
-              ).pipe(Effect.provideContext(services)),
+                )) as WorkflowImpl<any, any>).pipe(
+                Effect.provideContext(services),
+              ),
           } satisfies WorkflowExport);
 
           return self;
@@ -520,13 +524,13 @@ export const WorkflowProvider = () =>
 // Helpers
 // ---------------------------------------------------------------------------
 
-const wrapInstance = (raw: any): WorkflowInstance => ({
+const wrapInstance = <Result>(raw: any): WorkflowInstance<Result> => ({
   id: raw.id,
   status: () =>
     Effect.tryPromise(() => raw.status()).pipe(
       Effect.map((s: any) => ({
         status: s.status as string,
-        output: s.output,
+        output: s.output as Result,
         error: s.error,
       })),
       Effect.orDie,

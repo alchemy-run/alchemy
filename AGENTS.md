@@ -509,6 +509,117 @@ See the [VPC Smoke Test](./test/AWS/EC2/Vpc.smoke.test.ts) for an example.
 
 11. Add the resource-level JSDoc (`@section` + `@example` blocks) and field-level JSDoc on each prop/attribute on the source `.ts` file. Then run `bun generate:api-reference` to refresh `website/src/content/docs/providers/{Cloud}/{Resource}.md`. Do NOT manually edit the generated markdown.
 
+# Test Fixtures for Effect-Native Workers / Functions
+
+To test runtime behavior of an Effect-native Worker, Workflow, Lambda, etc., write a **fixture** that defines the Worker/Function with the bindings under test and exposes one HTTP route per behavior, then write a **test** that deploys the fixture once via `beforeAll` and drives it over HTTP.
+
+## File system layout
+
+Put fixtures in a `fixtures/` directory next to the test file. Each test suite owns its own fixtures — never reach across suites:
+
+```sh
+packages/alchemy/test/{Cloud}/{Service}/{Resource}.test.ts
+packages/alchemy/test/{Cloud}/{Service}/fixtures/{worker|workflow|handler}.ts
+```
+
+## Fixture shape
+
+Resolve the bindings, expose one route per behavior, default-export the class so the test can deploy it directly:
+
+```ts
+// fixtures/worker.ts
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Gateway } from "./gateway.ts";
+
+export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
+  "TestWorker",
+  {
+    main: import.meta.filename,
+  },
+  Effect.gen(function* () {
+    const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/url")) {
+          const url = yield* aiGateway.getUrl().pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ url });
+        }
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.AiGatewayBindingLive)),
+) {}
+```
+
+## Test shape
+
+Compose a `Stack` that deploys the fixture, share one deploy across the file with `beforeAll`/`afterAll`, drive it via `HttpClient`, and retry the first request through edge propagation:
+
+```ts
+// Service.test.ts
+import * as Alchemy from "@/index.ts";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Vitest";
+import { expect } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import TestWorker from "./fixtures/worker.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+});
+
+const Stack = Alchemy.Stack(
+  "ServiceTestStack",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const worker = yield* TestWorker;
+    return { url: worker.url.as<string>() };
+  }),
+);
+
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+
+test(
+  "deployed worker exercises the binding",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+
+    const res = yield* client.get(`${url}/url`).pipe(
+      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
+    );
+    expect(res.status).toBe(200);
+    const body = (yield* res.json) as { url: string };
+    expect(body.url).toContain("gateway.ai.cloudflare.com");
+  }),
+  { timeout: 180_000 },
+);
+```
+
+Notes:
+
+- `Test.make({ providers: Cloudflare.providers() })` gives you `test`, `beforeAll`, `afterAll`, `deploy`, `destroy`.
+- `beforeAll(deploy(Stack))` returns a handle (`stack` above) that every `test` body can `yield*` to get the stack outputs.
+- `afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack))` is the standard cleanup — set `NO_DESTROY=1` locally to keep the deployment around between runs while iterating.
+- Always retry the first request (`Schedule.exponential("500 millis")`) — fresh workers.dev URLs and Lambda function URLs take a few seconds to start serving 200s.
+- For POST: use `client.post(url)` for empty bodies, or `HttpClient.execute(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)))` for typed bodies.
+
+## Reference implementations
+
+- Cloudflare AiGateway — [worker fixture](./packages/alchemy/test/Cloudflare/AiGateway/worker.ts) + [test](./packages/alchemy/test/Cloudflare/AiGateway/AiGateway.test.ts) (the deploy+fetch case lives at the bottom of the file)
+- Cloudflare D1Connection — [worker fixture](./packages/alchemy/test/Cloudflare/D1/d1-worker.ts) + [test](./packages/alchemy/test/Cloudflare/D1/D1Binding.test.ts)
+- Cloudflare Workflow — [workflow fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/test-workflow.ts) + [worker fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/workflow-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/Workflow.test.ts)
+- Cloudflare Images — [worker fixture](./packages/alchemy/test/Cloudflare/Images/images-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Images/Images.test.ts)
+- AWS Lambda (DynamoDB bindings) — [Lambda fixture](./packages/alchemy/test/AWS/DynamoDB/handler.ts) + [test](./packages/alchemy/test/AWS/DynamoDB/Bindings.test.ts) (one `describe("<BindingName>")` per binding, all driving the same deployed Lambda)
+
 # Spec-Driven Service Bring-Up
 
 Use @processes/AWS.md as the source of truth for bringing a single AWS service from zero to full coverage.

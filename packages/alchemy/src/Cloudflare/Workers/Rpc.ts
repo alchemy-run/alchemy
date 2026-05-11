@@ -354,26 +354,30 @@ export const makeWorkflowBridge =
     getExport: (
       name: string,
     ) => Promise<
-      (env: unknown) => Effect.Effect<Effect.Effect<unknown, never, any>>
+      (
+        env: unknown,
+      ) => Effect.Effect<(input: unknown) => Effect.Effect<unknown, never, any>>
     >,
   ) =>
   (className: string) =>
     class WorkflowBridge extends WorkflowEntrypoint {
-      readonly body: Promise<Effect.Effect<unknown, never, any>>;
+      readonly fn: Promise<
+        (input: unknown) => Effect.Effect<unknown, never, any>
+      >;
       readonly env: unknown;
 
       constructor(ctx: unknown, env: unknown) {
         super(ctx, env);
         this.env = env;
-        this.body = getExport(className).then((factory) =>
+        this.fn = getExport(className).then((factory) =>
           Effect.runPromise(factory(env)),
         );
       }
 
       async run(event: any, step: any): Promise<unknown> {
-        const body = await this.body;
+        const fn = await this.fn;
         return Effect.runPromise(
-          body.pipe(
+          fn(event.payload).pipe(
             Effect.provideService(
               WorkflowEventService,
               wrapWorkflowEvent(event),
