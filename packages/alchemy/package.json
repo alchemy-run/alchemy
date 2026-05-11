@@ -196,6 +196,18 @@
       "worker": "./src/Output.ts",
       "import": "./lib/Output.js"
     },
+    "./Vultr": {
+      "types": "./lib/Vultr/index.d.ts",
+      "bun": "./src/Vultr/index.ts",
+      "worker": "./src/Vultr/index.ts",
+      "import": "./lib/Vultr/index.js"
+    },
+    "./Vultr/*": {
+      "types": "./lib/Vultr/*/index.d.ts",
+      "bun": "./src/Vultr/*/index.ts",
+      "worker": "./src/Vultr/*/index.ts",
+      "import": "./lib/Vultr/*/index.js"
+    },
     "./Process": {
       "types": "./lib/Process/index.d.ts",
       "bun": "./src/Process/index.ts",
