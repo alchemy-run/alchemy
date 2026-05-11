@@ -353,7 +353,32 @@ function proxy(self: any): any {
       prop === ExprSymbol || prop === inspect ? true : prop in self,
     get: (target, prop) =>
       prop === Symbol.toPrimitive
-        ? (hint: string) => (hint === "number" ? Number.NaN : self.toString())
+        ? (hint: string) => {
+            // Any JS-level coercion of an unresolved Output produces a
+            // placeholder that *looks* like a real value but isn't:
+            //
+            //   - `string` / `default` hints (`${output}`, `output + ""`,
+            //     `==` against a primitive) previously fell through to
+            //     `self.toString()` and returned the inspect form
+            //     (e.g. "tunnel.tunnelId"). The bogus string flowed
+            //     into resource props and into the cloud — only
+            //     surfacing as an opaque downstream error (see PR
+            //     description for a real Cloudflare DNS landing).
+            //
+            //   - `number` hint (`+output`, `output * 2`,
+            //     `Math.max(0, output)`) previously returned NaN, which
+            //     propagates silently through arithmetic and lands as
+            //     "the API rejected a NaN field" much later.
+            //
+            // All three hints fail loud at the coercion site with a
+            // pointer to the right composition API.
+            throw new Error(
+              `Cannot coerce Output<${self[inspect]()}> to a ` +
+                `${hint === "number" ? "number" : "string"} via JS coercion. ` +
+                `Use Output.interpolate\`...\` or Output.map(output, fn) ` +
+                `to compose Outputs — the value isn't known until deploy time.`,
+            );
+          }
         : prop === ExprSymbol
           ? self
           : prop === inspect
