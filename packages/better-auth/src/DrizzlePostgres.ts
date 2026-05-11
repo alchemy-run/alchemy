@@ -19,7 +19,7 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { BetterAuth } from "./BetterAuth.ts";
 
 /**
- * Common options accepted by every `DrizzlePostgres.from*` factory: the full
+ * Common options accepted by every `drizzlePostgresFrom*` factory: the full
  * `BetterAuthOptions` (minus `database`, supplied internally) plus a flat
  * pass-through of `drizzleAdapter` config (minus `provider`, fixed to `"pg"`).
  */
@@ -48,10 +48,8 @@ const buildLayer = <TRelations extends AnyRelations>(
   return Layer.effect(
     BetterAuth,
     Effect.gen(function* () {
-      const db = yield* Drizzle.postgres(connectionString);
-
       const auth = Effect.gen(function* () {
-        const raw = yield* db.raw;
+        const raw = yield* Drizzle.postgresRaw(connectionString);
         return makeBetterAuth({
           ...betterAuthOptions,
           database: drizzleAdapter(raw, {
@@ -81,23 +79,24 @@ const buildLayer = <TRelations extends AnyRelations>(
 };
 
 /**
- * Wires `better-auth` to a Postgres database via `drizzle-orm`. Pass any
- * `BetterAuthOptions` you'd normally pass to `betterAuth(...)` plus the
- * `drizzleAdapter` schema/config. The `database` field is supplied
- * internally using `Drizzle.postgres(...).raw` (a vanilla
+ * Wires `better-auth` to a Postgres database via `drizzle-orm` from a
+ * Cloudflare Hyperdrive resource. Provides `Cloudflare.HyperdriveBindingLive`
+ * internally so consumers don't need to wire it up.
+ *
+ * Pass any `BetterAuthOptions` you'd normally pass to `betterAuth(...)`
+ * plus the `drizzleAdapter` schema/config. The `database` field is
+ * supplied internally using `Drizzle.postgresRaw(...)` (a vanilla
  * `drizzle-orm/node-postgres` client). The drizzle pool is cached
  * per-`ExecutionContext`; the better-auth instance is cached so it's
  * constructed at most once per JS realm.
  *
- * Two factories — pick by where your connection string comes from.
- *
- * @example Cloudflare Hyperdrive
+ * @example
  * ```typescript
- * import { BetterAuth, DrizzlePostgres } from "@alchemy.run/better-auth";
+ * import { BetterAuth, drizzlePostgresFromHyperdrive } from "@alchemy.run/better-auth";
  *
  * .pipe(
  *   Effect.provide(
- *     DrizzlePostgres.fromHyperdrive({
+ *     drizzlePostgresFromHyperdrive({
  *       hyperdrive: MyHyperdrive,
  *       secret: process.env.BETTER_AUTH_SECRET!,
  *       baseURL: "https://app.example.com",
@@ -112,12 +111,34 @@ const buildLayer = <TRelations extends AnyRelations>(
  * const auth = yield* BetterAuth;
  * if (url.pathname.startsWith("/api/auth/")) return yield* auth.fetch;
  * ```
+ */
+export const drizzlePostgresFromHyperdrive = <
+  TRelations extends AnyRelations = EmptyRelations,
+>(
+  options: DrizzlePostgresOptions<TRelations> & { hyperdrive: Hyperdrive },
+) => {
+  const { hyperdrive, ...rest } = options;
+  return Layer.unwrap(
+    Effect.gen(function* () {
+      const hd = yield* Cloudflare.Hyperdrive.bind(hyperdrive);
+      return buildLayer<TRelations>(hd.connectionString, rest);
+    }),
+  ).pipe(Layer.provide(Cloudflare.HyperdriveBindingLive));
+};
+
+/**
+ * Wires `better-auth` to a Postgres database via `drizzle-orm` from a
+ * plain connection URL — a literal string, a `Redacted<string>`, or an
+ * Effect resolving to one. Use for Neon, Supabase direct connections,
+ * or any non-Hyperdrive Postgres source.
  *
- * @example Plain URL (Neon, Supabase direct, env var, …)
+ * @example
  * ```typescript
+ * import { BetterAuth, drizzlePostgresFromUrl } from "@alchemy.run/better-auth";
+ *
  * .pipe(
  *   Effect.provide(
- *     DrizzlePostgres.fromUrl({
+ *     drizzlePostgresFromUrl({
  *       url: process.env.DATABASE_URL!,
  *       secret: process.env.BETTER_AUTH_SECRET!,
  *       schema: { user, session, account, verification },
@@ -126,45 +147,22 @@ const buildLayer = <TRelations extends AnyRelations>(
  * )
  * ```
  */
-export const DrizzlePostgres = {
-  /**
-   * Build the `BetterAuth` layer from a Cloudflare Hyperdrive resource.
-   * Provides `Cloudflare.HyperdriveBindingLive` internally so consumers
-   * don't need to wire it up.
-   */
-  fromHyperdrive: <TRelations extends AnyRelations = EmptyRelations>(
-    options: DrizzlePostgresOptions<TRelations> & { hyperdrive: Hyperdrive },
-  ) => {
-    const { hyperdrive, ...rest } = options;
-    return Layer.unwrap(
-      Effect.gen(function* () {
-        const hd = yield* Cloudflare.Hyperdrive.bind(hyperdrive);
-        return buildLayer<TRelations>(hd.connectionString, rest);
-      }),
-    ).pipe(Layer.provide(Cloudflare.HyperdriveBindingLive));
+export const drizzlePostgresFromUrl = <
+  TRelations extends AnyRelations = EmptyRelations,
+>(
+  options: DrizzlePostgresOptions<TRelations> & {
+    url:
+      | string
+      | Redacted.Redacted<string>
+      | Effect.Effect<Redacted.Redacted<string>>;
   },
-
-  /**
-   * Build the `BetterAuth` layer from a plain Postgres connection URL —
-   * a literal string, a `Redacted<string>`, or an Effect resolving to one.
-   * Use for Neon, Supabase direct connections, or any non-Hyperdrive
-   * Postgres source.
-   */
-  fromUrl: <TRelations extends AnyRelations = EmptyRelations>(
-    options: DrizzlePostgresOptions<TRelations> & {
-      url:
-        | string
-        | Redacted.Redacted<string>
-        | Effect.Effect<Redacted.Redacted<string>>;
-    },
-  ) => {
-    const { url, ...rest } = options;
-    const connectionString: Effect.Effect<Redacted.Redacted<string>> =
-      typeof url === "string"
-        ? Effect.succeed(Redacted.make(url))
-        : Redacted.isRedacted(url)
-          ? Effect.succeed(url)
-          : url;
-    return buildLayer<TRelations>(connectionString, rest);
-  },
+) => {
+  const { url, ...rest } = options;
+  const connectionString: Effect.Effect<Redacted.Redacted<string>> =
+    typeof url === "string"
+      ? Effect.succeed(Redacted.make(url))
+      : Redacted.isRedacted(url)
+        ? Effect.succeed(url)
+        : url;
+  return buildLayer<TRelations>(connectionString, rest);
 };
