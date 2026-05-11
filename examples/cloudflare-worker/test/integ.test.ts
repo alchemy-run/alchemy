@@ -11,6 +11,7 @@ import { WORKFLOW_SECRET_VALUE } from "../src/NotifyWorkflow.ts";
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
   state: Cloudflare.state(),
+  dev: true,
 });
 
 const stack = beforeAll(deploy(Stack));

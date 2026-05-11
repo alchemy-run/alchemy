@@ -1,233 +1,90 @@
-import {
-  isWorkflowExport,
-  task,
-  sleep,
-  sleepUntil,
-  WorkflowEvent,
-  WorkflowStep,
-  type WorkflowExport,
-  type WorkflowBody,
-} from "@/Cloudflare/Workers/Workflow";
-import { makeWorkflowBridge } from "@/Cloudflare/Workers/Rpc";
-import { describe, expect, it } from "@effect/vitest";
+import * as Alchemy from "@/index.ts";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Vitest";
+import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import WorkflowTestWorker from "./fixtures/workflow-worker.ts";
 
-// ---------------------------------------------------------------------------
-// isWorkflowExport
-// ---------------------------------------------------------------------------
-
-describe("isWorkflowExport", () => {
-  it.effect("detects valid WorkflowExport", () =>
-    Effect.gen(function* () {
-      const valid: WorkflowExport = {
-        kind: "workflow",
-        make: () => Effect.succeed(Effect.void as any),
-      };
-      expect(isWorkflowExport(valid)).toBe(true);
-    }),
-  );
-
-  it.effect("rejects non-workflow values", () =>
-    Effect.gen(function* () {
-      expect(isWorkflowExport(null)).toBe(false);
-      expect(isWorkflowExport(undefined)).toBe(false);
-      expect(isWorkflowExport(42)).toBe(false);
-      expect(isWorkflowExport("workflow")).toBe(false);
-      expect(isWorkflowExport({})).toBe(false);
-      expect(isWorkflowExport({ kind: "durableObject" })).toBe(false);
-      expect(isWorkflowExport({ kind: "workflow" })).toBe(true);
-    }),
-  );
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
 });
 
-// ---------------------------------------------------------------------------
-// Helpers for bridge tests
-// ---------------------------------------------------------------------------
+const logLevel = Effect.provideService(
+  MinimumLogLevel,
+  process.env.DEBUG ? "Debug" : "Info",
+);
 
-class FakeEntrypoint {
-  constructor(
-    public ctx: unknown,
-    public env: unknown,
-  ) {}
-  async run(_event: any, _step: any): Promise<unknown> {
-    return undefined;
-  }
-}
+const Stack = Alchemy.Stack(
+  "WorkflowBindingStack",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const worker = yield* WorkflowTestWorker;
+    return {
+      url: worker.url.as<string>(),
+    };
+  }),
+);
 
-const fakeStep = () => ({
-  do: async (_n: string, fn: () => Promise<unknown>) => fn(),
-  sleep: async () => {},
-  sleepUntil: async () => {},
-});
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-const makeGetExport = (body: WorkflowBody) => async () => (_env: unknown) =>
-  Effect.succeed(body);
+test(
+  "deployed worker can run a workflow to completion",
+  Effect.gen(function* () {
+    const out = yield* stack;
+    const url = out.url;
+    expect(url).toBeTypeOf("string");
 
-// ---------------------------------------------------------------------------
-// makeWorkflowBridge
-// ---------------------------------------------------------------------------
+    const client = yield* HttpClient.HttpClient;
 
-describe("makeWorkflowBridge", () => {
-  it.effect("delegates run() to the Effect body with services", () =>
-    Effect.gen(function* () {
-      const body: WorkflowBody = Effect.gen(function* () {
-        const event = yield* WorkflowEvent;
-        const result = yield* task(
-          "greet",
-          Effect.succeed(`Hello ${event.payload}`),
-        );
-        return result;
-      });
+    // Cloudflare's edge takes a few seconds to start serving a fresh
+    // workers.dev URL, so retry the initial start call until it returns 200.
+    const startRes = yield* client.post(`${url}/workflow/start/world`).pipe(
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 10,
+      }),
+    );
+    expect(startRes.status).toBe(200);
+    const { instanceId } = (yield* startRes.json) as { instanceId: string };
+    expect(instanceId).toBeTypeOf("string");
 
-      const BridgeClass = makeWorkflowBridge(
-        FakeEntrypoint as any,
-        makeGetExport(body),
-      )("TestWorkflow");
-
-      const instance = new BridgeClass({}, {});
-      const result = yield* Effect.promise(() =>
-        instance.run(
-          { payload: "World", timestamp: new Date(), instanceId: "x" },
-          fakeStep(),
-        ),
+    // Poll the workflow status until it reaches a terminal state.
+    let lastStatus:
+      | {
+          status: string;
+          output?: { greeting: string; envBindingCount: number };
+          error?: { message?: string } | null;
+        }
+      | undefined;
+    const deadline = Date.now() + 60_000;
+    while (Date.now() < deadline) {
+      const statusRes = yield* client.get(
+        `${url}/workflow/status/${instanceId}`,
       );
-      expect(result).toBe("Hello World");
-    }),
-  );
+      lastStatus = (yield* statusRes.json) as typeof lastStatus;
+      if (
+        lastStatus?.status === "complete" ||
+        lastStatus?.status === "errored"
+      ) {
+        break;
+      }
+      yield* Effect.sleep("2 seconds");
+    }
 
-  it.effect("wraps step.sleep correctly", () =>
-    Effect.gen(function* () {
-      let sleepCalledWith: [string, unknown] | undefined;
-
-      const body: WorkflowBody = Effect.gen(function* () {
-        yield* sleep("pause", "5 seconds");
-        return "done";
-      });
-
-      const BridgeClass = makeWorkflowBridge(
-        FakeEntrypoint as any,
-        makeGetExport(body),
-      )("TestWorkflow");
-
-      const instance = new BridgeClass({}, {});
-
-      const step = {
-        ...fakeStep(),
-        sleep: async (name: string, duration: unknown) => {
-          sleepCalledWith = [name, duration];
-        },
-      };
-
-      const result = yield* Effect.promise(() =>
-        instance.run(
-          { payload: {}, timestamp: new Date(), instanceId: "x" },
-          step,
-        ),
-      );
-
-      expect(result).toBe("done");
-      expect(sleepCalledWith).toEqual(["pause", "5 seconds"]);
-    }),
-  );
-
-  it.effect("wraps step.sleepUntil correctly", () =>
-    Effect.gen(function* () {
-      let sleepUntilCalledWith: [string, unknown] | undefined;
-      const target = new Date("2025-06-01T00:00:00Z");
-
-      const body: WorkflowBody = Effect.gen(function* () {
-        yield* sleepUntil("wait", target);
-        return "done";
-      });
-
-      const BridgeClass = makeWorkflowBridge(
-        FakeEntrypoint as any,
-        makeGetExport(body),
-      )("TestWorkflow");
-
-      const instance = new BridgeClass({}, {});
-
-      const step = {
-        ...fakeStep(),
-        sleepUntil: async (name: string, ts: unknown) => {
-          sleepUntilCalledWith = [name, ts];
-        },
-      };
-
-      yield* Effect.promise(() =>
-        instance.run(
-          { payload: {}, timestamp: new Date(), instanceId: "x" },
-          step,
-        ),
-      );
-
-      expect(sleepUntilCalledWith?.[0]).toBe("wait");
-      expect(sleepUntilCalledWith?.[1]).toBe(target.toISOString());
-    }),
-  );
-
-  it.effect("provides WorkflowEvent with correct fields", () =>
-    Effect.gen(function* () {
-      let receivedPayload: unknown;
-      let receivedTimestamp: Date | undefined;
-      let receivedInstanceId: string | undefined;
-
-      const body: WorkflowBody = Effect.gen(function* () {
-        const event = yield* WorkflowEvent;
-        receivedPayload = event.payload;
-        receivedTimestamp = event.timestamp;
-        receivedInstanceId = event.instanceId;
-        return "ok";
-      });
-
-      const BridgeClass = makeWorkflowBridge(
-        FakeEntrypoint as any,
-        makeGetExport(body),
-      )("TestWorkflow");
-
-      const instance = new BridgeClass({}, {});
-      const ts = new Date("2025-01-01T00:00:00Z");
-
-      yield* Effect.promise(() =>
-        instance.run(
-          { payload: { key: "value" }, timestamp: ts, instanceId: "abc-123" },
-          fakeStep(),
-        ),
-      );
-
-      expect(receivedPayload).toEqual({ key: "value" });
-      expect(receivedTimestamp).toEqual(ts);
-      expect(receivedInstanceId).toBe("abc-123");
-    }),
-  );
-
-  it.effect("converts numeric timestamp to Date", () =>
-    Effect.gen(function* () {
-      let receivedTimestamp: Date | undefined;
-      const tsNum = 1735689600000;
-
-      const body: WorkflowBody = Effect.gen(function* () {
-        const event = yield* WorkflowEvent;
-        receivedTimestamp = event.timestamp;
-        return "ok";
-      });
-
-      const BridgeClass = makeWorkflowBridge(
-        FakeEntrypoint as any,
-        makeGetExport(body),
-      )("TestWorkflow");
-
-      const instance = new BridgeClass({}, {});
-
-      yield* Effect.promise(() =>
-        instance.run(
-          { payload: {}, timestamp: tsNum, instanceId: "" },
-          fakeStep(),
-        ),
-      );
-
-      expect(receivedTimestamp).toBeInstanceOf(Date);
-      expect(receivedTimestamp!.getTime()).toBe(tsNum);
-    }),
-  );
-});
+    expect(lastStatus).toBeDefined();
+    expect(lastStatus!.status).toBe("complete");
+    expect(lastStatus!.error).toBeFalsy();
+    expect(lastStatus!.output?.greeting).toBe("Hello, world!");
+    // The body yields `WorkerEnvironment` — if the regression from PR #71 ever
+    // returns, the body dies on the first yield and `output` is undefined.
+    expect(lastStatus!.output?.envBindingCount).toBeGreaterThan(0);
+  }).pipe(logLevel),
+  { timeout: 180_000 },
+);

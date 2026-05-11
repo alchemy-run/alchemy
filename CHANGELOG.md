@@ -1,3 +1,25 @@
+## v2.0.0-beta.36
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**:
+  - **Images**: Add Images binding &nbsp;-&nbsp; by **Alex** in https://github.com/alchemy-run/alchemy-effect/issues/237 [<samp>(b19c3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b19c3562)
+- **cloudflare**:
+  - Support Hyperdrive in Worker bindings &nbsp;-&nbsp; by **Baptiste Arnaud** in https://github.com/alchemy-run/alchemy-effect/issues/282 [<samp>(48381)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/48381a01)
+  - **r2**: Add lifecycleRules option to R2Bucket &nbsp;-&nbsp; by **Baptiste Arnaud** in https://github.com/alchemy-run/alchemy-effect/issues/284 [<samp>(ed905)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ed905d44)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Dev**: Resolve *.localhost via undici dispatcher &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/289 [<samp>(ae6de)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ae6de171)
+
+### &nbsp;&nbsp;&nbsp;🏎 Performance
+
+- **smoke**: Batch canary install at the workspace root &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/291 [<samp>(90918)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/9091856e)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.35...HEAD)
+
+---
+
 ## v2.0.0-beta.35
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

@@ -21,6 +21,7 @@ import * as Containers from "./Container/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as D1 from "./D1/index.ts";
 import * as Hyperdrive from "./Hyperdrive/index.ts";
+import * as Images from "./Images/index.ts";
 import * as KV from "./KV/index.ts";
 import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
@@ -56,6 +57,7 @@ export const providers = () =>
       D1.D1Database,
       Hyperdrive.Hyperdrive,
       Hyperdrive.HyperdriveBindingPolicy,
+      Images.ImagesBindingPolicy,
       KV.KVNamespace,
       KV.KVNamespaceBindingPolicy,
       Queue.Queue,
@@ -88,6 +90,7 @@ export const providers = () =>
         D1.DatabaseProvider(),
         Hyperdrive.HyperdriveBindingPolicyLive,
         Hyperdrive.HyperdriveProvider(),
+        Images.ImagesBindingPolicyLive,
         KV.KVNamespaceBindingPolicyLive,
         KV.KVNamespaceProvider(),
         Queue.QueueBindingPolicyLive,
