@@ -30,7 +30,7 @@ export type VariableInput<T, R = never> =
  * const port = yield* Alchemy.Variable("PORT", 3000);
  * ```
  */
-export function Variable(name: string): Output.Output<string>;
+export function Variable(name: string): Output.Output<string, never>;
 export function Variable<T, R = never>(
   name: string,
   value: VariableInput<T, R>,

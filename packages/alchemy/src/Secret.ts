@@ -49,8 +49,10 @@ export type SecretInput<R = never> =
  * const apiKey = yield* Alchemy.Secret("API_KEY", Config.redacted("API_KEY"));
  * ```
  */
-export function Secret(name: string): Output.Output<Redacted.Redacted<string>>;
-export function Secret<R>(
+export function Secret(
+  name: string,
+): Output.Output<Redacted.Redacted<string>, never>;
+export function Secret<R = never>(
   name: string,
   value: SecretInput<R>,
 ): Output.Output<Redacted.Redacted<string>, R>;
