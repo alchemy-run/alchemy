@@ -417,68 +417,50 @@ The forbidden pattern is `if (output === undefined) {
 rename-and-branch — it brings back every false assumption
 we just deleted.
 
-## Why this is easier for AI to write
+## Plan didn't change
 
-Alchemy has 50+ resources. We migrated all of them in a
-single afternoon with one AI prompt run in parallel across
-the codebase.
-
-That's not because the model got smarter. It's because
-`reconcile` is a *strictly easier* function to generate
-than `create` + `update`.
-
-`create` is a minefield of "what if it half-existed already"
-edge cases. `update` is a minefield of "what if `olds` is
-stale" edge cases. Both demand the author keep an implicit
-state-machine in their head and write defensively against
-the cases the other function was *supposed* to handle.
-
-`reconcile` collapses that into one mental model: read the
-cloud, compute the delta, apply the delta. Each sync step is
-independently idempotent. Crash mid-reconcile, re-run,
-converge. The AI doesn't have to reason about which function
-it's in or what the other one already did — there is no
-other one.
-
-The diffs were also smaller. A typical provider lost 30-40%
-of its lifecycle code. The DynamoDB `Table` provider, which
-had the gnarliest create/update split (GSIs, PITR, TTL, tags,
-stream config — each with its own update API), dropped about
-200 lines and got *more* correct in the process.
-
-## What you do as a provider author
-
-If you're writing a new resource, the recipe is:
+This is important: the *plan* still talks about create and
+update. Open [`Plan.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/Plan.ts)
+and you'll find an `action` field on every node, with the
+same values as before:
 
 ```typescript
-reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
-  // 1. Observe
-  const observed = yield* describeX(physicalNameFrom(news, output))
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-  // 2. Ensure
-  const current = observed ?? (yield* createX(news));
-
-  // 3. Sync each mutable aspect against `current`, not `olds`
-  yield* syncTags(current, news);
-  yield* syncSettings(current, news);
-
-  // 4. Return fresh attributes
-  return toAttrs(current);
-}),
+type Action = "create" | "update" | "replace" | "delete" | "noop";
 ```
 
-The canonical references in the repo are
-[`AWS/S3/Bucket.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/AWS/S3/Bucket.ts),
-[`AWS/Kinesis/Stream.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/AWS/Kinesis/Stream.ts),
-and
-[`AWS/DynamoDB/Table.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/AWS/DynamoDB/Table.ts)
-— the last one is the multi-aspect case study.
+The planner still computes a diff and decides, per resource,
+which of those actions applies. The terraform-style preview
+you see in your terminal still says "Plan: 4 to create,
+2 to update, 1 to replace, 0 to destroy."
+
+What changed is what happens at *apply* time. Both `create`
+and `update` actions now route into the same provider
+function — `reconcile`. The distinction lives in the plan
+(because users want to know "is this a fresh resource or a
+modification?"), but it doesn't live in the provider. The
+provider's job is identical either way: read live state,
+converge it toward desired.
+
+In other words, the create/update split was useful as a
+*user-facing concept* — "tell me what's about to change" —
+but harmful as a *provider-authoring concept*. We kept the
+former and deleted the latter.
 
 ## Where to go next
 
+This is part 1 of two. Part 2 covers how we actually
+migrated all 50+ providers from `create` + `update` to
+`reconcile`: we used a single AI prompt run in parallel
+across the codebase, with the existing per-resource tests as
+the ground truth, and the apply/plan integration tests as
+the safety net for the engine changes themselves.
+
+- [Part 2 — Migrating 50+ providers in an afternoon](/blog/2026-05-06-reconcile-ai-migration)
 - [`AdoptPolicy`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/AdoptPolicy.ts)
-  — the source file is the spec. It documents the
-  `read` → `Unowned` → adopt/fail routing in detail.
+  — the engine-side spec for `read` → `Unowned` → adopt/fail routing.
+- Canonical reconcilers:
+  [`AWS/S3/Bucket.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/AWS/S3/Bucket.ts),
+  [`AWS/Kinesis/Stream.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/AWS/Kinesis/Stream.ts),
+  [`AWS/DynamoDB/Table.ts`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/alchemy/src/AWS/DynamoDB/Table.ts).
 - [PR #179](https://github.com/alchemy-run/alchemy-effect/issues/179)
   — the migration itself, every provider in one diff.
