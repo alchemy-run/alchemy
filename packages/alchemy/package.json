@@ -190,6 +190,12 @@
       "worker": "./src/Output.ts",
       "import": "./lib/Output.js"
     },
+    "./Runtime": {
+      "types": "./lib/Runtime.d.ts",
+      "bun": "./src/Runtime.ts",
+      "worker": "./src/Runtime.ts",
+      "import": "./lib/Runtime.js"
+    },
     "./Process": {
       "types": "./lib/Process/index.d.ts",
       "bun": "./src/Process/index.ts",

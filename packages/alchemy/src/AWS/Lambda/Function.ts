@@ -667,6 +667,7 @@ export const FunctionProvider = () =>
                 (importPath) => `
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import { Stack } from "alchemy/Stack";
+import { makeEntrypointLayer } from "alchemy/Runtime";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
@@ -678,13 +679,10 @@ import * as Region from "@distilled.cloud/aws/Region";
 import * as Context from "effect/Context";
 import { MinimumLogLevel } from "effect/References";
 
-import entry from "${importPath}";
+import entrypoint from "${importPath}";
 
 const tag = Context.Service("${Self.key}")
-const layer =
-  typeof entry?.build === "function"
-    ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry : entry);
+const layer = makeEntrypointLayer(tag, entrypoint);
 
 const platform = Layer.mergeAll(
   nodeServicesLayer,

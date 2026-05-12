@@ -190,7 +190,7 @@ export const Policy =
             self,
             // @ts-expect-error
             (...args: Parameters<Shape>) =>
-              Self.useSync((self) => fn(self as ResourceLike, ...args)),
+              Self.use((self) => fn(self as ResourceLike, ...args)),
           ),
         effect: (
           fn: Effect.Effect<
