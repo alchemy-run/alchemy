@@ -71,29 +71,57 @@ const PUBLISHED = [
 const canary = process.env.SMOKE_CANARY === "1";
 const host = process.env.PKGING_HOST ?? "pkg.ing";
 
-async function run(cmd: string[], cwd: string): Promise<number> {
-  const proc = Bun.spawn(cmd, {
+async function run(
+  cmd: string[] | readonly string[],
+  cwd: string,
+  env?: Record<string, string>,
+): Promise<number> {
+  const proc = Bun.spawn([...cmd], {
     cwd,
     stdout: "inherit",
     stderr: "inherit",
-    env: { ...process.env, ALCHEMY_NO_TUI: "1" },
+    env: { ...process.env, ALCHEMY_NO_TUI: "1", ...env },
   });
   return await proc.exited;
 }
 
-// When the matrix is pinned to a single runtime (CI), use that runtime's
-// own `install` command so its install path gets exercised end-to-end —
-// otherwise (local: both runtimes) fall back to bun, which writes the
-// shared `node_modules` once for both subsequent runs.
-const PRIMARY_RUNTIME: Runtime = RUNTIMES[0];
+// Install every active runtime so each runtime's exec works against a
+// node_modules layout it understands. Bun runs first because it writes
+// the flat layout; pnpm 11 then layers its `.pnpm` virtual store on top
+// so `pnpm exec` doesn't trip its implicit `runDepsStatusCheck` install
+// inside an example directory at test time. When `SMOKE_RUNTIME` pins a
+// single runtime, only that one installs.
+//
 // Canary mode mutates example package.json files at runtime, so the
 // lockfile is intentionally stale during the run — `--no-frozen-lockfile`
 // lets the install resolve the new `catalog:` refs. CI defaults pnpm to
 // frozen-lockfile, which would otherwise fail with ERR_PNPM_OUTDATED_LOCKFILE.
-const installCmd = (): string[] =>
-  PRIMARY_RUNTIME === "bun"
-    ? ["bun", "install", "--no-frozen-lockfile"]
-    : ["pnpm", "install", "--no-frozen-lockfile"];
+//
+// `Bun.spawn` has no TTY, so pnpm 11 aborts non-interactive `node_modules`
+// removal with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` unless we set
+// `CI=1`. Only forwarded to pnpm — alchemy's `loadFromEnv` short-circuits
+// to env-only credentials when `CI=true`, which would break local runs
+// that rely on the AWS SDK credential chain.
+type InstallStep = { cmd: readonly string[]; env?: Record<string, string> };
+const installCmds = (): readonly InstallStep[] => {
+  const cmds: InstallStep[] = [];
+  if (RUNTIMES.includes("bun")) {
+    cmds.push({ cmd: ["bun", "install", "--no-frozen-lockfile"] });
+  }
+  if (RUNTIMES.includes("pnpm")) {
+    cmds.push({
+      cmd: ["pnpm", "install", "--no-frozen-lockfile"],
+      env: { CI: "1" },
+    });
+  }
+  return cmds;
+};
+
+const installAll = async (): Promise<void> => {
+  for (const { cmd, env } of installCmds()) {
+    expect(await run(cmd, ROOT, env)).toBe(0);
+  }
+};
 
 const ROOT_PKG_PATH = path.join(ROOT, "package.json");
 const examplePkgPath = (e: string) =>
@@ -241,10 +269,10 @@ if (canary) {
     }
 
     // Mirror the new catalog entries into pnpm-workspace.yaml so the
-    // pnpm matrix sees them too.
+    // pnpm leg sees them too.
     await writePnpmWorkspace();
 
-    expect(await run(installCmd(), ROOT)).toBe(0);
+    await installAll();
   }, TIMEOUT);
 }
 
@@ -257,7 +285,9 @@ const restoreWorkspaceDeps = async () => {
   const paths = [ROOT_PKG_PATH, ...examples.map(examplePkgPath)];
   await run(["git", "checkout", "--", ...paths], ROOT);
   await writePnpmWorkspace();
-  await run(installCmd(), ROOT);
+  for (const { cmd, env } of installCmds()) {
+    await run(cmd, ROOT, env);
+  }
 };
 
 // Always-on setup: write `pnpm-workspace.yaml` mirroring bun's catalog so

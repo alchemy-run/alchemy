@@ -58,6 +58,10 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
 
+      # Bootstrap install so `bun test:canary` itself can resolve. The
+      # test then runs its own `bun install` + `pnpm install` in canary
+      # `beforeAll` after rewriting the catalog to pkg.ing tarballs, so
+      # there's nothing pnpm-specific to wire up here.
       - run: bun install
 
       # OIDC → short-lived AWS session. Exports AWS_ACCESS_KEY_ID,

@@ -113,6 +113,7 @@
   "devDependencies": {
     "@alchemy.run/pr-package": "workspace:*",
     "@ark/attest": "^0.56.0",
+    "@distilled.cloud/cloudflare": "^0.19.1",
     "@effect/language-service": "^0.77.0",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",

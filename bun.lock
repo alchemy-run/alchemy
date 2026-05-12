@@ -7,6 +7,7 @@
       "devDependencies": {
         "@alchemy.run/pr-package": "workspace:*",
         "@ark/attest": "^0.56.0",
+        "@distilled.cloud/cloudflare": "^0.19.1",
         "@effect/language-service": "^0.77.0",
         "@effect/platform-bun": "catalog:",
         "@effect/platform-node": "catalog:",
@@ -3831,8 +3832,6 @@
 
     "@cspotcode/source-map-support/@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.9", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.0.3", "@jridgewell/sourcemap-codec": "^1.4.10" } }, "sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ=="],
 
-    "@distilled.cloud/cloudflare-runtime/@distilled.cloud/cloudflare": ["@distilled.cloud/cloudflare@0.16.8", "", { "dependencies": { "@distilled.cloud/core": "0.16.8", "effect": ">=4.0.0-beta.60 || >=4.0.0" } }, "sha512-ZjHnKcaEkNxTIcZaBw+jcZJKxYavZ1zMFUrtD4gIQGyaJknZle3fwmSkaneHe9W8kQK8LWUxV+aOeYA+ADTuZw=="],
-
     "@distilled.cloud/cloudflare-vite-plugin/@distilled.cloud/cloudflare-rolldown-plugin": ["@distilled.cloud/cloudflare-rolldown-plugin@0.2.0", "", { "dependencies": { "@cloudflare/unenv-preset": "^2.16.0", "unenv": "^2.0.0-rc.24" }, "peerDependencies": { "rolldown": "^1.0.0-rc.9" } }, "sha512-zZFzGzp+6sy+zP3fOxkJ0pXyTXd08pLrOw/9ooIR4NkcyL1D1k2NxNPuan0X5pttebigTVCP8Ny3e62gUe9MBg=="],
 
     "@effect/platform-node/undici": ["undici@8.2.0", "", {}, "sha512-Z+4Hx9GE26Lh9Upwfnc8C7SsrpBPGaM/Gm6kMFtiG7c+5IvQKlXi/t+9x9DrrCh29cww5TSP9YdVaBcnLDs5fQ=="],
@@ -4262,8 +4261,6 @@
     "@aws-crypto/sha256-browser/@smithy/util-utf8/@smithy/util-buffer-from": ["@smithy/util-buffer-from@2.2.0", "", { "dependencies": { "@smithy/is-array-buffer": "^2.2.0", "tslib": "^2.6.2" } }, "sha512-IJdWBbTcMQ6DA0gdNhh/BwrLkDR+ADW5Kr1aZmd4k3DIF6ezMV4R2NIAmT08wQJ3yUK82thHWmC/TnK/wpMMIA=="],
 
     "@aws-crypto/util/@smithy/util-utf8/@smithy/util-buffer-from": ["@smithy/util-buffer-from@2.2.0", "", { "dependencies": { "@smithy/is-array-buffer": "^2.2.0", "tslib": "^2.6.2" } }, "sha512-IJdWBbTcMQ6DA0gdNhh/BwrLkDR+ADW5Kr1aZmd4k3DIF6ezMV4R2NIAmT08wQJ3yUK82thHWmC/TnK/wpMMIA=="],
-
-    "@distilled.cloud/cloudflare-runtime/@distilled.cloud/cloudflare/@distilled.cloud/core": ["@distilled.cloud/core@0.16.8", "", { "dependencies": { "effect": ">=4.0.0-beta.60 || >=4.0.0" } }, "sha512-fmpbFtljRVzCAnh04OUyXqSwTvKPUbkjx7P7IplnHZopxAscfryPgAKPQFxNcOIszBVZcyf7TQmZOiMcvTrOsw=="],
 
     "@effect/sql-pg/pg-types/postgres-array": ["postgres-array@3.0.4", "", {}, "sha512-nAUSGfSDGOaOAEGwqsRY27GPOea7CNipJPOA7lPbdEpx5Kg3qzdP0AaWC5MlhTWV9s4hFX39nomVZ+C4tnGOJQ=="],
 
