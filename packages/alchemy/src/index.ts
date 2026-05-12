@@ -23,6 +23,12 @@ export * from "./Random.ts";
 export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
 export * from "./Resource.ts";
+export {
+  Action,
+  isAction,
+  type ActionLike,
+  type Action as ActionInstance,
+} from "./Action.ts";
 export * as Schema from "./Schema.ts";
 export { Secret } from "./Secret.ts";
 export * as Server from "./Server/index.ts";

@@ -153,6 +153,7 @@ export const withProviders = <A, E, R, ROut>(
         stage: options.stage ?? "test",
         resources: {},
         bindings: {},
+        actions: {},
       }),
     ),
     Effect.provide(Layer.succeed(Stage, options.stage ?? "test")),
@@ -262,6 +263,7 @@ export const scratchStack = <ROut>(
         stage,
         resources: {},
         bindings: {},
+        actions: {},
         output: {},
       }).pipe(
         Effect.flatMap(apply),
@@ -274,6 +276,7 @@ export const scratchStack = <ROut>(
             stage,
             resources: {},
             bindings: {},
+            actions: {},
           }),
         ),
         Effect.provide(Layer.succeed(Stage, stage)),

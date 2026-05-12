@@ -565,7 +565,10 @@ export const evaluate: <A, Req = never>(
             }),
           );
         }
-        return resource.attr;
+        // RefExpr targets persisted resources; tasks aren't cross-stack
+        // referenceable. Return the resource's output attrs, otherwise the
+        // task's output value, otherwise undefined.
+        return (resource as any).attr ?? (resource as any).output;
       } else if (isStackRefExpr(expr)) {
         const state = yield* State.State;
         const stack = expr.stack;

@@ -2568,7 +2568,7 @@ describe("engine-level adoption", () => {
         fqn: "Adopted",
       });
       expect(persisted?.status).toBe("created");
-      expect(persisted?.attr).toMatchObject({ string: "hello" });
+      expect((persisted as any)?.attr).toMatchObject({ string: "hello" });
     }),
   );
 
@@ -2603,7 +2603,7 @@ describe("engine-level adoption", () => {
       // reaches the state store — both via the public `Unowned.is`
       // check *and* via direct symbol inspection (in case someone
       // accidentally uses `Symbol.for` rather than `Unowned.is`).
-      const persistedAttr = persisted?.attr as object;
+      const persistedAttr = (persisted as any)?.attr as object;
       expect(Unowned.is(persistedAttr)).toBe(false);
       expect(Object.getOwnPropertySymbols(persistedAttr).length).toBe(0);
       expect(JSON.stringify(persistedAttr)).not.toContain("Unowned");

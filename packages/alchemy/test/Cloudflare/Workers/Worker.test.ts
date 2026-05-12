@@ -540,7 +540,9 @@ describe.concurrent("Cloudflare.Worker", () => {
         }).pipe(Effect.provide(stack.state));
 
         expect(persisted?.status).toBeDefined();
-        expect(persisted?.attr).toMatchObject({ workerName: physicalName });
+        expect((persisted as any)?.attr).toMatchObject({
+          workerName: physicalName,
+        });
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(physicalName, accountId);
