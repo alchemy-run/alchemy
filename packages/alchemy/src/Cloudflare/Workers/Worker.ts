@@ -2364,11 +2364,16 @@ export const LiveWorkerProvider = () =>
                 }),
               ],
             }).pipe(
-              // Cloudflare occasionally returns an UnknownCloudflareError
-              // (code 10002) for the initial putScript on a fresh worker name
-              // — retry a handful of times before giving up.
+              // Cloudflare's PUT /workers/scripts/{name} intermittently
+              // returns code 10002 / "An unknown error has occurred" on the
+              // first put for a fresh worker name. Typed as
+              // `WorkerInternalError` upstream (see distilled PR #290);
+              // also match `UnknownCloudflareError` so this works against
+              // older @distilled.cloud/cloudflare versions.
               Effect.retry({
-                while: (e: any) => e._tag === "UnknownCloudflareError",
+                while: (e: any) =>
+                  e._tag === "WorkerInternalError" ||
+                  e._tag === "UnknownCloudflareError",
                 schedule: Schedule.exponential(1000).pipe(
                   Schedule.both(Schedule.recurs(5)),
                 ),
