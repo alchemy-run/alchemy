@@ -143,10 +143,9 @@ Three things go wrong:
 2. **Circular type inference.** TypeScript needs `B`'s type
    to type-check `A`, but `B`'s type depends on `A`'s type
    (because the Effect inside `B` references `A`). The
-   compiler usually gives up here with the cheerful
-   ["function lacks ending return statement and return type
-   does not include 'undefined'"](https://github.com/microsoft/TypeScript/issues/43053)
-   genre of error.
+   compiler bails with:
+
+   > `'A' implicitly has return type 'any' because it does not have a return type annotation and is referenced directly or indirectly in one of its return expressions.ts(7023)`
 
 3. **Runtime initialization order.** Even if the types
    resolved, the module loader has to execute *something*
