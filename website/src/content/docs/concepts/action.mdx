@@ -6,7 +6,7 @@ sidebar:
 ---
 
 An **Action** is a node in the stack's dependency graph that runs an
-arbitrary Effect during `apply`. Unlike a [Resource](./resource), it has
+arbitrary Effect during `apply`. Unlike a [Resource](/concepts/resource), it has
 no provider lifecycle — no replace, no read, no delete. The engine just
 diffs the resolved input against the last persisted hash and either runs
 the body or skips it.
@@ -35,7 +35,7 @@ rows.rows // Output<number>
 ```
 
 The body Effect receives the **resolved** input — any
-[Output](./outputs) references in the input are evaluated against the
+[Output](/concepts/outputs) references in the input are evaluated against the
 current tracker before the body runs.
 
 ### Init constructor (pulling in dependencies)
@@ -74,7 +74,7 @@ const hourly  = yield* Sync("hourly",  { table: eventsBucket.name });
 
 When you want to split the contract from the implementation — e.g. for
 testing or to keep stack code declarative — use the class form. It
-mirrors [Platform](./platform):
+mirrors [Platform](/concepts/platform):
 
 ```typescript
 export class Sync extends Action<Sync, { table: string }, { rows: number }>()("Sync") {}
@@ -138,7 +138,7 @@ Cycles are rejected at plan time just like resource cycles.
 - **Not a Resource.** No `diff`/`read`/`reconcile`/`delete`. If you
   need lifecycle management of a cloud entity, model it as a Resource.
 - **Not a runtime function.** An Action runs at deploy time. To call code
-  from a deployed Worker/Lambda, use a [Platform](./platform).
+  from a deployed Worker/Lambda, use a [Platform](/concepts/platform).
 - **Not idempotent for free.** The engine guarantees the body runs
   only when inputs change, but the body itself must tolerate retries
   on apply restart (its `running` state is persisted but not its

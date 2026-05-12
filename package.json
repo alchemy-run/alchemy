@@ -72,14 +72,14 @@
       "@cloudflare/containers": "^0.1.1",
       "@cloudflare/vite-plugin": "^1.13.12",
       "@cloudflare/workers-types": "^4.20250805.0",
-      "@distilled.cloud/aws": "https://pkg.distilled.cloud/aws/16f0728",
-      "@distilled.cloud/axiom": "https://pkg.distilled.cloud/axiom/16f0728",
+      "@distilled.cloud/aws": "^0.20.0",
+      "@distilled.cloud/axiom": "^0.20.0",
       "@distilled.cloud/cloudflare-rolldown-plugin": "0.3.0",
       "@distilled.cloud/cloudflare-runtime": "0.3.2",
       "@distilled.cloud/cloudflare-vite-plugin": "0.2.0",
-      "@distilled.cloud/cloudflare": "https://pkg.distilled.cloud/cloudflare/16f0728",
-      "@distilled.cloud/core": "https://pkg.distilled.cloud/core/16f0728",
-      "@distilled.cloud/neon": "https://pkg.distilled.cloud/neon/16f0728",
+      "@distilled.cloud/cloudflare": "^0.20.0",
+      "@distilled.cloud/core": "^0.20.0",
+      "@distilled.cloud/neon": "^0.20.0",
       "@effect/language-service": ">=4.0.0-beta.66 || >=4.0.0",
       "@effect/platform-bun": ">=4.0.0-beta.66 || >=4.0.0",
       "@effect/platform-node-shared": ">=4.0.0-beta.66 || >=4.0.0",
@@ -116,6 +116,7 @@
   "devDependencies": {
     "@alchemy.run/pr-package": "workspace:*",
     "@ark/attest": "^0.56.0",
+    "@distilled.cloud/cloudflare": "catalog:",
     "@effect/language-service": "^0.77.0",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
@@ -137,9 +138,5 @@
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.0.18",
     "yaml": "^2.8.2"
-  },
-  "dependencies": {
-    "@distilled.cloud/aws": "https://pkg.distilled.cloud/aws/16f0728",
-    "@distilled.cloud/cloudflare": "https://pkg.distilled.cloud/cloudflare/16f0728"
   }
 }
