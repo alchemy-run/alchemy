@@ -291,7 +291,6 @@
     "@smithy/shared-ini-file-loader": "catalog:",
     "@smithy/types": "catalog:",
     "@types/aws-lambda": "catalog:",
-    "@types/libsodium-wrappers": "^0.8.2",
     "ai": "catalog:",
     "aws4fetch": "catalog:",
     "capnweb": "^0.6.1",
