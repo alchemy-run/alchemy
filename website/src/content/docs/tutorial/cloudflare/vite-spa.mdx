@@ -535,7 +535,7 @@ not a request, and the return value is the value itself (no
 `.json()`, no status codes to plumb).
 
 :::tip[Calling RPC from another Effect-native Worker?]
-Use [`Cloudflare.bindWorker(Backend)`](/providers/cloudflare/Worker)
+Use [`Cloudflare.bindWorker(Backend)`](/providers/cloudflare/worker)
 instead of `toPromiseApi`. It returns the same shape with `Effect`
 return values, preserving typed errors and decoded streams instead
 of throwing them away.

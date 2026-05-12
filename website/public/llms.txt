@@ -82,7 +82,10 @@ Standalone how-to pages. Each solves a specific problem; read in any order.
 
 ## Blog
 
+- [What's new in beta.35](https://v2.alchemy.run/blog/2026-05-08-beta-35) — A new Effect-native queue consumer API, R2 custom domains, Neon logical replication, non-string env bindings, and CLI quality-of-life.
+- [What's new in beta.36](https://v2.alchemy.run/blog/2026-05-09-beta-36) — Cloudflare Images binding, Hyperdrive as a Worker binding, R2 lifecycle rules, and a few sharp-edge fixes.
 - [Secrets and Variables](https://v2.alchemy.run/blog/2026-05-11-secrets-and-variables) — Bind a value into your deploy target's env and get back a typed runtime accessor — the same one-liner works for Cloudflare Workers and AWS Lambda.
+- [What's new in beta.37](https://v2.alchemy.run/blog/2026-05-12-beta-37) — Cross-stack references, Worker-to-Worker bindings, Workflows with typed I/O, cron triggers, Analytics Engine, R2 empty-on-destroy, and a few sharp-edge fixes.
 
 ## Providers — auto-generated API reference
 
