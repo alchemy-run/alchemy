@@ -18,8 +18,9 @@ invalidating a CDN cache, running a migration check.
 
 ## Declaring a Task
 
-Define a Task once with its type name and implementation, then call it
-in a stack to register an instance:
+Define a Task with its type name and a body, then call it inside a
+stack to register an instance. `yield*` returns `Output<Out>` ready to
+feed into downstream nodes:
 
 ```typescript
 const Sync = Task("Sync", Effect.fn(function* (input: { table: string }) {
@@ -28,15 +29,36 @@ const Sync = Task("Sync", Effect.fn(function* (input: { table: string }) {
 }));
 
 // In a stack — default form uses the Type as the LogicalId:
-const sync = yield* Sync({ table: bucket.name });
-
-sync.output      // Output<{ rows: number }>
-sync.output.rows // Output<number>
+const rows = yield* Sync({ table: bucket.name });
+//          ^ Output<{ rows: number }>
+rows.rows // Output<number>
 ```
 
 The body Effect receives the **resolved** input — any
 [Output](./outputs) references in the input are evaluated against the
 current tracker before the body runs.
+
+### Init constructor (pulling in dependencies)
+
+Pass an Effect that yields the runner instead of the runner itself.
+The init Effect can `yield*` services, and those dependencies surface
+as `Req` on the call site:
+
+```typescript
+const Sync = Task("Sync", Effect.gen(function* () {
+  const db = yield* Database;
+  const logger = yield* Logger;
+  return Effect.fn(function* (input: { table: string }) {
+    yield* logger.info(`syncing ${input.table}`);
+    return { rows: yield* db.count(input.table) };
+  });
+}));
+
+// `yield* Sync({...})` now requires `Database | Logger | Stack`.
+```
+
+The init runs at most once per process and the resolved runner is
+reused across every instance and re-run.
 
 ### Multiple instances
 
@@ -58,15 +80,20 @@ mirrors [Platform](./platform):
 export class Sync extends Task<Sync, { table: string }, { rows: number }>()("Sync") {}
 
 export const SyncLive = Sync.make(
-  Effect.fn(function* (input) {
-    return { rows: 42 };
+  Effect.gen(function* () {
+    const db = yield* Database;
+    return Effect.fn(function* (input) {
+      return { rows: yield* db.count(input.table) };
+    });
   }),
 );
 
 // In a stack:
-const sync = yield* Sync({ table: bucket.name });
-//         ^ requires `Sync` — add `SyncLive` to the stack's providers.
+const rows = yield* Sync({ table: bucket.name });
+//          ^ requires `Sync` — add `SyncLive` to the stack's providers.
 ```
+
+`.make(...)` accepts either a direct runner or an init Effect.
 
 ## Lifecycle
 
