@@ -39,6 +39,10 @@ import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
 import type { AiGateway } from "../AiGateway/AiGateway.ts";
 import {
+  isAnalyticsEngineDataset,
+  type AnalyticsEngineDataset,
+} from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
+import {
   isArtifacts as isArtifactsBinding,
   type Artifacts as ArtifactsBinding,
 } from "../Artifacts/Artifacts.ts";
@@ -187,6 +191,7 @@ export type WorkerBindingResource =
   | KVNamespace
   | CloudflareQueue
   | AiGateway
+  | AnalyticsEngineDataset
   | ArtifactsBinding
   | ImagesBinding
   | Hyperdrive
@@ -755,56 +760,62 @@ export const Worker: Platform<
                   type: "images",
                   name: bindingName,
                 }
-              : isDurableObjectNamespaceLike(binding)
+              : isAnalyticsEngineDataset(binding)
                 ? {
-                    type: "durable_object_namespace",
+                    type: "analytics_engine",
                     name: bindingName,
-                    className: binding.className ?? binding.name,
+                    dataset: binding.dataset,
                   }
-                : binding.Type === "Cloudflare.D1Database"
+                : isDurableObjectNamespaceLike(binding)
                   ? {
-                      type: "d1",
-                      id: binding.databaseId,
+                      type: "durable_object_namespace",
                       name: bindingName,
+                      className: binding.className ?? binding.name,
                     }
-                  : binding.Type === "Cloudflare.R2Bucket"
+                  : binding.Type === "Cloudflare.D1Database"
                     ? {
-                        type: "r2_bucket",
+                        type: "d1",
+                        id: binding.databaseId,
                         name: bindingName,
-                        bucketName: binding.bucketName,
-                        jurisdiction: binding.jurisdiction.pipe(
-                          Output.map((jurisdiction) =>
-                            jurisdiction === "default"
-                              ? undefined
-                              : jurisdiction,
-                          ),
-                        ),
                       }
-                    : binding.Type === "Cloudflare.KVNamespace"
+                    : binding.Type === "Cloudflare.R2Bucket"
                       ? {
-                          type: "kv_namespace",
+                          type: "r2_bucket",
                           name: bindingName,
-                          namespaceId: binding.namespaceId,
+                          bucketName: binding.bucketName,
+                          jurisdiction: binding.jurisdiction.pipe(
+                            Output.map((jurisdiction) =>
+                              jurisdiction === "default"
+                                ? undefined
+                                : jurisdiction,
+                            ),
+                          ),
                         }
-                      : binding.Type === "Cloudflare.Queue"
+                      : binding.Type === "Cloudflare.KVNamespace"
                         ? {
-                            type: "queue",
+                            type: "kv_namespace",
                             name: bindingName,
-                            queueName: binding.queueName,
+                            namespaceId: binding.namespaceId,
                           }
-                        : binding.Type === "Cloudflare.AiGateway"
+                        : binding.Type === "Cloudflare.Queue"
                           ? {
-                              type: "ai",
+                              type: "queue",
                               name: bindingName,
+                              queueName: binding.queueName,
                             }
-                          : binding.Type === "Cloudflare.Hyperdrive"
+                          : binding.Type === "Cloudflare.AiGateway"
                             ? {
-                                type: "hyperdrive",
+                                type: "ai",
                                 name: bindingName,
-                                id: binding.hyperdriveId,
                               }
-                            : // TODO(sam): handle others
-                              undefined;
+                            : binding.Type === "Cloudflare.Hyperdrive"
+                              ? {
+                                  type: "hyperdrive",
+                                  name: bindingName,
+                                  id: binding.hyperdriveId,
+                                }
+                              : // TODO(sam): handle others
+                                undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
