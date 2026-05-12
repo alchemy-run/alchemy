@@ -10,19 +10,18 @@ import { Stack } from "./Stack.ts";
 
 /**
  * A Task is a node in the dependency graph that runs an Effect with its
- * resolved inputs during {@link plan}/{@link apply}. It is similar to a
+ * resolved input during {@link plan}/{@link apply}. It is similar to a
  * Resource but without a Provider lifecycle:
  *
  *   - It has a LogicalId and typed Input.
- *   - The implementation Effect is called when inputs change (diff) or when
- *     `--force` is passed.
- *   - There is no replace/precreate/read/delete lifecycle: removing a Task
- *     from the stack simply drops its persisted state without invoking it.
- *   - The Effect's `Req` channel bubbles up to the constructor, exactly like
+ *   - The body Effect is called when input changes (diff) or `--force` is set.
+ *   - There is no replace/precreate/read/delete: removing a Task from the
+ *     stack simply drops its persisted state without invoking the body.
+ *   - The Effect's `Req` channel bubbles up to the call site, exactly like
  *     a Resource's provider services.
  *
  * Tasks are recorded on {@link Stack.tasks} and produce a single `output`
- * value that downstream Resources / Tasks can consume as `Output<T>`.
+ * value that downstream Resources / Tasks consume as `Output<T>`.
  */
 export interface TaskLike<
   Type extends string = string,
@@ -35,10 +34,7 @@ export interface TaskLike<
   readonly Type: Type;
   readonly LogicalId: string;
   readonly Input: In;
-  /**
-   * The implementation Effect to run when inputs change. Receives the
-   * resolved input value.
-   */
+  /** Implementation invoked when input changes. Receives the resolved input. */
   readonly Run: (input: In) => Effect.Effect<Out, any, any>;
   /** @internal phantom */
   Output: Out;
@@ -47,23 +43,13 @@ export interface TaskLike<
 export const isTask = (value: any): value is TaskLike =>
   typeof value === "object" && value !== null && value?.Kind === "task";
 
-/**
- * A registered Task instance. Acts as a node in the Output graph: its
- * `output` field is an {@link Output.Output} that resolves to the Effect's
- * return value once the Task has run.
- */
+/** Registered task instance. `output` is an `Output<Out>` for downstream use. */
 export type Task<
   Type extends string = string,
   In extends object | undefined = any,
   Out = any,
 > = Pipeable &
   TaskLike<Type, In, Out> & {
-    /**
-     * The value produced by running this Task. Usable as `Output<T>` in
-     * downstream resource inputs and other tasks. Property access chains
-     * through the standard Output proxy (`sync.output.rows` is
-     * `Output<number>`).
-     */
     readonly output: Output.Output<Out, never>;
   };
 
@@ -71,112 +57,118 @@ export type TaskRunner<In extends object | undefined, Out, Req> = (
   input: In,
 ) => Effect.Effect<Out, any, Req>;
 
-// ── Inline form ────────────────────────────────────────────────────────────
+// ── Public API ─────────────────────────────────────────────────────────────
 //
-//   const sync = yield* Task("nightly-sync", { table: bucket.name },
-//     Effect.fn(function* (input) {
-//       // input: { table: string }
-//       return { rows: 42 };
-//     }),
-//   );
-//   sync.output // Output<{ rows: number }>
+// Inline (impl baked in at definition time):
 //
-// The implementation Effect receives the *resolved* input. Its `Req` channel
-// is propagated to the constructor's call site.
-
-export function Task<In extends object | undefined, Out, Req = never>(
-  id: string,
-  input: { [k in keyof In]: Input<In[k]> },
-  run: TaskRunner<In, Out, Req>,
-): Effect.Effect<Task<string, In, Out>, never, Req | Stack>;
-
-// ── Tagged (service + layer) form ──────────────────────────────────────────
+//   const Sync = Task("Sync", Effect.fn(function* (input: { table: string }) {
+//     return { rows: 42 };
+//   }));
 //
-//   export class NightlySync extends Task<NightlySync, { table: string }, { rows: number }>()("NightlySync") {}
+//   const sync = yield* Sync({ table: bucket.name });
+//   // or with an explicit logical id for multiple instances:
+//   const nightly = yield* Sync("nightly", { table: bucket.name });
 //
-//   export const NightlySyncLive = NightlySync.make(
-//     Effect.fn(function* (input) { return { rows: 42 } }),
-//   );
+// Tagged (impl supplied separately via Layer):
+//
+//   class Sync extends Task<Sync, { table: string }, { rows: number }>()("Sync") {}
+//   const SyncLive = Sync.make(Effect.fn(function* (input) { ... }));
 //
 //   // In a stack:
-//   const sync = yield* NightlySync("nightly", { table: "users" });
-//   //         ^ Effect.Effect<Task<...>, never, NightlySync>
-//
-// `NightlySyncLive` is a Layer that resolves the tag to the runner. Provide
-// it via the stack's `providers` so the constructor's `Req = NightlySync` is
-// satisfied.
+//   const sync = yield* Sync({ table: bucket.name });
+//   //         ^ requires `Sync` — satisfied by adding SyncLive to providers.
+
+export function Task<
+  Type extends string,
+  In extends object | undefined,
+  Out,
+  Req = never,
+>(
+  type: Type,
+  run: TaskRunner<In, Out, Req>,
+): TaskClass<never, Type, In, Out, Req>;
 
 export function Task<Self, In extends object | undefined, Out>(): <
   Type extends string,
 >(
   type: Type,
-) => TaskClass<Self, Type, In, Out>;
+) => TaskClass<Self, Type, In, Out, Self>;
 
 export function Task(...args: any[]): any {
   if (args.length === 0) {
     // Tagged form: Task<Self, In, Out>()(type)
-    return (type: string) => makeTaskClass<any, string, any, any>(type);
+    return (type: string) => makeTaskClass(type, undefined);
   }
-  // Inline form: Task(id, input, run)
-  const [id, input, run] = args as [string, any, TaskRunner<any, any, any>];
-  return registerTask<string, any, any>("alchemy/Task", id, input, run);
+  // Inline form: Task(type, run)
+  const [type, run] = args as [string, TaskRunner<any, any, any>];
+  return makeTaskClass(type, run);
 }
-
-// ── Tagged class ──────────────────────────────────────────────────────────
 
 export interface TaskClass<
   Self,
   Type extends string,
   In extends object | undefined,
   Out,
+  Req,
 > {
   readonly Type: Type;
-  /** Context service tag holding the runner. Satisfied by {@link TaskClass.make}. */
-  readonly Self: Context.Service<Self, TaskRunner<In, Out, any>>;
-  /** Register a Task instance on the current Stack. */
+  /**
+   * Default form — uses `Type` as the LogicalId. One instance per Task
+   * definition (the common case for deploy-time work).
+   */
+  (input: { [k in keyof In]: Input<In[k]> }): Effect.Effect<
+    Task<Type, In, Out>,
+    never,
+    Req | Stack
+  >;
+  /**
+   * Explicit-id form — register multiple instances of the same Task
+   * definition under distinct logical ids.
+   */
   (
     id: string,
     input: { [k in keyof In]: Input<In[k]> },
-  ): Effect.Effect<Task<Type, In, Out>, never, Self | Stack>;
+  ): Effect.Effect<Task<Type, In, Out>, never, Req | Stack>;
   /**
-   * Bind an implementation to this Task tag. Returns a Layer suitable for
-   * the stack's `providers`.
+   * Tagged-only: bind an implementation to this Task's Self tag. Add the
+   * returned Layer to the stack's `providers`.
    */
-  make<Req = never>(
-    run: TaskRunner<In, Out, Req>,
-  ): Layer.Layer<Self, never, Exclude<Req, never>>;
+  make: [Self] extends [never]
+    ? never
+    : <R = never>(run: TaskRunner<In, Out, R>) => Layer.Layer<Self, never, R>;
+  /** Tagged-only: the Context tag holding the runner. */
+  readonly Self: [Self] extends [never]
+    ? never
+    : Context.Service<Self, TaskRunner<In, Out, any>>;
 }
 
-const makeTaskClass = <
-  Self,
-  Type extends string,
-  In extends object | undefined,
-  Out,
->(
-  type: Type,
-): TaskClass<Self, Type, In, Out> => {
-  // Per-class tag. The tag identity is keyed by the user-supplied type name
-  // so two `make(...)` Layers for the same Task type collide — which is the
-  // desired behavior, since two distinct runners for one Task is undefined.
-  const SelfTag = Context.Service<Self, TaskRunner<In, Out, any>>(
-    `alchemy/Task<${type}>`,
-  );
+const makeTaskClass = (
+  type: string,
+  bakedRunner: TaskRunner<any, any, any> | undefined,
+): any => {
+  // Tagged form needs a Context tag so the user can supply the runner
+  // through a Layer. Inline form bakes the runner in and skips the tag.
+  const SelfTag = bakedRunner
+    ? undefined
+    : Context.Service<any, TaskRunner<any, any, any>>(`alchemy/Task<${type}>`);
 
-  function constructor(id: string, input: any) {
+  const constructor = (...args: [any] | [string, any]) => {
+    const [id, input] =
+      args.length === 1 ? [type, args[0]] : (args as [string, any]);
     return Effect.gen(function* () {
-      const run = (yield* SelfTag) as TaskRunner<In, Out, any>;
-      return yield* registerTask<Type, In, Out>(type, id, input, run);
+      const run =
+        bakedRunner ?? ((yield* SelfTag!) as TaskRunner<any, any, any>);
+      return yield* registerTask(type, id, input, run);
     });
+  };
+
+  const extra: Record<string, any> = { Type: type };
+  if (SelfTag) {
+    extra.Self = SelfTag;
+    extra.make = <R>(run: TaskRunner<any, any, R>) =>
+      Layer.succeed(SelfTag, run as TaskRunner<any, any, any>);
   }
-
-  const make = <Req>(run: TaskRunner<In, Out, Req>) =>
-    Layer.succeed(SelfTag, run as TaskRunner<In, Out, any>);
-
-  return Object.assign(constructor as any, {
-    Type: type,
-    Self: SelfTag,
-    make,
-  }) as TaskClass<Self, Type, In, Out>;
+  return Object.assign(constructor, extra);
 };
 
 const registerTask = <Type extends string, In extends object | undefined, Out>(
@@ -221,13 +213,11 @@ const registerTask = <Type extends string, In extends object | undefined, Out>(
       },
     };
 
-    // Wrap in a Proxy so `task.output` resolves to an `Output<Out>` pointing
-    // at the eventual return value of `Run`. The engine writes the
-    // materialized value into `tracker[fqn].output`; `Output.evaluate`
-    // resolves a ResourceExpr by looking up `outputs[fqn]` — which is
-    // precisely that materialized value. Property access into
-    // `task.output.foo` chains through the standard PropExpr proxy that
-    // ResourceExpr already supplies.
+    // Wrap in a Proxy so `task.output` resolves to an `Output<Out>`. The
+    // engine writes the materialized value into `tracker[fqn]`; Output
+    // evaluation resolves a ResourceExpr by looking up `outputs[fqn]`.
+    // Property access into `task.output.foo` chains through the standard
+    // PropExpr proxy that ResourceExpr supplies.
     const task: Task<Type, In, Out> = new Proxy(target, {
       get: (t, prop) => {
         if (typeof prop === "symbol" || prop in t) {
