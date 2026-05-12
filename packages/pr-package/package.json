@@ -7,7 +7,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
-    "directory": "package/pr-package"
+    "directory": "packages/pr-package"
   },
   "files": [
     "lib",

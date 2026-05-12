@@ -45,5 +45,10 @@
     "@vue/server-renderer": "beta",
     "@vue/shared": "beta",
     "@vue/compat": "beta"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
+    "directory": "examples/cloudflare-vue"
   }
 }
