@@ -6,6 +6,7 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "../alchemy.run.ts";
+import { WORKFLOW_SECRET_VALUE } from "../src/NotifyWorkflow.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -118,6 +119,13 @@ test(
     expect(lastStatus).toBeDefined();
     expect(lastStatus!.status).toBe("complete");
     expect(lastStatus!.error).toBeFalsy();
+
+    // Prove the `Alchemy.Secret(...)` bound at plantime made it all the
+    // way through to the workflow body's runtime read. The workflow body
+    // unwraps `Redacted.value(secret)` and embeds it in the returned
+    // `processed` payload.
+    const output = lastStatus!.output as { secret?: string } | undefined;
+    expect(output?.secret).toBe(WORKFLOW_SECRET_VALUE);
   }),
   { timeout: 120_000 },
 );

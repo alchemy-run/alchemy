@@ -82,6 +82,7 @@ export type Expr<A = any, Req = any> =
   | ApplyExpr<any, A, Req>
   | EffectExpr<any, A, Req>
   | LiteralExpr<A>
+  | NamedExpr<A, Req>
   | PropExpr<A, keyof A, Req>
   | ResourceExpr<A, Req>
   | RefExpr<A>;
@@ -254,6 +255,36 @@ export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
     return `${this.expr[inspect]()}.mapEffect(${this.f.toString()})`;
   }
 }
+
+export const isNamedExpr = <A = any, Req = any>(
+  node: any,
+): node is NamedExpr<A, Req> => node?.kind === "NamedExpr";
+
+/**
+ * Wraps another `Expr` and overrides its `toString()` / inspect output.
+ *
+ * `BaseExpr.asEffect()` derives the binding id from `this.toString()`, so
+ * wrapping an expression in `NamedExpr` makes that derived id stable and
+ * caller-controlled (e.g. an env var name like `"API_KEY"`).
+ */
+export class NamedExpr<A, Req = never> extends BaseExpr<A, Req> {
+  readonly kind = "NamedExpr";
+  constructor(
+    public readonly expr: Expr<A, Req>,
+    public readonly bindingName: string,
+  ) {
+    super();
+    return proxy(this);
+  }
+  [inspect](): string {
+    return this.bindingName;
+  }
+}
+
+export const named = <A, Req>(
+  expr: Output<A, Req>,
+  name: string,
+): Output<A, Req> => new NamedExpr(expr as Expr<A, Req>, name) as any;
 
 export const all = <Outs extends (Output | Expr)[]>(...outs: Outs) =>
   new AllExpr(outs as any) as unknown as All<Outs>;
@@ -470,6 +501,8 @@ export const evaluate: <A, Req = never>(
         );
       } else if (isPropExpr(expr)) {
         return (yield* evaluate(expr.expr, upstream))?.[expr.identifier];
+      } else if (isNamedExpr(expr)) {
+        return yield* evaluate(expr.expr, upstream);
       } else if (isRefExpr(expr)) {
         const state = yield* State.State;
         const stack = expr.stack ?? (yield* Stack).name;
@@ -556,7 +589,7 @@ export const upstream = <E extends Output<any, any>>(expr: E): any => {
     return upstream(expr.expr);
   } else if (isAllExpr(expr)) {
     return Object.assign({}, ...expr.outs.map((out) => upstream(out)));
-  } else if (isEffectExpr(expr) || isApplyExpr(expr)) {
+  } else if (isEffectExpr(expr) || isApplyExpr(expr) || isNamedExpr(expr)) {
     return upstream(expr.expr);
   } else if (Array.isArray(expr)) {
     return expr.map(upstream).reduce(toObject, {});

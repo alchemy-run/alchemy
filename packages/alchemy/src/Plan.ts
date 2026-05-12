@@ -349,6 +349,8 @@ export const make = <A>(
           });
         } else if (Output.isLiteralExpr(expr)) {
           return expr.value;
+        } else if (Output.isNamedExpr(expr)) {
+          return yield* resolveOutput(expr.expr);
         }
         return yield* Effect.die(new Error("Not implemented yet"));
       });
