@@ -2366,14 +2366,14 @@ export const LiveWorkerProvider = () =>
             }).pipe(
               // Cloudflare's PUT /workers/scripts/{name} intermittently
               // returns code 10002 / "An unknown error has occurred" on the
-              // first put for a fresh worker name. Typed as `InternalError`
-              // upstream (alchemy-run/distilled#290); also match
-              // `UnknownCloudflareError` for older
+              // first put for a fresh worker name. Surfaced as the shared
+              // `InternalServerError` upstream (alchemy-run/distilled#290).
+              // Also match `UnknownCloudflareError` for older
               // @distilled.cloud/cloudflare versions that haven't picked
               // up the patch yet.
               Effect.retry({
                 while: (e: any) =>
-                  e._tag === "InternalError" ||
+                  e._tag === "InternalServerError" ||
                   e._tag === "UnknownCloudflareError",
                 schedule: Schedule.exponential(1000).pipe(
                   Schedule.both(Schedule.recurs(5)),
