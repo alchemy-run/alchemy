@@ -1,21 +1,14 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
 
-export const UnrestrictedSender = Cloudflare.SendEmail("EmailUnrestricted");
+const senderAddress = process.env.CLOUDFLARE_TEST_EMAIL_FROM;
+const destinationAddress = process.env.CLOUDFLARE_TEST_EMAIL_TO;
 
-export const RestrictedDestSender = Cloudflare.SendEmail(
-  "EmailRestrictedDest",
-  {
-    destinationAddress: "ops@example.com",
-  },
-);
-
-export const AllowedDestsSender = Cloudflare.SendEmail("EmailAllowedDests", {
-  allowedDestinationAddresses: ["ops@example.com", "alerts@example.com"],
+/**
+ * `send_email` binding for the deployed test Worker. Restricted to the
+ * sender/destination pair supplied via env so the e2e test exercises a
+ * real `.send()` round-trip against Cloudflare.
+ */
+export const Email = Cloudflare.SendEmail("Email", {
+  allowedSenderAddresses: senderAddress ? [senderAddress] : undefined,
+  destinationAddress,
 });
-
-export const AllowedSendersSender = Cloudflare.SendEmail(
-  "EmailAllowedSenders",
-  {
-    allowedSenderAddresses: ["noreply@example.com"],
-  },
-);
