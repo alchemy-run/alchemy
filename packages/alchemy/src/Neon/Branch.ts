@@ -1,15 +1,42 @@
+import {
+  createProjectBranch,
+  deleteProjectBranch,
+  getConnectionURI,
+  getProjectBranch,
+  listProjectBranchDatabases,
+  listProjectBranches,
+  type ListProjectBranchesOutput,
+  updateProjectBranch,
+} from "@distilled.cloud/neon";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import * as api from "./api.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
-import type { Project } from "./Project.ts";
+import { type Project, waitForOperations } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import { listSqlFiles, readSqlFile } from "./SqlFile.ts";
+
+const findBranchByName = (projectId: string, name: string) =>
+  Effect.gen(function* () {
+    const matches: ListProjectBranchesOutput["branches"][number][] = [];
+    let cursor: string | undefined;
+    do {
+      const page = yield* listProjectBranches({
+        project_id: projectId,
+        search: name,
+        ...(cursor !== undefined ? { cursor } : {}),
+      });
+      for (const b of page.branches) {
+        if (b.name === name) matches.push(b);
+      }
+      cursor = page.pagination?.next;
+    } while (cursor);
+    return matches;
+  });
 
 const DEFAULT_MIGRATIONS_TABLE = "neon_migrations";
 
@@ -202,7 +229,7 @@ const resolveParentBranchId = (
       return source.branchId as unknown as string;
     }
     if ("name" in source && source.name) {
-      const matches = yield* api.findBranchByName(projectId, source.name);
+      const matches = yield* findBranchByName(projectId, source.name);
       if (matches.length === 0) {
         return yield* Effect.die(
           `Parent branch "${source.name}" not found in project ${projectId}`,
@@ -218,9 +245,7 @@ const resolveParentBranchId = (
     return undefined as string | undefined;
   });
 
-const buildEndpoints = (
-  endpoints: BranchEndpointConfig[] | undefined,
-): api.CreateBranchEndpoint[] => {
+const buildEndpoints = (endpoints: BranchEndpointConfig[] | undefined) => {
   const list = endpoints ?? [{ type: "read_write" as const }];
   return list.map((e) => ({
     type: e.type,
@@ -237,13 +262,15 @@ const fetchConnection = (
   roleName: string,
 ) =>
   Effect.gen(function* () {
-    const direct = yield* api.getConnectionUri(projectId, {
+    const direct = yield* getConnectionURI({
+      project_id: projectId,
       branch_id: branchId,
       database_name: databaseName,
       role_name: roleName,
       pooled: false,
     });
-    const pooled = yield* api.getConnectionUri(projectId, {
+    const pooled = yield* getConnectionURI({
+      project_id: projectId,
       branch_id: branchId,
       database_name: databaseName,
       role_name: roleName,
@@ -318,31 +345,30 @@ export const BranchProvider = () =>
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
           if (output?.branchId) {
-            return yield* api
-              .getProjectBranch(output.projectId, output.branchId)
-              .pipe(
-                Effect.map(({ branch }) => ({
-                  ...output,
-                  branchName: branch.name,
-                  protected: branch.protected,
-                  default: branch.default,
-                  expiresAt: branch.expires_at,
-                })),
-                Effect.catchTag("BranchNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+            return yield* getProjectBranch({
+              project_id: output.projectId,
+              branch_id: output.branchId,
+            }).pipe(
+              Effect.map(({ branch }) => ({
+                ...output,
+                branchName: branch.name,
+                protected: branch.protected,
+                default: branch.default,
+                expiresAt: branch.expires_at,
+              })),
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            );
           }
           if (!olds?.project) return undefined;
           const projectId = resolveProjectId(olds.project as BranchSource);
           const name = yield* createBranchName(id, olds.name);
-          const matches = yield* api.findBranchByName(projectId, name);
+          const matches = yield* findBranchByName(projectId, name);
           const match = matches[0];
           if (!match) return undefined;
-          const dbs = yield* api.listProjectBranchDatabases(
-            projectId,
-            match.id,
-          );
+          const dbs = yield* listProjectBranchDatabases({
+            project_id: projectId,
+            branch_id: match.id,
+          });
           const db = dbs.databases[0];
           if (!db) return undefined;
           const conn = yield* fetchConnection(
@@ -383,12 +409,15 @@ export const BranchProvider = () =>
           // otherwise sync the mutable scalar fields on the existing
           // branch via updateProjectBranch.
           const branchInfo = output
-            ? yield* api
-                .updateProjectBranch(output.projectId, output.branchId, {
+            ? yield* updateProjectBranch({
+                project_id: output.projectId,
+                branch_id: output.branchId,
+                branch: {
                   name: newName !== output.branchName ? newName : undefined,
                   protected: news.protected,
                   expires_at: news.expiresAt ?? null,
-                })
+                },
+              })
                 .pipe(
                   Effect.map((r) => ({
                     branchId: output.branchId,
@@ -416,17 +445,20 @@ export const BranchProvider = () =>
                   news.parentBranch as ParentBranchSource | undefined,
                   projectId,
                 );
-                const created = yield* api.createProjectBranch(projectId, {
-                  name: newName,
-                  parent_id: parentBranchId,
-                  parent_lsn: news.parentLsn,
-                  parent_timestamp: news.parentTimestamp,
-                  init_source: news.initSource,
-                  protected: news.protected,
-                  expires_at: news.expiresAt,
+                const created = yield* createProjectBranch({
+                  project_id: projectId,
+                  branch: {
+                    name: newName,
+                    parent_id: parentBranchId,
+                    parent_lsn: news.parentLsn,
+                    parent_timestamp: news.parentTimestamp,
+                    init_source: news.initSource,
+                    protected: news.protected,
+                    expires_at: news.expiresAt,
+                  },
                   endpoints: buildEndpoints(news.endpoints),
                 });
-                yield* api.waitForOperations(created.operations);
+                yield* waitForOperations(created.operations);
 
                 const db = created.databases[0];
                 if (!db) {
@@ -492,7 +524,10 @@ export const BranchProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* api.deleteProjectBranch(output.projectId, output.branchId);
+          yield* deleteProjectBranch({
+            project_id: output.projectId,
+            branch_id: output.branchId,
+          }).pipe(Effect.catchTag("NotFound", () => Effect.void));
         }),
       };
     }),
