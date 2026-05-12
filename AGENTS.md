@@ -611,12 +611,36 @@ Notes:
 - `afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack))` is the standard cleanup — set `NO_DESTROY=1` locally to keep the deployment around between runs while iterating.
 - Always retry the first request (`Schedule.exponential("500 millis")`) — fresh workers.dev URLs and Lambda function URLs take a few seconds to start serving 200s.
 - For POST: use `client.post(url)` for empty bodies, or `HttpClient.execute(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)))` for typed bodies.
+- **Never use `while (Date.now() < deadline)` loops to poll** for an async side effect (a workflow status, a cron fire, a queue drain, eventual-consistency read, etc.). Use `Effect.repeat` with a `Schedule` and an `until` predicate so the polling participates in the Effect runtime — tracing, interruption, and error propagation work correctly, and the intent is declarative. Cap iterations with `times: N` (or a bounded schedule) so the test fails fast instead of running until the vitest timeout:
+
+  ```ts
+  // good — declarative, bounded, interruption-safe
+  const value = yield* fetchValue.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until: (v) => v.ready,
+      times: 36,
+    }),
+  );
+
+  // bad — opaque loop, ignores interruption, leaks into vitest timeout
+  let value: Value | undefined;
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    value = yield* fetchValue;
+    if (value.ready) break;
+    yield* Effect.sleep("5 seconds");
+  }
+  ```
+
+  See [CronEventSource.test.ts](./packages/alchemy/test/Cloudflare/Workers/CronEventSource.test.ts) for a real-world example (polling a DO via the worker's `/times` route until the cron handler fires).
 
 ## Reference implementations
 
 - Cloudflare AiGateway — [worker fixture](./packages/alchemy/test/Cloudflare/AiGateway/worker.ts) + [test](./packages/alchemy/test/Cloudflare/AiGateway/AiGateway.test.ts) (the deploy+fetch case lives at the bottom of the file)
 - Cloudflare D1Connection — [worker fixture](./packages/alchemy/test/Cloudflare/D1/d1-worker.ts) + [test](./packages/alchemy/test/Cloudflare/D1/D1Binding.test.ts)
 - Cloudflare Workflow — [workflow fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/test-workflow.ts) + [worker fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/workflow-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/Workflow.test.ts)
+- Cloudflare Cron Trigger — [worker + DO fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/cron-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/CronEventSource.test.ts) (cron handler writes to a DO; test polls a fetch route with `Effect.repeat` until the scheduled handler fires)
 - Cloudflare Images — [worker fixture](./packages/alchemy/test/Cloudflare/Images/images-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Images/Images.test.ts)
 - AWS Lambda (DynamoDB bindings) — [Lambda fixture](./packages/alchemy/test/AWS/DynamoDB/handler.ts) + [test](./packages/alchemy/test/AWS/DynamoDB/Bindings.test.ts) (one `describe("<BindingName>")` per binding, all driving the same deployed Lambda)
 

@@ -15,6 +15,12 @@
       "path": "./packages/alchemy/tsconfig.test.json"
     },
     {
+      "path": "./packages/better-auth/tsconfig.json"
+    },
+    {
+      "path": "./packages/pr-package/tsconfig.json"
+    },
+    {
       "path": "./website/tsconfig.json"
     },
     {
@@ -66,10 +72,10 @@
       "path": "./examples/cloudflare-worker-async/tsconfig.json"
     },
     {
-      "path": "./packages/better-auth/tsconfig.json"
+      "path": "./examples/monorepo-single-stack/tsconfig.json"
     },
     {
-      "path": "./packages/pr-package/tsconfig.json"
+      "path": "./examples/monorepo-multi-stack/tsconfig.json"
     }
   ],
   "compilerOptions": {

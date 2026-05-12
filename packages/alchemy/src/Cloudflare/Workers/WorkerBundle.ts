@@ -158,11 +158,11 @@ import * as Logger from "effect/Logger";
 import * as Context from "effect/Context";
 import * as Stream from "effect/Stream";
 
-import { env, DurableObject${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
+import { env, DurableObject, WorkerEntrypoint${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
 import { MinimumLogLevel } from "effect/References";
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy/Stack";
-import { WorkerEnvironment, makeDurableObjectBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy/Cloudflare";
+import { WorkerEnvironment, makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy/Cloudflare";
 
 import entry from "${importPath}";
 
@@ -223,10 +223,20 @@ let exportsPromise;
 // we cache it synchronously (??=) to guarnatee only one initialization ever happens
 const getExports = () => (exportsPromise ??= Effect.runPromise(exportsEffect))
 const getExport = (name) => getExports().then(exports => exports[name]?.make)
-const worker = () => getExports().then(exports => exports.default)
+const getDefault = () => getExports().then(exports => exports.default)
+const getRpc = () => getExports().then(exports => exports.__rpc__ ?? {})
 
-export default Object.fromEntries(ExportedHandlerMethods.map(
-  method => [method, async (...args) => (await worker())[method](...args)])
+// Bridge the user's default-export shape onto a real \`WorkerEntrypoint\`
+// subclass so Cloudflare service bindings can dispatch both the standard
+// handler methods (fetch, scheduled, …) and any user-defined RPC methods.
+// RPC method results are wire-encoded by \`runtimeContext.exports\`;
+// consumers unwrap them with \`Cloudflare.toPromiseApi(env.X)\` (Promise
+// API) or \`bindWorker(WorkerClass)\` (Effect API).
+export default makeWorkerBridge(
+  WorkerEntrypoint,
+  ExportedHandlerMethods,
+  getDefault,
+  getRpc,
 );
 
 // export class proxy stubs for Durable Objects and Workflows

@@ -36,7 +36,7 @@ export default class Store extends DurableObjectNamespace<Store>()(
         ),
       ).pipe(Effect.orDie);
 
-      const encryptValue = (value: ResourceState) =>
+      const encryptValue = (value: unknown) =>
         Effect.tryPromise(async () => {
           const plaintext = new TextEncoder().encode(
             JSON.stringify(encodeState(value)),
@@ -188,15 +188,39 @@ export default class Store extends DurableObjectNamespace<Store>()(
         deleteStack: ({ stage }: { stage?: string } = {}) =>
           stage === undefined
             ? storage.deleteAll()
-            : storage
-                .list<string>({ prefix: stagePrefix(stage) })
-                .pipe(
-                  Effect.flatMap((entries) =>
-                    entries.size === 0
-                      ? Effect.void
-                      : storage.delete([...entries.keys()]).pipe(Effect.asVoid),
-                  ),
-                ),
+            : storage.list<string>({ prefix: stagePrefix(stage) }).pipe(
+                Effect.flatMap((entries) => {
+                  const keys = [...entries.keys(), stackOutputKey(stage)];
+                  return storage.delete(keys).pipe(Effect.asVoid);
+                }),
+              ),
+
+        /**
+         * (Stack DO only) Read the persisted stack output for `stage`.
+         * Returns `undefined` when the stage has not been deployed.
+         */
+        getOutput: ({ stage }: { stage: string }) =>
+          storage
+            .get<string>(stackOutputKey(stage))
+            .pipe(
+              Effect.flatMap((entry) =>
+                entry == null ? Effect.succeed(undefined) : decryptEntry(entry),
+              ),
+            ),
+
+        /**
+         * (Stack DO only) Persist the resolved stack output for
+         * `stage`. Returns the stored value unchanged.
+         */
+        setOutput: ({ stage, value }: { stage: string; value: any }) =>
+          encryptValue(value).pipe(
+            Effect.flatMap((encrypted) =>
+              storage
+                .put<string>(stackOutputKey(stage), encrypted)
+                .pipe(Effect.asVoid),
+            ),
+            Effect.map(() => value),
+          ),
 
         /**
          * (Stack DO only) Return every resource in a stage whose
@@ -236,6 +260,9 @@ const SEP = "\x00";
 /** Key prefix for resource entries in a stack DO. */
 const RESOURCE_PREFIX = `r${SEP}`;
 
+/** Key prefix for stack-output entries in a stack DO. */
+const STACK_OUTPUT_PREFIX = `o${SEP}`;
+
 /** Key prefix for stack-index entries in the root DO. */
 const STACK_INDEX_PREFIX = "s:";
 
@@ -248,6 +275,9 @@ const resourceKey = (stage: string, fqn: string) =>
 
 /** Prefix matching every resource key inside a specific stage. */
 const stagePrefix = (stage: string) => `${RESOURCE_PREFIX}${stage}${SEP}`;
+
+/** Build the stack-output key inside a *stack DO*. */
+const stackOutputKey = (stage: string) => `${STACK_OUTPUT_PREFIX}${stage}`;
 
 /**
  * Parse a resource key back into its (stage, fqn) tuple. Returns

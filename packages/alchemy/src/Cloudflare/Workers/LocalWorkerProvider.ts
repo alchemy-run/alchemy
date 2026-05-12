@@ -7,7 +7,12 @@ import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { Sidecar } from "../Local/Sidecar.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import { Worker, type WorkerBinding, type WorkerProps } from "./Worker.ts";
+import {
+  getCronBindings,
+  Worker,
+  type WorkerBinding,
+  type WorkerProps,
+} from "./Worker.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
 export const LocalWorkerProvider = () =>
@@ -105,6 +110,9 @@ export const LocalWorkerProvider = () =>
           tags: [],
           durableObjectNamespaces,
           domains: [],
+          crons: Array.from(
+            new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
+          ),
           accountId,
         } satisfies Worker["Attributes"];
       });

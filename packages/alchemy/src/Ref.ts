@@ -22,11 +22,16 @@ export interface RefMetadata<R extends ResourceLike> {
   stage?: string;
 }
 
-export const ref = <R extends ResourceLike>({
-  stack,
-  id,
-  stage,
-}: RefMetadata<R>): Ref<R> => {
+export const ref = <R extends ResourceLike>(
+  id: string,
+  {
+    stack,
+    stage,
+  }: {
+    stack?: string;
+    stage?: string;
+  } = {},
+): Ref<R> => {
   const ref = new Proxy(
     {},
     {
