@@ -1,6 +1,7 @@
 ---
 title: One reconcile, no create vs. update
 date: 2026-05-04
+draft: true
 excerpt: We replaced `create` and `update` with a single `reconcile` function. Both halves were already converging on the same defensive code.
 ---
 

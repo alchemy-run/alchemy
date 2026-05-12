@@ -1,6 +1,7 @@
 ---
 title: How we migrated 50+ providers to reconcile in an afternoon
 date: 2026-05-06
+draft: true
 excerpt: One prompt, fifty resources, run in parallel. Tests were the ground truth. The engine got the same treatment.
 ---
 

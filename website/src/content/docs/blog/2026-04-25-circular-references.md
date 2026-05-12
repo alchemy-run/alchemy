@@ -1,6 +1,7 @@
 ---
 title: Circular references, without the deadlock
 date: 2026-04-25
+draft: true
 excerpt: Two Workers can call each other. A Lambda's role and the KMS key it uses can grant each other access. Alchemy plans these as graphs with cycles — at both the runtime layer and the type system layer.
 ---
 
