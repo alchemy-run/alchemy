@@ -34,7 +34,9 @@ function extractBlogId(href: string): string | undefined {
   return match ? `blog/${match[1]}` : undefined;
 }
 
-export const onRequest = defineRouteMiddleware(async (context) => {
+export const onRequest = defineRouteMiddleware(async (context, next) => {
+  await next();
+
   const { starlightRoute, t } = context.locals;
   const recentLabel = t("starlightBlog.sidebar.recent");
 
