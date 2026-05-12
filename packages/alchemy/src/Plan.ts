@@ -521,17 +521,17 @@ export const make = <A>(
     // tell whether any surviving resource still points at an orphan.
     const rawUpstreamDependencies: {
       [fqn: string]: string[];
-    } = Object.fromEntries([
-      ...resources.map((resource) => {
+    } = Object.fromEntries<string[]>([
+      ...resources.map((resource): [string, string[]] => {
         const fqn = resource.FQN;
         const propDeps = newUpstreamDependencies[fqn] ?? [];
         const bindDeps = bindingUpstreamDependencies[fqn] ?? [];
-        return [fqn, [...new Set([...propDeps, ...bindDeps])]] as const;
+        return [fqn, [...new Set([...propDeps, ...bindDeps])]];
       }),
       // Actions have no bindings — their upstream is purely their input.
-      ...actions.map((action) => {
+      ...actions.map((action): [string, string[]] => {
         const fqn = action.FQN;
-        return [fqn, newUpstreamDependencies[fqn] ?? []] as const;
+        return [fqn, newUpstreamDependencies[fqn] ?? []];
       }),
     ]);
 
