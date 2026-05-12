@@ -242,8 +242,18 @@ export const Platform = <
               }),
             )
         ).pipe(
-          Effect.tap(
-            (resource) => hooks.onCreate?.(resource as R, props) ?? Effect.void,
+          Effect.tap((resource) =>
+            hooks.onCreate
+              ? Effect.flatMap(
+                  // `props` may itself be an Effect (e.g. when wrapped by
+                  // `Cloudflare.Vite` via `Effect.map`); resolve it before
+                  // handing it to the hook so `onCreate` always sees the
+                  // plain props object — the second call site (in
+                  // `cls.make`) already does this.
+                  Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
+                  (resolved) => hooks.onCreate!(resource as R, resolved),
+                )
+              : Effect.void,
           ),
         );
       return Object.assign(
@@ -324,8 +334,13 @@ export const Platform = <
               yield* impl.pipe(
                 Effect.flatMap((impl) =>
                   impl?.fetch
-                    ? (runtimeContext.serve?.(impl.fetch) ??
-                      Effect.die("No serve handler"))
+                    ? // Hand the full impl to `serve` so the runtime can
+                      // expose any non-handler methods on the impl shape
+                      // (e.g. RPC methods on a Cloudflare Worker) alongside
+                      // the standard `fetch` handler.
+                      (runtimeContext.serve?.(impl.fetch, {
+                        shape: impl as Record<string, unknown>,
+                      }) ?? Effect.die("No serve handler"))
                     : Effect.void,
                 ),
                 Effect.provide(

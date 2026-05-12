@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import * as Cloudflare from "alchemy/Cloudflare";
+import type Backend from "../backend.ts";
 import { env } from "../env.ts";
 
 const VIAS = ["binding", "fetch", "rpc"] as const;
@@ -13,6 +15,20 @@ const parseRequest = (request: Request): { via: Via; key: string | null } => {
   return { via, key: url.searchParams.get("key") };
 };
 
+// Surface the actual error in BOTH the response body and the worker logs —
+// otherwise TanStack Start's outer boundary swallows it and you only ever
+// see "HTTPError" in `bun alchemy logs`.
+const trace = async (label: string, fn: () => Promise<Response>) => {
+  try {
+    return await fn();
+  } catch (err) {
+    const message =
+      err instanceof Error ? (err.stack ?? err.message) : String(err);
+    console.error(`[api.hello] ${label} failed:`, message);
+    return new Response(`${label} failed: ${message}`, { status: 500 });
+  }
+};
+
 export const Route = createFileRoute("/api/hello")({
   server: {
     handlers: {
@@ -25,26 +41,36 @@ export const Route = createFileRoute("/api/hello")({
 
         switch (via) {
           // option 1 — use the async binding directly
-          case "binding": {
-            const object = await env.BUCKET.get(key);
-            if (!object) return new Response("Not found", { status: 404 });
-            return new Response(object.body);
-          }
+          case "binding":
+            return trace("GET option 1 (env.BUCKET.get)", async () => {
+              const object = await env.BUCKET.get(key);
+              if (!object) return new Response("Not found", { status: 404 });
+              return new Response(object.body);
+            });
 
           // option 2 — bind to your effect worker and call fetch
-          case "fetch": {
-            return env.BACKEND.fetch(
-              `https://backend/?key=${encodeURIComponent(key)}`,
-            );
-          }
+          case "fetch":
+            return trace("GET option 2 (env.BACKEND.fetch)", async () => {
+              const res = await env.BACKEND.fetch(
+                `https://backend/?key=${encodeURIComponent(key)}`,
+              );
+              return new Response(res.body, {
+                status: res.status,
+                headers: res.headers,
+              });
+            });
 
           // option 3 — bind to your effect worker and call rpc method
-          case "rpc": {
-            const value = await env.BACKEND.hello(key);
-            if (value === null)
-              return new Response("Not found", { status: 404 });
-            return new Response(value);
-          }
+          case "rpc":
+            return trace("GET option 3 (backend.hello rpc)", async () => {
+              // Wrap the raw wire-shape binding into a Promise<T> view that
+              // throws on Effect.fail and unwraps stream envelopes.
+              const backend = Cloudflare.toPromiseApi<Backend>(env.BACKEND);
+              const value = await backend.hello(key);
+              if (value === null)
+                return new Response("Not found", { status: 404 });
+              return new Response(value);
+            });
         }
       },
 
@@ -61,35 +87,40 @@ export const Route = createFileRoute("/api/hello")({
 
         switch (via) {
           // option 1 — use the async binding directly
-          case "binding": {
-            await env.BUCKET.put(key, request.body, {
-              httpMetadata: {
-                contentType:
-                  request.headers.get("content-type") ??
-                  "application/octet-stream",
-              },
+          case "binding":
+            return trace("PUT option 1 (env.BUCKET.put)", async () => {
+              await env.BUCKET.put(key, request.body, {
+                httpMetadata: {
+                  contentType:
+                    request.headers.get("content-type") ??
+                    "application/octet-stream",
+                },
+              });
+              return new Response(null, { status: 204 });
             });
-            return new Response(null, { status: 204 });
-          }
 
           // option 2 — bind to your effect worker and call fetch
-          case "fetch": {
-            return env.BACKEND.fetch(
-              `https://backend/?key=${encodeURIComponent(key)}`,
-              {
-                method: "PUT",
-                body: request.body,
-                headers: request.headers,
-              },
-            );
-          }
+          case "fetch":
+            return trace("PUT option 2 (env.BACKEND.fetch)", async () => {
+              const res = await env.BACKEND.fetch(
+                `https://backend/?key=${encodeURIComponent(key)}`,
+                {
+                  method: "PUT",
+                  body: request.body,
+                  headers: request.headers,
+                },
+              );
+              return new Response(res.body, {
+                status: res.status,
+                headers: res.headers,
+              });
+            });
 
           // option 3 — RPC `hello` is read-only
-          case "rpc": {
+          case "rpc":
             return new Response("PUT is not supported via=rpc", {
               status: 400,
             });
-          }
         }
       },
     },

@@ -42,7 +42,7 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
           if (object === null) {
             return HttpServerResponse.text("Not found", { status: 404 });
           }
-          return HttpServerResponse.raw(object.body);
+          return HttpServerResponse.stream(object.body);
         }
 
         if (request.method === "PUT") {
