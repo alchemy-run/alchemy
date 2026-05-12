@@ -521,14 +521,19 @@ export const make = <A>(
     // tell whether any surviving resource still points at an orphan.
     const rawUpstreamDependencies: {
       [fqn: string]: string[];
-    } = Object.fromEntries(
-      resources.map((resource) => {
+    } = Object.fromEntries([
+      ...resources.map((resource) => {
         const fqn = resource.FQN;
         const propDeps = newUpstreamDependencies[fqn] ?? [];
         const bindDeps = bindingUpstreamDependencies[fqn] ?? [];
-        return [fqn, [...new Set([...propDeps, ...bindDeps])]];
+        return [fqn, [...new Set([...propDeps, ...bindDeps])]] as const;
       }),
-    );
+      // Actions have no bindings — their upstream is purely their input.
+      ...actions.map((action) => {
+        const fqn = action.FQN;
+        return [fqn, newUpstreamDependencies[fqn] ?? []] as const;
+      }),
+    ]);
 
     // Combined prop + binding upstream, filtered to resources/tasks in this
     // graph for scheduling and cycle detection.
@@ -547,19 +552,70 @@ export const make = <A>(
       }),
     ]);
 
-    // Map FQN -> list of downstream FQNs (resources/tasks that depend on this one)
+    // Resources that participate in a cycle when both prop and binding
+    // edges are considered. Used below to decide whether an acyclic
+    // binding edge should also become a downstream edge.
+    const combinedCycleMembers = findCycleMembers(allUpstreamDependencies);
+
+    // Map FQN -> list of downstream FQNs (resources/actions that depend on
+    // this one).
+    //
+    // Prop edges always become downstream edges — they can't form cycles
+    // (the resource graph is a DAG by construction once props are fully
+    // resolved). Binding edges become downstream edges too, except when
+    // they participate in a cycle in the combined graph: mutual bindings
+    // (A binds to B's data, B binds to A's data) intentionally do not
+    // create downstream edges, so deletion does not deadlock waiting on
+    // each other (see the "binding-only cycles inside a construct" test
+    // in `plan.test.ts`).
+    //
+    // Including acyclic binding edges is required for cloud APIs that
+    // enforce the binding at the provider level — e.g. a Cloudflare
+    // Worker with a `service` binding to another Worker cannot delete
+    // the upstream worker until the downstream worker's binding has been
+    // removed. Without the binding edge in `downstream`, the two delete
+    // concurrently and the upstream delete fails with
+    // `ServiceBindingConflict`.
+    //
+    // Actions don't have bindings, so for action upstreams we use only
+    // prop edges (which collapse to `newUpstreamDependencies` lookups).
+    const computeDownstream = (upFqn: string): string[] => {
+      const downstream: string[] = [];
+      for (const [downFqn, upstreams] of Object.entries(
+        rawUpstreamDependencies,
+      )) {
+        if (downFqn === upFqn) continue;
+        if (!upstreams.includes(upFqn)) continue;
+        const isPropEdge = (newUpstreamDependencies[downFqn] ?? []).includes(
+          upFqn,
+        );
+        if (isPropEdge) {
+          downstream.push(downFqn);
+          continue;
+        }
+        // Binding-only edge — exclude when both endpoints sit inside
+        // the same SCC of the combined graph.
+        if (
+          combinedCycleMembers.has(upFqn) &&
+          combinedCycleMembers.has(downFqn)
+        ) {
+          continue;
+        }
+        downstream.push(downFqn);
+      }
+      return downstream;
+    };
+
     const newDownstreamDependencies: {
       [fqn: string]: string[];
-    } = Object.fromEntries(
-      [...resources.map((r) => r.FQN), ...actions.map((t) => t.FQN)].map(
-        (fqn) => [
-          fqn,
-          Object.entries(newUpstreamDependencies)
-            .filter(([_, upstream]) => upstream.includes(fqn))
-            .map(([depFqn]) => depFqn),
-        ],
+    } = Object.fromEntries([
+      ...resources.map(
+        (resource) => [resource.FQN, computeDownstream(resource.FQN)] as const,
       ),
-    );
+      ...actions.map(
+        (action) => [action.FQN, computeDownstream(action.FQN)] as const,
+      ),
+    ]);
 
     const resourceGraph = Object.fromEntries(
       (yield* Effect.all(
@@ -931,7 +987,7 @@ export const make = <A>(
       )).map((update) => [update.resource.FQN, update]),
     ) as Plan["resources"];
 
-    // ── Task plan nodes ─────────────────────────────────────────────────
+    // ── Action plan nodes ────────────────────────────────────────────────
     const actionGraph = Object.fromEntries(
       (yield* Effect.all(
         actions.map(
@@ -996,10 +1052,11 @@ export const make = <A>(
       )) as ReadonlyArray<readonly [string, ActionApply]>,
     ) as Plan["actions"];
 
-    // Compute SCC membership once. Apply uses it to decide whether an
-    // update node must publish its prior attr early to break a cycle, or
-    // can simply wait for upstreams like a DAG node (the common case).
-    const cycleMembers = findCycleMembers(allUpstreamDependencies);
+    // SCC membership of the combined upstream graph. Apply uses it to
+    // decide whether an update node must publish its prior attr early to
+    // break a cycle, or can simply wait for upstreams like a DAG node
+    // (the common case). Computed once, above, for the downstream graph.
+    const cycleMembers = combinedCycleMembers;
 
     // Detect unsatisfiable dependency cycles among create/replace nodes.
     // Update/noop nodes signal their Deferred before waitForDeps when in a

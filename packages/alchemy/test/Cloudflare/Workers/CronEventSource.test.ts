@@ -45,7 +45,12 @@ test(
 
     // Reset any leftover state from prior runs. Doubles as a readiness probe —
     // a fresh workers.dev URL can take a few seconds to start serving 200s.
-    yield* client.post(`${url}/reset`).pipe(
+    yield* Effect.gen(function* () {
+      const res = yield* client.post(`${url}/reset`);
+      if (res.status !== 200) {
+        return yield* Effect.fail(new Error(`Worker not ready: ${res.status}`));
+      }
+    }).pipe(
       Effect.retry({
         schedule: Schedule.exponential("500 millis"),
         times: 10,
@@ -57,9 +62,12 @@ test(
     // delay after deploy, so we poll up to ~3 minutes for the first fire.
     const times = yield* Effect.gen(function* () {
       const res = yield* client.get(`${url}/times`);
-      const body = (yield* res.json) as { times: number[] };
+      if (res.status !== 200) return [];
+      const body = (yield* res.json) as { times?: unknown };
+      if (!Array.isArray(body.times)) return [];
       return body.times.filter((t) => t >= resetAt);
     }).pipe(
+      Effect.catch(() => Effect.succeed([])),
       Effect.repeat({
         schedule: Schedule.spaced("5 seconds"),
         until: (recent) => recent.length > 0,

@@ -2,6 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -12,6 +13,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -33,6 +35,7 @@ import {
   type PlatformProps,
   type Rpc,
 } from "../../Platform.ts";
+import { isYieldableEffectLike } from "../../Util/effect.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import * as Serverless from "../../Serverless/index.ts";
@@ -80,7 +83,14 @@ import {
 import { workersHttpHandler } from "./HttpServer.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
-import { makeRpcStub } from "./Rpc.ts";
+import {
+  encodeRpcError,
+  ErrorTag,
+  makeRpcStub,
+  toRpcStream,
+  type RpcErrorEnvelope,
+  type RpcStreamEnvelope,
+} from "./Rpc.ts";
 import { WorkerBundle } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
@@ -195,6 +205,7 @@ export type WorkerBindingResource =
   | ArtifactsBinding
   | ImagesBinding
   | Hyperdrive
+  | Worker
   | DurableObjectNamespaceLike<any>;
 
 export type WorkerBindings = {
@@ -738,8 +749,11 @@ export const Worker: Platform<
         const bindingEff = props.bindings?.[bindingName] as
           | WorkerBindingResource
           | Effect.Effect<WorkerBindingResource>;
-        const binding = Effect.isEffect(bindingEff)
-          ? yield* bindingEff
+        // Bindings can be passed as a plain resource value, an Effect that
+        // yields a resource, or an effect-class (e.g. a `Cloudflare.Worker`
+        // class). Resolve the yieldable forms before deriving binding metadata.
+        const binding = isYieldableEffectLike(bindingEff)
+          ? ((yield* bindingEff as Effect.Effect<unknown>) as WorkerBindingResource)
           : bindingEff;
 
         const bindingMeta: InputProps<WorkerBinding> | undefined = isAssets(
@@ -814,8 +828,14 @@ export const Worker: Platform<
                                   name: bindingName,
                                   id: binding.hyperdriveId,
                                 }
-                              : // TODO(sam): handle others
-                                undefined;
+                              : isWorker(binding)
+                                ? {
+                                    type: "service",
+                                    name: bindingName,
+                                    service: binding.workerName,
+                                  }
+                                : // TODO(sam): handle others
+                                  undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
@@ -831,6 +851,7 @@ export const Worker: Platform<
     const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
     const exports: Record<string, any> = {};
     const env: Record<string, any> = {};
+    let userShape: Record<string, unknown> | undefined;
 
     const ctx = {
       Type: WorkerTypeId,
@@ -897,7 +918,14 @@ export const Worker: Platform<
         }),
       serve: <Req = never>(
         handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>,
-      ) => ctx.listen(workersHttpHandler(handler)),
+        options?: { shape?: Record<string, unknown> },
+      ) => {
+        // Capture the user's full default-export shape so `exports` can
+        // expose any non-handler methods on it as RPC methods on the
+        // deployed `WorkerEntrypoint` subclass — see `__rpc__` below.
+        if (options?.shape) userShape = options.shape;
+        return ctx.listen(workersHttpHandler(handler));
+      },
       listen: ((
         handler:
           | Serverless.FunctionListener
@@ -917,6 +945,35 @@ export const Worker: Platform<
           concurrency: "unbounded",
         });
         const services = yield* Effect.context();
+
+        // Provide the per-request runtime layer (services + `WorkerExecutionContext`
+        // + a fresh `ExecutionContext`/`Scope`) to a user effect, then run it.
+        // This is the bridge between Cloudflare's request-time callback and
+        // the user's Effect-native handler. Used by both the standard
+        // `handle()` dispatch (fetch/scheduled/…) and the per-RPC dispatchers
+        // below — keeping them on a single layer-provision path.
+        const runUserEffect = <A, E>(
+          eff: Effect.Effect<A, E>,
+          context: cf.ExecutionContext,
+        ): Promise<Exit.Exit<A, E>> => {
+          const scope = Scope.makeUnsafe();
+          return eff
+            .pipe(
+              Effect.provideContext(services),
+              Scope.provide(scope),
+              Effect.provide(Layer.succeed(WorkerExecutionContext, context)),
+              Effect.provide(
+                Layer.succeed(ExecutionContext, { scope, cache: {} }),
+              ),
+              Effect.runPromiseExit,
+            )
+            .finally(() =>
+              context.waitUntil(
+                Effect.runPromise(Scope.close(scope, Exit.void)),
+              ),
+            );
+        };
+
         const handle =
           (type: WorkerEvent["type"]) =>
           (request: any, env: unknown, context: cf.ExecutionContext) => {
@@ -930,36 +987,76 @@ export const Worker: Platform<
             for (const handler of handlers) {
               const eff = handler(event);
               if (Effect.isEffect(eff)) {
-                const scope = Scope.makeUnsafe();
-                return eff
-                  .pipe(
-                    Effect.provideContext(services),
-                    Scope.provide(scope),
-                    Effect.provide(
-                      Layer.succeed(WorkerExecutionContext, context),
-                    ),
-                    Effect.provide(
-                      Layer.succeed(ExecutionContext, {
-                        scope,
-                        cache: {},
-                      }),
-                    ),
-                    Effect.runPromise,
-                  )
-                  .finally(() =>
-                    context.waitUntil(
-                      Effect.runPromise(Scope.close(scope, Exit.void)),
-                    ),
-                  );
+                return runUserEffect(
+                  eff as Effect.Effect<unknown, unknown>,
+                  context,
+                ).then((exit) => {
+                  if (exit._tag === "Success") return exit.value;
+                  throw Cause.squash(exit.cause);
+                });
               }
             }
             return Promise.reject(new Error("No event handler found"));
           };
+
+        // RPC method dispatchers — one per non-handler method on the user's
+        // shape. Each dispatcher is invoked by the WorkerEntrypoint bridge
+        // as `dispatcher(args, ctx)`: `args` are the user-facing call args,
+        // `ctx` is the `this.ctx` that Cloudflare hands the bridge per RPC
+        // request. The dispatcher runs the user effect with the same runtime
+        // layer the fetch path uses, then envelope-encodes the result so
+        // `Effect.fail` round-trips as `RpcErrorEnvelope` and `Stream` as
+        // `RpcStreamEnvelope` (consumers wrap the binding with
+        // `toPromiseApi`/`bindWorker` to decode).
+        const exportedHandlerSet = new Set<string>(ExportedHandlerMethods);
+        const rpcDispatchers: Record<
+          string,
+          (args: unknown[], ctx: cf.ExecutionContext) => Promise<unknown>
+        > = {};
+        if (userShape) {
+          for (const [name, value] of Object.entries(userShape)) {
+            if (exportedHandlerSet.has(name)) continue;
+            if (typeof value !== "function") continue;
+            rpcDispatchers[name] = async (
+              args: unknown[],
+              context: cf.ExecutionContext,
+            ) => {
+              const result = (value as (...a: unknown[]) => unknown)(...args);
+              if (!Effect.isEffect(result)) return result;
+              const exit = await runUserEffect(
+                result as Effect.Effect<unknown, unknown>,
+                context,
+              );
+              if (exit._tag === "Success") {
+                if (Stream.isStream(exit.value)) {
+                  return await Effect.runPromise(
+                    toRpcStream(exit.value) as Effect.Effect<RpcStreamEnvelope>,
+                  );
+                }
+                return exit.value;
+              }
+              const failReason = exit.cause.reasons.find(Cause.isFailReason);
+              if (failReason) {
+                return {
+                  _tag: ErrorTag,
+                  error: encodeRpcError(failReason.error),
+                } satisfies RpcErrorEnvelope;
+              }
+              const dieReason = exit.cause.reasons.find(Cause.isDieReason);
+              throw (
+                dieReason?.defect ??
+                new Error("RPC method failed with an unexpected cause")
+              );
+            };
+          }
+        }
+
         return {
           ...exports,
           default: Object.fromEntries(
             ExportedHandlerMethods.map((method) => [method, handle(method)]),
           ),
+          __rpc__: rpcDispatchers,
         };
       }),
     };
@@ -972,7 +1069,10 @@ export const bindWorker = Effect.fnUntraced(function* <Shape, Req = never>(
     | (Worker & Rpc<Shape>)
     | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
 ) {
-  const worker = Effect.isEffect(workerEff) ? yield* workerEff : workerEff;
+  // Worker classes and regular Effects are both yieldable here.
+  const worker = isYieldableEffectLike(workerEff)
+    ? yield* workerEff as Effect.Effect<Worker & Rpc<Shape>, never, Req>
+    : workerEff;
   const self = yield* Worker;
   yield* self.bind`${worker}`({
     bindings: [
@@ -984,13 +1084,14 @@ export const bindWorker = Effect.fnUntraced(function* <Shape, Req = never>(
     ],
   });
 
-  const workerBinding = WorkerEnvironment.asEffect().pipe(
-    Effect.map((env) => env[worker.LogicalId]),
+  // `bindWorker` runs at *init* phase (both at plantime and at runtime
+  // cold-start). `WorkerEnvironment` only exists at exec phase on the
+  // deployed worker, so we hand `makeRpcStub` an `Effect<stub>` that
+  // resolves the binding lazily on each method call.
+  const stubEff = WorkerEnvironment.asEffect().pipe(
+    Effect.map((env) => (env as Record<string, unknown>)[worker.LogicalId]),
   );
-
-  const fetcher = workerBinding.pipe(Effect.map(fromCloudflareFetcher));
-  // TODO(sam): update makeRpcStub to support lazily evaluating the Effect<Fetcher>
-  return makeRpcStub<Shape>(fetcher);
+  return makeRpcStub<Shape>(stubEff);
 });
 
 export class BindWorkerPolicy extends Binding.Policy<
