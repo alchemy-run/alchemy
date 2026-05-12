@@ -599,6 +599,23 @@ for (const m of monorepos) {
   }
 }
 
+// Some examples model the production "shared infra + per-PR compute"
+// pattern via cross-stage references (e.g. `cloudflare-neon-drizzle`
+// has a `pr-*` stage that references a long-lived `staging-*` stage
+// owning the Neon project). To keep tests isolated from one another,
+// each test owns *both* stages — `staging-${stage}` is deployed first,
+// then the main stage, then both are torn down in reverse order so the
+// dependency edge (pr → staging) is respected.
+//
+// We only set up the pre-stage when the main stage starts with `pr-`,
+// because that's the only branch in the example that crosses stages.
+// Local `smoke-*` and `dev_<user>` stages just stand up their own
+// project inline and don't need the pre-stage.
+const PRE_DEPLOY_STAGES: Record<string, (stage: string) => string[]> = {
+  "cloudflare-neon-drizzle": (stage) =>
+    stage.startsWith("pr-") ? [`staging-${stage}`] : [],
+};
+
 for (const example of examples) {
   const cwd = path.join(ROOT, "examples", example);
   let prev: Promise<unknown> = Promise.resolve();
@@ -612,10 +629,19 @@ for (const example of examples) {
     const stage = `${stagePrefix}-${runtime}-${example}`
       .replace(/[^a-zA-Z0-9-]/g, "-")
       .toLowerCase();
-    const cmd = (action: "destroy" | "deploy") =>
+    const cmd = (action: "destroy" | "deploy", stageOverride = stage) =>
       runtime === "bun"
-        ? ["bun", "alchemy", action, "--stage", stage, "--yes"]
-        : ["pnpm", "exec", "alchemy", action, "--stage", stage, "--yes"];
+        ? ["bun", "alchemy", action, "--stage", stageOverride, "--yes"]
+        : [
+            "pnpm",
+            "exec",
+            "alchemy",
+            action,
+            "--stage",
+            stageOverride,
+            "--yes",
+          ];
+    const preStages = PRE_DEPLOY_STAGES[example]?.(stage) ?? [];
 
     const myPrev = prev;
     let release!: () => void;
@@ -632,9 +658,23 @@ for (const example of examples) {
         // is already attributed to the right test.
         await myPrev.catch(() => {});
         try {
+          // Clean up any leftovers across all stages before deploying.
+          // Order: dependents (main) first, dependencies (pre-stages) last.
           expect(await run(cmd("destroy"), cwd)).toBe(0);
+          for (const s of [...preStages].reverse()) {
+            expect(await run(cmd("destroy", s), cwd)).toBe(0);
+          }
+          // Deploy: pre-stages first (data plane), main last (compute).
+          for (const s of preStages) {
+            expect(await run(cmd("deploy", s), cwd)).toBe(0);
+          }
           expect(await run(cmd("deploy"), cwd)).toBe(0);
+          // Tear down in reverse so cross-stage refs stay resolvable
+          // until the dependent stage is gone.
           expect(await run(cmd("destroy"), cwd)).toBe(0);
+          for (const s of [...preStages].reverse()) {
+            expect(await run(cmd("destroy", s), cwd)).toBe(0);
+          }
         } finally {
           release();
         }
