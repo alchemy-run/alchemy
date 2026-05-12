@@ -7,10 +7,12 @@
  * Modes:
  *   default              → test against the workspace `workspace:*` deps as-is
  *   SMOKE_CANARY=1       → pack + publish alchemy / better-auth / pr-package
- *                          tarballs to pkg.ing under a fresh tag, swap each
- *                          example's `workspace:*` refs for the pkg.ing URLs,
- *                          `bun install`, run, then `git checkout` the example
- *                          package.json files and reinstall on the way out.
+ *                          tarballs to pkg.ing under a fresh tag, add the
+ *                          pkg.ing URLs to the root workspace catalog, rewrite
+ *                          each example's `workspace:*` refs to `catalog:`,
+ *                          run a single root install, then `git checkout` the
+ *                          mutated package.json files and reinstall once on
+ *                          the way out.
  *
  * Env vars:
  *   SMOKE_RUNTIME    `bun` or `pnpm`                        (default: "bun")
@@ -79,14 +81,33 @@ async function run(cmd: string[], cwd: string): Promise<number> {
 }
 
 // When the matrix is pinned to a single runtime (CI), use that runtime's
-// own `add` command so its install path gets exercised end-to-end —
+// own `install` command so its install path gets exercised end-to-end —
 // otherwise (local: both runtimes) fall back to bun, which writes the
 // shared `node_modules` once for both subsequent runs.
 const PRIMARY_RUNTIME: Runtime = RUNTIMES[0];
-const addCmd = (specs: string[]): string[] =>
+// Canary mode mutates example package.json files at runtime, so the
+// lockfile is intentionally stale during the run — `--no-frozen-lockfile`
+// lets the install resolve the new `catalog:` refs. CI defaults pnpm to
+// frozen-lockfile, which would otherwise fail with ERR_PNPM_OUTDATED_LOCKFILE.
+const installCmd = (): string[] =>
   PRIMARY_RUNTIME === "bun"
-    ? ["bun", "add", ...specs]
-    : ["pnpm", "add", ...specs];
+    ? ["bun", "install", "--no-frozen-lockfile"]
+    : ["pnpm", "install", "--no-frozen-lockfile"];
+
+const ROOT_PKG_PATH = path.join(ROOT, "package.json");
+const examplePkgPath = (e: string) =>
+  path.join(ROOT, "examples", e, "package.json");
+
+type Pkg = {
+  workspaces?: { catalog?: Record<string, string> };
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+};
+
+const readJson = async <T>(p: string): Promise<T> =>
+  JSON.parse(await fs.readFile(p, "utf8")) as T;
+const writeJson = async (p: string, v: unknown) =>
+  fs.writeFile(p, `${JSON.stringify(v, null, 2)}\n`);
 
 const PNPM_WORKSPACE_PATH = path.join(ROOT, "pnpm-workspace.yaml");
 
@@ -189,67 +210,53 @@ if (canary) {
       }
     }
 
-    // `<runtime> add` mutates the root lockfile + install cache — running
-    // them in parallel across examples races on both. Keep sequential.
+    // Add the canary tarball URLs to the root catalog and rewrite each
+    // example's `workspace:*` ref for a published package to `catalog:`.
+    // One install at the root then resolves every example at once — much
+    // faster than `<runtime> add` per (example × published package).
+    const rootPkg = await readJson<Pkg>(ROOT_PKG_PATH);
+    rootPkg.workspaces ??= {};
+    rootPkg.workspaces.catalog ??= {};
+    for (const { name } of PUBLISHED) {
+      rootPkg.workspaces.catalog[name] = `https://${host}/${name}/${tag}`;
+    }
+    await writeJson(ROOT_PKG_PATH, rootPkg);
+
     for (const example of examples) {
-      const exampleDir = path.join(ROOT, "examples", example);
-      const pkg = JSON.parse(
-        await fs.readFile(path.join(exampleDir, "package.json"), "utf8"),
-      );
-      const adds: string[] = [];
+      const p = examplePkgPath(example);
+      const pkg = await readJson<Pkg>(p);
+      let mutated = false;
       for (const k of ["dependencies", "devDependencies"] as const) {
         const deps = pkg[k];
         if (!deps) continue;
         for (const [n, v] of Object.entries(deps)) {
-          if (v === "workspace:*" && PUBLISHED.some((p) => p.name === n)) {
-            adds.push(`${n}@https://${host}/${n}/${tag}`);
+          if (v === "workspace:*" && PUBLISHED.some((pp) => pp.name === n)) {
+            deps[n] = "catalog:";
+            mutated = true;
           }
         }
       }
-      if (adds.length > 0) {
-        expect(await run(addCmd(adds), exampleDir)).toBe(0);
-      }
+      if (mutated) await writeJson(p, pkg);
     }
+
+    // Mirror the new catalog entries into pnpm-workspace.yaml so the
+    // pnpm matrix sees them too.
+    await writePnpmWorkspace();
+
+    expect(await run(installCmd(), ROOT)).toBe(0);
   }, TIMEOUT);
 }
 
 /**
- * Restore every example's published-package deps (alchemy / better-auth /
- * pr-package) back to `workspace:*`. Idempotent — only emits an `add`
- * command when something is actually pointing at a non-workspace source,
- * so this is a no-op for the non-canary path that never mutates anything
- * in the first place.
+ * Restore the root + example package.json files via `git checkout` and
+ * reinstall once. No-op when nothing has been mutated (non-canary mode).
  */
 const restoreWorkspaceDeps = async () => {
-  // Sequential — concurrent add calls race on the root lockfile.
-  for (const example of examples) {
-    const exampleDir = path.join(ROOT, "examples", example);
-    let pkg: {
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-    };
-    try {
-      pkg = JSON.parse(
-        await fs.readFile(path.join(exampleDir, "package.json"), "utf8"),
-      );
-    } catch {
-      continue;
-    }
-    const adds: string[] = [];
-    for (const k of ["dependencies", "devDependencies"] as const) {
-      const deps = pkg[k];
-      if (!deps) continue;
-      for (const [n, v] of Object.entries(deps)) {
-        if (PUBLISHED.some((p) => p.name === n) && v !== "workspace:*") {
-          adds.push(`${n}@workspace:*`);
-        }
-      }
-    }
-    if (adds.length > 0) {
-      console.log(`→ restoring ${example}: ${adds.join(" ")}`);
-      await run(["bun", "add", ...adds], exampleDir);
-    }
-  }
+  if (!canary) return;
+  const paths = [ROOT_PKG_PATH, ...examples.map(examplePkgPath)];
+  await run(["git", "checkout", "--", ...paths], ROOT);
+  await writePnpmWorkspace();
+  await run(installCmd(), ROOT);
 };
 
 // Always-on setup: write `pnpm-workspace.yaml` mirroring bun's catalog so

@@ -22,7 +22,7 @@ import {
   getWorkerTags,
   waitForWorkerToBeDeleted,
 } from "../Utils/Worker.ts";
-import InternalWorker from "./internal-worker.ts";
+import InternalWorker from "./fixtures/internal-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -31,7 +31,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const main = pathe.resolve(import.meta.dirname, "worker.ts");
+const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
 
 describe.concurrent("Cloudflare.Worker", () => {
   test.provider("create, update, delete worker", (stack) =>
@@ -726,7 +726,7 @@ describe.concurrent("Cloudflare.Worker", () => {
       const worker = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.Worker("EnvJsonWorker", {
-            main: pathe.resolve(import.meta.dirname, "env-worker.ts"),
+            main: pathe.resolve(import.meta.dirname, "fixtures/env-worker.ts"),
             url: true,
             subdomain: { enabled: true, previewsEnabled: true },
             compatibility: { date: "2024-01-01" },

@@ -54,7 +54,17 @@ const resolveFromBunLock = (name: string): string | undefined => {
 };
 const pinnedCatalog: Record<string, string> = {};
 for (const [name, range] of Object.entries(catalog)) {
-  pinnedCatalog[name] = resolveFromBunLock(name) ?? range;
+  // Non-semver catalog values (URLs, file: paths, workspace:* entries from
+  // bun.lock for monorepo packages) must pass through unchanged — pnpm
+  // rejects e.g. `alchemy: workspace:packages/alchemy` in a catalog
+  // (ERR_PNPM_CATALOG_ENTRY_INVALID_WORKSPACE_SPEC).
+  if (/^(https?:|file:|git\+|workspace:|npm:)/.test(range)) {
+    pinnedCatalog[name] = range;
+    continue;
+  }
+  const pinned = resolveFromBunLock(name);
+  pinnedCatalog[name] =
+    pinned && !/^(workspace:|file:|link:)/.test(pinned) ? pinned : range;
 }
 
 const lines: string[] = [

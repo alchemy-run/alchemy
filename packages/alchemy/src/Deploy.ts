@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import * as Apply from "./Apply.ts";
 import type { Input } from "./Input.ts";
@@ -10,10 +11,13 @@ export const deploy = <A>({
   stack,
   stage,
   dev,
+  scope,
 }: {
   stack: StackEffect<CompiledStack<A>, Stage | AlchemyContext>;
   stage: string;
   dev?: boolean;
+  /** See {@link evalStack} — when set, scoped resources outlive `deploy`. */
+  scope?: Scope.Scope;
 }) =>
   evalStack(
     stack,
@@ -23,5 +27,5 @@ export const deploy = <A>({
         const output = yield* Apply.apply(plan);
         return output as Input.Resolve<A>;
       }),
-    { stage, dev },
+    { stage, dev, scope },
   );

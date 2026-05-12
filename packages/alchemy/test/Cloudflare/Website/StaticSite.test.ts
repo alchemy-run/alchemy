@@ -23,7 +23,7 @@ const logLevel = Effect.provideService(
 );
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "staticsite-fixture");
-const workerEntry = pathe.resolve(import.meta.dirname, "../Workers/worker.ts");
+const workerEntry = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
 
 test.provider(
   "StaticSite: editing a source file republishes the assets in a single deploy",

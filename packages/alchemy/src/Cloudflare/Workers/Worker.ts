@@ -6,7 +6,6 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
@@ -50,7 +49,14 @@ import {
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { D1Database } from "../D1/D1Database.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
-import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
+import type {
+  Hyperdrive,
+  HyperdriveDevOrigin,
+} from "../Hyperdrive/Hyperdrive.ts";
+import {
+  isImages as isImagesBinding,
+  type Images as ImagesBinding,
+} from "../Images/Images.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
 import { SidecarLive } from "../Local/Sidecar.ts";
 import { CloudflareLogs } from "../Logs.ts";
@@ -187,6 +193,8 @@ export type WorkerBindingResource =
   | AiGateway
   | AnalyticsEngineDataset
   | ArtifactsBinding
+  | ImagesBinding
+  | Hyperdrive
   | DurableObjectNamespaceLike<any>;
 
 export type WorkerBindings = {
@@ -278,6 +286,12 @@ export interface WorkerProps<
   exports?: string[];
   bindings?: Bindings;
   /**
+   * Cron expressions that trigger the Worker's scheduled handler.
+   *
+   * Pass an empty array to remove all Cron Triggers.
+   */
+  crons?: string[];
+  /**
    * One or more custom hostnames (e.g. `"app.example.com"`) to bind to this
    * Worker. The Cloudflare Zone is inferred from the hostname — the zone must
    * already exist in the account.
@@ -315,6 +329,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
     domains: { hostname: string; id: string; zoneId: string }[];
+    crons: string[];
     hash?: {
       assets: string | undefined;
       bundle: string | undefined;
@@ -324,6 +339,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   {
     bindings?: WorkerBinding[];
     containers?: { className: string }[];
+    crons?: string[];
     hyperdrives?: Record<string, Required<HyperdriveDevOrigin>>;
   },
   Providers
@@ -739,11 +755,10 @@ export const Worker: Platform<
                 name: bindingName,
                 namespace: binding.namespace,
               } as any)
-            : isDurableObjectNamespaceLike(binding)
+            : isImagesBinding(binding)
               ? {
-                  type: "durable_object_namespace",
+                  type: "images",
                   name: bindingName,
-                  className: binding.className ?? binding.name,
                 }
               : isAnalyticsEngineDataset(binding)
                 ? {
@@ -751,44 +766,56 @@ export const Worker: Platform<
                     name: bindingName,
                     dataset: binding.dataset,
                   }
-                : binding.Type === "Cloudflare.D1Database"
+                : isDurableObjectNamespaceLike(binding)
                   ? {
-                      type: "d1",
-                      id: binding.databaseId,
+                      type: "durable_object_namespace",
                       name: bindingName,
+                      className: binding.className ?? binding.name,
                     }
-                  : binding.Type === "Cloudflare.R2Bucket"
+                  : binding.Type === "Cloudflare.D1Database"
                     ? {
-                        type: "r2_bucket",
+                        type: "d1",
+                        id: binding.databaseId,
                         name: bindingName,
-                        bucketName: binding.bucketName,
-                        jurisdiction: binding.jurisdiction.pipe(
-                          Output.map((jurisdiction) =>
-                            jurisdiction === "default"
-                              ? undefined
-                              : jurisdiction,
-                          ),
-                        ),
                       }
-                    : binding.Type === "Cloudflare.KVNamespace"
+                    : binding.Type === "Cloudflare.R2Bucket"
                       ? {
-                          type: "kv_namespace",
+                          type: "r2_bucket",
                           name: bindingName,
-                          namespaceId: binding.namespaceId,
+                          bucketName: binding.bucketName,
+                          jurisdiction: binding.jurisdiction.pipe(
+                            Output.map((jurisdiction) =>
+                              jurisdiction === "default"
+                                ? undefined
+                                : jurisdiction,
+                            ),
+                          ),
                         }
-                      : binding.Type === "Cloudflare.Queue"
+                      : binding.Type === "Cloudflare.KVNamespace"
                         ? {
-                            type: "queue",
+                            type: "kv_namespace",
                             name: bindingName,
-                            queueName: binding.queueName,
+                            namespaceId: binding.namespaceId,
                           }
-                        : binding.Type === "Cloudflare.AiGateway"
+                        : binding.Type === "Cloudflare.Queue"
                           ? {
-                              type: "ai",
+                              type: "queue",
                               name: bindingName,
+                              queueName: binding.queueName,
                             }
-                          : // TODO(sam): handle others
-                            undefined;
+                          : binding.Type === "Cloudflare.AiGateway"
+                            ? {
+                                type: "ai",
+                                name: bindingName,
+                              }
+                            : binding.Type === "Cloudflare.Hyperdrive"
+                              ? {
+                                  type: "hyperdrive",
+                                  name: bindingName,
+                                  id: binding.hyperdriveId,
+                                }
+                              : // TODO(sam): handle others
+                                undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
@@ -1031,6 +1058,12 @@ function getDurableObjectBindings(
   );
 }
 
+export function getCronBindings(
+  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
+) {
+  return Array.from(new Set(bindings.flatMap((b) => b.data.crons ?? [])));
+}
+
 function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
   return Object.fromEntries(
     tags.flatMap((tag) => {
@@ -1072,20 +1105,20 @@ export const LiveWorkerProvider = () =>
   Provider.effect(
     Worker,
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
       const { accountId } = yield* CloudflareEnvironment;
-      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
 
       const createScriptSubdomain = yield* workers.createScriptSubdomain;
       const deleteScript = yield* workers.deleteScript;
       const getScriptSubdomain = yield* workers.getScriptSubdomain;
+      const getScriptSchedule = yield* workers.getScriptSchedule;
       const getScriptSettings = yield* workers.getScriptScriptAndVersionSetting;
       const getSubdomain = yield* workers.getSubdomain;
       const putScript = yield* workers.putScript;
+      const putScriptSchedule = yield* workers.putScriptSchedule;
       const putDomain = yield* workers.putDomain;
       const listDomains = yield* workers.listDomains;
       const deleteDomain = yield* workers.deleteDomain;
@@ -1132,6 +1165,60 @@ export const LiveWorkerProvider = () =>
                 (Array.isArray(domain) ? domain : [domain]).map(toPunycode),
               ),
             );
+
+      const normalizeCrons = (crons: string[] | undefined): string[] =>
+        Array.from(new Set(crons ?? []));
+
+      const getWorkerCrons = (scriptName: string) =>
+        getScriptSchedule({
+          accountId,
+          scriptName,
+        }).pipe(
+          Effect.map((response) =>
+            normalizeCrons(response.schedules.map((schedule) => schedule.cron)),
+          ),
+          Effect.catchTag("WorkerNotFound", () => Effect.succeed([])),
+        );
+
+      const reconcileCrons = (
+        scriptName: string,
+        desired: string[],
+        previous: string[],
+        session: ScopedPlanStatusSession,
+      ) =>
+        Effect.gen(function* () {
+          const live = yield* getWorkerCrons(scriptName);
+          const desiredSorted = [...desired].sort();
+          const liveSorted = [...live].sort();
+          const changed =
+            desiredSorted.length !== liveSorted.length ||
+            desiredSorted.some((cron, index) => cron !== liveSorted[index]);
+
+          if (!changed) return live;
+
+          if (desired.length > 0 || previous.length > 0 || live.length > 0) {
+            yield* session.note(
+              `Reconciling Cron Triggers (${desired.length}) ...`,
+            );
+          }
+
+          const result = yield* putScriptSchedule({
+            accountId,
+            scriptName,
+            body: desired.map((cron) => ({ cron })),
+          }).pipe(
+            Effect.retry({
+              while: (error: { _tag?: string }) =>
+                error?._tag === "WorkerNotFound",
+              schedule: Schedule.exponential(200).pipe(
+                Schedule.both(Schedule.recurs(15)),
+              ),
+            }),
+          );
+          return normalizeCrons(
+            result.schedules.map((schedule) => schedule.cron),
+          );
+        });
 
       /**
        * Infer the Cloudflare Zone ID for a given hostname by listing the
@@ -1952,6 +2039,12 @@ export const LiveWorkerProvider = () =>
           desiredDomains,
           previousDomains,
         );
+        const crons = yield* reconcileCrons(
+          name,
+          normalizeCrons([...getCronBindings(bindings), ...(news.crons ?? [])]),
+          output?.crons ?? [],
+          session,
+        );
         return {
           workerId: worker.id ?? name,
           workerName: name,
@@ -1964,6 +2057,7 @@ export const LiveWorkerProvider = () =>
           durableObjectNamespaces,
           accountId,
           domains,
+          crons,
           hash,
         } satisfies Worker["Attributes"];
       });
@@ -2019,7 +2113,13 @@ export const LiveWorkerProvider = () =>
 
       return Worker.Provider.of({
         stables: ["workerId", "workerName"],
-        diff: Effect.fnUntraced(function* ({ id, news, olds, output }) {
+        diff: Effect.fnUntraced(function* ({
+          id,
+          news,
+          olds,
+          output,
+          newBindings,
+        }) {
           if (!isResolved(news)) return undefined;
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" };
@@ -2041,7 +2141,23 @@ export const LiveWorkerProvider = () =>
           const domainsChanged =
             newDomains.length !== oldDomains.length ||
             newDomains.some((d, i) => d !== oldDomains[i]);
-          if (domainsChanged || (yield* hasChanged(id, news, output))) {
+          const newCrons = normalizeCrons([
+            ...(Array.isArray(newBindings)
+              ? getCronBindings(
+                  newBindings as ResourceBinding<Worker["Binding"]>[],
+                )
+              : []),
+            ...(news.crons ?? []),
+          ]).sort();
+          const oldCrons = [...(output?.crons ?? [])].sort();
+          const cronsChanged =
+            newCrons.length !== oldCrons.length ||
+            newCrons.some((cron, index) => cron !== oldCrons[index]);
+          if (
+            domainsChanged ||
+            cronsChanged ||
+            (yield* hasChanged(id, news, output))
+          ) {
             return {
               action: "update",
               stables:
@@ -2167,6 +2283,7 @@ export const LiveWorkerProvider = () =>
             durableObjectNamespaces,
             accountId,
             domains: [],
+            crons: [],
           } satisfies Worker["Attributes"];
         }),
         read: Effect.fnUntraced(
@@ -2198,6 +2315,7 @@ export const LiveWorkerProvider = () =>
                 service: workerName,
               }).pipe(Effect.map((r) => r.result ?? [])),
             ]);
+            const crons = yield* getWorkerCrons(workerName);
             yield* Effect.logInfo(
               `Cloudflare Worker read: found ${workerName}`,
             );
@@ -2218,6 +2336,7 @@ export const LiveWorkerProvider = () =>
                   ? [{ id: d.id, hostname: d.hostname, zoneId: d.zoneId }]
                   : [],
               ),
+              crons,
             } satisfies Worker["Attributes"];
 
             // Centralized ownership decision: the engine routes `read`'s
