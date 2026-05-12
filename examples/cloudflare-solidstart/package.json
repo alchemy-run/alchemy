@@ -22,5 +22,10 @@
   "engines": {
     "node": ">=22"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
+    "directory": "examples/cloudflare-solidstart"
+  }
 }
