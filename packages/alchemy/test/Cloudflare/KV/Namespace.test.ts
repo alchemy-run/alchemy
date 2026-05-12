@@ -145,7 +145,7 @@ test.provider(
         });
       }).pipe(Effect.provide(stack.state));
 
-      expect(persisted?.attr).toMatchObject({
+      expect((persisted as any)?.attr).toMatchObject({
         namespaceId: initialId,
         title,
       });

@@ -7,7 +7,11 @@ import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import { StateApi } from "./HttpStateApi.ts";
 
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
-import { StateStoreError, type StateService } from "./State.ts";
+import {
+  StateStoreError,
+  type StateService,
+  type PersistedState,
+} from "./State.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
 /**
@@ -90,7 +94,7 @@ export const makeHttpStateStore = ({
           ),
           mapStateStoreError,
         ),
-      set: <V extends ResourceState>(request: {
+      set: <V extends PersistedState>(request: {
         stack: string;
         stage: string;
         fqn: string;

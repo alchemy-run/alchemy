@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import type { ResourceState } from "./ResourceState.ts";
-import { State } from "./State.ts";
+import { State, type PersistedState } from "./State.ts";
 
 type StackId = string;
 type StageId = string;
@@ -54,7 +54,7 @@ export const InMemoryService = (
           (s) => s.status === "replaced",
         ),
       ),
-    set: <V extends ResourceState>({
+    set: <V extends PersistedState>({
       stack,
       stage,
       fqn,
@@ -68,7 +68,7 @@ export const InMemoryService = (
       Effect.sync(() => {
         const stackState = (state[stack] ??= {});
         const stageState = (stackState[stage] ??= {});
-        stageState[fqn] = value;
+        stageState[fqn] = value as ResourceState;
         return value;
       }),
     delete: ({
