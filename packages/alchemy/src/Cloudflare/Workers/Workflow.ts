@@ -73,7 +73,7 @@ export const sleep = (
   name: string,
   duration: string | number,
 ): Effect.Effect<void, never, WorkflowStep> =>
-  WorkflowStep.asEffect().pipe(
+  WorkflowStep.pipe(
     Effect.flatMap((step) => step.sleep(name, duration)),
     Effect.orDie,
   );
@@ -85,7 +85,7 @@ export const sleepUntil = (
   name: string,
   timestamp: Date | number,
 ): Effect.Effect<void, never, WorkflowStep> =>
-  WorkflowStep.asEffect().pipe(
+  WorkflowStep.pipe(
     Effect.flatMap((step) => step.sleepUntil(name, timestamp)),
     Effect.orDie,
   );

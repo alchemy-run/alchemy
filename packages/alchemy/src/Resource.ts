@@ -288,7 +288,7 @@ export function Resource<R extends ResourceLike>(
       return new SingleShotGen(this);
     },
     pipe() {
-      return pipeArguments(this.asEffect(), arguments);
+      return pipeArguments(this, arguments);
     },
     asEffect() {
       return Effect.succeed((id: string, props: R["Props"]) =>

@@ -226,7 +226,7 @@ export const make =
           Layer.provideMerge(
             Layer.effect(
               Stack,
-              Stage.asEffect().pipe(
+              Stage.pipe(
                 Effect.map(
                   (stage) =>
                     options.stack ?? {
@@ -246,7 +246,7 @@ export const make =
       Effect.flatMap((context) =>
         Effect.all([
           effect,
-          Stack.asEffect(),
+          Stack,
           Effect.context<ROut | StackServices>(),
         ]).pipe(
           Effect.map(
@@ -265,7 +265,7 @@ export const make =
     );
 
 export const CurrentStack = Effect.serviceOption(Stack)
-  .asEffect()
+
   .pipe(Effect.map(Option.getOrUndefined));
 
 const platform = Layer.mergeAll(
@@ -284,9 +284,7 @@ const alchemy = (overrides?: { dev?: boolean }) =>
       ? Layer.provide(
           Layer.effect(
             AlchemyContext,
-            AlchemyContext.asEffect().pipe(
-              Effect.map((ctx) => ({ ...ctx, dev: overrides.dev! })),
-            ),
+            AlchemyContext.useSync((ctx) => ({ ...ctx, dev: overrides.dev! })),
           ),
           AlchemyContextLive,
         )

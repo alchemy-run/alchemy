@@ -55,7 +55,7 @@ const services = Layer.provideMerge(
   PlatformServices,
 );
 
-RpcServer.makeRpcServer(Sidecar.asEffect(), SidecarSchema).pipe(
+RpcServer.makeRpcServer(Sidecar, SidecarSchema).pipe(
   Effect.provide(services),
   Effect.scoped,
   runMain,

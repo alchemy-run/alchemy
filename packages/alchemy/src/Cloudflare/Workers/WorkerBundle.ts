@@ -170,7 +170,7 @@ const tag = Context.Service("${Self.key}")
 const layer =
   typeof entry?.build === "function"
     ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
+    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry : entry);
 
 const platform = Layer.mergeAll(
   NodeServices.layer,
@@ -189,7 +189,7 @@ const stack = Layer.succeed(
   }
 );
 
-const exportsEffect = tag.asEffect().pipe(
+const exportsEffect = tag.pipe(
   Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.provide(
     layer.pipe(

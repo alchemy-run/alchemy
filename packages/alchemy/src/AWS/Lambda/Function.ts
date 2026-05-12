@@ -387,36 +387,34 @@ export const Function: Platform<
           return key;
         }),
       get: <T>(key: string) =>
-        Config.string(key)
-          .asEffect()
-          .pipe(
-            Effect.flatMap((val) =>
-              Effect.try({
-                try: () => {
-                  const value = JSON.parse(val);
-                  if (
-                    value !== null &&
-                    typeof value === "object" &&
-                    (value as { _tag?: unknown })._tag === "Redacted" &&
-                    "value" in (value as object)
-                  ) {
-                    return Redacted.make(
-                      (value as { value: unknown }).value,
-                    ) as unknown as T;
-                  }
-                  return value as T;
-                },
-                catch: () => val, // assume it's just a string
+        Config.string(key).pipe(
+          Effect.flatMap((val) =>
+            Effect.try({
+              try: () => {
+                const value = JSON.parse(val);
+                if (
+                  value !== null &&
+                  typeof value === "object" &&
+                  (value as { _tag?: unknown })._tag === "Redacted" &&
+                  "value" in (value as object)
+                ) {
+                  return Redacted.make(
+                    (value as { value: unknown }).value,
+                  ) as unknown as T;
+                }
+                return value as T;
+              },
+              catch: () => val, // assume it's just a string
+            }),
+          ),
+          Effect.catch((cause) =>
+            Effect.die(
+              new Error(`Failed to get environment variable: ${key}`, {
+                cause,
               }),
             ),
-            Effect.catch((cause) =>
-              Effect.die(
-                new Error(`Failed to get environment variable: ${key}`, {
-                  cause,
-                }),
-              ),
-            ),
           ),
+        ),
       serve: (handler: HttpEffect) =>
         ctx.listen(makeFunctionHttpHandler(handler)),
       listen: ((
@@ -686,7 +684,7 @@ const tag = Context.Service("${Self.key}")
 const layer =
   typeof entry?.build === "function"
     ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
+    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry : entry);
 
 const platform = Layer.mergeAll(
   nodeServicesLayer,
@@ -698,8 +696,8 @@ const platform = Layer.mergeAll(
 const stack = Layer.effect(
   Stack,
   Effect.all([
-    Config.string("ALCHEMY_STACK_NAME").asEffect(),
-    Config.string("ALCHEMY_STAGE").asEffect()
+    Config.string("ALCHEMY_STACK_NAME"),
+    Config.string("ALCHEMY_STAGE")
   ]).pipe(
     Effect.map(([name, stage]) => ({
       name,
@@ -710,7 +708,7 @@ const stack = Layer.effect(
   )
 );
 
-const handlerEffect = tag.asEffect().pipe(
+const handlerEffect = tag.pipe(
   Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.flatMap(exports => exports.handler),
   Effect.provide(

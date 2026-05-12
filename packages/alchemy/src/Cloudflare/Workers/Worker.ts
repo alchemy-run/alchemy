@@ -35,11 +35,11 @@ import {
   type PlatformProps,
   type Rpc,
 } from "../../Platform.ts";
-import { isYieldableEffectLike } from "../../Util/effect.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
+import { isYieldableEffectLike } from "../../Util/effect.ts";
 import type { AiGateway } from "../AiGateway/AiGateway.ts";
 import {
   isAnalyticsEngineDataset,
@@ -51,7 +51,6 @@ import {
 } from "../Artifacts/Artifacts.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { D1Database } from "../D1/D1Database.ts";
-import { fromCloudflareFetcher } from "../Fetcher.ts";
 import type {
   Hyperdrive,
   HyperdriveDevOrigin,
@@ -1088,7 +1087,7 @@ export const bindWorker = Effect.fnUntraced(function* <Shape, Req = never>(
   // cold-start). `WorkerEnvironment` only exists at exec phase on the
   // deployed worker, so we hand `makeRpcStub` an `Effect<stub>` that
   // resolves the binding lazily on each method call.
-  const stubEff = WorkerEnvironment.asEffect().pipe(
+  const stubEff = WorkerEnvironment.pipe(
     Effect.map((env) => (env as Record<string, unknown>)[worker.LogicalId]),
   );
   return makeRpcStub<Shape>(stubEff);

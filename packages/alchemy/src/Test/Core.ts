@@ -67,9 +67,7 @@ export const resolveDev = (options: { dev?: boolean }): boolean => {
 const overrideAlchemyContext = (overrides: { dev: boolean }) =>
   Layer.effect(
     AlchemyContext,
-    AlchemyContext.asEffect().pipe(
-      Effect.map((ctx) => ({ ...ctx, ...overrides })),
-    ),
+    AlchemyContext.pipe(Effect.map((ctx) => ({ ...ctx, ...overrides }))),
   );
 
 export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;

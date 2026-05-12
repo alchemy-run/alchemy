@@ -45,7 +45,7 @@ export const AnalyticsEngineDatasetBindingLive = Layer.effect(
     return Effect.fnUntraced(function* (dataset: AnalyticsEngineDatasetLike) {
       yield* bind(dataset);
 
-      const raw = WorkerEnvironment.asEffect().pipe(
+      const raw = WorkerEnvironment.pipe(
         Effect.map(
           (env) =>
             (env as Record<string, RuntimeAnalyticsEngineDataset>)[

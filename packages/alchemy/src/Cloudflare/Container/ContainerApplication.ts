@@ -545,7 +545,7 @@ const tag = Context.Service("${Self.key}")
 const layer =
   typeof entry?.build === "function"
     ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
+    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry : entry);
 
 const platform = Layer.mergeAll(
   ${runtime === "bun" ? "BunServices.layer" : "NodeServices.layer"},
@@ -561,7 +561,7 @@ const stack = Layer.succeed(Stack, {
   resources: {}
 });
 
-const serverEffect = tag.asEffect().pipe(
+const serverEffect = tag.pipe(
   Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.flatMap(exports => exports.default),
   Effect.provide(

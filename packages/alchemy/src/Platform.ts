@@ -258,7 +258,7 @@ export const Platform = <
         );
       return Object.assign(
         function (impl: Impl) {
-          return cls.asEffect().pipe(Effect.provide(cls.make(impl)));
+          return cls.pipe(Effect.provide(cls.make(impl)));
         },
         // we splice in the Effect so this can be yielded to indicate a non-Effect native instance
         // e.g. here, we yield it - in this case we don't want to provide an implementation
@@ -278,7 +278,7 @@ export const Platform = <
       // e.g.
       // export default Cloudflare.Worker("id", { main: "./src/worker.ts" }, Effect.gen(function* () { .. })
       const cls = makeClass(id, props);
-      return cls.asEffect().pipe(Effect.provide(cls.make(impl)), effectClass);
+      return cls.pipe(Effect.provide(cls.make(impl)), effectClass);
     }
   };
 
@@ -289,18 +289,18 @@ export const Platform = <
         `Platform<${type}<${id}>>`,
       );
       static [Symbol.iterator](): Iterator<
-        Effect.Yieldable<any, void, never, Self>,
+        Effect.Effect<void, never, Self>,
         Resource,
         void
       > {
         return new SingleShotGen(this) as any;
       }
       static asEffect() {
-        return this.Self.asEffect();
+        return this.Self;
       }
       static pipe(...args: any[]) {
         // @ts-expect-error
-        return pipe(this.asEffect(), ...args);
+        return pipe(this, ...args);
       }
       static of = (shape: any) => shape;
       static make = (impl: Impl) => {
@@ -375,7 +375,7 @@ export const Platform = <
             }),
           ),
         );
-        const self = Self.asEffect() as any; // TODO(sam): why do we need to cast?
+        const self = Self as any; // TODO(sam): why do we need to cast?
 
         return Layer.provideMerge(
           Layer.mergeAll(
@@ -395,7 +395,7 @@ export const Platform = <
 
   const instance = Object.assign(constructor, resource, {
     Platform: Platform,
-    asEffect: () => resource.Self.asEffect(),
+    asEffect: () => resource.Self,
     ...methods,
   }) as any;
   return instance;
