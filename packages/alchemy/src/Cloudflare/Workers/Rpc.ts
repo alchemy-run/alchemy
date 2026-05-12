@@ -8,6 +8,7 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import type { HttpEffect } from "../../Http.ts";
+import { isYieldableEffect } from "../../Util/effect.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
 import { serveWebRequest } from "./HttpServer.ts";
 import type { ExtractRpcShape, RpcPromiseShape } from "./InferEnv.ts";
@@ -204,7 +205,7 @@ export const decodeRpcResult = (
 export const makeRpcStub = <Shape>(
   stubSource: unknown | Effect.Effect<unknown, never, never>,
 ): Shape => {
-  const isLazy = Effect.isEffect(stubSource);
+  const isLazy = isYieldableEffect(stubSource);
   const eagerFetcher = isLazy
     ? undefined
     : fromCloudflareFetcher(stubSource as cf.Fetcher);
@@ -482,14 +483,20 @@ export const makeWorkerBridge = (
       // Cloudflare invokes `WorkerEntrypoint.fetch(request)` with only the
       // primary input on the *parameter list* — `env`/`ctx` live on `this`
       // (and the runtime sometimes passes `(request, undefined, undefined)`
-      // anyway for legacy compat). The platform's underlying handler
-      // dispatch (`handle("fetch")`) follows the plain-export signature
-      // `(input, env, context)`, so we extract only the first arg from
-      // Cloudflare and forward `(input, this.env, this.ctx)`.
+      // anyway for legacy compat). Other handlers, including `scheduled`, may
+      // receive the classic `(input, env, ctx)` arguments. The platform's
+      // underlying handler dispatch (`handle("fetch")`, `handle("scheduled")`,
+      // etc.) follows the plain-export signature `(input, env, context)`, so
+      // prefer explicit handler args when Cloudflare provides them and fall
+      // back to the WorkerEntrypoint instance fields.
       for (const method of ExportedHandlerMethods) {
-        (this as any)[method] = async (input: unknown) => {
+        (this as any)[method] = async (
+          input: unknown,
+          envArg?: unknown,
+          ctxArg?: unknown,
+        ) => {
           const def = await getDefault();
-          return def?.[method]?.(input, self.env, self.ctx);
+          return def?.[method]?.(input, envArg ?? self.env, ctxArg ?? self.ctx);
         };
       }
 

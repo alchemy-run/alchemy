@@ -68,7 +68,7 @@ Standalone how-to pages. Each solves a specific problem; read in any order.
 
 - [Continuous Integration](https://v2.alchemy.run/guides/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
 - [Circular Bindings](https://v2.alchemy.run/guides/circular-bindings) — How to model two services that reference each other (Worker A ↔ Worker B, Lambda ↔ Lambda) using tagged classes and Layers.
-- [CLI Reference](https://v2.alchemy.run/guides/cli) — All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, bootstrap, login, profile, and state.
+- [CLI Reference](https://v2.alchemy.run/guides/cli) — All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, aws, cloudflare, login, profile, and state.
 - [Writing a Custom Resource Provider](https://v2.alchemy.run/guides/custom-provider) — Add support for a new cloud or third-party API by declaring a Resource type and implementing its lifecycle as an Effect Layer.
 - [Writing a Custom State Store](https://v2.alchemy.run/guides/custom-state-store) — Build a Postgres-backed Alchemy state store step by step — implement the StateService interface, plug it into a stack, and test it end-to-end.
 - [Effect HTTP API](https://v2.alchemy.run/guides/effect-http-api) — Build a schema-validated HTTP API with Effect's HttpApi module and deploy it as a Cloudflare Worker.
@@ -76,10 +76,11 @@ Standalone how-to pages. Each solves a specific problem; read in any order.
 - [Frontend frameworks](https://v2.alchemy.run/guides/frontends) — Deploy Vite-based frameworks (TanStack Start, Astro, SolidStart, Nuxt, React) and any custom-built static site (Hugo, Eleventy) to Cloudflare with one declaration.
 - [Migrating from v1](https://v2.alchemy.run/guides/migrating-from-v1) — Migrate your Alchemy v1 (async/await) project to Alchemy v2.
 - [Privacy & Telemetry](https://v2.alchemy.run/guides/privacy) — What data the Alchemy CLI and Cloudflare State Store collect, where it goes, and how to opt out.
+- [Secrets and env vars](https://v2.alchemy.run/guides/secrets) — Wire OPENAI_API_KEY (or any .env value) into a Cloudflare Worker as a secret_text binding using Alchemy.Secret and Effect's Config.
 
 ## Blog
 
-- [Hello World](https://v2.alchemy.run/blog/2026-04-13-hello-world) — Introducing the alchemy blog — a place for updates, deep dives, and patterns for building cloud programs with Effect.
+- [Secrets and Variables](https://v2.alchemy.run/blog/2026-05-11-secrets-and-variables) — Bind a value into your deploy target's env and get back a typed runtime accessor — the same one-liner works for Cloudflare Workers and AWS Lambda.
 
 ## Providers — auto-generated API reference
 

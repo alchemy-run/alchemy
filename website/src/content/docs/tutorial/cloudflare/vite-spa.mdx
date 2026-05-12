@@ -329,6 +329,34 @@ Add the bucket to the Vite worker's `bindings` map:
 The key (`BUCKET`) is the field name on `env`; the value identifies
 the resource. `env.BUCKET` is now typed as `R2Bucket` end to end.
 
+## Pull in Cloudflare's binding types
+
+`InferEnv` maps each binding to a Cloudflare runtime type
+(`R2Bucket`, `Service`, `KVNamespace`, …) — those types live in
+`@cloudflare/workers-types`. Add it to your `tsconfig.json` so the
+TypeScript checker can find them:
+
+```sh
+bun add -d @cloudflare/workers-types
+```
+
+```diff lang="json"
+// tsconfig.json
+ {
+   "compilerOptions": {
+     "types": [
+       "bun",
+-      "vite/client"
++      "vite/client",
++      "@cloudflare/workers-types"
+     ]
+   }
+ }
+```
+
+Without this you'll see `Cannot find name 'R2Bucket'` (or `Service`,
+etc.) the moment you reference `env.BUCKET` inside a route handler.
+
 ## Option 1 — call the binding directly
 
 Inside a server route, `env.BUCKET` is the standard Cloudflare R2

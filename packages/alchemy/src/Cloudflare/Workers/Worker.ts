@@ -35,6 +35,7 @@ import {
   type PlatformProps,
   type Rpc,
 } from "../../Platform.ts";
+import { isYieldableEffectLike } from "../../Util/effect.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import * as Serverless from "../../Serverless/index.ts";
@@ -745,17 +746,10 @@ export const Worker: Platform<
           | Effect.Effect<WorkerBindingResource>;
         // Bindings can be passed as a plain resource value, an Effect that
         // yields a resource, or an effect-class (e.g. a `Cloudflare.Worker`
-        // class). Effect-classes are plain functions so `Effect.isEffect`
-        // returns false, but they implement `[Symbol.iterator]` (via
-        // `effectClass`) so `yield* bindingEff` resolves them through
-        // their own SelfLayer the same way `bindWorker(Backend)` does.
-        const isEffectClass =
-          typeof bindingEff === "function" &&
-          typeof (bindingEff as any)?.asEffect === "function";
-        const binding =
-          Effect.isEffect(bindingEff) || isEffectClass
-            ? ((yield* bindingEff as Effect.Effect<unknown>) as WorkerBindingResource)
-            : bindingEff;
+        // class). Resolve the yieldable forms before deriving binding metadata.
+        const binding = isYieldableEffectLike(bindingEff)
+          ? ((yield* bindingEff as Effect.Effect<unknown>) as WorkerBindingResource)
+          : bindingEff;
 
         const bindingMeta: InputProps<WorkerBinding> | undefined = isAssets(
           binding,
@@ -1064,17 +1058,10 @@ export const bindWorker = Effect.fnUntraced(function* <Shape, Req = never>(
     | (Worker & Rpc<Shape>)
     | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
 ) {
-  // Worker classes (built via `Cloudflare.Worker<Self>()(...)`) are plain
-  // functions, so `Effect.isEffect` returns false. They do implement
-  // `[Symbol.iterator]` via `effectClass`, so `yield*` resolves them
-  // through their own SelfLayer.
-  const isEffectClass =
-    typeof workerEff === "function" &&
-    typeof (workerEff as any)?.asEffect === "function";
-  const worker =
-    Effect.isEffect(workerEff) || isEffectClass
-      ? yield* workerEff as Effect.Effect<Worker & Rpc<Shape>, never, Req>
-      : workerEff;
+  // Worker classes and regular Effects are both yieldable here.
+  const worker = isYieldableEffectLike(workerEff)
+    ? yield* workerEff as Effect.Effect<Worker & Rpc<Shape>, never, Req>
+    : workerEff;
   const self = yield* Worker;
   yield* self.bind`${worker}`({
     bindings: [

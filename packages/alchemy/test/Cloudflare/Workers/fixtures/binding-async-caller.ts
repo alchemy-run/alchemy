@@ -10,7 +10,14 @@
  * assert against it directly instead of spelunking worker logs.
  */
 export default {
-  async fetch(request: Request, env: { TARGET: Service }): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: {
+      TARGET: Service & {
+        greet: (name: string) => Promise<string>;
+      };
+    },
+  ): Promise<Response> {
     const name = new URL(request.url).searchParams.get("name") ?? "world";
     try {
       const greeting = await env.TARGET.greet(name);
