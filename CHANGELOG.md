@@ -1,3 +1,32 @@
+## v2.0.0-beta.37
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Cross-stack and cross-stage references &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/300 [<samp>(94ea3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/94ea3129)
+- **Cloudflare**:
+  - Empty r2 bucket on destroy &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/276 [<samp>(2412a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/2412a3c2)
+  - Worker to worker binding types and tanstack start bridge example and docs &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/310 [<samp>(30dd9)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/30dd99c9)
+  - **Workflow**: Type workflow input and output &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/304 [<samp>(1dafd)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1dafd77c)
+- **cloudflare**:
+  - Add Worker cron triggers &nbsp;-&nbsp; by **Dawson** and **sam** in https://github.com/alchemy-run/alchemy-effect/issues/288 [<samp>(cae20)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/cae20c98)
+  - Add Analytics Engine binding &nbsp;-&nbsp; by **Dawson** and **sam** in https://github.com/alchemy-run/alchemy-effect/issues/286 [<samp>(ba8b3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ba8b3a16)
+- **core**:
+  - Add Alchemy.Secret and Alchemy.Variable &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/290 [<samp>(88611)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/88611eac)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Remove deprecated libsodium wrapper types &nbsp;-&nbsp; by **齐天大圣** in https://github.com/alchemy-run/alchemy-effect/issues/311 [<samp>(f3f70)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f3f7079a)
+- **Cloudflare**:
+  - **D1**: Make prepare/bind synchronous &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/299 [<samp>(6e58d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6e58da04)
+- **cloudflare**:
+  - Include wasm modules in local sidecar bundle &nbsp;-&nbsp; by **Baptiste Arnaud** and **sam** in https://github.com/alchemy-run/alchemy-effect/issues/305 [<samp>(1926d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1926d580)
+- **core**:
+  - Throw on JS string-coercion of unresolved Outputs &nbsp;-&nbsp; by **Zé Yuri** in https://github.com/alchemy-run/alchemy-effect/issues/306 [<samp>(d1b12)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d1b12ac7)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.36...HEAD)
+
+---
+
 ## v2.0.0-beta.36
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
