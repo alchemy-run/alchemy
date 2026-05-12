@@ -133,6 +133,37 @@ export const Traces = Axiom.Dataset(
 The function runs once at plan time, after the stage is resolved.
 Use it anywhere a resource accepts a `props` object.
 
+## Cross-stack references
+
+A typed `Alchemy.Stack` handle lets one stack read another's
+persisted outputs at plan time:
+
+```typescript
+// backend/src/Stack.ts — typed handle shared across packages
+export class Backend extends Alchemy.Stack<
+  Backend,
+  { url: string }
+>()("Backend") {}
+```
+
+```typescript
+// frontend/alchemy.run.ts — reads the matching stage of Backend
+const backend = yield* Backend;             // current stage
+const pinned = yield* Backend.stage.prod;   // pinned stage
+yield* Cloudflare.Vite("Website", {
+  env: { VITE_API_URL: backend.url },
+});
+```
+
+`yield* Backend` defaults to the **current stage** — `sam`
+frontend reads `sam` backend, `pr-42` reads `pr-42`. Use
+`Backend.stage.<name>` to pin to a specific stage instead.
+
+See [References](/concepts/references) for the underlying
+operators and [Monorepos](/guides/monorepo) for the
+end-to-end walkthrough (package layout, schema sharing, deploy
+ordering).
+
 ## Stack and stages — the engine
 
 After every deploy, alchemy persists the state of each resource so

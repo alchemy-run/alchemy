@@ -2663,3 +2663,184 @@ describe("engine-level adoption", () => {
     }),
   );
 });
+
+describe("RefExpr resolution", () => {
+  const seedAt = (
+    stack: string,
+    stage: string,
+    resources: Record<string, ResourceState>,
+  ) =>
+    Effect.gen(function* () {
+      const state = yield* State;
+      for (const [fqn, value] of Object.entries(resources)) {
+        yield* state.set({ stack, stage, fqn, value });
+      }
+    });
+
+  const sharedAttr = {
+    string: "shared-string",
+    stringArray: ["shared"],
+    stableString: "shared-stable",
+    stableArray: ["shared-stable"],
+    replaceString: undefined,
+    redacted: undefined,
+    redactedArray: undefined,
+  };
+
+  const sharedResourceState = {
+    instanceId,
+    providerVersion: 0,
+    logicalId: "Shared",
+    fqn: "Shared",
+    namespace: undefined,
+    resourceType: "Test.TestResource",
+    status: "created" as ResourceStatus,
+    props: { string: "shared-string" },
+    attr: sharedAttr,
+    bindings: [],
+    downstream: [],
+  } as ResourceState;
+
+  test(
+    "resolves a cross-stage Ref to the seeded resource's attributes",
+    Effect.gen(function* () {
+      yield* seedAt(TEST_STACK, "other", { Shared: sharedResourceState });
+      const plan = yield* Effect.gen(function* () {
+        const shared = yield* TestResource.ref("Shared", { stage: "other" });
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "shared-string",
+      });
+    }),
+  );
+
+  test(
+    "resolves a cross-stack Ref using the explicit stack option",
+    Effect.gen(function* () {
+      yield* seedAt("other-stack", TEST_STAGE, {
+        Shared: sharedResourceState,
+      });
+      const plan = yield* Effect.gen(function* () {
+        const shared = yield* TestResource.ref("Shared", {
+          stack: "other-stack",
+        });
+        yield* TestResource("Consumer", {
+          string: shared.string,
+        });
+      }).pipe(makePlan);
+
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "shared-string",
+      });
+    }),
+  );
+
+  test(
+    "Ref to a resource in the current stack/stage is resolved",
+    Effect.gen(function* () {
+      yield* seed({ Shared: sharedResourceState });
+      const plan = yield* Effect.gen(function* () {
+        const shared = yield* TestResource.ref("Shared");
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "shared-string",
+      });
+    }),
+  );
+
+  test(
+    "missing Ref target dies with InvalidReferenceError",
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const shared = yield* TestResource.ref("Ghost", { stage: "other" });
+          yield* TestResource("Consumer", { string: shared.string });
+        }).pipe(makePlan),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as Output.InvalidReferenceError;
+        expect(err._tag).toBe("InvalidReferenceError");
+        expect(err.resourceId).toBe("Ghost");
+        expect(err.stage).toBe("other");
+      }
+    }),
+  );
+});
+
+describe("StackRefExpr resolution", () => {
+  const setStackOutput = (stack: string, stage: string, value: unknown) =>
+    Effect.gen(function* () {
+      const state = yield* State;
+      yield* state.setOutput({ stack, stage, value });
+    });
+
+  test(
+    "resolves an Output.stackRef to the persisted stack output",
+    Effect.gen(function* () {
+      yield* setStackOutput("Backend", TEST_STAGE, {
+        url: "https://api.example.com",
+      });
+      const plan = yield* Effect.gen(function* () {
+        const backend = yield* Output.stackRef<{ url: string }>("Backend");
+        yield* TestResource("Consumer", {
+          string: (backend as any).url,
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "https://api.example.com",
+      });
+    }),
+  );
+
+  test(
+    "resolves an explicit stage on the stackRef",
+    Effect.gen(function* () {
+      yield* setStackOutput("Backend", "prod", {
+        url: "https://prod.example.com",
+      });
+      const plan = yield* Effect.gen(function* () {
+        const backend = yield* Output.stackRef<{ url: string }>("Backend", {
+          stage: "prod",
+        });
+        yield* TestResource("Consumer", {
+          string: (backend as any).url,
+        });
+      }).pipe(makePlan);
+
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "https://prod.example.com",
+      });
+    }),
+  );
+
+  test(
+    "missing stack output dies with InvalidReferenceError",
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const backend = yield* Output.stackRef<{ url: string }>("Backend", {
+            stage: "ghost",
+          });
+          yield* TestResource("Consumer", {
+            string: (backend as any).url,
+          });
+        }).pipe(makePlan),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as Output.InvalidReferenceError;
+        expect(err._tag).toBe("InvalidReferenceError");
+        expect(err.stack).toBe("Backend");
+        expect(err.stage).toBe("ghost");
+      }
+    }),
+  );
+});

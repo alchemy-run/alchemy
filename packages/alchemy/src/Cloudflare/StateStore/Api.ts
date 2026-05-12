@@ -29,7 +29,7 @@ export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
-export const STATE_STORE_VERSION = 3 as const;
+export const STATE_STORE_VERSION = 4 as const;
 
 /**
  * Hard-coded OTLP/HTTP endpoints. Point at the public ingest relay
@@ -239,6 +239,39 @@ export default Worker(
               Effect.withSpan("state_store.getReplacedResources", {
                 attributes: {
                   "alchemy.state_store.op": "getReplacedResources",
+                  "alchemy.state_store.stack": params.stack,
+                  "alchemy.state_store.stage": params.stage,
+                },
+              }),
+            ),
+        )
+        .handle("getStackOutput", ({ params }) =>
+          store
+            .getByName(params.stack)
+            .getOutput({ stage: params.stage })
+            .pipe(
+              Effect.withSpan("state_store.getStackOutput", {
+                attributes: {
+                  "alchemy.state_store.op": "getStackOutput",
+                  "alchemy.state_store.stack": params.stack,
+                  "alchemy.state_store.stage": params.stage,
+                },
+              }),
+            ),
+        )
+        .handle("setStackOutput", ({ params, payload }) =>
+          store
+            .getByName(params.stack)
+            .setOutput({ stage: params.stage, value: payload as any })
+            .pipe(
+              Effect.tap(() =>
+                store
+                  .getByName(Store.ROOT_DO_NAME)
+                  .registerStack({ stack: params.stack }),
+              ),
+              Effect.withSpan("state_store.setStackOutput", {
+                attributes: {
+                  "alchemy.state_store.op": "setStackOutput",
                   "alchemy.state_store.stack": params.stack,
                   "alchemy.state_store.stage": params.stage,
                 },

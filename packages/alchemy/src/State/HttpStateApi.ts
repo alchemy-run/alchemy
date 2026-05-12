@@ -155,6 +155,25 @@ export const GetReplacedResources = HttpApiEndpoint.get(
   },
 );
 
+export const GetStackOutput = HttpApiEndpoint.get(
+  "getStackOutput",
+  "/state/stacks/:stack/stages/:stage/output",
+  {
+    params: StackStage,
+    success: Schema.UndefinedOr(ResourceStateSchema),
+  },
+);
+
+export const SetStackOutput = HttpApiEndpoint.put(
+  "setStackOutput",
+  "/state/stacks/:stack/stages/:stage/output",
+  {
+    params: StackStage,
+    payload: ResourceStateSchema,
+    success: ResourceStateSchema,
+  },
+);
+
 /** Response shape for the unauthenticated `/version` probe. */
 export const VersionResponse = Schema.Struct({
   version: Schema.Number,
@@ -179,6 +198,8 @@ export class StateGroup extends HttpApiGroup.make("state")
   .add(DeleteState)
   .add(GetReplacedResources)
   .add(DeleteStack)
+  .add(GetStackOutput)
+  .add(SetStackOutput)
   .middleware(StateAuth) {}
 
 export class VersionGroup extends HttpApiGroup.make("version").add(

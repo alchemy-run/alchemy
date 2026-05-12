@@ -129,6 +129,27 @@ export const makeHttpStateStore = ({
             query: request.stage === undefined ? {} : { stage: request.stage },
           })
           .pipe(Effect.asVoid, mapStateStoreError),
+      getOutput: (request) =>
+        state
+          .getStackOutput({
+            params: { stack: request.stack, stage: request.stage },
+          })
+          .pipe(
+            Effect.map((s) =>
+              s == null ? undefined : reviveStateRecursive(s),
+            ),
+            mapStateStoreError,
+          ),
+      setOutput: (request) =>
+        state
+          .setStackOutput({
+            params: { stack: request.stack, stage: request.stage },
+            payload: encodeState(request.value as any),
+          })
+          .pipe(
+            Effect.map(() => request.value),
+            mapStateStoreError,
+          ),
     };
     return service;
   });

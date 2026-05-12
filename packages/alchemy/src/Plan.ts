@@ -349,10 +349,53 @@ export const make = <A>(
           });
         } else if (Output.isLiteralExpr(expr)) {
           return expr.value;
+        } else if (Output.isRefExpr(expr)) {
+          const refStack = expr.stack ?? stackName;
+          const refStage = expr.stage ?? stage;
+          const refState = yield* state
+            .get({
+              stack: refStack,
+              stage: refStage,
+              fqn: expr.resourceId,
+            })
+            .pipe(Effect.orDie);
+          if (!refState) {
+            return yield* Effect.die(
+              new Output.InvalidReferenceError({
+                message: `Reference to '${expr.resourceId}' in stack '${refStack}' and stage '${refStage}' not found. Have you deployed '${refStage}' of '${refStack}'?`,
+                stack: refStack,
+                stage: refStage,
+                resourceId: expr.resourceId,
+              }),
+            );
+          }
+          return refState.attr;
+        } else if (Output.isStackRefExpr(expr)) {
+          const refStack = expr.stack;
+          const refStage = expr.stage ?? stage;
+          const output = yield* state
+            .getOutput({
+              stack: refStack,
+              stage: refStage,
+            })
+            .pipe(Effect.orDie);
+          if (output == null) {
+            return yield* Effect.die(
+              new Output.InvalidReferenceError({
+                message: `Reference to stack '${refStack}' at stage '${refStage}' not found. Have you deployed stage '${refStage}' of '${refStack}'?`,
+                stack: refStack,
+                stage: refStage,
+                resourceId: refStack,
+              }),
+            );
+          }
+          return output;
         } else if (Output.isNamedExpr(expr)) {
           return yield* resolveOutput(expr.expr);
         }
-        return yield* Effect.die(new Error("Not implemented yet"));
+        return yield* Effect.die(
+          new Error("Not implemented yet" + (expr as any).kind),
+        );
       });
 
     // map of resource FQN -> its downstream dependencies (resources that depend on it)

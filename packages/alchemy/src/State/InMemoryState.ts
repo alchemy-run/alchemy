@@ -13,14 +13,18 @@ export const inMemoryState = (
     StackId,
     Record<StageId, Record<Fqn, ResourceState>>
   > = {},
+  initialOutputs: Record<StackId, Record<StageId, unknown>> = {},
 ) =>
   Layer.effect(
     State,
-    Effect.succeed(InMemoryService(initialState)).pipe(recordStateStoreInit),
+    Effect.succeed(InMemoryService(initialState, initialOutputs)).pipe(
+      recordStateStoreInit,
+    ),
   );
 
 export const InMemoryService = (
   state: Record<StackId, Record<StageId, Record<Fqn, ResourceState>>> = {},
+  outputs: Record<StackId, Record<StageId, unknown>> = {},
 ) =>
   State.of({
     id: "inmemory",
@@ -60,12 +64,13 @@ export const InMemoryService = (
       stage: string;
       fqn: string;
       value: V;
-    }) => {
-      const stackState = (state[stack] ??= {});
-      const stageState = (stackState[stage] ??= {});
-      stageState[fqn] = value;
-      return Effect.succeed(value);
-    },
+    }) =>
+      Effect.sync(() => {
+        const stackState = (state[stack] ??= {});
+        const stageState = (stackState[stage] ??= {});
+        stageState[fqn] = value;
+        return value;
+      }),
     delete: ({
       stack,
       stage,
@@ -74,7 +79,7 @@ export const InMemoryService = (
       stack: string;
       stage: string;
       fqn: string;
-    }) => Effect.succeed(delete state[stack]?.[stage]?.[fqn]),
+    }) => Effect.sync(() => delete state[stack]?.[stage]?.[fqn]),
     deleteStack: ({ stack, stage }: { stack: string; stage?: string }) =>
       Effect.sync(() => {
         if (stage === undefined) {
@@ -87,4 +92,20 @@ export const InMemoryService = (
       Effect.succeed(
         Array.from(Object.keys(state[stack]?.[stage] ?? {}) ?? []),
       ),
+    getOutput: ({ stack, stage }: { stack: string; stage: string }) =>
+      Effect.succeed(outputs[stack]?.[stage]),
+    setOutput: ({
+      stack,
+      stage,
+      value,
+    }: {
+      stack: string;
+      stage: string;
+      value: unknown;
+    }) =>
+      Effect.sync(() => {
+        const stackOutputs = (outputs[stack] ??= {});
+        stackOutputs[stage] = value;
+        return value;
+      }),
   });

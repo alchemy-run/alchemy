@@ -48,6 +48,7 @@ test(
     const { url } = yield* stack;
     expect(url).toBeString();
   }),
+  { timeout: 180_000 },
 );
 
 test(
