@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 
 import { Box, Text } from "ink";
-import type { CRUD, Plan, TaskApply, TaskDelete } from "../../../Plan.ts";
+import type { CRUD, Plan, ActionApply, ActionDelete } from "../../../Plan.ts";
 
 import type {
   ApplyEvent,
@@ -13,7 +13,7 @@ import {
   buildNamespaceTree,
   flattenTree,
   type FlattenedItem,
-  type TaskAction,
+  type ActionVerb,
 } from "../../NamespaceTree.ts";
 
 interface ProgressEventSource {
@@ -58,8 +58,8 @@ export type ProgressRow =
       type: "task";
       id: string;
       depth: number;
-      taskType: string;
-      action: TaskAction;
+      actionType: string;
+      action: ActionVerb;
     };
 
 const getTaskKey = (item: FlattenedItem) => item.path.join("/");
@@ -75,9 +75,9 @@ export const buildProgressRows = (plan: Plan): ProgressRow[] => {
     ),
   ] as PlanItem[];
   const taskItems = [
-    ...Object.values(plan.tasks ?? {}),
-    ...Object.values(plan.taskDeletions ?? {}),
-  ].filter((t): t is TaskApply | TaskDelete => t !== undefined);
+    ...Object.values(plan.actions ?? {}),
+    ...Object.values(plan.actionDeletions ?? {}),
+  ].filter((t): t is ActionApply | ActionDelete => t !== undefined);
   const tree = buildNamespaceTree(items, taskItems);
   return flattenTree(tree)
     .filter((item) => item.type !== "binding")
@@ -91,14 +91,14 @@ export const buildProgressRows = (plan: Plan): ProgressRow[] => {
           action: item.action,
         };
       }
-      if (item.type === "task") {
+      if (item.type === "action") {
         return {
           key: getTaskKey(item),
           type: "task" as const,
           id: item.id,
           depth: item.depth,
-          taskType: item.taskType ?? "unknown",
-          action: item.action as TaskAction,
+          actionType: item.actionType ?? "unknown",
+          action: item.action as ActionVerb,
         };
       }
       return {
@@ -173,7 +173,7 @@ const buildInitialTasks = (rows: ProgressRow[]) =>
                 {
                   key: row.key,
                   id: row.id,
-                  type: row.taskType,
+                  type: row.actionType,
                   // `noop` tasks are skipped — render as gray `•` from the start
                   // rather than briefly flashing the `ran` cyan styling.
                   status:
@@ -293,11 +293,11 @@ export function PlanProgress(props: PlanProgressProps): JSX.Element {
                   <Text color={color}>{icon} </Text>
                 </Box>
                 <Text bold>{row.id}</Text>
-                <Text dimColor> ({row.taskType})</Text>
+                <Text dimColor> ({row.actionType})</Text>
                 <Text color={color}> {label}</Text>
                 <Text color="cyan" dimColor>
                   {" "}
-                  [task]
+                  [action]
                 </Text>
               </Box>
               {t?.message ? (
@@ -378,7 +378,7 @@ function statusColor(
 }
 
 function taskIcon(
-  action: TaskAction,
+  action: ActionVerb,
   status: ApplyStatus,
   spinnerChar: string,
 ): string {

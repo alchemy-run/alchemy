@@ -6,14 +6,14 @@ import type {
   Plan as AlchemyPlan,
   BindingAction,
   CRUD,
-  TaskApply,
-  TaskDelete,
+  ActionApply,
+  ActionDelete,
 } from "../../../Plan.ts";
 import {
   buildNamespaceTree,
   flattenTree,
   type DerivedAction,
-  type TaskAction,
+  type ActionVerb,
 } from "../../NamespaceTree.ts";
 
 export interface PlanProps {
@@ -31,9 +31,9 @@ export function Plan({ plan }: PlanProps): JSX.Element {
   const taskItems = useMemo(
     () =>
       [
-        ...Object.values(plan.tasks ?? {}),
-        ...Object.values(plan.taskDeletions ?? {}),
-      ].filter((t): t is TaskApply | TaskDelete => t !== undefined),
+        ...Object.values(plan.actions ?? {}),
+        ...Object.values(plan.actionDeletions ?? {}),
+      ].filter((t): t is ActionApply | ActionDelete => t !== undefined),
     [plan],
   );
 
@@ -125,7 +125,7 @@ export function Plan({ plan }: PlanProps): JSX.Element {
             );
           }
 
-          if (item.type === "task") {
+          if (item.type === "action") {
             return (
               <Box key={key} flexDirection="row">
                 <Text>{indent}</Text>
@@ -136,10 +136,10 @@ export function Plan({ plan }: PlanProps): JSX.Element {
                   <Text bold>{item.id}</Text>
                 </Box>
                 <Box marginLeft={1}>
-                  <Text color="blackBright">({item.taskType})</Text>
+                  <Text color="blackBright">({item.actionType})</Text>
                 </Box>
                 <Box marginLeft={1}>
-                  <Text color="cyan">[task]</Text>
+                  <Text color="cyan">[action]</Text>
                 </Box>
               </Box>
             );
@@ -173,7 +173,7 @@ export function Plan({ plan }: PlanProps): JSX.Element {
 
 type Color = Parameters<typeof Text>[0]["color"];
 
-type AnyAction = CRUD["action"] | BindingAction | DerivedAction | TaskAction;
+type AnyAction = CRUD["action"] | BindingAction | DerivedAction | ActionVerb;
 
 const getActionColor = (action: AnyAction): Color =>
   ({

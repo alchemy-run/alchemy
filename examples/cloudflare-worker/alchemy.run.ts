@@ -8,10 +8,10 @@ import { Bucket } from "./src/Bucket.ts";
 import SecondaryApiLive, { SecondaryApi } from "./src/SecondaryApi.ts";
 import WorkerTagLive, { WorkerTag } from "./src/WorkerTag.ts";
 
-// Demo Task — runs at deploy time when its input (the resolved deployed
+// Demo Action — runs at deploy time when its input (the resolved deployed
 // URL) changes. Logs the new URL and returns a tiny manifest used as the
 // stack output. Re-deploys with no changes skip the body.
-const AnnounceDeploy = Alchemy.Task(
+const AnnounceDeploy = Alchemy.Action(
   "AnnounceDeploy",
   (input: { url: string; bucket: string }) =>
     Effect.gen(function* () {

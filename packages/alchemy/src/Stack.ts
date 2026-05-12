@@ -20,7 +20,7 @@ import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
-import type { TaskLike } from "./Task.ts";
+import type { ActionLike } from "./Action.ts";
 import type { State } from "./State/State.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
 import { effectClass, taggedFunction } from "./Util/effect.ts";
@@ -166,8 +166,8 @@ export interface StackSpec<Output = any> {
     [logicalId: string]: ResourceBinding[];
   };
   /** Tasks registered on the stack, keyed by FQN. */
-  tasks: {
-    [logicalId: string]: TaskLike;
+  actions: {
+    [logicalId: string]: ActionLike;
   };
   output: Output;
 }
@@ -234,7 +234,7 @@ export const make =
                       stage,
                       resources: {},
                       bindings: {},
-                      tasks: {},
+                      actions: {},
                     },
                 ),
               ),

@@ -25,8 +25,8 @@ import {
   type Apply,
   type Delete,
   type Plan,
-  type TaskApply,
-  type TaskDelete,
+  type ActionApply,
+  type ActionDelete,
 } from "./Plan.ts";
 import { findProviderByType } from "./Provider.ts";
 import type { ResourceBinding } from "./Resource.ts";
@@ -38,12 +38,12 @@ import {
   type CreatingResourceState,
   type DeletingResourceState,
   type PersistedState,
-  type RanTaskState,
+  type RanActionState,
   type ReplacedResourceState,
   type ReplacingResourceState,
   type ResourceState,
-  type RunningTaskState,
-  type TaskState,
+  type RunningActionState,
+  type ActionState,
   type UpdatedResourceState,
   type UpdatingReourceState,
   State,
@@ -247,9 +247,9 @@ const executePlan = Effect.fnUntraced(function* (
   // Resources and tasks share the same FQN namespace and DAG, so the
   // scheduler tracks them together. Each entry gets a single Deferred that
   // signals "my output is available in `tracker`."
-  const allNodes: Record<string, Apply | TaskApply> = {
+  const allNodes: Record<string, Apply | ActionApply> = {
     ...plan.resources,
-    ...plan.tasks,
+    ...plan.actions,
   };
 
   const ready = Object.fromEntries(
@@ -297,10 +297,10 @@ const executePlan = Effect.fnUntraced(function* (
 
   yield* Effect.all(
     Object.entries(allNodes).map(([fqn, node]) =>
-      (node as TaskApply).kind === "task"
-        ? executeTaskNode(
+      (node as ActionApply).kind === "action"
+        ? executeActionNode(
             fqn,
-            node as TaskApply,
+            node as ActionApply,
             tracker,
             ready,
             readyStable,
@@ -985,9 +985,9 @@ const executeNode = (
 // `--force` is set). The output value is written to `tracker[fqn].output`
 // so downstream Output evaluation works identically to resource attrs.
 
-const executeTaskNode = (
+const executeActionNode = (
   fqn: string,
-  node: TaskApply,
+  node: ActionApply,
   tracker: Record<string, ResourceTracker>,
   ready: Record<string, Deferred.Deferred<void>>,
   readyStable: Record<string, Deferred.Deferred<void>>,
@@ -1015,11 +1015,11 @@ const executeTaskNode = (
   failures: LifecycleFailure[],
 ): Effect.Effect<void, never, any> =>
   Effect.gen(function* () {
-    const task = node.task;
+    const task = node.def;
     const logicalId = task.LogicalId;
     const namespace = task.Namespace;
 
-    const commit = <S extends TaskState>(value: Omit<S, "namespace">) =>
+    const commit = <S extends ActionState>(value: Omit<S, "namespace">) =>
       state.set({
         stack: stackName,
         stage,
@@ -1069,12 +1069,12 @@ const executeTaskNode = (
     const resolvedInput = (yield* Output.evaluate(node.input, outputs)) as any;
     const inputHashValue = yield* hashInput(resolvedInput);
 
-    yield* commit<RunningTaskState>({
-      kind: "task",
+    yield* commit<RunningActionState>({
+      kind: "action",
       status: "running",
       fqn,
       logicalId,
-      taskType: task.Type,
+      actionType: task.Type,
       inputHash: inputHashValue,
       input: resolvedInput,
       downstream: node.downstream,
@@ -1083,12 +1083,12 @@ const executeTaskNode = (
 
     const result = yield* task.Run(resolvedInput);
 
-    yield* commit<RanTaskState>({
-      kind: "task",
+    yield* commit<RanActionState>({
+      kind: "action",
       status: "ran",
       fqn,
       logicalId,
-      taskType: task.Type,
+      actionType: task.Type,
       inputHash: inputHashValue,
       input: resolvedInput,
       output: result,
@@ -1113,8 +1113,8 @@ const executeTaskNode = (
       Effect.gen(function* () {
         failures.push({
           fqn,
-          logicalId: node.task.LogicalId,
-          type: node.task.Type,
+          logicalId: node.def.LogicalId,
+          type: node.def.Type,
           cause,
         });
         yield* Deferred.failCause(ready[fqn], cause as Cause.Cause<never>);
@@ -1124,18 +1124,18 @@ const executeTaskNode = (
         );
         yield* session.emit({
           kind: "status-change",
-          id: node.task.LogicalId,
-          type: node.task.Type,
+          id: node.def.LogicalId,
+          type: node.def.Type,
           status: "fail",
         });
       }),
     ),
-    Effect.withSpan("apply.task", {
+    Effect.withSpan("apply.action", {
       attributes: {
-        "alchemy.task.fqn": fqn,
-        "alchemy.task.type": node.task.Type,
-        "alchemy.task.logical_id": node.task.LogicalId,
-        "alchemy.task.action": node.action,
+        "alchemy.action.fqn": fqn,
+        "alchemy.action.type": node.def.Type,
+        "alchemy.action.logical_id": node.def.LogicalId,
+        "alchemy.action.verb": node.action,
       },
     }),
   ) as Effect.Effect<void, never, any>;
@@ -1271,7 +1271,7 @@ const converge = Effect.fnUntraced(function* (
     // last applied with (e.g. an upstream resource produced new attrs in
     // this pass). Skipped (noop) tasks are not re-checked here — their
     // recorded inputHash is authoritative until the next plan.
-    for (const [fqn, node] of Object.entries(plan.tasks)) {
+    for (const [fqn, node] of Object.entries(plan.actions)) {
       if (node.action !== "run") continue;
       if (!tracker[fqn]) continue;
 
@@ -1291,36 +1291,36 @@ const converge = Effect.fnUntraced(function* (
         stage,
         fqn,
         value: {
-          kind: "task",
+          kind: "action",
           status: "running",
           fqn,
-          logicalId: node.task.LogicalId,
-          namespace: node.task.Namespace,
-          taskType: node.task.Type,
+          logicalId: node.def.LogicalId,
+          namespace: node.def.Namespace,
+          actionType: node.def.Type,
           inputHash: newHash,
           input: newInput,
           downstream: node.downstream,
-        } satisfies RunningTaskState,
+        } satisfies RunningActionState,
       });
 
-      const result = yield* node.task.Run(newInput);
+      const result = yield* node.def.Run(newInput);
 
       yield* state.set({
         stack: stackName,
         stage,
         fqn,
         value: {
-          kind: "task",
+          kind: "action",
           status: "ran",
           fqn,
-          logicalId: node.task.LogicalId,
-          namespace: node.task.Namespace,
-          taskType: node.task.Type,
+          logicalId: node.def.LogicalId,
+          namespace: node.def.Namespace,
+          actionType: node.def.Type,
           inputHash: newHash,
           input: newInput,
           output: result,
           downstream: node.downstream,
-        } satisfies RanTaskState,
+        } satisfies RanActionState,
       });
 
       tracker[fqn] = {
@@ -1330,8 +1330,8 @@ const converge = Effect.fnUntraced(function* (
         instanceId: fqn,
       };
       terminalStatuses.set(fqn, {
-        id: node.task.LogicalId,
-        type: node.task.Type,
+        id: node.def.LogicalId,
+        type: node.def.Type,
         status: "ran",
       });
     }
@@ -1355,21 +1355,21 @@ const collectGarbage = Effect.fnUntraced(function* (
   // parallel before resource GC; tasks never have provider-side dependencies
   // to wait on.
   yield* Effect.all(
-    Object.entries(plan.taskDeletions ?? {}).map(([fqn, node]) =>
+    Object.entries(plan.actionDeletions ?? {}).map(([fqn, node]) =>
       node === undefined
         ? Effect.void
         : Effect.gen(function* () {
             yield* session.emit({
               kind: "status-change",
-              id: node.task.LogicalId,
-              type: node.task.Type,
+              id: node.def.LogicalId,
+              type: node.def.Type,
               status: "deleting",
             });
             yield* state.delete({ stack: stackName, stage, fqn });
             yield* session.emit({
               kind: "status-change",
-              id: node.task.LogicalId,
-              type: node.task.Type,
+              id: node.def.LogicalId,
+              type: node.def.Type,
               status: "deleted",
             });
           }),

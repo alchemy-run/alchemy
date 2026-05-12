@@ -28,7 +28,7 @@ export type ReplacementOldResourceState =
 
 interface BaseResourceState {
   /**
-   * Discriminator vs {@link TaskState}. Optional for back-compat: legacy
+   * Discriminator vs {@link ActionState}. Optional for back-compat: legacy
    * persisted rows have no `kind` field and are implicitly resources.
    */
   readonly kind?: "resource";

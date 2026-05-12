@@ -1,13 +1,18 @@
 import { toPath } from "../FQN.ts";
-import type { BindingAction, CRUD, TaskApply, TaskDelete } from "../Plan.ts";
+import type {
+  BindingAction,
+  CRUD,
+  ActionApply,
+  ActionDelete,
+} from "../Plan.ts";
 
 export interface TreeBinding {
   sid: string;
   action: BindingAction;
 }
 
-export type TaskTreeItem = TaskApply | TaskDelete;
-export type TaskAction = TaskTreeItem["action"]; // "run" | "noop" | "delete"
+export type ActionTreeItem = ActionApply | ActionDelete;
+export type ActionVerb = ActionTreeItem["action"]; // "run" | "noop" | "delete"
 
 /**
  * A tree node representing a namespace.
@@ -19,7 +24,7 @@ export interface TreeNode {
   path: string[];
   children: Map<string, TreeNode>;
   resources: CRUD[];
-  tasks: TaskTreeItem[];
+  actions: ActionTreeItem[];
 }
 
 export type DerivedAction =
@@ -32,14 +37,14 @@ export type DerivedAction =
 
 export function buildNamespaceTree(
   items: CRUD[],
-  tasks: ReadonlyArray<TaskTreeItem> = [],
+  actions: ReadonlyArray<ActionTreeItem> = [],
 ): TreeNode {
   const root: TreeNode = {
     id: "",
     path: [],
     children: new Map(),
     resources: [],
-    tasks: [],
+    actions: [],
   };
 
   const getNode = (path: string[]) => {
@@ -53,7 +58,7 @@ export function buildNamespaceTree(
           path: path.slice(0, i + 1),
           children: new Map(),
           resources: [],
-          tasks: [],
+          actions: [],
         };
         current.children.set(segment, child);
       }
@@ -65,8 +70,8 @@ export function buildNamespaceTree(
   for (const item of items) {
     getNode(toPath(item.resource.Namespace)).resources.push(item);
   }
-  for (const task of tasks) {
-    getNode(toPath(task.task.Namespace)).tasks.push(task);
+  for (const action of actions) {
+    getNode(toPath(action.def.Namespace)).actions.push(action);
   }
 
   return root;
@@ -78,13 +83,13 @@ export function deriveNamespaceAction(node: TreeNode): DerivedAction {
   for (const resource of node.resources) {
     actions.add(deriveResourceChildrenAction(resource, node));
   }
-  for (const task of node.tasks) {
+  for (const action of node.actions) {
     // Map task actions onto the resource action space for the rollup:
     // run → create, delete → delete, noop → noop.
     actions.add(
-      task.action === "run"
+      action.action === "run"
         ? "create"
-        : task.action === "delete"
+        : action.action === "delete"
           ? "delete"
           : "noop",
     );
@@ -101,17 +106,17 @@ export function deriveNamespaceAction(node: TreeNode): DerivedAction {
 }
 
 export interface FlattenedItem {
-  type: "namespace" | "resource" | "binding" | "task";
+  type: "namespace" | "resource" | "binding" | "action";
   depth: number;
   id: string;
   path: string[];
-  action: CRUD["action"] | BindingAction | DerivedAction | TaskAction;
+  action: CRUD["action"] | BindingAction | DerivedAction | ActionVerb;
   resourceType?: string;
   bindingSid?: string;
   bindingCount?: number;
   hasChildren?: boolean;
   /** For task items, the Task's Type (e.g. "Sync"). */
-  taskType?: string;
+  actionType?: string;
 }
 
 export function flattenTree(
@@ -181,25 +186,25 @@ const flattenNamespace = (
     }
   }
 
-  // Tasks are listed after resources at the same depth.
-  const sortedTasks = [...node.tasks].sort((a, b) =>
-    a.task.LogicalId.localeCompare(b.task.LogicalId),
+  // Actions are listed after resources at the same depth.
+  const sortedActions = [...node.actions].sort((a, b) =>
+    a.def.LogicalId.localeCompare(b.def.LogicalId),
   );
-  for (const task of sortedTasks) {
+  for (const action of sortedActions) {
     result.push({
-      type: "task",
+      type: "action",
       depth,
-      id: task.task.LogicalId,
-      path: [...node.path, task.task.LogicalId],
-      action: task.action,
-      taskType: task.task.Type,
+      id: action.def.LogicalId,
+      path: [...node.path, action.def.LogicalId],
+      action: action.action,
+      actionType: action.def.Type,
     });
   }
 };
 
 const isEmpty = (node: TreeNode) =>
   node.resources.length === 0 &&
-  node.tasks.length === 0 &&
+  node.actions.length === 0 &&
   Array.from(node.children.values()).every(isEmpty);
 
 const countVisibleChildren = (node: TreeNode) => {

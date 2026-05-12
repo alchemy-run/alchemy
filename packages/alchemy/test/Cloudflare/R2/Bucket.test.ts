@@ -145,7 +145,7 @@ test.provider(
         });
       }).pipe(Effect.provide(stack.state));
 
-      expect(persisted?.attr).toMatchObject({ bucketName });
+      expect((persisted as any)?.attr).toMatchObject({ bucketName });
 
       yield* stack.destroy();
       yield* waitForBucketToBeDeleted(bucketName, accountId);

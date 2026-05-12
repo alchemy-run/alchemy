@@ -4,6 +4,6 @@ export * from "./InMemoryState.ts";
 export * from "./LocalState.ts";
 export * from "./ResourceState.ts";
 export * from "./State.ts";
-export * from "./TaskState.ts";
+export * from "./ActionState.ts";
 export * from "./StateEncoding.ts";
 export * from "./Sync.ts";

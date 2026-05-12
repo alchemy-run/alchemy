@@ -168,7 +168,7 @@ test.provider(
         });
       }).pipe(Effect.provide(stack.state));
 
-      expect(persisted?.attr).toMatchObject({ gatewayId });
+      expect((persisted as any)?.attr).toMatchObject({ gatewayId });
 
       yield* stack.destroy();
       yield* waitForGatewayToBeDeleted(gatewayId, accountId);

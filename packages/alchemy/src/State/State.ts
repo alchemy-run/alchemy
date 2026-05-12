@@ -2,16 +2,17 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
-import type { TaskState } from "./TaskState.ts";
+import type { ActionState } from "./ActionState.ts";
 
 /**
  * Anything persistable under an FQN. Resources are discriminated by status
- * strings ("creating", "created", …) and Tasks by `kind: "task"`.
+ * strings ("creating", "created", …) and Tasks by `kind: "action"`.
  */
-export type PersistedState = ResourceState | TaskState;
+export type PersistedState = ResourceState | ActionState;
 
-export const isTaskState = (s: PersistedState | undefined): s is TaskState =>
-  !!s && (s as any).kind === "task";
+export const isActionState = (
+  s: PersistedState | undefined,
+): s is ActionState => !!s && (s as any).kind === "action";
 
 export const isResourceState = (
   s: PersistedState | undefined,

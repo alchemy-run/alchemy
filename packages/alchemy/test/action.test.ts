@@ -6,10 +6,10 @@ import {
   inMemoryState,
   InMemoryService,
   State,
-  type RanTaskState,
-  type TaskState,
+  type RanActionState,
+  type ActionState,
 } from "@/State";
-import { Task } from "@/Task";
+import { Action } from "@/Action";
 import * as Test from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Context from "effect/Context";
@@ -43,7 +43,7 @@ const resolveStackId = Effect.gen(function* () {
   });
 });
 
-const seed = (rows: Record<string, TaskState>) =>
+const seed = (rows: Record<string, ActionState>) =>
   Effect.gen(function* () {
     const { name, stage } = yield* resolveStackId;
     const state = yield* State;
@@ -79,7 +79,7 @@ describe("Plan", () => {
   test(
     "first-time task -> run",
     Effect.gen(function* () {
-      const Sync = Task("Sync", (input: { table: string }) =>
+      const Sync = Action("Sync", (input: { table: string }) =>
         Effect.succeed({ rows: 1, table: input.table }),
       );
 
@@ -87,20 +87,20 @@ describe("Plan", () => {
         return yield* Sync({ table: "users" });
       }).pipe(makePlan);
 
-      expect(plan.tasks.Sync).toMatchObject({
-        kind: "task",
+      expect(plan.actions.Sync).toMatchObject({
+        kind: "action",
         action: "run",
         state: undefined,
         forced: false,
       });
-      expect(plan.tasks.Sync.task.LogicalId).toBe("Sync");
+      expect(plan.actions.Sync.def.LogicalId).toBe("Sync");
     }),
   );
 
   test(
     "same input hash -> noop (skip)",
     Effect.gen(function* () {
-      const Sync = Task("Sync", (_: { table: string }) =>
+      const Sync = Action("Sync", (_: { table: string }) =>
         Effect.succeed({ rows: 1 }),
       );
 
@@ -109,31 +109,31 @@ describe("Plan", () => {
       const inputHash = yield* hashInput({ table: "users" });
       yield* seed({
         Sync: {
-          kind: "task",
+          kind: "action",
           status: "ran",
           fqn: "Sync",
           logicalId: "Sync",
           namespace: undefined,
-          taskType: "Sync",
+          actionType: "Sync",
           inputHash,
           input: { table: "users" },
           output: { rows: 1 },
           downstream: [],
-        } satisfies RanTaskState,
+        } satisfies RanActionState,
       });
 
       const plan = yield* Effect.gen(function* () {
         return yield* Sync({ table: "users" });
       }).pipe(makePlan);
 
-      expect(plan.tasks.Sync.action).toBe("noop");
+      expect(plan.actions.Sync.action).toBe("noop");
     }),
   );
 
   test(
     "changed input hash -> run",
     Effect.gen(function* () {
-      const Sync = Task("Sync", (_: { table: string }) =>
+      const Sync = Action("Sync", (_: { table: string }) =>
         Effect.succeed({ rows: 1 }),
       );
 
@@ -141,31 +141,31 @@ describe("Plan", () => {
       const oldHash = yield* hashInput({ table: "users" });
       yield* seed({
         Sync: {
-          kind: "task",
+          kind: "action",
           status: "ran",
           fqn: "Sync",
           logicalId: "Sync",
           namespace: undefined,
-          taskType: "Sync",
+          actionType: "Sync",
           inputHash: oldHash,
           input: { table: "users" },
           output: { rows: 1 },
           downstream: [],
-        } satisfies RanTaskState,
+        } satisfies RanActionState,
       });
 
       const plan = yield* Effect.gen(function* () {
         return yield* Sync({ table: "orders" });
       }).pipe(makePlan);
 
-      expect(plan.tasks.Sync.action).toBe("run");
+      expect(plan.actions.Sync.action).toBe("run");
     }),
   );
 
   test(
     "force flips noop -> run",
     Effect.gen(function* () {
-      const Sync = Task("Sync", (_: { table: string }) =>
+      const Sync = Action("Sync", (_: { table: string }) =>
         Effect.succeed({ rows: 1 }),
       );
 
@@ -173,25 +173,25 @@ describe("Plan", () => {
       const inputHash = yield* hashInput({ table: "users" });
       yield* seed({
         Sync: {
-          kind: "task",
+          kind: "action",
           status: "ran",
           fqn: "Sync",
           logicalId: "Sync",
           namespace: undefined,
-          taskType: "Sync",
+          actionType: "Sync",
           inputHash,
           input: { table: "users" },
           output: { rows: 1 },
           downstream: [],
-        } satisfies RanTaskState,
+        } satisfies RanActionState,
       });
 
       const plan = yield* Effect.gen(function* () {
         return yield* Sync({ table: "users" });
       }).pipe((eff) => makePlan(eff, { force: true }));
 
-      expect(plan.tasks.Sync.action).toBe("run");
-      expect((plan.tasks.Sync as Plan.TaskRun).forced).toBe(true);
+      expect(plan.actions.Sync.action).toBe("run");
+      expect((plan.actions.Sync as Plan.ActionRun).forced).toBe(true);
     }),
   );
 
@@ -202,17 +202,17 @@ describe("Plan", () => {
       const inputHash = yield* hashInput({ table: "users" });
       yield* seed({
         Sync: {
-          kind: "task",
+          kind: "action",
           status: "ran",
           fqn: "Sync",
           logicalId: "Sync",
           namespace: undefined,
-          taskType: "Sync",
+          actionType: "Sync",
           inputHash,
           input: { table: "users" },
           output: { rows: 1 },
           downstream: [],
-        } satisfies RanTaskState,
+        } satisfies RanActionState,
       });
 
       // The new stack has no tasks at all.
@@ -220,18 +220,18 @@ describe("Plan", () => {
         return undefined;
       }).pipe(makePlan);
 
-      expect(plan.taskDeletions.Sync).toMatchObject({
-        kind: "task",
+      expect(plan.actionDeletions.Sync).toMatchObject({
+        kind: "action",
         action: "delete",
       });
-      expect(plan.tasks.Sync).toBeUndefined();
+      expect(plan.actions.Sync).toBeUndefined();
     }),
   );
 
   test(
     "resource depends on task: task is upstream of resource",
     Effect.gen(function* () {
-      const Compute = Task("Compute", (_: {}) =>
+      const Compute = Action("Compute", (_: {}) =>
         Effect.succeed({ value: "computed" }),
       );
 
@@ -241,16 +241,16 @@ describe("Plan", () => {
         return bucket;
       }).pipe(makePlan);
 
-      // Task is run (first time), bucket is created and lists Compute as upstream.
-      expect(plan.tasks.Compute.action).toBe("run");
-      expect(plan.tasks.Compute.downstream).toContain("MyBucket");
+      // Action is run (first time), bucket is created and lists Compute as upstream.
+      expect(plan.actions.Compute.action).toBe("run");
+      expect(plan.actions.Compute.downstream).toContain("MyBucket");
     }),
   );
 
   test(
     "task depends on resource: resource is upstream of task",
     Effect.gen(function* () {
-      const Sync = Task("Sync", (_: { name: string }) =>
+      const Sync = Action("Sync", (_: { name: string }) =>
         Effect.succeed({ ok: true }),
       );
 
@@ -260,7 +260,7 @@ describe("Plan", () => {
       }).pipe(makePlan);
 
       expect(plan.resources.MyBucket.action).toBe("create");
-      expect(plan.tasks.Sync.action).toBe("run");
+      expect(plan.actions.Sync.action).toBe("run");
       // MyBucket's downstream includes the task FQN.
       expect(plan.resources.MyBucket.downstream).toContain("Sync");
     }),
@@ -269,7 +269,7 @@ describe("Plan", () => {
   test(
     "explicit logical id allows multiple instances",
     Effect.gen(function* () {
-      const Sync = Task("Sync", (_: { which: string }) =>
+      const Sync = Action("Sync", (_: { which: string }) =>
         Effect.succeed({ ok: true }),
       );
 
@@ -278,9 +278,9 @@ describe("Plan", () => {
         yield* Sync("hourly", { which: "h" });
       }).pipe(makePlan);
 
-      expect(plan.tasks.nightly.action).toBe("run");
-      expect(plan.tasks.hourly.action).toBe("run");
-      expect(plan.tasks.Sync).toBeUndefined();
+      expect(plan.actions.nightly.action).toBe("run");
+      expect(plan.actions.hourly.action).toBe("run");
+      expect(plan.actions.Sync).toBeUndefined();
     }),
   );
 });
@@ -291,7 +291,7 @@ describe("Apply", () => {
   test.provider("first run invokes body and persists ran state", (stack) =>
     Effect.gen(function* () {
       const counter = yield* Ref.make(0);
-      const Sync = Task("Sync", (input: { n: number }) =>
+      const Sync = Action("Sync", (input: { n: number }) =>
         Effect.gen(function* () {
           yield* Ref.update(counter, (c) => c + 1);
           return { doubled: input.n * 2 };
@@ -315,7 +315,7 @@ describe("Apply", () => {
         fqn: "Sync",
       });
       expect(persisted).toMatchObject({
-        kind: "task",
+        kind: "action",
         status: "ran",
         output: { doubled: 42 },
       });
@@ -326,7 +326,7 @@ describe("Apply", () => {
     Effect.gen(function* () {
       const counter = yield* Ref.make(0);
       const program = Effect.gen(function* () {
-        const Sync = Task("Sync", (input: { n: number }) =>
+        const Sync = Action("Sync", (input: { n: number }) =>
           Effect.gen(function* () {
             yield* Ref.update(counter, (c) => c + 1);
             return { doubled: input.n * 2 };
@@ -349,7 +349,7 @@ describe("Apply", () => {
       const counter = yield* Ref.make(0);
       const programFor = (n: number) =>
         Effect.gen(function* () {
-          const Sync = Task("Sync", (input: { n: number }) =>
+          const Sync = Action("Sync", (input: { n: number }) =>
             Effect.gen(function* () {
               yield* Ref.update(counter, (c) => c + 1);
               return { doubled: input.n * 2 };
@@ -368,7 +368,7 @@ describe("Apply", () => {
 
   test.provider("task output flows to downstream resource input", (stack) =>
     Effect.gen(function* () {
-      const Name = Task("Name", (_: {}) =>
+      const Name = Action("Name", (_: {}) =>
         Effect.succeed({ name: "computed-bucket-name" }),
       );
 
@@ -385,7 +385,7 @@ describe("Apply", () => {
 
   test.provider("resource attr flows to task input", (stack) =>
     Effect.gen(function* () {
-      const Echo = Task("Echo", (input: { name: string }) =>
+      const Echo = Action("Echo", (input: { name: string }) =>
         Effect.succeed({ echoed: input.name }),
       );
 
@@ -405,7 +405,7 @@ describe("Apply", () => {
     (stack) =>
       Effect.gen(function* () {
         const deleteSpy = yield* Ref.make(0);
-        const Sync = Task("Sync", (_: { n: number }) =>
+        const Sync = Action("Sync", (_: { n: number }) =>
           Effect.succeed({ ok: true }),
         );
 
@@ -418,7 +418,7 @@ describe("Apply", () => {
         const state = yield* State;
         expect(
           yield* state.get({ stack: stack.name, stage: "test", fqn: "Sync" }),
-        ).toMatchObject({ kind: "task", status: "ran" });
+        ).toMatchObject({ kind: "action", status: "ran" });
 
         // Re-deploy WITHOUT the task — state should be dropped.
         // (Use a tracker hook to confirm body wasn't called.)
@@ -437,7 +437,7 @@ describe("Apply", () => {
         "test/Multiplier",
       ) {}
 
-      const Sync = Task(
+      const Sync = Action(
         "Sync",
         Effect.gen(function* () {
           const m = yield* Multiplier;

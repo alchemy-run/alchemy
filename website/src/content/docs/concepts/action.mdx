@@ -1,29 +1,29 @@
 ---
-title: Task
+title: Action
 description: A node in the dependency graph that runs an Effect during apply when its inputs change.
 sidebar:
   order: 2
 ---
 
-A **Task** is a node in the stack's dependency graph that runs an
+An **Action** is a node in the stack's dependency graph that runs an
 arbitrary Effect during `apply`. Unlike a [Resource](./resource), it has
 no provider lifecycle — no replace, no read, no delete. The engine just
 diffs the resolved input against the last persisted hash and either runs
 the body or skips it.
 
-Tasks are useful for one-off deploy-time work that needs to be
+Actions are useful for one-off deploy-time work that needs to be
 reproducible and dependency-aware: seeding a database, posting a
 release notification, generating an artifact and uploading it,
 invalidating a CDN cache, running a migration check.
 
-## Declaring a Task
+## Declaring an Action
 
-Define a Task with its type name and a body, then call it inside a
+Define an Action with its type name and a body, then call it inside a
 stack to register an instance. `yield*` returns `Output<Out>` ready to
 feed into downstream nodes:
 
 ```typescript
-const Sync = Task("Sync", Effect.fn(function* (input: { table: string }) {
+const Sync = Action("Sync", Effect.fn(function* (input: { table: string }) {
   yield* Effect.log(`syncing ${input.table}`);
   return { rows: 42 };
 }));
@@ -45,7 +45,7 @@ The init Effect can `yield*` services, and those dependencies surface
 as `Req` on the call site:
 
 ```typescript
-const Sync = Task("Sync", Effect.gen(function* () {
+const Sync = Action("Sync", Effect.gen(function* () {
   const db = yield* Database;
   const logger = yield* Logger;
   return Effect.fn(function* (input: { table: string }) {
@@ -63,7 +63,7 @@ reused across every instance and re-run.
 ### Multiple instances
 
 Pass an explicit logical id to register more than one instance of the
-same Task definition:
+same Action definition:
 
 ```typescript
 const nightly = yield* Sync("nightly", { table: usersBucket.name });
@@ -77,7 +77,7 @@ testing or to keep stack code declarative — use the class form. It
 mirrors [Platform](./platform):
 
 ```typescript
-export class Sync extends Task<Sync, { table: string }, { rows: number }>()("Sync") {}
+export class Sync extends Action<Sync, { table: string }, { rows: number }>()("Sync") {}
 
 export const SyncLive = Sync.make(
   Effect.gen(function* () {
@@ -97,19 +97,19 @@ const rows = yield* Sync({ table: bucket.name });
 
 ## Lifecycle
 
-A Task has only two terminal states:
+An Action has only two terminal states:
 
 | Action | Symbol | When |
 | --- | --- | --- |
 | **run**  | `λ` | First time, or `inputHash` differs from the last persisted run, or `--force` is set |
 | **skip** | `·` | Persisted `inputHash` matches the newly resolved input |
 
-There is no `replace` and no `delete`. When a Task is removed from the
+There is no `replace` and no `delete`. When an Action is removed from the
 stack, its persisted state is dropped without the body being invoked.
 
 ### Input hashing
 
-The Task's input is JSON-serialized and SHA-256 hashed after upstream
+The Action's input is JSON-serialized and SHA-256 hashed after upstream
 Outputs are resolved. The hash is persisted alongside the result; on
 the next plan, a new hash that matches means "skip", a new hash that
 differs means "run".
@@ -120,24 +120,24 @@ differs means "run".
 alchemy deploy --force
 ```
 
-`--force` flips every `skip` to `run` at plan time, including tasks.
+`--force` flips every `skip` to `run` at plan time, including actions.
 
 ### Dependencies
 
-Tasks live in the same FQN namespace as Resources. They can:
+Actions live in the same FQN namespace as Resources. They can:
 
 - Take Resource outputs as input (`{ table: bucket.name }`)
-- Be referenced by Resources via `task.output` (downstream resource
-  waits for the task before reconciling)
-- Reference other Tasks
+- Be referenced by Resources via `action.output` (downstream resource
+  waits for the action before reconciling)
+- Reference other Actions
 
 Cycles are rejected at plan time just like resource cycles.
 
-## What Tasks are not
+## What Actions are not
 
 - **Not a Resource.** No `diff`/`read`/`reconcile`/`delete`. If you
   need lifecycle management of a cloud entity, model it as a Resource.
-- **Not a runtime function.** A Task runs at deploy time. To call code
+- **Not a runtime function.** An Action runs at deploy time. To call code
   from a deployed Worker/Lambda, use a [Platform](./platform).
 - **Not idempotent for free.** The engine guarantees the body runs
   only when inputs change, but the body itself must tolerate retries
