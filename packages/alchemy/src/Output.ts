@@ -104,7 +104,7 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
     void
   > {
     // @ts-expect-error - TODO(sam): fix this (works at runtime, but maybe indicates a bad assumption)
-    return new SingleShotGen(this);
+    return new SingleShotGen(this.asEffect());
   }
 
   asEffect(): any {

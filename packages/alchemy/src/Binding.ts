@@ -174,7 +174,7 @@ export const Policy =
     // @ts-expect-error
     return Object.assign(self, {
       [Symbol.iterator]() {
-        return new SingleShotGen(this);
+        return new SingleShotGen(asEffect());
       },
       asEffect,
       bind: (...args: any[]) =>

@@ -170,7 +170,7 @@ const tag = Context.Service("${Self.key}")
 const layer =
   typeof entry?.build === "function"
     ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry : entry);
+    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
 
 const platform = Layer.mergeAll(
   NodeServices.layer,

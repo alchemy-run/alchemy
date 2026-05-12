@@ -258,7 +258,7 @@ export const Platform = <
         );
       return Object.assign(
         function (impl: Impl) {
-          return cls.pipe(Effect.provide(cls.make(impl)));
+          return cls.asEffect().pipe(Effect.provide(cls.make(impl)));
         },
         // we splice in the Effect so this can be yielded to indicate a non-Effect native instance
         // e.g. here, we yield it - in this case we don't want to provide an implementation
@@ -270,7 +270,7 @@ export const Platform = <
           asEffect,
           // @ts-expect-error
           pipe: (...args: any[]) => asEffect().pipe(...args),
-          [Symbol.iterator]: () => new SingleShotGen({ asEffect }),
+          [Symbol.iterator]: () => new SingleShotGen(asEffect()),
         },
       );
     } else {
@@ -278,7 +278,7 @@ export const Platform = <
       // e.g.
       // export default Cloudflare.Worker("id", { main: "./src/worker.ts" }, Effect.gen(function* () { .. })
       const cls = makeClass(id, props);
-      return cls.pipe(Effect.provide(cls.make(impl)), effectClass);
+      return cls.asEffect().pipe(Effect.provide(cls.make(impl)), effectClass);
     }
   };
 
@@ -293,7 +293,7 @@ export const Platform = <
         Resource,
         void
       > {
-        return new SingleShotGen(this) as any;
+        return new SingleShotGen(this.asEffect()) as any;
       }
       static asEffect() {
         return this.Self;

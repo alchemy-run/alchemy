@@ -27,7 +27,7 @@ export const effectClass: {
             return impl;
           }
           static [Symbol.iterator]() {
-            return new SingleShotGen(this);
+            return new SingleShotGen(this.asEffect());
           }
           static pipe(...fns: any) {
             return pipeArguments(this, fns);
