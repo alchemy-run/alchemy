@@ -1,70 +1,76 @@
+import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
-import { RuntimeContext } from "@/RuntimeContext";
-import type { FunctionListener } from "@/Serverless/Function";
-import { Self } from "@/Self";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import CronTestWorker from "./fixtures/cron-worker.ts";
 
-const { test } = Test.make({ providers: Layer.empty });
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+});
 
-test(
-  "routes scheduled events that match the cron expression",
+const logLevel = Effect.provideService(
+  MinimumLogLevel,
+  process.env.DEBUG ? "Debug" : "Info",
+);
+
+const Stack = Alchemy.Stack(
+  "CronEventSourceStack",
+  {
+    providers: Cloudflare.providers(),
+    state: Cloudflare.state(),
+  },
   Effect.gen(function* () {
-    const listeners: FunctionListener[] = [];
-    const handled: number[] = [];
-
-    yield* Cloudflare.cron("0 12 * * *")
-      .subscribe((controller) =>
-        Effect.sync(() => {
-          handled.push(controller.scheduledTime);
-        }),
-      )
-      .pipe(
-        Effect.provide(
-          Layer.mergeAll(
-            Cloudflare.CronEventSourceLive,
-            Layer.succeed(Cloudflare.CronEventSourcePolicy, () => Effect.void),
-            Layer.succeed(RuntimeContext, {
-              Type: "Cloudflare.Worker",
-              id: "CronWorker",
-              env: {},
-              get: () => Effect.void,
-              set: () => Effect.succeed(""),
-              listen: (listener: FunctionListener) =>
-                Effect.sync(() => {
-                  listeners.push(listener);
-                }),
-            }),
-          ),
-        ),
-        Effect.provideService(Self, {
-          Type: "Cloudflare.Worker",
-          LogicalId: "CronWorker",
-        }),
-      );
-
-    const event = {
-      kind: "Cloudflare.Workers.WorkerEvent",
-      type: "scheduled",
-      input: { cron: "0 12 * * *", scheduledTime: 123 },
-      env: {},
-      context: {},
+    const worker = yield* CronTestWorker;
+    return {
+      url: worker.url.as<string>(),
+      crons: worker.crons,
     };
-    const ignored = {
-      ...event,
-      input: { cron: "0 0 * * *", scheduledTime: 456 },
-    };
-
-    yield* runListener(listeners[0]!, ignored);
-    yield* runListener(listeners[0]!, event);
-
-    expect(handled).toEqual([123]);
   }),
 );
 
-const runListener = (listener: FunctionListener, event: unknown) => {
-  const result = listener(event);
-  return Effect.isEffect(result) ? result : Effect.void;
-};
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+
+test(
+  "deployed worker fires the scheduled handler on its cron trigger",
+  Effect.gen(function* () {
+    const { url, crons } = yield* stack;
+    expect(crons).toContain("* * * * *");
+
+    const client = yield* HttpClient.HttpClient;
+
+    // Reset any leftover state from prior runs. Doubles as a readiness probe —
+    // a fresh workers.dev URL can take a few seconds to start serving 200s.
+    yield* client.post(`${url}/reset`).pipe(
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 10,
+      }),
+    );
+    const resetAt = Date.now();
+
+    // Cloudflare cron granularity is one minute and there's some propagation
+    // delay after deploy, so we poll up to ~3 minutes for the first fire.
+    const times = yield* Effect.gen(function* () {
+      const res = yield* client.get(`${url}/times`);
+      const body = (yield* res.json) as { times: number[] };
+      return body.times.filter((t) => t >= resetAt);
+    }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("5 seconds"),
+        until: (recent) => recent.length > 0,
+        times: 36,
+      }),
+    );
+
+    expect(times.length).toBeGreaterThan(0);
+    for (const t of times) {
+      expect(t).toBeGreaterThanOrEqual(resetAt);
+    }
+  }).pipe(logLevel),
+  { timeout: 300_000 },
+);
