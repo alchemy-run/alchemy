@@ -1,0 +1,109 @@
+---
+title: Task
+description: A node in the dependency graph that runs an Effect during apply when its inputs change.
+sidebar:
+  order: 2
+---
+
+A **Task** is a node in the stack's dependency graph that runs an
+arbitrary Effect during `apply`. Unlike a [Resource](./resource), it has
+no provider lifecycle — no replace, no read, no delete. The engine just
+diffs the resolved input against the last persisted hash and either runs
+the body or skips it.
+
+Tasks are useful for one-off deploy-time work that needs to be
+reproducible and dependency-aware: seeding a database, posting a
+release notification, generating an artifact and uploading it,
+invalidating a CDN cache, running a migration check.
+
+## Declaring a Task
+
+### Inline
+
+```typescript
+const sync = yield* Task("nightly-sync", { table: bucket.name },
+  Effect.fn(function* (input) {
+    // input: { table: string }
+    yield* Effect.log(`syncing ${input.table}`);
+    return { rows: 42 };
+  }),
+);
+
+sync.output      // Output<{ rows: number }>
+sync.output.rows // Output<number>
+```
+
+The implementation Effect receives the **resolved** input — any
+[Output](./outputs) references in the input are evaluated against the
+current tracker before the body runs.
+
+### Tagged (service + layer)
+
+When you want to split the contract from the implementation (e.g. for
+testing or to keep stack code declarative), use the class form. It
+mirrors [Platform](./platform):
+
+```typescript
+export class NightlySync extends Task<NightlySync, { table: string }, { rows: number }>()("NightlySync") {}
+
+export const NightlySyncLive = NightlySync.make(
+  Effect.fn(function* (input) {
+    return { rows: 42 };
+  }),
+);
+
+// In a stack:
+const sync = yield* NightlySync("nightly", { table: bucket.name });
+```
+
+The `NightlySyncLive` Layer is provided via the stack's `providers`,
+exactly like a resource provider.
+
+## Lifecycle
+
+A Task has only two terminal states:
+
+| Action | Symbol | When |
+| --- | --- | --- |
+| **run**  | `▶` | First time, or `inputHash` differs from the last persisted run, or `--force` is set |
+| **skip** | `·` | Persisted `inputHash` matches the newly resolved input |
+
+There is no `replace` and no `delete`. When a Task is removed from the
+stack, its persisted state is dropped without the body being invoked.
+
+### Input hashing
+
+The Task's input is JSON-serialized and SHA-256 hashed after upstream
+Outputs are resolved. The hash is persisted alongside the result; on
+the next plan, a new hash that matches means "skip", a new hash that
+differs means "run".
+
+### Forcing a re-run
+
+```sh
+alchemy deploy --force
+```
+
+`--force` flips every `skip` to `run` at plan time, including tasks.
+
+### Dependencies
+
+Tasks live in the same FQN namespace as Resources. They can:
+
+- Take Resource outputs as input (`{ table: bucket.name }`)
+- Be referenced by Resources via `task.output` (downstream resource
+  waits for the task before reconciling)
+- Reference other Tasks
+
+Cycles are rejected at plan time just like resource cycles.
+
+## What Tasks are not
+
+- **Not a Resource.** No `diff`/`read`/`reconcile`/`delete`. If you
+  need lifecycle management of a cloud entity, model it as a Resource.
+- **Not a runtime function.** A Task runs at deploy time. To call code
+  from a deployed Worker/Lambda, use a [Platform](./platform).
+- **Not idempotent for free.** The engine guarantees the body runs
+  only when inputs change, but the body itself must tolerate retries
+  on apply restart (its `running` state is persisted but not its
+  side effects).

@@ -12,6 +12,10 @@ export type ApplyStatus =
   | "deleted"
   | "replacing"
   | "replaced"
+  // Task lifecycle (see {@link Task})
+  | "running"
+  | "ran"
+  | "skipped"
   | "fail";
 
 export type ApplyEvent = AnnotateEvent | StatusChangeEvent;

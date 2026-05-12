@@ -24,6 +24,12 @@ export { Secret } from "./Secret.ts";
 export { Variable } from "./Variable.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
 export * from "./Resource.ts";
+export {
+  Task,
+  isTask,
+  type TaskLike,
+  type Task as TaskInstance,
+} from "./Task.ts";
 export * as Schema from "./Schema.ts";
 export * as Server from "./Server/index.ts";
 export * as Serverless from "./Serverless/index.ts";

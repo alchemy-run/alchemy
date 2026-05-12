@@ -42,12 +42,17 @@ import {
   State,
   type CreatedResourceState,
   type CreatingResourceState,
+  isTaskState,
+  type RanTaskState,
   type ReplacedResourceState,
   type ReplacingResourceState,
   type ResourceState,
+  type TaskState,
   type UpdatedResourceState,
   type UpdatingReourceState,
 } from "./State/index.ts";
+import { isTask, type TaskLike } from "./Task.ts";
+import { hashInput } from "./Util/hash.ts";
 import { findCycleMembers } from "./Util/scc.ts";
 
 export type PlanError = never;
@@ -148,12 +153,63 @@ export interface Replace<
     | ReplacedResourceState;
 }
 
+// ── Tasks ──────────────────────────────────────────────────────────────────
+//
+// Tasks live in the same FQN namespace as resources and participate in the
+// same DAG (downstream/upstream edges, cycle detection). Their plan nodes
+// have a different shape because they have no provider lifecycle.
+
+export type TaskApply<T extends TaskLike = TaskLike> = TaskRun<T> | TaskNoop<T>;
+
+export interface TaskNodeBase<T extends TaskLike = TaskLike> {
+  readonly kind: "task";
+  task: T;
+  downstream: string[];
+}
+
+export interface TaskRun<
+  T extends TaskLike = TaskLike,
+> extends TaskNodeBase<T> {
+  action: "run";
+  /** Input expression — resolved against tracker outputs during apply. */
+  input: T["Input"];
+  /** Previous state, if any. `undefined` on the first run. */
+  state: TaskState | undefined;
+  /** True when `--force` triggered the re-run regardless of input drift. */
+  forced: boolean;
+}
+
+export interface TaskNoop<
+  T extends TaskLike = TaskLike,
+> extends TaskNodeBase<T> {
+  action: "noop";
+  state: RanTaskState;
+}
+
+export interface TaskDelete<
+  T extends TaskLike = TaskLike,
+> extends TaskNodeBase<T> {
+  action: "delete";
+  state: TaskState;
+}
+
 export type Plan<Output = any> = {
   resources: {
     [id in string]: Apply<any>;
   };
+  /**
+   * Tasks scheduled for this apply. Keyed by FQN, same namespace as
+   * `resources` — Apply's scheduler merges both into a single DAG.
+   */
+  tasks: {
+    [id in string]: TaskApply;
+  };
   deletions: {
     [id in string]?: Delete<ResourceLike>;
+  };
+  /** Tasks whose state should be dropped (no body invoked on removal). */
+  taskDeletions: {
+    [id in string]?: TaskDelete;
   };
   output: Output;
   /**
@@ -179,6 +235,7 @@ export const make = <A>(
     const state = yield* State;
 
     const resources = Object.values(stack.resources);
+    const tasks = Object.values(stack.tasks ?? {});
 
     // TODO(sam): rename terminology to Stack
     const stackName = stack.name;
@@ -215,6 +272,12 @@ export const make = <A>(
       resourceExpr: Output.ResourceExpr<any, any>,
     ): Effect.Effect<any> =>
       Effect.gen(function* () {
+        // Tasks share the ResourceExpr machinery but have no provider /
+        // stable-properties story at plan time. Leave the expression
+        // unsubstituted — Apply resolves it from the tracker at run time.
+        if (isTask(resourceExpr.src as any)) {
+          return resourceExpr;
+        }
         // @ts-expect-error
         return yield* (resolvedResources[resourceExpr.src.FQN] ??=
           yield* Effect.cached(
@@ -223,11 +286,14 @@ export const make = <A>(
 
               const provider = yield* findProviderByType(resource.Type);
               const props = yield* resolveInput(resource.Props);
-              const oldState = yield* state.get({
+              const persisted = yield* state.get({
                 stack: stackName,
                 stage: stage,
                 fqn: resource.FQN,
               });
+              const oldState: ResourceState | undefined = isTaskState(persisted)
+                ? undefined
+                : (persisted as ResourceState | undefined);
 
               if (!oldState || oldState.status === "creating") {
                 return resourceExpr;
@@ -366,16 +432,30 @@ export const make = <A>(
 
     // Build a set of FQNs for the new resources to detect orphans
     const newResourceFqns = new Set(resources.map((r) => r.FQN));
+    const newTaskFqns = new Set(tasks.map((t) => t.FQN));
+    // Unified set used wherever the DAG must include both kinds.
+    const newNodeFqns = new Set<string>([...newResourceFqns, ...newTaskFqns]);
 
-    // Map FQN -> list of upstream FQNs (resources this one depends on via props)
+    // Map FQN -> list of upstream FQNs (resources this one depends on via props).
+    // Tasks contribute upstream edges through their `Input` expression.
     const newUpstreamDependencies: {
       [fqn: string]: string[];
-    } = Object.fromEntries(
-      resources.map((resource) => [
-        resource.FQN,
-        Object.values(Output.upstreamAny(resource.Props)).map((r) => r.FQN),
-      ]),
-    );
+    } = Object.fromEntries([
+      ...resources.map(
+        (resource) =>
+          [
+            resource.FQN,
+            Object.values(Output.upstreamAny(resource.Props)).map((r) => r.FQN),
+          ] as const,
+      ),
+      ...tasks.map(
+        (task) =>
+          [
+            task.FQN,
+            Object.values(Output.upstreamAny(task.Input)).map((r) => r.FQN),
+          ] as const,
+      ),
+    ]);
 
     // Map FQN -> list of upstream FQNs from bindings
     const bindingUpstreamDependencies: {
@@ -403,28 +483,35 @@ export const make = <A>(
       }),
     );
 
-    // Combined prop + binding upstream, filtered to resources in this graph for
-    // scheduling and cycle detection.
+    // Combined prop + binding upstream, filtered to resources/tasks in this
+    // graph for scheduling and cycle detection.
     const allUpstreamDependencies: {
       [fqn: string]: string[];
-    } = Object.fromEntries(
-      resources.map((resource) => {
+    } = Object.fromEntries([
+      ...resources.map((resource) => {
         const fqn = resource.FQN;
         const deps = rawUpstreamDependencies[fqn] ?? [];
-        return [fqn, deps.filter((dep) => newResourceFqns.has(dep))];
+        return [fqn, deps.filter((dep) => newNodeFqns.has(dep))] as const;
       }),
-    );
+      ...tasks.map((task) => {
+        const fqn = task.FQN;
+        const deps = newUpstreamDependencies[fqn] ?? [];
+        return [fqn, deps.filter((dep) => newNodeFqns.has(dep))] as const;
+      }),
+    ]);
 
-    // Map FQN -> list of downstream FQNs (resources that depend on this one)
+    // Map FQN -> list of downstream FQNs (resources/tasks that depend on this one)
     const newDownstreamDependencies: {
       [fqn: string]: string[];
     } = Object.fromEntries(
-      resources.map((resource) => [
-        resource.FQN,
-        Object.entries(newUpstreamDependencies)
-          .filter(([_, upstream]) => upstream.includes(resource.FQN))
-          .map(([depFqn]) => depFqn),
-      ]),
+      [...resources.map((r) => r.FQN), ...tasks.map((t) => t.FQN)].map(
+        (fqn) => [
+          fqn,
+          Object.entries(newUpstreamDependencies)
+            .filter(([_, upstream]) => upstream.includes(fqn))
+            .map(([depFqn]) => depFqn),
+        ],
+      ),
     );
 
     const resourceGraph = Object.fromEntries(
@@ -440,11 +527,17 @@ export const make = <A>(
             const newBindings: ResourceBinding[] = yield* resolveInput(
               stack.bindings[fqn] ?? [],
             );
-            let oldState = yield* state.get({
+            const persisted = yield* state.get({
               stack: stackName,
               stage: stage,
               fqn,
             });
+            // A Task previously held this FQN. Treat as if there were no
+            // prior state — the Task's row will be reaped by `taskDeletions`
+            // below and the resource starts from scratch.
+            let oldState: ResourceState | undefined = isTaskState(persisted)
+              ? undefined
+              : (persisted as ResourceState | undefined);
 
             // Engine-level adoption. When there is no prior state, always
             // consult `provider.read` (if implemented) so the engine — not
@@ -791,6 +884,71 @@ export const make = <A>(
       )).map((update) => [update.resource.FQN, update]),
     ) as Plan["resources"];
 
+    // ── Task plan nodes ─────────────────────────────────────────────────
+    const taskGraph = Object.fromEntries(
+      (yield* Effect.all(
+        tasks.map(
+          Effect.fn("plan.diff.task")(function* (task) {
+            const fqn = task.FQN;
+            const downstream = newDownstreamDependencies[fqn] ?? [];
+            const resolvedInput = yield* resolveInput(task.Input);
+            const inputHash = yield* hashInput(resolvedInput);
+            const oldState = yield* state.get({
+              stack: stackName,
+              stage,
+              fqn,
+            });
+
+            if (oldState && !isTaskState(oldState)) {
+              // FQN collision with a resource — surface as a fatal error so
+              // the user resolves it before we touch anything.
+              return [
+                fqn,
+                {
+                  kind: "task",
+                  action: "run",
+                  task,
+                  input: task.Input,
+                  state: undefined,
+                  downstream,
+                  forced: false,
+                } satisfies TaskRun,
+              ] as const;
+            }
+
+            const prior = oldState as TaskState | undefined;
+            const sameInput =
+              prior?.status === "ran" && prior.inputHash === inputHash;
+            if (sameInput && !options.force) {
+              return [
+                fqn,
+                {
+                  kind: "task",
+                  action: "noop",
+                  task,
+                  state: prior as RanTaskState,
+                  downstream,
+                } satisfies TaskNoop,
+              ] as const;
+            }
+            return [
+              fqn,
+              {
+                kind: "task",
+                action: "run",
+                task,
+                input: task.Input,
+                state: prior,
+                downstream,
+                forced: !!options.force,
+              } satisfies TaskRun,
+            ] as const;
+          }),
+        ),
+        { concurrency: "unbounded" },
+      )) as ReadonlyArray<readonly [string, TaskApply]>,
+    ) as Plan["tasks"];
+
     // Compute SCC membership once. Apply uses it to decide whether an
     // update node must publish its prior attr early to break a cycle, or
     // can simply wait for upstreams like a DAG node (the common case).
@@ -857,18 +1015,61 @@ export const make = <A>(
       }
     }
 
+    // Task deletions: state rows previously written by tasks that no
+    // longer appear in the stack. The body is NOT invoked — we just drop
+    // the row.
+    const taskDeletions: Plan["taskDeletions"] = Object.fromEntries(
+      (yield* Effect.all(
+        (yield* state.list({ stack: stackName, stage })).map(
+          Effect.fn("plan.diff.taskDeletion")(function* (fqn) {
+            if (newTaskFqns.has(fqn) || newResourceFqns.has(fqn)) return;
+            const persisted = yield* state.get({
+              stack: stackName,
+              stage,
+              fqn,
+            });
+            if (!isTaskState(persisted)) return;
+            const { logicalId } = parseFqn(fqn);
+            return [
+              fqn,
+              {
+                kind: "task",
+                action: "delete",
+                state: persisted,
+                downstream: persisted.downstream ?? [],
+                task: {
+                  Kind: "task",
+                  Namespace: persisted.namespace,
+                  FQN: fqn,
+                  LogicalId: logicalId,
+                  Type: persisted.taskType,
+                  Input: persisted.input,
+                  Run: () => undefined as any,
+                  Output: undefined as any,
+                } satisfies TaskLike,
+              } satisfies TaskDelete,
+            ] as const;
+          }),
+        ),
+        { concurrency: "unbounded" },
+      )).filter((v): v is NonNullable<typeof v> => !!v),
+    );
+
     const deletions = Object.fromEntries(
       (yield* Effect.all(
         (yield* state.list({ stack: stackName, stage: stage })).map(
           Effect.fn("plan.diff.deletion")(function* (fqn) {
-            if (newResourceFqns.has(fqn)) {
+            if (newResourceFqns.has(fqn) || newTaskFqns.has(fqn)) {
               return;
             }
-            const oldState = yield* state.get({
+            const persisted = yield* state.get({
               stack: stackName,
               stage: stage,
               fqn,
             });
+            // Tasks are routed through `taskDeletions` above.
+            if (isTaskState(persisted)) return;
+            const oldState = persisted as ResourceState | undefined;
             let attr: any = oldState?.attr;
             if (oldState) {
               const { logicalId } = parseFqn(fqn);
@@ -938,7 +1139,9 @@ export const make = <A>(
 
     return {
       resources: resourceGraph,
+      tasks: taskGraph,
       deletions,
+      taskDeletions,
       output: stack.output,
       cycleMembers,
     } satisfies Plan<A> as Plan<A>;
@@ -1038,7 +1241,10 @@ export const printPlan = (plan: Plan): string => {
     "╠════════════════════════════════════════════════════════════════╣",
   );
   lines.push(
-    "║ Legend: + create, ~ update, - delete, ± replace, = noop        ║",
+    "║ Legend: + create, ~ update, - delete, ± replace, = noop,       ║",
+  );
+  lines.push(
+    "║         ▶ run task, · skip task                                ║",
   );
   lines.push(
     "╚════════════════════════════════════════════════════════════════╝",
@@ -1067,6 +1273,28 @@ export const printPlan = (plan: Plan): string => {
   );
   lines.push("");
 
+  // Print tasks section
+  lines.push(
+    "┌─ Tasks ────────────────────────────────────────────────────────┐",
+  );
+  const taskIds = Object.keys(plan.tasks ?? {}).sort();
+  for (const id of taskIds) {
+    const node = plan.tasks[id];
+    const symbol = node.action === "run" ? "▶" : "·";
+    const type = node.task.Type;
+    const downstream = node.downstream.length
+      ? ` → [${node.downstream.join(", ")}]`
+      : "";
+    lines.push(`│ [${symbol}] ${id} (${type})${downstream}`);
+  }
+  if (taskIds.length === 0) {
+    lines.push("│ (none)");
+  }
+  lines.push(
+    "└────────────────────────────────────────────────────────────────┘",
+  );
+  lines.push("");
+
   // Print deletions section
   lines.push(
     "┌─ Deletions ────────────────────────────────────────────────────┐",
@@ -1080,7 +1308,12 @@ export const printPlan = (plan: Plan): string => {
       : "";
     lines.push(`│ [-] ${id} (${type})${downstream}`);
   }
-  if (deletionIds.length === 0) {
+  const taskDeletionIds = Object.keys(plan.taskDeletions ?? {}).sort();
+  for (const id of taskDeletionIds) {
+    const node = plan.taskDeletions[id]!;
+    lines.push(`│ [-] ${id} (${node.task.Type}) [task]`);
+  }
+  if (deletionIds.length === 0 && taskDeletionIds.length === 0) {
     lines.push("│ (none)");
   }
   lines.push(
