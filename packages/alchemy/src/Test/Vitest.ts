@@ -1,5 +1,7 @@
 import { it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
 import {
   afterAll as vitestAfterAll,
   afterEach as vitestAfterEach,
@@ -98,8 +100,13 @@ const DEFAULT_TIMEOUT = 120_000;
  * Effect-aware tests stay first-class.
  */
 export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
-  const wrap = <A>(eff: TestEffect<A>) => Core.toEffect(eff, options);
-  const runEff = <A>(eff: TestEffect<A>) => Core.run(eff, options);
+  // See `Test/Bun.ts` for the rationale: the dev sidecar must outlive a
+  // single `runPromise` boundary, so all hooks share one scope that's only
+  // closed after `destroy(...)` runs.
+  const sharedScope = Scope.makeUnsafe("sequential");
+  const wrap = <A>(eff: TestEffect<A>) =>
+    Core.toEffect(eff, options, sharedScope);
+  const runEff = <A>(eff: TestEffect<A>) => Core.run(eff, options, sharedScope);
 
   const test = ((name, eff, opts) => {
     it.live(name, () => wrap(eff), timeoutOf(opts));
@@ -130,6 +137,7 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     return Core.toEffect(
       Core.withProviders(fn(scratch), options, scratch.name),
       { ...options, state: scratch.state },
+      sharedScope,
     );
   };
 
@@ -182,13 +190,34 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     vitestAfterEach(() => runEff(eff), timeoutOf(hookOptions));
   };
 
+  // `destroy(Stack)` needs the dev sidecar alive so it can call `sidecar.stop`.
+  // `Scope.close` on an already-closed scope is a no-op, so the destroy
+  // wrapper AND the fallback cleanup hook below can both call it safely.
+  const closeScope = Effect.suspend(() =>
+    Scope.close(sharedScope, Exit.void),
+  ).pipe(Effect.ignore);
+
+  // Fallback cleanup: if the user never calls `destroy(Stack)` (e.g.
+  // `NO_DESTROY=1`), nothing else closes the shared scope and the sidecar
+  // child process leaks past the test process. Register an `afterAll` that
+  // closes it. We defer registration to a microtask so it runs AFTER any
+  // user-registered `afterAll` (including `destroy(Stack)`); vitest runs
+  // afterAll hooks in registration order.
+  queueMicrotask(() => {
+    vitestAfterAll(() => Effect.runPromise(closeScope), DEFAULT_TIMEOUT);
+  });
+
   return {
     test,
     beforeAll,
     beforeEach,
     afterAll,
     afterEach,
-    deploy: (stack, callOpts) => Core.deploy(options, stack, callOpts),
-    destroy: (stack, callOpts) => Core.destroy(options, stack, callOpts),
+    deploy: (stack, callOpts) =>
+      Core.deploy(options, stack, { ...callOpts, scope: sharedScope }),
+    destroy: (stack, callOpts) =>
+      Core.destroy(options, stack, { ...callOpts, scope: sharedScope }).pipe(
+        Effect.ensuring(closeScope),
+      ),
   };
 };

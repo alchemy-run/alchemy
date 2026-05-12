@@ -20,6 +20,8 @@ export * as Plan from "./Plan.ts";
 export { Provider, ProviderCollection } from "./Provider.ts";
 export * from "./Random.ts";
 export * from "./Ref.ts";
+export { Secret } from "./Secret.ts";
+export { Variable } from "./Variable.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
 export * from "./Resource.ts";
 export * as Schema from "./Schema.ts";

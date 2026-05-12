@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { Path } from "effect/Path";
-import type { Scope } from "effect/Scope";
+import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
@@ -30,7 +30,7 @@ import { PlatformServices } from "./Util/PlatformServices.ts";
 export type StackServices =
   | Stack
   | Stage
-  | Scope
+  | Scope.Scope
   | FileSystem
   | Path
   | AlchemyContext
@@ -46,7 +46,7 @@ export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
   Err,
   | PlatformServices
   | HttpClient
-  | Scope
+  | Scope.Scope
   | AuthProviders
   | AlchemyContext
   | Cli
@@ -283,9 +283,18 @@ export const evalStack = <A, B, Err, Req>(
   options: {
     stage: string;
     dev?: boolean;
+    /**
+     * Optional caller-supplied scope. When provided, scoped resources
+     * (e.g. the dev sidecar process) live until the caller closes this
+     * scope instead of being torn down when `evalStack` resolves. Used
+     * by the test harness so the sidecar survives across `beforeAll`,
+     * tests, and `afterAll`. When omitted, behaves as before with a
+     * private scope closed on completion.
+     */
+    scope?: Scope.Scope;
   },
-) =>
-  Effect.gen(function* () {
+) => {
+  const body = Effect.gen(function* () {
     const stack = yield* effect;
     const configProvider = yield* loadConfigProvider(Option.none());
 
@@ -305,5 +314,9 @@ export const evalStack = <A, B, Err, Req>(
     ),
     Effect.provide(Layer.succeed(Stage, options.stage)),
     Effect.provide(Layer.provideMerge(alchemy({ dev: options.dev }), platform)),
-    Effect.scoped,
   );
+
+  return options.scope === undefined
+    ? Effect.scoped(body)
+    : Scope.provide(body, options.scope);
+};

@@ -1,12 +1,27 @@
+import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { KV } from "./KV.ts";
 import Room from "./Room.ts";
+
+/**
+ * Hard-coded value the integ test asserts on to prove the secret was
+ * bound at plantime and read at runtime through the `Redacted` accessor.
+ */
+export const WORKFLOW_SECRET_VALUE = "wf-secret-abc123";
 
 export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>()(
   "Notifier",
   Effect.gen(function* () {
     const rooms = yield* Room;
+    // Bind a `secret_text` on the workflow at plantime. Using a literal
+    // (instead of `Config.redacted("WORKFLOW_SECRET")`) keeps the integ
+    // test self-contained — no `.env` setup required.
+    const workflowSecret = yield* Alchemy.Secret(
+      "WORKFLOW_SECRET",
+      WORKFLOW_SECRET_VALUE,
+    );
     // Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/71
     //
     // The kv binding internally yields `Cloudflare.WorkerEnvironment` —
@@ -37,10 +52,18 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
         }).pipe(Effect.orDie),
       );
 
+      // Resolve the bound secret inside the workflow body. The accessor
+      // returns `Redacted<string>`; unwrap only where the value needs to
+      // leave the workflow (here, in the broadcast + the returned output
+      // so the integ test can assert end-to-end propagation).
+      const secret = yield* workflowSecret;
+      const secretValue = Redacted.value(secret);
+
       const processed = yield* Cloudflare.task(
         "process",
         Effect.succeed({
           text: `Processed: ${stored}`,
+          secret: secretValue,
           ts: Date.now(),
         }),
       );
@@ -48,7 +71,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
       const room = rooms.getByName(roomId);
       yield* Cloudflare.task(
         "broadcast",
-        room.broadcast(`[workflow] ${processed.text}`),
+        room.broadcast(`[workflow] ${processed.text} secret=${secretValue}`),
       );
 
       yield* Cloudflare.sleep("cooldown", "2 seconds");
