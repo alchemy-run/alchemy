@@ -13,6 +13,7 @@ import { ProfileLive } from "../Auth/Profile.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as Access from "./Access.ts";
 import * as AiGateway from "./AiGateway/index.ts";
+import * as AnalyticsEngine from "./AnalyticsEngine/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Artifacts from "./Artifacts/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
@@ -21,6 +22,7 @@ import * as Containers from "./Container/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as D1 from "./D1/index.ts";
 import * as Hyperdrive from "./Hyperdrive/index.ts";
+import * as Images from "./Images/index.ts";
 import * as KV from "./KV/index.ts";
 import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
@@ -49,6 +51,7 @@ export const providers = () =>
       ApiToken.UserApiToken,
       AiGateway.AiGateway,
       AiGateway.AiGatewayBindingPolicy,
+      AnalyticsEngine.AnalyticsEngineDatasetBindingPolicy,
       Artifacts.ArtifactsBindingPolicy,
       Command,
       Containers.Container,
@@ -56,6 +59,7 @@ export const providers = () =>
       D1.D1Database,
       Hyperdrive.Hyperdrive,
       Hyperdrive.HyperdriveBindingPolicy,
+      Images.ImagesBindingPolicy,
       KV.KVNamespace,
       KV.KVNamespaceBindingPolicy,
       Queue.Queue,
@@ -71,6 +75,7 @@ export const providers = () =>
       VpcService.VpcService,
       Random,
       Workers.BindWorkerPolicy,
+      Workers.CronEventSourcePolicy,
       Workers.FetchPolicy,
       Workers.Worker,
       Workflows.WorkflowResource,
@@ -82,12 +87,14 @@ export const providers = () =>
         ApiToken.UserApiTokenProvider(),
         AiGateway.AiGatewayProvider(),
         AiGateway.AiGatewayBindingPolicyLive,
+        AnalyticsEngine.AnalyticsEngineDatasetBindingPolicyLive,
         Artifacts.ArtifactsBindingPolicyLive,
         Containers.ContainerProvider(),
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
         Hyperdrive.HyperdriveBindingPolicyLive,
         Hyperdrive.HyperdriveProvider(),
+        Images.ImagesBindingPolicyLive,
         KV.KVNamespaceBindingPolicyLive,
         KV.KVNamespaceProvider(),
         Queue.QueueBindingPolicyLive,
@@ -102,6 +109,7 @@ export const providers = () =>
         Tunnel.TunnelProvider(),
         VpcService.VpcServiceProvider(),
         Workers.BindWorkerPolicyLive,
+        Workers.CronEventSourcePolicyLive,
         Workers.FetchPolicyLive,
         Workers.WorkerProvider(),
         Workflows.WorkflowProvider(),

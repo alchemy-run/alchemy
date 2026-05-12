@@ -7,6 +7,7 @@ import type { Input, InputProps } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { Provider } from "./Provider.ts";
+import { ref as makeRef } from "./Ref.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
@@ -47,6 +48,10 @@ export type ResourceClassWithMethods<
   Effect.Effect<ResourceConstructor<R>> & {
     Self: Self<R>;
     Provider: Provider<R>;
+    ref(
+      id: string,
+      options?: { stage?: string; stack?: string },
+    ): Effect.Effect<R>;
   } & Methods;
 
 export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
@@ -56,6 +61,10 @@ export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
   Effect.Effect<ResourceConstructor<R>> & {
     Self: Self<R>;
     Provider: Provider<R>;
+    ref(
+      id: string,
+      options?: { stage?: string; stack?: string },
+    ): Effect.Effect<R>;
   };
 
 export type LogicalId = string;
@@ -286,6 +295,19 @@ export function Resource<R extends ResourceLike>(
         constructor(id, props),
       );
     },
+    /**
+     * Build a typed reference to a deployed instance of this resource
+     * — in the current stack/stage by default, or in another via
+     * `options`. Resolves to the same shape as `yield*
+     * MyResource("id", props)` so downstream code can read attributes
+     * (`ref.someAttr`) exactly the way it would for a locally-declared
+     * resource.
+     */
+    ref: (
+      id: string,
+      options?: { stage?: string; stack?: string },
+    ): Effect.Effect<R> =>
+      Effect.succeed(Output.of(makeRef<R>(id, options)) as unknown as R),
     Type: type,
     Provider: ProviderTag,
     Self: self,

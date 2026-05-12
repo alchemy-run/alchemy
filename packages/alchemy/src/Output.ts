@@ -5,7 +5,7 @@ import { pipe } from "effect/Function";
 import type { Pipeable } from "effect/Pipeable";
 import * as Redacted from "effect/Redacted";
 import { SingleShotGen } from "effect/Utils";
-import { getRefMetadata, isRef, ref as stageRef, type Ref } from "./Ref.ts";
+import { getRefMetadata, isRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
 import { RuntimeContext } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
@@ -82,9 +82,11 @@ export type Expr<A = any, Req = any> =
   | ApplyExpr<any, A, Req>
   | EffectExpr<any, A, Req>
   | LiteralExpr<A>
+  | NamedExpr<A, Req>
   | PropExpr<A, keyof A, Req>
   | ResourceExpr<A, Req>
-  | RefExpr<A>;
+  | RefExpr<A>
+  | StackRefExpr<A>;
 
 export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
   declare readonly kind: any;
@@ -255,6 +257,36 @@ export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
   }
 }
 
+export const isNamedExpr = <A = any, Req = any>(
+  node: any,
+): node is NamedExpr<A, Req> => node?.kind === "NamedExpr";
+
+/**
+ * Wraps another `Expr` and overrides its `toString()` / inspect output.
+ *
+ * `BaseExpr.asEffect()` derives the binding id from `this.toString()`, so
+ * wrapping an expression in `NamedExpr` makes that derived id stable and
+ * caller-controlled (e.g. an env var name like `"API_KEY"`).
+ */
+export class NamedExpr<A, Req = never> extends BaseExpr<A, Req> {
+  readonly kind = "NamedExpr";
+  constructor(
+    public readonly expr: Expr<A, Req>,
+    public readonly bindingName: string,
+  ) {
+    super();
+    return proxy(this);
+  }
+  [inspect](): string {
+    return this.bindingName;
+  }
+}
+
+export const named = <A, Req>(
+  expr: Output<A, Req>,
+  name: string,
+): Output<A, Req> => new NamedExpr(expr as Expr<A, Req>, name) as any;
+
 export const all = <Outs extends (Output | Expr)[]>(...outs: Outs) =>
   new AllExpr(outs as any) as unknown as All<Outs>;
 
@@ -309,6 +341,48 @@ export class RefExpr<A> extends BaseExpr<A, never> {
   }
 }
 
+export const isStackRefExpr = <A = any>(node: any): node is StackRefExpr<A> =>
+  node?.kind === "StackRefExpr";
+
+/**
+ * A reference to the persisted output of a Stack at `(stack, stage)`.
+ *
+ * Resolved at evaluation time by reading `state.getOutput({ stack,
+ * stage })`. Distinct from {@link RefExpr}, which references a
+ * single resource's attributes within a stack/stage. `stage` may be
+ * `undefined`, in which case it falls back to the current stage.
+ */
+export class StackRefExpr<A> extends BaseExpr<A, never> {
+  readonly kind = "StackRefExpr";
+  constructor(
+    public readonly stack: string,
+    public readonly stage: string | undefined,
+  ) {
+    super();
+    return proxy(this);
+  }
+  [inspect](): string {
+    return `stackRef(${this.stack}${
+      this.stage ? `, { stage: ${this.stage} }` : ""
+    })`;
+  }
+}
+
+/**
+ * Build an `Output<A>` referencing the persisted output of another
+ * Stack. The returned Effect resolves to a lazy `Output<A>` whose
+ * value is read from the state store at plan/apply time.
+ *
+ * Returns `Effect<Output<A>>` (not `Output<A>` directly) so that
+ * `yield* Output.stackRef(...)` reads ergonomically inside an Effect
+ * generator and lines up with `Resource.ref` and `Stack.stage.<name>`.
+ */
+export const stackRef = <A>(
+  stack: string,
+  options: { stage?: string } = {},
+): Effect.Effect<Output<A, never>> =>
+  Effect.succeed(new StackRefExpr<A>(stack, options.stage) as any);
+
 export const filter = <Outs extends any[]>(...outs: Outs) =>
   outs.filter(isOutput) as unknown as Filter<Outs>;
 
@@ -353,7 +427,32 @@ function proxy(self: any): any {
       prop === ExprSymbol || prop === inspect ? true : prop in self,
     get: (target, prop) =>
       prop === Symbol.toPrimitive
-        ? (hint: string) => (hint === "number" ? Number.NaN : self.toString())
+        ? (hint: string) => {
+            // Any JS-level coercion of an unresolved Output produces a
+            // placeholder that *looks* like a real value but isn't:
+            //
+            //   - `string` / `default` hints (`${output}`, `output + ""`,
+            //     `==` against a primitive) previously fell through to
+            //     `self.toString()` and returned the inspect form
+            //     (e.g. "tunnel.tunnelId"). The bogus string flowed
+            //     into resource props and into the cloud — only
+            //     surfacing as an opaque downstream error (see PR
+            //     description for a real Cloudflare DNS landing).
+            //
+            //   - `number` hint (`+output`, `output * 2`,
+            //     `Math.max(0, output)`) previously returned NaN, which
+            //     propagates silently through arithmetic and lands as
+            //     "the API rejected a NaN field" much later.
+            //
+            // All three hints fail loud at the coercion site with a
+            // pointer to the right composition API.
+            throw new Error(
+              `Cannot coerce Output<${self[inspect]()}> to a ` +
+                `${hint === "number" ? "number" : "string"} via JS coercion. ` +
+                `Use Output.interpolate\`...\` or Output.map(output, fn) ` +
+                `to compose Outputs — the value isn't known until deploy time.`,
+            );
+          }
         : prop === ExprSymbol
           ? self
           : prop === inspect
@@ -445,6 +544,8 @@ export const evaluate: <A, Req = never>(
         );
       } else if (isPropExpr(expr)) {
         return (yield* evaluate(expr.expr, upstream))?.[expr.identifier];
+      } else if (isNamedExpr(expr)) {
+        return yield* evaluate(expr.expr, upstream);
       } else if (isRefExpr(expr)) {
         const state = yield* State.State;
         const stack = expr.stack ?? (yield* Stack).name;
@@ -465,6 +566,22 @@ export const evaluate: <A, Req = never>(
           );
         }
         return resource.attr;
+      } else if (isStackRefExpr(expr)) {
+        const state = yield* State.State;
+        const stack = expr.stack;
+        const stage = expr.stage ?? (yield* Stage);
+        const output = yield* state.getOutput({ stack, stage });
+        if (output == null) {
+          return yield* Effect.fail(
+            new InvalidReferenceError({
+              message: `Reference to stack '${stack}' at stage '${stage}' not found. Have you deployed stage '${stage}' of '${stack}'?`,
+              stack,
+              stage,
+              resourceId: stack,
+            }),
+          );
+        }
+        return output;
       }
     }
     if (Array.isArray(expr)) {
@@ -482,14 +599,6 @@ export const evaluate: <A, Req = never>(
     }
     return expr;
   }) as Effect.Effect<any>;
-
-export const ref = <R extends ResourceLike>(
-  resourceId: R["LogicalId"],
-  options?: {
-    stage?: string;
-    stack?: string;
-  },
-) => of(stageRef({ id: resourceId, ...options }));
 
 export const hasOutputs = (value: any): value is Output<any, any> =>
   Object.keys(upstreamAny(value)).length > 0;
@@ -531,7 +640,7 @@ export const upstream = <E extends Output<any, any>>(expr: E): any => {
     return upstream(expr.expr);
   } else if (isAllExpr(expr)) {
     return Object.assign({}, ...expr.outs.map((out) => upstream(out)));
-  } else if (isEffectExpr(expr) || isApplyExpr(expr)) {
+  } else if (isEffectExpr(expr) || isApplyExpr(expr) || isNamedExpr(expr)) {
     return upstream(expr.expr);
   } else if (Array.isArray(expr)) {
     return expr.map(upstream).reduce(toObject, {});

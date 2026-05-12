@@ -14,6 +14,7 @@ export interface BaseRuntimeContext {
   exports?: Effect.Effect<Record<string, any>>;
   serve?<Req = never>(
     handler: HttpEffect<Req>,
+    options?: { shape?: Record<string, unknown> },
   ): Effect.Effect<void, never, Req>;
 }
 
