@@ -87,4 +87,25 @@ export interface StateService {
     stack: string;
     stage: string;
   }): Effect.Effect<readonly string[], StateStoreError, never>;
+  /**
+   * Read the persisted stack output for `(stack, stage)`. Returns
+   * `undefined` when the stack has not been deployed (or has been
+   * destroyed) at this stage.
+   *
+   * Stack outputs are written by `apply` once the deploy succeeds and
+   * read by cross-stack references (`yield* OtherStack` /
+   * `OtherStack.stage.<name>` / `Output.stackRef(...)`).
+   */
+  getOutput(request: {
+    stack: string;
+    stage: string;
+  }): Effect.Effect<unknown, StateStoreError, never>;
+  /**
+   * Persist the resolved stack output for `(stack, stage)`.
+   */
+  setOutput(request: {
+    stack: string;
+    stage: string;
+    value: unknown;
+  }): Effect.Effect<unknown, StateStoreError, never>;
 }

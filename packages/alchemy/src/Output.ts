@@ -5,7 +5,7 @@ import { pipe } from "effect/Function";
 import type { Pipeable } from "effect/Pipeable";
 import * as Redacted from "effect/Redacted";
 import { SingleShotGen } from "effect/Utils";
-import { getRefMetadata, isRef, ref as stageRef, type Ref } from "./Ref.ts";
+import { getRefMetadata, isRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
 import { RuntimeContext } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
@@ -85,7 +85,8 @@ export type Expr<A = any, Req = any> =
   | NamedExpr<A, Req>
   | PropExpr<A, keyof A, Req>
   | ResourceExpr<A, Req>
-  | RefExpr<A>;
+  | RefExpr<A>
+  | StackRefExpr<A>;
 
 export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
   declare readonly kind: any;
@@ -340,6 +341,48 @@ export class RefExpr<A> extends BaseExpr<A, never> {
   }
 }
 
+export const isStackRefExpr = <A = any>(node: any): node is StackRefExpr<A> =>
+  node?.kind === "StackRefExpr";
+
+/**
+ * A reference to the persisted output of a Stack at `(stack, stage)`.
+ *
+ * Resolved at evaluation time by reading `state.getOutput({ stack,
+ * stage })`. Distinct from {@link RefExpr}, which references a
+ * single resource's attributes within a stack/stage. `stage` may be
+ * `undefined`, in which case it falls back to the current stage.
+ */
+export class StackRefExpr<A> extends BaseExpr<A, never> {
+  readonly kind = "StackRefExpr";
+  constructor(
+    public readonly stack: string,
+    public readonly stage: string | undefined,
+  ) {
+    super();
+    return proxy(this);
+  }
+  [inspect](): string {
+    return `stackRef(${this.stack}${
+      this.stage ? `, { stage: ${this.stage} }` : ""
+    })`;
+  }
+}
+
+/**
+ * Build an `Output<A>` referencing the persisted output of another
+ * Stack. The returned Effect resolves to a lazy `Output<A>` whose
+ * value is read from the state store at plan/apply time.
+ *
+ * Returns `Effect<Output<A>>` (not `Output<A>` directly) so that
+ * `yield* Output.stackRef(...)` reads ergonomically inside an Effect
+ * generator and lines up with `Resource.ref` and `Stack.stage.<name>`.
+ */
+export const stackRef = <A>(
+  stack: string,
+  options: { stage?: string } = {},
+): Effect.Effect<Output<A, never>> =>
+  Effect.succeed(new StackRefExpr<A>(stack, options.stage) as any);
+
 export const filter = <Outs extends any[]>(...outs: Outs) =>
   outs.filter(isOutput) as unknown as Filter<Outs>;
 
@@ -523,6 +566,22 @@ export const evaluate: <A, Req = never>(
           );
         }
         return resource.attr;
+      } else if (isStackRefExpr(expr)) {
+        const state = yield* State.State;
+        const stack = expr.stack;
+        const stage = expr.stage ?? (yield* Stage);
+        const output = yield* state.getOutput({ stack, stage });
+        if (output == null) {
+          return yield* Effect.fail(
+            new InvalidReferenceError({
+              message: `Reference to stack '${stack}' at stage '${stage}' not found. Have you deployed stage '${stage}' of '${stack}'?`,
+              stack,
+              stage,
+              resourceId: stack,
+            }),
+          );
+        }
+        return output;
       }
     }
     if (Array.isArray(expr)) {
@@ -540,14 +599,6 @@ export const evaluate: <A, Req = never>(
     }
     return expr;
   }) as Effect.Effect<any>;
-
-export const ref = <R extends ResourceLike>(
-  resourceId: R["LogicalId"],
-  options?: {
-    stage?: string;
-    stack?: string;
-  },
-) => of(stageRef({ id: resourceId, ...options }));
 
 export const hasOutputs = (value: any): value is Output<any, any> =>
   Object.keys(upstreamAny(value)).length > 0;

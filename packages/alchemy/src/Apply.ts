@@ -185,7 +185,14 @@ export const apply = <P extends Plan>(
     const outputs = Object.fromEntries(
       Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
     );
-    return yield* Output.evaluate(plan.output, outputs);
+    const resolved = yield* Output.evaluate(plan.output, outputs);
+
+    // Persist the stack's evaluated outputs so cross-stack references
+    // (`yield* OtherStack` / `OtherStack.stage.<name>` / `Output.stackRef`)
+    // can read them back out of the state store.
+    yield* state.setOutput({ stack: stackName, stage, value: resolved });
+
+    return resolved;
   }).pipe(
     ensureArtifactStore,
     Effect.withSpan("apply", {
