@@ -281,6 +281,12 @@ export interface WorkerProps<
   exports?: string[];
   bindings?: Bindings;
   /**
+   * Cron expressions that trigger the Worker's scheduled handler.
+   *
+   * Pass an empty array to remove all Cron Triggers.
+   */
+  crons?: string[];
+  /**
    * One or more custom hostnames (e.g. `"app.example.com"`) to bind to this
    * Worker. The Cloudflare Zone is inferred from the hostname — the zone must
    * already exist in the account.
@@ -318,6 +324,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
     domains: { hostname: string; id: string; zoneId: string }[];
+    crons: string[];
     hash?: {
       assets: string | undefined;
       bundle: string | undefined;
@@ -327,6 +334,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   {
     bindings?: WorkerBinding[];
     containers?: { className: string }[];
+    crons?: string[];
     hyperdrives?: Record<string, Required<HyperdriveDevOrigin>>;
   },
   Providers
@@ -1039,6 +1047,12 @@ function getDurableObjectBindings(
   );
 }
 
+export function getCronBindings(
+  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
+) {
+  return Array.from(new Set(bindings.flatMap((b) => b.data.crons ?? [])));
+}
+
 function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
   return Object.fromEntries(
     tags.flatMap((tag) => {
@@ -1089,9 +1103,11 @@ export const LiveWorkerProvider = () =>
       const createScriptSubdomain = yield* workers.createScriptSubdomain;
       const deleteScript = yield* workers.deleteScript;
       const getScriptSubdomain = yield* workers.getScriptSubdomain;
+      const getScriptSchedule = yield* workers.getScriptSchedule;
       const getScriptSettings = yield* workers.getScriptScriptAndVersionSetting;
       const getSubdomain = yield* workers.getSubdomain;
       const putScript = yield* workers.putScript;
+      const putScriptSchedule = yield* workers.putScriptSchedule;
       const putDomain = yield* workers.putDomain;
       const listDomains = yield* workers.listDomains;
       const deleteDomain = yield* workers.deleteDomain;
@@ -1138,6 +1154,60 @@ export const LiveWorkerProvider = () =>
                 (Array.isArray(domain) ? domain : [domain]).map(toPunycode),
               ),
             );
+
+      const normalizeCrons = (crons: string[] | undefined): string[] =>
+        Array.from(new Set(crons ?? []));
+
+      const getWorkerCrons = (scriptName: string) =>
+        getScriptSchedule({
+          accountId,
+          scriptName,
+        }).pipe(
+          Effect.map((response) =>
+            normalizeCrons(response.schedules.map((schedule) => schedule.cron)),
+          ),
+          Effect.catchTag("WorkerNotFound", () => Effect.succeed([])),
+        );
+
+      const reconcileCrons = (
+        scriptName: string,
+        desired: string[],
+        previous: string[],
+        session: ScopedPlanStatusSession,
+      ) =>
+        Effect.gen(function* () {
+          const live = yield* getWorkerCrons(scriptName);
+          const desiredSorted = [...desired].sort();
+          const liveSorted = [...live].sort();
+          const changed =
+            desiredSorted.length !== liveSorted.length ||
+            desiredSorted.some((cron, index) => cron !== liveSorted[index]);
+
+          if (!changed) return live;
+
+          if (desired.length > 0 || previous.length > 0 || live.length > 0) {
+            yield* session.note(
+              `Reconciling Cron Triggers (${desired.length}) ...`,
+            );
+          }
+
+          const result = yield* putScriptSchedule({
+            accountId,
+            scriptName,
+            body: desired.map((cron) => ({ cron })),
+          }).pipe(
+            Effect.retry({
+              while: (error: { _tag?: string }) =>
+                error?._tag === "WorkerNotFound",
+              schedule: Schedule.exponential(200).pipe(
+                Schedule.both(Schedule.recurs(15)),
+              ),
+            }),
+          );
+          return normalizeCrons(
+            result.schedules.map((schedule) => schedule.cron),
+          );
+        });
 
       /**
        * Infer the Cloudflare Zone ID for a given hostname by listing the
@@ -1958,6 +2028,12 @@ export const LiveWorkerProvider = () =>
           desiredDomains,
           previousDomains,
         );
+        const crons = yield* reconcileCrons(
+          name,
+          normalizeCrons([...getCronBindings(bindings), ...(news.crons ?? [])]),
+          output?.crons ?? [],
+          session,
+        );
         return {
           workerId: worker.id ?? name,
           workerName: name,
@@ -1970,6 +2046,7 @@ export const LiveWorkerProvider = () =>
           durableObjectNamespaces,
           accountId,
           domains,
+          crons,
           hash,
         } satisfies Worker["Attributes"];
       });
@@ -2025,7 +2102,13 @@ export const LiveWorkerProvider = () =>
 
       return Worker.Provider.of({
         stables: ["workerId", "workerName"],
-        diff: Effect.fnUntraced(function* ({ id, news, olds, output }) {
+        diff: Effect.fnUntraced(function* ({
+          id,
+          news,
+          olds,
+          output,
+          newBindings,
+        }) {
           if (!isResolved(news)) return undefined;
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" };
@@ -2047,7 +2130,23 @@ export const LiveWorkerProvider = () =>
           const domainsChanged =
             newDomains.length !== oldDomains.length ||
             newDomains.some((d, i) => d !== oldDomains[i]);
-          if (domainsChanged || (yield* hasChanged(id, news, output))) {
+          const newCrons = normalizeCrons([
+            ...(Array.isArray(newBindings)
+              ? getCronBindings(
+                  newBindings as ResourceBinding<Worker["Binding"]>[],
+                )
+              : []),
+            ...(news.crons ?? []),
+          ]).sort();
+          const oldCrons = [...(output?.crons ?? [])].sort();
+          const cronsChanged =
+            newCrons.length !== oldCrons.length ||
+            newCrons.some((cron, index) => cron !== oldCrons[index]);
+          if (
+            domainsChanged ||
+            cronsChanged ||
+            (yield* hasChanged(id, news, output))
+          ) {
             return {
               action: "update",
               stables:
@@ -2173,6 +2272,7 @@ export const LiveWorkerProvider = () =>
             durableObjectNamespaces,
             accountId,
             domains: [],
+            crons: [],
           } satisfies Worker["Attributes"];
         }),
         read: Effect.fnUntraced(
@@ -2204,6 +2304,7 @@ export const LiveWorkerProvider = () =>
                 service: workerName,
               }).pipe(Effect.map((r) => r.result ?? [])),
             ]);
+            const crons = yield* getWorkerCrons(workerName);
             yield* Effect.logInfo(
               `Cloudflare Worker read: found ${workerName}`,
             );
@@ -2224,6 +2325,7 @@ export const LiveWorkerProvider = () =>
                   ? [{ id: d.id, hostname: d.hostname, zoneId: d.zoneId }]
                   : [],
               ),
+              crons,
             } satisfies Worker["Attributes"];
 
             // Centralized ownership decision: the engine routes `read`'s

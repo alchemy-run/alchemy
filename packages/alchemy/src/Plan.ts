@@ -390,6 +390,8 @@ export const make = <A>(
             );
           }
           return output;
+        } else if (Output.isNamedExpr(expr)) {
+          return yield* resolveOutput(expr.expr);
         }
         return yield* Effect.die(
           new Error("Not implemented yet" + (expr as any).kind),

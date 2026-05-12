@@ -30,7 +30,7 @@ const TINY_PNG = new Uint8Array(
 );
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
-const main = pathe.resolve(import.meta.dirname, "../Workers/worker.ts");
+const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
 
 test.provider("worker bindings emit Cloudflare Images metadata", (stack) =>
   Effect.gen(function* () {
