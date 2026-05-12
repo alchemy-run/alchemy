@@ -174,12 +174,12 @@ const buildInitialTasks = (rows: ProgressRow[]) =>
                   key: row.key,
                   id: row.id,
                   type: row.taskType,
+                  // `noop` tasks are skipped — render as gray `•` from the start
+                  // rather than briefly flashing the `ran` cyan styling.
                   status:
                     row.action === "noop"
-                      ? ("ran" as ApplyStatus)
-                      : row.action === "delete"
-                        ? ("pending" as ApplyStatus)
-                        : ("pending" as ApplyStatus),
+                      ? ("skipped" as ApplyStatus)
+                      : ("pending" as ApplyStatus),
                   updatedAt: Date.now(),
                 },
               ],
@@ -384,6 +384,7 @@ function taskIcon(
 ): string {
   if (status === "running") return spinnerChar;
   if (status === "fail") return "✗";
+  if (status === "skipped") return "•";
   if (status === "ran") return action === "noop" ? "•" : "✓";
   if (status === "deleted") return "✓";
   if (action === "delete") return "-";
