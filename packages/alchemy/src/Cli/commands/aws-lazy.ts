@@ -4,15 +4,18 @@ import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
 
 import { envFile, instrumentCommand } from "./_shared.ts";
+import { ProviderCommandLoadError } from "./ProviderCommandLoadError.ts";
 
 const loadAwsCommands = Effect.tryPromise({
   try: () => import("./aws.ts"),
   catch: (cause) =>
-    new Error(
-      `The alchemy aws command requires the AWS optional peer dependencies declared by alchemy. Install the AWS peer dependency set before running this command.\n\nOriginal error: ${
-        cause instanceof Error ? cause.message : String(cause)
-      }`,
-    ),
+    new ProviderCommandLoadError({
+      message:
+        "The alchemy aws command could not load its provider module. Install the AWS optional peer dependency set before running this command.",
+      provider: "AWS",
+      installCommand: "bun add @distilled.cloud/aws @types/aws-lambda",
+      cause,
+    }),
 });
 
 const awsProfile = Flag.string("profile").pipe(
