@@ -270,11 +270,29 @@
     "access": "public"
   },
   "dependencies": {
+    "@clack/prompts": "^0.11.0",
+    "capnweb": "^0.6.1",
+    "fast-glob": "^3.3.2",
+    "fast-xml-parser": "catalog:",
+    "foreground-child": "^4.0.3",
+    "ink": "^6.3.1",
+    "jszip": "^3.10.1",
+    "magic-string": "^0.30.21",
+    "pathe": "^2.0.3",
+    "picomatch": "^4.0.4",
+    "proper-lockfile": "^4.1.2",
+    "react": "^19.2.0",
+    "rolldown": "catalog:",
+    "undici": "^7.16.0",
+    "yaml": "catalog:"
+  },
+  "devDependencies": {
     "@ai-sdk/anthropic": "^3.0.31",
     "@ai-sdk/openai": "^3.0.23",
     "@ai-sdk/provider": "^3.0.8",
     "@aws-sdk/credential-providers": "catalog:",
     "@clack/prompts": "^0.11.0",
+    "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/aws": "catalog:",
     "@distilled.cloud/axiom": "catalog:",
     "@distilled.cloud/cloudflare": "catalog:",
@@ -283,7 +301,59 @@
     "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
     "@distilled.cloud/core": "catalog:",
     "@distilled.cloud/neon": "catalog:",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@effect/platform-node-shared": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@libsql/client": "catalog:",
+    "@octokit/rest": "^22.0.1",
+    "@oxc-project/types": "^0.127.0",
+    "@smithy/node-config-provider": "catalog:",
+    "@smithy/shared-ini-file-loader": "catalog:",
+    "@smithy/types": "catalog:",
+    "@types/aws-lambda": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/libsodium-wrappers": "^0.8.2",
+    "@types/node": "catalog:",
+    "@types/pg": "^8.11.0",
+    "@types/picomatch": "^4.0.0",
+    "@types/proper-lockfile": "^4.1.4",
+    "@types/react": "^19.2.2",
+    "@types/ws": "^8.18.1",
+    "ai": "catalog:",
+    "aws4fetch": "catalog:",
+    "better-auth": "catalog:",
+    "effect": "catalog:",
+    "ignore": "^7.0.5",
+    "libsodium-wrappers": "^0.8.3",
     "pg": "^8.13.0",
+    "react-devtools-core": "^7.0.1",
+    "solid-js": "catalog:",
+    "sonda": "catalog:",
+    "tsconfig-paths": "^4.2.0",
+    "tsdown": "^0.15.4",
+    "tsx": "^4.20.6",
+    "typescript": "catalog:",
+    "web-tree-sitter": "catalog:",
+    "ws": "catalog:"
+  },
+  "peerDependencies": {
+    "@ai-sdk/anthropic": "^3.0.31",
+    "@ai-sdk/openai": "^3.0.23",
+    "@ai-sdk/provider": "^3.0.8",
+    "@aws-sdk/credential-providers": "catalog:",
+    "@cloudflare/workers-types": "catalog:",
+    "@distilled.cloud/aws": "catalog:",
+    "@distilled.cloud/axiom": "catalog:",
+    "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare-rolldown-plugin": "catalog:",
+    "@distilled.cloud/cloudflare-runtime": "catalog:",
+    "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
+    "@distilled.cloud/core": "catalog:",
+    "@distilled.cloud/neon": "catalog:",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@effect/sql-pg": "catalog:",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
@@ -294,68 +364,94 @@
     "@types/libsodium-wrappers": "^0.8.2",
     "ai": "catalog:",
     "aws4fetch": "catalog:",
-    "capnweb": "^0.6.1",
-    "fast-glob": "^3.3.2",
-    "fast-xml-parser": "catalog:",
-    "foreground-child": "^4.0.3",
-    "ignore": "^7.0.5",
-    "ink": "^6.3.1",
-    "jszip": "^3.10.1",
-    "libsodium-wrappers": "^0.8.3",
-    "magic-string": "^0.30.21",
-    "pathe": "^2.0.3",
-    "picomatch": "^4.0.4",
-    "proper-lockfile": "^4.1.2",
-    "react": "^19.2.0",
-    "rolldown": "catalog:",
-    "sonda": "catalog:",
-    "undici": "^7.16.0",
-    "web-tree-sitter": "catalog:",
-    "yaml": "catalog:"
-  },
-  "devDependencies": {
-    "@clack/prompts": "^0.11.0",
-    "@cloudflare/workers-types": "catalog:",
-    "@effect/platform-bun": "catalog:",
-    "@effect/platform-node": "catalog:",
-    "@effect/platform-node-shared": "catalog:",
-    "@oxc-project/types": "^0.127.0",
-    "@types/pg": "^8.11.0",
-    "@types/aws-lambda": "catalog:",
-    "@types/bun": "catalog:",
-    "@types/node": "catalog:",
-    "@types/picomatch": "^4.0.0",
-    "@types/proper-lockfile": "^4.1.4",
-    "@types/react": "^19.2.2",
-    "@types/ws": "^8.18.1",
-    "better-auth": "catalog:",
-    "effect": "catalog:",
-    "react-devtools-core": "^7.0.1",
-    "solid-js": "catalog:",
-    "tsconfig-paths": "^4.2.0",
-    "tsdown": "^0.15.4",
-    "tsx": "^4.20.6",
-    "typescript": "catalog:",
-    "ws": "catalog:"
-  },
-  "peerDependencies": {
-    "@effect/platform-bun": "catalog:",
-    "@effect/platform-node": "catalog:",
-    "@effect/sql-pg": "catalog:",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "ignore": "^7.0.5",
+    "libsodium-wrappers": "^0.8.3",
+    "pg": "^8.13.0",
+    "sonda": "catalog:",
     "vite": "catalog:",
+    "web-tree-sitter": "catalog:",
     "ws": "catalog:"
   },
   "peerDependenciesMeta": {
-    "@effect/platform-node": {
+    "@ai-sdk/anthropic": {
+      "optional": true
+    },
+    "@ai-sdk/openai": {
+      "optional": true
+    },
+    "@ai-sdk/provider": {
+      "optional": true
+    },
+    "@aws-sdk/credential-providers": {
+      "optional": true
+    },
+    "@cloudflare/workers-types": {
+      "optional": true
+    },
+    "@distilled.cloud/aws": {
+      "optional": true
+    },
+    "@distilled.cloud/axiom": {
+      "optional": true
+    },
+    "@distilled.cloud/cloudflare": {
+      "optional": true
+    },
+    "@distilled.cloud/cloudflare-rolldown-plugin": {
+      "optional": true
+    },
+    "@distilled.cloud/cloudflare-runtime": {
+      "optional": true
+    },
+    "@distilled.cloud/cloudflare-vite-plugin": {
+      "optional": true
+    },
+    "@distilled.cloud/core": {
+      "optional": true
+    },
+    "@distilled.cloud/neon": {
       "optional": true
     },
     "@effect/platform-bun": {
       "optional": true
     },
+    "@effect/platform-node": {
+      "optional": true
+    },
     "@effect/sql-pg": {
+      "optional": true
+    },
+    "@effect/vitest": {
+      "optional": true
+    },
+    "@libsql/client": {
+      "optional": true
+    },
+    "@octokit/rest": {
+      "optional": true
+    },
+    "@smithy/node-config-provider": {
+      "optional": true
+    },
+    "@smithy/shared-ini-file-loader": {
+      "optional": true
+    },
+    "@smithy/types": {
+      "optional": true
+    },
+    "@types/aws-lambda": {
+      "optional": true
+    },
+    "@types/libsodium-wrappers": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    },
+    "aws4fetch": {
       "optional": true
     },
     "drizzle-kit": {
@@ -364,7 +460,22 @@
     "drizzle-orm": {
       "optional": true
     },
+    "ignore": {
+      "optional": true
+    },
+    "libsodium-wrappers": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "sonda": {
+      "optional": true
+    },
     "vite": {
+      "optional": true
+    },
+    "web-tree-sitter": {
       "optional": true
     },
     "ws": {

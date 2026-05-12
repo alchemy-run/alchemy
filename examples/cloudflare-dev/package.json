@@ -18,9 +18,16 @@
   },
   "dependencies": {
     "@cloudflare/workers-types": "catalog:",
+    "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare-rolldown-plugin": "catalog:",
+    "@distilled.cloud/cloudflare-runtime": "catalog:",
+    "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "ignore": "^7.0.5",
+    "sonda": "catalog:",
+    "vite": "catalog:"
   }
 }

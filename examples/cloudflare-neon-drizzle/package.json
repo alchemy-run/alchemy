@@ -16,16 +16,24 @@
   },
   "dependencies": {
     "@cloudflare/workers-types": "catalog:",
+    "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare-rolldown-plugin": "catalog:",
+    "@distilled.cloud/cloudflare-runtime": "catalog:",
+    "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
+    "@distilled.cloud/neon": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
     "alchemy": "workspace:*",
     "drizzle-orm": "1.0.0-rc.1",
     "effect": "catalog:",
-    "pg": "^8.13.0"
+    "ignore": "^7.0.5",
+    "pg": "^8.13.0",
+    "sonda": "catalog:"
   },
   "devDependencies": {
     "@types/pg": "^8.11.0",
-    "drizzle-kit": "1.0.0-rc.1"
+    "drizzle-kit": "1.0.0-rc.1",
+    "vite": "catalog:"
   }
 }

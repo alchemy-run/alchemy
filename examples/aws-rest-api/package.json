@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@distilled.cloud/aws": "catalog:",
+    "@types/aws-lambda": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   }

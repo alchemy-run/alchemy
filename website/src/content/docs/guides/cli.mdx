@@ -290,6 +290,14 @@ alchemy logs --stage prod --since 2026-04-01T00:00:00Z
 Cloud-provider commands for AWS — managing the per-account
 infrastructure that Alchemy itself relies on.
 
+The AWS command group loads AWS provider modules when an `aws`
+subcommand runs. Projects that use these commands install the AWS
+provider package alongside `alchemy`:
+
+```sh
+bun add @distilled.cloud/aws
+```
+
 ```sh
 alchemy aws <subcommand> [options]
 ```
@@ -325,6 +333,14 @@ alchemy aws bootstrap --destroy
 
 Cloud-provider commands for Cloudflare — managing the state-store
 worker that backs `Cloudflare.state(...)`, and inspecting its logs.
+
+The Cloudflare command group loads Cloudflare provider modules when a
+`cloudflare` subcommand runs. Projects that use these commands install
+the Cloudflare provider packages alongside `alchemy`:
+
+```sh
+bun add @cloudflare/workers-types @distilled.cloud/cloudflare @distilled.cloud/cloudflare-runtime @distilled.cloud/cloudflare-vite-plugin @distilled.cloud/cloudflare-rolldown-plugin ignore sonda vite
+```
 
 ```sh
 alchemy cloudflare <subcommand> [options]

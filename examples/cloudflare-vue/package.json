@@ -15,17 +15,24 @@
     "vue-router": "^5.0.4"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare-rolldown-plugin": "catalog:",
+    "@distilled.cloud/cloudflare-runtime": "catalog:",
+    "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
     "@tsconfig/node24": "^24.0.4",
     "@types/node": "^24.12.0",
     "@vitejs/plugin-vue": "^6.0.5",
     "@vue/tsconfig": "^0.9.1",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "ignore": "^7.0.5",
     "npm-run-all2": "^8.0.4",
     "oxfmt": "^0.42.0",
+    "sonda": "catalog:",
     "typescript": "~6.0.0",
     "vite": "^8.0.3",
     "vite-plugin-vue-devtools": "^8.1.1",
-    "alchemy": "workspace:*",
-    "effect": "catalog:",
     "vue-tsc": "^3.2.6"
   },
   "engines": {

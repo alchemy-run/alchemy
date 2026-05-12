@@ -20,6 +20,7 @@
     "@cloudflare/vite-plugin": "catalog:",
     "@distilled.cloud/aws": "catalog:",
     "@effect/platform-node": "catalog:",
+    "@types/aws-lambda": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },

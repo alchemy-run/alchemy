@@ -7,9 +7,21 @@ sidebar:
 
 import Terminal from "../../components/Terminal.astro";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
-import { alchemyVersion, effectVersion } from "../../versions";
+import {
+  alchemyVersion,
+  cloudflareWorkersTypesVersion,
+  distilledCloudflareRolldownPluginVersion,
+  distilledCloudflareRuntimeVersion,
+  distilledCloudflareVersion,
+  distilledCloudflareVitePluginVersion,
+  effectVersion,
+  sondaVersion,
+  viteVersion,
+} from "../../versions";
 
-export const pkgs = `"alchemy@${alchemyVersion}" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
+export const corePkgs = `"alchemy@${alchemyVersion}" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
+export const cloudflarePkgs = `"@cloudflare/workers-types@${cloudflareWorkersTypesVersion}" "@distilled.cloud/cloudflare@${distilledCloudflareVersion}" "@distilled.cloud/cloudflare-runtime@${distilledCloudflareRuntimeVersion}" "@distilled.cloud/cloudflare-vite-plugin@${distilledCloudflareVitePluginVersion}" "@distilled.cloud/cloudflare-rolldown-plugin@${distilledCloudflareRolldownPluginVersion}" "ignore@^7.0.5" "sonda@${sondaVersion}" "vite@${viteVersion}"`;
+export const pkgs = `${corePkgs} ${cloudflarePkgs}`;
 
 ## Prerequisites
 
@@ -35,6 +47,11 @@ export const pkgs = `"alchemy@${alchemyVersion}" "effect@${effectVersion}" "@eff
 
 ## Install
 
+Alchemy installs its core runtime separately from provider packages.
+This page imports `alchemy/Cloudflare`, so the install command includes
+the Cloudflare packages that provide the resource API, local Worker
+runtime, Worker bundling plugins, and Worker type definitions.
+
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
     <Code code={`bun add ${pkgs}`} lang="sh" />
@@ -49,6 +66,18 @@ export const pkgs = `"alchemy@${alchemyVersion}" "effect@${effectVersion}" "@eff
     <Code code={`yarn add ${pkgs}`} lang="sh" />
   </TabItem>
 </Tabs>
+
+Provider imports map to package groups:
+
+| Import surface | Package group |
+| --- | --- |
+| `alchemy/AWS` | `@distilled.cloud/aws`, `@types/aws-lambda` |
+| `alchemy/Cloudflare` | `@cloudflare/workers-types`, `@distilled.cloud/cloudflare`, `@distilled.cloud/cloudflare-runtime`, `@distilled.cloud/cloudflare-vite-plugin`, `@distilled.cloud/cloudflare-rolldown-plugin`, `ignore`, `sonda`, `vite` |
+| `alchemy/GitHub` | `@octokit/rest`, `libsodium-wrappers` |
+| `alchemy/Axiom` | `@distilled.cloud/axiom` |
+| `alchemy/Neon` | `@distilled.cloud/neon`, `pg` |
+| `alchemy/Drizzle` | `@effect/sql-pg`, `drizzle-orm` |
+| `alchemy/SQLite` | `@libsql/client` |
 
 ## Create your Stack
 

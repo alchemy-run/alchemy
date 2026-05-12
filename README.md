@@ -50,8 +50,14 @@ One `bind()` wires the binding, env var, and typed connection — at deploy time
 - **Same code, every stage.** Local dev, `plan` / `deploy`, smoke tests, and CI all share one mental model.
 
 ```sh
-bun add alchemy effect
+bun add alchemy effect @effect/platform-bun @effect/platform-node
+bun add @cloudflare/workers-types @distilled.cloud/cloudflare @distilled.cloud/cloudflare-runtime @distilled.cloud/cloudflare-vite-plugin @distilled.cloud/cloudflare-rolldown-plugin ignore sonda vite
 ```
+
+Alchemy keeps provider integrations in opt-in packages. The example
+above imports `alchemy/Cloudflare`, so the install command includes the
+Cloudflare packages that supply the resource API, local Worker runtime,
+bundling plugins, and Worker type definitions.
 
 ## Bootstrap with an AI coding agent
 

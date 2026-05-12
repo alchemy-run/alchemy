@@ -17,12 +17,19 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@distilled.cloud/cloudflare": "catalog:",
+    "@distilled.cloud/cloudflare-rolldown-plugin": "catalog:",
+    "@distilled.cloud/cloudflare-runtime": "catalog:",
+    "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
     "@tanstack/react-router": "^1.167.4",
     "@tanstack/react-start": "^1.166.15",
     "alchemy": "workspace:*",
     "effect": "catalog:",
+    "ignore": "^7.0.5",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "sonda": "catalog:"
   },
   "devDependencies": {
     "@types/react": "^19.2.14",

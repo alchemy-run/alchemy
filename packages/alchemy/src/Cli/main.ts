@@ -16,8 +16,8 @@ installLocalhostDns();
 
 import { checkLatestVersion } from "./checkVersion.ts";
 import { handleCancellation } from "./commands/_shared.ts";
-import { awsCommand } from "./commands/aws.ts";
-import { cloudflareCommand } from "./commands/cloudflare.ts";
+import { awsCommand } from "./commands/aws-lazy.ts";
+import { cloudflareCommand } from "./commands/cloudflare-lazy.ts";
 import {
   deployCommand,
   destroyCommand,

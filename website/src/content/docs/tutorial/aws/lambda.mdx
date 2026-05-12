@@ -24,8 +24,14 @@ Start with an empty directory and install Alchemy and Effect:
 
 ```sh
 mkdir my-app && cd my-app && bun init -y
-bun add alchemy effect @effect/platform-bun
+bun add alchemy effect @effect/platform-bun @effect/platform-node @distilled.cloud/aws @types/aws-lambda
 ```
+
+The stack imports `alchemy/AWS`, so the AWS provider package is part of
+the project dependencies. The Lambda section also installs the AWS
+Lambda type package because the Lambda resource surface exposes handler
+types. Provider packages stay explicit so projects install the cloud
+integrations their stack imports.
 
 ## Create the Stack
 
