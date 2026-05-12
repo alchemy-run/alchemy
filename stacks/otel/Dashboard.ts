@@ -415,6 +415,73 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             `,
           },
         },
+
+        // ─── Resource usage & reliability ──────────────────────────
+        //
+        // Every provider lifecycle invocation is wrapped in a
+        // `provider.<op>` span (see `instrumentLifecycle` in Apply.ts)
+        // carrying `alchemy.resource.type` and `alchemy.resource.op`
+        // (precreate/create/update/delete/read). `error` is set when
+        // the lifecycle effect fails.
+        {
+          id: "resource-usage-ranked",
+          name: "Resource usage — ranked by lifecycle ops (7d)",
+          type: "Table",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where name startswith "provider."
+              | extend resource_type=tostring(['attributes.custom']['alchemy.resource.type']),
+                       project=tostring(['resource.custom']['alchemy.git.origin_hash'])
+              | where resource_type != ""
+              | summarize ops=count(),
+                          projects=dcountif(project, project != ""),
+                          errors=countif(tobool(['error']) == true)
+                  by resource_type
+              | order by ops desc
+              | take 200
+            `,
+          },
+        },
+        {
+          id: "resource-error-rate-by-type",
+          name: "Resource error rate by resource type (7d)",
+          type: "Table",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where name startswith "provider."
+              | extend resource_type=tostring(['attributes.custom']['alchemy.resource.type']),
+                       err=tobool(['error'])
+              | where resource_type != ""
+              | summarize errors=countif(err == true),
+                          total=count()
+                  by resource_type
+              | extend error_rate=todouble(errors) / todouble(total)
+              | order by error_rate desc, total desc
+              | take 200
+            `,
+          },
+        },
+        {
+          id: "resource-error-rate-by-op",
+          name: "Resource error rate by lifecycle method (7d)",
+          type: "Table",
+          query: {
+            apl: Output.interpolate`
+              ['${t}']
+              | where name startswith "provider."
+              | extend op=tostring(['attributes.custom']['alchemy.resource.op']),
+                       err=tobool(['error'])
+              | where op != ""
+              | summarize errors=countif(err == true),
+                          total=count()
+                  by op
+              | extend error_rate=todouble(errors) / todouble(total)
+              | order by total desc
+            `,
+          },
+        },
       ];
 
       const layout: Axiom.LayoutCell[] = [
@@ -455,6 +522,11 @@ export const CliOverviewDashboard = Axiom.Dashboard(
         // Row 10 — distribution + adoption shape
         { i: "state-store-top-stacks", x: 0, y: 54, w: 6, h: 8 },
         { i: "state-store-deployments-over-time", x: 6, y: 54, w: 6, h: 8 },
+        // Row 11 — Resource usage ranking (full width)
+        { i: "resource-usage-ranked", x: 0, y: 62, w: 12, h: 10 },
+        // Row 12 — Error rate broken down by resource type and lifecycle method
+        { i: "resource-error-rate-by-type", x: 0, y: 72, w: 8, h: 10 },
+        { i: "resource-error-rate-by-op", x: 8, y: 72, w: 4, h: 10 },
       ];
 
       return {
@@ -468,6 +540,8 @@ export const CliOverviewDashboard = Axiom.Dashboard(
             "CI vs local usage, and state-store backend breakdown. Plus " +
             "Cloudflare State Store ops: distinct deployments, stack count, " +
             "per-op latency / error rate. " +
+            "Resource usage: ranked list of resource types by lifecycle ops, " +
+            "with error rates broken down by resource type and by lifecycle method. " +
             "Project identity = alchemy.git.origin_hash (stable across CI runs); " +
             "user identity = alchemy.user.id (ephemeral in CI); " +
             "Cloudflare deployment identity = alchemy.cloudflare.account_hash " +
