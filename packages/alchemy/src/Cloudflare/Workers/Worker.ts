@@ -2363,7 +2363,17 @@ export const LiveWorkerProvider = () =>
                   type: "application/javascript+module",
                 }),
               ],
-            });
+            }).pipe(
+              // Cloudflare occasionally returns an UnknownCloudflareError
+              // (code 10002) for the initial putScript on a fresh worker name
+              // — retry a handful of times before giving up.
+              Effect.retry({
+                while: (e: any) => e._tag === "UnknownCloudflareError",
+                schedule: Schedule.exponential(1000).pipe(
+                  Schedule.both(Schedule.recurs(5)),
+                ),
+              }),
+            );
             if (doClasses.length > 0) {
               ({ durableObjectNamespaces } =
                 yield* getWorkerSettingsWithDurableObjects(name, doClasses));

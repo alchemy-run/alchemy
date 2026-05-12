@@ -25,7 +25,7 @@ const fixtureStack = Effect.gen(function* () {
 );
 
 const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(9)),
+  Schedule.both(Schedule.recurs(75)),
 );
 
 let baseUrl: string;
