@@ -169,7 +169,15 @@ function bundleOutputToWorkerModules(
 ): WorkerModule[] {
   const modules: WorkerModule[] = [];
   for (const file of bundle.files) {
-    if (file.path.endsWith(".map") || file.content instanceof Uint8Array) {
+    if (file.path.endsWith(".map")) {
+      continue;
+    }
+    if (file.content instanceof Uint8Array) {
+      modules.push({
+        name: file.path,
+        type: file.path.endsWith(".wasm") ? "Wasm" : "Data",
+        content: file.content,
+      });
       continue;
     }
     modules.push({

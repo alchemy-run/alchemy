@@ -82,6 +82,7 @@ export type Expr<A = any, Req = any> =
   | ApplyExpr<any, A, Req>
   | EffectExpr<any, A, Req>
   | LiteralExpr<A>
+  | NamedExpr<A, Req>
   | PropExpr<A, keyof A, Req>
   | ResourceExpr<A, Req>
   | RefExpr<A>;
@@ -255,6 +256,36 @@ export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
   }
 }
 
+export const isNamedExpr = <A = any, Req = any>(
+  node: any,
+): node is NamedExpr<A, Req> => node?.kind === "NamedExpr";
+
+/**
+ * Wraps another `Expr` and overrides its `toString()` / inspect output.
+ *
+ * `BaseExpr.asEffect()` derives the binding id from `this.toString()`, so
+ * wrapping an expression in `NamedExpr` makes that derived id stable and
+ * caller-controlled (e.g. an env var name like `"API_KEY"`).
+ */
+export class NamedExpr<A, Req = never> extends BaseExpr<A, Req> {
+  readonly kind = "NamedExpr";
+  constructor(
+    public readonly expr: Expr<A, Req>,
+    public readonly bindingName: string,
+  ) {
+    super();
+    return proxy(this);
+  }
+  [inspect](): string {
+    return this.bindingName;
+  }
+}
+
+export const named = <A, Req>(
+  expr: Output<A, Req>,
+  name: string,
+): Output<A, Req> => new NamedExpr(expr as Expr<A, Req>, name) as any;
+
 export const all = <Outs extends (Output | Expr)[]>(...outs: Outs) =>
   new AllExpr(outs as any) as unknown as All<Outs>;
 
@@ -353,7 +384,32 @@ function proxy(self: any): any {
       prop === ExprSymbol || prop === inspect ? true : prop in self,
     get: (target, prop) =>
       prop === Symbol.toPrimitive
-        ? (hint: string) => (hint === "number" ? Number.NaN : self.toString())
+        ? (hint: string) => {
+            // Any JS-level coercion of an unresolved Output produces a
+            // placeholder that *looks* like a real value but isn't:
+            //
+            //   - `string` / `default` hints (`${output}`, `output + ""`,
+            //     `==` against a primitive) previously fell through to
+            //     `self.toString()` and returned the inspect form
+            //     (e.g. "tunnel.tunnelId"). The bogus string flowed
+            //     into resource props and into the cloud — only
+            //     surfacing as an opaque downstream error (see PR
+            //     description for a real Cloudflare DNS landing).
+            //
+            //   - `number` hint (`+output`, `output * 2`,
+            //     `Math.max(0, output)`) previously returned NaN, which
+            //     propagates silently through arithmetic and lands as
+            //     "the API rejected a NaN field" much later.
+            //
+            // All three hints fail loud at the coercion site with a
+            // pointer to the right composition API.
+            throw new Error(
+              `Cannot coerce Output<${self[inspect]()}> to a ` +
+                `${hint === "number" ? "number" : "string"} via JS coercion. ` +
+                `Use Output.interpolate\`...\` or Output.map(output, fn) ` +
+                `to compose Outputs — the value isn't known until deploy time.`,
+            );
+          }
         : prop === ExprSymbol
           ? self
           : prop === inspect
@@ -445,6 +501,8 @@ export const evaluate: <A, Req = never>(
         );
       } else if (isPropExpr(expr)) {
         return (yield* evaluate(expr.expr, upstream))?.[expr.identifier];
+      } else if (isNamedExpr(expr)) {
+        return yield* evaluate(expr.expr, upstream);
       } else if (isRefExpr(expr)) {
         const state = yield* State.State;
         const stack = expr.stack ?? (yield* Stack).name;
@@ -531,7 +589,7 @@ export const upstream = <E extends Output<any, any>>(expr: E): any => {
     return upstream(expr.expr);
   } else if (isAllExpr(expr)) {
     return Object.assign({}, ...expr.outs.map((out) => upstream(out)));
-  } else if (isEffectExpr(expr) || isApplyExpr(expr)) {
+  } else if (isEffectExpr(expr) || isApplyExpr(expr) || isNamedExpr(expr)) {
     return upstream(expr.expr);
   } else if (Array.isArray(expr)) {
     return expr.map(upstream).reduce(toObject, {});

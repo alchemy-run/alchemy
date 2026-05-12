@@ -467,6 +467,43 @@ describe("Output.interpolate", () => {
   );
 });
 
+describe("Output coercion guard", () => {
+  // These guard against the long-standing footgun where coercing an
+  // unresolved Output silently produced a placeholder — the inspect
+  // string for string-hints, or NaN for number-hints. Both let bogus
+  // values flow into resource props and ultimately into the cloud.
+
+  it("throws on template-literal interpolation of a raw Output", () => {
+    const src = fakeResource("Test.Bucket", "Buck");
+    // @ts-expect-error — synthetic prop access
+    const name = Output.of(src).name;
+    expect(() => `${name}`).toThrow(/Output\.interpolate/);
+  });
+
+  it("throws on string concatenation with a raw Output", () => {
+    const src = fakeResource("Test.Bucket", "Buck");
+    // @ts-expect-error — synthetic prop access
+    const name = Output.of(src).name;
+    expect(() => "s3://" + name).toThrow(/Output\.interpolate/);
+  });
+
+  it("throws on number coercion of a raw Output", () => {
+    const src = fakeResource("Test.Bucket", "Buck");
+    // @ts-expect-error — synthetic prop access
+    const name = Output.of(src).name;
+    expect(() => +name).toThrow(/Output\.(interpolate|map)/);
+  });
+
+  it("throws on arithmetic with a raw Output", () => {
+    const src = fakeResource("Test.Bucket", "Buck");
+    // @ts-expect-error — synthetic prop access
+    const name = Output.of(src).name;
+    expect(() => (name as unknown as number) * 2).toThrow(
+      /Output\.(interpolate|map)/,
+    );
+  });
+});
+
 describe("Output.isOutput / isExpr", () => {
   it("identifies Output expressions", () => {
     expect(Output.isOutput(Output.literal(1))).toBe(true);

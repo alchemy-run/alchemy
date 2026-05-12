@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.35",
+  "version": "2.0.0-beta.36",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -291,7 +291,6 @@
     "@smithy/shared-ini-file-loader": "catalog:",
     "@smithy/types": "catalog:",
     "@types/aws-lambda": "catalog:",
-    "@types/libsodium-wrappers": "^0.8.2",
     "ai": "catalog:",
     "aws4fetch": "catalog:",
     "capnweb": "^0.6.1",
@@ -309,6 +308,7 @@
     "react": "^19.2.0",
     "rolldown": "catalog:",
     "sonda": "catalog:",
+    "undici": "^7.16.0",
     "web-tree-sitter": "catalog:",
     "yaml": "catalog:"
   },
