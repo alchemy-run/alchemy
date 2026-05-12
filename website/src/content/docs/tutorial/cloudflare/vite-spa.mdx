@@ -286,6 +286,261 @@ For deeper coverage of framework-specific patterns (asset configs,
 SSR vs SPA tradeoffs, custom build steps), see the
 [Frontend frameworks guide](/guides/frontends).
 
+## Add a backend resource
+
+Most SPAs need to talk to a real backing service — a bucket for
+uploads, a database for state. Bindings give your Worker a typed
+handle to those resources.
+
+The walkthrough below uses a TanStack Start route handler because
+a pure SPA only ships static assets — there's no server-side `env`
+to call. The same `bindings` map and the same three call patterns
+work in any Vite framework that exposes server routes (SolidStart,
+Astro SSR, etc.).
+
+Start with the simplest backend: an R2 bucket.
+
+```typescript
+// src/backend.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+
+export const Bucket = Cloudflare.R2Bucket("Bucket");
+```
+
+`Cloudflare.R2Bucket("Bucket")` is a description, not a deploy.
+Alchemy provisions the real bucket on the next run as soon as
+something binds to it.
+
+## Bind the bucket to your worker
+
+Add the bucket to the Vite worker's `bindings` map:
+
+```diff lang="typescript"
+// alchemy.run.ts
++import { Bucket } from "./src/backend.ts";
+
+ const web = yield* Cloudflare.Vite("Website", {
++  bindings: {
++    BUCKET: Bucket,
++  },
+ });
+```
+
+The key (`BUCKET`) is the field name on `env`; the value identifies
+the resource. `env.BUCKET` is now typed as `R2Bucket` end to end.
+
+## Pull in Cloudflare's binding types
+
+`InferEnv` maps each binding to a Cloudflare runtime type
+(`R2Bucket`, `Service`, `KVNamespace`, …) — those types live in
+`@cloudflare/workers-types`. Add it to your `tsconfig.json` so the
+TypeScript checker can find them:
+
+```sh
+bun add -d @cloudflare/workers-types
+```
+
+```diff lang="json"
+// tsconfig.json
+ {
+   "compilerOptions": {
+     "types": [
+       "bun",
+-      "vite/client"
++      "vite/client",
++      "@cloudflare/workers-types"
+     ]
+   }
+ }
+```
+
+Without this you'll see `Cannot find name 'R2Bucket'` (or `Service`,
+etc.) the moment you reference `env.BUCKET` inside a route handler.
+
+## Option 1 — call the binding directly
+
+Inside a server route, `env.BUCKET` is the standard Cloudflare R2
+client. Use it as a regular `async`/`await` API:
+
+```typescript
+// src/routes/api.hello.ts
+import { createFileRoute } from "@tanstack/react-router";
+import { env } from "../env.ts";
+
+export const Route = createFileRoute("/api/hello")({
+  server: {
+    handlers: {
+      GET: async ({ request }) => {
+        const key = new URL(request.url).searchParams.get("key");
+        if (!key) return new Response("Missing 'key'", { status: 400 });
+
+        // option 1 — use the async binding directly
+        const object = await env.BUCKET.get(key);
+        if (!object) return new Response("Not found", { status: 404 });
+        return new Response(object.body);
+      },
+    },
+  },
+});
+```
+
+This is the most direct path — no extra workers, no extra code.
+Reach for it when the route handler owns all the logic itself.
+
+## Add an Effect-native Worker
+
+When the work is shared across routes, deserves typed errors, or
+needs Effect-native primitives (retries, layers, structured
+concurrency), factor it into its own Worker:
+
+```diff lang="typescript"
+// src/backend.ts
+ import * as Cloudflare from "alchemy/Cloudflare";
++import * as Effect from "effect/Effect";
++import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
++import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+
+ export const Bucket = Cloudflare.R2Bucket("Bucket");
++
++export default class Backend extends Cloudflare.Worker<Backend>()(
++  "Backend",
++  { main: import.meta.path },
++  Effect.gen(function* () {
++    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
++
++    return {
++      hello: Effect.fn("Backend.hello")(function* (key: string) {
++        const object = yield* bucket.get(key);
++        if (object === null) return null;
++        return yield* object.text();
++      }),
++      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        const key = new URL(request.url, "http://x").searchParams.get("key");
++        if (!key) {
++          return HttpServerResponse.text("Missing 'key'", { status: 400 });
++        }
++        const object = yield* bucket.get(key);
++        if (object === null) {
++          return HttpServerResponse.text("Not found", { status: 404 });
++        }
++        return HttpServerResponse.raw(object.body);
++      }),
++    };
++  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
++) {}
+```
+
+`hello` is a typed RPC method — any worker bound to `Backend` can
+call it across worker boundaries. `fetch` is the standard HTTP
+handler. The R2 binding lives once on the Backend; the Vite worker
+no longer needs to bind it directly unless it also wants to call
+R2 itself.
+
+## Bind the Backend as a service
+
+Add `Backend` next to (or instead of) `BUCKET` in the Vite worker's
+bindings:
+
+```diff lang="typescript"
+// alchemy.run.ts
+-import { Bucket } from "./src/backend.ts";
++import Backend, { Bucket } from "./src/backend.ts";
+
+ const web = yield* Cloudflare.Vite("Website", {
+   bindings: {
+     BUCKET: Bucket,
++    BACKEND: Backend,
+   },
+ });
+```
+
+`env.BACKEND` is a Cloudflare service binding, typed for the wire
+shape Alchemy emits — Effect/Stream return values come back as
+encoded envelopes (more on that in option 3).
+
+## Option 2 — call the worker's `fetch`
+
+`env.BACKEND.fetch(input, init?)` is the standard Cloudflare
+service-binding `fetch`. Use it like any other HTTP service:
+
+```diff lang="typescript"
+// src/routes/api.hello.ts
+       GET: async ({ request }) => {
+         const key = new URL(request.url).searchParams.get("key");
+         if (!key) return new Response("Missing 'key'", { status: 400 });
+
+-        // option 1 — use the async binding directly
+-        const object = await env.BUCKET.get(key);
+-        if (!object) return new Response("Not found", { status: 404 });
+-        return new Response(object.body);
++        // option 2 — call the worker's fetch handler
++        return env.BACKEND.fetch(
++          `https://backend/?key=${encodeURIComponent(key)}`,
++        );
+       },
+```
+
+The Backend already handles the R2 lookup behind its own `fetch`,
+so the response flows straight through. Reach for this when the
+backend logic is HTTP-shaped (REST endpoints, streaming responses)
+and you don't want to duplicate it in the route handler.
+
+## Wrap the binding for typed RPC
+
+Effect-native workers serialize their results as wire envelopes:
+`Effect.fail` becomes an `RpcErrorEnvelope`, `Stream` becomes an
+encoded `ReadableStream`. `toPromiseApi` is the consumer-side
+wrapper that auto-decodes those envelopes into a clean `Promise<T>`
+API:
+
+```diff lang="typescript"
+// src/routes/api.hello.ts
+ import { createFileRoute } from "@tanstack/react-router";
++import * as Cloudflare from "alchemy/Cloudflare";
++import type Backend from "../backend.ts";
+ import { env } from "../env.ts";
+
++const backend = Cloudflare.toPromiseApi<Backend>(env.BACKEND);
+```
+
+Error envelopes are thrown so `await` rejects; stream envelopes
+unwrap to their raw `ReadableStream<Uint8Array>` body.
+`Service.fetch` and `Service.connect` pass through unchanged so the
+returned proxy is still a usable `Service` binding.
+
+## Option 3 — call the worker's RPC method
+
+Now `hello` is a normal typed `await`:
+
+```diff lang="typescript"
+// src/routes/api.hello.ts
+       GET: async ({ request }) => {
+         const key = new URL(request.url).searchParams.get("key");
+         if (!key) return new Response("Missing 'key'", { status: 400 });
+
+-        // option 2 — call the worker's fetch handler
+-        return env.BACKEND.fetch(
+-          `https://backend/?key=${encodeURIComponent(key)}`,
+-        );
++        // option 3 — call the worker's RPC method
++        const value = await backend.hello(key);
++        if (value === null) return new Response("Not found", { status: 404 });
++        return new Response(value);
+       },
+```
+
+RPC keeps you off the HTTP detour — the call is a typed function,
+not a request, and the return value is the value itself (no
+`.json()`, no status codes to plumb).
+
+:::tip[Calling RPC from another Effect-native Worker?]
+Use [`Cloudflare.bindWorker(Backend)`](/providers/cloudflare/Worker)
+instead of `toPromiseApi`. It returns the same shape with `Effect`
+return values, preserving typed errors and decoded streams instead
+of throwing them away.
+:::
+
 Your app now ships a Worker backend and a Vite frontend from the
 same `alchemy.run.ts`, deploying together with one command. Next
 you'll [run a Container](/tutorial/cloudflare/containers) so each

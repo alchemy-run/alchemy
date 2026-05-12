@@ -64,6 +64,31 @@ export const taggedFunction = <
   }) as Tag & Fn;
 };
 
+export const isYieldableEffect = (
+  value: unknown,
+): value is Effect.Effect<unknown, unknown, unknown> =>
+  Effect.isEffect(value) &&
+  typeof (value as { [Symbol.iterator]?: unknown })[Symbol.iterator] ===
+    "function";
+
+export type YieldableEffectLike<A = unknown, E = unknown, R = unknown> =
+  | Effect.Effect<A, E, R>
+  | {
+      asEffect: () => Effect.Effect<A, E, R>;
+      [Symbol.iterator]: () => Iterator<unknown>;
+    };
+
+export const isEffectClassLike = (
+  value: unknown,
+): value is YieldableEffectLike =>
+  typeof value === "function" &&
+  typeof (value as { asEffect?: unknown }).asEffect === "function";
+
+export const isYieldableEffectLike = (
+  value: unknown,
+): value is YieldableEffectLike =>
+  isYieldableEffect(value) || isEffectClassLike(value);
+
 export type UnwrapEffect<T> =
   T extends Effect.Effect<infer A, any, any> ? A : T;
 
