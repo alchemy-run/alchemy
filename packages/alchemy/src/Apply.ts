@@ -260,6 +260,18 @@ const executePlan = Effect.fnUntraced(function* (
     ),
   ) as Record<string, Deferred.Deferred<void>>;
 
+  // `readyStable` fires only when a node has reached its TERMINAL output —
+  // resources after `reconcile`, tasks after the body completes. Resource
+  // precreate stubs do NOT signal `readyStable`, so any consumer that
+  // requires stable inputs (e.g. Tasks) waits past the precreate phase.
+  const readyStable = Object.fromEntries(
+    yield* Effect.all(
+      Object.keys(allNodes).map((fqn) =>
+        Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
+      ),
+    ),
+  ) as Record<string, Deferred.Deferred<void>>;
+
   const getOutputs = (): Record<string, any> =>
     Object.fromEntries(
       Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
@@ -273,6 +285,14 @@ const executePlan = Effect.fnUntraced(function* (
       { concurrency: "unbounded" },
     );
 
+  const waitForStableDeps = (fqns: string[]) =>
+    Effect.all(
+      fqns
+        .filter((fqn) => fqn in readyStable)
+        .map((fqn) => Deferred.await(readyStable[fqn])),
+      { concurrency: "unbounded" },
+    );
+
   const failures: LifecycleFailure[] = [];
 
   yield* Effect.all(
@@ -283,13 +303,14 @@ const executePlan = Effect.fnUntraced(function* (
             node as TaskApply,
             tracker,
             ready,
+            readyStable,
             terminalStatuses,
             session,
             state,
             stackName,
             stage,
             getOutputs,
-            waitForDeps,
+            waitForStableDeps,
             failures,
           )
         : executeNode(
@@ -297,6 +318,7 @@ const executePlan = Effect.fnUntraced(function* (
             node as Apply,
             tracker,
             ready,
+            readyStable,
             terminalStatuses as any,
             session,
             state,
@@ -331,6 +353,7 @@ const executeNode = (
   node: Apply,
   tracker: Record<string, ResourceTracker>,
   ready: Record<string, Deferred.Deferred<void>>,
+  readyStable: Record<string, Deferred.Deferred<void>>,
   terminalStatuses: Map<
     string,
     {
@@ -391,6 +414,10 @@ const executeNode = (
       });
 
     const signalReady = Deferred.succeed(ready[fqn], void 0);
+    // Signal only after reconcile completes — never during precreate. Tasks
+    // (and any other consumer that calls `waitForStableDeps`) block on this
+    // so they observe the resource's final attrs rather than a stub.
+    const signalReadyStable = Deferred.succeed(readyStable[fqn], void 0);
 
     const storeAndSignal = (t: ResourceTracker) =>
       Effect.gen(function* () {
@@ -401,6 +428,8 @@ const executeNode = (
     // ── noop ──
 
     if (node.action === "noop") {
+      // No work to do — the persisted attr is already stable.
+      yield* signalReadyStable;
       yield* storeAndSignal({
         output: node.state.attr,
         props: node.state.props,
@@ -604,6 +633,7 @@ const executeNode = (
           instanceId,
         };
         yield* signalReady;
+        yield* signalReadyStable;
 
         yield* markTerminal("created");
         return;
@@ -735,6 +765,7 @@ const executeNode = (
         // the deferred has already been resolved by the early `storeAndSignal`
         // above and `signalReady` is a no-op the second time.
         yield* signalReady;
+        yield* signalReadyStable;
 
         yield* markTerminal("updated");
         return;
@@ -752,6 +783,7 @@ const executeNode = (
             instanceId,
           };
           yield* signalReady;
+          yield* signalReadyStable;
           yield* markTerminal("created");
           return;
         }
@@ -898,6 +930,7 @@ const executeNode = (
           instanceId,
         };
         yield* signalReady;
+        yield* signalReadyStable;
 
         // Keep progress anchored to the live replacement while GC drains the
         // previous generation(s) in the background.
@@ -923,6 +956,10 @@ const executeNode = (
           cause,
         });
         yield* Deferred.failCause(ready[fqn], cause as Cause.Cause<never>);
+        yield* Deferred.failCause(
+          readyStable[fqn],
+          cause as Cause.Cause<never>,
+        );
         yield* session.emit({
           kind: "status-change",
           id: node.resource.LogicalId,
@@ -953,6 +990,7 @@ const executeTaskNode = (
   node: TaskApply,
   tracker: Record<string, ResourceTracker>,
   ready: Record<string, Deferred.Deferred<void>>,
+  readyStable: Record<string, Deferred.Deferred<void>>,
   terminalStatuses: Map<
     string,
     {
@@ -998,6 +1036,7 @@ const executeTaskNode = (
       });
 
     const signalReady = Deferred.succeed(ready[fqn], void 0);
+    const signalReadyStable = Deferred.succeed(readyStable[fqn], void 0);
 
     if (node.action === "noop") {
       tracker[fqn] = {
@@ -1007,6 +1046,7 @@ const executeTaskNode = (
         instanceId: fqn,
       };
       yield* signalReady;
+      yield* signalReadyStable;
       terminalStatuses.set(fqn, {
         id: logicalId,
         type: task.Type,
@@ -1016,8 +1056,13 @@ const executeTaskNode = (
     }
 
     // ── run ──
+    // Wait for stable (post-reconcile) upstream attrs — not precreate stubs.
+    // This is `waitForStableDeps` at the call site, passed in as the
+    // `waitForDeps` parameter here.
     yield* waitForDeps(
-      Object.keys(Output.resolveUpstream(node.input)).filter((f) => f in ready),
+      Object.keys(Output.resolveUpstream(node.input)).filter(
+        (f) => f in readyStable,
+      ),
     );
 
     const outputs = getOutputs();
@@ -1057,6 +1102,7 @@ const executeTaskNode = (
       instanceId: fqn,
     };
     yield* signalReady;
+    yield* signalReadyStable;
     terminalStatuses.set(fqn, {
       id: logicalId,
       type: task.Type,
@@ -1072,6 +1118,10 @@ const executeTaskNode = (
           cause,
         });
         yield* Deferred.failCause(ready[fqn], cause as Cause.Cause<never>);
+        yield* Deferred.failCause(
+          readyStable[fqn],
+          cause as Cause.Cause<never>,
+        );
         yield* session.emit({
           kind: "status-change",
           id: node.task.LogicalId,

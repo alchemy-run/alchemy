@@ -1287,7 +1287,7 @@ export const printPlan = (plan: Plan): string => {
     "║ Legend: + create, ~ update, - delete, ± replace, = noop,       ║",
   );
   lines.push(
-    "║         ▶ run task, · skip task                                ║",
+    "║         λ run task, · skip task                                ║",
   );
   lines.push(
     "╚════════════════════════════════════════════════════════════════╝",
@@ -1323,7 +1323,7 @@ export const printPlan = (plan: Plan): string => {
   const taskIds = Object.keys(plan.tasks ?? {}).sort();
   for (const id of taskIds) {
     const node = plan.tasks[id];
-    const symbol = node.action === "run" ? "▶" : "·";
+    const symbol = node.action === "run" ? "λ" : "·";
     const type = node.task.Type;
     const downstream = node.downstream.length
       ? ` → [${node.downstream.join(", ")}]`

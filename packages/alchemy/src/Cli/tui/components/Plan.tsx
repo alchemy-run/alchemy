@@ -194,7 +194,7 @@ const getActionIcon = (action: AnyAction): string =>
     noop: "•",
     replace: "!",
     mixed: "*",
-    run: "▶",
+    run: "λ",
   })[action] ?? "?";
 
 const actionColor = (action: CRUD["action"]): Color => getActionColor(action);

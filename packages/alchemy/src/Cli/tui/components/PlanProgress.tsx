@@ -388,7 +388,7 @@ function taskIcon(
   if (status === "deleted") return "✓";
   if (action === "delete") return "-";
   if (action === "noop") return "•";
-  return "▶";
+  return "λ";
 }
 
 function statusIcon(status: ApplyStatus, spinnerChar: string): string {
