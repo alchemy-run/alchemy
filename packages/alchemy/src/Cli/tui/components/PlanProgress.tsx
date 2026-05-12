@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState, type JSX } from "react";
 
 import { Box, Text } from "ink";
-import type { CRUD, Plan } from "../../../Plan.ts";
+import type { CRUD, Plan, TaskApply, TaskDelete } from "../../../Plan.ts";
 
 import type {
   ApplyEvent,
@@ -13,6 +13,7 @@ import {
   buildNamespaceTree,
   flattenTree,
   type FlattenedItem,
+  type TaskAction,
 } from "../../NamespaceTree.ts";
 
 interface ProgressEventSource {
@@ -51,6 +52,14 @@ export type ProgressRow =
       action: CRUD["action"];
       /** For `noop` resources, persisted state status to show instead of `pending`. */
       persistedApplyStatus?: "created" | "updated";
+    }
+  | {
+      key: string;
+      type: "task";
+      id: string;
+      depth: number;
+      taskType: string;
+      action: TaskAction;
     };
 
 const getTaskKey = (item: FlattenedItem) => item.path.join("/");
@@ -65,42 +74,55 @@ export const buildProgressRows = (plan: Plan): ProgressRow[] => {
         item !== undefined,
     ),
   ] as PlanItem[];
-  const tree = buildNamespaceTree(items);
+  const taskItems = [
+    ...Object.values(plan.tasks ?? {}),
+    ...Object.values(plan.taskDeletions ?? {}),
+  ].filter((t): t is TaskApply | TaskDelete => t !== undefined);
+  const tree = buildNamespaceTree(items, taskItems);
   return flattenTree(tree)
     .filter((item) => item.type !== "binding")
-    .map((item) =>
-      item.type === "namespace"
-        ? {
-            key: getTaskKey(item),
-            type: "namespace" as const,
-            id: item.id,
-            depth: item.depth,
-            action: item.action,
-          }
-        : {
-            key: getTaskKey(item),
-            type: "resource" as const,
-            id: item.id,
-            depth: item.depth,
-            resourceType: item.resourceType ?? "unknown",
-            action: item.action as CRUD["action"],
-            persistedApplyStatus:
-              item.action === "noop"
-                ? (() => {
-                    const crud = findCrudByLogicalId(plan, item.id);
-                    return crud?.action === "noop"
-                      ? crud.state.status
-                      : undefined;
-                  })()
-                : undefined,
-          },
-    );
+    .map((item) => {
+      if (item.type === "namespace") {
+        return {
+          key: getTaskKey(item),
+          type: "namespace" as const,
+          id: item.id,
+          depth: item.depth,
+          action: item.action,
+        };
+      }
+      if (item.type === "task") {
+        return {
+          key: getTaskKey(item),
+          type: "task" as const,
+          id: item.id,
+          depth: item.depth,
+          taskType: item.taskType ?? "unknown",
+          action: item.action as TaskAction,
+        };
+      }
+      return {
+        key: getTaskKey(item),
+        type: "resource" as const,
+        id: item.id,
+        depth: item.depth,
+        resourceType: item.resourceType ?? "unknown",
+        action: item.action as CRUD["action"],
+        persistedApplyStatus:
+          item.action === "noop"
+            ? (() => {
+                const crud = findCrudByLogicalId(plan, item.id);
+                return crud?.action === "noop" ? crud.state.status : undefined;
+              })()
+            : undefined,
+      };
+    });
 };
 
 const buildLogicalIdIndex = (rows: ProgressRow[]) => {
   const index = new Map<string, string[]>();
   for (const row of rows) {
-    if (row.type !== "resource") continue;
+    if (row.type !== "resource" && row.type !== "task") continue;
     const keys = index.get(row.id);
     if (keys) {
       keys.push(row.key);
@@ -142,7 +164,27 @@ export function toPlanTask(
 const buildInitialTasks = (rows: ProgressRow[]) =>
   new Map(
     rows.flatMap((row) =>
-      row.type === "resource" ? [[row.key, toPlanTask(row)]] : [],
+      row.type === "resource"
+        ? [[row.key, toPlanTask(row)]]
+        : row.type === "task"
+          ? [
+              [
+                row.key,
+                {
+                  key: row.key,
+                  id: row.id,
+                  type: row.taskType,
+                  status:
+                    row.action === "noop"
+                      ? ("ran" as ApplyStatus)
+                      : row.action === "delete"
+                        ? ("pending" as ApplyStatus)
+                        : ("pending" as ApplyStatus),
+                  updatedAt: Date.now(),
+                },
+              ],
+            ]
+          : [],
     ),
   );
 
@@ -220,6 +262,53 @@ export function PlanProgress(props: PlanProgressProps): JSX.Element {
           );
         }
 
+        if (row.type === "task") {
+          const t = tasks.get(row.key);
+          const status: ApplyStatus =
+            t?.status ?? (row.action === "noop" ? "ran" : "pending");
+          const color = statusColor(status);
+          const icon = taskIcon(row.action, status, spinner);
+          const label =
+            row.action === "delete"
+              ? status === "deleted"
+                ? "deleted"
+                : "drop"
+              : status === "ran"
+                ? row.action === "noop"
+                  ? "skip"
+                  : "ran"
+                : status === "running"
+                  ? "running"
+                  : status === "fail"
+                    ? "fail"
+                    : row.action === "noop"
+                      ? "skip"
+                      : "run";
+
+          return (
+            <Box key={row.key} flexDirection="column">
+              <Box flexDirection="row">
+                <Text>{indent}</Text>
+                <Box width={2}>
+                  <Text color={color}>{icon} </Text>
+                </Box>
+                <Text bold>{row.id}</Text>
+                <Text dimColor> ({row.taskType})</Text>
+                <Text color={color}> {label}</Text>
+                <Text color="cyan" dimColor>
+                  {" "}
+                  [task]
+                </Text>
+              </Box>
+              {t?.message ? (
+                <Box paddingLeft={row.depth * 2 + 2}>
+                  <Text dimColor>• {t.message}</Text>
+                </Box>
+              ) : null}
+            </Box>
+          );
+        }
+
         const task = tasks.get(row.key) ?? toPlanTask(row);
         const displayStatus = getDisplayStatus(row, task.status);
         const color = statusColor(displayStatus);
@@ -276,11 +365,30 @@ function statusColor(
     case "deleting":
     case "deleted":
       return "red";
+    case "running":
+    case "ran":
+      return "cyan";
+    case "skipped":
+      return "gray";
     case "fail":
       return "redBright";
     default:
       return undefined;
   }
+}
+
+function taskIcon(
+  action: TaskAction,
+  status: ApplyStatus,
+  spinnerChar: string,
+): string {
+  if (status === "running") return spinnerChar;
+  if (status === "fail") return "✗";
+  if (status === "ran") return action === "noop" ? "•" : "✓";
+  if (status === "deleted") return "✓";
+  if (action === "delete") return "-";
+  if (action === "noop") return "•";
+  return "▶";
 }
 
 function statusIcon(status: ApplyStatus, spinnerChar: string): string {
@@ -294,7 +402,8 @@ function isInProgress(status: ApplyStatus): boolean {
     status === "pending" ||
     status === "creating" ||
     status === "updating" ||
-    status === "deleting"
+    status === "deleting" ||
+    status === "running"
   );
 }
 
