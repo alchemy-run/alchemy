@@ -417,26 +417,25 @@ export const BranchProvider = () =>
                   protected: news.protected,
                   expires_at: news.expiresAt ?? null,
                 },
-              })
-                .pipe(
-                  Effect.map((r) => ({
-                    branchId: output.branchId,
-                    branchName: r.branch.name,
-                    projectId: output.projectId,
-                    parentBranchId: output.parentBranchId,
-                    parentLsn: output.parentLsn,
-                    parentTimestamp: output.parentTimestamp,
-                    initSource: output.initSource,
-                    protected: r.branch.protected,
-                    default: output.default,
-                    expiresAt: r.branch.expires_at,
-                    databaseName: output.databaseName,
-                    roleName: output.roleName,
-                    connectionUri: output.connectionUri,
-                    pooledConnectionUri: output.pooledConnectionUri,
-                    origin: output.origin,
-                  })),
-                )
+              }).pipe(
+                Effect.map((r) => ({
+                  branchId: output.branchId,
+                  branchName: r.branch.name,
+                  projectId: output.projectId,
+                  parentBranchId: output.parentBranchId,
+                  parentLsn: output.parentLsn,
+                  parentTimestamp: output.parentTimestamp,
+                  initSource: output.initSource,
+                  protected: r.branch.protected,
+                  default: output.default,
+                  expiresAt: r.branch.expires_at,
+                  databaseName: output.databaseName,
+                  roleName: output.roleName,
+                  connectionUri: output.connectionUri,
+                  pooledConnectionUri: output.pooledConnectionUri,
+                  origin: output.origin,
+                })),
+              )
             : yield* Effect.gen(function* () {
                 const projectId = resolveProjectId(
                   news.project as BranchSource,

@@ -485,27 +485,26 @@ export const ProjectProvider = () =>
                         }
                       : undefined,
                 },
-              })
-                .pipe(
-                  Effect.map((r) => ({
-                    projectId: output.projectId,
-                    projectName: r.project.name,
-                    region: output.region,
-                    pgVersion: output.pgVersion,
-                    defaultBranchId: output.defaultBranchId,
-                    defaultBranchName: output.defaultBranchName,
-                    databaseName: output.databaseName,
-                    roleName: output.roleName,
-                    connectionUri: output.connectionUri,
-                    pooledConnectionUri: output.pooledConnectionUri,
-                    origin: output.origin,
-                    historyRetentionSeconds:
-                      r.project.history_retention_seconds ??
-                      output.historyRetentionSeconds,
-                    enableLogicalReplication:
-                      r.project.settings?.enable_logical_replication === true,
-                  })),
-                )
+              }).pipe(
+                Effect.map((r) => ({
+                  projectId: output.projectId,
+                  projectName: r.project.name,
+                  region: output.region,
+                  pgVersion: output.pgVersion,
+                  defaultBranchId: output.defaultBranchId,
+                  defaultBranchName: output.defaultBranchName,
+                  databaseName: output.databaseName,
+                  roleName: output.roleName,
+                  connectionUri: output.connectionUri,
+                  pooledConnectionUri: output.pooledConnectionUri,
+                  origin: output.origin,
+                  historyRetentionSeconds:
+                    r.project.history_retention_seconds ??
+                    output.historyRetentionSeconds,
+                  enableLogicalReplication:
+                    r.project.settings?.enable_logical_replication === true,
+                })),
+              )
             : yield* Effect.gen(function* () {
                 const name = yield* createProjectName(id, news.name);
                 const created = yield* sdkCreateProject({
