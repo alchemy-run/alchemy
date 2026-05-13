@@ -201,15 +201,15 @@ export type AiGateway = Resource<
     rateLimitingLimit: number | null;
     rateLimitingTechnique: AiGatewayRateLimitingTechnique;
     authentication: boolean | undefined;
-    dlp: AiGatewayDlp | null | undefined;
+    dlp: AiGatewayDlp | undefined;
     isDefault: boolean | undefined;
-    logManagement: number | null | undefined;
-    logManagementStrategy: AiGatewayLogManagementStrategy | null | undefined;
+    logManagement: number | undefined;
+    logManagementStrategy: AiGatewayLogManagementStrategy | undefined;
     logpush: boolean | undefined;
-    logpushPublicKey: string | null | undefined;
-    otel: AiGatewayOtel[] | null | undefined;
-    storeId: string | null | undefined;
-    stripe: AiGatewayStripe | null | undefined;
+    logpushPublicKey: string | undefined;
+    otel: AiGatewayOtel[] | undefined;
+    storeId: string | undefined;
+    stripe: AiGatewayStripe | undefined;
     zdr: boolean | undefined;
   },
   never,
@@ -302,15 +302,15 @@ export const AiGatewayProvider = () =>
             rateLimitingLimit: props?.rateLimitingLimit ?? null,
             rateLimitingTechnique: props?.rateLimitingTechnique ?? "fixed",
             authentication: props?.authentication,
-            dlp: props?.dlp,
+            dlp: props?.dlp ?? undefined,
             isDefault: props?.isDefault,
-            logManagement: props?.logManagement,
-            logManagementStrategy: props?.logManagementStrategy,
+            logManagement: props?.logManagement ?? undefined,
+            logManagementStrategy: props?.logManagementStrategy ?? undefined,
             logpush: props?.logpush,
-            logpushPublicKey: props?.logpushPublicKey,
-            otel: props?.otel,
-            storeId: props?.storeId,
-            stripe: props?.stripe,
+            logpushPublicKey: props?.logpushPublicKey ?? undefined,
+            otel: props?.otel ?? undefined,
+            storeId: props?.storeId ?? undefined,
+            stripe: props?.stripe ?? undefined,
             zdr: props?.zdr,
           };
         });
@@ -335,15 +335,15 @@ export const AiGatewayProvider = () =>
         rateLimitingLimit: nullIfZero(gateway.rateLimitingLimit),
         rateLimitingTechnique: gateway.rateLimitingTechnique ?? "fixed",
         authentication: gateway.authentication ?? undefined,
-        dlp: gateway.dlp,
+        dlp: gateway.dlp ?? undefined,
         isDefault: gateway.isDefault ?? undefined,
-        logManagement: gateway.logManagement,
-        logManagementStrategy: gateway.logManagementStrategy,
+        logManagement: gateway.logManagement ?? undefined,
+        logManagementStrategy: gateway.logManagementStrategy ?? undefined,
         logpush: gateway.logpush ?? undefined,
-        logpushPublicKey: gateway.logpushPublicKey,
-        otel: gateway.otel,
-        storeId: gateway.storeId,
-        stripe: gateway.stripe,
+        logpushPublicKey: gateway.logpushPublicKey ?? undefined,
+        otel: gateway.otel ?? undefined,
+        storeId: gateway.storeId ?? undefined,
+        stripe: gateway.stripe ?? undefined,
         zdr: gateway.zdr ?? undefined,
       });
 
@@ -355,7 +355,7 @@ export const AiGatewayProvider = () =>
         rateLimitingLimit: gateway.rateLimitingLimit,
         rateLimitingTechnique: gateway.rateLimitingTechnique,
         authentication: gateway.authentication,
-        dlp: gateway.dlp ?? undefined,
+        dlp: gateway.dlp,
         isDefault: gateway.isDefault,
         logManagement: gateway.logManagement,
         logManagementStrategy: gateway.logManagementStrategy,
@@ -434,48 +434,10 @@ export const AiGatewayProvider = () =>
             return { action: "replace" } as const;
           }
 
-          const oldMutable = output
-            ? mutable(output)
-            : yield* desired(id, olds).pipe(
-                Effect.map((old) => ({
-                  cacheInvalidateOnUpdate: old.cacheInvalidateOnUpdate,
-                  cacheTtl: old.cacheTtl,
-                  collectLogs: old.collectLogs,
-                  rateLimitingInterval: old.rateLimitingInterval,
-                  rateLimitingLimit: old.rateLimitingLimit,
-                  rateLimitingTechnique: old.rateLimitingTechnique,
-                  authentication: old.authentication,
-                  dlp: old.dlp,
-                  isDefault: old.isDefault,
-                  logManagement: old.logManagement,
-                  logManagementStrategy: old.logManagementStrategy,
-                  logpush: old.logpush,
-                  logpushPublicKey: old.logpushPublicKey,
-                  otel: old.otel,
-                  storeId: old.storeId,
-                  stripe: old.stripe,
-                  zdr: old.zdr,
-                })),
-              );
-          const nextMutable = {
-            cacheInvalidateOnUpdate: next.cacheInvalidateOnUpdate,
-            cacheTtl: next.cacheTtl,
-            collectLogs: next.collectLogs,
-            rateLimitingInterval: next.rateLimitingInterval,
-            rateLimitingLimit: next.rateLimitingLimit,
-            rateLimitingTechnique: next.rateLimitingTechnique,
-            authentication: next.authentication,
-            dlp: next.dlp,
-            isDefault: next.isDefault,
-            logManagement: next.logManagement,
-            logManagementStrategy: next.logManagementStrategy,
-            logpush: next.logpush,
-            logpushPublicKey: next.logpushPublicKey,
-            otel: next.otel,
-            storeId: next.storeId,
-            stripe: next.stripe,
-            zdr: next.zdr,
-          };
+          const oldMutable = mutable(
+            output ?? ((yield* desired(id, olds)) as AiGateway["Attributes"]),
+          );
+          const nextMutable = mutable(next as AiGateway["Attributes"]);
           if (!deepEqual(oldMutable, nextMutable)) {
             return { action: "update" } as const;
           }
