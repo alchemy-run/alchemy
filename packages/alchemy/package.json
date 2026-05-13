@@ -293,7 +293,6 @@
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
     "foreground-child": "^4.0.3",
-    "ignore": "^7.0.5",
     "ink": "^6.3.1",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
