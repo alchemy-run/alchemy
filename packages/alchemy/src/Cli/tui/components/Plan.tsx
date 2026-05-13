@@ -6,11 +6,14 @@ import type {
   Plan as AlchemyPlan,
   BindingAction,
   CRUD,
+  ActionApply,
+  ActionDelete,
 } from "../../../Plan.ts";
 import {
   buildNamespaceTree,
   flattenTree,
   type DerivedAction,
+  type ActionVerb,
 } from "../../NamespaceTree.ts";
 
 export interface PlanProps {
@@ -25,13 +28,21 @@ export function Plan({ plan }: PlanProps): JSX.Element {
       ] as CRUD[],
     [plan],
   );
+  const taskItems = useMemo(
+    () =>
+      [
+        ...Object.values(plan.actions ?? {}),
+        ...Object.values(plan.actionDeletions ?? {}),
+      ].filter((t): t is ActionApply | ActionDelete => t !== undefined),
+    [plan],
+  );
 
   const flatItems = useMemo(() => {
-    const tree = buildNamespaceTree(items);
+    const tree = buildNamespaceTree(items, taskItems);
     return flattenTree(tree);
-  }, [items]);
+  }, [items, taskItems]);
 
-  if (items.length === 0) {
+  if (items.length === 0 && taskItems.length === 0) {
     return <Text color="gray">No changes planned</Text>;
   }
 
@@ -42,31 +53,46 @@ export function Plan({ plan }: PlanProps): JSX.Element {
     noop: 0,
     replace: 0,
   });
+  const taskCounts = taskItems.reduce(
+    (acc, item) => (acc[item.action]++, acc),
+    { run: 0, noop: 0, delete: 0 },
+  );
 
   const actions = (["create", "update", "delete", "replace"] as const).filter(
     (action) => counts[action] > 0,
   );
+  const taskHeaderEntries = [
+    taskCounts.run > 0 ? `${taskCounts.run} to run` : undefined,
+    taskCounts.delete > 0 ? `${taskCounts.delete} to drop` : undefined,
+  ].filter((s): s is string => !!s);
 
   return (
     <Box flexDirection="column">
       <Box marginTop={1}>
         <Text underline>Plan</Text>
         <Text>: </Text>
-        {actions.flatMap((action, i) => {
-          const count = counts[action];
-          const color = actionColor(action);
-          if (count === 0) return [];
-          const box = (
-            <Box key={action}>
-              <Text color={color}>
-                {count} to {action}
-              </Text>
+        {[
+          ...actions.map((action) => {
+            const count = counts[action];
+            const color = actionColor(action);
+            return (
+              <Box key={action}>
+                <Text color={color}>
+                  {count} to {action}
+                </Text>
+              </Box>
+            );
+          }),
+          ...taskHeaderEntries.map((label, i) => (
+            <Box key={`task-${i}`}>
+              <Text color="cyan">{label}</Text>
             </Box>
-          );
-          return i === actions.length - 1
+          )),
+        ].flatMap((box, i, arr) =>
+          i === arr.length - 1
             ? [box]
-            : [box, <Text key={`${action}-separator`}> | </Text>];
-        })}
+            : [box, <Text key={`sep-${i}`}> | </Text>],
+        )}
       </Box>
       <Box flexDirection="column" marginTop={1}>
         {flatItems.map((item) => {
@@ -99,6 +125,26 @@ export function Plan({ plan }: PlanProps): JSX.Element {
             );
           }
 
+          if (item.type === "action") {
+            return (
+              <Box key={key} flexDirection="row">
+                <Text>{indent}</Text>
+                <Box width={2}>
+                  <Text color={color}>{icon} </Text>
+                </Box>
+                <Box>
+                  <Text bold>{item.id}</Text>
+                </Box>
+                <Box marginLeft={1}>
+                  <Text color="blackBright">({item.actionType})</Text>
+                </Box>
+                <Box marginLeft={1}>
+                  <Text color="cyan">[action]</Text>
+                </Box>
+              </Box>
+            );
+          }
+
           // Resource item
           return (
             <Box key={key} flexDirection="row">
@@ -127,7 +173,7 @@ export function Plan({ plan }: PlanProps): JSX.Element {
 
 type Color = Parameters<typeof Text>[0]["color"];
 
-type AnyAction = CRUD["action"] | BindingAction | DerivedAction;
+type AnyAction = CRUD["action"] | BindingAction | DerivedAction | ActionVerb;
 
 const getActionColor = (action: AnyAction): Color =>
   ({
@@ -137,6 +183,7 @@ const getActionColor = (action: AnyAction): Color =>
     delete: "red",
     replace: "magenta",
     mixed: "cyan",
+    run: "cyan",
   })[action] ?? "gray";
 
 const getActionIcon = (action: AnyAction): string =>
@@ -147,6 +194,7 @@ const getActionIcon = (action: AnyAction): string =>
     noop: "•",
     replace: "!",
     mixed: "*",
+    run: "λ",
   })[action] ?? "?";
 
 const actionColor = (action: CRUD["action"]): Color => getActionColor(action);

@@ -99,8 +99,5 @@ export const records = <S extends KinesisStream>(
     process: (
       stream: Stream.Stream<KinesisEventRecord, never, StreamReq>,
     ) => Effect.Effect<void, never, Req>,
-  ) =>
-    StreamEventSource.asEffect().pipe(
-      Effect.flatMap((source) => source(stream, props, process)),
-    ),
+  ) => StreamEventSource.use((source) => source(stream, props, process)),
 });

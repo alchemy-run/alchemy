@@ -242,8 +242,18 @@ export const Platform = <
               }),
             )
         ).pipe(
-          Effect.tap(
-            (resource) => hooks.onCreate?.(resource as R, props) ?? Effect.void,
+          Effect.tap((resource) =>
+            hooks.onCreate
+              ? Effect.flatMap(
+                  // `props` may itself be an Effect (e.g. when wrapped by
+                  // `Cloudflare.Vite` via `Effect.map`); resolve it before
+                  // handing it to the hook so `onCreate` always sees the
+                  // plain props object — the second call site (in
+                  // `cls.make`) already does this.
+                  Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
+                  (resolved) => hooks.onCreate!(resource as R, resolved),
+                )
+              : Effect.void,
           ),
         );
       return Object.assign(
@@ -260,7 +270,7 @@ export const Platform = <
           asEffect,
           // @ts-expect-error
           pipe: (...args: any[]) => asEffect().pipe(...args),
-          [Symbol.iterator]: () => new SingleShotGen({ asEffect }),
+          [Symbol.iterator]: () => new SingleShotGen(asEffect()),
         },
       );
     } else {
@@ -279,18 +289,18 @@ export const Platform = <
         `Platform<${type}<${id}>>`,
       );
       static [Symbol.iterator](): Iterator<
-        Effect.Yieldable<any, void, never, Self>,
+        Effect.Effect<void, never, Self>,
         Resource,
         void
       > {
-        return new SingleShotGen(this) as any;
+        return new SingleShotGen(this.asEffect()) as any;
       }
       static asEffect() {
-        return this.Self.asEffect();
+        return this.Self;
       }
       static pipe(...args: any[]) {
         // @ts-expect-error
-        return pipe(this.asEffect(), ...args);
+        return pipe(this, ...args);
       }
       static of = (shape: any) => shape;
       static make = (impl: Impl) => {
@@ -324,8 +334,13 @@ export const Platform = <
               yield* impl.pipe(
                 Effect.flatMap((impl) =>
                   impl?.fetch
-                    ? (runtimeContext.serve?.(impl.fetch) ??
-                      Effect.die("No serve handler"))
+                    ? // Hand the full impl to `serve` so the runtime can
+                      // expose any non-handler methods on the impl shape
+                      // (e.g. RPC methods on a Cloudflare Worker) alongside
+                      // the standard `fetch` handler.
+                      (runtimeContext.serve?.(impl.fetch, {
+                        shape: impl as Record<string, unknown>,
+                      }) ?? Effect.die("No serve handler"))
                     : Effect.void,
                 ),
                 Effect.provide(
@@ -360,7 +375,7 @@ export const Platform = <
             }),
           ),
         );
-        const self = Self.asEffect() as any; // TODO(sam): why do we need to cast?
+        const self = Self as any; // TODO(sam): why do we need to cast?
 
         return Layer.provideMerge(
           Layer.mergeAll(
@@ -380,7 +395,7 @@ export const Platform = <
 
   const instance = Object.assign(constructor, resource, {
     Platform: Platform,
-    asEffect: () => resource.Self.asEffect(),
+    asEffect: () => resource.Self,
     ...methods,
   }) as any;
   return instance;

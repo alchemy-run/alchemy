@@ -16,7 +16,7 @@
     "noEmit": true,
     "skipLibCheck": true,
     "strict": true,
-    "types": ["bun", "vite/client"]
+    "types": ["bun", "vite/client", "@cloudflare/workers-types"]
   },
   "references": [
     {

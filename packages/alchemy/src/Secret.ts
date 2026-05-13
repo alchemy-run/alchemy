@@ -78,7 +78,7 @@ export const toOutput = <T, R = never>(
     return source;
   }
   if (Config.isConfig(source)) {
-    return Output.asOutput(source.asEffect() as any) as Output.Output<T, R>;
+    return Output.asOutput(source as any) as Output.Output<T, R>;
   }
   if (Effect.isEffect(source)) {
     return Output.asOutput(source as any) as Output.Output<T, R>;

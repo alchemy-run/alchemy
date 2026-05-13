@@ -8,8 +8,10 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
 import type { HttpEffect } from "../../Http.ts";
+import { isYieldableEffect } from "../../Util/effect.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
 import { serveWebRequest } from "./HttpServer.ts";
+import type { ExtractRpcShape, RpcPromiseShape } from "./InferEnv.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 
 export const StreamTag = "~alchemy/rpc/stream";
@@ -188,20 +190,120 @@ export const decodeRpcResult = (
   return Effect.succeed(decodeRpcValue(value));
 };
 
-export const makeRpcStub = <Shape>(stub: any): Shape => {
-  const fetcher = fromCloudflareFetcher(stub);
+/**
+ * Wrap a Cloudflare service-binding stub (or an `Effect` that resolves
+ * to one — useful when the stub depends on a service like
+ * `WorkerEnvironment` that's only available at *exec* phase) into an
+ * Effect-typed RPC client.
+ *
+ * `Service.fetch`/`Service.connect` are passed through eagerly when the
+ * stub is already resolved; everything else is treated as an RPC method
+ * whose dispatch is deferred until call time, so the user effect runs in
+ * the right runtime layer (which is what `bindWorker` actually wants —
+ * its methods are called at exec, even though it's *defined* at init).
+ */
+export const makeRpcStub = <Shape>(
+  stubSource: unknown | Effect.Effect<unknown, never, never>,
+): Shape => {
+  const isLazy = isYieldableEffect(stubSource);
+  const eagerFetcher = isLazy
+    ? undefined
+    : fromCloudflareFetcher(stubSource as cf.Fetcher);
+  const proxyTarget: object = eagerFetcher ?? {};
 
-  return new Proxy(fetcher, {
-    get: (target: any, prop) =>
-      prop in target
-        ? target[prop]
-        : (...args: any[]) =>
-            Effect.tryPromise({
-              try: () => stub[prop](...args),
-              catch: (cause) =>
-                new RpcCallError({ method: String(prop), cause }),
-            }).pipe(Effect.flatMap(decodeRpcResult)),
+  return new Proxy(proxyTarget, {
+    get: (target: any, prop) => {
+      if (!isLazy && prop in target) return target[prop];
+      if (typeof prop !== "string" && typeof prop !== "symbol") {
+        return target[prop];
+      }
+      return (...args: any[]) =>
+        Effect.gen(function* () {
+          const stub = isLazy
+            ? yield* stubSource as Effect.Effect<any>
+            : stubSource;
+          return yield* Effect.tryPromise({
+            try: () => (stub as any)[prop](...args),
+            catch: (cause) => new RpcCallError({ method: String(prop), cause }),
+          }).pipe(Effect.flatMap(decodeRpcResult));
+        });
+    },
   }) as Shape;
+};
+
+/**
+ * Wrap a raw Cloudflare service binding (the wire-typed view emitted by
+ * `InferEnv`) into a Promise-flavored API for non-Effect consumers.
+ *
+ * Effect-native worker methods serialize their results as envelopes:
+ * `Effect.fail` becomes `RpcErrorEnvelope`, `Stream` becomes
+ * `RpcStreamEnvelope`, and `Effect.succeed`/raw values pass through. This
+ * proxy auto-decodes those envelopes — error envelopes are thrown so the
+ * caller's `await` rejects, and stream envelopes are unwrapped to their raw
+ * `ReadableStream<Uint8Array>` body.
+ *
+ * `Service.fetch` and `Service.connect` pass through untouched, so the
+ * returned proxy is still a usable `Service` binding.
+ *
+ * For Effect-to-Effect cross-worker calls, prefer `bindWorker(Worker)` —
+ * it preserves typed errors and decoded streams.
+ *
+ * The generic parameter is the Worker *class* (or its Effect form), the
+ * same value you would pass to `bindWorker`. Shape is recovered from the
+ * embedded `Rpc<Shape>`.
+ *
+ * @example
+ * ```ts
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import Backend from "./backend.ts";
+ *
+ * const backend = Cloudflare.toPromiseApi<typeof Backend>(env.BACKEND);
+ * const greeting = await backend.hello(key); // throws on Effect.fail
+ * ```
+ */
+export const toPromiseApi = <W>(
+  stub: any,
+): RpcPromiseShape<ExtractRpcShape<W>> & Service =>
+  new Proxy(stub, {
+    get: (target, prop) => {
+      // `Service` methods (fetch/connect) and any non-string keys (Symbol.dispose, etc.)
+      // pass through to the underlying Cloudflare binding unchanged.
+      if (typeof prop !== "string" || prop === "fetch" || prop === "connect") {
+        const value = (target as any)[prop];
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+
+      return async (...args: unknown[]) => {
+        const result = await (target as any)[prop](...args);
+        if (isRpcErrorEnvelope(result)) {
+          throw decodeRpcThrowable(result.error);
+        }
+        if (isRpcStreamEnvelope(result)) {
+          return result.body;
+        }
+        return result;
+      };
+    },
+  }) as any;
+
+/**
+ * Reconstruct a throwable from {@link encodeRpcError}'s wire form. Plain
+ * `Error` payloads are rebuilt as `Error` instances so `.message`/`.name`/
+ * `.stack` survive. Tagged errors (anything with a `_tag`) and primitives
+ * are thrown as-is so `try { ... } catch (e) { if (e._tag === ...) }` keeps
+ * working.
+ */
+const decodeRpcThrowable = (error: unknown): unknown => {
+  if (error === null || typeof error !== "object") return error;
+  const obj = error as Record<string, unknown>;
+  if ("_tag" in obj) return obj;
+  if (typeof obj.message === "string" || typeof obj.name === "string") {
+    const e = new Error(typeof obj.message === "string" ? obj.message : "");
+    if (typeof obj.name === "string") e.name = obj.name;
+    if (typeof obj.stack === "string") e.stack = obj.stack;
+    return e;
+  }
+  return error;
 };
 
 /**
@@ -335,6 +437,109 @@ export const makeDurableObjectBridge =
         });
       }
     };
+
+/**
+ * Create a `WorkerBridge` class — a `WorkerEntrypoint` subclass that
+ * Cloudflare instantiates per request and dispatches both standard
+ * handlers (`fetch`/`scheduled`/…) and RPC method calls into.
+ *
+ * The bridge is intentionally layer-ignorant: all runtime-layer plumbing
+ * (services, scope, `WorkerExecutionContext`) lives in the platform's
+ * `runtimeContext.exports` flow, which builds:
+ *
+ *   - `getDefault()` → `{ fetch, scheduled, … }` — handler dispatchers
+ *     that the bridge forwards `(input, env, ctx)` to.
+ *   - `getRpc()`     → `{ method: (args, ctx) => Promise<envelope> }` —
+ *     pre-wrapped RPC dispatchers that already run the user effect with
+ *     the right runtime layer and envelope-encode the result.
+ *
+ * Cloudflare's script-validate step requires standard handler methods
+ * (`fetch`/`scheduled`/etc.) to be visible on the class prototype. We
+ * declare static stubs there and override them per-instance with
+ * closure-bound forwarders that capture `ctx`/`env` from the constructor
+ * (prototype-level `this` doesn't survive the proxy + RPC dispatch
+ * round-trip in some Cloudflare runtime versions).
+ */
+export const makeWorkerBridge = (
+  WorkerEntrypoint: abstract new (
+    ctx: unknown,
+    env: unknown,
+  ) => { fetch?(request: cf.Request): Promise<cf.Response> | cf.Response },
+  ExportedHandlerMethods: ReadonlyArray<string>,
+  getDefault: () => Promise<Record<string, any>>,
+  getRpc: () => Promise<Record<string, any>>,
+) => {
+  class WorkerBridge extends WorkerEntrypoint {
+    constructor(ctx: unknown, env: unknown) {
+      super(ctx, env);
+
+      // Override handler methods per-instance with closure-bound forwarders.
+      // We read `this.ctx`/`this.env` at *call time* rather than capturing
+      // the constructor args because Cloudflare's runtime appears to
+      // populate those instance fields differently depending on whether
+      // the entrypoint is invoked via direct fetch or RPC — `super(ctx, env)`
+      // alone isn't enough to guarantee they survive into the call.
+      const self = this as unknown as { ctx: unknown; env: unknown };
+      // Cloudflare invokes `WorkerEntrypoint.fetch(request)` with only the
+      // primary input on the *parameter list* — `env`/`ctx` live on `this`
+      // (and the runtime sometimes passes `(request, undefined, undefined)`
+      // anyway for legacy compat). Other handlers, including `scheduled`, may
+      // receive the classic `(input, env, ctx)` arguments. The platform's
+      // underlying handler dispatch (`handle("fetch")`, `handle("scheduled")`,
+      // etc.) follows the plain-export signature `(input, env, context)`, so
+      // prefer explicit handler args when Cloudflare provides them and fall
+      // back to the WorkerEntrypoint instance fields.
+      for (const method of ExportedHandlerMethods) {
+        (this as any)[method] = async (
+          input: unknown,
+          envArg?: unknown,
+          ctxArg?: unknown,
+        ) => {
+          const def = await getDefault();
+          return def?.[method]?.(input, envArg ?? self.env, ctxArg ?? self.ctx);
+        };
+      }
+
+      // RPC method dispatch — anything Cloudflare RPC tries to invoke that
+      // isn't an own property goes through the dispatcher table built by
+      // the platform's exports flow.
+      return new Proxy(this, {
+        get: (target, prop) => {
+          if (typeof prop !== "string") return (target as any)[prop];
+          if (prop in target) return (target as any)[prop];
+          return async (...args: unknown[]) => {
+            const rpc = await getRpc();
+            const dispatcher = rpc?.[prop];
+            if (typeof dispatcher !== "function") {
+              throw new Error(
+                `Method "${prop}" not found on worker. ` +
+                  `Make sure it's returned from the worker's default export.`,
+              );
+            }
+            return dispatcher(args, self.ctx);
+          };
+        },
+      });
+    }
+  }
+
+  // Stub prototype methods so Cloudflare's script-validate detects the
+  // standard handler set; per-instance overrides above are what actually
+  // run.
+  for (const method of ExportedHandlerMethods) {
+    Object.defineProperty(WorkerBridge.prototype, method, {
+      value: function () {
+        throw new Error(
+          `Bridge method '${method}' was called before instance setup`,
+        );
+      },
+      writable: true,
+      configurable: true,
+    });
+  }
+
+  return WorkerBridge;
+};
 
 /**
  * Create a WorkflowBridge class that extends `WorkflowEntrypoint` and

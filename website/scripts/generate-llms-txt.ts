@@ -26,6 +26,7 @@ interface Page {
   slug: string;
   title: string;
   description: string;
+  draft: boolean;
 }
 
 interface Section {
@@ -182,6 +183,7 @@ async function loadPage(slug: string): Promise<Page> {
         slug,
         title,
         description,
+        draft: fm.draft === "true" || (fm.draft as unknown as boolean) === true,
       };
     } catch (err: any) {
       if (err?.code !== "ENOENT") throw err;
@@ -223,7 +225,9 @@ async function main() {
       "slugs" in section.pages
         ? section.pages.slugs
         : await listSlugs(section.pages.directory, section.pages.exclude);
-    const pages = await Promise.all(slugs.map(loadPage));
+    const pages = (await Promise.all(slugs.map(loadPage))).filter(
+      (p) => !p.draft,
+    );
 
     parts.push(`## ${section.heading}`);
     if (section.intro) parts.push(section.intro);

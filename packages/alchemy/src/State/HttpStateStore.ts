@@ -7,7 +7,11 @@ import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import { StateApi } from "./HttpStateApi.ts";
 
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
-import { StateStoreError, type StateService } from "./State.ts";
+import {
+  StateStoreError,
+  type StateService,
+  type PersistedState,
+} from "./State.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
 /**
@@ -90,7 +94,7 @@ export const makeHttpStateStore = ({
           ),
           mapStateStoreError,
         ),
-      set: <V extends ResourceState>(request: {
+      set: <V extends PersistedState>(request: {
         stack: string;
         stage: string;
         fqn: string;
@@ -129,6 +133,27 @@ export const makeHttpStateStore = ({
             query: request.stage === undefined ? {} : { stage: request.stage },
           })
           .pipe(Effect.asVoid, mapStateStoreError),
+      getOutput: (request) =>
+        state
+          .getStackOutput({
+            params: { stack: request.stack, stage: request.stage },
+          })
+          .pipe(
+            Effect.map((s) =>
+              s == null ? undefined : reviveStateRecursive(s),
+            ),
+            mapStateStoreError,
+          ),
+      setOutput: (request) =>
+        state
+          .setStackOutput({
+            params: { stack: request.stack, stage: request.stage },
+            payload: encodeState(request.value as any),
+          })
+          .pipe(
+            Effect.map(() => request.value),
+            mapStateStoreError,
+          ),
     };
     return service;
   });

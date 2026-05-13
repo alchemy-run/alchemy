@@ -87,8 +87,5 @@ export const stream = <T extends Table>(
     process: (
       stream: Stream.Stream<StreamRecord<Data>, never, StreamReq>,
     ) => Effect.Effect<void, never, Req>,
-  ) =>
-    TableEventSource.asEffect().pipe(
-      Effect.flatMap((source) => source(table, props, process)),
-    ),
+  ) => TableEventSource.use((source) => source(table, props, process)),
 });

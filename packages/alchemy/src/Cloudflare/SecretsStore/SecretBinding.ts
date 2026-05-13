@@ -45,7 +45,7 @@ export const SecretBindingLive = Layer.effect(
 
     return Effect.fn(function* (secret: Secret) {
       yield* bind(secret);
-      const env = WorkerEnvironment.asEffect();
+      const env = WorkerEnvironment;
       const raw = env.pipe(
         Effect.map(
           (env) =>

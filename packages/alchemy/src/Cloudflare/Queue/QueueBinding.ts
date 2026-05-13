@@ -71,7 +71,7 @@ export const QueueBindingLive = Layer.effect(
 
     return Effect.fn(function* (queue: Queue) {
       yield* bind(queue);
-      const env = WorkerEnvironment.asEffect();
+      const env = WorkerEnvironment;
       const raw = env.pipe(
         Effect.map((env) => (env as Record<string, any>)[queue.LogicalId]),
       );

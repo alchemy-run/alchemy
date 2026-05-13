@@ -107,6 +107,40 @@ Importing the same `Bucket` from multiple files is safe. Alchemy
 keys resources by their fully qualified name, so even if two
 modules `yield*` it, it registers on the stack exactly once.
 
+## `ref`
+
+Every resource constructor exposes a static `ref` returning a
+typed reference to a resource that's already been deployed
+**elsewhere** — another stage of this stack, or a different
+stack entirely:
+
+```typescript
+const project = yield* Neon.Project.ref("app-db", {
+  stage: "staging",
+});
+// project: Neon.Project — same shape, same typed attributes
+```
+
+Lookup keyed by `{ stack, stage, id }`; both options default to
+the current stack/stage. Lazy — no cloud calls at declaration
+time. Typed — the result has the same interface as a freshly
+deployed resource. Strict — fails fast with
+`InvalidReferenceError` when the target is missing.
+
+A typical pattern: PR-preview stages reference long-lived
+`staging` resources instead of provisioning their own:
+
+```typescript
+const project = stage.startsWith("pr-")
+  ? yield* Neon.Project.ref("app-db", { stage: "staging" })
+  : yield* Neon.Project("app-db", { region: "aws-us-east-1" });
+```
+
+See [References](/concepts/references) for the full reference
+surface and the [Shared database across
+stages](/guides/shared-database) guide for the canonical
+walkthrough.
+
 ## Logical ID
 
 The first argument you pass to a resource constructor is its

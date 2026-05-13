@@ -532,6 +532,7 @@ const HttpServer = NodeHttpServer;
 `
 }
 import { Stack } from "alchemy/Stack";
+import { makeEntrypointLayer } from "alchemy/Runtime";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -539,13 +540,10 @@ import * as Logger from "effect/Logger";
 import * as Context from "effect/Context";
 import { MinimumLogLevel } from "effect/References";
 
-import ${handler === "default" ? "entry" : `{ ${handler} as entry }`} from "${importPath}";
+import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from "${importPath}";
 
 const tag = Context.Service("${Self.key}")
-const layer =
-  typeof entry?.build === "function"
-    ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
+const layer = makeEntrypointLayer(tag, entrypoint);
 
 const platform = Layer.mergeAll(
   ${runtime === "bun" ? "BunServices.layer" : "NodeServices.layer"},
@@ -561,7 +559,7 @@ const stack = Layer.succeed(Stack, {
   resources: {}
 });
 
-const serverEffect = tag.asEffect().pipe(
+const serverEffect = tag.pipe(
   Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.flatMap(exports => exports.default),
   Effect.provide(

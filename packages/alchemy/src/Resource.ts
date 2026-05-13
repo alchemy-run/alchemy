@@ -7,6 +7,7 @@ import type { Input, InputProps } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { Provider } from "./Provider.ts";
+import { ref as makeRef } from "./Ref.ts";
 import { RemovalPolicy } from "./RemovalPolicy.ts";
 import { Self } from "./Self.ts";
 import { Stack } from "./Stack.ts";
@@ -47,6 +48,10 @@ export type ResourceClassWithMethods<
   Effect.Effect<ResourceConstructor<R>> & {
     Self: Self<R>;
     Provider: Provider<R>;
+    ref(
+      id: string,
+      options?: { stage?: string; stack?: string },
+    ): Effect.Effect<R>;
   } & Methods;
 
 export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
@@ -56,6 +61,10 @@ export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
   Effect.Effect<ResourceConstructor<R>> & {
     Self: Self<R>;
     Provider: Provider<R>;
+    ref(
+      id: string,
+      options?: { stage?: string; stack?: string },
+    ): Effect.Effect<R>;
   };
 
 export type LogicalId = string;
@@ -228,29 +237,6 @@ export function Resource<R extends ResourceLike>(
         [Symbol.toPrimitive](this: typeof target, hint: string) {
           return hint === "number" ? NaN : this.toString();
         },
-        // TODO(sam): figure out a better way to log things in cloudflare, this breaks indentation and is bloated
-        // [nodeInspect](
-        //   depth: number,
-        //   options: { depth?: number | null } & Record<string, unknown>,
-        //   inspect: (value: unknown, opts?: unknown) => string,
-        // ) {
-        //   if (depth < 0) {
-        //     return target.toString();
-        //   }
-        //   const nextDepth =
-        //     options.depth == null ? null : Math.max(0, options.depth - 1);
-        //   return inspect(
-        //     {
-        //       Type: target.Type,
-        //       Namespace: target.Namespace,
-        //       FQN: target.FQN,
-        //       LogicalId: target.LogicalId,
-        //       Props: target.Props,
-        //       RemovalPolicy: target.RemovalPolicy,
-        //     },
-        //     { ...options, depth: nextDepth },
-        //   );
-        // },
       };
 
       const Resource: R = (stack.resources[fqn] = new Proxy(target, {
@@ -276,16 +262,29 @@ export function Resource<R extends ResourceLike>(
 
   const Service = {
     [Symbol.iterator]() {
-      return new SingleShotGen(this);
+      return new SingleShotGen(this.asEffect());
     },
     pipe() {
-      return pipeArguments(this.asEffect(), arguments);
+      return pipeArguments(this, arguments);
     },
     asEffect() {
       return Effect.succeed((id: string, props: R["Props"]) =>
         constructor(id, props),
       );
     },
+    /**
+     * Build a typed reference to a deployed instance of this resource
+     * — in the current stack/stage by default, or in another via
+     * `options`. Resolves to the same shape as `yield*
+     * MyResource("id", props)` so downstream code can read attributes
+     * (`ref.someAttr`) exactly the way it would for a locally-declared
+     * resource.
+     */
+    ref: (
+      id: string,
+      options?: { stage?: string; stack?: string },
+    ): Effect.Effect<R> =>
+      Effect.succeed(Output.of(makeRef<R>(id, options)) as unknown as R),
     Type: type,
     Provider: ProviderTag,
     Self: self,

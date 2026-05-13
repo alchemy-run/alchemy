@@ -1,13 +1,13 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.36",
+  "version": "2.0.0-beta.37",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
-    "directory": "package/alchemy"
+    "directory": "packages/alchemy"
   },
   "bin": {
     "alchemy": "./bin/cli.js"
@@ -39,12 +39,6 @@
       "bun": "./src/*.ts",
       "worker": "./src/*.ts",
       "import": "./lib/*.js"
-    },
-    "./Agent": {
-      "types": "./lib/Agent/index.d.ts",
-      "bun": "./src/Agent/index.ts",
-      "worker": "./src/Agent/index.ts",
-      "import": "./lib/Agent/index.js"
     },
     "./Auth": {
       "types": "./lib/Auth/index.d.ts",
@@ -196,6 +190,12 @@
       "worker": "./src/Output.ts",
       "import": "./lib/Output.js"
     },
+    "./Runtime": {
+      "types": "./lib/Runtime.d.ts",
+      "bun": "./src/Runtime.ts",
+      "worker": "./src/Runtime.ts",
+      "import": "./lib/Runtime.js"
+    },
     "./Process": {
       "types": "./lib/Process/index.d.ts",
       "bun": "./src/Process/index.ts",
@@ -270,9 +270,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.31",
-    "@ai-sdk/openai": "^3.0.23",
-    "@ai-sdk/provider": "^3.0.8",
     "@aws-sdk/credential-providers": "catalog:",
     "@clack/prompts": "^0.11.0",
     "@distilled.cloud/aws": "catalog:",
@@ -291,7 +288,6 @@
     "@smithy/shared-ini-file-loader": "catalog:",
     "@smithy/types": "catalog:",
     "@types/aws-lambda": "catalog:",
-    "ai": "catalog:",
     "aws4fetch": "catalog:",
     "capnweb": "^0.6.1",
     "fast-glob": "^3.3.2",
@@ -309,7 +305,6 @@
     "rolldown": "catalog:",
     "sonda": "catalog:",
     "undici": "^7.16.0",
-    "web-tree-sitter": "catalog:",
     "yaml": "catalog:"
   },
   "devDependencies": {

@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/unstable/process";
-import { exec } from "../Agent/util/exec.ts";
+import { exec } from "../Util/exec.ts";
 
 export class DockerCommandError extends Data.TaggedError("DockerCommandError")<{
   readonly command: string;
