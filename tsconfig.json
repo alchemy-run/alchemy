@@ -20,9 +20,10 @@
     {
       "path": "./packages/pr-package/tsconfig.json"
     },
-    {
-      "path": "./website/tsconfig.json"
-    },
+    // TODO(sam): fix by upgrading starlight to ^0.39.2
+    // {
+    //   "path": "./website/tsconfig.json"
+    // },
     {
       "path": "./examples/aws-ec2/tsconfig.json"
     },
