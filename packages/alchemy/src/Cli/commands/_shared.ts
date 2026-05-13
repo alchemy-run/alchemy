@@ -21,7 +21,7 @@ export const USER = Config.string("USER").pipe(
 
 export const STAGE = Config.string("stage").pipe(
   Config.option,
-  (a) => a.asEffect(),
+  (a) => a,
   Effect.map(Option.getOrUndefined),
 );
 
@@ -96,7 +96,7 @@ export const stage = Flag.string("stage").pipe(
         ),
         Effect.flatMap((s) =>
           s === undefined
-            ? USER.asEffect().pipe(
+            ? USER.pipe(
                 Effect.map((user) => `dev_${user}`),
                 Effect.catch(() => Effect.succeed("unknown")),
               )

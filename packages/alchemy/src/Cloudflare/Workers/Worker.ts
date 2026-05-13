@@ -35,11 +35,11 @@ import {
   type PlatformProps,
   type Rpc,
 } from "../../Platform.ts";
-import { isYieldableEffectLike } from "../../Util/effect.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
+import { isYieldableEffectLike } from "../../Util/effect.ts";
 import type { AiGateway } from "../AiGateway/AiGateway.ts";
 import {
   isAnalyticsEngineDataset,
@@ -51,7 +51,6 @@ import {
 } from "../Artifacts/Artifacts.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { D1Database } from "../D1/D1Database.ts";
-import { fromCloudflareFetcher } from "../Fetcher.ts";
 import type {
   Hyperdrive,
   HyperdriveDevOrigin,
@@ -1088,7 +1087,7 @@ export const bindWorker = Effect.fnUntraced(function* <Shape, Req = never>(
   // cold-start). `WorkerEnvironment` only exists at exec phase on the
   // deployed worker, so we hand `makeRpcStub` an `Effect<stub>` that
   // resolves the binding lazily on each method call.
-  const stubEff = WorkerEnvironment.asEffect().pipe(
+  const stubEff = WorkerEnvironment.pipe(
     Effect.map((env) => (env as Record<string, unknown>)[worker.LogicalId]),
   );
   return makeRpcStub<Shape>(stubEff);
@@ -2363,7 +2362,23 @@ export const LiveWorkerProvider = () =>
                   type: "application/javascript+module",
                 }),
               ],
-            });
+            }).pipe(
+              // Cloudflare's PUT /workers/scripts/{name} intermittently
+              // returns code 10002 / "An unknown error has occurred" on the
+              // first put for a fresh worker name. Surfaced as the shared
+              // `InternalServerError` upstream (alchemy-run/distilled#290).
+              // Also match `UnknownCloudflareError` for older
+              // @distilled.cloud/cloudflare versions that haven't picked
+              // up the patch yet.
+              Effect.retry({
+                while: (e: any) =>
+                  e._tag === "InternalServerError" ||
+                  e._tag === "UnknownCloudflareError",
+                schedule: Schedule.exponential(1000).pipe(
+                  Schedule.both(Schedule.recurs(5)),
+                ),
+              }),
+            );
             if (doClasses.length > 0) {
               ({ durableObjectNamespaces } =
                 yield* getWorkerSettingsWithDurableObjects(name, doClasses));

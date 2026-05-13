@@ -1,5 +1,4 @@
 import * as Data from "effect/Data";
-import type { Yieldable } from "effect/Effect";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import type { Pipeable } from "effect/Pipeable";
@@ -48,7 +47,7 @@ export interface Output<A = any, Req = any> extends Pipeable {
   readonly req: Req;
   /** @internal phantom */
   [Symbol.iterator](): Iterator<
-    Yieldable<any, void, never, Req>,
+    Effect.Effect<void, never, Req>,
     Accessor<A>,
     void
   >;
@@ -100,12 +99,12 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
   }
 
   [Symbol.iterator](): Iterator<
-    Yieldable<any, void, never, Req>,
+    Effect.Effect<void, never, Req>,
     Accessor<A>,
     void
   > {
     // @ts-expect-error - TODO(sam): fix this (works at runtime, but maybe indicates a bad assumption)
-    return new SingleShotGen(this);
+    return new SingleShotGen(this.asEffect());
   }
 
   asEffect(): any {
@@ -113,7 +112,7 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
   }
 
   public bind(id: string): any {
-    return RuntimeContext.asEffect().pipe(
+    return RuntimeContext.pipe(
       Effect.flatMap((ctx) =>
         Effect.map(ctx.set(id, this), (key) => ctx.get<A>(key)),
       ),
@@ -264,7 +263,7 @@ export const isNamedExpr = <A = any, Req = any>(
 /**
  * Wraps another `Expr` and overrides its `toString()` / inspect output.
  *
- * `BaseExpr.asEffect()` derives the binding id from `this.toString()`, so
+ * `BaseExpr` derives the binding id from `this.toString()`, so
  * wrapping an expression in `NamedExpr` makes that derived id stable and
  * caller-controlled (e.g. an env var name like `"API_KEY"`).
  */

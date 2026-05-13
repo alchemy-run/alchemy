@@ -16,11 +16,11 @@ export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
     | (ContainerApplication & Rpc<Shape>)
     | Effect.Effect<ContainerApplication & Rpc<Shape>, never, Req>,
 ) {
-  const namespace = yield* DurableObjectNamespace.asEffect();
+  const namespace = yield* DurableObjectNamespace;
 
   const container =
     "asEffect" in containerEff
-      ? yield* (containerEff as any).asEffect() as Effect.Effect<
+      ? yield* containerEff as any as Effect.Effect<
           ContainerApplication & Rpc<Shape>
         >
       : Effect.isEffect(containerEff)

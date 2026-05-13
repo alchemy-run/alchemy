@@ -6,6 +6,7 @@ export * from "./CloudflareEnvironment.ts";
 export * from "./Container/index.ts";
 export * from "./D1/index.ts";
 export * from "./EdgeSession.ts";
+export * from "./Email/index.ts";
 export * from "./Hyperdrive/index.ts";
 export * from "./Images/index.ts";
 export * from "./KV/index.ts";

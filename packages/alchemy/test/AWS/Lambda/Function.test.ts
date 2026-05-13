@@ -14,7 +14,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { functionName, functionUrl } = yield* stack.deploy(
-        TestFunction.asEffect().pipe(Effect.provide(TestFunctionLive)),
+        TestFunction.pipe(Effect.provide(TestFunctionLive)),
       );
 
       expect(functionUrl).toBeTruthy();

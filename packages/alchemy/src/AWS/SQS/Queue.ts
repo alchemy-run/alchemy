@@ -313,12 +313,24 @@ export const QueueProvider = () =>
           // apply only the delta. SQS returns all attribute values as strings,
           // and `desiredAttributes` is already string-shaped, so equality
           // comparison is direct.
+          // SQS is eventually consistent: a freshly-created queue can return
+          // `QueueDoesNotExist` from `getQueueAttributes` for a few seconds
+          // even after `createQueue` succeeded. Retry briefly so the
+          // reconciler converges instead of failing the first deploy.
           const currentAttributes = yield* sqs
             .getQueueAttributes({
               QueueUrl: queueUrl,
               AttributeNames: ["All"],
             })
-            .pipe(Effect.map((r) => r.Attributes ?? {}));
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "QueueDoesNotExist",
+                schedule: Schedule.fixed(1000).pipe(
+                  Schedule.both(Schedule.recurs(30)),
+                ),
+              }),
+              Effect.map((r) => r.Attributes ?? {}),
+            );
 
           const attributeDelta: Record<string, string> = {};
           for (const [key, value] of Object.entries(desiredAttributes)) {
@@ -330,10 +342,19 @@ export const QueueProvider = () =>
             }
           }
           if (Object.keys(attributeDelta).length > 0) {
-            yield* sqs.setQueueAttributes({
-              QueueUrl: queueUrl,
-              Attributes: attributeDelta,
-            });
+            yield* sqs
+              .setQueueAttributes({
+                QueueUrl: queueUrl,
+                Attributes: attributeDelta,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "QueueDoesNotExist",
+                  schedule: Schedule.fixed(1000).pipe(
+                    Schedule.both(Schedule.recurs(30)),
+                  ),
+                }),
+              );
           }
 
           // Sync alchemy-owned tags. The `tags` parameter on `createQueue`
@@ -342,6 +363,12 @@ export const QueueProvider = () =>
           const currentTags = yield* sqs
             .listQueueTags({ QueueUrl: queueUrl })
             .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "QueueDoesNotExist",
+                schedule: Schedule.fixed(1000).pipe(
+                  Schedule.both(Schedule.recurs(30)),
+                ),
+              }),
               Effect.map((r) => r.Tags ?? {}),
               Effect.catch(() => Effect.succeed({} as Record<string, string>)),
             );
@@ -352,7 +379,14 @@ export const QueueProvider = () =>
             }
           }
           if (Object.keys(tagDelta).length > 0) {
-            yield* sqs.tagQueue({ QueueUrl: queueUrl, Tags: tagDelta });
+            yield* sqs.tagQueue({ QueueUrl: queueUrl, Tags: tagDelta }).pipe(
+              Effect.retry({
+                while: (e) => e._tag === "QueueDoesNotExist",
+                schedule: Schedule.fixed(1000).pipe(
+                  Schedule.both(Schedule.recurs(30)),
+                ),
+              }),
+            );
           }
 
           yield* session.note(queueUrl);

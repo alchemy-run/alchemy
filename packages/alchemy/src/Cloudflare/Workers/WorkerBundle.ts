@@ -163,14 +163,12 @@ import { MinimumLogLevel } from "effect/References";
 import { NodeServices } from "@effect/platform-node";
 import { Stack } from "alchemy/Stack";
 import { WorkerEnvironment, makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy/Cloudflare";
+import { makeEntrypointLayer } from "alchemy/Runtime";
 
-import entry from "${importPath}";
+import entrypoint from "${importPath}";
 
 const tag = Context.Service("${Self.key}")
-const layer =
-  typeof entry?.build === "function"
-    ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
+const layer = makeEntrypointLayer(tag, entrypoint);
 
 const platform = Layer.mergeAll(
   NodeServices.layer,
@@ -189,7 +187,7 @@ const stack = Layer.succeed(
   }
 );
 
-const exportsEffect = tag.asEffect().pipe(
+const exportsEffect = tag.pipe(
   Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.provide(
     layer.pipe(

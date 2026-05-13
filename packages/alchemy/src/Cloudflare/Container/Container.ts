@@ -270,7 +270,7 @@ export const Container: Platform<
           }),
         get: <T>(key: string) =>
           Config.string(key)
-            .asEffect()
+
             .pipe(
               Effect.flatMap((value) =>
                 Effect.try({

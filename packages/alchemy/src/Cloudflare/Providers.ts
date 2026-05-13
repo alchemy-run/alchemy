@@ -21,6 +21,7 @@ import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Containers from "./Container/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as D1 from "./D1/index.ts";
+import * as Email from "./Email/index.ts";
 import * as Hyperdrive from "./Hyperdrive/index.ts";
 import * as Images from "./Images/index.ts";
 import * as KV from "./KV/index.ts";
@@ -57,6 +58,10 @@ export const providers = () =>
       Containers.Container,
       D1.D1ConnectionPolicy,
       D1.D1Database,
+      Email.EmailAddress,
+      Email.EmailRouting,
+      Email.EmailRule,
+      Email.SendEmailBindingPolicy,
       Hyperdrive.Hyperdrive,
       Hyperdrive.HyperdriveBindingPolicy,
       Images.ImagesBindingPolicy,
@@ -92,6 +97,10 @@ export const providers = () =>
         Containers.ContainerProvider(),
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
+        Email.EmailAddressProvider(),
+        Email.EmailRoutingProvider(),
+        Email.EmailRuleProvider(),
+        Email.SendEmailBindingPolicyLive,
         Hyperdrive.HyperdriveBindingPolicyLive,
         Hyperdrive.HyperdriveProvider(),
         Images.ImagesBindingPolicyLive,

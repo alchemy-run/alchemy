@@ -106,7 +106,7 @@ export const ArtifactsBindingLive = Layer.effect(
 
     return Effect.fn(function* (artifacts: ArtifactsLike) {
       yield* Policy(artifacts);
-      const env = WorkerEnvironment.asEffect();
+      const env = WorkerEnvironment;
       const raw = env.pipe(
         Effect.map(
           (env) => (env as Record<string, Artifacts>)[artifacts.name]!,
