@@ -184,7 +184,7 @@ test.provider(
         Effect.retry({
           while: (error) => error === "not ready",
           schedule: Schedule.fixed("2 seconds").pipe(
-            Schedule.both(Schedule.recurs(9)),
+            Schedule.both(Schedule.recurs(75)),
           ),
         }),
         Effect.flatMap((result) => result.json),
@@ -310,7 +310,7 @@ const waitForFunctionReady = (url: string) =>
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
       schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(9)),
+        Schedule.both(Schedule.recurs(75)),
       ),
     }),
   );

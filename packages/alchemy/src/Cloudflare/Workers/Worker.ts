@@ -2362,7 +2362,23 @@ export const LiveWorkerProvider = () =>
                   type: "application/javascript+module",
                 }),
               ],
-            });
+            }).pipe(
+              // Cloudflare's PUT /workers/scripts/{name} intermittently
+              // returns code 10002 / "An unknown error has occurred" on the
+              // first put for a fresh worker name. Surfaced as the shared
+              // `InternalServerError` upstream (alchemy-run/distilled#290).
+              // Also match `UnknownCloudflareError` for older
+              // @distilled.cloud/cloudflare versions that haven't picked
+              // up the patch yet.
+              Effect.retry({
+                while: (e: any) =>
+                  e._tag === "InternalServerError" ||
+                  e._tag === "UnknownCloudflareError",
+                schedule: Schedule.exponential(1000).pipe(
+                  Schedule.both(Schedule.recurs(5)),
+                ),
+              }),
+            );
             if (doClasses.length > 0) {
               ({ durableObjectNamespaces } =
                 yield* getWorkerSettingsWithDurableObjects(name, doClasses));

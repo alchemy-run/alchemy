@@ -44,11 +44,18 @@ test(
     const client = yield* HttpClient.HttpClient;
 
     // Cloudflare's edge takes a few seconds to start serving a fresh
-    // workers.dev URL, so retry the initial start call until it returns 200.
+    // workers.dev URL, so retry until it returns 200 (a fresh URL also
+    // returns 404 transiently, which is not an HTTP error so Effect.retry
+    // does not catch it unless we explicitly fail on non-200).
     const startRes = yield* client.post(`${url}/workflow/start/world`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
       Effect.retry({
         schedule: Schedule.exponential("500 millis"),
-        times: 10,
+        times: 15,
       }),
     );
     expect(startRes.status).toBe(200);

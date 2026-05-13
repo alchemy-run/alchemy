@@ -16,7 +16,7 @@ import {
 const { test } = Test.make({ providers: AWS.providers() });
 
 const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(9)),
+  Schedule.both(Schedule.recurs(75)),
 );
 
 describe.sequential("SNS Bindings", () => {
