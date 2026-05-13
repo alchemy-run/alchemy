@@ -1,9 +1,12 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
 import type { HttpBodyError } from "effect/unstable/http/HttpBody";
+import * as EffectHttp from "effect/unstable/http/HttpEffect";
+import { ClientAbort } from "effect/unstable/http/HttpServerError";
 import * as HttpServerError from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -48,6 +51,10 @@ export const serveWebRequest = <Req = never>(
   Exclude<Req, HttpServerRequest.HttpServerRequest | Scope>
 > =>
   Effect.gen(function* () {
+    const context =
+      yield* Effect.context<
+        Exclude<Req, HttpServerRequest.HttpServerRequest | Scope>
+      >();
     const request = HttpServerRequest.fromWeb(
       webRequest as any as globalThis.Request,
     ).modify({
@@ -61,9 +68,7 @@ export const serveWebRequest = <Req = never>(
         }),
     });
 
-    const response = yield* handler.pipe(
-      Effect.provideService(HttpServerRequest.HttpServerRequest, request),
-      Effect.provideService(Request, webRequest as any),
+    const safeHandler = handler.pipe(
       Effect.catchCause((cause) => {
         const message = Option.match(Cause.findErrorOption(cause), {
           onNone: () => "Internal Server Error",
@@ -81,7 +86,34 @@ export const serveWebRequest = <Req = never>(
       }),
     );
 
-    return HttpServerResponse.toWeb(response, {
-      context: yield* Effect.context(),
+    const resolveSymbol = Symbol.for("@effect/platform/HttpApp/resolve");
+    const httpApp = EffectHttp.toHandled(safeHandler, (request, response) => {
+      response = EffectHttp.scopeTransferToStream(response);
+      (request as any)[resolveSymbol](
+        HttpServerResponse.toWeb(response, {
+          withoutBody: request.method === "HEAD",
+          context,
+        }),
+      );
+      return Effect.void;
+    });
+
+    return yield* Effect.promise(() => {
+      return new Promise<Response>((resolve) => {
+        const contextMap = new Map<string, any>(context.mapUnsafe);
+        contextMap.set(HttpServerRequest.HttpServerRequest.key, request);
+        contextMap.set(Request.key, webRequest);
+        (request as any)[resolveSymbol] = resolve;
+        const fiber = Effect.runForkWith(Context.makeUnsafe(contextMap))(
+          httpApp as any,
+        );
+        webRequest.signal?.addEventListener(
+          "abort",
+          () => {
+            fiber.interruptUnsafe(undefined, ClientAbort.annotation);
+          },
+          { once: true },
+        );
+      });
     });
   }) as any;
