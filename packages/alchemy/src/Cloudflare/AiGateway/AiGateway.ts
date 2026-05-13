@@ -200,17 +200,17 @@ export type AiGateway = Resource<
     rateLimitingInterval: number | null;
     rateLimitingLimit: number | null;
     rateLimitingTechnique: AiGatewayRateLimitingTechnique;
-    authentication: boolean | undefined;
+    authentication: boolean;
     dlp: AiGatewayDlp | undefined;
-    isDefault: boolean | undefined;
-    logManagement: number | undefined;
-    logManagementStrategy: AiGatewayLogManagementStrategy | undefined;
-    logpush: boolean | undefined;
+    isDefault: boolean;
+    logManagement: number;
+    logManagementStrategy: AiGatewayLogManagementStrategy;
+    logpush: boolean;
     logpushPublicKey: string | undefined;
     otel: AiGatewayOtel[] | undefined;
-    storeId: string | undefined;
+    storeId: string;
     stripe: AiGatewayStripe | undefined;
-    zdr: boolean | undefined;
+    zdr: boolean;
   },
   never,
   Providers
@@ -301,17 +301,21 @@ export const AiGatewayProvider = () =>
             rateLimitingInterval: props?.rateLimitingInterval ?? null,
             rateLimitingLimit: props?.rateLimitingLimit ?? null,
             rateLimitingTechnique: props?.rateLimitingTechnique ?? "fixed",
-            authentication: props?.authentication,
+            // Defaults align with what Cloudflare's API returns for an
+            // unconfigured gateway, so the reconciler converges to noop
+            // when the user didn't explicitly set the field.
+            authentication: props?.authentication ?? false,
             dlp: props?.dlp ?? undefined,
-            isDefault: props?.isDefault,
-            logManagement: props?.logManagement ?? undefined,
-            logManagementStrategy: props?.logManagementStrategy ?? undefined,
-            logpush: props?.logpush,
+            isDefault: props?.isDefault ?? false,
+            logManagement: props?.logManagement ?? 100_000,
+            logManagementStrategy:
+              props?.logManagementStrategy ?? "STOP_INSERTING",
+            logpush: props?.logpush ?? false,
             logpushPublicKey: props?.logpushPublicKey ?? undefined,
             otel: props?.otel ?? undefined,
-            storeId: props?.storeId ?? undefined,
+            storeId: props?.storeId ?? "",
             stripe: props?.stripe ?? undefined,
-            zdr: props?.zdr,
+            zdr: props?.zdr ?? false,
           };
         });
 
@@ -334,17 +338,18 @@ export const AiGatewayProvider = () =>
         rateLimitingInterval: nullIfZero(gateway.rateLimitingInterval),
         rateLimitingLimit: nullIfZero(gateway.rateLimitingLimit),
         rateLimitingTechnique: gateway.rateLimitingTechnique ?? "fixed",
-        authentication: gateway.authentication ?? undefined,
+        authentication: gateway.authentication ?? false,
         dlp: gateway.dlp ?? undefined,
-        isDefault: gateway.isDefault ?? undefined,
-        logManagement: gateway.logManagement ?? undefined,
-        logManagementStrategy: gateway.logManagementStrategy ?? undefined,
-        logpush: gateway.logpush ?? undefined,
+        isDefault: gateway.isDefault ?? false,
+        logManagement: gateway.logManagement ?? 100_000,
+        logManagementStrategy:
+          gateway.logManagementStrategy ?? "STOP_INSERTING",
+        logpush: gateway.logpush ?? false,
         logpushPublicKey: gateway.logpushPublicKey ?? undefined,
         otel: gateway.otel ?? undefined,
-        storeId: gateway.storeId ?? undefined,
+        storeId: gateway.storeId ?? "",
         stripe: gateway.stripe ?? undefined,
-        zdr: gateway.zdr ?? undefined,
+        zdr: gateway.zdr ?? false,
       });
 
       const mutable = (gateway: AiGateway["Attributes"]) => ({
