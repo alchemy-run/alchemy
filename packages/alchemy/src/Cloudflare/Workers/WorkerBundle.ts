@@ -7,7 +7,6 @@ import * as Stream from "effect/Stream";
 import { fileURLToPath } from "node:url";
 import type * as rolldown from "rolldown";
 import Sonda from "sonda/rolldown";
-import * as Artifacts from "../../Artifacts.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import { Self } from "../../Self.ts";
@@ -116,7 +115,6 @@ export const WorkerBundle = Effect.gen(function* () {
           resolved.extraOptions,
         ),
       ),
-      Artifacts.cached("build"),
     ),
     watch: flow(
       makeOptions,

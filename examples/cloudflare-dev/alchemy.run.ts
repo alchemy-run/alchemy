@@ -24,7 +24,7 @@ export default Alchemy.Stack(
   "CloudflareDev",
   {
     providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
+    state: Alchemy.localState(),
   },
   Effect.gen(function* () {
     const asyncWorker = yield* AsyncWorker;

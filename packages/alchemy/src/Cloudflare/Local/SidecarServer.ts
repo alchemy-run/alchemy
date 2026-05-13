@@ -1,4 +1,4 @@
-import * as RuntimeServices from "@distilled.cloud/cloudflare-runtime/RuntimeServices";
+import { layerRuntime } from "@distilled.cloud/cloudflare-runtime/RuntimeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -38,9 +38,17 @@ const runtimeServices = SidecarHandlers.pipe(
           yield* CloudflareEnvironment.CloudflareEnvironment;
         const { dotAlchemy } = yield* AlchemyContext.AlchemyContext;
         const path = yield* Path.Path;
-        return RuntimeServices.layer({
-          accountId,
-          storage: path.join(dotAlchemy, "local"),
+        return layerRuntime({
+          server: {
+            host: "localhost",
+            port: 1337,
+          },
+          api: {
+            accountId,
+          },
+          storage: {
+            directory: path.join(dotAlchemy, "local"),
+          },
         });
       }),
     ),
