@@ -1,3 +1,20 @@
+## v2.0.0-beta.38
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Add Email Routing resources and SendEmail Worker binding &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/314 [<samp>(06dab)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/06dab7c5)
+- **core**: Action plan node type (functions that run as part of apply) &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/315 [<samp>(8a66a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/8a66a896)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Move to effect@4.0.0-beta.66 &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/321 [<samp>(b57f7)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b57f78cf)
+- Improve transport error fault tolerance &nbsp;-&nbsp; by **sam** [<samp>(6d67c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6d67c24f)
+- **Neon**: Use @distilled.cloud/neon SDK instead of hand-rolled API &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/270 [<samp>(1b9d4)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1b9d4372)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.37...HEAD)
+
+---
+
 ## v2.0.0-beta.37
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
