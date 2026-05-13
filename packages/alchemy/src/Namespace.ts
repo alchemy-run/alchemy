@@ -40,10 +40,10 @@ export const set = (namespace: string | NamespaceNode) =>
   );
 
 export const CurrentNamespace = Effect.serviceOption(Namespace)
-  .asEffect()
+
   .pipe(Effect.map(Option.getOrUndefined));
 
-export const CurrentChain = CurrentNamespace.asEffect().pipe(
+export const CurrentChain = CurrentNamespace.pipe(
   Effect.map(function findRoot(ns): string[] {
     if (ns?.Parent) {
       return [ns.Id, ...findRoot(ns.Parent)];
@@ -52,9 +52,9 @@ export const CurrentChain = CurrentNamespace.asEffect().pipe(
   }),
 );
 
-export const Parent = Namespace.asEffect().pipe(Effect.map((ns) => ns?.Parent));
+export const Parent = Namespace.pipe(Effect.map((ns) => ns?.Parent));
 
-export const Root = Namespace.asEffect().pipe(
+export const Root = Namespace.pipe(
   Effect.map(function findRoot(ns) {
     if (ns.Parent) {
       return findRoot(ns.Parent);

@@ -87,7 +87,7 @@ export const ImagesBindingLive = Layer.effect(
 
     return Effect.fn(function* (images: ImagesLike) {
       yield* Policy(images);
-      const env = WorkerEnvironment.asEffect();
+      const env = WorkerEnvironment;
       const raw = env.pipe(
         Effect.map(
           (env) => (env as Record<string, cf.ImagesBinding>)[images.name]!,

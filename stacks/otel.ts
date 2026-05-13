@@ -53,7 +53,7 @@ export default Alchemy.Stack(
 
     // const posthogProjectKey = yield* Config.string("POSTHOG_PROJECT_KEY")
     //   .pipe(Config.option)
-    //   .asEffect()
+    //
     //   .pipe(Effect.orDie);
 
     // Saved APL queries — one per insight surfaced by the dashboard.

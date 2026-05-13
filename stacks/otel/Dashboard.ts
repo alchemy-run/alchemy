@@ -41,7 +41,7 @@ import { Traces } from "./Datasets.ts";
  */
 export const CliOverviewDashboard = Axiom.Dashboard(
   "CliOverview",
-  Effect.all([Alchemy.Stack.asEffect(), Traces]).pipe(
+  Effect.all([Alchemy.Stack, Traces]).pipe(
     Effect.map(([stack, traces]) => {
       const t = traces.name;
       const charts: Input<Axiom.Chart>[] = [

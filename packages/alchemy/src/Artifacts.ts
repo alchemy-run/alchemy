@@ -78,7 +78,7 @@ const getOrCreateBag = (
 export const makeScopedArtifacts = (
   store: Map<string, ArtifactBag>,
   fqn: string,
-): typeof Artifacts.Service => {
+): Artifacts["Service"] => {
   const bag = getOrCreateBag(store, fqn);
   return {
     get: <T>(key: string) => Effect.sync(() => bag.get(key) as T | undefined),
@@ -98,9 +98,7 @@ export const scopedArtifacts = (
 ): Layer.Layer<Artifacts, never, ArtifactStore> =>
   Layer.effect(
     Artifacts,
-    ArtifactStore.asEffect().pipe(
-      Effect.map((store) => makeScopedArtifacts(store, fqn)),
-    ),
+    ArtifactStore.useSync((store) => makeScopedArtifacts(store, fqn)),
   );
 
 /**

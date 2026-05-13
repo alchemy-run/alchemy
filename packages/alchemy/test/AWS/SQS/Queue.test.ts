@@ -161,9 +161,7 @@ test.provider(
       // yield* stack.destroy();
 
       const apiFunction = yield* stack.deploy(
-        QueueSinkFunction.asEffect().pipe(
-          Effect.provide(QueueSinkFunctionLive),
-        ),
+        QueueSinkFunction.pipe(Effect.provide(QueueSinkFunctionLive)),
       );
       const baseUrl = apiFunction.functionUrl!.replace(/\/+$/, "");
 

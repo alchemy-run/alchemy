@@ -27,10 +27,10 @@ export const effectClass: {
             return impl;
           }
           static [Symbol.iterator]() {
-            return new SingleShotGen(this);
+            return new SingleShotGen(this.asEffect());
           }
           static pipe(...fns: any) {
-            return pipeArguments(this.asEffect(), fns);
+            return pipeArguments(this, fns);
           }
         },
         impl,
@@ -44,9 +44,9 @@ export const taggedFunction = <
   fn: Fn,
 ): Tag & Fn => {
   const overrides = {
-    asEffect: () => tag.asEffect(),
+    asEffect: () => tag,
     [Symbol.iterator]: () => tag[Symbol.iterator](),
-    pipe: (...fns: any[]) => pipeArguments(tag.asEffect(), fns as any),
+    pipe: (...fns: any[]) => pipeArguments(tag, fns as any),
     toString: () => `${tag.toString()}.${fn.name}`,
   };
 

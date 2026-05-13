@@ -146,7 +146,7 @@ export const R2BucketBindingLive = Layer.effect(
 
     return Effect.fn(function* (bucket: R2Bucket) {
       yield* bind(bucket);
-      const env = WorkerEnvironment.asEffect();
+      const env = WorkerEnvironment;
       const raw = env.pipe(
         Effect.map(
           (env) => (env as Record<string, runtime.R2Bucket>)[bucket.LogicalId],
