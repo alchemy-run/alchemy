@@ -225,9 +225,14 @@ test(
 
     const client = yield* HttpClient.HttpClient;
     const res = yield* client.get(`${workerUrl}/url`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
       Effect.retry({
         schedule: Schedule.exponential("500 millis"),
-        times: 10,
+        times: 15,
       }),
     );
     expect(res.status).toBe(200);

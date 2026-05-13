@@ -145,6 +145,7 @@ export default defineConfig({
         },
       ],
       plugins: [starlightBlog()],
+      routeMiddleware: ["./src/blog-sidebar.ts"],
     }),
     mdx(),
   ],

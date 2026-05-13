@@ -229,7 +229,7 @@ export const KVNamespaceBindingLive = Layer.effect(
 
     return Effect.fn(function* (bucket: KVNamespace) {
       yield* bind(bucket);
-      const env = WorkerEnvironment.asEffect();
+      const env = WorkerEnvironment;
       const raw = env.pipe(
         Effect.map(
           (env) =>

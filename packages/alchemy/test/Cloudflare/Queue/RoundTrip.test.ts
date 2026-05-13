@@ -74,10 +74,23 @@ test.provider(
       const messages = ["alpha", "beta", "gamma", "delta"];
 
       for (const text of messages) {
+        // Cloudflare's edge takes a few seconds to start serving a fresh
+        // workers.dev URL — retry until the worker returns 202.
         const sendResponse = yield* HttpClient.execute(
           HttpClientRequest.post(
             `${baseUrl}/send?name=${encodeURIComponent(name)}`,
           ).pipe(HttpClientRequest.bodyText(text)),
+        ).pipe(
+          Effect.flatMap((res) =>
+            res.status === 202
+              ? Effect.succeed(res)
+              : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+          ),
+          Effect.retry({
+            schedule: Schedule.exponential("500 millis").pipe(
+              Schedule.both(Schedule.recurs(15)),
+            ),
+          }),
         );
         expect(sendResponse.status).toBe(202);
         const sent = (yield* sendResponse.json) as {

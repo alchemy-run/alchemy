@@ -80,7 +80,7 @@ export const safeHttpEffect = <Req = never>(
 export const resolvePort = (options: { port?: number } | undefined) =>
   options?.port !== undefined
     ? Effect.succeed(options.port)
-    : Config.number("PORT").pipe(Config.withDefault(3000)).asEffect();
+    : Config.number("PORT").pipe(Config.withDefault(3000));
 
 export const BunHttpServer = () =>
   Layer.effect(

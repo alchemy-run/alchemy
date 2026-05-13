@@ -33,7 +33,7 @@ import { Traces } from "./Datasets.ts";
 const viewProps = <A>(
   fn: (ctx: { stage: string; traces: Output.Output<string> }) => A,
 ) =>
-  Effect.all([Alchemy.Stack.asEffect(), Traces]).pipe(
+  Effect.all([Alchemy.Stack, Traces]).pipe(
     Effect.map(([stack, traces]) =>
       fn({ stage: stack.stage, traces: traces.name }),
     ),
