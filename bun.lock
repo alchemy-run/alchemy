@@ -502,9 +502,6 @@
       },
     },
   },
-  "overrides": {
-    "@distilled.cloud/core": "https://pkg.distilled.cloud/core/16f0728",
-  },
   "catalog": {
     "@aws-sdk/credential-providers": "^3.0.0",
     "@cloudflare/containers": "^0.1.1",
@@ -805,7 +802,7 @@
 
     "@distilled.cloud/cloudflare-vite-plugin": ["@distilled.cloud/cloudflare-vite-plugin@0.2.0", "", { "dependencies": { "@distilled.cloud/cloudflare-rolldown-plugin": "0.2.0" }, "peerDependencies": { "vite": "^7.0.0 || ^8.0.0" } }, "sha512-yLk+q5EUQthiVU5nIEyF8mL1CujaO8bZp5Z7DQsxKkqwtwKLXapXjDsnknAGwv5xJuEyZG9rbSKNY2cVVRPdZQ=="],
 
-    "@distilled.cloud/core": ["@distilled.cloud/core@https://pkg.distilled.cloud/core/16f0728", { "peerDependencies": { "effect": ">=4.0.0-beta.66 || >=4.0.0" } }],
+    "@distilled.cloud/core": ["@distilled.cloud/core@0.20.1", "", { "peerDependencies": { "effect": ">=4.0.0-beta.66 || >=4.0.0" } }, "sha512-fPB6WoPKxVKWy9kAuhdnTZGvA2m9VVZsL5szSSCVcxZCv34tOKzI9T0e6hiN8WWIqwq0IrEGWE9P3GgMtdG1IA=="],
 
     "@distilled.cloud/neon": ["@distilled.cloud/neon@0.20.1", "", { "dependencies": { "@distilled.cloud/core": "0.20.1" }, "peerDependencies": { "effect": ">=4.0.0-beta.66 || >=4.0.0" } }, "sha512-5BujUUL6tgGLHRod8YWPekDe8FvEhhQeBO1/kdPK9sHt+9w8nMFG6eoqCoXcNvWYqjoOKmpSuzDtN6XEkM3+9A=="],
 

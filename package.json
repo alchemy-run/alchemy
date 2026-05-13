@@ -56,9 +56,6 @@
     "test": "bun run test:live",
     "prepare": "husky"
   },
-  "overrides": {
-    "@distilled.cloud/core": "https://pkg.distilled.cloud/core/16f0728"
-  },
   "workspaces": {
     "packages": [
       "website",
