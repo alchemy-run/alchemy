@@ -2,10 +2,34 @@
 /*
  * Vendored copy of `ignore` (https://github.com/kaelzhang/node-ignore)
  * Version: 7.0.5
- * License: MIT (see ./ignore.LICENSE-MIT)
  *
- * Source below is a verbatim copy of upstream `index.js`. The only change is
- * the CommonJS export footer, which has been rewritten as ES module exports.
+ * The body below is a mechanical copy of upstream `index.js`. The only
+ * substantive change is the CommonJS export footer, which has been rewritten
+ * as ES module exports; the upstream `index.d.ts` declarations are appended.
+ *
+ * ---------------------------------------------------------------------------
+ * Copyright (c) 2013 Kael Zhang <i@kael.me>, contributors
+ * http://kael.me/
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+ * LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+ * OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+ * WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * ---------------------------------------------------------------------------
  */
 
 // A simple implementation of make-array
@@ -741,17 +765,14 @@ if (
   setupWindows();
 }
 
-// COMMONJS_EXPORTS ////////////////////////////////////////////////////////////
-// (vendored: upstream uses `module.exports`; replaced with ES module exports
-//  below — no other changes to the source above.)
+// ES module exports (upstream uses `module.exports`). Upstream also exposes
+// `setupWindows` via `Symbol.for("setupWindows")` for its own test suite; we
+// drop that hook since it's unused.
 
 export default factory as unknown as (
   options?: IgnoreOptions,
 ) => IgnoreInstance;
 export { isPathValid };
-
-// For testing purposes
-define(factory, Symbol.for("setupWindows"), setupWindows);
 
 // --- Type declarations -----------------------------------------------------
 // (not part of the verbatim upstream source; mirrors upstream `index.d.ts`)
