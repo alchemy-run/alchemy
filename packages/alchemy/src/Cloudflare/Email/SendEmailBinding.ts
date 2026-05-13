@@ -69,10 +69,8 @@ export const SendEmailBindingLive = Layer.effect(
     return Effect.fnUntraced(function* (sender: SendEmail) {
       yield* bind(sender);
 
-      const raw = WorkerEnvironment.asEffect().pipe(
-        Effect.map(
-          (env) => (env as Record<string, runtime.SendEmail>)[sender.name]!,
-        ),
+      const raw = WorkerEnvironment.useSync(
+        (env) => (env as Record<string, runtime.SendEmail>)[sender.name]!,
       );
 
       const tryPromise = <T>(
