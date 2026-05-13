@@ -20,17 +20,24 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { BetterAuth } from "./BetterAuth.ts";
 
 /**
- * A Postgres connection source. Either a Cloudflare Hyperdrive resource, a
- * plain connection URL string, a `Redacted<string>`, or an Effect resolving
- * to one. Use a Hyperdrive resource inside Cloudflare Workers for pooled
- * connections; use a URL for Neon/Supabase direct or any non-Hyperdrive
- * Postgres source.
+ * A Postgres connection source: a Cloudflare Hyperdrive resource (passed
+ * directly or as the deferred `Effect<Hyperdrive>` form returned by
+ * `Cloudflare.Hyperdrive(...)`), a plain connection URL string, a
+ * `Redacted<string>`, or an Effect resolving to one. Use a Hyperdrive for
+ * pooled connections inside Workers; use a URL for Neon/Supabase direct or
+ * any non-Hyperdrive Postgres source.
  */
 export type PostgresSource =
   | Hyperdrive
+  | Effect.Effect<Hyperdrive, any, any>
   | string
   | Redacted.Redacted<string>
-  | Effect.Effect<Redacted.Redacted<string>>;
+  | Effect.Effect<Redacted.Redacted<string>, any, any>;
+
+const isHyperdrive = (value: unknown): value is Hyperdrive =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as { Type?: unknown }).Type === "Cloudflare.Hyperdrive";
 
 /**
  * Options for {@link postgresDrizzle}: the full `BetterAuthOptions` (minus
@@ -48,11 +55,17 @@ export type PostgresDrizzleOptions<TRelations extends AnyRelations> = Omit<
 const resolveConnectionString = (db: PostgresSource) => {
   if (typeof db === "string") return Effect.succeed(Redacted.make(db));
   if (Redacted.isRedacted(db)) return Effect.succeed(db);
-  if (Effect.isEffect(db)) return db;
-  return Effect.gen(function* () {
-    const hd = yield* Cloudflare.Hyperdrive.bind(db);
-    return yield* hd.connectionString;
-  });
+  if (isHyperdrive(db) || Effect.isEffect(db)) {
+    return Effect.gen(function* () {
+      // Effect form may resolve to either a `Redacted<string>` or a
+      // Hyperdrive resource; the direct form is always a Hyperdrive.
+      const resolved = Effect.isEffect(db) ? yield* db : db;
+      if (Redacted.isRedacted(resolved)) return resolved;
+      const hd = yield* Cloudflare.Hyperdrive.bind(resolved);
+      return yield* hd.connectionString;
+    });
+  }
+  return Effect.die(new Error("Unsupported PostgresSource"));
 };
 
 /**
