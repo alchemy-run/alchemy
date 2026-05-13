@@ -1607,6 +1607,22 @@ export const LiveWorkerProvider = () =>
           const builder = await vite.createBuilder(
             {
               root: props.vite?.rootDir,
+              // Emulate `vite build` env semantics for `props.env`: only
+              // keys with Vite's default `VITE_` prefix are inlined into
+              // the bundle as `import.meta.env.*`. `Redacted` values are
+              // unwrapped — by prefixing with `VITE_` the user is opting
+              // them into the public bundle.
+              define: Object.fromEntries(
+                Object.entries(props.env ?? {}).flatMap(([key, raw]) => {
+                  if (!key.startsWith("VITE_")) return [];
+                  const value = Redacted.isRedacted(raw)
+                    ? Redacted.value(raw)
+                    : raw;
+                  return [
+                    [`import.meta.env.${key}`, JSON.stringify(value)] as const,
+                  ];
+                }),
+              ),
               // Declare the ssr environment so Vite 8+ creates it.
               // The cloudflare-vite-plugin config hook merges its
               // SSR-specific settings on top of this stub.
