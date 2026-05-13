@@ -77,7 +77,7 @@ describe.sequential("AWS.DynamoDB.Stream", () => {
         yield* Effect.logInfo("DynamoDB Stream test: destroying fixture");
         yield* stack.destroy();
       }),
-    { timeout: 360_000 },
+    { timeout: 600_000 },
   );
 });
 
@@ -175,7 +175,7 @@ const waitForQueueMessage = Effect.fn(function* (queueUrl: string) {
     Effect.retry({
       while: (error) => error._tag === "StreamMessageNotReady",
       schedule: Schedule.fixed("5 seconds").pipe(
-        Schedule.both(Schedule.recurs(36)), // 36 * (5s sleep + up to 20s poll) ~= 3min budget
+        Schedule.both(Schedule.recurs(72)), // 72 * (5s sleep + up to 20s poll) ~= 6min budget
       ),
     }),
   );

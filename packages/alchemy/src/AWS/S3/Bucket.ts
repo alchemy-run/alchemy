@@ -564,12 +564,17 @@ export const BucketProvider = () =>
           yield* Effect.logInfo(
             `S3 Bucket delete: bucket=${output.bucketName} forceDestroy=${olds.forceDestroy ?? false}`,
           );
-          // If forceDestroy is enabled, delete all objects first
+          // If forceDestroy is enabled, delete all objects first. The bucket
+          // may already be gone (deleted out-of-band, or a previous destroy
+          // partially succeeded) — treat NoSuchBucket as a no-op so the
+          // overall delete still converges.
           if (olds.forceDestroy) {
             yield* session.note(
               `Force destroying bucket: ${output.bucketName} - deleting all objects...`,
             );
-            yield* deleteAllObjects(output.bucketName);
+            yield* deleteAllObjects(output.bucketName).pipe(
+              Effect.catchTag("NoSuchBucket", () => Effect.void),
+            );
           }
 
           yield* s3

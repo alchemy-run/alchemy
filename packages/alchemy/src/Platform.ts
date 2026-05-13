@@ -270,7 +270,7 @@ export const Platform = <
           asEffect,
           // @ts-expect-error
           pipe: (...args: any[]) => asEffect().pipe(...args),
-          [Symbol.iterator]: () => new SingleShotGen({ asEffect }),
+          [Symbol.iterator]: () => new SingleShotGen(asEffect()),
         },
       );
     } else {
@@ -289,18 +289,18 @@ export const Platform = <
         `Platform<${type}<${id}>>`,
       );
       static [Symbol.iterator](): Iterator<
-        Effect.Yieldable<any, void, never, Self>,
+        Effect.Effect<void, never, Self>,
         Resource,
         void
       > {
-        return new SingleShotGen(this) as any;
+        return new SingleShotGen(this.asEffect()) as any;
       }
       static asEffect() {
-        return this.Self.asEffect();
+        return this.Self;
       }
       static pipe(...args: any[]) {
         // @ts-expect-error
-        return pipe(this.asEffect(), ...args);
+        return pipe(this, ...args);
       }
       static of = (shape: any) => shape;
       static make = (impl: Impl) => {
@@ -375,7 +375,7 @@ export const Platform = <
             }),
           ),
         );
-        const self = Self.asEffect() as any; // TODO(sam): why do we need to cast?
+        const self = Self as any; // TODO(sam): why do we need to cast?
 
         return Layer.provideMerge(
           Layer.mergeAll(
@@ -395,7 +395,7 @@ export const Platform = <
 
   const instance = Object.assign(constructor, resource, {
     Platform: Platform,
-    asEffect: () => resource.Self.asEffect(),
+    asEffect: () => resource.Self,
     ...methods,
   }) as any;
   return instance;

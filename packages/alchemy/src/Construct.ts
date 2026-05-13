@@ -49,11 +49,7 @@ import * as Namespace from "./Namespace.ts";
  * ```
  */
 export const fn: {
-  <
-    Eff extends Effect.Yieldable<any, any, any, any>,
-    AEff,
-    Props extends object,
-  >(
+  <Eff extends Effect.Effect<any, any, any>, AEff, Props extends object>(
     body: (id: string, props: Props) => Generator<Eff, AEff, never>,
   ): (
     id: string,
@@ -62,12 +58,12 @@ export const fn: {
     AEff,
     [Eff] extends [never]
       ? never
-      : [Eff] extends [Effect.Yieldable<infer _S, infer _A, infer E, infer _R>]
+      : [Eff] extends [Effect.Effect<infer _A, infer E, infer _R>]
         ? E
         : never,
     [Eff] extends [never]
       ? never
-      : [Eff] extends [Effect.Yieldable<infer _S, infer _A, infer _E, infer R>]
+      : [Eff] extends [Effect.Effect<infer _A, infer _E, infer R>]
         ? R
         : never
   >;

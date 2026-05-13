@@ -95,7 +95,7 @@ export const tailCommand = Command.make(
               stage: stack.stage,
               fqn,
             });
-            if (!resourceState?.attr) continue;
+            if (!(resourceState as any)?.attr) continue;
 
             const provider = yield* findProviderByType(resource.Type);
             if (!provider.tail) continue;
@@ -104,9 +104,9 @@ export const tailCommand = Command.make(
               logicalId: resource.LogicalId,
               stream: provider.tail({
                 id: resource.LogicalId,
-                instanceId: resourceState.instanceId,
-                props: resourceState.props as any,
-                output: resourceState.attr as any,
+                instanceId: (resourceState as any).instanceId,
+                props: (resourceState as any).props,
+                output: (resourceState as any).attr,
               }),
             });
           }

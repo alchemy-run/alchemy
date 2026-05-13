@@ -83,7 +83,7 @@ export const execStack = Effect.fn(function* ({
   const services = Layer.mergeAll(
     Layer.effect(
       AlchemyContext,
-      AlchemyContext.asEffect().pipe(
+      AlchemyContext.pipe(
         Effect.map((ctx) => ({
           ...ctx,
           dev,

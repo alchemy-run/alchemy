@@ -63,6 +63,9 @@
       "path": "./examples/cloudflare-worker/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-email/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-neon-drizzle/tsconfig.json"
     },
     {

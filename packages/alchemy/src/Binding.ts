@@ -141,7 +141,7 @@ export const Policy =
       Effect.flatMap((service) =>
         service
           ? Effect.succeed(service)
-          : Effect.all([CurrentStack, ALCHEMY_PHASE.asEffect()]).pipe(
+          : Effect.all([CurrentStack, ALCHEMY_PHASE]).pipe(
               Effect.flatMap(([stack, phase]) =>
                 stack && phase === "plan"
                   ? Effect.die(
@@ -154,7 +154,7 @@ export const Policy =
     );
 
     const asEffect = () =>
-      Effect.all([Self.asEffect(), Service]).pipe(
+      Effect.all([Self, Service]).pipe(
         Effect.map(
           ([resource, fn]) =>
             (...args: any[]) =>
@@ -174,7 +174,7 @@ export const Policy =
     // @ts-expect-error
     return Object.assign(self, {
       [Symbol.iterator]() {
-        return new SingleShotGen(this);
+        return new SingleShotGen(asEffect());
       },
       asEffect,
       bind: (...args: any[]) =>
@@ -190,9 +190,7 @@ export const Policy =
             self,
             // @ts-expect-error
             (...args: Parameters<Shape>) =>
-              Self.asEffect().pipe(
-                Effect.flatMap((self) => fn(self as ResourceLike, ...args)),
-              ),
+              Self.use((self) => fn(self as ResourceLike, ...args)),
           ),
         effect: (
           fn: Effect.Effect<
@@ -209,9 +207,7 @@ export const Policy =
               fn,
               (fn) =>
                 (...args: Parameters<Shape>) =>
-                  Effect.flatMap(Self.asEffect(), (self) =>
-                    fn(self as ResourceLike, ...args),
-                  ),
+                  Self.use((self) => fn(self as ResourceLike, ...args)),
             ),
           ),
       },

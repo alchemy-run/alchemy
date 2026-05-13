@@ -21,9 +21,7 @@ test.provider.skipIf(!runLive)(
 
       const out = yield* stack.deploy(
         Effect.gen(function* () {
-          const fn = yield* TestFunction.asEffect().pipe(
-            Effect.provide(TestFunctionLive),
-          );
+          const fn = yield* TestFunction.pipe(Effect.provide(TestFunctionLive));
 
           const api = yield* AWS.ApiGateway.RestApi("AgSmokeApi", {
             endpointConfiguration: { types: ["REGIONAL"] },

@@ -21,17 +21,6 @@ export const NeonDb = Effect.gen(function* () {
     out: "./migrations",
   });
 
-  // Stages are organised in two tiers:
-  //
-  //   - `staging-*` stages own the long-lived Neon project (the data
-  //     plane). They're deployed once per PR / preview namespace.
-  //   - `pr-*` stages reference the parallel `staging-pr-*` project
-  //     and only own ephemeral compute (branch + Hyperdrive + Worker).
-  //
-  // Deriving `staging-${stage}` instead of a single global `"staging"`
-  // keeps each test / PR isolated — two concurrent PRs never race on
-  // the same Neon project. Locally (`dev_<user>`, etc.) we just create
-  // a fresh project.
   const project = stage.startsWith("pr-")
     ? yield* Neon.Project.ref("app-db", { stage: `staging-${stage}` })
     : yield* Neon.Project("app-db", {

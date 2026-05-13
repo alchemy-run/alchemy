@@ -20,6 +20,7 @@ import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
+import type { ActionLike } from "./Action.ts";
 import type { State } from "./State/State.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
 import { effectClass, taggedFunction } from "./Util/effect.ts";
@@ -164,6 +165,10 @@ export interface StackSpec<Output = any> {
   bindings: {
     [logicalId: string]: ResourceBinding[];
   };
+  /** Tasks registered on the stack, keyed by FQN. */
+  actions: {
+    [logicalId: string]: ActionLike;
+  };
   output: Output;
 }
 
@@ -221,7 +226,7 @@ export const make =
           Layer.provideMerge(
             Layer.effect(
               Stack,
-              Stage.asEffect().pipe(
+              Stage.pipe(
                 Effect.map(
                   (stage) =>
                     options.stack ?? {
@@ -229,6 +234,7 @@ export const make =
                       stage,
                       resources: {},
                       bindings: {},
+                      actions: {},
                     },
                 ),
               ),
@@ -240,7 +246,7 @@ export const make =
       Effect.flatMap((context) =>
         Effect.all([
           effect,
-          Stack.asEffect(),
+          Stack,
           Effect.context<ROut | StackServices>(),
         ]).pipe(
           Effect.map(
@@ -259,7 +265,7 @@ export const make =
     );
 
 export const CurrentStack = Effect.serviceOption(Stack)
-  .asEffect()
+
   .pipe(Effect.map(Option.getOrUndefined));
 
 const platform = Layer.mergeAll(
@@ -278,9 +284,7 @@ const alchemy = (overrides?: { dev?: boolean }) =>
       ? Layer.provide(
           Layer.effect(
             AlchemyContext,
-            AlchemyContext.asEffect().pipe(
-              Effect.map((ctx) => ({ ...ctx, dev: overrides.dev! })),
-            ),
+            AlchemyContext.useSync((ctx) => ({ ...ctx, dev: overrides.dev! })),
           ),
           AlchemyContextLive,
         )

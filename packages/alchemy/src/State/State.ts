@@ -2,6 +2,21 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
+import type { ActionState } from "./ActionState.ts";
+
+/**
+ * Anything persistable under an FQN. Resources are discriminated by status
+ * strings ("creating", "created", …) and Tasks by `kind: "action"`.
+ */
+export type PersistedState = ResourceState | ActionState;
+
+export const isActionState = (
+  s: PersistedState | undefined,
+): s is ActionState => !!s && (s as any).kind === "action";
+
+export const isResourceState = (
+  s: PersistedState | undefined,
+): s is ResourceState => !!s && (s as any).kind !== "task";
 
 export class StateStoreError extends Data.TaggedError("StateStoreError")<{
   message: string;
@@ -41,7 +56,7 @@ export interface StateService {
     stack: string;
     stage: string;
     fqn: string;
-  }): Effect.Effect<ResourceState | undefined, StateStoreError, never>;
+  }): Effect.Effect<PersistedState | undefined, StateStoreError, never>;
   /**
    * List top-level resources that are still in replacement cleanup.
    *
@@ -59,7 +74,7 @@ export interface StateService {
   /**
    * Set a resource by its FQN (namespace-qualified key).
    */
-  set<V extends ResourceState>(request: {
+  set<V extends PersistedState>(request: {
     stack: string;
     stage: string;
     fqn: string;
