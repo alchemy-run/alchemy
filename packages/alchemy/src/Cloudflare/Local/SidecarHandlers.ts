@@ -271,22 +271,27 @@ export const SidecarHandlers = Layer.effect(
     >();
 
     const runInstance = Effect.fn(function* (options: ReconcileOptions) {
+      const { id, props, bindings } = options;
       const config = yield* buildConfig(options);
       let address: string;
-      if (options.props.vite) {
-        console.log("starting vite dev server", options.id);
-        const devServer = yield* Vite.viteDev(options.props.vite.rootDir, {
-          compatibilityDate: config.compatibility.date,
-          compatibilityFlags: config.compatibility.flags,
-          bindings: config.workerBindings,
-          durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
-            config.durableObjectNamespaces,
-          ),
-          context,
-        });
-        console.log("vite dev server started", options.id);
+      if (props.vite) {
+        console.log("starting vite dev server", id);
+        const devServer = yield* Vite.viteDev(
+          props.vite.rootDir,
+          props.env ?? {},
+          {
+            compatibilityDate: config.compatibility.date,
+            compatibilityFlags: config.compatibility.flags,
+            bindings: config.workerBindings,
+            durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
+              config.durableObjectNamespaces,
+            ),
+            context,
+          },
+        );
+        console.log("vite dev server started", id);
         address = devServer.resolvedUrls!.local[0];
-      } else if (!options.props.isExternal) {
+      } else if (!props.isExternal) {
         // HACK: `runServer` fails with Effect workers right now.
         // The failure occurs in `serveScoped` - `runtime.start` fails because the `stdin` pipe is broken.
         // It shows up as a generic RuntimeError, but I was able to trace it down to one of:
@@ -309,10 +314,7 @@ export const SidecarHandlers = Layer.effect(
         durableObjectNamespaces: config.durableObjectNamespaces,
         domains: [],
         crons: Array.from(
-          new Set([
-            ...getCronBindings(options.bindings),
-            ...(options.props.crons ?? []),
-          ]),
+          new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
         ),
         accountId,
       } satisfies Worker["Attributes"];

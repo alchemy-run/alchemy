@@ -1608,6 +1608,7 @@ export const LiveWorkerProvider = () =>
         const compatibility = getCompatibility(props);
         const { assetsDirectory, serverBundle } = yield* Vite.viteBuild(
           props.vite?.rootDir,
+          props.env ?? {},
           {
             compatibilityDate: compatibility.date,
             compatibilityFlags: compatibility.flags,
