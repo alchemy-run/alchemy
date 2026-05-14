@@ -311,10 +311,7 @@ export const SidecarHandlers = Layer.effect(
       diff: Effect.fn(function* (options) {
         const hash = Hash.structure(options);
         return {
-          action:
-            // The props.isExternal check is a workaround for the Effect worker issue (see `runInstance` for more details).
-            // Remove it once the issue is fixed.
-            instances.get(options.id)?.hash === hash ? "noop" : "update",
+          action: instances.get(options.id)?.hash === hash ? "noop" : "update",
         };
       }),
       reconcile: Effect.fn(function* (options) {
