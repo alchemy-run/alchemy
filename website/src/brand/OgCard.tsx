@@ -38,6 +38,10 @@ const COLORS = {
   darkFg2: "#bdb09a",
   darkFg3: "#7d705c",
   darkAccent: "#a8c47a",
+  // Dark-mode yantra — lifted moss stroke + terracotta bindu dot, mirroring
+  // the runtime tokens (--alc-accent / --alc-yantra-dot in the .dark block).
+  darkYantraStroke: "#7a9a5e",
+  darkYantraDot: "#c56e3c",
   darkHairline: "rgba(245,239,227,0.12)",
 } as const;
 
@@ -236,7 +240,10 @@ function DocCard({ title, description, eyebrow, kind }: OgCardProps): any {
 // ────────────────────────────────────────────────────────────────────────────
 
 function BlogCard({ title, description, date }: OgCardProps): any {
-  const yantraDataUrl = yantraImage(COLORS.darkAccent);
+  const yantraDataUrl = yantraImage(
+    COLORS.darkYantraStroke,
+    COLORS.darkYantraDot,
+  );
 
   return {
     type: "div",
@@ -369,11 +376,11 @@ function BlogCard({ title, description, date }: OgCardProps): any {
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-function yantraImage(color: string): string {
+function yantraImage(stroke: string, dot: string = stroke): string {
   const svg = yantraSvg({
     size: 96,
-    stroke: color,
-    dot: color,
+    stroke,
+    dot,
     strokeWidth: 0.7,
   });
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
