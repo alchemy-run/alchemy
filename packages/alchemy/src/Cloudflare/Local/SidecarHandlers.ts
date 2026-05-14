@@ -26,14 +26,18 @@ import {
   WasmModule,
   WorkerLoader,
 } from "@distilled.cloud/cloudflare-runtime/bindings";
+import { Result } from "effect";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import { flow } from "effect/Function";
+import * as Fiber from "effect/Fiber";
 import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { getCompatibility } from "../Workers/Compatibility.ts";
@@ -48,7 +52,13 @@ import {
   WorkerBundle,
   type WorkerBundleOptions,
 } from "../Workers/WorkerBundle.ts";
-import { Sidecar, ValidationError, type ReconcileOptions } from "./Sidecar.ts";
+import {
+  ServeError,
+  ServeResult,
+  Sidecar,
+  ValidationError,
+  type ReconcileOptions,
+} from "./Sidecar.ts";
 
 export const SidecarHandlers = Layer.effect(
   Sidecar,
@@ -91,6 +101,33 @@ export const SidecarHandlers = Layer.effect(
         }
       }
       return modules;
+    });
+
+    const serveScoped = Effect.fnUntraced(function* (
+      worker: WorkerConfig,
+      modules: Module[],
+    ) {
+      const scope = yield* Effect.flatMap(Effect.scope, Scope.fork);
+      const result = yield* runtime
+        .start({
+          name: worker.name,
+          compatibilityDate: worker.compatibility.date,
+          compatibilityFlags: worker.compatibility.flags,
+          bindings: worker.workerBindings as never,
+          hyperdrives: worker.hyperdrives,
+          durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
+            worker.durableObjectNamespaces,
+          ),
+          modules,
+          assets: toRuntimeAssets(worker.assets),
+        })
+        .pipe(Scope.provide(scope));
+      const previous = workerdScopes.get(worker.id);
+      if (previous) {
+        yield* Effect.forkDetach(Scope.close(previous, Exit.void));
+      }
+      workerdScopes.set(worker.id, scope);
+      return result;
     });
 
     const buildConfig = Effect.fn(function* ({
@@ -138,6 +175,7 @@ export const SidecarHandlers = Layer.effect(
         }
       }
       return {
+        id,
         name,
         compatibility,
         workerBindings,
@@ -153,87 +191,170 @@ export const SidecarHandlers = Layer.effect(
           stack: { name: stack.name, stage: stack.stage },
           userOptions: props.build,
         } satisfies WorkerBundleOptions,
-        serve: flow(
-          toRuntimeModules,
-          Effect.flatMap((modules) =>
-            runtime.start({
-              name,
-              compatibilityDate: compatibility.date,
-              compatibilityFlags: compatibility.flags,
-              bindings: workerBindings as BindingHook<never>[],
-              modules,
-              assets: toRuntimeAssets(props.assets),
-              hyperdrives,
-              durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
-                durableObjectNamespaces,
-              ),
-            }),
-          ),
-        ),
+        assets: props.assets,
       };
     });
 
-    const rootScope = yield* Effect.scope;
-    const serverScopes = new Map<string, Scope.Closeable>();
+    type WorkerConfig = Effect.Success<ReturnType<typeof buildConfig>>;
 
-    const hashes = new Map<string, number>();
+    const runServer = Effect.fnUntraced(function* (worker: WorkerConfig) {
+      const addressResult = yield* Deferred.make<string, ServeError>();
+      let start = Date.now();
+      yield* bundler.watch(worker.bundleOptions).pipe(
+        Stream.mapEffect((event) =>
+          event._tag === "Error" && !Deferred.isDoneUnsafe(addressResult)
+            ? Effect.fail(event.error)
+            : Effect.succeed(event),
+        ),
+        Stream.tap((event) => {
+          if (event._tag === "Start") {
+            start = Date.now();
+            if (Deferred.isDoneUnsafe(addressResult)) {
+              return Effect.log(`[${worker.name}] Rebuilding`);
+            }
+          } else if (event._tag === "Error") {
+            return Effect.logError(
+              `[${worker.name}] Bundle error`,
+              event.error,
+            );
+          }
+          return Effect.void;
+        }),
+        Stream.filterMap((event) =>
+          event._tag === "Success"
+            ? Result.succeed(event.output)
+            : Result.failVoid,
+        ),
+        Stream.mapEffect(toRuntimeModules),
+        Stream.mapEffect((modules) =>
+          serveScoped(worker, modules).pipe(
+            Effect.exit,
+            Effect.tap((exit) => {
+              const isDone = Deferred.isDoneUnsafe(addressResult);
+              if (exit._tag === "Success") {
+                return Effect.log(
+                  `[${worker.id}] ${isDone ? "Updated" : "Started"} in ${Math.round(Date.now() - start)}ms`,
+                );
+              } else {
+                return Effect.logError(
+                  `[${worker.id}] Error`,
+                  Cause.squash(exit.cause),
+                );
+              }
+            }),
+            Effect.tap((exit) => Deferred.complete(addressResult, exit)),
+          ),
+        ),
+        Stream.onExit((exit) =>
+          exit._tag === "Failure" && !Deferred.isDoneUnsafe(addressResult)
+            ? Deferred.failCause(addressResult, exit.cause)
+            : Effect.void,
+        ),
+        Stream.runDrain,
+        Effect.forkScoped,
+      );
+      return yield* Deferred.await(addressResult);
+    });
+
+    const rootScope = yield* Effect.scope;
+    const workerdScopes = new Map<string, Scope.Closeable>();
+
     const context = yield* Effect.context<RuntimeServices>();
+    const instances = new Map<
+      string,
+      {
+        hash: number;
+        fiber: Fiber.Fiber<ServeResult, ServeError>;
+        scope: Scope.Closeable;
+      }
+    >();
+
+    const runInstance = Effect.fn(function* (options: ReconcileOptions) {
+      const config = yield* buildConfig(options);
+      let address: string;
+      if (options.props.vite) {
+        console.log("starting vite dev server", options.id);
+        const devServer = yield* Vite.viteDev(options.props.vite.rootDir, {
+          compatibilityDate: config.compatibility.date,
+          compatibilityFlags: config.compatibility.flags,
+          bindings: config.workerBindings,
+          durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
+            config.durableObjectNamespaces,
+          ),
+          context,
+        });
+        console.log("vite dev server started", options.id);
+        address = devServer.resolvedUrls!.local[0];
+      } else {
+        console.log("building bundle", options.id);
+        address = yield* runServer(config);
+        console.log("serving bundle", options.id);
+      }
+      console.log("sidecar reconciled", options.id);
+      return {
+        workerId: config.name,
+        workerName: config.name,
+        logpush: undefined,
+        url: address,
+        tags: [],
+        durableObjectNamespaces: config.durableObjectNamespaces,
+        domains: [],
+        crons: Array.from(
+          new Set([
+            ...getCronBindings(options.bindings),
+            ...(options.props.crons ?? []),
+          ]),
+        ),
+        accountId,
+      } satisfies Worker["Attributes"];
+    });
 
     return Sidecar.of({
       diff: Effect.fn(function* (options) {
         const hash = Hash.structure(options);
         return {
-          action: hashes.get(options.id) === hash ? "noop" : "update",
+          action: instances.get(options.id)?.hash === hash ? "noop" : "update",
         };
       }),
       reconcile: Effect.fn(function* (options) {
-        const config = yield* buildConfig(options);
-        const previousScope = serverScopes.get(options.id);
-        if (previousScope) {
-          yield* Scope.close(previousScope, Exit.void);
-          serverScopes.delete(options.id);
+        const hash = Hash.structure(options);
+        const existing = instances.get(options.id);
+        if (existing) {
+          if (existing.hash === hash) {
+            yield* Effect.log(
+              `[${options.id}] No changes, using existing instance`,
+            );
+            return yield* Fiber.join(existing.fiber);
+          }
+          yield* Effect.log(
+            `[${options.id}] Changes detected, interrupting existing instance`,
+          );
+          yield* Fiber.interrupt(existing.fiber);
+          yield* Scope.close(existing.scope, Exit.void);
+          instances.delete(options.id);
         }
-        const newScope = yield* Scope.fork(rootScope);
-        let address: string;
-        if (options.props.vite) {
-          const devServer = yield* Vite.viteDev(options.props.vite.rootDir, {
-            compatibilityDate: config.compatibility.date,
-            compatibilityFlags: config.compatibility.flags,
-            bindings: config.workerBindings,
-            durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
-              config.durableObjectNamespaces,
-            ),
-            context,
-          }).pipe(Scope.provide(newScope));
-          address = devServer.resolvedUrls!.local[0];
-        } else {
-          const bundle = yield* bundler.build(config.bundleOptions);
-          address = yield* config.serve(bundle).pipe(Scope.provide(newScope));
-        }
-        serverScopes.set(options.id, newScope);
-        hashes.set(options.id, Hash.structure(options));
-        return {
-          workerId: config.name,
-          workerName: config.name,
-          logpush: undefined,
-          url: address,
-          tags: [],
-          durableObjectNamespaces: config.durableObjectNamespaces,
-          domains: [],
-          crons: Array.from(
-            new Set([
-              ...getCronBindings(options.bindings),
-              ...(options.props.crons ?? []),
-            ]),
+        const scope = yield* Scope.fork(rootScope);
+        const fiber = yield* runInstance(options).pipe(
+          Effect.forkDetach,
+          Scope.provide(scope),
+        );
+        instances.set(options.id, { hash, fiber, scope });
+        return yield* Fiber.join(fiber).pipe(
+          Effect.onExit((exit) =>
+            Effect.sync(() => {
+              if (exit._tag === "Failure") {
+                instances.delete(options.id);
+              }
+            }),
           ),
-          accountId,
-        } satisfies Worker["Attributes"];
+        );
       }),
       delete: Effect.fn(function* (id) {
-        const previousScope = serverScopes.get(id);
-        if (previousScope) {
-          yield* Scope.close(previousScope, Exit.void);
-          serverScopes.delete(id);
+        const existing = instances.get(id);
+        if (existing) {
+          yield* Fiber.interrupt(existing.fiber);
+          yield* Scope.close(existing.scope, Exit.void);
+          instances.delete(id);
         }
       }),
     });

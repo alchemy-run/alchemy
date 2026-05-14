@@ -23,6 +23,7 @@ export const viteDev = (
     }),
     (devServer) =>
       Effect.promise(async () => {
+        console.log("closing dev server");
         await devServer.close();
       }),
   );

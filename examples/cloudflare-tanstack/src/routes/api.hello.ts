@@ -35,6 +35,7 @@ export const Route = createFileRoute("/api/hello")({
       GET: async ({ request }) => {
         const { via, key } = parseRequest(request);
         if (!key) {
+          console.log("env", Object.keys(env));
           return new Response("Missing 'key' query parameter", { status: 400 });
         }
 

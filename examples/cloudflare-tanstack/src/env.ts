@@ -7,4 +7,13 @@ export const env = new Proxy({} as WebsiteEnv, {
   get(_, prop) {
     return cf.env[prop as keyof typeof cf.env];
   },
+  has(_, prop) {
+    return prop in cf.env;
+  },
+  ownKeys(_) {
+    return Object.keys(cf.env);
+  },
+  getOwnPropertyDescriptor(_, prop) {
+    return Object.getOwnPropertyDescriptor(cf.env, prop);
+  },
 });
