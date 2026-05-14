@@ -264,7 +264,11 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "dispatch_namespace":
       return yield* unsupported();
     case "durable_object_namespace":
-      return DurableObjectNamespace.local(b.name, b.className!);
+      return DurableObjectNamespace.local({
+        name: b.name,
+        className: b.className!,
+        scriptName: b.scriptName,
+      });
     case "hyperdrive":
       return Hyperdrive.binding(b.name, b.id);
     case "images":
@@ -296,7 +300,7 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "send_email":
       return yield* unsupported();
     case "service":
-      return Service.remote(b.name, b.service);
+      return Service.local({ name: b.name, scriptName: b.service });
     case "text_blob":
       return Data.binding(b.name, Buffer.from(b.part));
     case "vectorize":

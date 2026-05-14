@@ -1,7 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import { Bucket } from "./src/backend.ts";
+import Backend, { Bucket } from "./src/backend.ts";
 
 export const Website = Cloudflare.Vite("Website", {
   compatibility: {
@@ -9,7 +9,7 @@ export const Website = Cloudflare.Vite("Website", {
   },
   bindings: {
     BUCKET: Bucket,
-    // BACKEND: Backend,
+    BACKEND: Backend,
   },
 });
 
