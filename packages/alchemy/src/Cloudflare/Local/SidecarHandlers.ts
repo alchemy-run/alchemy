@@ -252,7 +252,9 @@ export const SidecarHandlers = Layer.effect(
         Stream.runDrain,
         Effect.forkScoped,
       );
-      return yield* Deferred.await(addressResult);
+      return yield* Deferred.await(addressResult).pipe(
+        Effect.map((address) => `http://${address}`),
+      );
     });
 
     const rootScope = yield* Effect.scope;
