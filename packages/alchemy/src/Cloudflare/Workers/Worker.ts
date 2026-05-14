@@ -15,6 +15,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
+import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
 import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
@@ -1588,21 +1589,23 @@ export const LiveWorkerProvider = () =>
       });
 
       const prepareBundle = (id: string, props: WorkerProps) =>
-        bundler.build({
-          id,
-          main: props.main,
-          compatibility: getCompatibility(props),
-          entry: props.isExternal
-            ? {
-                kind: "external",
-              }
-            : {
-                kind: "effect",
-                exports: (props.exports ?? {}) as any,
-              },
-          stack: { name: stack.name, stage: stack.stage },
-          userOptions: props.build,
-        });
+        bundler
+          .build({
+            id,
+            main: props.main,
+            compatibility: getCompatibility(props),
+            entry: props.isExternal
+              ? {
+                  kind: "external",
+                }
+              : {
+                  kind: "effect",
+                  exports: (props.exports ?? {}) as any,
+                },
+            stack: { name: stack.name, stage: stack.stage },
+            userOptions: props.build,
+          })
+          .pipe(Artifacts.cached("build"));
 
       const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
         const compatibility = getCompatibility(props);
