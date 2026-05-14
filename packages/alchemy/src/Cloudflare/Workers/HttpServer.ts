@@ -1,13 +1,10 @@
 import type * as cf from "@cloudflare/workers-types";
-import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
-import type { HttpBodyError } from "effect/unstable/http/HttpBody";
 import * as EffectHttp from "effect/unstable/http/HttpEffect";
 import { ClientAbort } from "effect/unstable/http/HttpServerError";
-import * as HttpServerError from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Http from "../../Http.ts";
@@ -19,11 +16,10 @@ export type HttpEffect = Http.HttpEffect<WorkerServices>;
 export const workersHttpHandler = <Req = never>(
   handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>,
 ) => {
-  const safeHandler = Http.safeHttpEffect(handler);
   return (event: any) => {
     if (isWorkerEvent(event) && event.type === "fetch") {
       const webRequest = event.input;
-      return serveWebRequest(webRequest, safeHandler, {
+      return serveWebRequest(webRequest, handler, {
         remoteAddress: webRequest.headers.get("cf-connecting-ip") ?? undefined,
       });
     }
@@ -32,11 +28,7 @@ export const workersHttpHandler = <Req = never>(
 
 export const serveWebRequest = <Req = never>(
   webRequest: cf.Request,
-  handler: Effect.Effect<
-    HttpServerResponse.HttpServerResponse,
-    HttpServerError.HttpServerError | HttpBodyError,
-    Req
-  >,
+  handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>,
   options: {
     // Preserve transport metadata when this helper is adapting a request
     // that originated from another runtime surface.
@@ -68,23 +60,12 @@ export const serveWebRequest = <Req = never>(
         }),
     });
 
-    const safeHandler = handler.pipe(
-      Effect.catchCause((cause) => {
-        const message = Option.match(Cause.findErrorOption(cause), {
-          onNone: () => "Internal Server Error",
-          onSome: (error) =>
-            error instanceof Error && error.message
-              ? error.message
-              : "Internal Server Error",
-        });
-        return Effect.succeed(
-          HttpServerResponse.text(message, {
-            status: 500,
-            statusText: message,
-          }),
-        );
-      }),
-    );
+    // Centralized error handling: every cause is caught, logged, and
+    // rendered as a structured 500. Every entry into this function — the
+    // Worker fetch path, the Durable Object fetch path in `Rpc.ts`, etc —
+    // gets identical failure semantics, regardless of how the caller
+    // produced `handler`.
+    const safeHandler = Http.safeHttpEffect(handler);
 
     const resolveSymbol = Symbol.for("@effect/platform/HttpApp/resolve");
     const httpApp = EffectHttp.toHandled(safeHandler, (request, response) => {
