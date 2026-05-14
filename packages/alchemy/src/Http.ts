@@ -61,18 +61,22 @@ export const safeHttpEffect = <Req = never>(
       ),
     ) as any as HttpEffect<Req>,
     (cause) => {
-      const message = Option.match(Cause.findErrorOption(cause), {
-        onNone: () => "Internal Server Error",
-        onSome: (error) => error.message ?? "Internal Server Error",
-      });
-
-      return Effect.map(
-        Effect.all([Effect.logError(message), Effect.logError(cause)]),
-        () =>
-          HttpServerResponse.text(message, {
+      // ClientAbort interrupts are not real failures — the client closed
+      // the connection. Skip logging and respond with 499 if applicable.
+      if (Cause.hasInterruptsOnly(cause)) {
+        return Effect.succeed(HttpServerResponse.empty({ status: 499 }));
+      }
+      // Log the full cause server-side so operators can debug, but return
+      // a generic 500 to the client. Causes can contain sensitive data
+      // (prompt contents, API keys baked into error messages, internal
+      // file paths) and should never be echoed back to the network.
+      return Effect.logError("HTTP handler failed", cause).pipe(
+        Effect.as(
+          HttpServerResponse.text("Internal Server Error", {
             status: 500,
-            statusText: message,
+            statusText: "Internal Server Error",
           }),
+        ),
       );
     },
   );
