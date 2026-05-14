@@ -1,7 +1,7 @@
 import cloudflare, {
   type CloudflareVitePluginOptions,
 } from "@distilled.cloud/cloudflare-vite-plugin";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
