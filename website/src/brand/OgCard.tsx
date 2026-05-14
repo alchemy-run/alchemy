@@ -129,6 +129,15 @@ export function OgCard({
             ],
           },
         },
+        // For blog cards, push the title down so it sits at the bottom of
+        // its container (just above the footer) rather than near the top.
+        kind === "blog"
+          ? {
+              type: "div",
+              key: "title-spacer",
+              props: { style: { display: "flex", flexGrow: 1 } },
+            }
+          : null,
         // Title — serif, large, rendered verbatim. Either a plain string
         // (doc pages) or an array of styled parts (marketing pages, which
         // mirror the homepage hero's explicit per-word accent markup).
@@ -199,12 +208,16 @@ export function OgCard({
               },
             }
           : null,
-        // Spacer pushes the footer to the bottom.
-        {
-          type: "div",
-          key: "spacer",
-          props: { style: { display: "flex", flexGrow: 1 } },
-        },
+        // Spacer pushes the footer to the bottom. Skipped for blog cards,
+        // which use a spacer above the title instead so the heading sits
+        // at the bottom of its container.
+        kind === "blog"
+          ? null
+          : {
+              type: "div",
+              key: "spacer",
+              props: { style: { display: "flex", flexGrow: 1 } },
+            },
         // Footer — hairline + wordmark + hand-drawn URL.
         {
           type: "div",
