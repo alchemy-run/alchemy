@@ -69,6 +69,93 @@ function copyMarkdownSources() {
   };
 }
 
+/**
+ * Case-sensitive internal-link checker. astro-broken-links-checker uses
+ * `fs.existsSync`, which is case-insensitive on macOS — so `/foo/Bar` will
+ * resolve to `/foo/bar` locally but 404 on Linux CI. This integration walks
+ * the build output once into a case-sensitive Set of paths and validates
+ * every `href`/`src` against it.
+ *
+ * @returns {import("astro").AstroIntegration}
+ */
+function caseSensitiveLinkChecker() {
+  return {
+    name: "case-sensitive-link-checker",
+    hooks: {
+      "astro:build:done": async ({ dir, logger }) => {
+        const distPath = fileURLToPath(dir);
+
+        /** @type {Set<string>} */
+        const paths = new Set();
+        /** @type {Set<string>} */
+        const dirs = new Set();
+        /**
+         * @param {string} d
+         */
+        async function walk(d) {
+          const entries = await fs.readdir(d, { withFileTypes: true });
+          for (const entry of entries) {
+            const full = path.join(d, entry.name);
+            if (entry.isDirectory()) {
+              dirs.add("/" + path.relative(distPath, full));
+              await walk(full);
+            } else if (entry.isFile()) {
+              paths.add("/" + path.relative(distPath, full));
+            }
+          }
+        }
+        await walk(distPath);
+
+        /** @type {Map<string, Set<string>>} */
+        const broken = new Map();
+        const htmlFiles = [...paths].filter((p) => p.endsWith(".html"));
+
+        for (const htmlFile of htmlFiles) {
+          const html = await fs.readFile(
+            path.join(distPath, htmlFile.slice(1)),
+            "utf8",
+          );
+          const links = [
+            ...html.matchAll(/<a\s+[^>]*href="([^"#?]+)/gi),
+            ...html.matchAll(/<img\s+[^>]*src="([^"#?]+)/gi),
+          ].map((m) => m[1]);
+
+          for (const link of links) {
+            if (!link.startsWith("/")) continue; // skip external, anchors, mailto, etc.
+            const clean = link.replace(/\/$/, "");
+            const fileCandidates = [
+              clean,
+              clean + "/index.html",
+              clean + ".html",
+            ];
+            const exists =
+              fileCandidates.some((c) => paths.has(c)) || dirs.has(clean);
+            if (!exists) {
+              if (!broken.has(link)) broken.set(link, new Set());
+              broken.get(link)?.add(htmlFile);
+            }
+          }
+        }
+
+        if (broken.size > 0) {
+          let msg = "Case-sensitive broken links detected:\n";
+          for (const [link, docs] of broken.entries()) {
+            msg += `\n  ${link}\n    Found in:\n`;
+            for (const doc of docs) msg += `      - ${doc}\n`;
+          }
+          logger.error(msg);
+          throw new Error(
+            `Case-sensitive broken links detected (${broken.size})`,
+          );
+        }
+        logger.info(
+          `Case-sensitive link check passed (${htmlFiles.length} pages)`,
+        );
+      },
+    },
+  };
+}
+
 export default defineConfig({
   site: "https://v2.alchemy.run",
   prefetch: true,
@@ -81,6 +168,7 @@ export default defineConfig({
       checkExternalLinks: false,
       throwError: true,
     }),
+    caseSensitiveLinkChecker(),
     sitemap({
       filter: (page) =>
         !page.endsWith(".html") &&
