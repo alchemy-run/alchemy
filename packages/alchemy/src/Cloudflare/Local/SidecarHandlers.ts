@@ -189,6 +189,10 @@ export const SidecarHandlers = Layer.effect(
       reconcile: Effect.fn(function* (options) {
         const config = yield* buildConfig(options);
         const previousScope = serverScopes.get(options.id);
+        if (previousScope) {
+          yield* Scope.close(previousScope, Exit.void);
+          serverScopes.delete(options.id);
+        }
         const newScope = yield* Scope.fork(rootScope);
         let address: string;
         if (options.props.vite) {
@@ -208,9 +212,6 @@ export const SidecarHandlers = Layer.effect(
         }
         serverScopes.set(options.id, newScope);
         hashes.set(options.id, Hash.structure(options));
-        if (previousScope) {
-          yield* Scope.close(previousScope, Exit.void);
-        }
         return {
           workerId: config.name,
           workerName: config.name,
