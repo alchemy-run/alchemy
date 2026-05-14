@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Binding from "../../Binding.ts";
+import { makeBoundClientService } from "../BoundClient.ts";
 import { WorkerEnvironment } from "../Workers/Worker.ts";
 import type { D1Database } from "./D1Database.ts";
 import { DatabaseBinding } from "./D1DatabaseBinding.ts";
@@ -116,6 +117,13 @@ export class D1Connection extends Binding.Service<
   D1Connection,
   (database: D1Database) => Effect.Effect<D1ConnectionClient>
 >()("Cloudflare.D1.Connection") {}
+
+export const D1ConnectionClient = makeBoundClientService<
+  D1ConnectionClient,
+  D1Database,
+  D1ConnectionClient,
+  D1Connection
+>("Cloudflare.D1.Connection.Client", D1Connection);
 
 export const D1ConnectionLive = Layer.effect(
   D1Connection,

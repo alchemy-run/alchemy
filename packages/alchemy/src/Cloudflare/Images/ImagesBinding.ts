@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import { makeBoundClientService } from "../BoundClient.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { type Images as ImagesLike } from "./Images.ts";
 
@@ -79,6 +80,13 @@ export class ImagesBinding extends Binding.Service<
   ImagesBinding,
   (images: ImagesLike) => Effect.Effect<ImagesClient>
 >()("Cloudflare.Images.Binding") {}
+
+export const ImagesClient = makeBoundClientService<
+  ImagesClient,
+  ImagesLike,
+  ImagesClient,
+  ImagesBinding
+>("Cloudflare.Images.Client", ImagesBinding);
 
 export const ImagesBindingLive = Layer.effect(
   ImagesBinding,

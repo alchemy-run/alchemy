@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import { makeBoundClientService } from "../BoundClient.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Queue } from "./Queue.ts";
 
@@ -63,6 +64,13 @@ export class QueueBinding extends Binding.Service<
   QueueBinding,
   (queue: Queue) => Effect.Effect<QueueSender>
 >()("Cloudflare.Queue") {}
+
+export const QueueSender = makeBoundClientService<
+  QueueSender,
+  Queue,
+  QueueSender,
+  QueueBinding
+>("Cloudflare.Queue.Sender", QueueBinding);
 
 export const QueueBindingLive = Layer.effect(
   QueueBinding,

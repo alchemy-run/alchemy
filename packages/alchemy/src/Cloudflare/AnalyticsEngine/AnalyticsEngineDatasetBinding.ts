@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import { makeBoundClientService } from "../BoundClient.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { AnalyticsEngineDataset as AnalyticsEngineDatasetLike } from "./AnalyticsEngineDataset.ts";
 
@@ -36,6 +37,13 @@ export class AnalyticsEngineDatasetBinding extends Binding.Service<
     dataset: AnalyticsEngineDatasetLike,
   ) => Effect.Effect<AnalyticsEngineDatasetClient>
 >()("Cloudflare.AnalyticsEngineDataset.Binding") {}
+
+export const AnalyticsEngineDatasetClient = makeBoundClientService<
+  AnalyticsEngineDatasetClient,
+  AnalyticsEngineDatasetLike,
+  AnalyticsEngineDatasetClient,
+  AnalyticsEngineDatasetBinding
+>("Cloudflare.AnalyticsEngineDataset.Client", AnalyticsEngineDatasetBinding);
 
 export const AnalyticsEngineDatasetBindingLive = Layer.effect(
   AnalyticsEngineDatasetBinding,

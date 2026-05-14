@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import { makeBoundClientService } from "../BoundClient.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { KVNamespace } from "./KVNamespace.ts";
 
@@ -221,6 +222,13 @@ export class KVNamespaceBinding extends Binding.Service<
   KVNamespaceBinding,
   (bucket: KVNamespace) => Effect.Effect<KVNamespaceClient>
 >()("Cloudflare.KVNamespace") {}
+
+export const KVNamespaceClient = makeBoundClientService<
+  KVNamespaceClient,
+  KVNamespace,
+  KVNamespaceClient,
+  KVNamespaceBinding
+>("Cloudflare.KVNamespace.Client", KVNamespaceBinding);
 
 export const KVNamespaceBindingLive = Layer.effect(
   KVNamespaceBinding,

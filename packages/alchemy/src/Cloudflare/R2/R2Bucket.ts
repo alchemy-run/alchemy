@@ -180,6 +180,31 @@ export type R2Bucket = Resource<
  * }
  * ```
  *
+ * @example Providing an R2 client to another service
+ * ```typescript
+ * const Images = Context.Service<{
+ *   get(key: string): Effect.Effect<Uint8Array | undefined, Cloudflare.R2Error>;
+ * }>("Images");
+ *
+ * const ImagesLive = Layer.effect(
+ *   Images,
+ *   Effect.gen(function* () {
+ *     const bucket = yield* Cloudflare.R2BucketClient;
+ *
+ *     return {
+ *       get: (key: string) =>
+ *         Effect.gen(function* () {
+ *           const object = yield* bucket.get(key);
+ *           return object ? yield* object.bytes() : undefined;
+ *         }),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.R2BucketClient.layer(MyBucket)),
+ *   Layer.provide(Cloudflare.R2BucketBindingLive),
+ * );
+ * ```
+ *
  * @example Streaming upload with content length
  * ```typescript
  * const bucket = yield* Cloudflare.R2Bucket.bind(MyBucket);
