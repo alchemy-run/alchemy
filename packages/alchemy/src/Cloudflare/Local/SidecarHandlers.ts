@@ -108,7 +108,7 @@ export const SidecarHandlers = Layer.effect(
       bundle: Bundle.BundleOutput,
     ) {
       const scope = yield* Effect.flatMap(Effect.scope, Scope.fork);
-      const result = yield* runtime
+      const address = yield* runtime
         .start({
           name: worker.name,
           compatibilityDate: worker.compatibility.date,
@@ -127,7 +127,7 @@ export const SidecarHandlers = Layer.effect(
         yield* Effect.forkDetach(Scope.close(previous, Exit.void));
       }
       workerdScopes.set(worker.id, scope);
-      return result;
+      return `http://${address}`;
     });
 
     const buildConfig = Effect.fn(function* ({
@@ -252,9 +252,7 @@ export const SidecarHandlers = Layer.effect(
         Stream.runDrain,
         Effect.forkScoped,
       );
-      return yield* Deferred.await(addressResult).pipe(
-        Effect.map((address) => `http://${address}`),
-      );
+      return yield* Deferred.await(addressResult);
     });
 
     const rootScope = yield* Effect.scope;
@@ -291,17 +289,6 @@ export const SidecarHandlers = Layer.effect(
         );
         console.log("vite dev server started", id);
         address = devServer.resolvedUrls!.local[0];
-      } else if (!props.isExternal) {
-        // HACK: `runServer` fails with Effect workers right now.
-        // The failure occurs in `serveScoped` - `runtime.start` fails because the `stdin` pipe is broken.
-        // It shows up as a generic RuntimeError, but I was able to trace it down to one of:
-        // - kj/io.c++:351: failed: miniposix::read(fd, pos, max - pos): Device not configured; fd = 0
-        // - EPIPE: broken pipe, send
-        // This only occurs when it's an Effect worker and `serveScoped` is called after a watcher event.
-        // I need to figure out a better solution, but in the meantime, this is our workaround, and
-        // it should be safe (albeit slower) because the CLI watches Effect workers anyway.
-        const bundle = yield* bundler.build(config.bundleOptions);
-        address = yield* serveScoped(config, bundle);
       } else {
         address = yield* runServer(config);
       }
@@ -327,18 +314,14 @@ export const SidecarHandlers = Layer.effect(
           action:
             // The props.isExternal check is a workaround for the Effect worker issue (see `runInstance` for more details).
             // Remove it once the issue is fixed.
-            instances.get(options.id)?.hash === hash && options.props.isExternal
-              ? "noop"
-              : "update",
+            instances.get(options.id)?.hash === hash ? "noop" : "update",
         };
       }),
       reconcile: Effect.fn(function* (options) {
         const hash = Hash.structure(options);
         const existing = instances.get(options.id);
         if (existing) {
-          // The props.isExternal check is a workaround for the Effect worker issue (see `runInstance` for more details).
-          // Remove it once the issue is fixed.
-          if (existing.hash === hash && options.props.isExternal) {
+          if (existing.hash === hash) {
             yield* Effect.log(
               `[${options.id}] No changes, using existing instance`,
             );
