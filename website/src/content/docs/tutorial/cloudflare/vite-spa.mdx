@@ -130,6 +130,45 @@ Any framework Vite supports works the same way — vanilla TS,
 Vue, Solid, Svelte — bring whatever `src/` layout the framework
 wants.
 
+### Inject the Worker URL at build time
+
+A pure SPA needs the backend's URL baked into the JS bundle at
+build time — there's no server to resolve it on each request. Pass
+`env` to `Cloudflare.Vite` and any `VITE_`-prefixed entry is
+inlined as `import.meta.env.<KEY>` during the Vite build, the same
+as if you'd run `VITE_API_URL=https://… vite build`:
+
+```diff lang="typescript"
+// alchemy.run.ts
+ const worker = yield* Worker;
+ const web = yield* Cloudflare.Vite("Website", {
++  env: {
++    VITE_API_URL: worker.url.as<string>(),
++  },
+ });
+```
+
+Then read it from the SPA:
+
+```tsx
+// src/main.tsx
+const apiUrl = import.meta.env.VITE_API_URL;
+
+await fetch(`${apiUrl}/api/hello`);
+```
+
+A few notes:
+
+- **Only `VITE_`-prefixed keys are inlined into the bundle**, matching
+  Vite's default `envPrefix`. Other keys are still attached to the
+  deployed Worker as runtime bindings but stay out of the SPA's JS.
+- **`Redacted` values are unwrapped** when they're `VITE_`-prefixed —
+  prefixing means "this is public", so the redaction is taken as a
+  marker for log scrubbing, not for hiding the value from the bundle.
+  Don't prefix secrets with `VITE_`.
+- **`Output` values resolve at deploy time** before the build runs,
+  so `worker.url.as<string>()` works as shown.
+
 ## Use the create-vite template
 
 If you'd rather start from a real framework scaffold (React + TS

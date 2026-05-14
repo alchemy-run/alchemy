@@ -1,3 +1,18 @@
+## v2.0.0-beta.39
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - **Vite**:
+    - Inline `env` props as `import.meta.env.*` in the bundle &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/330 [<samp>(c22a1)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c22a1c7a)
+  - **Worker**:
+    - Cloudflare Worker HTTP effect lifecycle &nbsp;-&nbsp; by **Will King** in https://github.com/alchemy-run/alchemy-effect/issues/328 [<samp>(a1032)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a1032c34)
+    - Add missing SendEmail worker binding type and meta &nbsp;-&nbsp; by **Gerben Mulder** in https://github.com/alchemy-run/alchemy-effect/issues/326 [<samp>(a7fbb)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a7fbba51)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.38...HEAD)
+
+---
+
 ## v2.0.0-beta.38
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

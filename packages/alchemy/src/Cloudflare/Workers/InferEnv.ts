@@ -97,14 +97,18 @@ export type GetBindingType<T> = T extends Cloudflare.Assets
             ? Queue<unknown>
             : T extends Cloudflare.AiGateway
               ? Ai
-              : T extends Cloudflare.AnalyticsEngineDataset
-                ? AnalyticsEngineDataset
-                : T extends Cloudflare.Artifacts
-                  ? Artifacts
-                  : T extends Cloudflare.Images
-                    ? ImagesBinding
-                    : T extends Cloudflare.Hyperdrive
-                      ? Hyperdrive
-                      : T extends Cloudflare.DurableObjectNamespaceLike
-                        ? DurableObjectNamespace<Exclude<T["Shape"], undefined>>
-                        : never;
+              : T extends Cloudflare.SendEmail
+                ? SendEmail
+                : T extends Cloudflare.AnalyticsEngineDataset
+                  ? AnalyticsEngineDataset
+                  : T extends Cloudflare.Artifacts
+                    ? Artifacts
+                    : T extends Cloudflare.Images
+                      ? ImagesBinding
+                      : T extends Cloudflare.Hyperdrive
+                        ? Hyperdrive
+                        : T extends Cloudflare.DurableObjectNamespaceLike
+                          ? DurableObjectNamespace<
+                              Exclude<T["Shape"], undefined>
+                            >
+                          : never;
