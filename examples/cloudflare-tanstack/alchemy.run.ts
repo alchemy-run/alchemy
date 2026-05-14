@@ -22,9 +22,11 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
+    const backend = yield* Backend;
     const website = yield* Website;
     return {
-      url: website.url.as<string>(),
+      backendUrl: backend.url.as<string>(),
+      websiteUrl: website.url.as<string>(),
     };
   }),
 );
