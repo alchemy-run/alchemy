@@ -289,7 +289,6 @@
     "@types/aws-lambda": "catalog:",
     "aws4fetch": "catalog:",
     "capnweb": "^0.6.1",
-    "enhanced-resolve": "^5.21.3",
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
     "foreground-child": "^4.0.3",

@@ -4,8 +4,6 @@ import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import enhancedResolve from "enhanced-resolve";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type * as rolldown from "rolldown";
 import Sonda from "sonda/rolldown";
@@ -66,7 +64,6 @@ export const WorkerBundle = Effect.gen(function* () {
         }),
         options.entry.kind === "effect"
           ? [
-              awsNodeResolvePlugin(),
               virtualEntryPlugin(
                 makeEffectVirtualEntry(options.entry.exports, options.stack),
               ),
@@ -134,32 +131,6 @@ export const WorkerBundle = Effect.gen(function* () {
     ),
   };
 });
-
-const awsNodeResolvePlugin = (): rolldown.Plugin => {
-  const nodeResolver = enhancedResolve.create({
-    conditionNames: ["workerd", "worker", "module", "node"],
-    mainFields: ["module", "main"],
-  });
-  return {
-    name: "alchemy:aws-node-resolve",
-    resolveId: {
-      order: "pre",
-      filter: { id: /^@aws-sdk\// },
-      async handler(source, importer) {
-        const dir = importer ? path.dirname(importer) : process.cwd();
-        const result = await new Promise<string | false | undefined>(
-          (resolve, reject) =>
-            nodeResolver(dir, source, (err, result) => {
-              if (err) reject(err);
-              else resolve(result);
-            }),
-        );
-        if (result) return { id: result };
-        return null;
-      },
-    },
-  };
-};
 
 export const makeEffectVirtualEntry = (
   exports: Record<string, DurableObjectExport | WorkflowExport>,
