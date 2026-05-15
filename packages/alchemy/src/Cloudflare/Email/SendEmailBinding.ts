@@ -64,10 +64,8 @@ export class SendEmailBinding extends Binding.Service<
 
 export const SendEmailClient = makeBoundClientService<
   SendEmailClient,
-  SendEmail,
-  SendEmailClient,
-  SendEmailBinding
->("Cloudflare.SendEmail.Client", SendEmailBinding);
+  SendEmailClient
+>("Cloudflare.SendEmail.Client");
 
 export const SendEmailBindingLive = Layer.effect(
   SendEmailBinding,

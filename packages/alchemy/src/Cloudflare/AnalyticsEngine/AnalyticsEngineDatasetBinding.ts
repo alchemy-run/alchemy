@@ -40,10 +40,8 @@ export class AnalyticsEngineDatasetBinding extends Binding.Service<
 
 export const AnalyticsEngineDatasetClient = makeBoundClientService<
   AnalyticsEngineDatasetClient,
-  AnalyticsEngineDatasetLike,
-  AnalyticsEngineDatasetClient,
-  AnalyticsEngineDatasetBinding
->("Cloudflare.AnalyticsEngineDataset.Client", AnalyticsEngineDatasetBinding);
+  AnalyticsEngineDatasetClient
+>("Cloudflare.AnalyticsEngineDataset.Client");
 
 export const AnalyticsEngineDatasetBindingLive = Layer.effect(
   AnalyticsEngineDatasetBinding,

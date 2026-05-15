@@ -33,9 +33,9 @@ export class QueueSendError extends Data.TaggedError("QueueSendError")<{
  *
  * @section Sending Messages
  * Bind a queue directly inside a Worker, or provide
- * `Cloudflare.QueueSender.layer(queue)` to services that need to send
- * messages. Use `send` for single messages or `sendBatch` for many messages
- * in one call.
+ * `Cloudflare.QueueSender.layer(boundQueue)` to services that need to send
+ * messages after binding the queue in Worker init. Use `send` for single
+ * messages or `sendBatch` for many messages in one call.
  * Messages can be any JSON-serializable value.
  *
  * @example Direct binding inside a Worker
@@ -47,6 +47,8 @@ export class QueueSendError extends Data.TaggedError("QueueSendError")<{
  *
  * @example Providing a Queue client to a service
  * ```typescript
+ * const boundQueue = yield* Cloudflare.QueueBinding.bind(Queue);
+ *
  * class Producer extends Context.Service<Producer, {
  *   sendGreeting: Effect.Effect<void, Cloudflare.QueueSendError>;
  * }>()("Producer") {}
@@ -60,8 +62,7 @@ export class QueueSendError extends Data.TaggedError("QueueSendError")<{
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.QueueSender.layer(Queue)),
- *   Layer.provide(Cloudflare.QueueBindingLive),
+ *   Layer.provide(Cloudflare.QueueSender.layer(boundQueue)),
  * );
  *
  * return {
@@ -90,12 +91,9 @@ export class QueueBinding extends Binding.Service<
   (queue: Queue) => Effect.Effect<QueueSender>
 >()("Cloudflare.Queue") {}
 
-export const QueueSender = makeBoundClientService<
-  QueueSender,
-  Queue,
-  QueueSender,
-  QueueBinding
->("Cloudflare.Queue.Sender", QueueBinding);
+export const QueueSender = makeBoundClientService<QueueSender, QueueSender>(
+  "Cloudflare.Queue.Sender",
+);
 
 export const QueueBindingLive = Layer.effect(
   QueueBinding,

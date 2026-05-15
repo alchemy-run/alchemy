@@ -369,7 +369,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```typescript
  * Effect.gen(function* () {
  *   // Phase 1: bind resources (runs at deploy time)
- *   const kv = yield* Cloudflare.KVNamespaceClient;
+ *   const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
  *
  *   return {
  *     // Phase 2: runtime handlers (runs on each request)
@@ -379,7 +379,6 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *     }),
  *   };
  * }).pipe(
- *   Effect.provide(Cloudflare.KVNamespaceClient.layer(MyKV)),
  *   Effect.provide(Cloudflare.KVNamespaceBindingLive),
  * )
  * ```
@@ -450,7 +449,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     // init: bind resources
- *     const kv = yield* Cloudflare.KVNamespaceClient;
+ *     const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
  *
  *     return {
  *       // runtime: use them
@@ -460,7 +459,6 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *       }),
  *     };
  *   }).pipe(
- *     Effect.provide(Cloudflare.KVNamespaceClient.layer(MyKV)),
  *     Effect.provide(Cloudflare.KVNamespaceBindingLive),
  *   ),
  * ) {}
@@ -491,7 +489,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * export default WorkerB.make(
  *   Effect.gen(function* () {
  *     // init: bind resources
- *     const kv = yield* Cloudflare.KVNamespaceClient;
+ *     const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
  *
  *     return {
  *       // runtime: use them
@@ -502,7 +500,6 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *         }),
  *     };
  *   }).pipe(
- *     Effect.provide(Cloudflare.KVNamespaceClient.layer(MyKV)),
  *     Effect.provide(Cloudflare.KVNamespaceBindingLive),
  *   ),
  * );
@@ -613,6 +610,8 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Providing R2 to a service
  *
  * ```typescript
+ * const boundBucket = yield* Cloudflare.R2Bucket.bind(MyBucket);
+ *
  * class Store extends Context.Service<Store, {
  *   put(key: string, value: string): Effect.Effect<Cloudflare.R2Object, Cloudflare.R2Error>;
  *   get(key: string): Effect.Effect<Cloudflare.R2Object | undefined, Cloudflare.R2Error>;
@@ -628,8 +627,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.R2BucketClient.layer(MyBucket)),
- *   Layer.provide(Cloudflare.R2BucketBindingLive),
+ *   Layer.provide(Cloudflare.R2BucketClient.layer(boundBucket)),
  * );
  * ```
  *
@@ -655,6 +653,8 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Providing KV to a service
  *
  * ```typescript
+ * const boundKV = yield* Cloudflare.KVNamespace.bind(MyKV);
+ *
  * class Cache extends Context.Service<Cache, {
  *   get(key: string): Effect.Effect<string | null, Cloudflare.KVNamespaceError>;
  *   put(key: string, value: string): Effect.Effect<void, Cloudflare.KVNamespaceError>;
@@ -670,8 +670,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.KVNamespaceClient.layer(MyKV)),
- *   Layer.provide(Cloudflare.KVNamespaceBindingLive),
+ *   Layer.provide(Cloudflare.KVNamespaceClient.layer(boundKV)),
  * );
  * ```
  *
@@ -700,6 +699,8 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Providing D1 to a service
  *
  * ```typescript
+ * const boundDB = yield* Cloudflare.D1Connection.bind(MyDB);
+ *
  * class Users extends Context.Service<Users, {
  *   findById(userId: number): Effect.Effect<D1Result<User>>;
  * }>()("Users") {}
@@ -714,8 +715,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.D1ConnectionClient.layer(MyDB)),
- *   Layer.provide(Cloudflare.D1ConnectionLive),
+ *   Layer.provide(Cloudflare.D1ConnectionClient.layer(boundDB)),
  * );
  * ```
  *

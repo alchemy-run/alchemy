@@ -178,6 +178,8 @@ export type R2Bucket = Resource<
  *
  * @example Providing an R2 client to a service
  * ```typescript
+ * const boundBucket = yield* Cloudflare.R2Bucket.bind(MyBucket);
+ *
  * class Store extends Context.Service<Store, {
  *   put(key: string, value: string): Effect.Effect<Cloudflare.R2Object, Cloudflare.R2Error>;
  *   get(key: string): Effect.Effect<string | undefined, Cloudflare.R2Error>;
@@ -197,8 +199,7 @@ export type R2Bucket = Resource<
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.R2BucketClient.layer(MyBucket)),
- *   Layer.provide(Cloudflare.R2BucketBindingLive),
+ *   Layer.provide(Cloudflare.R2BucketClient.layer(boundBucket)),
  * );
  *
  * const store = yield* Store;
@@ -208,6 +209,8 @@ export type R2Bucket = Resource<
  *
  * @example Reusing the R2 client from another service
  * ```typescript
+ * const boundBucket = yield* Cloudflare.R2Bucket.bind(MyBucket);
+ *
  * class Images extends Context.Service<Images, {
  *   get(key: string): Effect.Effect<Uint8Array | undefined, Cloudflare.R2Error>;
  * }>()("Images") {}
@@ -226,8 +229,7 @@ export type R2Bucket = Resource<
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.R2BucketClient.layer(MyBucket)),
- *   Layer.provide(Cloudflare.R2BucketBindingLive),
+ *   Layer.provide(Cloudflare.R2BucketClient.layer(boundBucket)),
  * );
  * ```
  *

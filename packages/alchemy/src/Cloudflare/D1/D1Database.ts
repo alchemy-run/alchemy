@@ -239,6 +239,8 @@ export type D1Database = Resource<
  *
  * @example Providing a D1 client to a service
  * ```typescript
+ * const boundDB = yield* Cloudflare.D1Connection.bind(MyDB);
+ *
  * class Users extends Context.Service<Users, {
  *   findById(userId: number): Effect.Effect<D1Result<User>>;
  *   insert(newId: number, name: string): Effect.Effect<D1Result>;
@@ -260,8 +262,7 @@ export type D1Database = Resource<
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.D1ConnectionClient.layer(MyDB)),
- *   Layer.provide(Cloudflare.D1ConnectionLive),
+ *   Layer.provide(Cloudflare.D1ConnectionClient.layer(boundDB)),
  * );
  *
  * const users = yield* Users;

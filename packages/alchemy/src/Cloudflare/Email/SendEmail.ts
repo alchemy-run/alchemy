@@ -53,6 +53,8 @@ export type SendEmailProps = {
  *
  * @example Providing an Email client to a service
  * ```typescript
+ * const boundEmail = yield* Cloudflare.SendEmail.bind(Email);
+ *
  * class Mailer extends Context.Service<Mailer, {
  *   hello: Effect.Effect<EmailSendResult, Cloudflare.SendEmailError>;
  * }>()("Mailer") {}
@@ -71,8 +73,7 @@ export type SendEmailProps = {
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.SendEmailClient.layer(Email)),
- *   Layer.provide(Cloudflare.SendEmailBindingLive),
+ *   Layer.provide(Cloudflare.SendEmailClient.layer(boundEmail)),
  * );
  * ```
  *

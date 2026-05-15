@@ -63,8 +63,8 @@ export interface ArtifactsRepoClient {
  *
  * Wraps the runtime {@link Artifacts} binding so each method returns an
  * Effect tagged with {@link ArtifactsError}. Provide
- * `Cloudflare.ArtifactsClient.layer(Repos)` to services that need the
- * namespace client.
+ * `Cloudflare.ArtifactsClient.layer(boundArtifacts)` to services that need the
+ * namespace client after binding Artifacts in Worker init.
  */
 export interface ArtifactsClient {
   /** Effect resolving to the raw Cloudflare runtime binding. */
@@ -103,10 +103,8 @@ export class ArtifactsBinding extends Binding.Service<
 
 export const ArtifactsClient = makeBoundClientService<
   ArtifactsClient,
-  ArtifactsLike,
-  ArtifactsClient,
-  ArtifactsBinding
->("Cloudflare.Artifacts.Client", ArtifactsBinding);
+  ArtifactsClient
+>("Cloudflare.Artifacts.Client");
 
 export const ArtifactsBindingLive = Layer.effect(
   ArtifactsBinding,

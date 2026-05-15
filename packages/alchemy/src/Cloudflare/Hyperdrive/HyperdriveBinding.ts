@@ -60,6 +60,8 @@ export interface HyperdriveBindingClient {
  *
  * @example Providing a Hyperdrive client to a service
  * ```typescript
+ * const boundHyperdrive = yield* Cloudflare.Hyperdrive.bind(MyHyperdrive);
+ *
  * class Database extends Context.Service<Database, {
  *   connectionString: Effect.Effect<Redacted.Redacted<string>>;
  * }>()("Database") {}
@@ -73,8 +75,7 @@ export interface HyperdriveBindingClient {
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.HyperdriveBindingClient.layer(MyHyperdrive)),
- *   Layer.provide(Cloudflare.HyperdriveBindingLive),
+ *   Layer.provide(Cloudflare.HyperdriveBindingClient.layer(boundHyperdrive)),
  * );
  *
  * const database = yield* Database;
@@ -90,10 +91,8 @@ export class HyperdriveBinding extends Binding.Service<
 
 export const HyperdriveBindingClient = makeBoundClientService<
   HyperdriveBindingClient,
-  Hyperdrive,
-  HyperdriveBindingClient,
-  HyperdriveBinding
->("Cloudflare.Hyperdrive.Client", HyperdriveBinding);
+  HyperdriveBindingClient
+>("Cloudflare.Hyperdrive.Client");
 
 export const HyperdriveBindingLive = Layer.effect(
   HyperdriveBinding,

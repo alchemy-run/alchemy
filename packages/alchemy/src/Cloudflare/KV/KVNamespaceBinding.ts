@@ -225,10 +225,8 @@ export class KVNamespaceBinding extends Binding.Service<
 
 export const KVNamespaceClient = makeBoundClientService<
   KVNamespaceClient,
-  KVNamespace,
-  KVNamespaceClient,
-  KVNamespaceBinding
->("Cloudflare.KVNamespace.Client", KVNamespaceBinding);
+  KVNamespaceClient
+>("Cloudflare.KVNamespace.Client");
 
 export const KVNamespaceBindingLive = Layer.effect(
   KVNamespaceBinding,

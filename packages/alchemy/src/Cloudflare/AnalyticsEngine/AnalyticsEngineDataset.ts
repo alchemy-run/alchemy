@@ -43,6 +43,8 @@ export type AnalyticsEngineDatasetProps = {
  *
  * @example Providing an Analytics client to a service
  * ```typescript
+ * const boundAnalytics = yield* Cloudflare.AnalyticsEngineDataset.bind(Analytics);
+ *
  * class Events extends Context.Service<Events, {
  *   writeSignup: Effect.Effect<void, Cloudflare.AnalyticsEngineDatasetError>;
  * }>()("Events") {}
@@ -56,8 +58,7 @@ export type AnalyticsEngineDatasetProps = {
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.AnalyticsEngineDatasetClient.layer(Analytics)),
- *   Layer.provide(Cloudflare.AnalyticsEngineDatasetBindingLive),
+ *   Layer.provide(Cloudflare.AnalyticsEngineDatasetClient.layer(boundAnalytics)),
  * );
  * ```
  */

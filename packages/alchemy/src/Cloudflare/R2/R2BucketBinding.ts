@@ -144,10 +144,8 @@ export class R2BucketBinding extends Binding.Service<
 
 export const R2BucketClient = makeBoundClientService<
   R2BucketClientIdentifier,
-  R2Bucket,
-  R2BucketClient,
-  R2BucketBinding
->("Cloudflare.R2Bucket.Client", R2BucketBinding);
+  R2BucketClient
+>("Cloudflare.R2Bucket.Client");
 
 export const R2BucketBindingLive = Layer.effect(
   R2BucketBinding,

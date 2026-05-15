@@ -156,6 +156,8 @@ export type Hyperdrive = Resource<
  *
  * @example Providing a Hyperdrive client to a service
  * ```typescript
+ * const boundHyperdrive = yield* Cloudflare.Hyperdrive.bind(MyDB);
+ *
  * class Database extends Context.Service<Database, {
  *   connectionString: Effect.Effect<Redacted.Redacted<string>>;
  * }>()("Database") {}
@@ -169,8 +171,7 @@ export type Hyperdrive = Resource<
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.HyperdriveBindingClient.layer(MyDB)),
- *   Layer.provide(Cloudflare.HyperdriveBindingLive),
+ *   Layer.provide(Cloudflare.HyperdriveBindingClient.layer(boundHyperdrive)),
  * );
  *
  * const database = yield* Database;

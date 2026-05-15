@@ -52,8 +52,8 @@ export interface ImageTransformerClient {
  *
  * Wraps the runtime {@link cf.ImagesBinding} so each method returns
  * an Effect tagged with {@link ImagesError}. Provide
- * `Cloudflare.ImagesClient.layer(images)` to services that need the Images
- * client.
+ * `Cloudflare.ImagesClient.layer(boundImages)` to services that need the
+ * Images client after binding Images in Worker init.
  */
 export interface ImagesClient {
   /** Effect resolving to the raw Cloudflare runtime binding. */
@@ -82,12 +82,9 @@ export class ImagesBinding extends Binding.Service<
   (images: ImagesLike) => Effect.Effect<ImagesClient>
 >()("Cloudflare.Images.Binding") {}
 
-export const ImagesClient = makeBoundClientService<
-  ImagesClient,
-  ImagesLike,
-  ImagesClient,
-  ImagesBinding
->("Cloudflare.Images.Client", ImagesBinding);
+export const ImagesClient = makeBoundClientService<ImagesClient, ImagesClient>(
+  "Cloudflare.Images.Client",
+);
 
 export const ImagesBindingLive = Layer.effect(
   ImagesBinding,

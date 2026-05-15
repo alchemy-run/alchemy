@@ -120,10 +120,8 @@ export class D1Connection extends Binding.Service<
 
 export const D1ConnectionClient = makeBoundClientService<
   D1ConnectionClient,
-  D1Database,
-  D1ConnectionClient,
-  D1Connection
->("Cloudflare.D1.Connection.Client", D1Connection);
+  D1ConnectionClient
+>("Cloudflare.D1.Connection.Client");
 
 export const D1ConnectionLive = Layer.effect(
   D1Connection,

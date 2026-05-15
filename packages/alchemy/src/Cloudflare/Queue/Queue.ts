@@ -52,8 +52,8 @@ export type Queue = Resource<
  *
  * @section Binding to a Worker
  * In an Effect-style Worker, bind the queue directly when the Worker owns the
- * use site. Provide `Cloudflare.QueueSender.layer(queue)` when another
- * service should receive the queue client.
+ * use site. Provide `Cloudflare.QueueSender.layer(boundQueue)` when another
+ * service should receive the already-bound queue client.
  *
  * @example Direct binding inside a Worker
  * ```typescript
@@ -72,6 +72,8 @@ export type Queue = Resource<
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export const Queue = Cloudflare.Queue("Queue");
+ * const boundQueue = yield* Cloudflare.QueueBinding.bind(Queue);
+ *
  * class Producer extends Context.Service<Producer, {
  *   send(text: string): Effect.Effect<void, Cloudflare.QueueSendError>;
  * }>()("Producer") {}
@@ -86,8 +88,7 @@ export type Queue = Resource<
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.QueueSender.layer(Queue)),
- *   Layer.provide(Cloudflare.QueueBindingLive),
+ *   Layer.provide(Cloudflare.QueueSender.layer(boundQueue)),
  * );
  *
  * export default Cloudflare.Worker(

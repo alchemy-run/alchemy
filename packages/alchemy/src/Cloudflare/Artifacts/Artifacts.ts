@@ -111,6 +111,8 @@ export const isArtifacts = (value: unknown): value is Artifacts =>
  *
  * @example Providing an Artifacts client to a service
  * ```typescript
+ * const boundArtifacts = yield* Cloudflare.Artifacts.bind(Repos);
+ *
  * class Repositories extends Context.Service<Repositories, {
  *   createStarter: Effect.Effect<ArtifactsCreateRepoResult, Cloudflare.ArtifactsError>;
  * }>()("Repositories") {}
@@ -126,8 +128,7 @@ export const isArtifacts = (value: unknown): value is Artifacts =>
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.ArtifactsClient.layer(Repos)),
- *   Layer.provide(Cloudflare.ArtifactsBindingLive),
+ *   Layer.provide(Cloudflare.ArtifactsClient.layer(boundArtifacts)),
  * );
  * ```
  */

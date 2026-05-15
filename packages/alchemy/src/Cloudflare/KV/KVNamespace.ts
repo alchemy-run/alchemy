@@ -56,6 +56,8 @@ export type KVNamespace = Resource<
  *
  * @example Providing a KV client to a service
  * ```typescript
+ * const boundKV = yield* Cloudflare.KVNamespace.bind(MyKV);
+ *
  * class Cache extends Context.Service<Cache, {
  *   get(key: string): Effect.Effect<string | null, Cloudflare.KVNamespaceError>;
  *   put(key: string, value: string): Effect.Effect<void, Cloudflare.KVNamespaceError>;
@@ -71,8 +73,7 @@ export type KVNamespace = Resource<
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.KVNamespaceClient.layer(MyKV)),
- *   Layer.provide(Cloudflare.KVNamespaceBindingLive),
+ *   Layer.provide(Cloudflare.KVNamespaceClient.layer(boundKV)),
  * );
  *
  * const cache = yield* Cache;

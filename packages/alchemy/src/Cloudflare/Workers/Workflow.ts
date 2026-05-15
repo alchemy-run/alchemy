@@ -283,6 +283,8 @@ export class WorkflowScope extends Context.Service<
  * another service should own the resource access.
  *
  * ```typescript
+ * const boundKV = yield* Cloudflare.KVNamespace.bind(KV);
+ *
  * class Messages extends Context.Service<Messages, {
  *   roundtrip(roomId: string, message: string): Effect.Effect<string | null, Cloudflare.KVNamespaceError>;
  * }>()("Messages") {}
@@ -301,8 +303,7 @@ export class WorkflowScope extends Context.Service<
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.KVNamespaceClient.layer(KV)),
- *   Layer.provide(Cloudflare.KVNamespaceBindingLive),
+ *   Layer.provide(Cloudflare.KVNamespaceClient.layer(boundKV)),
  * );
  *
  * Effect.gen(function* () {

@@ -189,6 +189,8 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * service instead:
  *
  * ```typescript
+ * const boundDB = yield* Cloudflare.D1Connection.bind(MyDB);
+ *
  * class Persistence extends Context.Service<Persistence, {
  *   save(data: string): Effect.Effect<D1Result>;
  * }>()("Persistence") {}
@@ -200,8 +202,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *     return { save: (data: string) => db.exec("INSERT ...") };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.D1ConnectionClient.layer(MyDB)),
- *   Layer.provide(Cloudflare.D1ConnectionLive),
+ *   Layer.provide(Cloudflare.D1ConnectionClient.layer(boundDB)),
  * );
  * ```
  *
@@ -268,9 +269,10 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * export default Counter.make(
  *   Effect.gen(function* () {
  *     // init: use the client layer when a service owns database access
- *     const db = yield* Cloudflare.D1ConnectionClient;
+ *     const boundDB = yield* Cloudflare.D1Connection.bind(MyDB);
  *
  *     return Effect.gen(function* () {
+ *       const db = yield* Cloudflare.D1ConnectionClient;
  *       const state = yield* Cloudflare.DurableObjectState;
  *       const count = (yield* state.storage.get<number>("count")) ?? 0;
  *
@@ -287,8 +289,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *       };
  *     });
  *   }).pipe(
- *     Effect.provide(Cloudflare.D1ConnectionClient.layer(MyDB)),
- *     Effect.provide(Cloudflare.D1ConnectionLive),
+ *     Effect.provide(Cloudflare.D1ConnectionClient.layer(boundDB)),
  *   ),
  * );
  * ```

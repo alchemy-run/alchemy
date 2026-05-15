@@ -29,8 +29,8 @@ export class AiGatewayError extends Data.TaggedError("AiGatewayError")<{
  *
  * Wraps the runtime {@link AiGateway} binding so each operation returns an
  * Effect tagged with {@link AiGatewayError}. Provide
- * `Cloudflare.AiGatewayClient.layer(gateway)` to services that need the
- * gateway client.
+ * `Cloudflare.AiGatewayClient.layer(boundGateway)` to services that need the
+ * gateway client after binding the gateway in Worker init.
  */
 export interface AiGatewayClient {
   /**
@@ -93,6 +93,8 @@ export interface AiGatewayClient {
  *
  * @example Providing an AI Gateway client to a service
  * ```typescript
+ * const boundGateway = yield* Cloudflare.AiGateway.bind(gateway);
+ *
  * class Ai extends Context.Service<Ai, {
  *   status: Effect.Effect<Response, Cloudflare.AiGatewayError>;
  * }>()("Ai") {}
@@ -111,8 +113,7 @@ export interface AiGatewayClient {
  *     };
  *   }),
  * ).pipe(
- *   Layer.provide(Cloudflare.AiGatewayClient.layer(gateway)),
- *   Layer.provide(Cloudflare.AiGatewayBindingLive),
+ *   Layer.provide(Cloudflare.AiGatewayClient.layer(boundGateway)),
  * );
  *
  * return {
@@ -133,10 +134,8 @@ export class AiGatewayBinding extends Binding.Service<
 
 export const AiGatewayClient = makeBoundClientService<
   AiGatewayClient,
-  AiGatewayResource,
-  AiGatewayClient,
-  AiGatewayBinding
->("Cloudflare.AiGateway.Client", AiGatewayBinding);
+  AiGatewayClient
+>("Cloudflare.AiGateway.Client");
 
 /**
  * Runtime layer for {@link AiGatewayBinding}.

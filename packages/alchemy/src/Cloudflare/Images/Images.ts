@@ -6,8 +6,8 @@ const ImagesTypeId = "Cloudflare.Images" as const;
 
 export type ImagesProps = {
   /**
-   * Binding name used when `Cloudflare.ImagesClient.layer(images)` attaches
-   * Images from inside a Worker init phase. When Images is passed through
+   * Binding name used when `Cloudflare.Images.bind(images)` attaches Images
+   * from inside a Worker init phase. When Images is passed through
    * `Worker({ bindings: { ... } })`, the object key remains the binding name.
    *
    * @default "IMAGES"
@@ -64,6 +64,8 @@ export const isImages = (value: unknown): value is Images =>
  * Cloudflare.Worker("ImageWorker", { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const pipeline = yield* Pipeline;
+ *     const boundImages = yield* Cloudflare.Images.bind(pipeline);
+ *
  *     class ImageInfo extends Context.Service<ImageInfo, {
  *       read(stream: Stream.Stream<Uint8Array>): Effect.Effect<ImageInfoResponse, Cloudflare.ImagesError>;
  *     }>()("ImageInfo") {}
@@ -77,8 +79,7 @@ export const isImages = (value: unknown): value is Images =>
  *         };
  *       }),
  *     ).pipe(
- *       Layer.provide(Cloudflare.ImagesClient.layer(pipeline)),
- *       Layer.provide(Cloudflare.ImagesBindingLive),
+ *       Layer.provide(Cloudflare.ImagesClient.layer(boundImages)),
  *     );
  *
  *     return {
