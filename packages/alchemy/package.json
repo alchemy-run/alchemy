@@ -130,6 +130,12 @@
       "worker": "./src/Cloudflare/index.ts",
       "import": "./lib/Cloudflare/index.js"
     },
+    "./Cloudflare/Bridge": {
+      "types": "./lib/Cloudflare/Bridge.d.ts",
+      "bun": "./src/Cloudflare/Bridge.ts",
+      "worker": "./src/Cloudflare/Bridge.ts",
+      "import": "./lib/Cloudflare/Bridge.js"
+    },
     "./Cloudflare/Live": {
       "types": "./lib/Cloudflare/Live.d.ts",
       "bun": "./src/Cloudflare/Live.ts",

@@ -62,8 +62,8 @@ export const Route = createFileRoute("/api/hello")({
           // option 3 — bind to your effect worker and call rpc method
           case "rpc":
             return trace("GET option 3 (backend.hello rpc)", async () => {
-              // Error: Calling `require` for "path" in an environment that doesn't expose the `require` function. See https://rolldown.rs/in-depth/bundling-cjs#require-external-modules for more details.
-              const Cloudflare = await import("alchemy/Cloudflare");
+              // This doesn't work due to a bundling error.
+              const Cloudflare = await import("alchemy/Cloudflare/Bridge");
               // Wrap the raw wire-shape binding into a Promise<T> view that
               // throws on Effect.fail and unwraps stream envelopes.
               const backend = Cloudflare.toPromiseApi<Backend>(env.BACKEND);
