@@ -159,7 +159,7 @@ const make = Effect.gen(function* () {
 
   const touchLock = assertOwnLock.pipe(
     Effect.flatMap(() => {
-      const now = Date.now();
+      const now = new Date();
       return fs.utimes(paths.lock, now, now).pipe(
         Effect.mapError(
           (e) =>
