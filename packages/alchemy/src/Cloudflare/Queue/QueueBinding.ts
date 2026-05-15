@@ -32,17 +32,42 @@ export class QueueSendError extends Data.TaggedError("QueueSendError")<{
  * {@link QueueSender} you can call from a Worker's runtime Effect.
  *
  * @section Sending Messages
- * Bind the queue in the Worker's init phase, then use `send` for
- * single messages or `sendBatch` for many messages in one call.
+ * Bind a queue directly inside a Worker, or provide
+ * `Cloudflare.QueueSender.layer(queue)` to services that need to send
+ * messages. Use `send` for single messages or `sendBatch` for many messages
+ * in one call.
  * Messages can be any JSON-serializable value.
  *
- * @example Producer route
+ * @example Direct binding inside a Worker
  * ```typescript
  * const queue = yield* Cloudflare.QueueBinding.bind(Queue);
  *
+ * yield* queue.send({ text: "hi", sentAt: Date.now() });
+ * ```
+ *
+ * @example Providing a Queue client to a service
+ * ```typescript
+ * class Producer extends Context.Service<Producer, {
+ *   sendGreeting: Effect.Effect<void, Cloudflare.QueueSendError>;
+ * }>()("Producer") {}
+ *
+ * const ProducerLive = Layer.effect(
+ *   Producer,
+ *   Effect.gen(function* () {
+ *     const queue = yield* Cloudflare.QueueSender;
+ *     return {
+ *       sendGreeting: queue.send({ text: "hi", sentAt: Date.now() }),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.QueueSender.layer(Queue)),
+ *   Layer.provide(Cloudflare.QueueBindingLive),
+ * );
+ *
  * return {
  *   fetch: Effect.gen(function* () {
- *     yield* queue.send({ text: "hi", sentAt: Date.now() });
+ *     const producer = yield* Producer;
+ *     yield* producer.sendGreeting;
  *     return HttpServerResponse.empty({ status: 202 });
  *   }),
  * };
@@ -57,8 +82,8 @@ export class QueueSendError extends Data.TaggedError("QueueSendError")<{
  * ]);
  * ```
  *
- * Provide {@link QueueBindingLive} in the worker's runtime layer to
- * resolve the underlying Cloudflare queue at request time.
+ * Provide {@link QueueBindingLive} with the sender layer so Alchemy can attach
+ * the underlying Cloudflare queue binding and resolve it at request time.
  */
 export class QueueBinding extends Binding.Service<
   QueueBinding,

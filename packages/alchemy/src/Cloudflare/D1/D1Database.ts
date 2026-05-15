@@ -224,19 +224,50 @@ export type D1Database = Resource<
  * ```
  *
  * @section Binding to a Worker
- * @example Using D1 inside a Worker
+ * @example Direct binding inside a Worker
  * ```typescript
  * const db = yield* Cloudflare.D1Connection.bind(MyDB);
  *
- * // Run a query
  * const results = yield* db.prepare("SELECT * FROM users WHERE id = ?")
  *   .bind(userId)
  *   .all();
  *
- * // Execute a mutation
  * yield* db.prepare("INSERT INTO users (id, name) VALUES (?, ?)")
  *   .bind(newId, name)
  *   .run();
+ * ```
+ *
+ * @example Providing a D1 client to a service
+ * ```typescript
+ * class Users extends Context.Service<Users, {
+ *   findById(userId: number): Effect.Effect<D1Result<User>>;
+ *   insert(newId: number, name: string): Effect.Effect<D1Result>;
+ * }>()("Users") {}
+ *
+ * const UsersLive = Layer.effect(
+ *   Users,
+ *   Effect.gen(function* () {
+ *     const db = yield* Cloudflare.D1ConnectionClient;
+ *     return {
+ *       findById: (userId: number) =>
+ *         db.prepare("SELECT * FROM users WHERE id = ?")
+ *           .bind(userId)
+ *           .all(),
+ *       insert: (newId: number, name: string) =>
+ *         db.prepare("INSERT INTO users (id, name) VALUES (?, ?)")
+ *           .bind(newId, name)
+ *           .run(),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.D1ConnectionClient.layer(MyDB)),
+ *   Layer.provide(Cloudflare.D1ConnectionLive),
+ * );
+ *
+ * const users = yield* Users;
+ * const results = yield* users.findById(userId);
+ *
+ * yield* users.insert(newId, name);
  * ```
  *
  * @see https://developers.cloudflare.com/d1/

@@ -51,32 +51,57 @@ export type Queue = Resource<
  * ```
  *
  * @section Binding to a Worker
- * In an Effect-style Worker, use `Cloudflare.QueueBinding.bind` in
- * the init phase and provide `Cloudflare.QueueBindingLive` in the
- * runtime layer. The returned `QueueSender` exposes `send` and
- * `sendBatch`.
+ * In an Effect-style Worker, bind the queue directly when the Worker owns the
+ * use site. Provide `Cloudflare.QueueSender.layer(queue)` when another
+ * service should receive the queue client.
  *
- * @example Sending messages from a Worker
+ * @example Direct binding inside a Worker
+ * ```typescript
+ * const queue = yield* Cloudflare.QueueBinding.bind(Queue);
+ *
+ * yield* queue.send({ text: "hi", sentAt: Date.now() });
+ * ```
+ *
+ * @example Providing a Queue client to a service
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Context from "effect/Context";
  * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
  * export const Queue = Cloudflare.Queue("Queue");
+ * class Producer extends Context.Service<Producer, {
+ *   send(text: string): Effect.Effect<void, Cloudflare.QueueSendError>;
+ * }>()("Producer") {}
+ *
+ * const ProducerLive = Layer.effect(
+ *   Producer,
+ *   Effect.gen(function* () {
+ *     const queue = yield* Cloudflare.QueueSender;
+ *     return {
+ *       send: (text: string) =>
+ *         queue.send({ text, sentAt: Date.now() }),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.QueueSender.layer(Queue)),
+ *   Layer.provide(Cloudflare.QueueBindingLive),
+ * );
  *
  * export default Cloudflare.Worker(
  *   "Worker",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const queue = yield* Cloudflare.QueueBinding.bind(Queue);
+ *     const producer = yield* Producer;
  *
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const request = yield* HttpServerRequest;
  *         if (request.url === "/queue/send" && request.method === "POST") {
  *           const text = yield* request.text;
- *           yield* queue.send({ text, sentAt: Date.now() }).pipe(Effect.orDie);
+ *           yield* producer.send(text).pipe(Effect.orDie);
  *           return yield* HttpServerResponse.json(
  *             { sent: { text } },
  *             { status: 202 },
@@ -85,7 +110,7 @@ export type Queue = Resource<
  *         return HttpServerResponse.text("Not Found", { status: 404 });
  *       }),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.QueueBindingLive)),
+ *   }).pipe(Effect.provide(ProducerLive)),
  * );
  * ```
  */

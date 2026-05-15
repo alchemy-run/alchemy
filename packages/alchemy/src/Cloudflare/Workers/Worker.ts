@@ -369,7 +369,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```typescript
  * Effect.gen(function* () {
  *   // Phase 1: bind resources (runs at deploy time)
- *   const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
+ *   const kv = yield* Cloudflare.KVNamespaceClient;
  *
  *   return {
  *     // Phase 2: runtime handlers (runs on each request)
@@ -378,7 +378,10 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *       return HttpServerResponse.text(value ?? "not found");
  *     }),
  *   };
- * })
+ * }).pipe(
+ *   Effect.provide(Cloudflare.KVNamespaceClient.layer(MyKV)),
+ *   Effect.provide(Cloudflare.KVNamespaceBindingLive),
+ * )
  * ```
  *
  * There are three ways to define a Worker, from simplest to most
@@ -447,7 +450,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     // init: bind resources
- *     const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
+ *     const kv = yield* Cloudflare.KVNamespaceClient;
  *
  *     return {
  *       // runtime: use them
@@ -456,7 +459,10 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *         return HttpServerResponse.text(value ?? "not found");
  *       }),
  *     };
- *   }),
+ *   }).pipe(
+ *     Effect.provide(Cloudflare.KVNamespaceClient.layer(MyKV)),
+ *     Effect.provide(Cloudflare.KVNamespaceBindingLive),
+ *   ),
  * ) {}
  * ```
  *
@@ -485,7 +491,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * export default WorkerB.make(
  *   Effect.gen(function* () {
  *     // init: bind resources
- *     const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
+ *     const kv = yield* Cloudflare.KVNamespaceClient;
  *
  *     return {
  *       // runtime: use them
@@ -495,7 +501,10 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *           return `Hello ${name}`;
  *         }),
  *     };
- *   }),
+ *   }).pipe(
+ *     Effect.provide(Cloudflare.KVNamespaceClient.layer(MyKV)),
+ *     Effect.provide(Cloudflare.KVNamespaceBindingLive),
+ *   ),
  * );
  * ```
  *
@@ -574,11 +583,11 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * @section R2 Bucket
- * Bind an R2 bucket in the init phase with `Cloudflare.R2Bucket.bind`.
- * The returned handle exposes `get`, `put`, `delete`, and `list`
- * methods you can call in your runtime handlers.
+ * Bind an R2 bucket directly inside a Worker when the handler owns the use
+ * site. Provide `Cloudflare.R2BucketClient.layer` when another service should
+ * receive the bucket client.
  *
- * @example Binding and using R2
+ * @example Direct binding and using R2
  * ```typescript
  * // init
  * const bucket = yield* Cloudflare.R2Bucket.bind(MyBucket);
@@ -601,12 +610,36 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * };
  * ```
  *
- * @section KV Namespace
- * Bind a KV namespace with `Cloudflare.KVNamespace.bind`. KV provides
- * eventually-consistent, low-latency key-value reads replicated
- * globally across Cloudflare's edge.
+ * @example Providing R2 to a service
  *
- * @example Binding and using KV
+ * ```typescript
+ * class Store extends Context.Service<Store, {
+ *   put(key: string, value: string): Effect.Effect<Cloudflare.R2Object, Cloudflare.R2Error>;
+ *   get(key: string): Effect.Effect<Cloudflare.R2Object | undefined, Cloudflare.R2Error>;
+ * }>()("Store") {}
+ *
+ * const StoreLive = Layer.effect(
+ *   Store,
+ *   Effect.gen(function* () {
+ *     const bucket = yield* Cloudflare.R2BucketClient;
+ *     return {
+ *       put: (key: string, value: string) => bucket.put(key, value),
+ *       get: (key: string) => bucket.get(key),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.R2BucketClient.layer(MyBucket)),
+ *   Layer.provide(Cloudflare.R2BucketBindingLive),
+ * );
+ * ```
+ *
+ * @section KV Namespace
+ * Bind a KV namespace directly inside a Worker, or provide
+ * `Cloudflare.KVNamespaceClient.layer` to a service. KV provides
+ * eventually-consistent, low-latency key-value reads replicated globally
+ * across Cloudflare's edge.
+ *
+ * @example Direct binding and using KV
  * ```typescript
  * // init
  * const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
@@ -619,12 +652,36 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * };
  * ```
  *
- * @section D1 Database
- * Bind a D1 database with `Cloudflare.D1Connection.bind`. D1 is a
- * serverless SQLite database — use `prepare` to build parameterized
- * queries and `all`, `first`, or `run` to execute them.
+ * @example Providing KV to a service
  *
- * @example Binding and querying D1
+ * ```typescript
+ * class Cache extends Context.Service<Cache, {
+ *   get(key: string): Effect.Effect<string | null, Cloudflare.KVNamespaceError>;
+ *   put(key: string, value: string): Effect.Effect<void, Cloudflare.KVNamespaceError>;
+ * }>()("Cache") {}
+ *
+ * const CacheLive = Layer.effect(
+ *   Cache,
+ *   Effect.gen(function* () {
+ *     const kv = yield* Cloudflare.KVNamespaceClient;
+ *     return {
+ *       get: (key: string) => kv.get(key),
+ *       put: (key: string, value: string) => kv.put(key, value),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.KVNamespaceClient.layer(MyKV)),
+ *   Layer.provide(Cloudflare.KVNamespaceBindingLive),
+ * );
+ * ```
+ *
+ * @section D1 Database
+ * Bind a D1 database directly inside a Worker, or provide
+ * `Cloudflare.D1ConnectionClient.layer` to a service. D1 is a serverless
+ * SQLite database — use `prepare` to build parameterized queries and `all`,
+ * `first`, or `run` to execute them.
+ *
+ * @example Direct binding and querying D1
  * ```typescript
  * // init
  * const db = yield* Cloudflare.D1Connection.bind(MyDB);
@@ -638,6 +695,28 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *     return yield* HttpServerResponse.json(results);
  *   }),
  * };
+ * ```
+ *
+ * @example Providing D1 to a service
+ *
+ * ```typescript
+ * class Users extends Context.Service<Users, {
+ *   findById(userId: number): Effect.Effect<D1Result<User>>;
+ * }>()("Users") {}
+ *
+ * const UsersLive = Layer.effect(
+ *   Users,
+ *   Effect.gen(function* () {
+ *     const db = yield* Cloudflare.D1ConnectionClient;
+ *     return {
+ *       findById: (userId: number) =>
+ *         db.prepare("SELECT * FROM users WHERE id = ?").bind(userId).all(),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.D1ConnectionClient.layer(MyDB)),
+ *   Layer.provide(Cloudflare.D1ConnectionLive),
+ * );
  * ```
  *
  * @section Durable Objects

@@ -6,8 +6,8 @@ const ImagesTypeId = "Cloudflare.Images" as const;
 
 export type ImagesProps = {
   /**
-   * Binding name used when `Cloudflare.Images.bind(images)` attaches Images
-   * from inside a Worker init phase. When Images is passed through
+   * Binding name used when `Cloudflare.ImagesClient.layer(images)` attaches
+   * Images from inside a Worker init phase. When Images is passed through
    * `Worker({ bindings: { ... } })`, the object key remains the binding name.
    *
    * @default "IMAGES"
@@ -38,11 +38,10 @@ export const isImages = (value: unknown): value is Images =>
  * A Cloudflare Images binding for image transformation and manipulation inside
  * Workers.
  *
- * The Effect-native interface (`Cloudflare.Images.bind(...)`) returns an
- * `ImagesClient` whose methods take Effect `Stream.Stream<Uint8Array>`
- * inputs and return `Effect`s — `info`, `input(...).transform(...)
- * .draw(...).output(...)`. The runtime conversion to Cloudflare's
- * `ReadableStream` is handled internally.
+ * The Effect-native interface (`Cloudflare.ImagesClient`) takes Effect
+ * `Stream.Stream<Uint8Array>` inputs and returns `Effect`s — `info`,
+ * `input(...).transform(...).draw(...).output(...)`. The runtime conversion
+ * to Cloudflare's `ReadableStream` is handled internally.
  *
  * @section Declaring Images
  * @example
@@ -51,23 +50,47 @@ export const isImages = (value: unknown): value is Images =>
  * ```
  *
  * @section Effect-style Worker (recommended)
- * @example Read image format and dimensions from the request body
+ * @example Direct binding inside a Worker
+ * ```typescript
+ * const images = yield* Cloudflare.Images.bind(pipeline);
+ *
+ * const info = yield* images.info(request.stream);
+ * ```
+ *
+ * @example Providing an Images client to a service
  * ```typescript
  * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
  *
  * Cloudflare.Worker("ImageWorker", { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const pipeline = yield* Pipeline;
- *     const images = yield* Cloudflare.Images.bind(pipeline);
+ *     class ImageInfo extends Context.Service<ImageInfo, {
+ *       read(stream: Stream.Stream<Uint8Array>): Effect.Effect<ImageInfoResponse, Cloudflare.ImagesError>;
+ *     }>()("ImageInfo") {}
+ *
+ *     const ImageInfoLive = Layer.effect(
+ *       ImageInfo,
+ *       Effect.gen(function* () {
+ *         const images = yield* Cloudflare.ImagesClient;
+ *         return {
+ *           read: (stream) => images.info(stream),
+ *         };
+ *       }),
+ *     ).pipe(
+ *       Layer.provide(Cloudflare.ImagesClient.layer(pipeline)),
+ *       Layer.provide(Cloudflare.ImagesBindingLive),
+ *     );
+ *
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const request = yield* HttpServerRequest;
+ *         const imageInfo = yield* ImageInfo;
  *         // request.stream is Stream.Stream<Uint8Array>
- *         const info = yield* images.info(request.stream);
+ *         const info = yield* imageInfo.read(request.stream);
  *         return yield* HttpServerResponse.json(info);
- *       }),
+ *       }).pipe(Effect.provide(ImageInfoLive)),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.ImagesBindingLive)),
+ *   }),
  * );
  * ```
  *
@@ -95,8 +118,8 @@ export const isImages = (value: unknown): value is Images =>
  * Inside the Worker, the raw Cloudflare runtime binding is reachable via
  * `client.raw` if you need to call `info()` / `input()` directly with
  * `async`/`await`. The Effect-native interface is preferred — it returns
- * tagged `ImagesError`s, threads `WorkerEnvironment`, and lets you stream
- * Effect `Stream<Uint8Array>` sources without manual conversion.
+ * tagged `ImagesError`s and lets you stream Effect `Stream<Uint8Array>`
+ * sources without manual conversion.
  *
  * @see https://developers.cloudflare.com/images/transform-images/bindings/
  */

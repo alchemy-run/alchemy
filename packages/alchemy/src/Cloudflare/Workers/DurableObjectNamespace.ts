@@ -169,7 +169,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *
  * ```typescript
  * Effect.gen(function* () {
- *   // Phase 1: resolve shared dependencies
+ *   // Phase 1: bind resources directly when the DO owns the use site
  *   const db = yield* Cloudflare.D1Connection.bind(MyDB);
  *
  *   return Effect.gen(function* () {
@@ -183,6 +183,26 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *     };
  *   });
  * })
+ * ```
+ *
+ * If another service needs the database, provide the client layer to that
+ * service instead:
+ *
+ * ```typescript
+ * class Persistence extends Context.Service<Persistence, {
+ *   save(data: string): Effect.Effect<D1Result>;
+ * }>()("Persistence") {}
+ *
+ * const PersistenceLive = Layer.effect(
+ *   Persistence,
+ *   Effect.gen(function* () {
+ *     const db = yield* Cloudflare.D1ConnectionClient;
+ *     return { save: (data: string) => db.exec("INSERT ...") };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.D1ConnectionClient.layer(MyDB)),
+ *   Layer.provide(Cloudflare.D1ConnectionLive),
+ * );
  * ```
  *
  * There are two ways to define a Durable Object. See the
@@ -247,8 +267,8 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *
  * export default Counter.make(
  *   Effect.gen(function* () {
- *     // init: bind resources
- *     const db = yield* Cloudflare.D1Connection.bind(MyDB);
+ *     // init: use the client layer when a service owns database access
+ *     const db = yield* Cloudflare.D1ConnectionClient;
  *
  *     return Effect.gen(function* () {
  *       const state = yield* Cloudflare.DurableObjectState;
@@ -266,7 +286,10 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *         get: () => Effect.succeed(count),
  *       };
  *     });
- *   }),
+ *   }).pipe(
+ *     Effect.provide(Cloudflare.D1ConnectionClient.layer(MyDB)),
+ *     Effect.provide(Cloudflare.D1ConnectionLive),
+ *   ),
  * );
  * ```
  *

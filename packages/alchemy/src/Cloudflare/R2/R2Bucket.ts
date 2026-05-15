@@ -166,25 +166,51 @@ export type R2Bucket = Resource<
  * ```
  *
  * @section Binding to a Worker
- * @example Reading and writing objects
+ * @example Direct binding inside a Worker
  * ```typescript
  * const bucket = yield* Cloudflare.R2Bucket.bind(MyBucket);
  *
- * // Write an object
  * yield* bucket.put("hello.txt", "Hello, World!");
  *
- * // Read an object
  * const object = yield* bucket.get("hello.txt");
- * if (object) {
- *   const text = yield* object.text();
- * }
+ * const text = object ? yield* object.text() : undefined;
  * ```
  *
- * @example Providing an R2 client to another service
+ * @example Providing an R2 client to a service
  * ```typescript
- * const Images = Context.Service<{
+ * class Store extends Context.Service<Store, {
+ *   put(key: string, value: string): Effect.Effect<Cloudflare.R2Object, Cloudflare.R2Error>;
+ *   get(key: string): Effect.Effect<string | undefined, Cloudflare.R2Error>;
+ * }>()("Store") {}
+ *
+ * const StoreLive = Layer.effect(
+ *   Store,
+ *   Effect.gen(function* () {
+ *     const bucket = yield* Cloudflare.R2BucketClient;
+ *     return {
+ *       put: (key: string, value: string) => bucket.put(key, value),
+ *       get: (key: string) =>
+ *         Effect.gen(function* () {
+ *           const object = yield* bucket.get(key);
+ *           return object ? yield* object.text() : undefined;
+ *         }),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.R2BucketClient.layer(MyBucket)),
+ *   Layer.provide(Cloudflare.R2BucketBindingLive),
+ * );
+ *
+ * const store = yield* Store;
+ * yield* store.put("hello.txt", "Hello, World!");
+ * const text = yield* store.get("hello.txt");
+ * ```
+ *
+ * @example Reusing the R2 client from another service
+ * ```typescript
+ * class Images extends Context.Service<Images, {
  *   get(key: string): Effect.Effect<Uint8Array | undefined, Cloudflare.R2Error>;
- * }>("Images");
+ * }>()("Images") {}
  *
  * const ImagesLive = Layer.effect(
  *   Images,

@@ -62,8 +62,9 @@ export interface ArtifactsRepoClient {
  * Effect-native client for a Cloudflare Artifacts namespace binding.
  *
  * Wraps the runtime {@link Artifacts} binding so each method returns an
- * Effect tagged with {@link ArtifactsError}. Use
- * `Cloudflare.ArtifactsBinding.bind(Repos)` inside a Worker's init phase.
+ * Effect tagged with {@link ArtifactsError}. Provide
+ * `Cloudflare.ArtifactsClient.layer(Repos)` to services that need the
+ * namespace client.
  */
 export interface ArtifactsClient {
   /** Effect resolving to the raw Cloudflare runtime binding. */

@@ -41,15 +41,39 @@ export type SendEmailProps = {
  * @example Send to any verified destination
  * ```typescript
  * const Email = Cloudflare.SendEmail("Email");
- *
- * // in the Worker effect:
  * const email = yield* Cloudflare.SendEmail.bind(Email);
+ *
  * yield* email.send({
  *   from: "noreply@example.com",
  *   to: "user@example.com",
  *   subject: "Hello",
  *   text: "Hi from Alchemy",
  * });
+ * ```
+ *
+ * @example Providing an Email client to a service
+ * ```typescript
+ * class Mailer extends Context.Service<Mailer, {
+ *   hello: Effect.Effect<EmailSendResult, Cloudflare.SendEmailError>;
+ * }>()("Mailer") {}
+ *
+ * const MailerLive = Layer.effect(
+ *   Mailer,
+ *   Effect.gen(function* () {
+ *     const email = yield* Cloudflare.SendEmailClient;
+ *     return {
+ *       hello: email.send({
+ *         from: "noreply@example.com",
+ *         to: "user@example.com",
+ *         subject: "Hello",
+ *         text: "Hi from Alchemy",
+ *       }),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.SendEmailClient.layer(Email)),
+ *   Layer.provide(Cloudflare.SendEmailBindingLive),
+ * );
  * ```
  *
  * @example Restrict the sender address

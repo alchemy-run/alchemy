@@ -51,8 +51,9 @@ export interface ImageTransformerClient {
  * Effect-native client for a Cloudflare Images binding.
  *
  * Wraps the runtime {@link cf.ImagesBinding} so each method returns
- * an Effect tagged with {@link ImagesError}. Use
- * `Cloudflare.Images.bind(images)` inside a Worker's init phase.
+ * an Effect tagged with {@link ImagesError}. Provide
+ * `Cloudflare.ImagesClient.layer(images)` to services that need the Images
+ * client.
  */
 export interface ImagesClient {
   /** Effect resolving to the raw Cloudflare runtime binding. */

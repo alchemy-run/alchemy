@@ -253,12 +253,11 @@ export class WorkflowScope extends Context.Service<
  * yield* Cloudflare.sleep("cooldown", "30 seconds");
  * ```
  *
- * @example Accessing env bindings inside a task
- * Bind a resource (e.g. `KVNamespace`, `R2Bucket`) in the workflow's
- * outer init phase to get a typed Effect-native client, then use it
- * directly inside `task`. `task` threads the binding's service
- * requirement (`WorkerEnvironment`) through automatically so the inner
- * Effect needs no extra plumbing.
+ * @example Direct binding inside a workflow
+ * Bind a resource in the workflow's outer init phase, then use it directly
+ * inside `task`. `task` threads the binding's service requirement
+ * (`WorkerEnvironment`) through automatically so the inner Effect needs no
+ * extra plumbing.
  *
  * ```typescript
  * Effect.gen(function* () {
@@ -267,7 +266,7 @@ export class WorkflowScope extends Context.Service<
  *   return Effect.fn(function* (input: { roomId: string; message: string }) {
  *     const { roomId, message } = input;
  *
- *     const stored = yield* Cloudflare.task(
+ *     return yield* Cloudflare.task(
  *       "kv-roundtrip",
  *       Effect.gen(function* () {
  *         const key = `workflow:${roomId}`;
@@ -275,10 +274,47 @@ export class WorkflowScope extends Context.Service<
  *         return yield* kv.get(key);
  *       }).pipe(Effect.orDie),
  *     );
- *
- *     return stored;
  *   });
  * });
+ * ```
+ *
+ * @example Providing a resource client to a service
+ * Provide a resource client (e.g. `KVNamespaceClient`, `R2BucketClient`) when
+ * another service should own the resource access.
+ *
+ * ```typescript
+ * class Messages extends Context.Service<Messages, {
+ *   roundtrip(roomId: string, message: string): Effect.Effect<string | null, Cloudflare.KVNamespaceError>;
+ * }>()("Messages") {}
+ *
+ * const MessagesLive = Layer.effect(
+ *   Messages,
+ *   Effect.gen(function* () {
+ *     const kv = yield* Cloudflare.KVNamespaceClient;
+ *     return {
+ *       roundtrip: (roomId: string, message: string) =>
+ *         Effect.gen(function* () {
+ *           const key = `workflow:${roomId}`;
+ *           yield* kv.put(key, message);
+ *           return yield* kv.get(key);
+ *         }),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.KVNamespaceClient.layer(KV)),
+ *   Layer.provide(Cloudflare.KVNamespaceBindingLive),
+ * );
+ *
+ * Effect.gen(function* () {
+ *   const messages = yield* Messages;
+ *
+ *   return Effect.fn(function* (input: { roomId: string; message: string }) {
+ *     return yield* Cloudflare.task(
+ *       "kv-roundtrip",
+ *       messages.roundtrip(input.roomId, input.message).pipe(Effect.orDie),
+ *     );
+ *   });
+ * }).pipe(Effect.provide(MessagesLive));
  * ```
  *
  * @section Starting and Monitoring Instances

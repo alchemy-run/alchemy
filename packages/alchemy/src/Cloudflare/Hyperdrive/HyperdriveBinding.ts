@@ -51,10 +51,34 @@ export interface HyperdriveBindingClient {
  * (connection string, host, port, user, password, database) plus a `raw`
  * escape hatch for libraries that want direct access.
  *
- * @example Bind Hyperdrive in a Worker
+ * @example Direct binding inside a Worker
  * ```typescript
  * const hd = yield* Cloudflare.Hyperdrive.bind(MyHyperdrive);
+ *
  * const url = yield* hd.connectionString;
+ * ```
+ *
+ * @example Providing a Hyperdrive client to a service
+ * ```typescript
+ * class Database extends Context.Service<Database, {
+ *   connectionString: Effect.Effect<Redacted.Redacted<string>>;
+ * }>()("Database") {}
+ *
+ * const DatabaseLive = Layer.effect(
+ *   Database,
+ *   Effect.gen(function* () {
+ *     const hd = yield* Cloudflare.HyperdriveBindingClient;
+ *     return {
+ *       connectionString: hd.connectionString,
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.HyperdriveBindingClient.layer(MyHyperdrive)),
+ *   Layer.provide(Cloudflare.HyperdriveBindingLive),
+ * );
+ *
+ * const database = yield* Database;
+ * const url = yield* database.connectionString;
  * ```
  *
  * @binding

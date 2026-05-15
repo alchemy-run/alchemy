@@ -100,12 +100,35 @@ export const isArtifacts = (value: unknown): value is Artifacts =>
  * };
  * ```
  *
- * @example Effect-style worker
+ * @example Direct binding inside a Worker
  * ```typescript
  * const artifacts = yield* Cloudflare.Artifacts.bind(Repos);
+ *
  * const repo = yield* artifacts.create("starter-repo", {
  *   setDefaultBranch: "main",
  * });
+ * ```
+ *
+ * @example Providing an Artifacts client to a service
+ * ```typescript
+ * class Repositories extends Context.Service<Repositories, {
+ *   createStarter: Effect.Effect<ArtifactsCreateRepoResult, Cloudflare.ArtifactsError>;
+ * }>()("Repositories") {}
+ *
+ * const RepositoriesLive = Layer.effect(
+ *   Repositories,
+ *   Effect.gen(function* () {
+ *     const artifacts = yield* Cloudflare.ArtifactsClient;
+ *     return {
+ *       createStarter: artifacts.create("starter-repo", {
+ *         setDefaultBranch: "main",
+ *       }),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.ArtifactsClient.layer(Repos)),
+ *   Layer.provide(Cloudflare.ArtifactsBindingLive),
+ * );
  * ```
  */
 export const Artifacts: {

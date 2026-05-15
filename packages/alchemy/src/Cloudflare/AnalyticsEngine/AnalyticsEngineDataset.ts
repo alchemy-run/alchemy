@@ -34,10 +34,31 @@ export type AnalyticsEngineDatasetProps = {
  * });
  * ```
  *
- * @example Effect-style worker
+ * @example Direct binding inside a Worker
  * ```typescript
  * const analytics = yield* Cloudflare.AnalyticsEngineDataset.bind(Analytics);
+ *
  * yield* analytics.writeDataPoint({ blobs: ["signup"] });
+ * ```
+ *
+ * @example Providing an Analytics client to a service
+ * ```typescript
+ * class Events extends Context.Service<Events, {
+ *   writeSignup: Effect.Effect<void, Cloudflare.AnalyticsEngineDatasetError>;
+ * }>()("Events") {}
+ *
+ * const EventsLive = Layer.effect(
+ *   Events,
+ *   Effect.gen(function* () {
+ *     const analytics = yield* Cloudflare.AnalyticsEngineDatasetClient;
+ *     return {
+ *       writeSignup: analytics.writeDataPoint({ blobs: ["signup"] }),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.AnalyticsEngineDatasetClient.layer(Analytics)),
+ *   Layer.provide(Cloudflare.AnalyticsEngineDatasetBindingLive),
+ * );
  * ```
  */
 export type AnalyticsEngineDataset = {

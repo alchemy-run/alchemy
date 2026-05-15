@@ -28,8 +28,9 @@ export class AiGatewayError extends Data.TaggedError("AiGatewayError")<{
  * Effect-native client for a Cloudflare AI Gateway Worker binding.
  *
  * Wraps the runtime {@link AiGateway} binding so each operation returns an
- * Effect tagged with {@link AiGatewayError}. Use
- * `Cloudflare.AiGatewayBinding.bind(gateway)` inside a Worker's init phase.
+ * Effect tagged with {@link AiGatewayError}. Provide
+ * `Cloudflare.AiGatewayClient.layer(gateway)` to services that need the
+ * gateway client.
  */
 export interface AiGatewayClient {
   /**
@@ -76,24 +77,54 @@ export interface AiGatewayClient {
  * Bind the gateway during the Worker's init phase, then use `run` or `getUrl`
  * from request handlers.
  *
- * @example Run through a gateway
+ * @example Direct binding inside a Worker
  * ```typescript
- * const aiGateway = yield* Cloudflare.AiGatewayBinding.bind(gateway);
+ * const aiGateway = yield* Cloudflare.AiGateway.bind(gateway);
  *
  * return {
- *   fetch: Effect.gen(function* () {
- *     return yield* aiGateway.run({
- *       provider: "workers-ai",
- *       endpoint: "@cf/meta/llama-3.1-8b-instruct",
- *       headers: { "content-type": "application/json" },
- *       query: { prompt: "Write a concise status update" },
- *     });
+ *   fetch: aiGateway.run({
+ *     provider: "workers-ai",
+ *     endpoint: "@cf/meta/llama-3.1-8b-instruct",
+ *     headers: { "content-type": "application/json" },
+ *     query: { prompt: "Write a concise status update" },
  *   }),
  * };
  * ```
  *
- * Provide {@link AiGatewayBindingLive} in the worker's runtime layer to
- * resolve the underlying Cloudflare AI binding at request time.
+ * @example Providing an AI Gateway client to a service
+ * ```typescript
+ * class Ai extends Context.Service<Ai, {
+ *   status: Effect.Effect<Response, Cloudflare.AiGatewayError>;
+ * }>()("Ai") {}
+ *
+ * const AiLive = Layer.effect(
+ *   Ai,
+ *   Effect.gen(function* () {
+ *     const aiGateway = yield* Cloudflare.AiGatewayClient;
+ *     return {
+ *       status: aiGateway.run({
+ *         provider: "workers-ai",
+ *         endpoint: "@cf/meta/llama-3.1-8b-instruct",
+ *         headers: { "content-type": "application/json" },
+ *         query: { prompt: "Write a concise status update" },
+ *       }),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.AiGatewayClient.layer(gateway)),
+ *   Layer.provide(Cloudflare.AiGatewayBindingLive),
+ * );
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const ai = yield* Ai;
+ *     return yield* ai.status;
+ *   }).pipe(Effect.provide(AiLive)),
+ * };
+ * ```
+ *
+ * Provide {@link AiGatewayBindingLive} with the client layer so Alchemy can
+ * attach the underlying Cloudflare AI binding and resolve it at request time.
  */
 export class AiGatewayBinding extends Binding.Service<
   AiGatewayBinding,

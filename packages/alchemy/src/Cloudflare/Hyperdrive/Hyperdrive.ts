@@ -147,10 +147,34 @@ export type Hyperdrive = Resource<
  * ```
  *
  * @section Binding to a Worker
- * @example Using Hyperdrive inside a Worker
+ * @example Direct binding inside a Worker
  * ```typescript
  * const hd = yield* Cloudflare.Hyperdrive.bind(MyDB);
+ *
  * const url = yield* hd.connectionString;
+ * ```
+ *
+ * @example Providing a Hyperdrive client to a service
+ * ```typescript
+ * class Database extends Context.Service<Database, {
+ *   connectionString: Effect.Effect<Redacted.Redacted<string>>;
+ * }>()("Database") {}
+ *
+ * const DatabaseLive = Layer.effect(
+ *   Database,
+ *   Effect.gen(function* () {
+ *     const hd = yield* Cloudflare.HyperdriveBindingClient;
+ *     return {
+ *       connectionString: hd.connectionString,
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.HyperdriveBindingClient.layer(MyDB)),
+ *   Layer.provide(Cloudflare.HyperdriveBindingLive),
+ * );
+ *
+ * const database = yield* Database;
+ * const url = yield* database.connectionString;
  * ```
  */
 export const Hyperdrive = Resource<Hyperdrive>("Cloudflare.Hyperdrive")({

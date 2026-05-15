@@ -46,15 +46,39 @@ export type KVNamespace = Resource<
  * ```
  *
  * @section Binding to a Worker
- * @example Using KV inside a Worker
+ * @example Direct binding inside a Worker
  * ```typescript
  * const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
  *
- * // Read a value
  * const value = yield* kv.get("my-key");
- *
- * // Write a value
  * yield* kv.put("my-key", "hello world");
+ * ```
+ *
+ * @example Providing a KV client to a service
+ * ```typescript
+ * class Cache extends Context.Service<Cache, {
+ *   get(key: string): Effect.Effect<string | null, Cloudflare.KVNamespaceError>;
+ *   put(key: string, value: string): Effect.Effect<void, Cloudflare.KVNamespaceError>;
+ * }>()("Cache") {}
+ *
+ * const CacheLive = Layer.effect(
+ *   Cache,
+ *   Effect.gen(function* () {
+ *     const kv = yield* Cloudflare.KVNamespaceClient;
+ *     return {
+ *       get: (key: string) => kv.get(key),
+ *       put: (key: string, value: string) => kv.put(key, value),
+ *     };
+ *   }),
+ * ).pipe(
+ *   Layer.provide(Cloudflare.KVNamespaceClient.layer(MyKV)),
+ *   Layer.provide(Cloudflare.KVNamespaceBindingLive),
+ * );
+ *
+ * const cache = yield* Cache;
+ * const value = yield* cache.get("my-key");
+ *
+ * yield* cache.put("my-key", "hello world");
  * ```
  */
 export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace")({
