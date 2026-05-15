@@ -197,6 +197,7 @@ const retryTransient = <A, Err, Req>(eff: Effect.Effect<A, Err, Req>) =>
 const mapStateStoreError = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
     retryTransient,
+    Effect.tapError(Effect.log),
     Effect.catch((e: E) =>
       Effect.fail(
         new StateStoreError({
