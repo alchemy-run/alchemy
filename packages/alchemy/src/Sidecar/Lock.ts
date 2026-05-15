@@ -2,7 +2,6 @@ import * as lockfile from "@alchemy.run/node-utils";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Fiber from "effect/Fiber";
-import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
@@ -33,22 +32,13 @@ const STALE_MS = 10_000;
 const UPDATE_MS = 1_000;
 
 const make = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
   const paths = yield* RpcPaths.RpcPaths;
 
-  const ensureLockFile = fs
-    .writeFileString(paths.lock, "", { flag: "a" })
-    .pipe(Effect.ignore);
-
-  const check = ensureLockFile.pipe(
-    Effect.flatMap(() =>
-      Effect.tryPromise(() => lockfile.check(paths.lock, { stale: STALE_MS })),
-    ),
-    Effect.orElseSucceed(() => false),
-  );
+  const check = Effect.tryPromise(() =>
+    lockfile.check(paths.lock, { stale: STALE_MS, realpath: false }),
+  ).pipe(Effect.orElseSucceed(() => false));
 
   const acquire = Effect.gen(function* () {
-    yield* ensureLockFile;
     yield* Effect.acquireRelease(
       Effect.tryPromise({
         try: () =>
@@ -56,6 +46,7 @@ const make = Effect.gen(function* () {
             stale: STALE_MS,
             update: UPDATE_MS,
             retries: 0,
+            realpath: false,
           }),
         catch: (cause) =>
           new LockError({
