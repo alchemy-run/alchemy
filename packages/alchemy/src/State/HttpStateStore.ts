@@ -9,8 +9,8 @@ import { StateApi } from "./HttpStateApi.ts";
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import {
   StateStoreError,
-  type StateService,
   type PersistedState,
+  type StateService,
 } from "./State.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
@@ -196,7 +196,6 @@ const retryTransient = <A, Err, Req>(eff: Effect.Effect<A, Err, Req>) =>
 /** Collapse any client failure into a {@link StateStoreError}. */
 const mapStateStoreError = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
-    Effect.tapError(Effect.log),
     retryTransient,
     Effect.catch((e: E) =>
       Effect.fail(
