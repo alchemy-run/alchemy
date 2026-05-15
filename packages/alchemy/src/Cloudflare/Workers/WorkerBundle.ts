@@ -160,7 +160,7 @@ import * as Stream from "effect/Stream";
 
 import { env, DurableObject, WorkerEntrypoint${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
 import { MinimumLogLevel } from "effect/References";
-import { NodeServices } from "@effect/platform-node";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Stack } from "alchemy/Stack";
 import { WorkerEnvironment, makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy/Cloudflare";
 import { makeEntrypointLayer } from "alchemy/Runtime";
