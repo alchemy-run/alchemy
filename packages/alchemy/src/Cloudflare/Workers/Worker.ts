@@ -2517,6 +2517,12 @@ export const LiveWorkerProvider = () =>
           yield* deleteScript({
             accountId: output.accountId,
             scriptName: output.workerName,
+            // Force teardown of queue consumers, durable object classes, and
+            // service bindings hanging off this worker. Without `force`, those
+            // conditions raise QueueConsumerConflict / ServiceBindingConflict
+            // and leave the script in CF. Alchemy is the source of truth for
+            // the worker, so we want a hard delete on teardown.
+            force: true,
           }).pipe(Effect.catchTag("WorkerNotFound", () => Effect.void));
         }),
         tail: ({ output }) =>
