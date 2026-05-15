@@ -69,7 +69,7 @@
       "@cloudflare/containers": "^0.1.1",
       "@cloudflare/vite-plugin": "^1.13.12",
       "@cloudflare/workers-types": "^4.20250805.0",
-      "@distilled.cloud/aws": "https://pkg.distilled.cloud/aws/a7da7c8",
+      "@distilled.cloud/aws": "https://pkg.distilled.cloud/aws/8c791f1",
       "@distilled.cloud/axiom": "^0.20.1",
       "@distilled.cloud/cloudflare-rolldown-plugin": "0.5.1",
       "@distilled.cloud/cloudflare-runtime": "0.5.1",
