@@ -11,7 +11,7 @@ const lockDir = path.join(rootDir, "lock");
  * critical section concurrently for the same `key`, both within this
  * process and across other processes on the same machine.
  *
- * Uses `proper-lockfile` for both: it tracks in-process holders by path
+ * Uses `@alchemy.run/node-utils` lockfile for both: it tracks in-process holders by path
  * (so same-process callers wait via `retries`) and uses an OS file lock
  * for cross-process coordination, with stale-lock detection at 60s.
  */
