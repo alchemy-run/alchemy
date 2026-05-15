@@ -130,6 +130,12 @@
       "worker": "./src/Cloudflare/index.ts",
       "import": "./lib/Cloudflare/index.js"
     },
+    "./Cloudflare/Bridge": {
+      "types": "./lib/Cloudflare/Bridge.d.ts",
+      "bun": "./src/Cloudflare/Bridge.ts",
+      "worker": "./src/Cloudflare/Bridge.ts",
+      "import": "./lib/Cloudflare/Bridge.js"
+    },
     "./Cloudflare/Live": {
       "types": "./lib/Cloudflare/Live.d.ts",
       "bun": "./src/Cloudflare/Live.ts",
@@ -270,6 +276,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@alchemy.run/node-utils": "catalog:",
     "@aws-sdk/credential-providers": "catalog:",
     "@clack/prompts": "^0.11.0",
     "@distilled.cloud/aws": "catalog:",
@@ -280,7 +287,6 @@
     "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
     "@distilled.cloud/core": "catalog:",
     "@distilled.cloud/neon": "catalog:",
-    "pg": "^8.13.0",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
@@ -298,6 +304,7 @@
     "libsodium-wrappers": "^0.8.3",
     "magic-string": "^0.30.21",
     "pathe": "^2.0.3",
+    "pg": "^8.13.0",
     "picomatch": "^4.0.4",
     "proper-lockfile": "^4.1.2",
     "react": "^19.2.0",

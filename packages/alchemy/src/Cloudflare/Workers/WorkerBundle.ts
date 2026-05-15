@@ -7,7 +7,6 @@ import * as Stream from "effect/Stream";
 import { fileURLToPath } from "node:url";
 import type * as rolldown from "rolldown";
 import Sonda from "sonda/rolldown";
-import * as Artifacts from "../../Artifacts.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import { Self } from "../../Self.ts";
@@ -64,9 +63,11 @@ export const WorkerBundle = Effect.gen(function* () {
           compatibilityFlags: options.compatibility.flags,
         }),
         options.entry.kind === "effect"
-          ? virtualEntryPlugin(
-              makeEffectVirtualEntry(options.entry.exports, options.stack),
-            )
+          ? [
+              virtualEntryPlugin(
+                makeEffectVirtualEntry(options.entry.exports, options.stack),
+              ),
+            ]
           : undefined,
         ...(options.userOptions?.metafile ? [Sonda({ open: false })] : []),
       ],
@@ -116,7 +117,6 @@ export const WorkerBundle = Effect.gen(function* () {
           resolved.extraOptions,
         ),
       ),
-      Artifacts.cached("build"),
     ),
     watch: flow(
       makeOptions,
@@ -160,7 +160,7 @@ import * as Stream from "effect/Stream";
 
 import { env, DurableObject, WorkerEntrypoint${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
 import { MinimumLogLevel } from "effect/References";
-import { NodeServices } from "@effect/platform-node";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Stack } from "alchemy/Stack";
 import { WorkerEnvironment, makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy/Cloudflare";
 import { makeEntrypointLayer } from "alchemy/Runtime";

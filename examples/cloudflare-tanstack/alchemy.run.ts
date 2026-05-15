@@ -3,7 +3,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import Backend, { Bucket } from "./src/backend.ts";
 
-export const Website = Cloudflare.Vite("Websiter", {
+export const Website = Cloudflare.Vite("Website", {
   compatibility: {
     flags: ["nodejs_compat"],
   },
@@ -22,9 +22,11 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
+    const backend = yield* Backend;
     const website = yield* Website;
     return {
-      url: website.url.as<string>(),
+      backendUrl: backend.url.as<string>(),
+      websiteUrl: website.url.as<string>(),
     };
   }),
 );

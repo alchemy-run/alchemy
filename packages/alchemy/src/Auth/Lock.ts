@@ -1,7 +1,7 @@
+import * as lockfile from "@alchemy.run/node-utils";
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
 import * as path from "pathe";
-import lockfile from "proper-lockfile";
 import { rootDir } from "./Profile.ts";
 
 const lockDir = path.join(rootDir, "lock");

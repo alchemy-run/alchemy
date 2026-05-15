@@ -2,14 +2,18 @@ import type { RpcCompatible } from "capnweb";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { flow } from "effect/Function";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
 type RpcHandler<Args extends Array<any>, Success, Error> = (
   ...args: Args
 ) => Effect.Effect<Success, Error>;
 
-type SerializedRpcHandler<Args extends Array<any>, Success, Error> = (
-  ...args: Args
+type SerializedArgs<T> = string & { __serializedArgs: T };
+
+type SerializedRpcHandler<Args, Success, Error> = (
+  args: SerializedArgs<Args>,
 ) => Promise<SerializedExit<RpcCompatible<Success>, RpcCompatible<Error>>>;
 
 type SerializedCause<Error> =
@@ -60,45 +64,59 @@ export type RpcHandlerDecoders<T extends RpcHandlers> = {
     : never;
 };
 
-const serializeRpcHandler =
-  <Args extends Array<any>, Success, Error>(
-    handler: RpcHandler<Args, Success, Error>,
-    schema: RpcHandlerEncoder<Success, Error>,
-  ): SerializedRpcHandler<Args, Success, Error> =>
-  (...args) =>
-    handler(...args).pipe(
-      Effect.exit,
-      Effect.map((exit): SerializedExit<Success, Error> => {
-        if (exit._tag === "Success") {
-          return {
-            _tag: "Success",
-            value: Schema.encodeSync(schema.success)(exit.value),
-          } as const;
-        }
-        return {
-          _tag: "Failure",
-          cause: exit.cause.reasons.map((reason): SerializedCause<Error> => {
-            switch (reason._tag) {
-              case "Fail":
-                return {
-                  _tag: "Fail",
-                  error: Schema.encodeSync(schema.error)(reason.error),
-                };
-              case "Die":
-                return {
-                  _tag: "Die",
-                  defect: Schema.encodeSync(Schema.DefectWithStack)(
-                    reason.defect,
-                  ),
-                };
-              case "Interrupt":
-                return { _tag: "Interrupt", fiberId: reason.fiberId };
+const serializeRpcHandler = <Args extends Array<any>, Success, Error>(
+  handler: RpcHandler<Args, Success, Error>,
+  schema: RpcHandlerEncoder<Success, Error>,
+): SerializedRpcHandler<Args, Success, Error> =>
+  flow(
+    (args) =>
+      Effect.sync(
+        () =>
+          JSON.parse(args, (_, value) => {
+            if (
+              typeof value === "object" &&
+              value !== null &&
+              "_tag" in value &&
+              value._tag === "Redacted"
+            ) {
+              return Redacted.make(value.value);
             }
-          }),
+            return value;
+          }) as Args,
+      ),
+    Effect.flatMap((args) => handler(...args)),
+    Effect.exit,
+    Effect.map((exit): SerializedExit<Success, Error> => {
+      if (exit._tag === "Success") {
+        return {
+          _tag: "Success",
+          value: Schema.encodeSync(schema.success)(exit.value),
         } as const;
-      }),
-      Effect.runPromise,
-    );
+      }
+      return {
+        _tag: "Failure",
+        cause: exit.cause.reasons.map((reason): SerializedCause<Error> => {
+          switch (reason._tag) {
+            case "Fail":
+              return {
+                _tag: "Fail",
+                error: Schema.encodeSync(schema.error)(reason.error),
+              };
+            case "Die":
+              return {
+                _tag: "Die",
+                defect: Schema.encodeSync(Schema.DefectWithStack)(
+                  reason.defect,
+                ),
+              };
+            case "Interrupt":
+              return { _tag: "Interrupt", fiberId: reason.fiberId };
+          }
+        }),
+      } as const;
+    }),
+    Effect.runPromise,
+  );
 
 export const serializeRpcHandlers = <T extends RpcHandlers>(
   handlers: T,
@@ -119,7 +137,16 @@ const deserializeRpcHandler =
   (...args) =>
     Effect.promise(async () => {
       try {
-        return await handler(...args);
+        const serializedArgs = JSON.stringify(args, (_, value) => {
+          if (Redacted.isRedacted(value)) {
+            return {
+              _tag: "Redacted",
+              value: Redacted.value(value),
+            };
+          }
+          return value;
+        }) as SerializedArgs<Args>;
+        return await handler(serializedArgs);
       } catch (error) {
         console.error("Error calling handler", error);
         throw error;

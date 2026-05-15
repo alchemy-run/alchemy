@@ -1,5 +1,4 @@
 import type * as cf from "@cloudflare/workers-types";
-import cloudflareVite from "@distilled.cloud/cloudflare-vite-plugin";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Cause from "effect/Cause";
@@ -14,12 +13,9 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { createRequire } from "node:module";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-import type * as vite from "vite";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
+import * as Artifacts from "../../Artifacts.ts";
 import * as Binding from "../../Binding.ts";
 import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
@@ -91,6 +87,7 @@ import {
   type RpcErrorEnvelope,
   type RpcStreamEnvelope,
 } from "./Rpc.ts";
+import * as Vite from "./Vite.ts";
 import { WorkerBundle } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
@@ -1592,92 +1589,35 @@ export const LiveWorkerProvider = () =>
       });
 
       const prepareBundle = (id: string, props: WorkerProps) =>
-        bundler.build({
-          id,
-          main: props.main,
-          compatibility: getCompatibility(props),
-          entry: props.isExternal
-            ? {
-                kind: "external",
-              }
-            : {
-                kind: "effect",
-                exports: (props.exports ?? {}) as any,
-              },
-          stack: { name: stack.name, stage: stack.stage },
-          userOptions: props.build,
-        });
+        bundler
+          .build({
+            id,
+            main: props.main,
+            compatibility: getCompatibility(props),
+            entry: props.isExternal
+              ? {
+                  kind: "external",
+                }
+              : {
+                  kind: "effect",
+                  exports: (props.exports ?? {}) as any,
+                },
+            stack: { name: stack.name, stage: stack.stage },
+            userOptions: props.build,
+          })
+          .pipe(Artifacts.cached("build"));
 
       const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
-        let assetsDirectory: string | undefined;
-        let serverBundle: vite.Rolldown.OutputBundle | undefined;
         const compatibility = getCompatibility(props);
+        const { assetsDirectory, serverBundle } = yield* Vite.viteBuild(
+          props.vite?.rootDir,
+          props.env ?? {},
+          {
+            compatibilityDate: compatibility.date,
+            compatibilityFlags: compatibility.flags,
+          },
+        );
 
-        yield* Effect.promise(async () => {
-          const vite = await loadVite(props.vite?.rootDir);
-          const builder = await vite.createBuilder(
-            {
-              root: props.vite?.rootDir,
-              // Emulate `vite build` env semantics for `props.env`: only
-              // keys with Vite's default `VITE_` prefix are inlined into
-              // the bundle as `import.meta.env.*`. `Redacted` values are
-              // unwrapped — by prefixing with `VITE_` the user is opting
-              // them into the public bundle.
-              define: Object.fromEntries(
-                Object.entries(props.env ?? {}).flatMap(([key, raw]) => {
-                  if (!key.startsWith("VITE_")) return [];
-                  const value = Redacted.isRedacted(raw)
-                    ? Redacted.value(raw)
-                    : raw;
-                  return [
-                    [`import.meta.env.${key}`, JSON.stringify(value)] as const,
-                  ];
-                }),
-              ),
-              // Declare the ssr environment so Vite 8+ creates it.
-              // The cloudflare-vite-plugin config hook merges its
-              // SSR-specific settings on top of this stub.
-              environments: {
-                ssr: {
-                  build: {
-                    // Prevent the SSR build from wiping the client
-                    // build's output (both share the dist/ directory).
-                    emptyOutDir: false,
-                  },
-                },
-              },
-              plugins: [
-                cloudflareVite({
-                  compatibilityDate: compatibility.date,
-                  compatibilityFlags: compatibility.flags,
-                }),
-                {
-                  name: "output:ssr",
-                  applyToEnvironment(environment) {
-                    return environment.name === "ssr";
-                  },
-                  generateBundle(_outputOptions, bundle) {
-                    serverBundle = bundle;
-                  },
-                },
-                {
-                  name: "output:client",
-                  applyToEnvironment(environment) {
-                    return environment.name === "client";
-                  },
-                  generateBundle(outputOptions) {
-                    assetsDirectory = outputOptions.dir;
-                  },
-                },
-              ],
-            },
-            // This is the `useLegacyBuilder` option. The Vite CLI implementation uses `null` here.
-            // Originally we used `undefined` here, but this caused the static site build to fail.
-            // https://github.com/vitejs/vite/blob/a07a4bd052ac75f916391c999c408ad5f2867e61/packages/vite/src/node/cli.ts#L367
-            null,
-          );
-          await builder.buildApp();
-        });
         if (!assetsDirectory && !serverBundle) {
           return yield* Effect.die(
             new Error("Vite build produced neither server nor client output"),
@@ -2623,25 +2563,3 @@ const contentTypeFromExtension = (extension: string) => {
       return "application/octet-stream";
   }
 };
-
-type ViteModule = typeof import("vite");
-
-/**
- * Dynamically load Vite from the project root. Falls back to the bundled
- * copy if the project doesn't have its own Vite installation.
- */
-async function loadVite(
-  projectRoot: string = process.cwd(),
-): Promise<ViteModule> {
-  try {
-    const require = createRequire(path.join(projectRoot, "package.json"));
-    const vitePath = require.resolve("vite");
-    // On Windows, absolute paths must be file:// URLs for ESM import().
-    const viteUrl = pathToFileURL(vitePath);
-    return await import(/* @vite-ignore */ viteUrl.href);
-  } catch {
-    // Fallback: try to import vite from the global node_modules (works for non-linked installs)
-    // The fallback is a bare specifier and works as-is.
-    return await import("vite");
-  }
-}
