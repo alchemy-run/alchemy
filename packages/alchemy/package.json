@@ -270,6 +270,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@alchemy.run/node-utils": "catalog:",
     "@aws-sdk/credential-providers": "catalog:",
     "@clack/prompts": "^0.11.0",
     "@distilled.cloud/aws": "catalog:",

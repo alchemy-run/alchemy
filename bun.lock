@@ -367,6 +367,7 @@
         "alchemy": "./bin/cli.js",
       },
       "dependencies": {
+        "@alchemy.run/node-utils": "catalog:",
         "@aws-sdk/credential-providers": "catalog:",
         "@clack/prompts": "^0.11.0",
         "@distilled.cloud/aws": "catalog:",
@@ -503,7 +504,7 @@
     },
   },
   "catalog": {
-    "@alchemy-run/node-utils": "0.0.2",
+    "@alchemy.run/node-utils": "0.0.2",
     "@aws-sdk/credential-providers": "^3.0.0",
     "@cloudflare/containers": "^0.1.1",
     "@cloudflare/vite-plugin": "^1.13.12",
@@ -560,6 +561,8 @@
     "@alcalzone/ansi-tokenize": ["@alcalzone/ansi-tokenize@0.2.5", "", { "dependencies": { "ansi-styles": "^6.2.1", "is-fullwidth-code-point": "^5.0.0" } }, "sha512-3NX/MpTdroi0aKz134A6RC2Gb2iXVECN4QaAXnvCIxxIm3C3AVB1mkUe8NaaiyvOpDfsrqWhYtj+Q6a62RrTsw=="],
 
     "@alchemy.run/better-auth": ["@alchemy.run/better-auth@workspace:packages/better-auth"],
+
+    "@alchemy.run/node-utils": ["@alchemy.run/node-utils@0.0.2", "", {}, "sha512-pprGQfISHtLB6FEAN8ZulBAXzxMWjwnnY9mL1Ft0nrAUfvuxG7CbvOG5pIyrPMGq9FNa7vHOaiQt8na9vvrRjw=="],
 
     "@alchemy.run/pr-package": ["@alchemy.run/pr-package@workspace:packages/pr-package"],
 
