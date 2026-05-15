@@ -26,8 +26,8 @@ import {
   WasmModule,
   WorkerLoader,
 } from "@distilled.cloud/cloudflare-runtime/bindings";
+import * as LocalProxy from "@distilled.cloud/cloudflare-runtime/proxy/LocalProxy";
 import * as Cause from "effect/Cause";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -39,6 +39,9 @@ import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type * as Bundle from "../../Bundle/Bundle.ts";
+import { InstanceId } from "../../InstanceId.ts";
+import { Stack } from "../../Stack.ts";
+import { Stage } from "../../Stage.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { getCompatibility } from "../Workers/Compatibility.ts";
 import { getCronBindings } from "../Workers/index.ts";
@@ -52,6 +55,7 @@ import {
   WorkerBundle,
   type WorkerBundleOptions,
 } from "../Workers/WorkerBundle.ts";
+import { createWorkerName } from "../Workers/WorkerName.ts";
 import {
   ServeError,
   ServeResult,
@@ -67,6 +71,7 @@ export const SidecarHandlers = Layer.effect(
     const bundler = yield* WorkerBundle;
     const runtime = yield* Runtime;
     const path = yield* Path.Path;
+    const localProxy = yield* LocalProxy.LocalProxy;
 
     const toRuntimeModules = Effect.fn(function* (bundle: Bundle.BundleOutput) {
       const modules: Module[] = [];
@@ -127,7 +132,8 @@ export const SidecarHandlers = Layer.effect(
         yield* Effect.forkDetach(Scope.close(previous, Exit.void));
       }
       workerdScopes.set(worker.id, scope);
-      return `http://${address}`;
+      yield* localProxy.setLocalAddress(worker.id, address);
+      return address;
     });
 
     const buildConfig = Effect.fn(function* ({
@@ -135,8 +141,13 @@ export const SidecarHandlers = Layer.effect(
       props,
       bindings,
       stack,
+      instanceId,
     }: ReconcileOptions) {
-      const name = id.toLowerCase();
+      const name = yield* createWorkerName(id, props.name).pipe(
+        Effect.provideService(Stack, stack),
+        Effect.provideService(Stage, stack.stage),
+        Effect.provideService(InstanceId, instanceId),
+      );
       const compatibility = getCompatibility(props);
       const workerBindings: BindingHook<BindingServices>[] = [];
       const durableObjectNamespaces: Record<string, string> = {};
@@ -198,25 +209,17 @@ export const SidecarHandlers = Layer.effect(
     type WorkerConfig = Effect.Success<ReturnType<typeof buildConfig>>;
 
     const runServer = Effect.fnUntraced(function* (worker: WorkerConfig) {
-      const addressResult = yield* Deferred.make<string, ServeError>();
       let start = Date.now();
+      let status: "start" | "update" = "start";
       yield* bundler.watch(worker.bundleOptions).pipe(
-        Stream.mapEffect((event) =>
-          event._tag === "Error" && !Deferred.isDoneUnsafe(addressResult)
-            ? Effect.fail(event.error)
-            : Effect.succeed(event),
-        ),
         Stream.tap((event) => {
           if (event._tag === "Start") {
             start = Date.now();
-            if (Deferred.isDoneUnsafe(addressResult)) {
-              return Effect.log(`[${worker.name}] Rebuilding`);
+            if (status === "update") {
+              return Effect.log(`[${worker.id}] Rebuilding`);
             }
           } else if (event._tag === "Error") {
-            return Effect.logError(
-              `[${worker.name}] Bundle error`,
-              event.error,
-            );
+            return Effect.logError(`[${worker.id}] Bundle error`, event.error);
           }
           return Effect.void;
         }),
@@ -229,11 +232,12 @@ export const SidecarHandlers = Layer.effect(
           serveScoped(worker, bundle).pipe(
             Effect.exit,
             Effect.tap((exit) => {
-              const isDone = Deferred.isDoneUnsafe(addressResult);
               if (exit._tag === "Success") {
-                return Effect.log(
-                  `[${worker.id}] ${isDone ? "Updated" : "Started"} in ${Math.round(Date.now() - start)}ms`,
+                const message = Effect.log(
+                  `[${worker.id}] ${status === "update" ? "Updated" : "Started"} in ${Math.round(Date.now() - start)}ms`,
                 );
+                status = "update";
+                return message;
               } else {
                 return Effect.logError(
                   `[${worker.id}] Error`,
@@ -241,18 +245,11 @@ export const SidecarHandlers = Layer.effect(
                 );
               }
             }),
-            Effect.tap((exit) => Deferred.complete(addressResult, exit)),
           ),
-        ),
-        Stream.onExit((exit) =>
-          exit._tag === "Failure" && !Deferred.isDoneUnsafe(addressResult)
-            ? Deferred.failCause(addressResult, exit.cause)
-            : Effect.void,
         ),
         Stream.runDrain,
         Effect.forkScoped,
       );
-      return yield* Deferred.await(addressResult);
     });
 
     const rootScope = yield* Effect.scope;
@@ -271,7 +268,7 @@ export const SidecarHandlers = Layer.effect(
     const runInstance = Effect.fn(function* (options: ReconcileOptions) {
       const { id, props, bindings } = options;
       const config = yield* buildConfig(options);
-      let address: string;
+      const url = yield* localProxy.registerWorker(id);
       if (props.vite) {
         console.log("starting vite dev server", id);
         const devServer = yield* Vite.viteDev(
@@ -280,23 +277,29 @@ export const SidecarHandlers = Layer.effect(
           {
             compatibilityDate: config.compatibility.date,
             compatibilityFlags: config.compatibility.flags,
-            bindings: config.workerBindings,
-            durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
-              config.durableObjectNamespaces,
-            ),
+            worker: {
+              name: config.name,
+              bindings: config.workerBindings,
+              durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
+                config.durableObjectNamespaces,
+              ),
+              hyperdrives: config.hyperdrives,
+              assets: toRuntimeAssets(config.assets),
+            },
             context,
           },
         );
         console.log("vite dev server started", id);
-        address = devServer.resolvedUrls!.local[0];
+        const localAddress = devServer.resolvedUrls!.local[0].slice(0, -1);
+        yield* localProxy.setLocalAddress(id, localAddress);
       } else {
-        address = yield* runServer(config);
+        yield* runServer(config);
       }
       return {
         workerId: config.name,
         workerName: config.name,
         logpush: undefined,
-        url: address,
+        url,
         tags: [],
         durableObjectNamespaces: config.durableObjectNamespaces,
         domains: [],

@@ -12,6 +12,7 @@ export interface ReconcileOptions {
   props: WorkerProps;
   bindings: ResourceBinding<Worker["Binding"]>[];
   stack: { name: string; stage: string };
+  instanceId: string;
 }
 
 export class ValidationError extends Schema.TaggedErrorClass<ValidationError>()(

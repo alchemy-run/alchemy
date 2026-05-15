@@ -1,4 +1,7 @@
-import { layerRuntime } from "@distilled.cloud/cloudflare-runtime/RuntimeServices";
+import {
+  layerLocalProxy,
+  layerRuntime,
+} from "@distilled.cloud/cloudflare-runtime/RuntimeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -31,6 +34,7 @@ const apiServices = Layer.merge(
 );
 
 const runtimeServices = SidecarHandlers.pipe(
+  Layer.provide(layerLocalProxy(1337)),
   Layer.provide(
     Layer.unwrap(
       Effect.gen(function* () {
@@ -39,10 +43,6 @@ const runtimeServices = SidecarHandlers.pipe(
         const { dotAlchemy } = yield* AlchemyContext.AlchemyContext;
         const path = yield* Path.Path;
         return layerRuntime({
-          server: {
-            host: "localhost",
-            port: 1337,
-          },
           api: {
             accountId,
           },
