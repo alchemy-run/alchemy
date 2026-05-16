@@ -540,7 +540,7 @@ import * as Logger from "effect/Logger";
 import * as Context from "effect/Context";
 import { MinimumLogLevel } from "effect/References";
 
-import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from "${importPath}";
+import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
 
 const tag = Context.Service("${Self.key}")
 const layer = makeEntrypointLayer(tag, entrypoint);
