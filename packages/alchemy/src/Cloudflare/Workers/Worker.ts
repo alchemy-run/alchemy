@@ -741,7 +741,9 @@ export const Worker: Platform<
           Assets
         >]: NormalizedBindings<Bindings, Assets>[binding];
       } & {
-        [K in keyof Env]: Env[K];
+        [K in keyof Env]: Env[K] extends Redacted.Redacted<infer T>
+          ? T
+          : Env[K];
       }
     >,
     never,
@@ -765,95 +767,107 @@ export const Worker: Platform<
           ? ((yield* bindingEff as Effect.Effect<unknown>) as WorkerBindingResource)
           : bindingEff;
 
-        const bindingMeta: InputProps<WorkerBinding> | undefined = isAssets(
-          binding,
-        )
-          ? {
-              type: "assets",
-              name: bindingName,
-            }
-          : isArtifactsBinding(binding)
-            ? ({
-                type: "artifacts",
+        const bindingMeta: InputProps<WorkerBinding> | undefined =
+          typeof binding === "string"
+            ? {
+                type: "plain_text",
                 name: bindingName,
-                namespace: binding.namespace,
-              } as any)
-            : isImagesBinding(binding)
+                value: binding,
+              }
+            : Redacted.isRedacted(binding)
               ? {
-                  type: "images",
+                  type: "secret_text",
                   name: bindingName,
+                  value: Redacted.value(binding),
                 }
-              : isAnalyticsEngineDataset(binding)
+              : isAssets(binding)
                 ? {
-                    type: "analytics_engine",
+                    type: "assets",
                     name: bindingName,
-                    dataset: binding.dataset,
                   }
-                : isSendEmail(binding)
-                  ? {
-                      type: "send_email",
+                : isArtifactsBinding(binding)
+                  ? ({
+                      type: "artifacts",
                       name: bindingName,
-                      destinationAddress: binding.destinationAddress,
-                      allowedDestinationAddresses:
-                        binding.allowedDestinationAddresses,
-                      allowedSenderAddresses: binding.allowedSenderAddresses,
-                    }
-                  : isDurableObjectNamespaceLike(binding)
+                      namespace: binding.namespace,
+                    } as any)
+                  : isImagesBinding(binding)
                     ? {
-                        type: "durable_object_namespace",
+                        type: "images",
                         name: bindingName,
-                        className: binding.className ?? binding.name,
                       }
-                    : binding.Type === "Cloudflare.D1Database"
+                    : isAnalyticsEngineDataset(binding)
                       ? {
-                          type: "d1",
-                          id: binding.databaseId,
+                          type: "analytics_engine",
                           name: bindingName,
+                          dataset: binding.dataset,
                         }
-                      : binding.Type === "Cloudflare.R2Bucket"
+                      : isSendEmail(binding)
                         ? {
-                            type: "r2_bucket",
+                            type: "send_email",
                             name: bindingName,
-                            bucketName: binding.bucketName,
-                            jurisdiction: binding.jurisdiction.pipe(
-                              Output.map((jurisdiction) =>
-                                jurisdiction === "default"
-                                  ? undefined
-                                  : jurisdiction,
-                              ),
-                            ),
+                            destinationAddress: binding.destinationAddress,
+                            allowedDestinationAddresses:
+                              binding.allowedDestinationAddresses,
+                            allowedSenderAddresses:
+                              binding.allowedSenderAddresses,
                           }
-                        : binding.Type === "Cloudflare.KVNamespace"
+                        : isDurableObjectNamespaceLike(binding)
                           ? {
-                              type: "kv_namespace",
+                              type: "durable_object_namespace",
                               name: bindingName,
-                              namespaceId: binding.namespaceId,
+                              className: binding.className ?? binding.name,
                             }
-                          : binding.Type === "Cloudflare.Queue"
+                          : binding.Type === "Cloudflare.D1Database"
                             ? {
-                                type: "queue",
+                                type: "d1",
+                                id: binding.databaseId,
                                 name: bindingName,
-                                queueName: binding.queueName,
                               }
-                            : binding.Type === "Cloudflare.AiGateway"
+                            : binding.Type === "Cloudflare.R2Bucket"
                               ? {
-                                  type: "ai",
+                                  type: "r2_bucket",
                                   name: bindingName,
+                                  bucketName: binding.bucketName,
+                                  jurisdiction: binding.jurisdiction.pipe(
+                                    Output.map((jurisdiction) =>
+                                      jurisdiction === "default"
+                                        ? undefined
+                                        : jurisdiction,
+                                    ),
+                                  ),
                                 }
-                              : binding.Type === "Cloudflare.Hyperdrive"
+                              : binding.Type === "Cloudflare.KVNamespace"
                                 ? {
-                                    type: "hyperdrive",
+                                    type: "kv_namespace",
                                     name: bindingName,
-                                    id: binding.hyperdriveId,
+                                    namespaceId: binding.namespaceId,
                                   }
-                                : isWorker(binding)
+                                : binding.Type === "Cloudflare.Queue"
                                   ? {
-                                      type: "service",
+                                      type: "queue",
                                       name: bindingName,
-                                      service: binding.workerName,
+                                      queueName: binding.queueName,
                                     }
-                                  : // TODO(sam): handle others
-                                    undefined;
+                                  : binding.Type === "Cloudflare.AiGateway"
+                                    ? {
+                                        type: "ai",
+                                        name: bindingName,
+                                      }
+                                    : binding.Type === "Cloudflare.Hyperdrive"
+                                      ? {
+                                          type: "hyperdrive",
+                                          name: bindingName,
+                                          id: binding.hyperdriveId,
+                                        }
+                                      : isWorker(binding)
+                                        ? {
+                                            type: "service",
+                                            name: bindingName,
+                                            service: binding.workerName,
+                                          }
+                                        : // TODO(sam): handle others
+                                          undefined;
 
         if (bindingMeta) {
           yield* resource.bind`${bindingName}`({
