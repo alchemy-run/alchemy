@@ -116,6 +116,64 @@ test(
 );
 
 test(
+  "concurrent createTask + getTask survive scope-lifecycle pressure",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+
+    yield* client
+      .execute(
+        HttpClientRequest.post(`${url}/`).pipe(
+          HttpClientRequest.bodyJsonUnsafe({ title: "warmup" }),
+        ),
+      )
+      .pipe(
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? Effect.succeed(res)
+            : Effect.fail(new Error(`warmup not ready: ${res.status}`)),
+        ),
+        Effect.retry({
+          schedule: Schedule.exponential("500 millis"),
+          times: 15,
+        }),
+      );
+
+    const N = 200;
+    const results = yield* Effect.forEach(
+      Array.from({ length: N }, (_, i) => i),
+      (i) =>
+        Effect.gen(function* () {
+          const created = yield* client
+            .execute(
+              HttpClientRequest.post(`${url}/`).pipe(
+                HttpClientRequest.bodyJsonUnsafe({ title: `task-${i}` }),
+              ),
+            )
+            .pipe(Effect.timeout("15 seconds"));
+          if (created.status !== 200) {
+            return yield* Effect.fail(
+              new Error(`create ${i} -> ${created.status}`),
+            );
+          }
+          const body = (yield* created.json) as { id: string; title: string };
+          if (body.title !== `task-${i}`) {
+            return yield* Effect.fail(
+              new Error(`create ${i} title mismatch: ${body.title}`),
+            );
+          }
+          return body.id;
+        }),
+      { concurrency: 64 },
+    );
+
+    expect(results).toHaveLength(N);
+    expect(new Set(results).size).toBe(N);
+  }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+test(
   "deployed http-api worker is consumable via typed HttpApiClient",
   Effect.gen(function* () {
     const { url } = yield* stack;
