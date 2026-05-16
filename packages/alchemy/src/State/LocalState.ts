@@ -5,6 +5,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
+import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import { State, StateStoreError, type StateService } from "./State.ts";
 import { encodeState, reviveState } from "./StateEncoding.ts";
 
@@ -60,6 +61,7 @@ export const makeLocalState = () =>
 
     const state: StateService = {
       id: "local",
+      getVersion: () => Effect.succeed(STATE_STORE_VERSION),
       listStacks: () =>
         fs.readDirectory(stateDir).pipe(
           recover,

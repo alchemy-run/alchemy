@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
+import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import type { ResourceState } from "./ResourceState.ts";
 import { State, type PersistedState } from "./State.ts";
 
@@ -28,6 +29,7 @@ export const InMemoryService = (
 ) =>
   State.of({
     id: "inmemory",
+    getVersion: () => Effect.succeed(STATE_STORE_VERSION),
     listStacks: () => Effect.succeed(Array.from(Object.keys(state))),
     listStages: (stack: string) =>
       Effect.succeed(

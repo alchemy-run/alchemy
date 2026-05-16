@@ -19,7 +19,14 @@ export const REDACTED_MARKER = "__redacted__";
  * - Plain objects and arrays are walked structurally.
  */
 export const encodeState = (value: unknown): unknown => {
-  if (value === null || value === undefined) return value;
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  )
+    return value;
   if (Redacted.isRedacted(value)) {
     return {
       [REDACTED_MARKER]: encodeState(Redacted.value(value)),

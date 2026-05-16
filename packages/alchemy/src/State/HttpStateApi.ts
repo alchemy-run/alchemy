@@ -174,6 +174,17 @@ export const SetStackOutput = HttpApiEndpoint.put(
   },
 );
 
+/**
+ * Version of the State Store wire / behavioural contract.
+ *
+ * Bump this whenever the wire format or runtime behaviour of an HTTP
+ * state-store changes in a way that an older deployed copy can no
+ * longer satisfy. Clients query `/version` on the deployed worker and
+ * compare against this constant; a mismatch (or 404) triggers a
+ * forced redeploy via the bootstrap flow.
+ */
+export const STATE_STORE_VERSION = 4 as const;
+
 /** Response shape for the unauthenticated `/version` probe. */
 export const VersionResponse = Schema.Struct({
   version: Schema.Number,

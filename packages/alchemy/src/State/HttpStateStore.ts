@@ -59,6 +59,11 @@ export const makeHttpStateStore = ({
 
     const service: StateService = {
       id,
+      getVersion: () =>
+        apiClient.version.getVersion().pipe(
+          Effect.map((v) => v.version),
+          mapStateStoreError,
+        ),
       listStacks: () =>
         state.listStacks().pipe(
           Effect.map((stacks) => [...stacks]),
