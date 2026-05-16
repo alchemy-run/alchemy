@@ -45,6 +45,14 @@ export interface StateService {
    * stable, kebab-case slug.
    */
   readonly id: string;
+  /**
+   * Wire / behavioural contract version of this state-store
+   * implementation. For local / in-process stores this is the
+   * `STATE_STORE_VERSION` the CLI was built against; for HTTP-backed
+   * stores it is the version reported by the deployed `/version`
+   * probe.
+   */
+  getVersion(): Effect.Effect<number, StateStoreError, never>;
   listStacks(): Effect.Effect<readonly string[], StateStoreError, never>;
   listStages(
     stack: string,

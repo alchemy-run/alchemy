@@ -492,7 +492,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
 
-import { ${handler} as handler } from "${importPath}";
+import { ${handler} as handler } from ${JSON.stringify(importPath)};
 
 const platform = Layer.mergeAll(
   NodeServices.layer,

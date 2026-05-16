@@ -679,7 +679,7 @@ import * as Region from "@distilled.cloud/aws/Region";
 import * as Context from "effect/Context";
 import { MinimumLogLevel } from "effect/References";
 
-import entrypoint from "${importPath}";
+import entrypoint from ${JSON.stringify(importPath)};
 
 const tag = Context.Service("${Self.key}")
 const layer = makeEntrypointLayer(tag, entrypoint);

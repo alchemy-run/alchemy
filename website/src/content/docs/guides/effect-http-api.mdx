@@ -231,6 +231,33 @@ We assemble it in three layers:
     };
 ```
 
+### 3d. Enable CORS
+
+`HttpRouter.cors(...)` returns a `Layer` that registers a global
+router middleware. Plug it in alongside the platform services with
+another `Layer.provide`.
+
+```diff lang="typescript"
+    return {
+      fetch: HttpApiBuilder.layer(TaskApi).pipe(
+        Layer.provide(tasksGroup),
+        Layer.provide([HttpPlatform.layer, Etag.layer]),
++       Layer.provide(HttpRouter.cors({
++         allowedOrigins: ["*"],
++         allowedMethods: ["GET", "POST", "OPTIONS"],
++         allowedHeaders: ["Content-Type"],
++       })),
+        HttpRouter.toHttpEffect,
+      ),
+    };
+```
+
+The middleware wraps every response — including the automatic
+`OPTIONS` preflight — with the configured `Access-Control-*` headers.
+Because it's a `Layer<never, never, HttpRouter>`, it composes the same
+way as the rest of the API stack: order doesn't matter, and there's
+no per-handler plumbing.
+
 ### Putting it together
 
 Here's the complete `src/worker.ts`:
@@ -285,6 +312,13 @@ export default Cloudflare.Worker(
       fetch: HttpApiBuilder.layer(TaskApi).pipe(
         Layer.provide(tasksGroup),
         Layer.provide([HttpPlatform.layer, Etag.layer]),
+        Layer.provide(
+          HttpRouter.cors({
+            allowedOrigins: ["*"],
+            allowedMethods: ["GET", "POST", "OPTIONS"],
+            allowedHeaders: ["Content-Type"],
+          }),
+        ),
         HttpRouter.toHttpEffect,
       ),
     };

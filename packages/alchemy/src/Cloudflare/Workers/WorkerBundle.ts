@@ -165,7 +165,7 @@ import { Stack } from "alchemy/Stack";
 import { WorkerEnvironment, makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy/Cloudflare";
 import { makeEntrypointLayer } from "alchemy/Runtime";
 
-import entrypoint from "${importPath}";
+import entrypoint from ${JSON.stringify(importPath)};
 
 const tag = Context.Service("${Self.key}")
 const layer = makeEntrypointLayer(tag, entrypoint);

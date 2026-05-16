@@ -1,3 +1,31 @@
+## v2.0.0-beta.40
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **axiom**: Smartfilter chart subtype &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/339 [<samp>(f2650)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f2650d05)
+- **cloudflare**: Vite dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/331 [<samp>(1913a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1913aafb)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - Revert scopeTransferToStream which is causing 415 &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(fe354)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/fe354905)
+  - Bump state store version to 5 &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(baddd)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/baddd845)
+  - **AiGateway**:
+    - Stop reporting update on every deploy &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/332 [<samp>(2a1f7)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/2a1f7232)
+    - Align desired-state defaults with API defaults &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/334 [<samp>(0e3dc)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/0e3dcd3b)
+  - **Container**:
+    - Forward startup options through Cloudflare.start &nbsp;-&nbsp; by **Christopher Yovanovitch** in https://github.com/alchemy-run/alchemy-effect/issues/341 [<samp>(1c72b)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1c72b9c0)
+  - **Worker**:
+    - Log full Cause server-side, return generic 500 to client &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/336 [<samp>(ebdbc)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ebdbc0d5)
+- **aws,cloudflare**:
+  - Sanitize entrypoint urls &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/353 [<samp>(4cf38)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/4cf3856c)
+- **dev**:
+  - Use @alchemy.run/node-utils lockfile &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/345 [<samp>(acc8b)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/acc8b885)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.39...HEAD)
+
+---
+
 ## v2.0.0-beta.39
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
