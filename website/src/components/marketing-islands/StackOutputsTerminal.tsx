@@ -95,7 +95,7 @@ export default function StackOutputsTerminal() {
       title={`alchemy · ${STAGE}`}
       badge="DEPLOY"
       badgeColor={accent}
-      bodyMinHeight={220}
+      bodyMinHeight={300}
     >
       <Line>
         <span style={{ color: accent }}>$ </span>
