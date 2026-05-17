@@ -181,12 +181,7 @@ export default function TestTerminal({
   };
 
   return (
-    <TermChrome
-      title={title}
-      badge="TEST"
-      badgeColor={accent}
-      bodyMinHeight={232}
-    >
+    <TermChrome title={title} badge="TEST" badgeColor={accent} maxLines={10}>
       <Line>
         <span style={{ color: accent }}>$ </span>
         {cmd}
