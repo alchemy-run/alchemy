@@ -47,6 +47,12 @@ export const WorkerBundle = Effect.gen(function* () {
     const realMain = yield* sanitizeMain(options.main);
     const inputOptions: rolldown.InputOptions = {
       input: realMain,
+      // Forever-devtool native modules that vite/chokidar reference behind
+      // runtime guards. Rolldown resolves before tree-shaking, so the dead
+      // `require('../pkg')` (lightningcss < 1.32) and `require('fsevents')`
+      // (darwin-only) trip [UNRESOLVED_IMPORT] before DCE can prune them.
+      // See rolldown/tsdown#212.
+      external: ["lightningcss", "fsevents"],
       cwd: yield* findCwdForBundle(realMain).pipe(
         Effect.mapError(
           (cause) =>
