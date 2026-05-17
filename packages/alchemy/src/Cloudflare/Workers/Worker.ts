@@ -187,7 +187,7 @@ export interface WorkerRuntimeContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
 }
 
-export type WorkerServices = Worker | Request;
+export type WorkerServices = Worker | Request | WorkerExecutionContext;
 
 export type WorkerShape = Main<WorkerServices | WorkerEnvironment>;
 

@@ -7,6 +7,7 @@ import type { Scope } from "effect/Scope";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { SingleShotGen } from "effect/Utils";
 import type { PolicyLike } from "./Binding.ts";
+import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
@@ -42,6 +43,7 @@ export type Rpc<Shape> = {
 // services provided to the Resource
 export type PlatformServices =
   | RuntimeContext
+  | ExecutionContext
   | HttpClient
   | PolicyLike
   | Provider<any>
