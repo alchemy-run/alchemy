@@ -1,0 +1,230 @@
+import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
+import * as Prisma from "@/Prisma/Operations";
+import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+
+type AssertNever<T extends never> = T;
+type ClientOperation = Exclude<
+  keyof PrismaManagementClient,
+  "request" | "paginate"
+>;
+export type PrismaOperationCoverage = [
+  AssertNever<Exclude<ClientOperation, keyof typeof Prisma>>,
+  AssertNever<Exclude<keyof typeof Prisma, ClientOperation>>,
+];
+
+const expectedOperationHelpers = [
+  "listWorkspaces",
+  "getWorkspace",
+  "listRegions",
+  "listPostgresRegions",
+  "listAccelerateRegions",
+  "listProjects",
+  "getProject",
+  "createProject",
+  "updateProject",
+  "deleteProject",
+  "transferProject",
+  "listDatabases",
+  "listProjectDatabases",
+  "getDatabase",
+  "createDatabase",
+  "createProjectDatabase",
+  "updateDatabase",
+  "deleteDatabase",
+  "listBackups",
+  "restoreDatabase",
+  "getDatabaseUsage",
+  "listConnections",
+  "listDatabaseConnections",
+  "getConnection",
+  "createConnection",
+  "createDatabaseConnection",
+  "deleteConnection",
+  "rotateConnection",
+  "listBranches",
+  "getBranch",
+  "createBranch",
+  "updateBranch",
+  "deleteBranch",
+  "listComputeServices",
+  "listProjectComputeServices",
+  "getComputeService",
+  "createComputeService",
+  "createProjectComputeService",
+  "updateComputeService",
+  "deleteComputeService",
+  "promoteComputeService",
+  "listComputeVersions",
+  "listServiceComputeVersions",
+  "getComputeVersion",
+  "getComputeServiceVersion",
+  "createComputeVersion",
+  "createServiceComputeVersion",
+  "deleteComputeVersion",
+  "deleteComputeServiceVersion",
+  "startComputeVersion",
+  "startComputeServiceVersion",
+  "stopComputeVersion",
+  "stopComputeServiceVersion",
+  "getComputeVersionLogsRequest",
+  "getComputeVersionLogsUrl",
+  "listEnvironmentVariables",
+  "getEnvironmentVariable",
+  "createEnvironmentVariable",
+  "updateEnvironmentVariable",
+  "deleteEnvironmentVariable",
+  "listIntegrations",
+  "listWorkspaceIntegrations",
+  "getIntegration",
+  "deleteIntegration",
+  "revokeWorkspaceIntegration",
+  "listSourceRepositories",
+  "getSourceRepository",
+  "createSourceRepository",
+  "deleteSourceRepository",
+];
+
+describe("Prisma operation helpers", () => {
+  it.effect("delegate every public operation helper to PrismaClient", () => {
+    const calls: Array<[string, unknown[]]> = [];
+    const client = new Proxy(
+      {},
+      {
+        get:
+          (_target, prop) =>
+          (...args: unknown[]) =>
+            Effect.sync(() => {
+              calls.push([String(prop), args]);
+              return { ok: true };
+            }),
+      },
+    ) as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      yield* Prisma.listWorkspaces({ limit: 1 });
+      yield* Prisma.getWorkspace("workspace-1");
+      yield* Prisma.listRegions({ product: "postgres" });
+      yield* Prisma.listPostgresRegions();
+      yield* Prisma.listAccelerateRegions();
+
+      yield* Prisma.listProjects({ limit: 1 });
+      yield* Prisma.getProject("project-1");
+      yield* Prisma.createProject({ name: "app" });
+      yield* Prisma.updateProject("project-1", { name: "renamed" });
+      yield* Prisma.deleteProject("project-1");
+      yield* Prisma.transferProject("project-1", {
+        recipientAccessToken: "recipient-token",
+      });
+
+      yield* Prisma.listDatabases({ projectId: "project-1" });
+      yield* Prisma.listProjectDatabases("project-1", { limit: 1 });
+      yield* Prisma.getDatabase("database-1");
+      yield* Prisma.createDatabase({ projectId: "project-1" });
+      yield* Prisma.createProjectDatabase("project-1", {
+        region: "us-east-1",
+        fromDatabase: {
+          id: "database-source",
+          backupId: "backup-1",
+        },
+      });
+      yield* Prisma.updateDatabase("database-1", { name: "renamed" });
+      yield* Prisma.deleteDatabase("database-1");
+      yield* Prisma.listBackups("database-1", { limit: 1 });
+      yield* Prisma.restoreDatabase("database-1", {
+        source: {
+          type: "backup",
+          databaseId: "source-database",
+          backupId: "backup-1",
+        },
+      });
+      yield* Prisma.getDatabaseUsage("database-1", {
+        startDate: "2026-01-01",
+        endDate: "2026-01-02",
+      });
+
+      yield* Prisma.listConnections({ databaseId: "database-1" });
+      yield* Prisma.listDatabaseConnections("database-1", { limit: 1 });
+      yield* Prisma.getConnection("connection-1");
+      yield* Prisma.createConnection({
+        databaseId: "database-1",
+        name: "api",
+      });
+      yield* Prisma.createDatabaseConnection("database-1", { name: "api" });
+      yield* Prisma.deleteConnection("connection-1");
+      yield* Prisma.rotateConnection("connection-1");
+
+      yield* Prisma.listBranches("project-1", { gitName: "main" });
+      yield* Prisma.getBranch("branch-1");
+      yield* Prisma.createBranch("project-1", { gitName: "main" });
+      yield* Prisma.updateBranch("branch-1", { isDefault: true });
+      yield* Prisma.deleteBranch("branch-1");
+
+      yield* Prisma.listComputeServices({ projectId: "project-1" });
+      yield* Prisma.listProjectComputeServices("project-1", { limit: 1 });
+      yield* Prisma.getComputeService("service-1");
+      yield* Prisma.createComputeService({
+        projectId: "project-1",
+        displayName: "api",
+      });
+      yield* Prisma.createProjectComputeService("project-1", {
+        displayName: "api",
+      });
+      yield* Prisma.updateComputeService("service-1", {
+        displayName: "renamed",
+      });
+      yield* Prisma.deleteComputeService("service-1");
+      yield* Prisma.promoteComputeService("service-1", "version-1");
+
+      yield* Prisma.listComputeVersions({ computeServiceId: "service-1" });
+      yield* Prisma.listServiceComputeVersions("service-1", { limit: 1 });
+      yield* Prisma.getComputeVersion("version-1");
+      yield* Prisma.getComputeServiceVersion("version-1");
+      yield* Prisma.createComputeVersion({ computeServiceId: "service-1" });
+      yield* Prisma.createServiceComputeVersion("service-1", {
+        skipCodeUpload: true,
+      });
+      yield* Prisma.deleteComputeVersion("version-1");
+      yield* Prisma.deleteComputeServiceVersion("version-1");
+      yield* Prisma.startComputeVersion("version-1");
+      yield* Prisma.startComputeServiceVersion("version-1");
+      yield* Prisma.stopComputeVersion("version-1");
+      yield* Prisma.stopComputeServiceVersion("version-1");
+      yield* Prisma.getComputeVersionLogsRequest("version-1", { tail: 10 });
+      yield* Prisma.getComputeVersionLogsUrl("version-1", {
+        fromStart: true,
+      });
+
+      yield* Prisma.listEnvironmentVariables({ projectId: "project-1" });
+      yield* Prisma.getEnvironmentVariable("env-1");
+      yield* Prisma.createEnvironmentVariable({
+        projectId: "project-1",
+        class: "production",
+        key: "TOKEN",
+        value: "secret",
+      });
+      yield* Prisma.updateEnvironmentVariable("env-1", { value: "next" });
+      yield* Prisma.deleteEnvironmentVariable("env-1");
+
+      yield* Prisma.listIntegrations({ workspaceId: "workspace-1" });
+      yield* Prisma.listWorkspaceIntegrations("workspace-1", { limit: 1 });
+      yield* Prisma.getIntegration("integration-1");
+      yield* Prisma.deleteIntegration("integration-1");
+      yield* Prisma.revokeWorkspaceIntegration("workspace-1", "client-1");
+
+      yield* Prisma.listSourceRepositories({ projectId: "project-1" });
+      yield* Prisma.getSourceRepository("repo-1");
+      yield* Prisma.createSourceRepository({
+        projectId: "project-1",
+        provider: "github",
+        providerRepositoryId: 123,
+      });
+      yield* Prisma.deleteSourceRepository("repo-1");
+
+      expect(Object.keys(Prisma).sort()).toEqual(
+        [...expectedOperationHelpers].sort(),
+      );
+      expect(calls.map(([name]) => name)).toEqual(expectedOperationHelpers);
+    }).pipe(Effect.provideService(PrismaClient, client));
+  });
+});

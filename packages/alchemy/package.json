@@ -190,6 +190,18 @@
       "worker": "./src/Neon/*/index.ts",
       "import": "./lib/Neon/*/index.js"
     },
+    "./Prisma": {
+      "types": "./lib/Prisma/index.d.ts",
+      "bun": "./src/Prisma/index.ts",
+      "worker": "./src/Prisma/index.ts",
+      "import": "./lib/Prisma/index.js"
+    },
+    "./Prisma/*": {
+      "types": "./lib/Prisma/*.d.ts",
+      "bun": "./src/Prisma/*.ts",
+      "worker": "./src/Prisma/*.ts",
+      "import": "./lib/Prisma/*.js"
+    },
     "./Output": {
       "types": "./lib/Output.d.ts",
       "bun": "./src/Output.ts",
@@ -303,6 +315,7 @@
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
+    "@prisma/dev": "^0.20.0",
     "@smithy/node-config-provider": "catalog:",
     "@smithy/shared-ini-file-loader": "catalog:",
     "@smithy/types": "catalog:",

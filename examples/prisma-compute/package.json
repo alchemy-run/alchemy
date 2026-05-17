@@ -1,0 +1,28 @@
+{
+  "name": "prisma-compute",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
+    "directory": "examples/prisma-compute"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "deploy": "alchemy deploy",
+    "dev": "alchemy dev",
+    "destroy": "alchemy destroy",
+    "tail": "alchemy tail",
+    "test:live": "cd ../.. && ALCHEMY_RUN_LIVE_PRISMA_TESTS=true bun vitest run packages/alchemy/test/Prisma/ComputeApp.live.test.ts",
+    "test:live:profile": "cd ../.. && ALCHEMY_RUN_LIVE_PRISMA_TESTS=true ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE=true bun vitest run packages/alchemy/test/Prisma/ComputeApp.live.test.ts",
+    "cleanup:live": "cd ../.. && ALCHEMY_RUN_LIVE_PRISMA_CLEANUP=true bun vitest run packages/alchemy/test/Prisma/ComputeApp.live.test.ts",
+    "cleanup:live:profile": "cd ../.. && ALCHEMY_RUN_LIVE_PRISMA_CLEANUP=true ALCHEMY_RUN_LIVE_PRISMA_WITH_PROFILE=true bun vitest run packages/alchemy/test/Prisma/ComputeApp.live.test.ts",
+    "dev:server": "bun src/server.ts"
+  },
+  "dependencies": {
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  }
+}

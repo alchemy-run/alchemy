@@ -1,0 +1,262 @@
+import * as Effect from "effect/Effect";
+import { PrismaClient, type PrismaManagementClient } from "./Client.ts";
+import type {
+  BranchCreateInput,
+  BranchUpdateInput,
+  ComputeVersionLogsQuery,
+  DatabaseConnectionCreateInput,
+  ComputeServiceCreateInput,
+  ComputeServiceUpdateInput,
+  ComputeVersionCreateInput,
+  ConnectionCreateInput,
+  DatabaseCreateInput,
+  DatabaseUpdateInput,
+  EnvironmentVariableCreateInput,
+  EnvironmentVariableUpdateInput,
+  PrismaBranchIdFilter,
+  ProjectComputeServiceCreateInput,
+  ProjectCreateInput,
+  ProjectDatabaseCreateInput,
+  ProjectTransferInput,
+  ProjectUpdateInput,
+  RestoreDatabaseInput,
+  ServiceComputeVersionCreateInput,
+  SourceRepositoryCreateInput,
+} from "./Types.ts";
+
+const withClient = <A, E, R>(
+  f: (client: PrismaManagementClient) => Effect.Effect<A, E, R>,
+) => Effect.flatMap(PrismaClient, f);
+
+export const listWorkspaces = (query?: {
+  cursor?: string | null;
+  limit?: number;
+}) => withClient((client) => client.listWorkspaces(query));
+export const getWorkspace = (id: string) =>
+  withClient((client) => client.getWorkspace(id));
+
+export const listRegions = (query?: { product?: "postgres" | "accelerate" }) =>
+  withClient((client) => client.listRegions(query));
+export const listPostgresRegions = () =>
+  withClient((client) => client.listPostgresRegions());
+export const listAccelerateRegions = () =>
+  withClient((client) => client.listAccelerateRegions());
+
+export const listProjects = (query?: {
+  cursor?: string | null;
+  limit?: number;
+}) => withClient((client) => client.listProjects(query));
+export const getProject = (id: string) =>
+  withClient((client) => client.getProject(id));
+export const createProject = (input: ProjectCreateInput) =>
+  withClient((client) => client.createProject(input));
+export const updateProject = (id: string, input: ProjectUpdateInput) =>
+  withClient((client) => client.updateProject(id, input));
+export const deleteProject = (id: string) =>
+  withClient((client) => client.deleteProject(id));
+export const transferProject = (id: string, input: ProjectTransferInput) =>
+  withClient((client) => client.transferProject(id, input));
+
+export const listDatabases = (query?: {
+  cursor?: string | null;
+  limit?: number;
+  projectId?: string;
+  branchId?: PrismaBranchIdFilter;
+  branchGitName?: string;
+}) => withClient((client) => client.listDatabases(query));
+export const listProjectDatabases = (
+  projectId: string,
+  query?: { cursor?: string | null; limit?: number },
+) => withClient((client) => client.listProjectDatabases(projectId, query));
+export const getDatabase = (id: string) =>
+  withClient((client) => client.getDatabase(id));
+export const createDatabase = (input: DatabaseCreateInput) =>
+  withClient((client) => client.createDatabase(input));
+export const createProjectDatabase = (
+  projectId: string,
+  input: ProjectDatabaseCreateInput,
+) => withClient((client) => client.createProjectDatabase(projectId, input));
+export const updateDatabase = (id: string, input: DatabaseUpdateInput) =>
+  withClient((client) => client.updateDatabase(id, input));
+export const deleteDatabase = (id: string) =>
+  withClient((client) => client.deleteDatabase(id));
+export const listBackups = (databaseId: string, query?: { limit?: number }) =>
+  withClient((client) => client.listBackups(databaseId, query));
+export const restoreDatabase = (
+  targetDatabaseId: string,
+  input: RestoreDatabaseInput,
+) => withClient((client) => client.restoreDatabase(targetDatabaseId, input));
+export const getDatabaseUsage = (
+  databaseId: string,
+  query?: { startDate?: string; endDate?: string },
+) => withClient((client) => client.getDatabaseUsage(databaseId, query));
+
+export const listConnections = (query?: {
+  cursor?: string | null;
+  limit?: number;
+  databaseId?: string;
+}) => withClient((client) => client.listConnections(query));
+export const listDatabaseConnections = (
+  databaseId: string,
+  query?: { cursor?: string | null; limit?: number },
+) => withClient((client) => client.listDatabaseConnections(databaseId, query));
+export const getConnection = (id: string) =>
+  withClient((client) => client.getConnection(id));
+export const createConnection = (input: ConnectionCreateInput) =>
+  withClient((client) => client.createConnection(input));
+export const createDatabaseConnection = (
+  databaseId: string,
+  input: DatabaseConnectionCreateInput,
+) => withClient((client) => client.createDatabaseConnection(databaseId, input));
+export const deleteConnection = (id: string) =>
+  withClient((client) => client.deleteConnection(id));
+export const rotateConnection = (id: string) =>
+  withClient((client) => client.rotateConnection(id));
+
+export const listBranches = (
+  projectId: string,
+  query?: {
+    cursor?: string | null;
+    limit?: number;
+    gitName?: string;
+    gitNameContains?: string;
+  },
+) => withClient((client) => client.listBranches(projectId, query));
+export const getBranch = (id: string) =>
+  withClient((client) => client.getBranch(id));
+export const createBranch = (projectId: string, input: BranchCreateInput) =>
+  withClient((client) => client.createBranch(projectId, input));
+export const updateBranch = (id: string, input: BranchUpdateInput) =>
+  withClient((client) => client.updateBranch(id, input));
+export const deleteBranch = (id: string) =>
+  withClient((client) => client.deleteBranch(id));
+
+export const listComputeServices = (query?: {
+  cursor?: string | null;
+  limit?: number;
+  projectId?: string;
+  branchId?: PrismaBranchIdFilter;
+  branchGitName?: string;
+}) => withClient((client) => client.listComputeServices(query));
+export const listProjectComputeServices = (
+  projectId: string,
+  query?: { cursor?: string | null; limit?: number },
+) =>
+  withClient((client) => client.listProjectComputeServices(projectId, query));
+export const getComputeService = (id: string) =>
+  withClient((client) => client.getComputeService(id));
+export const createComputeService = (input: ComputeServiceCreateInput) =>
+  withClient((client) => client.createComputeService(input));
+export const createProjectComputeService = (
+  projectId: string,
+  input: ProjectComputeServiceCreateInput,
+) =>
+  withClient((client) => client.createProjectComputeService(projectId, input));
+export const updateComputeService = (
+  id: string,
+  input: ComputeServiceUpdateInput,
+) => withClient((client) => client.updateComputeService(id, input));
+export const deleteComputeService = (id: string) =>
+  withClient((client) => client.deleteComputeService(id));
+export const promoteComputeService = (id: string, versionId: string) =>
+  withClient((client) => client.promoteComputeService(id, versionId));
+
+export const listComputeVersions = (query?: {
+  cursor?: string | null;
+  limit?: number;
+  computeServiceId?: string;
+}) => withClient((client) => client.listComputeVersions(query));
+export const listServiceComputeVersions = (
+  computeServiceId: string,
+  query?: { cursor?: string | null; limit?: number },
+) =>
+  withClient((client) =>
+    client.listServiceComputeVersions(computeServiceId, query),
+  );
+export const getComputeVersion = (id: string) =>
+  withClient((client) => client.getComputeVersion(id));
+export const getComputeServiceVersion = (id: string) =>
+  withClient((client) => client.getComputeServiceVersion(id));
+export const createComputeVersion = (input: ComputeVersionCreateInput) =>
+  withClient((client) => client.createComputeVersion(input));
+export const createServiceComputeVersion = (
+  computeServiceId: string,
+  input: ServiceComputeVersionCreateInput,
+) =>
+  withClient((client) =>
+    client.createServiceComputeVersion(computeServiceId, input),
+  );
+export const deleteComputeVersion = (id: string) =>
+  withClient((client) => client.deleteComputeVersion(id));
+export const deleteComputeServiceVersion = (id: string) =>
+  withClient((client) => client.deleteComputeServiceVersion(id));
+export const startComputeVersion = (id: string) =>
+  withClient((client) => client.startComputeVersion(id));
+export const startComputeServiceVersion = (id: string) =>
+  withClient((client) => client.startComputeServiceVersion(id));
+export const stopComputeVersion = (id: string) =>
+  withClient((client) => client.stopComputeVersion(id));
+export const stopComputeServiceVersion = (id: string) =>
+  withClient((client) => client.stopComputeServiceVersion(id));
+export const getComputeVersionLogsRequest = (
+  id: string,
+  query?: ComputeVersionLogsQuery,
+) => withClient((client) => client.getComputeVersionLogsRequest(id, query));
+export const getComputeVersionLogsUrl = (
+  id: string,
+  query?: ComputeVersionLogsQuery,
+) => withClient((client) => client.getComputeVersionLogsUrl(id, query));
+
+export const listEnvironmentVariables = (query?: {
+  cursor?: string | null;
+  limit?: number;
+  projectId?: string;
+  class?: "production" | "preview";
+  key?: string;
+  branchId?: string;
+}) => withClient((client) => client.listEnvironmentVariables(query));
+export const getEnvironmentVariable = (id: string) =>
+  withClient((client) => client.getEnvironmentVariable(id));
+export const createEnvironmentVariable = (
+  input: EnvironmentVariableCreateInput,
+) => withClient((client) => client.createEnvironmentVariable(input));
+export const updateEnvironmentVariable = (
+  id: string,
+  input: EnvironmentVariableUpdateInput,
+) => withClient((client) => client.updateEnvironmentVariable(id, input));
+export const deleteEnvironmentVariable = (id: string) =>
+  withClient((client) => client.deleteEnvironmentVariable(id));
+
+export const listIntegrations = (query: {
+  workspaceId: string;
+  cursor?: string | null;
+  limit?: number;
+}) => withClient((client) => client.listIntegrations(query));
+export const listWorkspaceIntegrations = (
+  workspaceId: string,
+  query?: { cursor?: string | null; limit?: number },
+) =>
+  withClient((client) => client.listWorkspaceIntegrations(workspaceId, query));
+export const getIntegration = (id: string) =>
+  withClient((client) => client.getIntegration(id));
+export const deleteIntegration = (id: string) =>
+  withClient((client) => client.deleteIntegration(id));
+export const revokeWorkspaceIntegration = (
+  workspaceId: string,
+  clientId: string,
+) =>
+  withClient((client) =>
+    client.revokeWorkspaceIntegration(workspaceId, clientId),
+  );
+
+export const listSourceRepositories = (query: {
+  projectId: string;
+  cursor?: string | null;
+  limit?: number;
+}) => withClient((client) => client.listSourceRepositories(query));
+export const getSourceRepository = (id: string) =>
+  withClient((client) => client.getSourceRepository(id));
+export const createSourceRepository = (input: SourceRepositoryCreateInput) =>
+  withClient((client) => client.createSourceRepository(input));
+export const deleteSourceRepository = (id: string) =>
+  withClient((client) => client.deleteSourceRepository(id));

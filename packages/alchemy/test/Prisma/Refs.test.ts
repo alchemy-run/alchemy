@@ -1,0 +1,26 @@
+import {
+  concreteIdOf,
+  isPrismaDevId,
+  unresolvedComputeServiceIdOf,
+  unresolvedDatabaseIdOf,
+  unresolvedProjectIdOf,
+} from "@/Prisma/Refs";
+import { describe, expect, it } from "@effect/vitest";
+
+describe("Prisma Refs", () => {
+  it("treats missing unresolved references as unknown", () => {
+    expect(unresolvedProjectIdOf(undefined)).toBeUndefined();
+    expect(unresolvedDatabaseIdOf(undefined)).toBeUndefined();
+    expect(unresolvedComputeServiceIdOf(undefined)).toBeUndefined();
+  });
+
+  it("treats local dev placeholders as unknown live ids", () => {
+    expect(isPrismaDevId("dev:project:Project")).toBe(true);
+    expect(concreteIdOf("dev:project:Project")).toBeUndefined();
+    expect(unresolvedProjectIdOf("dev:project:Project")).toBeUndefined();
+    expect(unresolvedDatabaseIdOf("dev:database:Database")).toBeUndefined();
+    expect(
+      unresolvedComputeServiceIdOf("dev:compute-service:Service"),
+    ).toBeUndefined();
+  });
+});

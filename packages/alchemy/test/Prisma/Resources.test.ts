@@ -1,0 +1,2337 @@
+import { Branch as PrismaBranch, BranchProvider } from "@/Prisma/Branch";
+import { PrismaApiError, PrismaClient } from "@/Prisma/Client";
+import {
+  ComputeService as PrismaComputeService,
+  ComputeServiceProvider,
+} from "@/Prisma/ComputeService";
+import {
+  ComputeVersion as PrismaComputeVersion,
+  ComputeVersionProvider,
+} from "@/Prisma/ComputeVersion";
+import {
+  Connection as PrismaConnection,
+  ConnectionProvider,
+} from "@/Prisma/Connection";
+import {
+  Database as PrismaDatabase,
+  DatabaseProvider,
+} from "@/Prisma/Database";
+import {
+  EnvironmentVariable as PrismaEnvironmentVariable,
+  EnvironmentVariableProvider,
+} from "@/Prisma/EnvironmentVariable";
+import { Project as PrismaProject, ProjectProvider } from "@/Prisma/Project";
+import {
+  SourceRepository as PrismaSourceRepository,
+  SourceRepositoryProvider,
+} from "@/Prisma/SourceRepository";
+import type { PrismaManagementClient } from "@/Prisma/Client";
+import { Stack } from "@/Stack";
+import { Stage } from "@/Stage";
+import { describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+
+type Call = [operation: string, input?: unknown];
+
+const createdAt = "2026-01-01T00:00:00Z";
+const updatedAt = "2026-01-01T00:00:01Z";
+
+const resourceRef = (kind: string, id: string, name = id) => ({
+  id,
+  url: `https://api.prisma.test/v1/${kind}/${id}`,
+  name,
+});
+
+const makeClient = () => {
+  const calls: Call[] = [];
+  const client = {
+    listProjects: () => {
+      calls.push(["listProjects"]);
+      return Effect.succeed([]);
+    },
+    createProject: (input: unknown) => {
+      calls.push(["createProject", input]);
+      return Effect.succeed({
+        id: "project-1",
+        type: "project",
+        url: "https://api.prisma.test/v1/projects/project-1",
+        name: "app",
+        createdAt,
+        defaultRegion: "us-east-1",
+        workspace: resourceRef("workspaces", "workspace-1", "team"),
+        database: null,
+      });
+    },
+    listProjectDatabases: (projectId: string, query: unknown) => {
+      calls.push(["listProjectDatabases", { projectId, query }]);
+      return Effect.succeed([]);
+    },
+    createDatabase: (input: unknown) => {
+      calls.push(["createDatabase", input]);
+      return Effect.succeed({
+        id: "database-1",
+        type: "database",
+        url: "https://api.prisma.test/v1/databases/database-1",
+        name: "main",
+        status: "ready",
+        createdAt,
+        isDefault: false,
+        defaultConnectionId: "connection-1",
+        connections: [
+          {
+            id: "connection-1",
+            type: "connection",
+            url: "https://api.prisma.test/v1/connections/connection-1",
+            name: "default",
+            createdAt,
+            kind: "postgres",
+            endpoints: {
+              direct: {
+                host: "db.prisma.test",
+                port: 5432,
+                connectionString: "postgres://direct",
+              },
+              pooled: {
+                host: "pool.prisma.test",
+                port: 5432,
+                connectionString: "postgres://pooled",
+              },
+            },
+            database: resourceRef("databases", "database-1", "main"),
+          },
+        ],
+        project: resourceRef("projects", "project-1", "app"),
+        region: { id: "us-east-1", name: "US East" },
+        source: { type: "empty" },
+        branchId: null,
+      });
+    },
+    listDatabaseConnections: (databaseId: string, query: unknown) => {
+      calls.push(["listDatabaseConnections", { databaseId, query }]);
+      return Effect.succeed([]);
+    },
+    createConnection: (input: unknown) => {
+      calls.push(["createConnection", input]);
+      return Effect.succeed({
+        id: "connection-2",
+        type: "connection",
+        url: "https://api.prisma.test/v1/connections/connection-2",
+        name: "api",
+        createdAt,
+        kind: "postgres",
+        endpoints: {
+          direct: {
+            host: "db.prisma.test",
+            port: 5432,
+            connectionString: "postgres://api-direct",
+          },
+        },
+        database: resourceRef("databases", "database-1", "main"),
+      });
+    },
+    listBranches: (projectId: string, query: unknown) => {
+      calls.push(["listBranches", { projectId, query }]);
+      return Effect.succeed([]);
+    },
+    createBranch: (projectId: string, input: unknown) => {
+      calls.push(["createBranch", { projectId, input }]);
+      return Effect.succeed({
+        id: "branch-1",
+        type: "branch",
+        url: "https://api.prisma.test/v1/branches/branch-1",
+        gitName: "main",
+        isDefault: true,
+        createdAt,
+        updatedAt,
+        project: resourceRef("projects", "project-1", "app"),
+      });
+    },
+    listProjectComputeServices: (projectId: string, query: unknown) => {
+      calls.push(["listProjectComputeServices", { projectId, query }]);
+      return Effect.succeed([]);
+    },
+    createProjectComputeService: (projectId: string, input: unknown) => {
+      calls.push(["createProjectComputeService", { projectId, input }]);
+      return Effect.succeed({
+        id: "service-1",
+        type: "compute-service",
+        url: "https://api.prisma.test/v1/compute-services/service-1",
+        name: "api",
+        region: { id: "us-east-1", name: "US East" },
+        projectId: "project-1",
+        branchId: null,
+        latestVersionId: null,
+        serviceEndpointDomain: "service-1.prisma.build",
+        createdAt,
+      });
+    },
+    createServiceComputeVersion: (computeServiceId: string, input: unknown) => {
+      calls.push(["createServiceComputeVersion", { computeServiceId, input }]);
+      return Effect.succeed({
+        id: "version-1",
+        type: "compute-version",
+        url: "https://api.prisma.test/v1/versions/version-1",
+        foundryVersionId: "foundry-1",
+        uploadUrl: null,
+      });
+    },
+    getComputeVersion: (id: string) => {
+      calls.push(["getComputeVersion", id]);
+      return Effect.succeed({
+        id,
+        type: "compute-version",
+        url: `https://api.prisma.test/v1/versions/${id}`,
+        foundryVersionId: "foundry-1",
+        status: "new",
+        previewDomain: null,
+        createdAt,
+      });
+    },
+    listEnvironmentVariables: (query: unknown) => {
+      calls.push(["listEnvironmentVariables", query]);
+      return Effect.succeed([]);
+    },
+    createEnvironmentVariable: (input: unknown) => {
+      calls.push(["createEnvironmentVariable", input]);
+      return Effect.succeed({
+        id: "env-1",
+        type: "environment-variable",
+        url: "https://api.prisma.test/v1/environment-variables/env-1",
+        projectId: "project-1",
+        branchId: null,
+        class: "production",
+        key: "TOKEN",
+        valueKid: "kid-1",
+        isManagedBySystem: false,
+        createdAt,
+        updatedAt,
+      });
+    },
+    listSourceRepositories: (query: unknown) => {
+      calls.push(["listSourceRepositories", query]);
+      return Effect.succeed([]);
+    },
+    createSourceRepository: (input: unknown) => {
+      calls.push(["createSourceRepository", input]);
+      return Effect.succeed({
+        id: "repo-1",
+        type: "source-repository",
+        url: "https://api.prisma.test/v1/source-repositories/repo-1",
+        repoId: 123,
+        provider: "github",
+        repoFullName: "acme/api",
+        defaultBranch: "main",
+        isPrivate: true,
+        status: "active",
+        projectId: "project-1",
+        installationId: "installation-1",
+        createdAt,
+        updatedAt,
+      });
+    },
+  } as unknown as PrismaManagementClient;
+  return { client, calls };
+};
+
+const providerLayer = (client: PrismaManagementClient) =>
+  Layer.mergeAll(
+    ProjectProvider(),
+    DatabaseProvider(),
+    ConnectionProvider(),
+    BranchProvider(),
+    ComputeServiceProvider(),
+    ComputeVersionProvider(),
+    EnvironmentVariableProvider(),
+    SourceRepositoryProvider(),
+  ).pipe(Layer.provide(Layer.succeed(PrismaClient, client)));
+
+const reconcileInput = <Props, Attrs>(
+  id: string,
+  news: Props,
+  output?: Attrs,
+  olds?: Props,
+) => ({
+  id,
+  instanceId: "00000000000000000000000000000000",
+  news,
+  olds,
+  output,
+  session: undefined as never,
+  bindings: [],
+});
+
+const deleteInput = (id: string, output: unknown) =>
+  ({
+    id,
+    instanceId: "00000000000000000000000000000000",
+    olds: {} as never,
+    output,
+    session: undefined as never,
+    bindings: [],
+  }) as never;
+
+const readInput = <Props, Attrs>(id: string, olds: Props, output?: Attrs) =>
+  ({
+    id,
+    instanceId: "00000000000000000000000000000000",
+    olds,
+    output,
+  }) as never;
+
+const diffInput = <Props, Attrs>(olds: Props, news: Props, output?: Attrs) =>
+  ({
+    id: "Resource",
+    instanceId: "00000000000000000000000000000000",
+    olds,
+    news,
+    oldBindings: [],
+    newBindings: [],
+    output,
+  }) as never;
+
+describe("Prisma resource providers", () => {
+  it.effect("rejects conflicting ComputeService branch inputs", () => {
+    const { client } = makeClient();
+
+    return Effect.gen(function* () {
+      const serviceProvider = yield* PrismaComputeService.Provider;
+      const error = yield* serviceProvider
+        .reconcile(
+          reconcileInput("ComputeService", {
+            project: "project-1",
+            displayName: "api",
+            branchId: "branch-1",
+            branchGitName: "main",
+          }),
+        )
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "branchId and branchGitName are mutually exclusive",
+      );
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
+  it.effect("rejects conflicting Database branch inputs", () => {
+    const { client } = makeClient();
+
+    return Effect.gen(function* () {
+      const databaseProvider = yield* PrismaDatabase.Provider;
+      const error = yield* databaseProvider
+        .reconcile(
+          reconcileInput("Database", {
+            project: "project-1",
+            name: "main",
+            branchId: "branch-1",
+            branchGitName: "main",
+          }),
+        )
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "branchId and branchGitName are mutually exclusive",
+      );
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
+  it.effect(
+    "classifies Prisma resource diffs as updates or replacements",
+    () => {
+      const { client } = makeClient();
+
+      return Effect.gen(function* () {
+        const projectProvider = yield* PrismaProject.Provider;
+        const databaseProvider = yield* PrismaDatabase.Provider;
+        const connectionProvider = yield* PrismaConnection.Provider;
+        const branchProvider = yield* PrismaBranch.Provider;
+        const serviceProvider = yield* PrismaComputeService.Provider;
+        const versionProvider = yield* PrismaComputeVersion.Provider;
+        const envProvider = yield* PrismaEnvironmentVariable.Provider;
+        const repoProvider = yield* PrismaSourceRepository.Provider;
+
+        expect(
+          yield* projectProvider.diff!(
+            diffInput(
+              { name: "app", region: "us-east-1", createDatabase: false },
+              { name: "renamed", region: "us-east-1", createDatabase: false },
+            ),
+          ),
+        ).toEqual({ action: "update" });
+        expect(
+          yield* projectProvider.diff!(
+            diffInput(
+              { name: "app", region: "us-east-1", createDatabase: false },
+              { name: "app", region: "us-west-2", createDatabase: false },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
+
+        expect(
+          yield* databaseProvider.diff!(
+            diffInput(
+              { project: "project-1", name: "main", region: "us-east-1" },
+              { project: "project-1", name: "primary", region: "us-east-1" },
+            ),
+          ),
+        ).toEqual({ action: "update" });
+        expect(
+          yield* databaseProvider.diff!(
+            diffInput(
+              {
+                project: "project-1",
+                name: "main",
+                region: "us-east-1",
+                isDefault: false,
+              },
+              {
+                project: "project-1",
+                name: "main",
+                region: "us-east-1",
+                isDefault: true,
+              },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
+
+        expect(
+          yield* connectionProvider.diff!(
+            diffInput(
+              { database: "database-1", name: "api", rotate: false },
+              { database: "database-1", name: "api", rotate: true },
+            ),
+          ),
+        ).toEqual({ action: "update" });
+        expect(
+          yield* connectionProvider.diff!(
+            diffInput(
+              { database: "database-1", name: "api" },
+              { database: "database-1", name: "worker" },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
+
+        expect(
+          yield* branchProvider.diff!(
+            diffInput(
+              { project: "project-1", gitName: "main", isDefault: false },
+              { project: "project-1", gitName: "main", isDefault: true },
+            ),
+          ),
+        ).toEqual({ action: "update" });
+        expect(
+          yield* branchProvider.diff!(
+            diffInput(
+              { project: "project-1", gitName: "main" },
+              { project: "project-1", gitName: "release" },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
+
+        expect(
+          yield* serviceProvider.diff!(
+            diffInput(
+              {
+                project: "project-1",
+                displayName: "api",
+                regionId: "us-east-1",
+              },
+              {
+                project: "project-1",
+                displayName: "web",
+                regionId: "us-east-1",
+              },
+            ),
+          ),
+        ).toEqual({ action: "update" });
+        expect(
+          yield* serviceProvider.diff!(
+            diffInput(
+              {
+                project: "project-1",
+                displayName: "api",
+                regionId: "us-east-1",
+              },
+              {
+                project: "project-1",
+                displayName: "api",
+                regionId: "us-west-2",
+              },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
+
+        expect(
+          yield* versionProvider.diff!(
+            diffInput(
+              { computeService: "service-1", start: false },
+              { computeService: "service-1", start: true },
+            ),
+          ),
+        ).toEqual({ action: "update" });
+        expect(
+          yield* versionProvider.diff!(
+            diffInput(
+              { computeService: "service-1", portMapping: { http: 3000 } },
+              { computeService: "service-1", portMapping: { http: 8080 } },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
+
+        expect(
+          yield* envProvider.diff!(
+            diffInput(
+              {
+                project: "project-1",
+                class: "production" as const,
+                key: "TOKEN",
+                value: Redacted.make("old"),
+              },
+              {
+                project: "project-1",
+                class: "production" as const,
+                key: "TOKEN",
+                value: Redacted.make("new"),
+              },
+            ),
+          ),
+        ).toEqual({ action: "update" });
+        expect(
+          yield* envProvider.diff!(
+            diffInput(
+              {
+                project: "project-1",
+                class: "production" as const,
+                key: "TOKEN",
+                value: "secret",
+              },
+              {
+                project: "project-1",
+                class: "preview" as const,
+                key: "TOKEN",
+                value: "secret",
+              },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
+
+        expect(
+          yield* repoProvider.diff!(
+            diffInput(
+              { project: "project-1", providerRepositoryId: 123 },
+              { project: "project-1", providerRepositoryId: 456 },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(Stack, {
+          name: "prisma-provider-diff-test",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Effect.provideService(Stage, "test"),
+      );
+    },
+  );
+
+  it.effect("reads existing Prisma resources for adoption and refresh", () => {
+    const calls: Call[] = [];
+    const database = {
+      id: "database-1",
+      type: "database" as const,
+      url: "https://api.prisma.test/v1/databases/database-1",
+      name: "main",
+      status: "ready" as const,
+      createdAt,
+      isDefault: true,
+      defaultConnectionId: "connection-1",
+      connections: [],
+      project: resourceRef("projects", "project-1", "app"),
+      region: { id: "us-east-1", name: "US East" },
+      source: { type: "empty" },
+      branchId: null,
+    };
+    const client = {
+      listProjects: () =>
+        Effect.sync(() => {
+          calls.push(["listProjects"]);
+          return [
+            {
+              id: "project-1",
+              type: "project" as const,
+              url: "https://api.prisma.test/v1/projects/project-1",
+              name: "app",
+              createdAt,
+              defaultRegion: "us-east-1",
+              workspace: resourceRef("workspaces", "workspace-1", "team"),
+            },
+          ];
+        }),
+      listProjectDatabases: (projectId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listProjectDatabases", { projectId, query }]);
+          return [database];
+        }),
+      listDatabaseConnections: (databaseId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listDatabaseConnections", { databaseId, query }]);
+          return [
+            {
+              id: "connection-1",
+              type: "connection" as const,
+              url: "https://api.prisma.test/v1/connections/connection-1",
+              name: "api",
+              createdAt,
+              kind: "postgres" as const,
+              endpoints: {
+                direct: {
+                  host: "db.prisma.test",
+                  port: 5432,
+                },
+              },
+              database: resourceRef("databases", "database-1", "main"),
+            },
+          ];
+        }),
+      listBranches: (projectId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listBranches", { projectId, query }]);
+          return [
+            {
+              id: "branch-1",
+              type: "branch" as const,
+              url: "https://api.prisma.test/v1/branches/branch-1",
+              gitName: "main",
+              isDefault: true,
+              createdAt,
+              updatedAt,
+              project: resourceRef("projects", "project-1", "app"),
+            },
+          ];
+        }),
+      listProjectComputeServices: (projectId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listProjectComputeServices", { projectId, query }]);
+          return [
+            {
+              id: "service-1",
+              type: "compute-service" as const,
+              url: "https://api.prisma.test/v1/compute-services/service-1",
+              name: "api",
+              region: { id: "us-east-1", name: "US East" },
+              projectId,
+              branchId: "branch-1",
+              latestVersionId: "version-1",
+              serviceEndpointDomain: "api.prisma.build",
+              createdAt,
+            },
+          ];
+        }),
+      listServiceComputeVersions: (computeServiceId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push([
+            "listServiceComputeVersions",
+            { computeServiceId, query },
+          ]);
+          return [
+            {
+              id: "version-1",
+              type: "compute-version" as const,
+              url: "https://api.prisma.test/v1/versions/version-1",
+              foundryVersionId: "foundry-1",
+              createdAt,
+            },
+          ];
+        }),
+      getComputeVersion: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getComputeVersion", id]);
+          return {
+            id,
+            type: "compute-version" as const,
+            url: `https://api.prisma.test/v1/versions/${id}`,
+            foundryVersionId: "foundry-1",
+            status: "running",
+            previewDomain: "version-1.preview.prisma.build",
+            createdAt,
+          };
+        }),
+      listEnvironmentVariables: (query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listEnvironmentVariables", query]);
+          return [
+            {
+              id: "env-1",
+              type: "environment-variable" as const,
+              url: "https://api.prisma.test/v1/environment-variables/env-1",
+              projectId: "project-1",
+              branchId: null,
+              class: "production" as const,
+              key: "TOKEN",
+              valueKid: "kid-1",
+              isManagedBySystem: false,
+              createdAt,
+              updatedAt,
+            },
+          ];
+        }),
+      listSourceRepositories: (query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listSourceRepositories", query]);
+          return [
+            {
+              id: "repo-1",
+              type: "source-repository" as const,
+              url: "https://api.prisma.test/v1/source-repositories/repo-1",
+              repoId: 123,
+              provider: "github" as const,
+              repoFullName: "acme/api",
+              defaultBranch: "main",
+              isPrivate: true,
+              status: "active" as const,
+              projectId: "project-1",
+              installationId: "installation-1",
+              createdAt,
+              updatedAt,
+            },
+          ];
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const projectProvider = yield* PrismaProject.Provider;
+      const databaseProvider = yield* PrismaDatabase.Provider;
+      const connectionProvider = yield* PrismaConnection.Provider;
+      const branchProvider = yield* PrismaBranch.Provider;
+      const serviceProvider = yield* PrismaComputeService.Provider;
+      const versionProvider = yield* PrismaComputeVersion.Provider;
+      const envProvider = yield* PrismaEnvironmentVariable.Provider;
+      const repoProvider = yield* PrismaSourceRepository.Provider;
+
+      const project = yield* projectProvider.read!(
+        readInput("Project", { name: "app" }),
+      );
+      const database = yield* databaseProvider.read!(
+        readInput("Database", { project: "project-1", name: "main" }),
+      );
+      const connection = yield* connectionProvider.read!(
+        readInput("Connection", { database: "database-1", name: "api" }),
+      );
+      const branch = yield* branchProvider.read!(
+        readInput("Branch", { project: "project-1", gitName: "main" }),
+      );
+      const service = yield* serviceProvider.read!(
+        readInput("ComputeService", {
+          project: "project-1",
+          displayName: "api",
+        }),
+      );
+      const version = yield* versionProvider.read!(
+        readInput(
+          "ComputeVersion",
+          { computeService: "service-1" },
+          {
+            computeVersionId: "version-1",
+            computeServiceId: "service-1",
+            foundryVersionId: "foundry-1",
+            status: "new",
+            previewDomain: null,
+            uploadUrl: null,
+            serviceEndpointDomain: undefined,
+            createdAt,
+          },
+        ),
+      );
+      const env = yield* envProvider.read!(
+        readInput("EnvironmentVariable", {
+          project: "project-1",
+          class: "production" as const,
+          key: "TOKEN",
+          value: Redacted.make("secret"),
+        }),
+      );
+      const repo = yield* repoProvider.read!(
+        readInput("SourceRepository", {
+          project: "project-1",
+          providerRepositoryId: 123,
+        }),
+      );
+
+      expect(project?.projectId).toBe("project-1");
+      expect(project?.databaseId).toBe("database-1");
+      expect(database?.databaseId).toBe("database-1");
+      expect(connection?.connectionId).toBe("connection-1");
+      expect(branch?.branchId).toBe("branch-1");
+      expect(service?.computeServiceId).toBe("service-1");
+      expect(version?.computeVersionId).toBe("version-1");
+      expect(version?.status).toBe("running");
+      expect(env?.environmentVariableId).toBe("env-1");
+      expect(env?.valueKid).toBe("kid-1");
+      expect(env?.value && Redacted.value(env.value)).toBe("secret");
+      expect(repo?.sourceRepositoryId).toBe("repo-1");
+      expect(calls.map(([operation]) => operation)).toEqual([
+        "listProjects",
+        "listProjectDatabases",
+        "listProjectDatabases",
+        "listDatabaseConnections",
+        "listBranches",
+        "listProjectComputeServices",
+        "listServiceComputeVersions",
+        "getComputeVersion",
+        "listEnvironmentVariables",
+        "listSourceRepositories",
+      ]);
+      expect(calls.map(([operation]) => operation)).not.toContain(
+        "createProject",
+      );
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(Stack, {
+        name: "prisma-provider-read-test",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "test"),
+    );
+  });
+
+  it.effect("treats Prisma 404 during delete as already gone", () => {
+    const calls: Call[] = [];
+    const notFound = (method: "GET" | "DELETE", path: string) =>
+      new PrismaApiError({
+        method,
+        path,
+        status: 404,
+        message: "not found",
+      });
+    const failNotFound = (
+      operation: string,
+      id: string,
+      method: "GET" | "DELETE",
+      path: string,
+    ) =>
+      Effect.gen(function* () {
+        calls.push([operation, id]);
+        return yield* Effect.fail(notFound(method, path));
+      });
+
+    const client = {
+      listProjectComputeServices: (projectId: string) =>
+        Effect.sync(() => {
+          calls.push(["listProjectComputeServices", projectId]);
+          return [];
+        }),
+      deleteProject: (id: string) =>
+        failNotFound("deleteProject", id, "DELETE", `/v1/projects/${id}`),
+      deleteDatabase: (id: string) =>
+        failNotFound("deleteDatabase", id, "DELETE", `/v1/databases/${id}`),
+      deleteConnection: (id: string) =>
+        failNotFound("deleteConnection", id, "DELETE", `/v1/connections/${id}`),
+      deleteBranch: (id: string) =>
+        failNotFound("deleteBranch", id, "DELETE", `/v1/branches/${id}`),
+      deleteEnvironmentVariable: (id: string) =>
+        failNotFound(
+          "deleteEnvironmentVariable",
+          id,
+          "DELETE",
+          `/v1/environment-variables/${id}`,
+        ),
+      deleteSourceRepository: (id: string) =>
+        failNotFound(
+          "deleteSourceRepository",
+          id,
+          "DELETE",
+          `/v1/source-repositories/${id}`,
+        ),
+      listServiceComputeVersions: (computeServiceId: string) =>
+        failNotFound(
+          "listServiceComputeVersions",
+          computeServiceId,
+          "GET",
+          `/v1/compute-services/${computeServiceId}/versions`,
+        ),
+      getComputeServiceVersion: (id: string) =>
+        failNotFound(
+          "getComputeServiceVersion",
+          id,
+          "GET",
+          `/v1/compute-services/versions/${id}`,
+        ),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const projectProvider = yield* PrismaProject.Provider;
+      const databaseProvider = yield* PrismaDatabase.Provider;
+      const connectionProvider = yield* PrismaConnection.Provider;
+      const branchProvider = yield* PrismaBranch.Provider;
+      const serviceProvider = yield* PrismaComputeService.Provider;
+      const versionProvider = yield* PrismaComputeVersion.Provider;
+      const envProvider = yield* PrismaEnvironmentVariable.Provider;
+      const repoProvider = yield* PrismaSourceRepository.Provider;
+
+      yield* projectProvider.delete!(
+        deleteInput("Project", { projectId: "project-1" }),
+      );
+      yield* databaseProvider.delete!(
+        deleteInput("Database", { databaseId: "database-1" }),
+      );
+      yield* connectionProvider.delete!(
+        deleteInput("Connection", { connectionId: "connection-1" }),
+      );
+      yield* branchProvider.delete!(
+        deleteInput("Branch", { branchId: "branch-1" }),
+      );
+      yield* envProvider.delete!(
+        deleteInput("EnvironmentVariable", {
+          environmentVariableId: "env-1",
+        }),
+      );
+      yield* repoProvider.delete!(
+        deleteInput("SourceRepository", { sourceRepositoryId: "repo-1" }),
+      );
+      yield* serviceProvider.delete!(
+        deleteInput("ComputeService", { computeServiceId: "service-1" }),
+      );
+      yield* versionProvider.delete!(
+        deleteInput("ComputeVersion", { computeVersionId: "version-1" }),
+      );
+
+      expect(calls).toEqual([
+        ["listProjectComputeServices", "project-1"],
+        ["deleteProject", "project-1"],
+        ["deleteDatabase", "database-1"],
+        ["deleteConnection", "connection-1"],
+        ["deleteBranch", "branch-1"],
+        ["deleteEnvironmentVariable", "env-1"],
+        ["deleteSourceRepository", "repo-1"],
+        ["listServiceComputeVersions", "service-1"],
+        ["getComputeServiceVersion", "version-1"],
+      ]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
+  it.effect(
+    "reconciles each greenfield Prisma resource through the client",
+    () => {
+      const { client, calls } = makeClient();
+
+      return Effect.gen(function* () {
+        const projectProvider = yield* PrismaProject.Provider;
+        const databaseProvider = yield* PrismaDatabase.Provider;
+        const connectionProvider = yield* PrismaConnection.Provider;
+        const branchProvider = yield* PrismaBranch.Provider;
+        const serviceProvider = yield* PrismaComputeService.Provider;
+        const versionProvider = yield* PrismaComputeVersion.Provider;
+        const envProvider = yield* PrismaEnvironmentVariable.Provider;
+        const repoProvider = yield* PrismaSourceRepository.Provider;
+
+        const project = yield* projectProvider.reconcile(
+          reconcileInput("Project", {
+            name: "app",
+            createDatabase: false,
+            region: "us-east-1",
+          }),
+        );
+        const database = yield* databaseProvider.reconcile(
+          reconcileInput("Database", {
+            project: project.projectId,
+            name: "main",
+            region: "us-east-1",
+          }),
+        );
+        const connection = yield* connectionProvider.reconcile(
+          reconcileInput("Connection", {
+            database: database.databaseId,
+            name: "api",
+          }),
+        );
+        const branch = yield* branchProvider.reconcile(
+          reconcileInput("Branch", {
+            project: project.projectId,
+            gitName: "main",
+            isDefault: true,
+          }),
+        );
+        const service = yield* serviceProvider.reconcile(
+          reconcileInput("ComputeService", {
+            project: project.projectId,
+            displayName: "api",
+            regionId: "us-east-1",
+          }),
+        );
+        const version = yield* versionProvider.reconcile(
+          reconcileInput("ComputeVersion", {
+            computeService: service.computeServiceId,
+            portMapping: { http: 3000 },
+          }),
+        );
+        const env = yield* envProvider.reconcile(
+          reconcileInput("EnvironmentVariable", {
+            project: project.projectId,
+            class: "production" as const,
+            key: "TOKEN",
+            value: Redacted.make("secret"),
+          }),
+        );
+        const repo = yield* repoProvider.reconcile(
+          reconcileInput("SourceRepository", {
+            project: project.projectId,
+            providerRepositoryId: 123,
+          }),
+        );
+
+        expect(project.projectId).toBe("project-1");
+        expect(database.databaseId).toBe("database-1");
+        expect(Redacted.value(database.directConnectionString!)).toBe(
+          "postgres://direct",
+        );
+        expect(connection.connectionId).toBe("connection-2");
+        expect(branch.branchId).toBe("branch-1");
+        expect(service.computeServiceId).toBe("service-1");
+        expect(version.computeVersionId).toBe("version-1");
+        expect(env.environmentVariableId).toBe("env-1");
+        expect(Redacted.value(env.value)).toBe("secret");
+        expect(repo.sourceRepositoryId).toBe("repo-1");
+
+        expect(calls).toEqual([
+          ["listProjects"],
+          [
+            "createProject",
+            { name: "app", createDatabase: false, region: "us-east-1" },
+          ],
+          [
+            "listProjectDatabases",
+            { projectId: "project-1", query: { limit: 100 } },
+          ],
+          [
+            "createDatabase",
+            {
+              projectId: "project-1",
+              name: "main",
+              region: "us-east-1",
+              isDefault: false,
+              source: undefined,
+              branchId: undefined,
+              branchGitName: undefined,
+            },
+          ],
+          [
+            "listDatabaseConnections",
+            { databaseId: "database-1", query: { limit: 100 } },
+          ],
+          ["createConnection", { databaseId: "database-1", name: "api" }],
+          [
+            "listBranches",
+            { projectId: "project-1", query: { gitName: "main" } },
+          ],
+          [
+            "createBranch",
+            {
+              projectId: "project-1",
+              input: { gitName: "main", isDefault: true },
+            },
+          ],
+          [
+            "listProjectComputeServices",
+            { projectId: "project-1", query: { limit: 100 } },
+          ],
+          [
+            "createProjectComputeService",
+            {
+              projectId: "project-1",
+              input: {
+                displayName: "api",
+                regionId: "us-east-1",
+                branchId: undefined,
+                branchGitName: undefined,
+              },
+            },
+          ],
+          [
+            "createServiceComputeVersion",
+            {
+              computeServiceId: "service-1",
+              input: {
+                portMapping: { http: 3000 },
+                skipCodeUpload: undefined,
+              },
+            },
+          ],
+          ["getComputeVersion", "version-1"],
+          [
+            "listEnvironmentVariables",
+            {
+              projectId: "project-1",
+              class: "production",
+              key: "TOKEN",
+              limit: 2,
+            },
+          ],
+          [
+            "createEnvironmentVariable",
+            {
+              projectId: "project-1",
+              class: "production",
+              key: "TOKEN",
+              value: "secret",
+            },
+          ],
+          ["listSourceRepositories", { projectId: "project-1", limit: 100 }],
+          [
+            "createSourceRepository",
+            {
+              projectId: "project-1",
+              provider: "github",
+              providerRepositoryId: 123,
+            },
+          ],
+        ]);
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(Stack, {
+          name: "prisma-provider-test",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Effect.provideService(Stage, "test"),
+      );
+    },
+  );
+
+  it.effect(
+    "starts a direct compute version only after observing status",
+    () => {
+      const calls: Call[] = [];
+      let status = "new";
+      const client = {
+        createServiceComputeVersion: (
+          computeServiceId: string,
+          input: unknown,
+        ) =>
+          Effect.sync(() => {
+            calls.push([
+              "createServiceComputeVersion",
+              { computeServiceId, input },
+            ]);
+            return {
+              id: "version-1",
+              type: "compute-version" as const,
+              url: "https://api.prisma.test/v1/versions/version-1",
+              foundryVersionId: "foundry-1",
+              uploadUrl: null,
+            };
+          }),
+        getComputeVersion: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getComputeVersion", id]);
+            return {
+              id,
+              type: "compute-version" as const,
+              url: `https://api.prisma.test/v1/versions/${id}`,
+              foundryVersionId: "foundry-1",
+              status,
+              previewDomain: null,
+              createdAt,
+            };
+          }),
+        startComputeVersion: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["startComputeVersion", id]);
+            status = "running";
+            return { previewDomain: "version-1.preview.prisma.build" };
+          }),
+        getComputeServiceVersion: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getComputeServiceVersion", id]);
+            return {
+              id,
+              type: "compute-version" as const,
+              url: `https://api.prisma.test/v1/versions/${id}`,
+              foundryVersionId: "foundry-1",
+              status,
+              previewDomain: "version-1.preview.prisma.build",
+              createdAt,
+            };
+          }),
+        promoteComputeService: (computeServiceId: string, versionId: string) =>
+          Effect.sync(() => {
+            calls.push([
+              "promoteComputeService",
+              { computeServiceId, versionId },
+            ]);
+            return { serviceEndpointDomain: "api.prisma.build" };
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaComputeVersion.Provider;
+        const output = yield* provider.reconcile(
+          reconcileInput("ComputeVersion", {
+            computeService: "service-1",
+            start: true,
+            promote: true,
+          }),
+        );
+
+        expect(output.status).toBe("running");
+        expect(output.previewDomain).toBe("version-1.preview.prisma.build");
+        expect(output.serviceEndpointDomain).toBe("api.prisma.build");
+        expect(calls).toEqual([
+          [
+            "createServiceComputeVersion",
+            {
+              computeServiceId: "service-1",
+              input: {
+                portMapping: undefined,
+                skipCodeUpload: undefined,
+              },
+            },
+          ],
+          ["getComputeVersion", "version-1"],
+          ["startComputeVersion", "version-1"],
+          ["getComputeServiceVersion", "version-1"],
+          [
+            "promoteComputeService",
+            { computeServiceId: "service-1", versionId: "version-1" },
+          ],
+        ]);
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(Stack, {
+          name: "prisma-compute-version-test",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Effect.provideService(Stage, "test"),
+      );
+    },
+  );
+
+  it.effect("updates mutable Prisma resources from observed state", () => {
+    const calls: Call[] = [];
+    const client = {
+      getDatabase: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getDatabase", id]);
+          return {
+            id,
+            type: "database" as const,
+            url: `https://api.prisma.test/v1/databases/${id}`,
+            name: "main",
+            status: "ready" as const,
+            createdAt,
+            isDefault: false,
+            defaultConnectionId: "connection-1",
+            connections: [],
+            project: resourceRef("projects", "project-1", "app"),
+            region: { id: "us-east-1", name: "US East" },
+            source: { type: "empty" },
+            branchId: null,
+          };
+        }),
+      updateDatabase: (id: string, input: unknown) =>
+        Effect.sync(() => {
+          calls.push(["updateDatabase", { id, input }]);
+          return {
+            id,
+            type: "database" as const,
+            url: `https://api.prisma.test/v1/databases/${id}`,
+            name: "primary",
+            status: "ready" as const,
+            createdAt,
+            isDefault: false,
+            defaultConnectionId: "connection-1",
+            connections: [],
+            project: resourceRef("projects", "project-1", "app"),
+            region: { id: "us-east-1", name: "US East" },
+            source: { type: "empty" },
+            branchId: "branch-1",
+          };
+        }),
+      getConnection: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getConnection", id]);
+          return {
+            id,
+            type: "connection" as const,
+            url: `https://api.prisma.test/v1/connections/${id}`,
+            name: "api",
+            createdAt,
+            kind: "postgres" as const,
+            endpoints: {
+              direct: {
+                host: "db.prisma.test",
+                port: 5432,
+                connectionString: "postgres://old-direct",
+              },
+            },
+            database: resourceRef("databases", "database-1", "main"),
+          };
+        }),
+      rotateConnection: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["rotateConnection", id]);
+          return {
+            id,
+            type: "connection" as const,
+            url: `https://api.prisma.test/v1/connections/${id}`,
+            name: "api",
+            createdAt,
+            kind: "postgres" as const,
+            endpoints: {
+              direct: {
+                host: "db.prisma.test",
+                port: 5432,
+                connectionString: "postgres://new-direct",
+              },
+            },
+            directConnection: {
+              host: "db.prisma.test",
+              user: "app",
+              pass: "new-password",
+            },
+            database: resourceRef("databases", "database-1", "main"),
+          };
+        }),
+      getBranch: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getBranch", id]);
+          return {
+            id,
+            type: "branch" as const,
+            url: `https://api.prisma.test/v1/branches/${id}`,
+            gitName: "main",
+            isDefault: false,
+            createdAt,
+            updatedAt,
+            project: resourceRef("projects", "project-1", "app"),
+          };
+        }),
+      updateBranch: (id: string, input: unknown) =>
+        Effect.sync(() => {
+          calls.push(["updateBranch", { id, input }]);
+          return {
+            id,
+            type: "branch" as const,
+            url: `https://api.prisma.test/v1/branches/${id}`,
+            gitName: "main",
+            isDefault: true,
+            createdAt,
+            updatedAt: "2026-01-01T00:00:02Z",
+            project: resourceRef("projects", "project-1", "app"),
+          };
+        }),
+      getComputeService: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getComputeService", id]);
+          return {
+            id,
+            type: "compute-service" as const,
+            url: `https://api.prisma.test/v1/compute-services/${id}`,
+            name: "api",
+            region: { id: "us-east-1", name: "US East" },
+            projectId: "project-1",
+            branchId: null,
+            latestVersionId: null,
+            serviceEndpointDomain: "service-1.prisma.build",
+            createdAt,
+          };
+        }),
+      updateComputeService: (id: string, input: unknown) =>
+        Effect.sync(() => {
+          calls.push(["updateComputeService", { id, input }]);
+          return {
+            id,
+            type: "compute-service" as const,
+            url: `https://api.prisma.test/v1/compute-services/${id}`,
+            name: "web",
+            region: { id: "us-east-1", name: "US East" },
+            projectId: "project-1",
+            branchId: "branch-1",
+            latestVersionId: null,
+            serviceEndpointDomain: "service-1.prisma.build",
+            createdAt,
+          };
+        }),
+      getEnvironmentVariable: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getEnvironmentVariable", id]);
+          return {
+            id,
+            type: "environment-variable" as const,
+            url: `https://api.prisma.test/v1/environment-variables/${id}`,
+            projectId: "project-1",
+            branchId: null,
+            class: "production" as const,
+            key: "TOKEN",
+            valueKid: "kid-old",
+            isManagedBySystem: false,
+            createdAt,
+            updatedAt,
+          };
+        }),
+      updateEnvironmentVariable: (id: string, input: unknown) =>
+        Effect.sync(() => {
+          calls.push(["updateEnvironmentVariable", { id, input }]);
+          return {
+            id,
+            type: "environment-variable" as const,
+            url: `https://api.prisma.test/v1/environment-variables/${id}`,
+            projectId: "project-1",
+            branchId: null,
+            class: "production" as const,
+            key: "TOKEN",
+            valueKid: "kid-new",
+            isManagedBySystem: false,
+            createdAt,
+            updatedAt: "2026-01-01T00:00:02Z",
+          };
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const databaseProvider = yield* PrismaDatabase.Provider;
+      const connectionProvider = yield* PrismaConnection.Provider;
+      const branchProvider = yield* PrismaBranch.Provider;
+      const serviceProvider = yield* PrismaComputeService.Provider;
+      const envProvider = yield* PrismaEnvironmentVariable.Provider;
+
+      const database = yield* databaseProvider.reconcile(
+        reconcileInput(
+          "Database",
+          {
+            project: "project-1",
+            name: "primary",
+            region: "us-east-1",
+            branchId: "branch-1",
+          },
+          {
+            databaseId: "database-1",
+            databaseName: "main",
+            projectId: "project-1",
+            status: "ready",
+            region: "us-east-1",
+            isDefault: false,
+            branchId: null,
+            defaultConnectionId: "connection-1",
+            createdAt,
+            connectionString: undefined,
+            directConnectionString: undefined,
+            pooledConnectionString: undefined,
+            accelerateConnectionString: undefined,
+            host: undefined,
+            user: undefined,
+            password: undefined,
+          },
+        ),
+      );
+      const connection = yield* connectionProvider.reconcile(
+        reconcileInput(
+          "Connection",
+          {
+            database: "database-1",
+            name: "api",
+            rotate: true,
+          },
+          {
+            connectionId: "connection-1",
+            connectionName: "api",
+            databaseId: "database-1",
+            kind: "postgres" as const,
+            createdAt,
+            connectionString: undefined,
+            directConnectionString: Redacted.make("postgres://old-direct"),
+            pooledConnectionString: undefined,
+            accelerateConnectionString: undefined,
+            host: "db.prisma.test",
+            user: undefined,
+            password: undefined,
+          },
+          {
+            database: "database-1",
+            name: "api",
+            rotate: false,
+          },
+        ),
+      );
+      const branch = yield* branchProvider.reconcile(
+        reconcileInput(
+          "Branch",
+          {
+            project: "project-1",
+            gitName: "main",
+            isDefault: true,
+          },
+          {
+            branchId: "branch-1",
+            gitName: "main",
+            projectId: "project-1",
+            isDefault: false,
+            createdAt,
+            updatedAt,
+          },
+        ),
+      );
+      const service = yield* serviceProvider.reconcile(
+        reconcileInput(
+          "ComputeService",
+          {
+            project: "project-1",
+            displayName: "web",
+            regionId: "us-east-1",
+            branchId: "branch-1",
+          },
+          {
+            computeServiceId: "service-1",
+            name: "api",
+            projectId: "project-1",
+            regionId: "us-east-1",
+            branchId: null,
+            latestVersionId: null,
+            serviceEndpointDomain: "service-1.prisma.build",
+            createdAt,
+          },
+        ),
+      );
+      const env = yield* envProvider.reconcile(
+        reconcileInput(
+          "EnvironmentVariable",
+          {
+            project: "project-1",
+            class: "production" as const,
+            key: "TOKEN",
+            value: Redacted.make("new-secret"),
+          },
+          {
+            environmentVariableId: "env-1",
+            projectId: "project-1",
+            branchId: null,
+            class: "production" as const,
+            key: "TOKEN",
+            value: Redacted.make("old-secret"),
+            valueKid: "kid-old",
+            isManagedBySystem: false,
+            createdAt,
+            updatedAt,
+          },
+        ),
+      );
+
+      expect(database.databaseName).toBe("primary");
+      expect(database.branchId).toBe("branch-1");
+      expect(Redacted.value(connection.directConnectionString!)).toBe(
+        "postgres://new-direct",
+      );
+      expect(connection.user).toBe("app");
+      expect(Redacted.value(connection.password!)).toBe("new-password");
+      expect(branch.isDefault).toBe(true);
+      expect(service.name).toBe("web");
+      expect(service.branchId).toBe("branch-1");
+      expect(env.valueKid).toBe("kid-new");
+      expect(Redacted.value(env.value)).toBe("new-secret");
+      expect(calls).toEqual([
+        ["getDatabase", "database-1"],
+        [
+          "updateDatabase",
+          {
+            id: "database-1",
+            input: {
+              name: "primary",
+              branchId: "branch-1",
+              branchGitName: undefined,
+            },
+          },
+        ],
+        ["getConnection", "connection-1"],
+        ["rotateConnection", "connection-1"],
+        ["getBranch", "branch-1"],
+        ["updateBranch", { id: "branch-1", input: { isDefault: true } }],
+        ["getComputeService", "service-1"],
+        [
+          "updateComputeService",
+          {
+            id: "service-1",
+            input: {
+              displayName: "web",
+              branchId: "branch-1",
+              branchGitName: undefined,
+            },
+          },
+        ],
+        ["getEnvironmentVariable", "env-1"],
+        [
+          "updateEnvironmentVariable",
+          { id: "env-1", input: { value: "new-secret" } },
+        ],
+      ]);
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(Stack, {
+        name: "prisma-provider-update-test",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "test"),
+    );
+  });
+
+  it.effect(
+    "skips branchGitName updates when observed branch ids already match",
+    () => {
+      const calls: Call[] = [];
+      const branch = {
+        id: "branch-main",
+        type: "branch" as const,
+        url: "https://api.prisma.test/v1/branches/branch-main",
+        gitName: "main",
+        isDefault: true,
+        createdAt,
+        updatedAt,
+        project: resourceRef("projects", "project-1", "app"),
+      };
+      const client = {
+        getDatabase: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getDatabase", id]);
+            return {
+              id,
+              type: "database" as const,
+              url: `https://api.prisma.test/v1/databases/${id}`,
+              name: "main",
+              status: "ready" as const,
+              createdAt,
+              isDefault: false,
+              defaultConnectionId: "connection-1",
+              connections: [],
+              project: resourceRef("projects", "project-1", "app"),
+              region: { id: "us-east-1", name: "US East" },
+              source: { type: "empty" },
+              branchId: "branch-main",
+            };
+          }),
+        getComputeService: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getComputeService", id]);
+            return {
+              id,
+              type: "compute-service" as const,
+              url: `https://api.prisma.test/v1/compute-services/${id}`,
+              name: "api",
+              region: { id: "us-east-1", name: "US East" },
+              projectId: "project-1",
+              branchId: "branch-main",
+              latestVersionId: null,
+              serviceEndpointDomain: "service-1.prisma.build",
+              createdAt,
+            };
+          }),
+        listBranches: (projectId: string, query: unknown) =>
+          Effect.sync(() => {
+            calls.push(["listBranches", { projectId, query }]);
+            return [branch];
+          }),
+        updateDatabase: (id: string, input: unknown) =>
+          Effect.sync(() => {
+            calls.push(["updateDatabase", { id, input }]);
+            throw new Error("updateDatabase should not be called");
+          }),
+        updateComputeService: (id: string, input: unknown) =>
+          Effect.sync(() => {
+            calls.push(["updateComputeService", { id, input }]);
+            throw new Error("updateComputeService should not be called");
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const databaseProvider = yield* PrismaDatabase.Provider;
+        const serviceProvider = yield* PrismaComputeService.Provider;
+
+        const database = yield* databaseProvider.reconcile(
+          reconcileInput(
+            "Database",
+            {
+              project: "project-1",
+              name: "main",
+              region: "us-east-1",
+              branchGitName: "main",
+            },
+            {
+              databaseId: "database-1",
+              databaseName: "main",
+              projectId: "project-1",
+              status: "ready",
+              region: "us-east-1",
+              isDefault: false,
+              branchId: "branch-main",
+              defaultConnectionId: "connection-1",
+              createdAt,
+              connectionString: undefined,
+              directConnectionString: undefined,
+              pooledConnectionString: undefined,
+              accelerateConnectionString: undefined,
+              host: undefined,
+              user: undefined,
+              password: undefined,
+            },
+          ),
+        );
+        const service = yield* serviceProvider.reconcile(
+          reconcileInput(
+            "ComputeService",
+            {
+              project: "project-1",
+              displayName: "api",
+              regionId: "us-east-1",
+              branchGitName: "main",
+            },
+            {
+              computeServiceId: "service-1",
+              name: "api",
+              projectId: "project-1",
+              regionId: "us-east-1",
+              branchId: "branch-main",
+              latestVersionId: null,
+              serviceEndpointDomain: "service-1.prisma.build",
+              createdAt,
+            },
+          ),
+        );
+
+        expect(database.branchId).toBe("branch-main");
+        expect(service.branchId).toBe("branch-main");
+        expect(calls).toEqual([
+          ["getDatabase", "database-1"],
+          [
+            "listBranches",
+            { projectId: "project-1", query: { gitName: "main", limit: 1 } },
+          ],
+          ["getComputeService", "service-1"],
+          [
+            "listBranches",
+            { projectId: "project-1", query: { gitName: "main", limit: 1 } },
+          ],
+        ]);
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(Stack, {
+          name: "prisma-branch-noop-test",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Effect.provideService(Stage, "test"),
+      );
+    },
+  );
+
+  it.effect("ensures a default database on an existing Prisma project", () => {
+    const calls: Call[] = [];
+    const client = {
+      listProjects: () =>
+        Effect.sync(() => {
+          calls.push(["listProjects"]);
+          return [
+            {
+              id: "project-1",
+              type: "project" as const,
+              url: "https://api.prisma.test/v1/projects/project-1",
+              name: "app",
+              createdAt,
+              defaultRegion: "us-east-1",
+              workspace: resourceRef("workspaces", "workspace-1", "team"),
+            },
+          ];
+        }),
+      listProjectDatabases: (projectId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listProjectDatabases", { projectId, query }]);
+          return [];
+        }),
+      createProjectDatabase: (projectId: string, input: unknown) =>
+        Effect.sync(() => {
+          calls.push(["createProjectDatabase", { projectId, input }]);
+          return {
+            id: "database-1",
+            type: "database" as const,
+            url: "https://api.prisma.test/v1/databases/database-1",
+            name: "main",
+            status: "ready" as const,
+            createdAt,
+            isDefault: true,
+            defaultConnectionId: "connection-1",
+            connections: [
+              {
+                id: "connection-1",
+                type: "connection" as const,
+                url: "https://api.prisma.test/v1/connections/connection-1",
+                name: "default",
+                createdAt,
+                kind: "postgres" as const,
+                endpoints: {
+                  direct: {
+                    host: "db.prisma.test",
+                    port: 5432,
+                    connectionString: "postgres://direct",
+                  },
+                },
+                database: resourceRef("databases", "database-1", "main"),
+              },
+            ],
+            project: resourceRef("projects", "project-1", "app"),
+            region: { id: "us-east-1", name: "US East" },
+            source: { type: "empty" },
+            branchId: null,
+          };
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const projectProvider = yield* PrismaProject.Provider;
+      const project = yield* projectProvider.reconcile(
+        reconcileInput("Project", { name: "app", region: "us-east-1" }),
+      );
+
+      expect(project.projectId).toBe("project-1");
+      expect(project.databaseId).toBe("database-1");
+      expect(Redacted.value(project.directConnectionString!)).toBe(
+        "postgres://direct",
+      );
+      expect(calls).toEqual([
+        ["listProjects"],
+        [
+          "listProjectDatabases",
+          { projectId: "project-1", query: { limit: 100 } },
+        ],
+        [
+          "createProjectDatabase",
+          {
+            projectId: "project-1",
+            input: { region: "us-east-1", isDefault: true },
+          },
+        ],
+      ]);
+    }).pipe(
+      Effect.provide(
+        ProjectProvider().pipe(
+          Layer.provide(Layer.succeed(PrismaClient, client)),
+        ),
+      ),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(Stack, {
+        name: "prisma-project-ensure-test",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "test"),
+    );
+  });
+
+  it.effect("deletes Prisma resources through their management APIs", () => {
+    const calls: Call[] = [];
+    const status = new Map([["version-1", "running"]]);
+    const client = {
+      deleteProject: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteProject", id]);
+        }),
+      deleteDatabase: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteDatabase", id]);
+        }),
+      deleteConnection: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteConnection", id]);
+        }),
+      deleteBranch: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteBranch", id]);
+        }),
+      listProjectComputeServices: (projectId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listProjectComputeServices", { projectId, query }]);
+          return [];
+        }),
+      listServiceComputeVersions: (computeServiceId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push([
+            "listServiceComputeVersions",
+            { computeServiceId, query },
+          ]);
+          return [
+            {
+              id: "version-1",
+              type: "compute-version" as const,
+              url: "https://api.prisma.test/v1/versions/version-1",
+              foundryVersionId: "foundry-1",
+              createdAt,
+            },
+          ];
+        }),
+      getComputeServiceVersion: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getComputeServiceVersion", id]);
+          return {
+            id,
+            type: "compute-version" as const,
+            url: `https://api.prisma.test/v1/versions/${id}`,
+            foundryVersionId: "foundry-1",
+            status: status.get(id) ?? "stopped",
+            previewDomain: null,
+            createdAt,
+          };
+        }),
+      stopComputeServiceVersion: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["stopComputeServiceVersion", id]);
+          status.set(id, "stopped");
+        }),
+      deleteComputeServiceVersion: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteComputeServiceVersion", id]);
+        }),
+      deleteComputeService: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteComputeService", id]);
+        }),
+      deleteEnvironmentVariable: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteEnvironmentVariable", id]);
+        }),
+      deleteSourceRepository: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteSourceRepository", id]);
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const projectProvider = yield* PrismaProject.Provider;
+      const databaseProvider = yield* PrismaDatabase.Provider;
+      const connectionProvider = yield* PrismaConnection.Provider;
+      const branchProvider = yield* PrismaBranch.Provider;
+      const serviceProvider = yield* PrismaComputeService.Provider;
+      const versionProvider = yield* PrismaComputeVersion.Provider;
+      const envProvider = yield* PrismaEnvironmentVariable.Provider;
+      const repoProvider = yield* PrismaSourceRepository.Provider;
+
+      yield* versionProvider.delete(
+        deleteInput("ComputeVersion", { computeVersionId: "version-1" }),
+      );
+      yield* serviceProvider.delete(
+        deleteInput("ComputeService", { computeServiceId: "service-1" }),
+      );
+      yield* repoProvider.delete(
+        deleteInput("SourceRepository", { sourceRepositoryId: "repo-1" }),
+      );
+      yield* envProvider.delete(
+        deleteInput("EnvironmentVariable", { environmentVariableId: "env-1" }),
+      );
+      yield* branchProvider.delete(
+        deleteInput("Branch", { branchId: "branch-1" }),
+      );
+      yield* connectionProvider.delete(
+        deleteInput("Connection", { connectionId: "connection-1" }),
+      );
+      yield* databaseProvider.delete(
+        deleteInput("Database", { databaseId: "database-1" }),
+      );
+      yield* projectProvider.delete(
+        deleteInput("Project", { projectId: "project-1" }),
+      );
+
+      expect(calls).toEqual([
+        ["getComputeServiceVersion", "version-1"],
+        ["stopComputeServiceVersion", "version-1"],
+        ["getComputeServiceVersion", "version-1"],
+        ["deleteComputeServiceVersion", "version-1"],
+        [
+          "listServiceComputeVersions",
+          { computeServiceId: "service-1", query: { limit: 100 } },
+        ],
+        ["getComputeServiceVersion", "version-1"],
+        ["deleteComputeServiceVersion", "version-1"],
+        ["deleteComputeService", "service-1"],
+        ["deleteSourceRepository", "repo-1"],
+        ["deleteEnvironmentVariable", "env-1"],
+        ["deleteBranch", "branch-1"],
+        ["deleteConnection", "connection-1"],
+        ["deleteDatabase", "database-1"],
+        [
+          "listProjectComputeServices",
+          { projectId: "project-1", query: { limit: 100 } },
+        ],
+        ["deleteProject", "project-1"],
+      ]);
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(Stack, {
+        name: "prisma-provider-delete-test",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "test"),
+    );
+  });
+
+  it.effect("re-reads resources after create conflict races", () => {
+    const calls: Call[] = [];
+    const visible = new Set<string>();
+    const conflict = (path: string) =>
+      new PrismaApiError({
+        method: "POST",
+        path,
+        status: 409,
+        message: "already exists",
+      });
+    const project = {
+      id: "project-1",
+      type: "project" as const,
+      url: "https://api.prisma.test/v1/projects/project-1",
+      name: "app",
+      createdAt,
+      defaultRegion: "us-east-1",
+      workspace: resourceRef("workspaces", "workspace-1", "team"),
+    };
+    const database = {
+      id: "database-1",
+      type: "database" as const,
+      url: "https://api.prisma.test/v1/databases/database-1",
+      name: "main",
+      status: "ready" as const,
+      createdAt,
+      isDefault: false,
+      defaultConnectionId: "connection-1",
+      connections: [],
+      project: resourceRef("projects", "project-1", "app"),
+      region: { id: "us-east-1", name: "US East" },
+      source: { type: "empty" },
+      branchId: null,
+    };
+    const connection = {
+      id: "connection-1",
+      type: "connection" as const,
+      url: "https://api.prisma.test/v1/connections/connection-1",
+      name: "api",
+      createdAt,
+      kind: "postgres" as const,
+      endpoints: {
+        direct: { host: "db.prisma.test", port: 5432 },
+      },
+      database: resourceRef("databases", "database-1", "main"),
+    };
+    const branch = {
+      id: "branch-1",
+      type: "branch" as const,
+      url: "https://api.prisma.test/v1/branches/branch-1",
+      gitName: "main",
+      isDefault: false,
+      createdAt,
+      updatedAt,
+      project: resourceRef("projects", "project-1", "app"),
+    };
+    const service = {
+      id: "service-1",
+      type: "compute-service" as const,
+      url: "https://api.prisma.test/v1/compute-services/service-1",
+      name: "api",
+      region: { id: "us-east-1", name: "US East" },
+      projectId: "project-1",
+      branchId: null,
+      latestVersionId: null,
+      serviceEndpointDomain: "service-1.prisma.build",
+      createdAt,
+    };
+    const variable = {
+      id: "env-1",
+      type: "environment-variable" as const,
+      url: "https://api.prisma.test/v1/environment-variables/env-1",
+      projectId: "project-1",
+      branchId: null,
+      class: "production" as const,
+      key: "TOKEN",
+      valueKid: "kid-1",
+      isManagedBySystem: false,
+      createdAt,
+      updatedAt,
+    };
+    const repo = {
+      id: "repo-1",
+      type: "source-repository" as const,
+      url: "https://api.prisma.test/v1/source-repositories/repo-1",
+      repoId: 123,
+      provider: "github" as const,
+      repoFullName: "acme/api",
+      defaultBranch: "main",
+      isPrivate: true,
+      status: "active" as const,
+      projectId: "project-1",
+      installationId: "installation-1",
+      createdAt,
+      updatedAt,
+    };
+
+    const client = {
+      listProjects: () =>
+        Effect.sync(() => {
+          calls.push(["listProjects"]);
+          return visible.has("project") ? [project] : [];
+        }),
+      createProject: (input: unknown) =>
+        Effect.gen(function* () {
+          calls.push(["createProject", input]);
+          visible.add("project");
+          return yield* Effect.fail(conflict("/v1/projects"));
+        }),
+      listProjectDatabases: (projectId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listProjectDatabases", { projectId, query }]);
+          return visible.has("database") ? [database] : [];
+        }),
+      createDatabase: (input: unknown) =>
+        Effect.gen(function* () {
+          calls.push(["createDatabase", input]);
+          visible.add("database");
+          return yield* Effect.fail(conflict("/v1/databases"));
+        }),
+      listDatabaseConnections: (databaseId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listDatabaseConnections", { databaseId, query }]);
+          return visible.has("connection") ? [connection] : [];
+        }),
+      createConnection: (input: unknown) =>
+        Effect.gen(function* () {
+          calls.push(["createConnection", input]);
+          visible.add("connection");
+          return yield* Effect.fail(conflict("/v1/connections"));
+        }),
+      rotateConnection: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["rotateConnection", id]);
+          return {
+            ...connection,
+            endpoints: {
+              direct: {
+                host: "db.prisma.test",
+                port: 5432,
+                connectionString: "postgres://rotated-direct",
+              },
+            },
+            directConnection: {
+              host: "db.prisma.test",
+              user: "app",
+              pass: "rotated-password",
+            },
+          };
+        }),
+      listBranches: (projectId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listBranches", { projectId, query }]);
+          return visible.has("branch") ? [branch] : [];
+        }),
+      createBranch: (projectId: string, input: unknown) =>
+        Effect.gen(function* () {
+          calls.push(["createBranch", { projectId, input }]);
+          visible.add("branch");
+          return yield* Effect.fail(
+            conflict(`/v1/projects/${projectId}/branches`),
+          );
+        }),
+      listProjectComputeServices: (projectId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listProjectComputeServices", { projectId, query }]);
+          return visible.has("service") ? [service] : [];
+        }),
+      createProjectComputeService: (projectId: string, input: unknown) =>
+        Effect.gen(function* () {
+          calls.push(["createProjectComputeService", { projectId, input }]);
+          visible.add("service");
+          return yield* Effect.fail(
+            conflict(`/v1/projects/${projectId}/compute-services`),
+          );
+        }),
+      listEnvironmentVariables: (query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listEnvironmentVariables", query]);
+          return visible.has("env") ? [variable] : [];
+        }),
+      createEnvironmentVariable: (input: unknown) =>
+        Effect.gen(function* () {
+          calls.push(["createEnvironmentVariable", input]);
+          visible.add("env");
+          return yield* Effect.fail(conflict("/v1/environment-variables"));
+        }),
+      updateEnvironmentVariable: (id: string, input: unknown) =>
+        Effect.sync(() => {
+          calls.push(["updateEnvironmentVariable", { id, input }]);
+          return variable;
+        }),
+      listSourceRepositories: (query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listSourceRepositories", query]);
+          return visible.has("repo") ? [repo] : [];
+        }),
+      createSourceRepository: (input: unknown) =>
+        Effect.gen(function* () {
+          calls.push(["createSourceRepository", input]);
+          visible.add("repo");
+          return yield* Effect.fail(conflict("/v1/source-repositories"));
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const projectProvider = yield* PrismaProject.Provider;
+      const databaseProvider = yield* PrismaDatabase.Provider;
+      const connectionProvider = yield* PrismaConnection.Provider;
+      const branchProvider = yield* PrismaBranch.Provider;
+      const serviceProvider = yield* PrismaComputeService.Provider;
+      const envProvider = yield* PrismaEnvironmentVariable.Provider;
+      const repoProvider = yield* PrismaSourceRepository.Provider;
+
+      const projectOut = yield* projectProvider.reconcile(
+        reconcileInput("Project", { name: "app", createDatabase: false }),
+      );
+      const databaseOut = yield* databaseProvider.reconcile(
+        reconcileInput("Database", { project: "project-1", name: "main" }),
+      );
+      const connectionOut = yield* connectionProvider.reconcile(
+        reconcileInput("Connection", {
+          database: "database-1",
+          name: "api",
+          rotate: true,
+        }),
+      );
+      const branchOut = yield* branchProvider.reconcile(
+        reconcileInput("Branch", { project: "project-1", gitName: "main" }),
+      );
+      const serviceOut = yield* serviceProvider.reconcile(
+        reconcileInput("ComputeService", {
+          project: "project-1",
+          displayName: "api",
+        }),
+      );
+      const envOut = yield* envProvider.reconcile(
+        reconcileInput("EnvironmentVariable", {
+          project: "project-1",
+          class: "production" as const,
+          key: "TOKEN",
+          value: "secret",
+        }),
+      );
+      const repoOut = yield* repoProvider.reconcile(
+        reconcileInput("SourceRepository", {
+          project: "project-1",
+          providerRepositoryId: 123,
+        }),
+      );
+
+      expect(projectOut.projectId).toBe("project-1");
+      expect(databaseOut.databaseId).toBe("database-1");
+      expect(connectionOut.connectionId).toBe("connection-1");
+      expect(Redacted.value(connectionOut.directConnectionString!)).toBe(
+        "postgres://rotated-direct",
+      );
+      expect(Redacted.value(connectionOut.password!)).toBe("rotated-password");
+      expect(branchOut.branchId).toBe("branch-1");
+      expect(serviceOut.computeServiceId).toBe("service-1");
+      expect(envOut.environmentVariableId).toBe("env-1");
+      expect(repoOut.sourceRepositoryId).toBe("repo-1");
+      expect(calls.filter(([name]) => name.startsWith("create"))).toEqual([
+        [
+          "createProject",
+          { name: "app", createDatabase: false, region: "us-east-1" },
+        ],
+        [
+          "createDatabase",
+          {
+            projectId: "project-1",
+            name: "main",
+            region: "us-east-1",
+            isDefault: false,
+            source: undefined,
+            branchId: undefined,
+            branchGitName: undefined,
+          },
+        ],
+        ["createConnection", { databaseId: "database-1", name: "api" }],
+        [
+          "createBranch",
+          {
+            projectId: "project-1",
+            input: { gitName: "main", isDefault: undefined },
+          },
+        ],
+        [
+          "createProjectComputeService",
+          {
+            projectId: "project-1",
+            input: {
+              displayName: "api",
+              regionId: "us-east-1",
+              branchId: undefined,
+              branchGitName: undefined,
+            },
+          },
+        ],
+        [
+          "createEnvironmentVariable",
+          {
+            projectId: "project-1",
+            class: "production",
+            key: "TOKEN",
+            value: "secret",
+          },
+        ],
+        [
+          "createSourceRepository",
+          {
+            projectId: "project-1",
+            provider: "github",
+            providerRepositoryId: 123,
+          },
+        ],
+      ]);
+      expect(calls).toContainEqual([
+        "updateEnvironmentVariable",
+        { id: "env-1", input: { value: "secret" } },
+      ]);
+      expect(calls).toContainEqual(["rotateConnection", "connection-1"]);
+    }).pipe(
+      Effect.provide(providerLayer(client)),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(Stack, {
+        name: "prisma-provider-conflict-test",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "test"),
+    );
+  });
+});

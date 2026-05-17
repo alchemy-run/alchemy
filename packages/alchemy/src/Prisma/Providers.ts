@@ -1,0 +1,352 @@
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { AlchemyContext } from "../AlchemyContext.ts";
+import { AuthProviders } from "../Auth/AuthProvider.ts";
+import { CredentialsStoreLive } from "../Auth/Credentials.ts";
+import { ProfileLive } from "../Auth/Profile.ts";
+import * as Provider from "../Provider.ts";
+import type { ResourceClass, ResourceLike } from "../Resource.ts";
+import { PlatformServices } from "../Util/PlatformServices.ts";
+import { PrismaAuth } from "./AuthProvider.ts";
+import { Branch, BranchProvider } from "./Branch.ts";
+import {
+  ComputeApp,
+  ComputeAppDevProvider,
+  ComputeAppProvider,
+} from "./ComputeApp.ts";
+import { ComputeService, ComputeServiceProvider } from "./ComputeService.ts";
+import { ComputeVersion, ComputeVersionProvider } from "./ComputeVersion.ts";
+import { Connection, ConnectionProvider } from "./Connection.ts";
+import { Database, DatabaseProvider } from "./Database.ts";
+import {
+  EnvironmentVariable,
+  EnvironmentVariableProvider,
+} from "./EnvironmentVariable.ts";
+import {
+  closePrismaDevDatabase,
+  ensurePrismaDevDatabase,
+} from "./PrismaDevDatabase.ts";
+import { PrismaClientLive } from "./Client.ts";
+import { PrismaEnvironment, fromProfile } from "./PrismaEnvironment.ts";
+import { Project, ProjectProvider } from "./Project.ts";
+import {
+  SourceRepository,
+  SourceRepositoryProvider,
+} from "./SourceRepository.ts";
+
+export { PrismaEnvironment } from "./PrismaEnvironment.ts";
+
+export class Providers extends Provider.ProviderCollection<Providers>()(
+  "Prisma",
+) {}
+
+export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
+
+const managementApiLayer = () =>
+  PrismaClientLive.pipe(
+    Layer.provideMerge(fromProfile()),
+    Layer.provideMerge(PrismaAuth),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        Layer.succeed(AuthProviders, {}),
+        FetchHttpClient.layer,
+        Layer.provide(ProfileLive, PlatformServices),
+        Layer.provide(CredentialsStoreLive, PlatformServices),
+      ),
+    ),
+  );
+
+/**
+ * Build a layer for Prisma Management API operation helpers.
+ *
+ * Use this when calling helpers like `Prisma.listProjects()` outside a stack
+ * resource provider. `Prisma.providers()` is still the layer to pass to an
+ * Alchemy stack for resource lifecycle management.
+ *
+ * @example
+ * ```typescript
+ * const projects = yield* Prisma.listProjects().pipe(
+ *   Effect.provide(Prisma.managementApi()),
+ * );
+ * ```
+ */
+export const managementApi = () => managementApiLayer().pipe(Layer.orDie);
+
+/**
+ * Build a layer that registers all Prisma Management API resource providers,
+ * the Prisma auth provider, resolved credentials, and an HTTP client.
+ *
+ * @example
+ * ```typescript
+ * import * as Alchemy from "alchemy";
+ * import * as Prisma from "alchemy/Prisma";
+ * import * as Effect from "effect/Effect";
+ *
+ * export default Alchemy.Stack(
+ *   "MyStack",
+ *   { providers: Prisma.providers(), state: Alchemy.localState() },
+ *   Effect.gen(function* () {
+ *     const project = yield* Prisma.Project("app", {
+ *       name: "app",
+ *       region: "us-east-1",
+ *     });
+ *     return { projectId: project.projectId };
+ *   }),
+ * );
+ * ```
+ */
+export const providers = () =>
+  Layer.effect(
+    Providers,
+    Provider.collection([
+      Project,
+      Database,
+      Connection,
+      Branch,
+      ComputeApp,
+      ComputeService,
+      ComputeVersion,
+      EnvironmentVariable,
+      SourceRepository,
+    ]),
+  ).pipe(Layer.provide(implementationLayer()));
+
+const implementationLayer = () =>
+  Layer.unwrap(
+    AlchemyContext.pipe(
+      Effect.map((ctx) => (ctx.dev ? devProviderLayer() : liveProviderLayer())),
+    ),
+  );
+
+const devProviderLayer = () =>
+  Layer.mergeAll(
+    projectDevProvider(),
+    databaseDevProvider(),
+    connectionDevProvider(),
+    branchDevProvider(),
+    ComputeAppDevProvider(),
+    computeServiceDevProvider(),
+    computeVersionDevProvider(),
+    environmentVariableDevProvider(),
+    sourceRepositoryDevProvider(),
+  );
+
+type DevRecord = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is DevRecord =>
+  typeof value === "object" && value !== null;
+
+const devProvider = <R extends ResourceLike>(
+  resource: ResourceClass<R>,
+  attrs: (input: {
+    id: string;
+    news: DevRecord;
+    output?: DevRecord;
+  }) => DevRecord,
+) =>
+  Provider.succeed(resource, {
+    stables: [],
+    diff: Effect.fn(function* () {
+      return { action: "update" } as const;
+    }),
+    read: Effect.fn(function* ({ output }) {
+      return output;
+    }),
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const newsRecord = isRecord(news) ? news : {};
+      const outputRecord = isRecord(output) ? output : undefined;
+      return {
+        ...(outputRecord ?? {}),
+        ...attrs({ id, news: newsRecord, output: outputRecord }),
+      } as R["Attributes"];
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
+const DEV_TIMESTAMP = "1970-01-01T00:00:00.000Z";
+const devId = (type: string, id: string) => `dev:${type}:${id}`;
+const attr = (value: unknown, key: string) =>
+  isRecord(value) ? value[key] : undefined;
+const attrOrString = (value: unknown, attr: string) =>
+  typeof value === "string"
+    ? value
+    : isRecord(value) && typeof value[attr] === "string"
+      ? value[attr]
+      : undefined;
+const attrOrNullableString = (value: unknown, key: string) => {
+  const candidate = attr(value, key);
+  return candidate === null || typeof candidate === "string"
+    ? candidate
+    : undefined;
+};
+const attrOrRedactedString = (value: unknown, key: string) => {
+  const candidate = attr(value, key);
+  return Redacted.isRedacted(candidate)
+    ? Redacted.make(String(Redacted.value(candidate)))
+    : typeof candidate === "string"
+      ? Redacted.make(candidate)
+      : undefined;
+};
+
+const projectDevProvider = () =>
+  devProvider(Project, ({ id, news }) => ({
+    projectId: devId("project", id),
+    projectName: news.name ?? id,
+    workspaceId: devId("workspace", "local"),
+    createdAt: DEV_TIMESTAMP,
+    defaultRegion: news.region ?? "us-east-1",
+    databaseId:
+      news.createDatabase === false ? undefined : devId("database", id),
+    defaultConnectionId:
+      news.createDatabase === false ? undefined : devId("connection", id),
+    connectionString: undefined,
+    directConnectionString: undefined,
+    pooledConnectionString: undefined,
+    accelerateConnectionString: undefined,
+    host: undefined,
+    user: undefined,
+    password: undefined,
+  }));
+
+const databaseDevProvider = () =>
+  Provider.succeed(Database, {
+    stables: ["databaseId"],
+    diff: Effect.fn(function* () {
+      return { action: "update" } as const;
+    }),
+    read: Effect.fn(function* ({ output }) {
+      return output;
+    }),
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const databaseId = output?.databaseId ?? devId("database", id);
+      const local = yield* ensurePrismaDevDatabase(databaseId, news.dev);
+      return {
+        databaseId,
+        databaseName: news.name ?? id,
+        projectId:
+          attrOrString(news.project, "projectId") ?? devId("project", id),
+        status: "ready",
+        region: news.region ?? "us-east-1",
+        isDefault: news.isDefault ?? false,
+        branchId: news.branchId ?? null,
+        defaultConnectionId: devId("connection", id),
+        createdAt: output?.createdAt ?? DEV_TIMESTAMP,
+        connectionString: local?.connectionString,
+        directConnectionString: local?.directConnectionString,
+        pooledConnectionString: local?.pooledConnectionString,
+        accelerateConnectionString: local?.accelerateConnectionString,
+        host: local?.host,
+        user: local?.user,
+        password: local?.password,
+      } satisfies Database["Attributes"];
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* closePrismaDevDatabase(output.databaseId);
+    }),
+  });
+
+const connectionDevProvider = () =>
+  devProvider(Connection, ({ id, news }) => ({
+    connectionId: devId("connection", id),
+    connectionName: news.name,
+    databaseId: attrOrString(news.database, "databaseId"),
+    kind: "postgres",
+    createdAt: DEV_TIMESTAMP,
+    connectionString: attrOrRedactedString(news.database, "connectionString"),
+    directConnectionString: attrOrRedactedString(
+      news.database,
+      "directConnectionString",
+    ),
+    pooledConnectionString: attrOrRedactedString(
+      news.database,
+      "pooledConnectionString",
+    ),
+    accelerateConnectionString: attrOrRedactedString(
+      news.database,
+      "accelerateConnectionString",
+    ),
+    host: attrOrNullableString(news.database, "host"),
+    user: attrOrNullableString(news.database, "user"),
+    password: attrOrRedactedString(news.database, "password"),
+  }));
+
+const branchDevProvider = () =>
+  devProvider(Branch, ({ id, news }) => ({
+    branchId: devId("branch", id),
+    gitName: news.gitName,
+    projectId: attrOrString(news.project, "projectId"),
+    isDefault: news.isDefault ?? false,
+    createdAt: DEV_TIMESTAMP,
+    updatedAt: DEV_TIMESTAMP,
+  }));
+
+const computeServiceDevProvider = () =>
+  devProvider(ComputeService, ({ id, news }) => ({
+    computeServiceId: devId("compute-service", id),
+    name: news.displayName,
+    projectId: attrOrString(news.project, "projectId"),
+    regionId: news.regionId ?? "us-east-1",
+    branchId: news.branchId ?? null,
+    latestVersionId: null,
+    serviceEndpointDomain: "localhost",
+    createdAt: DEV_TIMESTAMP,
+  }));
+
+const computeVersionDevProvider = () =>
+  devProvider(ComputeVersion, ({ id, news }) => ({
+    computeVersionId: devId("compute-version", id),
+    computeServiceId: attrOrString(news.computeService, "computeServiceId"),
+    foundryVersionId: devId("foundry-version", id),
+    status: "new",
+    previewDomain: undefined,
+    uploadUrl: undefined,
+    artifactHash: undefined,
+    serviceEndpointDomain: undefined,
+    createdAt: DEV_TIMESTAMP,
+  }));
+
+const environmentVariableDevProvider = () =>
+  devProvider(EnvironmentVariable, ({ id, news }) => ({
+    environmentVariableId: devId("environment-variable", id),
+    projectId: attrOrString(news.project, "projectId"),
+    branchId: null,
+    class: news.class,
+    key: news.key,
+    value: Redacted.isRedacted(news.value)
+      ? news.value
+      : Redacted.make(news.value),
+    valueKid: devId("value-kid", id),
+    isManagedBySystem: false,
+    createdAt: DEV_TIMESTAMP,
+    updatedAt: DEV_TIMESTAMP,
+  }));
+
+const sourceRepositoryDevProvider = () =>
+  devProvider(SourceRepository, ({ id, news }) => ({
+    sourceRepositoryId: devId("source-repository", id),
+    projectId: attrOrString(news.project, "projectId"),
+    repoId: news.providerRepositoryId,
+    provider: news.provider ?? "github",
+    repoFullName: `dev/${id}`,
+    defaultBranch: "main",
+    isPrivate: false,
+    status: "active",
+    installationId: devId("installation", id),
+    createdAt: DEV_TIMESTAMP,
+    updatedAt: DEV_TIMESTAMP,
+  }));
+
+const liveProviderLayer = () =>
+  Layer.mergeAll(
+    ProjectProvider(),
+    DatabaseProvider(),
+    ConnectionProvider(),
+    BranchProvider(),
+    ComputeAppProvider(),
+    ComputeServiceProvider(),
+    ComputeVersionProvider(),
+    EnvironmentVariableProvider(),
+    SourceRepositoryProvider(),
+  ).pipe(Layer.provideMerge(managementApiLayer()), Layer.orDie);
