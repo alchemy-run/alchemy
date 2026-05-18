@@ -607,6 +607,14 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
                 kind: "durableObject",
                 make: (state: cf.DurableObjectState, env: any) => {
                   const doState = fromDurableObjectState(state);
+                  const provideRuntimeServices = (
+                    effect: Effect.Effect<any, any, any>,
+                  ) =>
+                    effect.pipe(
+                      Effect.provideService(DurableObjectState, doState),
+                      Effect.provideService(WorkerEnvironment, env),
+                    );
+
                   return constructor.pipe(
                     Effect.provideContext(services),
                     Effect.provideService(DurableObjectState, doState),
@@ -616,22 +624,15 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
                       for (const key of Object.getOwnPropertyNames(methods)) {
                         const value = methods[key];
                         if (Effect.isEffect(value)) {
-                          wrapped[key] = (
-                            value as Effect.Effect<any, any, any>
-                          ).pipe(
-                            Effect.provideService(DurableObjectState, doState),
+                          wrapped[key] = provideRuntimeServices(
+                            value as Effect.Effect<any, any, any>,
                           );
                         } else if (typeof value === "function") {
                           wrapped[key] = (...args: unknown[]) => {
                             const result = (value as Function)(...args);
                             if (Effect.isEffect(result)) {
-                              return (
-                                result as Effect.Effect<any, any, any>
-                              ).pipe(
-                                Effect.provideService(
-                                  DurableObjectState,
-                                  doState,
-                                ),
+                              return provideRuntimeServices(
+                                result as Effect.Effect<any, any, any>,
                               );
                             }
                             return result;
