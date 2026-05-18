@@ -7,6 +7,7 @@ import * as Option from "effect/Option";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
+import * as Http from "../../Http.ts";
 import type { HttpEffect } from "../../Http.ts";
 import { isYieldableEffect } from "../../Util/effect.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
@@ -332,8 +333,13 @@ export const makeDurableObjectBridge =
       async fetch(request: cf.Request): Promise<cf.Response> {
         const methods = await this.object;
         if (methods.fetch) {
-          const fetch = methods.fetch as HttpEffect<never>;
+          const fetch = Http.safeHttpEffect(
+            methods.fetch as
+              | HttpEffect<never>
+              | Effect.Effect<HttpEffect<never>>,
+          );
           const response = await serveWebRequest(request, fetch).pipe(
+            Effect.scoped,
             Effect.runPromise,
           );
           return response as any;

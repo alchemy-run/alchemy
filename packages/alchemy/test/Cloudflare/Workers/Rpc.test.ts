@@ -13,6 +13,7 @@ import {
   fromRpcReadableStream,
   fromRpcStreamEnvelope,
   toRpcStream,
+  makeDurableObjectBridge,
   makeRpcStub,
   type RpcErrorEnvelope,
   type RpcStreamEnvelope,
@@ -22,7 +23,13 @@ import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Rpc from "effect/unstable/rpc/Rpc";
+import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
+import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
+import * as RpcServer from "effect/unstable/rpc/RpcServer";
 
 class MyError extends Data.TaggedError("MyError")<{
   readonly message: string;
@@ -446,6 +453,85 @@ describe("toRpcStream", () => {
       const chunks = yield* Stream.runCollect(decoded);
       expect(chunks).toEqual([]);
     }),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// makeDurableObjectBridge
+// ---------------------------------------------------------------------------
+
+describe("makeDurableObjectBridge", () => {
+  it.effect(
+    "serves Durable Object fetch declared as RpcServer.toHttpEffect",
+    () =>
+      Effect.gen(function* () {
+        class Message extends Schema.Class<Message>("Message")({
+          message: Schema.String,
+        }) {}
+
+        const Rpcs = RpcGroup.make(
+          Rpc.make("Echo", {
+            payload: { input: Message },
+            success: Schema.Struct({
+              echo: Schema.String,
+              typed: Schema.Boolean,
+            }),
+          }),
+        );
+
+        const handlers = Rpcs.toLayer({
+          Echo: ({ input }) =>
+            Effect.succeed({
+              echo: input.message,
+              typed: input instanceof Message,
+            }),
+        });
+
+        const fetch = RpcServer.toHttpEffect(Rpcs).pipe(
+          Effect.provide(
+            Layer.mergeAll(handlers, RpcSerialization.layerJsonRpc()),
+          ),
+        );
+
+        class TestDurableObject {
+          constructor(_state: unknown, _env: unknown) {}
+        }
+
+        const Bridge = makeDurableObjectBridge(
+          TestDurableObject as any,
+          async () => () => Effect.succeed({ fetch }),
+        )("TestDurableObject");
+
+        const object = new Bridge(
+          {
+            blockConcurrencyWhile: (fn: () => Promise<unknown>) => fn(),
+          } as any,
+          {},
+        );
+
+        const response = yield* Effect.promise(
+          () =>
+            object.fetch(
+              new Request("https://example.test/rpc", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: 1,
+                  method: "Echo",
+                  params: { input: { message: "hello" } },
+                  headers: [],
+                }),
+              }) as any,
+            ) as unknown as Promise<Response>,
+        );
+
+        expect(response.status).toBe(200);
+        const body = (yield* Effect.promise(() => response.json())) as {
+          result: { echo: string; typed: boolean };
+        };
+        expect(body.result).toEqual({ echo: "hello", typed: true });
+      }),
   );
 });
 

@@ -80,7 +80,9 @@ export interface DurableObjectNamespace<
 }
 
 export interface DurableObjectShape {
-  fetch?: HttpEffect<DurableObjectState>;
+  fetch?:
+    | HttpEffect<DurableObjectState>
+    | Effect.Effect<HttpEffect<DurableObjectState>>;
   alarm?: (
     alarmInfo?: AlarmInvocationInfo,
   ) => Effect.Effect<void, never, never>;
