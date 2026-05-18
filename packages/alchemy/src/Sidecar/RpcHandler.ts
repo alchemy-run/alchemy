@@ -129,6 +129,21 @@ export const serializeRpcHandlers = <T extends RpcHandlers>(
     ]),
   ) as SerializedRpcHandlers<T>;
 
+const encodeRedacted = (value: unknown): unknown => {
+  if (Redacted.isRedacted(value)) {
+    return { _tag: "Redacted", value: Redacted.value(value) };
+  }
+  if (Array.isArray(value)) {
+    return value.map(encodeRedacted);
+  }
+  if (value && typeof value === "object" && !("toJSON" in value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, encodeRedacted(child)]),
+    );
+  }
+  return value;
+};
+
 const deserializeRpcHandler =
   <Args extends Array<any>, Success, Error>(
     handler: SerializedRpcHandler<Args, Success, Error>,
@@ -137,15 +152,9 @@ const deserializeRpcHandler =
   (...args) =>
     Effect.promise(async () => {
       try {
-        const serializedArgs = JSON.stringify(args, (_, value) => {
-          if (Redacted.isRedacted(value)) {
-            return {
-              _tag: "Redacted",
-              value: Redacted.value(value),
-            };
-          }
-          return value;
-        }) as SerializedArgs<Args>;
+        const serializedArgs = JSON.stringify(
+          encodeRedacted(args),
+        ) as SerializedArgs<Args>;
         return await handler(serializedArgs);
       } catch (error) {
         console.error("Error calling handler", error);
