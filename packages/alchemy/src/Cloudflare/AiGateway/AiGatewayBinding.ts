@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import { makeBindingTag } from "../BindingTag.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { AiGateway as AiGatewayResource } from "./AiGateway.ts";
 
@@ -98,6 +99,21 @@ export class AiGatewayBinding extends Binding.Service<
   AiGatewayBinding,
   (gateway: AiGatewayResource) => Effect.Effect<AiGatewayClient>
 >()("Cloudflare.AiGateway.Binding") {}
+
+export const AiGatewayTag =
+  <Self>() =>
+  <Id extends string, Req = never>(
+    id: Id,
+    options: {
+      resource:
+        | AiGatewayResource
+        | Effect.Effect<AiGatewayResource, never, Req>;
+    },
+  ) =>
+    makeBindingTag<Self, Id, AiGatewayClient, never, AiGatewayBinding | Req>(
+      id,
+      AiGatewayBinding.bind(options.resource),
+    );
 
 /**
  * Runtime layer for {@link AiGatewayBinding}.

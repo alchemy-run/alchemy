@@ -9,7 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { HyperdriveBinding } from "./HyperdriveBinding.ts";
+import { HyperdriveBinding, HyperdriveTag } from "./HyperdriveBinding.ts";
 
 export type HyperdriveScheme = "postgres" | "postgresql" | "mysql";
 
@@ -155,6 +155,7 @@ export type Hyperdrive = Resource<
  */
 export const Hyperdrive = Resource<Hyperdrive>("Cloudflare.Hyperdrive")({
   bind: HyperdriveBinding.bind,
+  Tag: HyperdriveTag,
 });
 
 export const HyperdriveProvider = () =>

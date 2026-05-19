@@ -6,7 +6,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { AiGatewayBinding } from "./AiGatewayBinding.ts";
+import { AiGatewayBinding, AiGatewayTag } from "./AiGatewayBinding.ts";
 
 export type AiGatewayRateLimitingTechnique = "fixed" | "sliding";
 
@@ -269,6 +269,7 @@ export const AiGateway = Resource<AiGateway>("Cloudflare.AiGateway")({
    * client for the runtime AI Gateway binding.
    */
   bind: AiGatewayBinding.bind,
+  Tag: AiGatewayTag,
 });
 
 export const AiGatewayProvider = () =>

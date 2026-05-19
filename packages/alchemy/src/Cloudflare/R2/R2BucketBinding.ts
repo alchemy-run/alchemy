@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
+import { makeBindingTag } from "../BindingTag.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
 import { getRawStream } from "../../Util/Stream.ts";
@@ -138,6 +139,19 @@ export class R2BucketBinding extends Binding.Service<
   R2BucketBinding,
   (bucket: R2Bucket) => Effect.Effect<R2BucketClient>
 >()("Cloudflare.R2Bucket") {}
+
+export const R2BucketTag =
+  <Self>() =>
+  <Id extends string, Req = never>(
+    id: Id,
+    options: {
+      resource: R2Bucket | Effect.Effect<R2Bucket, never, Req>;
+    },
+  ) =>
+    makeBindingTag<Self, Id, R2BucketClient, never, R2BucketBinding | Req>(
+      id,
+      R2BucketBinding.bind(options.resource),
+    );
 
 export const R2BucketBindingLive = Layer.effect(
   R2BucketBinding,

@@ -8,7 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { KVNamespaceBinding } from "./KVNamespaceBinding.ts";
+import { KVNamespaceBinding, KVNamespaceTag } from "./KVNamespaceBinding.ts";
 
 export type KVNamespaceProps = {
   /**
@@ -59,6 +59,7 @@ export type KVNamespace = Resource<
  */
 export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace")({
   bind: KVNamespaceBinding.bind,
+  Tag: KVNamespaceTag,
 });
 
 export const KVNamespaceProvider = () =>

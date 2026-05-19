@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import { makeBindingTag } from "../BindingTag.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Queue } from "./Queue.ts";
 
@@ -63,6 +64,19 @@ export class QueueBinding extends Binding.Service<
   QueueBinding,
   (queue: Queue) => Effect.Effect<QueueSender>
 >()("Cloudflare.Queue") {}
+
+export const QueueTag =
+  <Self>() =>
+  <Id extends string, Req = never>(
+    id: Id,
+    options: {
+      resource: Queue | Effect.Effect<Queue, never, Req>;
+    },
+  ) =>
+    makeBindingTag<Self, Id, QueueSender, never, QueueBinding | Req>(
+      id,
+      QueueBinding.bind(options.resource),
+    );
 
 export const QueueBindingLive = Layer.effect(
   QueueBinding,

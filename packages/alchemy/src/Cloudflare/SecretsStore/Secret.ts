@@ -8,7 +8,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { SecretBinding } from "./SecretBinding.ts";
+import { SecretBinding, SecretTag } from "./SecretBinding.ts";
 export type StoreSecretProps = {
   /**
    * The Secrets Store that owns this secret.
@@ -82,6 +82,7 @@ export type Secret = Resource<
  */
 export const Secret = Resource<Secret>("Cloudflare.SecretsStore.Secret")({
   bind: SecretBinding.bind,
+  Tag: SecretTag,
 });
 
 const resolveScopes = (scopes: string[] | undefined): string[] =>

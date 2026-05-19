@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { ImagesBinding } from "./ImagesBinding.ts";
+import { ImagesBinding, ImagesTag } from "./ImagesBinding.ts";
 
 type ImagesTypeId = typeof ImagesTypeId;
 const ImagesTypeId = "Cloudflare.Images" as const;
@@ -107,6 +107,7 @@ export const Images: {
    * Effect-native client with access to the native Workers runtime binding.
    */
   bind: typeof ImagesBinding.bind;
+  Tag: typeof ImagesTag;
 } = Object.assign(
   Effect.fn(function* (props?: ImagesProps) {
     return {
@@ -115,7 +116,7 @@ export const Images: {
     } satisfies Images;
   }),
   {
-    bind: (...args: Parameters<typeof ImagesBinding.bind>) =>
-      ImagesBinding.bind(...args),
+    bind: ImagesBinding.bind,
+    Tag: ImagesTag,
   },
 );

@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import { makeBindingTag } from "../BindingTag.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Secret } from "./Secret.ts";
 
@@ -37,6 +38,19 @@ export class SecretBinding extends Binding.Service<
   SecretBinding,
   (secret: Secret) => Effect.Effect<SecretClient>
 >()("Cloudflare.SecretsStore.Secret") {}
+
+export const SecretTag =
+  <Self>() =>
+  <Id extends string, Req = never>(
+    id: Id,
+    options: {
+      resource: Secret | Effect.Effect<Secret, never, Req>;
+    },
+  ) =>
+    makeBindingTag<Self, Id, SecretClient, never, SecretBinding | Req>(
+      id,
+      SecretBinding.bind(options.resource),
+    );
 
 export const SecretBindingLive = Layer.effect(
   SecretBinding,

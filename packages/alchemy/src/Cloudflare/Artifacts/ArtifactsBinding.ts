@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import { makeBindingTag } from "../BindingTag.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { type Artifacts as ArtifactsLike } from "./Artifacts.ts";
 
@@ -98,6 +99,19 @@ export class ArtifactsBinding extends Binding.Service<
   ArtifactsBinding,
   (artifacts: ArtifactsLike) => Effect.Effect<ArtifactsClient>
 >()("Cloudflare.Artifacts.Binding") {}
+
+export const ArtifactsTag =
+  <Self>() =>
+  <Id extends string, Req = never>(
+    id: Id,
+    options: {
+      resource: ArtifactsLike | Effect.Effect<ArtifactsLike, never, Req>;
+    },
+  ) =>
+    makeBindingTag<Self, Id, ArtifactsClient, never, ArtifactsBinding | Req>(
+      id,
+      ArtifactsBinding.bind(options.resource),
+    );
 
 export const ArtifactsBindingLive = Layer.effect(
   ArtifactsBinding,

@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
-import { ArtifactsBinding } from "./ArtifactsBinding.ts";
+import { ArtifactsBinding, ArtifactsTag } from "./ArtifactsBinding.ts";
 
 type ArtifactsTypeId = typeof ArtifactsTypeId;
 const ArtifactsTypeId = "Cloudflare.Artifacts" as const;
@@ -118,6 +118,7 @@ export const Artifacts: {
    * an Effect-native client. See {@link ArtifactsBinding}.
    */
   bind: typeof ArtifactsBinding.bind;
+  Tag: typeof ArtifactsTag;
 } = Object.assign(
   Effect.fn(function* (name: string, props?: ArtifactsProps) {
     const namespace = props?.namespace
@@ -133,7 +134,7 @@ export const Artifacts: {
     } satisfies Artifacts;
   }),
   {
-    bind: (...args: Parameters<typeof ArtifactsBinding.bind>) =>
-      ArtifactsBinding.bind(...args),
+    bind: ArtifactsBinding.bind,
+    Tag: ArtifactsTag,
   },
 );

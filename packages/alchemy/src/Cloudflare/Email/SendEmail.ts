@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { SendEmailBinding } from "./SendEmailBinding.ts";
+import { SendEmailBinding, SendEmailTag } from "./SendEmailBinding.ts";
 
 type SendEmailTypeId = typeof SendEmailTypeId;
 const SendEmailTypeId = "Cloudflare.SendEmail" as const;
@@ -78,6 +78,7 @@ export const SendEmail: {
    * typed runtime client for sending email.
    */
   bind: typeof SendEmailBinding.bind;
+  Tag: typeof SendEmailTag;
 } = Object.assign(
   Effect.fnUntraced(function* (id: string, props?: SendEmailProps) {
     return {
@@ -89,7 +90,7 @@ export const SendEmail: {
     } satisfies SendEmail;
   }),
   {
-    bind: (...args: Parameters<typeof SendEmailBinding.bind>) =>
-      SendEmailBinding.bind(...args),
+    bind: SendEmailBinding.bind,
+    Tag: SendEmailTag,
   },
 );

@@ -1,5 +1,8 @@
 import * as Effect from "effect/Effect";
-import { AnalyticsEngineDatasetBinding } from "./AnalyticsEngineDatasetBinding.ts";
+import {
+  AnalyticsEngineDatasetBinding,
+  AnalyticsEngineDatasetTag,
+} from "./AnalyticsEngineDatasetBinding.ts";
 
 type AnalyticsEngineDatasetTypeId = typeof AnalyticsEngineDatasetTypeId;
 const AnalyticsEngineDatasetTypeId =
@@ -64,6 +67,7 @@ export const AnalyticsEngineDataset: {
    * Effect-native client with access to the native Workers runtime binding.
    */
   bind: typeof AnalyticsEngineDatasetBinding.bind;
+  Tag: typeof AnalyticsEngineDatasetTag;
 } = Object.assign(
   Effect.fnUntraced(function* (
     name: string,
@@ -76,7 +80,7 @@ export const AnalyticsEngineDataset: {
     } satisfies AnalyticsEngineDataset;
   }),
   {
-    bind: (...args: Parameters<typeof AnalyticsEngineDatasetBinding.bind>) =>
-      AnalyticsEngineDatasetBinding.bind(...args),
+    bind: AnalyticsEngineDatasetBinding.bind,
+    Tag: AnalyticsEngineDatasetTag,
   },
 );

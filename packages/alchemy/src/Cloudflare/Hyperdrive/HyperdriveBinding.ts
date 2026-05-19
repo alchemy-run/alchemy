@@ -7,6 +7,7 @@ import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import { makeBindingTag } from "../BindingTag.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Hyperdrive } from "./Hyperdrive.ts";
 import { defaultPort, type HyperdriveDevOrigin } from "./Hyperdrive.ts";
@@ -62,6 +63,22 @@ export class HyperdriveBinding extends Binding.Service<
   HyperdriveBinding,
   (hyperdrive: Hyperdrive) => Effect.Effect<HyperdriveBindingClient>
 >()("Cloudflare.Hyperdrive.Binding") {}
+
+export const HyperdriveTag =
+  <Self>() =>
+  <Id extends string, Req = never>(
+    id: Id,
+    options: {
+      resource: Hyperdrive | Effect.Effect<Hyperdrive, never, Req>;
+    },
+  ) =>
+    makeBindingTag<
+      Self,
+      Id,
+      HyperdriveBindingClient,
+      never,
+      HyperdriveBinding | Req
+    >(id, HyperdriveBinding.bind(options.resource));
 
 export const HyperdriveBindingLive = Layer.effect(
   HyperdriveBinding,

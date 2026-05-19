@@ -7,6 +7,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { D1Connection, D1DatabaseTag } from "./D1Connection.ts";
 import { cloneD1Database } from "./D1Clone.ts";
 import { importD1Database } from "./D1Import.ts";
 import { applyMigrations } from "./D1Migrations.ts";
@@ -241,7 +242,10 @@ export type D1Database = Resource<
  *
  * @see https://developers.cloudflare.com/d1/
  */
-export const D1Database = Resource<D1Database>("Cloudflare.D1Database");
+export const D1Database = Resource<D1Database>("Cloudflare.D1Database")({
+  bind: D1Connection.bind,
+  Tag: D1DatabaseTag,
+});
 
 export const DatabaseProvider = () =>
   Provider.effect(

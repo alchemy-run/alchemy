@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import { makeBindingTag } from "../BindingTag.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { SendEmail } from "./SendEmail.ts";
 
@@ -60,6 +61,19 @@ export class SendEmailBinding extends Binding.Service<
   SendEmailBinding,
   (sender: SendEmail) => Effect.Effect<SendEmailClient>
 >()("Cloudflare.SendEmail.Binding") {}
+
+export const SendEmailTag =
+  <Self>() =>
+  <Id extends string, Req = never>(
+    id: Id,
+    options: {
+      resource: SendEmail | Effect.Effect<SendEmail, never, Req>;
+    },
+  ) =>
+    makeBindingTag<Self, Id, SendEmailClient, never, SendEmailBinding | Req>(
+      id,
+      SendEmailBinding.bind(options.resource),
+    );
 
 export const SendEmailBindingLive = Layer.effect(
   SendEmailBinding,

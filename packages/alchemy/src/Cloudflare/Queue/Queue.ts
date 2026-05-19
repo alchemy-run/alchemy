@@ -8,7 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { QueueBinding } from "./QueueBinding.ts";
+import { QueueBinding, QueueTag } from "./QueueBinding.ts";
 
 export type QueueProps = {
   /**
@@ -91,6 +91,7 @@ export type Queue = Resource<
  */
 export const Queue = Resource<Queue>("Cloudflare.Queue")({
   bind: QueueBinding.bind,
+  Tag: QueueTag,
 });
 
 export const QueueProvider = () =>

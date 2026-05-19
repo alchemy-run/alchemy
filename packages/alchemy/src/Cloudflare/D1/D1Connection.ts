@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Binding from "../../Binding.ts";
+import { makeBindingTag } from "../BindingTag.ts";
 import { WorkerEnvironment } from "../Workers/Worker.ts";
 import type { D1Database } from "./D1Database.ts";
 import { DatabaseBinding } from "./D1DatabaseBinding.ts";
@@ -116,6 +117,19 @@ export class D1Connection extends Binding.Service<
   D1Connection,
   (database: D1Database) => Effect.Effect<D1ConnectionClient>
 >()("Cloudflare.D1.Connection") {}
+
+export const D1DatabaseTag =
+  <Self>() =>
+  <Id extends string, Req = never>(
+    id: Id,
+    options: {
+      resource: D1Database | Effect.Effect<D1Database, never, Req>;
+    },
+  ) =>
+    makeBindingTag<Self, Id, D1ConnectionClient, never, D1Connection | Req>(
+      id,
+      D1Connection.bind(options.resource),
+    );
 
 export const D1ConnectionLive = Layer.effect(
   D1Connection,

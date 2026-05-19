@@ -10,7 +10,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone.ts";
-import { R2BucketBinding } from "./R2BucketBinding.ts";
+import { R2BucketBinding, R2BucketTag } from "./R2BucketBinding.ts";
 
 export type R2BucketName = string;
 
@@ -297,6 +297,7 @@ export type R2Bucket = Resource<
  */
 export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket")({
   bind: R2BucketBinding.bind,
+  Tag: R2BucketTag,
 });
 
 export declare namespace R2Bucket {
