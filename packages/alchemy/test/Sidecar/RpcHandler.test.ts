@@ -26,7 +26,8 @@ const schema = defineSchema<Handlers>({
 const handlers: Handlers = {
   echo: (s) => Effect.succeed(Redacted.value(s)),
   password: (env) => Effect.succeed(Redacted.value(env.password)),
-  withDate: ((env: { when: unknown }) => Effect.succeed(String(env.when))) as Handlers["withDate"],
+  withDate: ((env: { when: unknown }) =>
+    Effect.succeed(String(env.when))) as Handlers["withDate"],
 };
 
 const client = () =>
