@@ -82,10 +82,13 @@ Standalone how-to pages. Each solves a specific problem; read in any order.
 
 ## Blog
 
-- [What's new in beta.35](https://v2.alchemy.run/blog/2026-05-08-beta-35) — A Stream-shaped Effect consumer for Cloudflare Queues, R2 bucket custom domains, non-string env bindings on Workers, Neon logical replication, and a round of CLI quality-of-life.
-- [What's new in beta.36](https://v2.alchemy.run/blog/2026-05-09-beta-36) — Cloudflare Images binding, Hyperdrive as a Worker binding, R2 object lifecycle rules, and a dev-mode networking fix.
+- [alchemy@2.0.0-beta.35](https://v2.alchemy.run/blog/2026-05-08-beta-35) — A Stream-shaped Effect consumer for Cloudflare Queues, R2 bucket custom domains, non-string env bindings on Workers, Neon logical replication, and a round of CLI quality-of-life.
+- [alchemy@2.0.0-beta.36](https://v2.alchemy.run/blog/2026-05-09-beta-36) — Cloudflare Images binding, Hyperdrive as a Worker binding, R2 object lifecycle rules, and a dev-mode networking fix.
 - [Secrets and Variables](https://v2.alchemy.run/blog/2026-05-11-secrets-and-variables) — Bind a value into your deploy target's env and get back a typed runtime accessor — the same one-liner works for Cloudflare Workers and AWS Lambda.
-- [What's new in beta.37](https://v2.alchemy.run/blog/2026-05-12-beta-37) — Cross-stack and cross-stage references, fully-typed Worker-to-Worker bindings, Workflows with typed I/O, `Alchemy.Secret` / `Alchemy.Variable`, cron triggers, an Analytics Engine binding, and R2 buckets that finally empty themselves on destroy.
+- [alchemy@2.0.0-beta.37](https://v2.alchemy.run/blog/2026-05-12-beta-37) — Cross-stack and cross-stage references, fully-typed Worker-to-Worker bindings, Workflows with typed I/O, `Alchemy.Secret` / `Alchemy.Variable`, cron triggers, an Analytics Engine binding, and R2 buckets that finally empty themselves on destroy.
+- [alchemy@2.0.0-beta.38](https://v2.alchemy.run/blog/2026-05-13-beta-38) — Cloudflare Email Routing and the `send_email` Worker binding, a new `Action` plan node for arbitrary Effects that run during apply, a leaner Neon provider on the typed `@distilled.cloud/neon` SDK, and a transport-error retry fix.
+- [alchemy@2.0.0-beta.39](https://v2.alchemy.run/blog/2026-05-13-beta-39) — A small, high-impact fix release — `VITE_*` env props are now inlined into the client bundle, the Cloudflare Worker HTTP adapter runs handlers through Effect's standard HTTP lifecycle (unblocking `RpcServer.toHttpEffect`), and the `SendEmail` binding from beta.38 is now wired into Worker binding inference.
+- [alchemy@2.0.0-beta.40](https://v2.alchemy.run/blog/2026-05-15-beta-40) — Cloudflare local dev gains a real Vite dev server (HMR, SSR, client + worker in one process), AiGateway stops reporting spurious updates on every deploy, the Worker HTTP server returns generic 500s while logging the full Cause server-side, and a handful of fixes around entrypoint generation, container startup, and the dev lockfile.
 
 ## Providers — auto-generated API reference
 
