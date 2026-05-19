@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "mysql",
-  "id": "fb56c3ef-f90b-48b7-9e6c-78d0e7009c4e",
+  "id": "34f6e5bd-9164-4ff3-b298-bf82949627f3",
   "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
@@ -165,17 +165,6 @@
       "name": "email_unique",
       "table": "users",
       "entityType": "indexes"
-    },
-    {
-      "columns": ["user_id"],
-      "tableTo": "users",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "nameExplicit": false,
-      "name": "posts_user_id_users_id_fkey",
-      "entityType": "fks",
-      "table": "posts"
     }
   ],
   "renames": []

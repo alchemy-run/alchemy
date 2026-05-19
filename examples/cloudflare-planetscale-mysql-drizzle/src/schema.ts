@@ -11,9 +11,7 @@ export type User = typeof Users.$inferSelect;
 
 export const Posts = mysqlTable("posts", {
   id: int("id").primaryKey().autoincrement(),
-  userId: int("user_id")
-    .notNull()
-    .references(() => Users.id, { onDelete: "cascade" }),
+  userId: int("user_id").notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   body: varchar("body", { length: 4096 }).notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),

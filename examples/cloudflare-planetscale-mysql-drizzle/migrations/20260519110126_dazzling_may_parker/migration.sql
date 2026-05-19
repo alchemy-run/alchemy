@@ -13,5 +13,3 @@ CREATE TABLE `users` (
 	`created_at` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `email_unique` UNIQUE INDEX(`email`)
 );
---> statement-breakpoint
-ALTER TABLE `posts` ADD CONSTRAINT `posts_user_id_users_id_fkey` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE;

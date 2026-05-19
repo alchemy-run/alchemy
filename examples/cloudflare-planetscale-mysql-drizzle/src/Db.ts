@@ -27,7 +27,6 @@ export const PlanetscaleDb = Effect.gen(function* () {
     : yield* Planetscale.MySQLDatabase("app-db", {
         region: { slug: "us-east" },
         clusterSize: "PS_10",
-        allowForeignKeyConstraints: true,
       });
 
   const branch = yield* Planetscale.MySQLBranch("app-branch", {

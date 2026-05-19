@@ -95,7 +95,9 @@ const applyMySQLMigrations = (options: ApplyMigrationsOptions) =>
         nextSeq += 1;
         yield* Effect.gen(function* () {
           yield* mysqlQuery(connection, "START TRANSACTION");
-          yield* mysqlQuery(connection, file.sql);
+          for (const statement of splitMySQLStatements(file.sql)) {
+            yield* mysqlQuery(connection, statement);
+          }
           yield* mysqlExecute(
             connection,
             `INSERT INTO ${table} (id, name) VALUES (?, ?);`,
@@ -115,7 +117,26 @@ const applyMySQLMigrations = (options: ApplyMigrationsOptions) =>
   );
 
 const runMySQLSql = (target: MySQLMigrationTarget, sql: string) =>
-  withMySQLConnection(target, (connection) => mysqlQuery(connection, sql));
+  withMySQLConnection(target, (connection) =>
+    Effect.gen(function* () {
+      for (const statement of splitMySQLStatements(sql)) {
+        yield* mysqlQuery(connection, statement);
+      }
+    }),
+  );
+
+// Drizzle (and other migration tools) emit `--> statement-breakpoint` as a
+// separator between statements. PlanetScale's Vitess parser rejects the `-->`
+// token ("syntax error at position 2") because MySQL line comments require
+// whitespace after `--`. Split on the marker and run each statement
+// individually so the connector never sees the breakpoint comment.
+const STATEMENT_BREAKPOINT = /\r?\n\s*-->\s*statement-breakpoint\s*\r?\n?/g;
+
+const splitMySQLStatements = (sql: string): string[] =>
+  sql
+    .split(STATEMENT_BREAKPOINT)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
 const getNextMySQLSeq = (connection: Connection, table: string) =>
   mysqlQueryRows<{ id: string }>(connection, `SELECT id FROM ${table};`).pipe(
