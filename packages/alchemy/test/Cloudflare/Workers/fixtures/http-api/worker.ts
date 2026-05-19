@@ -6,7 +6,9 @@ import * as Etag from "effect/unstable/http/Etag";
 import * as HttpPlatform from "effect/unstable/http/HttpPlatform";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import { decodeTask, Task, TaskApi, TaskNotFound } from "./api.ts";
+import TasksObject, { TaskDOApi } from "./object.ts";
 
 const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
   fileResponse: () => Effect.die("HttpPlatform.fileResponse not supported"),
@@ -31,37 +33,58 @@ export default class HttpApiTestWorker extends Cloudflare.Worker<HttpApiTestWork
   },
   Effect.gen(function* () {
     const tasks = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const tasksDO = yield* TasksObject;
+
+    const getTaskDO = (id: string = "default") =>
+      HttpApiClient.makeWith(TaskDOApi, {
+        baseUrl: `http://localhost`,
+        httpClient: Cloudflare.toHttpClient(tasksDO.getByName(id)),
+      });
 
     const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
       handlers
-        .handle(
-          "getTask",
-          Effect.fn(function* ({ params }) {
-            const task = yield* tasks.get(params.id).pipe(
-              Effect.flatMap((data) =>
-                data
-                  ? data.text().pipe(Effect.map((data) => JSON.parse(data)))
-                  : Effect.succeed(undefined),
-              ),
-              Effect.orDie,
-            );
-            if (!task) {
-              return yield* Effect.fail(new TaskNotFound({ id: params.id }));
-            }
-            return decodeTask(task);
-          }),
+        .handle("getTask", ({ params }) =>
+          tasks.get(params.id).pipe(
+            Effect.orDie,
+            Effect.flatMap((data) =>
+              data
+                ? data.text().pipe(
+                    Effect.map((data) => JSON.parse(data)),
+                    Effect.orDie,
+                  )
+                : Effect.succeed(undefined),
+            ),
+            Effect.flatMap((data) =>
+              data
+                ? decodeTask(data).pipe(Effect.orDie)
+                : Effect.fail(new TaskNotFound({ id: params.id })),
+            ),
+            Effect.tapError((err) => Effect.logError("err", err)),
+          ),
         )
-        .handle(
-          "createTask",
-          Effect.fn(function* ({ payload }) {
-            const task = new Task({
-              id: crypto.randomUUID(),
-              title: payload.title,
-              completed: false,
-            });
-            yield* tasks.put(task.id, JSON.stringify(task)).pipe(Effect.orDie);
-            return task;
-          }),
+        .handle("createTask", ({ payload }) => {
+          const task = new Task({
+            id: crypto.randomUUID(),
+            title: payload.title,
+            completed: false,
+          });
+          return tasks
+            .put(task.id, JSON.stringify(task))
+            .pipe(Effect.orDie, Effect.as(task));
+        })
+        .handle("getTaskDO", ({ params }) =>
+          getTaskDO().pipe(
+            Effect.flatMap((client) =>
+              client.TasksDO.getTask({ params }).pipe(Effect.orDie),
+            ),
+          ),
+        )
+        .handle("createTaskDO", ({ payload }) =>
+          getTaskDO().pipe(
+            Effect.flatMap((client) =>
+              client.TasksDO.createTask({ payload }).pipe(Effect.orDie),
+            ),
+          ),
         ),
     );
 

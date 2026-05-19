@@ -153,38 +153,29 @@ export const makeEffectVirtualEntry = (
   const hasDoClasses = doClasses.length > 0;
   const hasWfClasses = wfClasses.length > 0;
   return (importPath: string) => `
-import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Context from "effect/Context";
-import * as Stream from "effect/Stream";
 
 import { env, DurableObject, WorkerEntrypoint${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
-import { MinimumLogLevel } from "effect/References";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Stack } from "alchemy/Stack";
-import { WorkerEnvironment, makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy/Cloudflare";
+import { makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""} } from "alchemy/Cloudflare";
 import { makeEntrypointLayer } from "alchemy/Runtime";
 
 import entrypoint from ${JSON.stringify(importPath)};
 
-export default makeWorkerBridge(WorkerEntrypoint, {
+const meta = {
   entrypoint,
   stack: {
     name: ${JSON.stringify(stack.name)},
     stage: ${JSON.stringify(stack.stage)},
   },
-});
+};
+
+export default makeWorkerBridge(WorkerEntrypoint, meta);
 
 // export class proxy stubs for Durable Objects and Workflows
 ${[
   ...(hasDoClasses
     ? [
-        "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, getExport);",
+        "const DurableObjectBridge = makeDurableObjectBridge(DurableObject, meta);",
         ...doClasses.map(
           (id) => `export class ${id} extends DurableObjectBridge("${id}") {}`,
         ),
@@ -192,7 +183,7 @@ ${[
     : []),
   ...(hasWfClasses
     ? [
-        "const WorkflowBridgeFn = makeWorkflowBridge(WorkflowEntrypoint, getExport);",
+        "const WorkflowBridgeFn = makeWorkflowBridge(WorkflowEntrypoint, meta);",
         ...wfClasses.map(
           (id) => `export class ${id} extends WorkflowBridgeFn("${id}") {}`,
         ),
