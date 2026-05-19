@@ -6,10 +6,13 @@ import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { fileURLToPath } from "node:url";
 import type * as rolldown from "rolldown";
-import Sonda from "sonda/rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import { Self } from "../../Self.ts";
+import {
+  dependencyGroups,
+  loadDependencyModule,
+} from "../../ProviderDependencies.ts";
 import {
   isDurableObjectExport,
   type DurableObjectExport,
@@ -75,7 +78,15 @@ export const WorkerBundle = Effect.gen(function* () {
               ),
             ]
           : undefined,
-        ...(options.userOptions?.metafile ? [Sonda({ open: false })] : []),
+        ...(options.userOptions?.metafile
+          ? [
+              (yield* loadDependencyModule({
+                surface: "Cloudflare Worker bundle analysis",
+                group: dependencyGroups.cloudflareBundleAnalysis,
+                load: () => import("sonda/rolldown"),
+              })).default({ open: false }),
+            ]
+          : []),
       ],
       checks: {
         // Suppress unresolved import warnings for unrelated AWS packages

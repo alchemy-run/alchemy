@@ -28,7 +28,6 @@
     "alchemy": "workspace:*",
     "drizzle-orm": "1.0.0-rc.1",
     "effect": "catalog:",
-    "ignore": "^7.0.5",
     "pg": "^8.13.0",
     "sonda": "catalog:"
   },

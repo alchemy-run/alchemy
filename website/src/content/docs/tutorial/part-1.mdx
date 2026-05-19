@@ -8,21 +8,9 @@ sidebar:
 import Terminal from "../../../components/Terminal.astro";
 import StateStoreBootstrap from "../../../components/marketing-islands/StateStoreBootstrap.tsx";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
-import {
-  alchemyVersion,
-  cloudflareWorkersTypesVersion,
-  distilledCloudflareRolldownPluginVersion,
-  distilledCloudflareRuntimeVersion,
-  distilledCloudflareVersion,
-  distilledCloudflareVitePluginVersion,
-  effectVersion,
-  sondaVersion,
-  viteVersion,
-} from "../../../versions";
+import { gettingStartedPkgs } from "../../../versions";
 
-export const corePkgs = `"alchemy@${alchemyVersion}" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
-export const cloudflarePkgs = `"@cloudflare/workers-types@${cloudflareWorkersTypesVersion}" "@distilled.cloud/cloudflare@${distilledCloudflareVersion}" "@distilled.cloud/cloudflare-runtime@${distilledCloudflareRuntimeVersion}" "@distilled.cloud/cloudflare-vite-plugin@${distilledCloudflareVitePluginVersion}" "@distilled.cloud/cloudflare-rolldown-plugin@${distilledCloudflareRolldownPluginVersion}" "ignore@^7.0.5" "sonda@${sondaVersion}" "vite@${viteVersion}"`;
-export const pkgs = `${corePkgs} ${cloudflarePkgs}`;
+export const pkgs = gettingStartedPkgs;
 
 In this first part you'll install Alchemy and Effect, create a Stack
 with a Cloudflare R2 Bucket, and deploy it — all in under five
@@ -54,10 +42,11 @@ Start with an empty directory and initialize a `package.json`:
 
 ## Install dependencies
 
-Install <code>alchemy@{alchemyVersion}</code>, Effect, and the Cloudflare
-provider packages used by this tutorial. Alchemy keeps provider
-integrations in opt-in packages, so a project imports `alchemy/Cloudflare`
-only after those Cloudflare packages are present in its package manifest.
+Install Alchemy, Effect, and the Cloudflare package group used by this
+tutorial. The generated command includes the runtime packages, the
+Cloudflare resource API, shared Distilled error types, Worker binding
+types, and the Worker packaging path that `Cloudflare.state()` uses when
+it bootstraps the account-level state-store Worker.
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">

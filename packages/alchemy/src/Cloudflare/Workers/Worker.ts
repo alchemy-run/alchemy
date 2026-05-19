@@ -26,6 +26,11 @@ import type { HttpEffect } from "../../Http.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import {
+  cloudflareStateStoreDependencyGroup,
+  dependencyGroups,
+  loadDependencyModule,
+} from "../../ProviderDependencies.ts";
+import {
   Platform,
   type Main,
   type PlatformProps,
@@ -57,7 +62,6 @@ import {
   type Images as ImagesBinding,
 } from "../Images/Images.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
-import { SidecarLive } from "../Local/Sidecar.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import type { Queue as CloudflareQueue } from "../Queue/Queue.ts";
@@ -87,8 +91,6 @@ import {
   type RpcErrorEnvelope,
   type RpcStreamEnvelope,
 } from "./Rpc.ts";
-import * as Vite from "./Vite.ts";
-import { WorkerBundle } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
 const WorkerTypeId = "Cloudflare.Worker";
@@ -1203,10 +1205,23 @@ const selectLayer = <
     ),
   );
 
+const LocalWorkerProviderWithSidecar = () =>
+  Layer.unwrap(
+    loadDependencyModule({
+      surface: "Cloudflare local Worker development",
+      group: cloudflareStateStoreDependencyGroup,
+      load: () => import("../Local/Sidecar.ts"),
+    }).pipe(
+      Effect.map(({ SidecarLive }) =>
+        Layer.provide(LocalWorkerProvider(), SidecarLive),
+      ),
+    ),
+  );
+
 export const WorkerProvider = () =>
   selectLayer({
     live: LiveWorkerProvider,
-    dev: () => Layer.provide(LocalWorkerProvider(), SidecarLive),
+    dev: LocalWorkerProviderWithSidecar,
   });
 
 export const LiveWorkerProvider = () =>
@@ -1216,6 +1231,11 @@ export const LiveWorkerProvider = () =>
       const path = yield* Path.Path;
 
       const { accountId } = yield* CloudflareEnvironment;
+      const { WorkerBundle } = yield* loadDependencyModule({
+        surface: "Cloudflare Worker packaging",
+        group: dependencyGroups.cloudflareWorkerRuntime,
+        load: () => import("./WorkerBundle.ts"),
+      }).pipe(Effect.orDie);
       const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
 
@@ -1609,6 +1629,11 @@ export const LiveWorkerProvider = () =>
 
       const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
         const compatibility = getCompatibility(props);
+        const Vite = yield* loadDependencyModule({
+          surface: "Cloudflare Vite Worker build",
+          group: dependencyGroups.cloudflareWorkerRuntime,
+          load: () => import("./Vite.ts"),
+        });
         const { assetsDirectory, serverBundle } = yield* Vite.viteBuild(
           props.vite?.rootDir,
           props.env ?? {},

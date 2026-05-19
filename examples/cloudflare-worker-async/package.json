@@ -29,7 +29,6 @@
     "alchemy": "workspace:*",
     "better-auth": "catalog:",
     "effect": "catalog:",
-    "ignore": "^7.0.5",
     "sonda": "catalog:",
     "vite": "catalog:"
   }

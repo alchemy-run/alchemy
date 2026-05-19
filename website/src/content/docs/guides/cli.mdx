@@ -6,6 +6,8 @@ sidebar:
 ---
 
 import Terminal from "../../../components/Terminal.astro";
+import { Code } from "@astrojs/starlight/components";
+import { awsPkgs, cloudflarePkgs } from "../../../versions";
 
 The Alchemy CLI manages the lifecycle of your stacks. Every command
 operates on an `alchemy.run.ts` file (or a custom entrypoint) and
@@ -290,13 +292,11 @@ alchemy logs --stage prod --since 2026-04-01T00:00:00Z
 Cloud-provider commands for AWS — managing the per-account
 infrastructure that Alchemy itself relies on.
 
-The AWS command group loads AWS provider modules when an `aws`
-subcommand runs. Projects that use these commands install the AWS
-provider package alongside `alchemy`:
+The AWS command group loads its provider module when an `aws` subcommand
+runs. The package group includes the AWS client surface, Smithy credential
+types, and Lambda handler type declarations used across AWS resources:
 
-```sh
-bun add @distilled.cloud/aws
-```
+<Code code={`bun add ${awsPkgs}`} lang="sh" />
 
 ```sh
 alchemy aws <subcommand> [options]
@@ -334,13 +334,12 @@ alchemy aws bootstrap --destroy
 Cloud-provider commands for Cloudflare — managing the state-store
 worker that backs `Cloudflare.state(...)`, and inspecting its logs.
 
-The Cloudflare command group loads Cloudflare provider modules when a
-`cloudflare` subcommand runs. Projects that use these commands install
-the Cloudflare provider packages alongside `alchemy`:
+The Cloudflare command group loads its provider module when a `cloudflare`
+subcommand runs. The package group includes the Cloudflare API client,
+shared Distilled error types, Worker binding types, and Worker packaging
+path used by the state-store bootstrap flow:
 
-```sh
-bun add @cloudflare/workers-types @distilled.cloud/cloudflare @distilled.cloud/cloudflare-runtime @distilled.cloud/cloudflare-vite-plugin @distilled.cloud/cloudflare-rolldown-plugin ignore sonda vite
-```
+<Code code={`bun add ${cloudflarePkgs}`} lang="sh" />
 
 ```sh
 alchemy cloudflare <subcommand> [options]

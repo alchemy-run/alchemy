@@ -27,7 +27,6 @@
     "@tanstack/react-start": "^1.166.15",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "ignore": "^7.0.5",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "sonda": "catalog:"

@@ -51,13 +51,14 @@ One `bind()` wires the binding, env var, and typed connection — at deploy time
 
 ```sh
 bun add alchemy effect @effect/platform-bun @effect/platform-node
-bun add @cloudflare/workers-types @distilled.cloud/cloudflare @distilled.cloud/cloudflare-runtime @distilled.cloud/cloudflare-vite-plugin @distilled.cloud/cloudflare-rolldown-plugin ignore sonda vite
+bun add @cloudflare/workers-types @distilled.cloud/cloudflare @distilled.cloud/core @distilled.cloud/cloudflare-runtime @distilled.cloud/cloudflare-vite-plugin @distilled.cloud/cloudflare-rolldown-plugin vite
 ```
 
-Alchemy keeps provider integrations in opt-in packages. The example
-above imports `alchemy/Cloudflare`, so the install command includes the
-Cloudflare packages that supply the resource API, local Worker runtime,
-bundling plugins, and Worker type definitions.
+The first command installs the Alchemy runtime and Effect platform layers.
+The second command installs the Cloudflare resource API, shared Distilled
+error types, Worker binding types, and Worker packaging path used when
+`Cloudflare.state()` deploys its account-level state-store Worker or a
+stack declares Worker resources.
 
 ## Bootstrap with an AI coding agent
 

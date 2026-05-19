@@ -294,7 +294,6 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
-    "@aws-sdk/credential-providers": "catalog:",
     "@clack/prompts": "^0.11.0",
     "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/aws": "catalog:",
@@ -312,8 +311,6 @@
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
     "@oxc-project/types": "^0.127.0",
-    "@smithy/node-config-provider": "catalog:",
-    "@smithy/shared-ini-file-loader": "catalog:",
     "@smithy/types": "catalog:",
     "@types/aws-lambda": "catalog:",
     "@types/bun": "catalog:",
@@ -324,11 +321,9 @@
     "@types/proper-lockfile": "^4.1.4",
     "@types/react": "^19.2.2",
     "@types/ws": "^8.18.1",
-    "ai": "catalog:",
     "aws4fetch": "catalog:",
     "better-auth": "catalog:",
     "effect": "catalog:",
-    "ignore": "^7.0.5",
     "libsodium-wrappers": "^0.8.3",
     "pg": "^8.13.0",
     "react-devtools-core": "^7.0.1",
@@ -341,7 +336,6 @@
     "ws": "catalog:"
   },
   "peerDependencies": {
-    "@aws-sdk/credential-providers": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/aws": "catalog:",
     "@distilled.cloud/axiom": "catalog:",
@@ -357,8 +351,6 @@
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
-    "@smithy/node-config-provider": "catalog:",
-    "@smithy/shared-ini-file-loader": "catalog:",
     "@smithy/types": "catalog:",
     "@types/aws-lambda": "catalog:",
     "@types/libsodium-wrappers": "^0.8.2",
@@ -370,22 +362,10 @@
     "pg": "^8.13.0",
     "sonda": "catalog:",
     "vite": "catalog:",
-    "web-tree-sitter": "catalog:",
+    "vitest": "^4.0.18",
     "ws": "catalog:"
   },
   "peerDependenciesMeta": {
-    "@ai-sdk/anthropic": {
-      "optional": true
-    },
-    "@ai-sdk/openai": {
-      "optional": true
-    },
-    "@ai-sdk/provider": {
-      "optional": true
-    },
-    "@aws-sdk/credential-providers": {
-      "optional": true
-    },
     "@cloudflare/workers-types": {
       "optional": true
     },
@@ -413,12 +393,6 @@
     "@distilled.cloud/neon": {
       "optional": true
     },
-    "@effect/platform-bun": {
-      "optional": true
-    },
-    "@effect/platform-node": {
-      "optional": true
-    },
     "@effect/sql-pg": {
       "optional": true
     },
@@ -431,12 +405,6 @@
     "@octokit/rest": {
       "optional": true
     },
-    "@smithy/node-config-provider": {
-      "optional": true
-    },
-    "@smithy/shared-ini-file-loader": {
-      "optional": true
-    },
     "@smithy/types": {
       "optional": true
     },
@@ -446,9 +414,6 @@
     "@types/libsodium-wrappers": {
       "optional": true
     },
-    "ai": {
-      "optional": true
-    },
     "aws4fetch": {
       "optional": true
     },
@@ -456,9 +421,6 @@
       "optional": true
     },
     "drizzle-orm": {
-      "optional": true
-    },
-    "ignore": {
       "optional": true
     },
     "libsodium-wrappers": {
@@ -473,7 +435,7 @@
     "vite": {
       "optional": true
     },
-    "web-tree-sitter": {
+    "vitest": {
       "optional": true
     },
     "ws": {

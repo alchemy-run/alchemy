@@ -27,7 +27,6 @@
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "ignore": "^7.0.5",
     "sonda": "catalog:",
     "vite": "catalog:"
   }

@@ -3,18 +3,16 @@ import * as Option from "effect/Option";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
 
+import { cloudflareCliDependencyGroup } from "../../ProviderDependencies.ts";
 import { envFile, instrumentCommand, profile } from "./_shared.ts";
-import { ProviderCommandLoadError } from "./ProviderCommandLoadError.ts";
+import { makeProviderCommandLoadError } from "./ProviderCommandLoadError.ts";
 
 const loadCloudflareCommands = Effect.tryPromise({
   try: () => import("./cloudflare.ts"),
   catch: (cause) =>
-    new ProviderCommandLoadError({
-      message:
-        "The alchemy cloudflare command could not load its provider module. Install the Cloudflare optional peer dependency set before running this command.",
-      provider: "Cloudflare",
-      installCommand:
-        "bun add @cloudflare/workers-types @distilled.cloud/cloudflare @distilled.cloud/cloudflare-runtime @distilled.cloud/cloudflare-vite-plugin @distilled.cloud/cloudflare-rolldown-plugin ignore sonda vite",
+    makeProviderCommandLoadError({
+      command: "alchemy cloudflare",
+      group: cloudflareCliDependencyGroup,
       cause,
     }),
 });

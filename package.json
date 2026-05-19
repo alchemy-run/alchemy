@@ -66,7 +66,6 @@
     ],
     "catalog": {
       "@alchemy.run/node-utils": "0.0.2",
-      "@aws-sdk/credential-providers": "^3.0.0",
       "@cloudflare/containers": "^0.1.1",
       "@cloudflare/vite-plugin": "^1.13.12",
       "@cloudflare/workers-types": "^4.20250805.0",
@@ -87,14 +86,11 @@
       "@libsql/client": "^0.17.0",
       "@opentui/core": "latest",
       "@opentui/solid": "latest",
-      "@smithy/node-config-provider": "^4.0.0",
-      "@smithy/shared-ini-file-loader": "^4.3.4",
       "@smithy/types": "^4.8.1",
       "@types/aws-lambda": "^8.10.152",
       "@types/bun": "latest",
       "@types/node": "latest",
       "@typescript/native-preview": "latest",
-      "ai": "^6.0.62",
       "aws4fetch": "^1.0.20",
       "better-auth": "^1.6.2",
       "drizzle-kit": ">=1.0.0-rc.1",
@@ -106,7 +102,6 @@
       "sonda": "^0.11.1",
       "typescript": "^6.0.3",
       "vite": "^8.0.7",
-      "web-tree-sitter": "0.25.10",
       "ws": "^8.20.0",
       "yaml": "^2.0.0"
     }

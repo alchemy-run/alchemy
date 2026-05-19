@@ -5,6 +5,9 @@ sidebar:
   order: 1
 ---
 
+import { Code } from "@astrojs/starlight/components";
+import { awsTutorialPkgs } from "../../../../versions";
+
 In this part you'll stand up the smallest piece of compute AWS
 offers — a single **Lambda Function** with a public **Function
 URL** — and grow it across the rest of this section into S3,
@@ -22,16 +25,13 @@ DynamoDB, SQS, and Kinesis.
 
 Start with an empty directory and install Alchemy and Effect:
 
-```sh
-mkdir my-app && cd my-app && bun init -y
-bun add alchemy effect @effect/platform-bun @effect/platform-node @distilled.cloud/aws @types/aws-lambda
-```
+<Code code={`mkdir my-app && cd my-app && bun init -y
+bun add ${awsTutorialPkgs}`} lang="sh" />
 
-The stack imports `alchemy/AWS`, so the AWS provider package is part of
-the project dependencies. The Lambda section also installs the AWS
-Lambda type package because the Lambda resource surface exposes handler
-types. Provider packages stay explicit so projects install the cloud
-integrations their stack imports.
+The stack imports `alchemy/AWS`, so the AWS package group is part of the
+project dependencies. The group includes the AWS client surface, Smithy
+credential types, and Lambda handler type declarations used by AWS
+resources in this section.
 
 ## Create the Stack
 

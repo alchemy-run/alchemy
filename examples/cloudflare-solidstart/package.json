@@ -21,7 +21,6 @@
     "@solidjs/vite-plugin-nitro-2": "^0.1.0",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "ignore": "^7.0.5",
     "solid-js": "^1.9.5",
     "sonda": "catalog:",
     "vite": "^7.0.0"

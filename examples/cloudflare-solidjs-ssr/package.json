@@ -20,7 +20,6 @@
     "@tailwindcss/postcss": "^4.1.13",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "ignore": "^7.0.5",
     "postcss": "^8.4.49",
     "solid-devtools": "^0.34.3",
     "sonda": "catalog:",

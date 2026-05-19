@@ -7,21 +7,9 @@ sidebar:
 
 import Terminal from "../../components/Terminal.astro";
 import { Code, Tabs, TabItem } from "@astrojs/starlight/components";
-import {
-  alchemyVersion,
-  cloudflareWorkersTypesVersion,
-  distilledCloudflareRolldownPluginVersion,
-  distilledCloudflareRuntimeVersion,
-  distilledCloudflareVersion,
-  distilledCloudflareVitePluginVersion,
-  effectVersion,
-  sondaVersion,
-  viteVersion,
-} from "../../versions";
+import { dependencyRows, gettingStartedPkgs } from "../../versions";
 
-export const corePkgs = `"alchemy@${alchemyVersion}" "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}" "@effect/platform-node@${effectVersion}"`;
-export const cloudflarePkgs = `"@cloudflare/workers-types@${cloudflareWorkersTypesVersion}" "@distilled.cloud/cloudflare@${distilledCloudflareVersion}" "@distilled.cloud/cloudflare-runtime@${distilledCloudflareRuntimeVersion}" "@distilled.cloud/cloudflare-vite-plugin@${distilledCloudflareVitePluginVersion}" "@distilled.cloud/cloudflare-rolldown-plugin@${distilledCloudflareRolldownPluginVersion}" "ignore@^7.0.5" "sonda@${sondaVersion}" "vite@${viteVersion}"`;
-export const pkgs = `${corePkgs} ${cloudflarePkgs}`;
+export const pkgs = gettingStartedPkgs;
 
 ## Prerequisites
 
@@ -47,10 +35,10 @@ export const pkgs = `${corePkgs} ${cloudflarePkgs}`;
 
 ## Install
 
-Alchemy installs its core runtime separately from provider packages.
-This page imports `alchemy/Cloudflare`, so the install command includes
-the Cloudflare packages that provide the resource API, local Worker
-runtime, Worker bundling plugins, and Worker type definitions.
+This page uses `Cloudflare.state()` and `alchemy/Cloudflare`, so the
+install command includes Alchemy core packages plus the Cloudflare
+packages needed to deploy the state-store Worker and create Cloudflare
+resources.
 
 <Tabs syncKey="pkgManager">
   <TabItem label="bun" icon="bun">
@@ -66,18 +54,6 @@ runtime, Worker bundling plugins, and Worker type definitions.
     <Code code={`yarn add ${pkgs}`} lang="sh" />
   </TabItem>
 </Tabs>
-
-Provider imports map to package groups:
-
-| Import surface | Package group |
-| --- | --- |
-| `alchemy/AWS` | `@distilled.cloud/aws`, `@types/aws-lambda` |
-| `alchemy/Cloudflare` | `@cloudflare/workers-types`, `@distilled.cloud/cloudflare`, `@distilled.cloud/cloudflare-runtime`, `@distilled.cloud/cloudflare-vite-plugin`, `@distilled.cloud/cloudflare-rolldown-plugin`, `ignore`, `sonda`, `vite` |
-| `alchemy/GitHub` | `@octokit/rest`, `libsodium-wrappers` |
-| `alchemy/Axiom` | `@distilled.cloud/axiom` |
-| `alchemy/Neon` | `@distilled.cloud/neon`, `pg` |
-| `alchemy/Drizzle` | `@effect/sql-pg`, `drizzle-orm` |
-| `alchemy/SQLite` | `@libsql/client` |
 
 ## Create your Stack
 
@@ -152,6 +128,33 @@ an API token, or to add a `prod` profile) use
 `alchemy login --configure` or `alchemy login --profile prod --configure`.
 See [Profiles](/concepts/profiles) for the full picture.
 :::
+
+## Package Groups
+
+Alchemy keeps provider packages explicit so projects install the provider
+surfaces they import. A stack that uses more than one provider installs
+the package groups for each provider surface it imports.
+
+<table>
+  <thead>
+    <tr>
+      <th>Import surface</th>
+      <th>Install packages</th>
+    </tr>
+  </thead>
+  <tbody>
+    {dependencyRows.map((row) => (
+      <tr>
+        <td><code>{row.importSurface}</code></td>
+        <td>{row.packages}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+
+The install command on this page combines the Cloudflare package group
+with Alchemy core packages. An AWS-only stack would install the AWS
+package group beside the core packages instead.
 
 ## What's next
 
