@@ -18,12 +18,12 @@ import { Profile, ProfileLive } from "./Auth/Profile.ts";
 import { Cli } from "./Cli/Cli.ts";
 import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
-import { ref } from "./Ref.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
+import type { ActionLike } from "./Action.ts";
 import type { State } from "./State/State.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
-import { taggedFunction } from "./Util/effect.ts";
+import { effectClass, taggedFunction } from "./Util/effect.ts";
 import { fileLogger } from "./Util/FileLogger.ts";
 import { PlatformServices } from "./Util/PlatformServices.ts";
 
@@ -98,6 +98,7 @@ export const Stack: Context.ServiceClass<
     (stackName: string): Effect.Effect<Self> & {
       new (_: never): Output.ToOutput<Shape>;
       make: <A, Req>(
+        options: StackProps<NoInfer<Req>>,
         effect: Effect.Effect<A, never, Req>,
       ) => Effect.Effect<CompiledStack<A>>;
       stage: {
@@ -114,35 +115,45 @@ export const Stack: Context.ServiceClass<
   taggedFunction(
     Context.Service<Stack, Omit<StackSpec, "output">>()("Stack"),
     <A, Req>(
-      stackName: string,
-      options: {
-        providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
-        state: Layer.Layer<State, never, StackServices>;
-      },
-      eff: Effect.Effect<A, never, Req>,
-    ) =>
-      eff.pipe(
+      stackName?: string,
+      options?: StackProps<NoInfer<Req>>,
+      eff?: Effect.Effect<A, never, Req>,
+    ) => {
+      if (!stackName) {
+        return (stackName: string) =>
+          Object.assign(
+            // by default, reference the stack at the "current" stage of the importer
+            Output.stackRef<A>(stackName).pipe(effectClass),
+            {
+              stage: createStageProxy(stackName),
+              make: <Req = never>(
+                options: StackProps<NoInfer<Req>>,
+                eff: Effect.Effect<A, never, Req>,
+              ) => Stack(stackName, options, eff),
+            },
+          );
+      }
+      return eff!.pipe(
         make({
           name: stackName,
-          ...options,
+          ...options!,
         }),
         (eff) =>
           Object.assign(eff, {
-            stage: new Proxy(
-              {},
-              {
-                get: (_, stage: string) =>
-                  ref({
-                    stack: stackName,
-                    stage,
-                    id: stackName,
-                  }),
-              },
-            ),
+            stage: createStageProxy(stackName),
           }),
-      ),
+      );
+    },
   ),
 ) as any;
+
+const createStageProxy = (stackName: string) =>
+  new Proxy(
+    {},
+    {
+      get: (_, stage: string) => Output.stackRef(stackName, { stage }),
+    },
+  );
 
 export interface StackSpec<Output = any> {
   name: string;
@@ -153,6 +164,10 @@ export interface StackSpec<Output = any> {
   };
   bindings: {
     [logicalId: string]: ResourceBinding[];
+  };
+  /** Tasks registered on the stack, keyed by FQN. */
+  actions: {
+    [logicalId: string]: ActionLike;
   };
   output: Output;
 }
@@ -211,7 +226,7 @@ export const make =
           Layer.provideMerge(
             Layer.effect(
               Stack,
-              Stage.asEffect().pipe(
+              Stage.pipe(
                 Effect.map(
                   (stage) =>
                     options.stack ?? {
@@ -219,6 +234,7 @@ export const make =
                       stage,
                       resources: {},
                       bindings: {},
+                      actions: {},
                     },
                 ),
               ),
@@ -230,7 +246,7 @@ export const make =
       Effect.flatMap((context) =>
         Effect.all([
           effect,
-          Stack.asEffect(),
+          Stack,
           Effect.context<ROut | StackServices>(),
         ]).pipe(
           Effect.map(
@@ -249,7 +265,7 @@ export const make =
     );
 
 export const CurrentStack = Effect.serviceOption(Stack)
-  .asEffect()
+
   .pipe(Effect.map(Option.getOrUndefined));
 
 const platform = Layer.mergeAll(
@@ -268,9 +284,7 @@ const alchemy = (overrides?: { dev?: boolean }) =>
       ? Layer.provide(
           Layer.effect(
             AlchemyContext,
-            AlchemyContext.asEffect().pipe(
-              Effect.map((ctx) => ({ ...ctx, dev: overrides.dev! })),
-            ),
+            AlchemyContext.useSync((ctx) => ({ ...ctx, dev: overrides.dev! })),
           ),
           AlchemyContextLive,
         )

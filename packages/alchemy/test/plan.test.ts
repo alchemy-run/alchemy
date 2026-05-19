@@ -4,6 +4,8 @@ import type { Input, InputProps } from "@/Input";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
 import { UnsatisfiedResourceCycle } from "@/Plan";
+import { Secret } from "@/Secret";
+import { Variable } from "@/Variable";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import {
@@ -2406,6 +2408,98 @@ describe("Redacted props/outputs are preserved through plan", () => {
   );
 });
 
+describe("NamedExpr (Alchemy.Secret / Alchemy.Variable) resolution", () => {
+  test(
+    "Alchemy.Variable literal flows into a downstream prop as the unwrapped value",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: Variable("STRING_VAR", "hello") as any,
+        });
+      }).pipe(makePlan);
+
+      const node: any = plan.resources.A!;
+      expect(node.action).toBe("create");
+      expect((node.props as TestResourceProps).string).toBe("hello");
+    }),
+  );
+
+  test(
+    "Alchemy.Secret literal flows into a downstream prop as a Redacted",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: "x",
+          redacted: Secret("API_KEY", "hunter2") as any,
+        });
+      }).pipe(makePlan);
+
+      const node: any = plan.resources.A!;
+      expect(node.action).toBe("create");
+      const props = node.props as TestResourceProps;
+      expect(Redacted.isRedacted(props.redacted)).toBe(true);
+      expect(Redacted.value(props.redacted!)).toBe("hunter2");
+    }),
+  );
+
+  test(
+    "Alchemy.Secret pre-redacted input flows through unchanged",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: "x",
+          redacted: Secret("API_KEY", Redacted.make("already-redacted")) as any,
+        });
+      }).pipe(makePlan);
+
+      const node: any = plan.resources.A!;
+      const props = node.props as TestResourceProps;
+      expect(Redacted.isRedacted(props.redacted)).toBe(true);
+      expect(Redacted.value(props.redacted!)).toBe("already-redacted");
+    }),
+  );
+
+  test(
+    "no-op when prior state already has the same Alchemy.Secret value",
+    Effect.gen(function* () {
+      yield* seed({
+        A: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "A",
+          fqn: "A",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: {
+            string: "x",
+            redacted: Redacted.make("hunter2"),
+          },
+          attr: {
+            string: "x",
+            stringArray: [],
+            stableString: "A",
+            stableArray: ["A"],
+            replaceString: undefined,
+            redacted: Redacted.make("hunter2"),
+            redactedArray: undefined,
+          },
+          downstream: [],
+          bindings: [],
+        },
+      });
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: "x",
+          redacted: Secret("API_KEY", "hunter2") as any,
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("noop");
+    }),
+  );
+});
+
 describe("engine-level adoption", () => {
   // Build a plan, optionally with an explicit AdoptPolicy and a read hook
   // that simulates a pre-existing cloud resource.
@@ -2474,7 +2568,7 @@ describe("engine-level adoption", () => {
         fqn: "Adopted",
       });
       expect(persisted?.status).toBe("created");
-      expect(persisted?.attr).toMatchObject({ string: "hello" });
+      expect((persisted as any)?.attr).toMatchObject({ string: "hello" });
     }),
   );
 
@@ -2509,7 +2603,7 @@ describe("engine-level adoption", () => {
       // reaches the state store — both via the public `Unowned.is`
       // check *and* via direct symbol inspection (in case someone
       // accidentally uses `Symbol.for` rather than `Unowned.is`).
-      const persistedAttr = persisted?.attr as object;
+      const persistedAttr = (persisted as any)?.attr as object;
       expect(Unowned.is(persistedAttr)).toBe(false);
       expect(Object.getOwnPropertySymbols(persistedAttr).length).toBe(0);
       expect(JSON.stringify(persistedAttr)).not.toContain("Unowned");
@@ -2566,6 +2660,187 @@ describe("engine-level adoption", () => {
       );
 
       expect(plan.resources.FreshBucket!.action).toBe("create");
+    }),
+  );
+});
+
+describe("RefExpr resolution", () => {
+  const seedAt = (
+    stack: string,
+    stage: string,
+    resources: Record<string, ResourceState>,
+  ) =>
+    Effect.gen(function* () {
+      const state = yield* State;
+      for (const [fqn, value] of Object.entries(resources)) {
+        yield* state.set({ stack, stage, fqn, value });
+      }
+    });
+
+  const sharedAttr = {
+    string: "shared-string",
+    stringArray: ["shared"],
+    stableString: "shared-stable",
+    stableArray: ["shared-stable"],
+    replaceString: undefined,
+    redacted: undefined,
+    redactedArray: undefined,
+  };
+
+  const sharedResourceState = {
+    instanceId,
+    providerVersion: 0,
+    logicalId: "Shared",
+    fqn: "Shared",
+    namespace: undefined,
+    resourceType: "Test.TestResource",
+    status: "created" as ResourceStatus,
+    props: { string: "shared-string" },
+    attr: sharedAttr,
+    bindings: [],
+    downstream: [],
+  } as ResourceState;
+
+  test(
+    "resolves a cross-stage Ref to the seeded resource's attributes",
+    Effect.gen(function* () {
+      yield* seedAt(TEST_STACK, "other", { Shared: sharedResourceState });
+      const plan = yield* Effect.gen(function* () {
+        const shared = yield* TestResource.ref("Shared", { stage: "other" });
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "shared-string",
+      });
+    }),
+  );
+
+  test(
+    "resolves a cross-stack Ref using the explicit stack option",
+    Effect.gen(function* () {
+      yield* seedAt("other-stack", TEST_STAGE, {
+        Shared: sharedResourceState,
+      });
+      const plan = yield* Effect.gen(function* () {
+        const shared = yield* TestResource.ref("Shared", {
+          stack: "other-stack",
+        });
+        yield* TestResource("Consumer", {
+          string: shared.string,
+        });
+      }).pipe(makePlan);
+
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "shared-string",
+      });
+    }),
+  );
+
+  test(
+    "Ref to a resource in the current stack/stage is resolved",
+    Effect.gen(function* () {
+      yield* seed({ Shared: sharedResourceState });
+      const plan = yield* Effect.gen(function* () {
+        const shared = yield* TestResource.ref("Shared");
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "shared-string",
+      });
+    }),
+  );
+
+  test(
+    "missing Ref target dies with InvalidReferenceError",
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const shared = yield* TestResource.ref("Ghost", { stage: "other" });
+          yield* TestResource("Consumer", { string: shared.string });
+        }).pipe(makePlan),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as Output.InvalidReferenceError;
+        expect(err._tag).toBe("InvalidReferenceError");
+        expect(err.resourceId).toBe("Ghost");
+        expect(err.stage).toBe("other");
+      }
+    }),
+  );
+});
+
+describe("StackRefExpr resolution", () => {
+  const setStackOutput = (stack: string, stage: string, value: unknown) =>
+    Effect.gen(function* () {
+      const state = yield* State;
+      yield* state.setOutput({ stack, stage, value });
+    });
+
+  test(
+    "resolves an Output.stackRef to the persisted stack output",
+    Effect.gen(function* () {
+      yield* setStackOutput("Backend", TEST_STAGE, {
+        url: "https://api.example.com",
+      });
+      const plan = yield* Effect.gen(function* () {
+        const backend = yield* Output.stackRef<{ url: string }>("Backend");
+        yield* TestResource("Consumer", {
+          string: (backend as any).url,
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "https://api.example.com",
+      });
+    }),
+  );
+
+  test(
+    "resolves an explicit stage on the stackRef",
+    Effect.gen(function* () {
+      yield* setStackOutput("Backend", "prod", {
+        url: "https://prod.example.com",
+      });
+      const plan = yield* Effect.gen(function* () {
+        const backend = yield* Output.stackRef<{ url: string }>("Backend", {
+          stage: "prod",
+        });
+        yield* TestResource("Consumer", {
+          string: (backend as any).url,
+        });
+      }).pipe(makePlan);
+
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "https://prod.example.com",
+      });
+    }),
+  );
+
+  test(
+    "missing stack output dies with InvalidReferenceError",
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const backend = yield* Output.stackRef<{ url: string }>("Backend", {
+            stage: "ghost",
+          });
+          yield* TestResource("Consumer", {
+            string: (backend as any).url,
+          });
+        }).pipe(makePlan),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as Output.InvalidReferenceError;
+        expect(err._tag).toBe("InvalidReferenceError");
+        expect(err.stack).toBe("Backend");
+        expect(err.stage).toBe("ghost");
+      }
     }),
   );
 });

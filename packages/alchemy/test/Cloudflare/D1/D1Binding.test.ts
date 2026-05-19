@@ -92,9 +92,28 @@ test.provider(
       expect(typeof initBody.count).toBe("number");
       expect(typeof initBody.duration).toBe("number");
 
-      // batch-insert via prepare.bind
+      // batch-insert via prepare.bind. Edge propagation can still serve a
+      // transient 404 between routes on a fresh URL, so retry until the
+      // route handler responds 200.
       const seedRes = yield* HttpClient.execute(
         HttpClientRequest.post(`${baseUrl}/seed`),
+      ).pipe(
+        Effect.flatMap((res) =>
+          res.status === 200
+            ? Effect.succeed(res)
+            : res.text.pipe(
+                Effect.flatMap((body) =>
+                  Effect.fail(new WorkerNotReady({ status: res.status, body })),
+                ),
+              ),
+        ),
+        Effect.retry({
+          while: (e): e is WorkerNotReady =>
+            e instanceof WorkerNotReady && e.status >= 400 && e.status < 600,
+          schedule: Schedule.exponential("500 millis").pipe(
+            Schedule.both(Schedule.recurs(15)),
+          ),
+        }),
       );
       expect(seedRes.status).toBe(200);
       expect(yield* seedRes.json).toMatchObject({ batches: 3, success: true });

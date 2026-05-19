@@ -264,7 +264,7 @@ export default function PRLifecycle() {
               title={`ci · ${STAGE}`}
               badge={badge}
               badgeColor={accent}
-              bodyMinHeight={232}
+              maxLines={10}
             >
               <Line>
                 <span style={{ color: accent }}>$ </span>

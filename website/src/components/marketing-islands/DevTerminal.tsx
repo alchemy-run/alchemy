@@ -199,7 +199,7 @@ export default function DevTerminal({
       title={title}
       badge="DEV"
       badgeColor="var(--alc-accent-bright)"
-      bodyMinHeight={320}
+      maxLines={15}
     >
       {lines.map((l) => (
         <Line key={l.key}>{l.text}</Line>

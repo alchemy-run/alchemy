@@ -20,7 +20,7 @@ export type Random = Resource<
 >;
 
 export const makeRandom = (id: string, props?: RandomProps) =>
-  Random(id, props).pipe(Effect.flatMap((rand) => rand.text.asEffect()));
+  Random(id, props).pipe(Effect.map((rand) => rand.text));
 
 /**
  * A deterministic-in-state random secret generator.

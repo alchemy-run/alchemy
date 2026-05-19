@@ -5,11 +5,12 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alchemy-run/alchemy-effect"
+    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
+    "directory": "examples/cloudflare-tanstack"
   },
   "type": "module",
   "scripts": {
-    "dev": "vite dev --port 3000",
+    "dev": "alchemy dev",
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "alchemy deploy",
@@ -32,6 +33,7 @@
     "sonda": "catalog:"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",

@@ -28,6 +28,7 @@ export const destroy = ({
         // TODO(sam): probably better to have Plan.destroy and Plan.update
         resources: {},
         bindings: {},
+        actions: {},
         output: {},
       }).pipe(Effect.flatMap(Apply.apply)),
     { stage, dev, scope },

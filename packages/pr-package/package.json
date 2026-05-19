@@ -1,13 +1,13 @@
 {
   "name": "@alchemy.run/pr-package",
-  "version": "2.0.0-beta.36",
+  "version": "2.0.0-beta.40",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
-    "directory": "package/pr-package"
+    "directory": "packages/pr-package"
   },
   "files": [
     "lib",

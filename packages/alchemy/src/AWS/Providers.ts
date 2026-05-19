@@ -15,13 +15,14 @@ import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
+import * as HttpClientError from "effect/unstable/http/HttpClientError";
+import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { Command, CommandProvider } from "../Build/Command.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as ACM from "./ACM/index.ts";
 import * as ApiGateway from "./ApiGateway/index.ts";
 import * as Assets from "./Assets.ts";
-import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { AwsAuth } from "./AuthProvider.ts";
 import * as AutoScaling from "./AutoScaling/index.ts";
 import * as CloudFront from "./CloudFront/index.ts";
@@ -34,6 +35,7 @@ import * as ECS from "./ECS/index.ts";
 import * as EKS from "./EKS/index.ts";
 import * as ELBv2 from "./ELBv2/index.ts";
 import * as Endpoint from "./Endpoint.ts";
+import { Default as DefaultEnvironment } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
 import * as IAM from "./IAM/index.ts";
 import * as IdentityCenter from "./IdentityCenter/index.ts";
@@ -50,7 +52,6 @@ import * as Scheduler from "./Scheduler/index.ts";
 import * as SecretsManager from "./SecretsManager/index.ts";
 import * as SNS from "./SNS/index.ts";
 import * as SQS from "./SQS/index.ts";
-import { Default as DefaultEnvironment } from "./Environment.ts";
 import * as Website from "./Website/index.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
@@ -591,9 +592,27 @@ export const providers = () =>
     Layer.orDie,
   );
 
+// TODO(sam): remove this once it's upstreamed to distilled
+const isHttpTransportError = (error: unknown): boolean => {
+  if (!HttpClientError.isHttpClientError(error)) return false;
+  const tag = error.reason._tag;
+  if (tag === "TransportError") return true;
+  if (
+    tag === "StatusCodeError" &&
+    "response" in error.reason &&
+    error.reason.response.status >= 500
+  ) {
+    return true;
+  }
+  return false;
+};
+
 const awsRetryFactory: RetryFactory = (lastError) => ({
   while: (error) =>
-    isTransientError(error) || isThrottlingError(error) || isRetryable(error),
+    isTransientError(error) ||
+    isThrottlingError(error) ||
+    isRetryable(error) ||
+    isHttpTransportError(error),
   schedule: pipe(
     Schedule.exponential(Duration.millis(200), 2),
     Schedule.modifyDelay(

@@ -65,6 +65,7 @@ export function TermChrome({
   badgeColor,
   children,
   bodyMinHeight,
+  maxLines,
   bare,
 }: {
   title: string;
@@ -73,18 +74,38 @@ export function TermChrome({
   children: ReactNode;
   bodyMinHeight?: number;
   /**
+   * Locks the terminal body to exactly this many lines of content (computed
+   * from the body font-size × line-height + padding). Use in docs/embedded
+   * contexts where layout shift below the terminal must be avoided. Count
+   * the maximum number of visible lines the body ever renders. Takes
+   * precedence over `bodyMinHeight`.
+   */
+  maxLines?: number;
+  /**
    * When true, omit the outer `.alc-term` wrapper and the dots/title header.
    * Useful when this terminal is embedded inside another chrome (e.g. the
    * mobile tab toggle that combines code + deploy into one card).
    */
   bare?: boolean;
 }) {
+  // `1lh` resolves to the computed line-height of `.alc-term__body`, so the
+  // reservation scales with font-size and browser zoom. Padding (28px = 14px
+  // top + 14px bottom) is fixed visual chrome; with `box-sizing: border-box`
+  // it's included in `height`.
+  const bodyStyle: CSSProperties | undefined =
+    maxLines !== undefined
+      ? {
+          boxSizing: "border-box",
+          height: `calc(${maxLines} * 1lh + 28px)`,
+          minHeight: `calc(${maxLines} * 1lh + 28px)`,
+          overflow: "hidden",
+        }
+      : bodyMinHeight
+        ? { minHeight: bodyMinHeight }
+        : undefined;
   if (bare) {
     return (
-      <pre
-        className="alc-term__body"
-        style={bodyMinHeight ? { minHeight: bodyMinHeight } : undefined}
-      >
+      <pre className="alc-term__body" style={bodyStyle}>
         {children}
       </pre>
     );
@@ -125,10 +146,7 @@ export function TermChrome({
           </span>
         )}
       </div>
-      <pre
-        className="alc-term__body"
-        style={bodyMinHeight ? { minHeight: bodyMinHeight } : undefined}
-      >
+      <pre className="alc-term__body" style={bodyStyle}>
         {children}
       </pre>
     </div>

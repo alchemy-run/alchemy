@@ -14,7 +14,6 @@ const aws = AWS.providers();
 const EKS_ADMIN_PRINCIPAL_ARN = Config.string("EKS_ADMIN_PRINCIPAL_ARN").pipe(
   Config.option,
   Config.map(Option.getOrUndefined),
-  (config) => config.asEffect(),
 );
 
 const clusterName = "alchemy-eks-auto-example";

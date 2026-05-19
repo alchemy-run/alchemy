@@ -1,13 +1,13 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.36",
+  "version": "2.0.0-beta.40",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
-    "directory": "package/alchemy"
+    "directory": "packages/alchemy"
   },
   "bin": {
     "alchemy": "./bin/cli.js"
@@ -39,12 +39,6 @@
       "bun": "./src/*.ts",
       "worker": "./src/*.ts",
       "import": "./lib/*.js"
-    },
-    "./Agent": {
-      "types": "./lib/Agent/index.d.ts",
-      "bun": "./src/Agent/index.ts",
-      "worker": "./src/Agent/index.ts",
-      "import": "./lib/Agent/index.js"
     },
     "./Auth": {
       "types": "./lib/Auth/index.d.ts",
@@ -136,6 +130,12 @@
       "worker": "./src/Cloudflare/index.ts",
       "import": "./lib/Cloudflare/index.js"
     },
+    "./Cloudflare/Bridge": {
+      "types": "./lib/Cloudflare/Bridge.d.ts",
+      "bun": "./src/Cloudflare/Bridge.ts",
+      "worker": "./src/Cloudflare/Bridge.ts",
+      "import": "./lib/Cloudflare/Bridge.js"
+    },
     "./Cloudflare/Live": {
       "types": "./lib/Cloudflare/Live.d.ts",
       "bun": "./src/Cloudflare/Live.ts",
@@ -195,6 +195,12 @@
       "bun": "./src/Output.ts",
       "worker": "./src/Output.ts",
       "import": "./lib/Output.js"
+    },
+    "./Runtime": {
+      "types": "./lib/Runtime.d.ts",
+      "bun": "./src/Runtime.ts",
+      "worker": "./src/Runtime.ts",
+      "import": "./lib/Runtime.js"
     },
     "./Process": {
       "types": "./lib/Process/index.d.ts",
@@ -270,6 +276,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@alchemy.run/node-utils": "catalog:",
     "@clack/prompts": "^0.11.0",
     "capnweb": "^0.6.1",
     "fast-glob": "^3.3.2",
@@ -287,9 +294,6 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
-    "@ai-sdk/anthropic": "^3.0.31",
-    "@ai-sdk/openai": "^3.0.23",
-    "@ai-sdk/provider": "^3.0.8",
     "@aws-sdk/credential-providers": "catalog:",
     "@clack/prompts": "^0.11.0",
     "@cloudflare/workers-types": "catalog:",
@@ -334,13 +338,9 @@
     "tsdown": "^0.15.4",
     "tsx": "^4.20.6",
     "typescript": "catalog:",
-    "web-tree-sitter": "catalog:",
     "ws": "catalog:"
   },
   "peerDependencies": {
-    "@ai-sdk/anthropic": "^3.0.31",
-    "@ai-sdk/openai": "^3.0.23",
-    "@ai-sdk/provider": "^3.0.8",
     "@aws-sdk/credential-providers": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@distilled.cloud/aws": "catalog:",
@@ -362,12 +362,10 @@
     "@smithy/types": "catalog:",
     "@types/aws-lambda": "catalog:",
     "@types/libsodium-wrappers": "^0.8.2",
-    "ai": "catalog:",
     "aws4fetch": "catalog:",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
-    "ignore": "^7.0.5",
     "libsodium-wrappers": "^0.8.3",
     "pg": "^8.13.0",
     "sonda": "catalog:",

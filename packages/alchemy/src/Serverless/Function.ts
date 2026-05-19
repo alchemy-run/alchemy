@@ -3,7 +3,16 @@ import type { HttpEffect } from "../Http.ts";
 import type { BaseRuntimeContext } from "../RuntimeContext.ts";
 
 export interface FunctionContext extends BaseRuntimeContext {
-  serve<Req = never>(handler: HttpEffect<Req>): Effect.Effect<void, never, Req>;
+  /**
+   * Register an HTTP handler. The optional `shape` payload is the user's
+   * full default-export shape — Cloudflare Workers use it to expose
+   * non-handler methods (e.g. `greet`) as RPC methods on the deployed
+   * `WorkerEntrypoint`. Other platforms (Lambda, etc.) ignore it.
+   */
+  serve<Req = never>(
+    handler: HttpEffect<Req>,
+    options?: { shape?: Record<string, unknown> },
+  ): Effect.Effect<void, never, Req>;
   listen<A, Req = never>(
     handler: FunctionListener<A, Req>,
   ): Effect.Effect<void, never, Req>;

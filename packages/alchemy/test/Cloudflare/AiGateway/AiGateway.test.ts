@@ -168,7 +168,7 @@ test.provider(
         });
       }).pipe(Effect.provide(stack.state));
 
-      expect(persisted?.attr).toMatchObject({ gatewayId });
+      expect((persisted as any)?.attr).toMatchObject({ gatewayId });
 
       yield* stack.destroy();
       yield* waitForGatewayToBeDeleted(gatewayId, accountId);
@@ -225,9 +225,14 @@ test(
 
     const client = yield* HttpClient.HttpClient;
     const res = yield* client.get(`${workerUrl}/url`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
       Effect.retry({
         schedule: Schedule.exponential("500 millis"),
-        times: 10,
+        times: 15,
       }),
     );
     expect(res.status).toBe(200);

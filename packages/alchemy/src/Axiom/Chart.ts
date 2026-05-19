@@ -24,7 +24,8 @@ export type ChartKind =
   | "Statistic"
   | "Heatmap"
   | "LogStream"
-  | "Note";
+  | "Note"
+  | "SmartFilter";
 
 /**
  * Minimum chart payload Axiom's `POST /v2/dashboards` accepts.
@@ -67,6 +68,58 @@ export interface NoteChart extends BaseChart {
   readonly type: "Note";
 }
 
+/**
+ * A dashboard filter bar (Axiom calls it `SmartFilter` on the wire,
+ * `Filter bar` in the UI). Holds one or more filters whose IDs can
+ * be referenced from other charts' APL via
+ * `declare query_parameters (<filter-id>:string = "")`.
+ *
+ * Unlike data charts, `SmartFilter` has no top-level `query` field —
+ * each filter inside `filters` may carry its own option-source APL.
+ */
+export interface SmartFilterChart {
+  readonly id: string;
+  readonly type: "SmartFilter";
+  /** Optional display name for the filter bar element. */
+  readonly name?: string;
+  readonly filters: readonly SmartFilter[];
+}
+
+/**
+ * One filter inside a {@link SmartFilterChart}. Either a free-text
+ * `search` filter or a dropdown `select` filter. Select filters draw
+ * their options from either an inline `list` or an APL `query`.
+ */
+export type SmartFilter = SmartFilterSearch | SmartFilterSelect;
+
+export interface SmartFilterSearch {
+  readonly id: string;
+  readonly type: "search";
+  readonly name?: string;
+  readonly active?: boolean;
+}
+
+export interface SmartFilterSelect {
+  readonly id: string;
+  readonly type: "select";
+  readonly name?: string;
+  readonly active?: boolean;
+  /** `"list"` for inline `options`, `"apl"` for a query-driven dropdown. */
+  readonly selectType?: "list" | "apl";
+  /**
+   * APL query that returns rows shaped `{ key, value }`. Axiom shows
+   * `key` in the dropdown and substitutes `value` into chart queries.
+   */
+  readonly apl?: { readonly apl: string };
+  /** Inline key/value options when `selectType === "list"`. */
+  readonly options?: readonly {
+    readonly id?: string;
+    readonly key: string;
+    readonly value: string;
+    readonly default?: boolean;
+  }[];
+}
+
 export type Chart =
   | TimeSeriesChart
   | TableChart
@@ -74,7 +127,8 @@ export type Chart =
   | StatisticChart
   | HeatmapChart
   | LogStreamChart
-  | NoteChart;
+  | NoteChart
+  | SmartFilterChart;
 
 /**
  * Mirrors Axiom's `CreateDashboardInput.dashboard.layout` cell schema.

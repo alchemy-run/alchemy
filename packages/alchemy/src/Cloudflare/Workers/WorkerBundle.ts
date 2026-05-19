@@ -7,7 +7,6 @@ import * as Stream from "effect/Stream";
 import { fileURLToPath } from "node:url";
 import type * as rolldown from "rolldown";
 import Sonda from "sonda/rolldown";
-import * as Artifacts from "../../Artifacts.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import { Self } from "../../Self.ts";
@@ -48,6 +47,12 @@ export const WorkerBundle = Effect.gen(function* () {
     const realMain = yield* sanitizeMain(options.main);
     const inputOptions: rolldown.InputOptions = {
       input: realMain,
+      // Forever-devtool native modules that vite/chokidar reference behind
+      // runtime guards. Rolldown resolves before tree-shaking, so the dead
+      // `require('../pkg')` (lightningcss < 1.32) and `require('fsevents')`
+      // (darwin-only) trip [UNRESOLVED_IMPORT] before DCE can prune them.
+      // See rolldown/tsdown#212.
+      external: ["lightningcss", "fsevents"],
       cwd: yield* findCwdForBundle(realMain).pipe(
         Effect.mapError(
           (cause) =>
@@ -64,9 +69,11 @@ export const WorkerBundle = Effect.gen(function* () {
           compatibilityFlags: options.compatibility.flags,
         }),
         options.entry.kind === "effect"
-          ? virtualEntryPlugin(
-              makeEffectVirtualEntry(options.entry.exports, options.stack),
-            )
+          ? [
+              virtualEntryPlugin(
+                makeEffectVirtualEntry(options.entry.exports, options.stack),
+              ),
+            ]
           : undefined,
         ...(options.userOptions?.metafile ? [Sonda({ open: false })] : []),
       ],
@@ -116,7 +123,6 @@ export const WorkerBundle = Effect.gen(function* () {
           resolved.extraOptions,
         ),
       ),
-      Artifacts.cached("build"),
     ),
     watch: flow(
       makeOptions,
@@ -158,19 +164,17 @@ import * as Logger from "effect/Logger";
 import * as Context from "effect/Context";
 import * as Stream from "effect/Stream";
 
-import { env, DurableObject${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
+import { env, DurableObject, WorkerEntrypoint${hasWfClasses ? ", WorkflowEntrypoint" : ""} } from "cloudflare:workers";
 import { MinimumLogLevel } from "effect/References";
-import { NodeServices } from "@effect/platform-node";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Stack } from "alchemy/Stack";
-import { WorkerEnvironment, makeDurableObjectBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy/Cloudflare";
+import { WorkerEnvironment, makeDurableObjectBridge, makeWorkerBridge${hasWfClasses ? ", makeWorkflowBridge" : ""}, ExportedHandlerMethods } from "alchemy/Cloudflare";
+import { makeEntrypointLayer } from "alchemy/Runtime";
 
-import entry from "${importPath}";
+import entrypoint from ${JSON.stringify(importPath)};
 
 const tag = Context.Service("${Self.key}")
-const layer =
-  typeof entry?.build === "function"
-    ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
+const layer = makeEntrypointLayer(tag, entrypoint);
 
 const platform = Layer.mergeAll(
   NodeServices.layer,
@@ -189,7 +193,7 @@ const stack = Layer.succeed(
   }
 );
 
-const exportsEffect = tag.asEffect().pipe(
+const exportsEffect = tag.pipe(
   Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.provide(
     layer.pipe(
@@ -223,10 +227,20 @@ let exportsPromise;
 // we cache it synchronously (??=) to guarnatee only one initialization ever happens
 const getExports = () => (exportsPromise ??= Effect.runPromise(exportsEffect))
 const getExport = (name) => getExports().then(exports => exports[name]?.make)
-const worker = () => getExports().then(exports => exports.default)
+const getDefault = () => getExports().then(exports => exports.default)
+const getRpc = () => getExports().then(exports => exports.__rpc__ ?? {})
 
-export default Object.fromEntries(ExportedHandlerMethods.map(
-  method => [method, async (...args) => (await worker())[method](...args)])
+// Bridge the user's default-export shape onto a real \`WorkerEntrypoint\`
+// subclass so Cloudflare service bindings can dispatch both the standard
+// handler methods (fetch, scheduled, …) and any user-defined RPC methods.
+// RPC method results are wire-encoded by \`runtimeContext.exports\`;
+// consumers unwrap them with \`Cloudflare.toPromiseApi(env.X)\` (Promise
+// API) or \`bindWorker(WorkerClass)\` (Effect API).
+export default makeWorkerBridge(
+  WorkerEntrypoint,
+  ExportedHandlerMethods,
+  getDefault,
+  getRpc,
 );
 
 // export class proxy stubs for Durable Objects and Workflows

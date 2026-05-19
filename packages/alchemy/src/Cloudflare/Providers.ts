@@ -13,6 +13,7 @@ import { ProfileLive } from "../Auth/Profile.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as Access from "./Access.ts";
 import * as AiGateway from "./AiGateway/index.ts";
+import * as AnalyticsEngine from "./AnalyticsEngine/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Artifacts from "./Artifacts/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
@@ -20,6 +21,7 @@ import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Containers from "./Container/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as D1 from "./D1/index.ts";
+import * as Email from "./Email/index.ts";
 import * as Hyperdrive from "./Hyperdrive/index.ts";
 import * as Images from "./Images/index.ts";
 import * as KV from "./KV/index.ts";
@@ -50,11 +52,16 @@ export const providers = () =>
       ApiToken.UserApiToken,
       AiGateway.AiGateway,
       AiGateway.AiGatewayBindingPolicy,
+      AnalyticsEngine.AnalyticsEngineDatasetBindingPolicy,
       Artifacts.ArtifactsBindingPolicy,
       Command,
       Containers.Container,
       D1.D1ConnectionPolicy,
       D1.D1Database,
+      Email.EmailAddress,
+      Email.EmailRouting,
+      Email.EmailRule,
+      Email.SendEmailBindingPolicy,
       Hyperdrive.Hyperdrive,
       Hyperdrive.HyperdriveBindingPolicy,
       Images.ImagesBindingPolicy,
@@ -73,6 +80,7 @@ export const providers = () =>
       VpcService.VpcService,
       Random,
       Workers.BindWorkerPolicy,
+      Workers.CronEventSourcePolicy,
       Workers.FetchPolicy,
       Workers.Worker,
       Workflows.WorkflowResource,
@@ -84,10 +92,15 @@ export const providers = () =>
         ApiToken.UserApiTokenProvider(),
         AiGateway.AiGatewayProvider(),
         AiGateway.AiGatewayBindingPolicyLive,
+        AnalyticsEngine.AnalyticsEngineDatasetBindingPolicyLive,
         Artifacts.ArtifactsBindingPolicyLive,
         Containers.ContainerProvider(),
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
+        Email.EmailAddressProvider(),
+        Email.EmailRoutingProvider(),
+        Email.EmailRuleProvider(),
+        Email.SendEmailBindingPolicyLive,
         Hyperdrive.HyperdriveBindingPolicyLive,
         Hyperdrive.HyperdriveProvider(),
         Images.ImagesBindingPolicyLive,
@@ -105,6 +118,7 @@ export const providers = () =>
         Tunnel.TunnelProvider(),
         VpcService.VpcServiceProvider(),
         Workers.BindWorkerPolicyLive,
+        Workers.CronEventSourcePolicyLive,
         Workers.FetchPolicyLive,
         Workers.WorkerProvider(),
         Workflows.WorkflowProvider(),

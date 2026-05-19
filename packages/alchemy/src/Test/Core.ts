@@ -67,9 +67,7 @@ export const resolveDev = (options: { dev?: boolean }): boolean => {
 const overrideAlchemyContext = (overrides: { dev: boolean }) =>
   Layer.effect(
     AlchemyContext,
-    AlchemyContext.asEffect().pipe(
-      Effect.map((ctx) => ({ ...ctx, ...overrides })),
-    ),
+    AlchemyContext.pipe(Effect.map((ctx) => ({ ...ctx, ...overrides }))),
   );
 
 export type TestEffect<A, Req = never> = StackEffect<A, any, Req>;
@@ -153,6 +151,7 @@ export const withProviders = <A, E, R, ROut>(
         stage: options.stage ?? "test",
         resources: {},
         bindings: {},
+        actions: {},
       }),
     ),
     Effect.provide(Layer.succeed(Stage, options.stage ?? "test")),
@@ -262,6 +261,7 @@ export const scratchStack = <ROut>(
         stage,
         resources: {},
         bindings: {},
+        actions: {},
         output: {},
       }).pipe(
         Effect.flatMap(apply),
@@ -274,6 +274,7 @@ export const scratchStack = <ROut>(
             stage,
             resources: {},
             bindings: {},
+            actions: {},
           }),
         ),
         Effect.provide(Layer.succeed(Stage, stage)),
