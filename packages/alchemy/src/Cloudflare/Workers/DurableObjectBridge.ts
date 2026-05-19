@@ -1,11 +1,9 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
-import * as Console from "effect/Console";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as util from "util";
 
-import { pipe } from "effect/Function";
 import type { DurableObjectExport } from "./DurableObjectNamespace.ts";
 import {
   DurableObjectState,
@@ -38,13 +36,17 @@ export const makeDurableObjectBridge =
   ) =>
   (className: string) =>
     class DurableObjectBridge extends DurableObject {
-      #instance;
+      #instance: any;
+      #state: cf.DurableObjectState;
+      #exported: Effect.Effect<DurableObjectExport>;
+      #globalContext;
 
       // @ts-expect-error - it is assigned, just not how TSC expects it
       #services: Layer.Layer<DurableObjectState>;
 
       constructor(state: cf.DurableObjectState, env: any) {
         super(state as any, env);
+        this.#state = state;
 
         const { globalContext, exported } =
           getWorkerExport<DurableObjectExport>({
@@ -53,74 +55,86 @@ export const makeDurableObjectBridge =
             exportName: className,
           });
 
-        this.#instance = state.blockConcurrencyWhile(() =>
-          exported.pipe(
-            Effect.flatMap(({ constructor, services }) =>
-              constructor.pipe(
-                Effect.provide(
-                  (this.#services = pipe(
-                    Layer.succeed(
-                      DurableObjectState,
-                      fromDurableObjectState(state),
-                    ),
-                    Layer.provideMerge(Layer.succeedContext(services)),
-                  )),
-                ),
-              ),
-            ),
-            Effect.provide(globalContext),
-            Effect.tap((instance) =>
-              Console.log("instance", util.inspect(instance, { depth: null })),
-            ),
-            Effect.tapError((err) =>
-              Console.log("err", util.inspect(err, { depth: null })),
-            ),
-            Effect.tapCause((err) =>
-              Console.log("cause", util.inspect(err, { depth: null })),
-            ),
-            Effect.runPromise,
-          ),
-        );
+        this.#exported = exported;
+        this.#globalContext = globalContext;
+
+        // this.#instance = state.blockConcurrencyWhile(() =>
+        //   exported.pipe(
+        //     Effect.flatMap(({ constructor, services }) =>
+        //       constructor.pipe(
+        //         Effect.provide(
+        //           (this.#services = pipe(
+        //             Layer.succeed(
+        //               DurableObjectState,
+        //               fromDurableObjectState(state),
+        //             ),
+        //             Layer.provideMerge(Layer.succeedContext(services)),
+        //           )),
+        //         ),
+        //       ),
+        //     ),
+        //     Effect.provide(globalContext),
+        //     Effect.runPromise,
+        //   ),
+        // );
       }
 
       async fetch(request: Request): Promise<any> {
-        const methods = await this.#instance;
-        if (methods.fetch) {
-          const response = await makeRequestEffect(
-            request as any,
-            methods.fetch,
-          )
-            .pipe(
-              Effect.tap((response) =>
-                Console.log(
-                  "response",
-                  util.inspect(response, { depth: null }),
+        // const methods = await this.#instance;
+        // if (!methods.fetch) {
+        //   return new Response("Method not found", { status: 404 }) as any;
+        // }
+        // console.log(
+        //   "DurableObjectBridge.fetch: request",
+        //   request.url,
+        //   util.inspect(methods),
+        // );
+
+        // const scope = Scope.makeUnsafe();
+
+        return this.#exported
+          .pipe(
+            Effect.flatMap(({ constructor, services }) =>
+              constructor.pipe(
+                Effect.flatMap((instance) =>
+                  makeRequestEffect(request as any, instance.fetch!),
                 ),
+                Effect.provide(
+                  Layer.succeedContext(services).pipe(
+                    Layer.provideMerge(
+                      Layer.succeed(
+                        DurableObjectState,
+                        fromDurableObjectState(this.#state),
+                      ),
+                    ),
+                    // Layer.provideMerge(Layer.succeed(Scope.Scope, scope)),
+                  ),
+                ),
+                Effect.timeout("2 seconds"),
               ),
-              Effect.tapError((err) =>
-                Console.log("fetch err", util.inspect(err, { depth: null })),
-              ),
-              Effect.tapCause((err) =>
-                Console.log("fetch cause", util.inspect(err, { depth: null })),
-              ),
-              Effect.provide(this.#services),
-              Effect.runPromise,
-            )
-            .catch((err) => {
-              console.log(err);
-              throw err;
-            });
-          console.log("response", util.inspect(response, { depth: null }));
-          return response as any as cf.Response;
-        } else {
-          return new Response("Method not found", { status: 404 }) as any;
-        }
+            ),
+            Effect.provide(this.#globalContext),
+            Effect.scoped,
+            Effect.runPromiseExit,
+          )
+          .then((exit) =>
+            exit._tag === "Success"
+              ? Promise.resolve(exit.value)
+              : Promise.reject(Cause.squash(exit.cause)),
+          );
+        // .finally(() =>
+        //   Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>
+        //     this.#state.waitUntil(promise),
+        //   ),
+        // );
       }
 
       async alarm(alarmInfo?: cf.AlarmInvocationInfo) {
         const methods = await this.#instance;
         if (methods.alarm) {
-          await Effect.runPromise(methods.alarm(alarmInfo));
+          await methods
+            .alarm(alarmInfo)
+            .pipe(Effect.provide(this.#services), Effect.runPromise);
         }
       }
 
@@ -130,7 +144,7 @@ export const makeDurableObjectBridge =
           const socket = fromWebSocket(ws as any);
           const value = methods.webSocketMessage(socket, message);
           if (Effect.isEffect(value)) {
-            await Effect.runPromise(value as Effect.Effect<void>);
+            await value.pipe(Effect.provide(this.#services), Effect.runPromise);
           }
         }
       }
@@ -146,7 +160,7 @@ export const makeDurableObjectBridge =
           const socket = fromWebSocket(ws as any);
           const value = methods.webSocketClose(socket, code, reason, wasClean);
           if (Effect.isEffect(value)) {
-            await Effect.runPromise(value as Effect.Effect<void>);
+            await value.pipe(Effect.provide(this.#services), Effect.runPromise);
           }
         }
       }

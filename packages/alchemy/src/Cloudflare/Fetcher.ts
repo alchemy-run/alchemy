@@ -131,12 +131,17 @@ export const toHttpClient = (fetcher: {
   fetch: (
     request: HttpServerRequest.HttpServerRequest,
   ) => Effect.Effect<HttpServerResponse.HttpServerResponse, HttpServerError>;
-}): HttpClient.HttpClient =>
-  HttpClient.make((request) =>
-    fetcher.fetch(HttpServerRequest.fromClientRequest(request)).pipe(
-      Effect.map((response) =>
-        HttpClientResponse.fromWeb(request, HttpServerResponse.toWeb(response)),
-      ),
+}) =>
+  HttpClient.make((request) => {
+    console.log("toHttpClient: request", request.url);
+    return fetcher.fetch(HttpServerRequest.fromClientRequest(request)).pipe(
+      Effect.map((response) => {
+        console.log("toHttpClient: response", response);
+        return HttpClientResponse.fromWeb(
+          request,
+          HttpServerResponse.toWeb(response),
+        );
+      }),
       Effect.mapError(
         (cause) =>
           new HttpClientError({
@@ -147,8 +152,8 @@ export const toHttpClient = (fetcher: {
             }),
           }),
       ),
-    ),
-  );
+    );
+  });
 
 export const fromCloudflareSocket = (cfSocket: cf.Socket): Socket.Socket => {
   const latch = Latch.makeUnsafe(false);

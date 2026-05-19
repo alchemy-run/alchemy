@@ -52,6 +52,7 @@ export const makeRequestEffect = <Req = never>(
         Layer.succeed(Request, webRequest as any),
       ]),
       Effect.catchCause((cause) => {
+        console.log({ cause });
         const message = Option.match(Cause.findErrorOption(cause), {
           onNone: () => "Internal Server Error",
           onSome: (error: any) =>
@@ -68,8 +69,6 @@ export const makeRequestEffect = <Req = never>(
       }),
     );
 
-    return HttpServerResponse.toWeb(response, {
-      context: yield* Effect.context(),
-    });
+    return HttpServerResponse.toWeb(response);
   }) as any;
 };
