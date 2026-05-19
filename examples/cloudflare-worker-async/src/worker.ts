@@ -17,6 +17,13 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    // Echo back env.API_KEY so the integ test can verify the env round-trip.
+    if (request.method === "GET" && path === "/api-key") {
+      return new Response(env.API_KEY, {
+        headers: { "content-type": "text/plain" },
+      });
+    }
+
     // Queue producer — POST /queue/send?text=...
     //
     // Exercises Cloudflare.QueueBinding by calling `env.Queue.send(...)`.

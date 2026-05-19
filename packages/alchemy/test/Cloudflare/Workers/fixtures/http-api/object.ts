@@ -21,7 +21,6 @@ export class TaskDOApi extends HttpApi.make("TaskDOApi").add(TasksDOGroup) {}
  */
 export default class TasksObject extends Cloudflare.DurableObjectNamespace<TasksObject>()(
   "TasksObject",
-  // @ts-expect-error
   Effect.gen(function* () {
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;

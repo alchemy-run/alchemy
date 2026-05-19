@@ -3,18 +3,51 @@
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import type { Rpc } from "../../Rpc.ts";
-import type { UnwrapEffect } from "../../Util/effect.ts";
 import type * as Cloudflare from "../index.ts";
 import type { RpcErrorEnvelope, RpcStreamEnvelope } from "./Rpc.ts";
 import type { Worker } from "./Worker.ts";
 
-export type InferEnv<W> = W extends
-  | Worker<infer Bindings>
-  | Effect.Effect<Worker<infer Bindings>, any, any>
-  ? {
-      [K in keyof Bindings]: GetBindingType<UnwrapEffect<Bindings[K]>>;
-    }
-  : never;
+export type InferEnv<W> =
+  W extends Effect.Effect<infer A, infer _E, infer _R>
+    ? InferEnv<A>
+    : W extends Worker<any>
+      ? InferEnv<Exclude<W["Props"]["bindings"], undefined>>
+      : {
+          [k in keyof W]: GetBindingType<W[k]>;
+        };
+
+export type GetBindingType<T> =
+  T extends Effect.Effect<infer A, infer _E, infer _R>
+    ? GetBindingType<A>
+    : T extends Cloudflare.Assets
+      ? Service
+      : T extends Rpc<infer Shape extends object>
+        ? RpcWireShape<Shape> & Service
+        : T extends Cloudflare.D1Database
+          ? D1Database
+          : T extends Cloudflare.R2Bucket
+            ? R2Bucket
+            : T extends Cloudflare.KVNamespace
+              ? KVNamespace
+              : T extends Cloudflare.Queue
+                ? Queue<unknown>
+                : T extends Cloudflare.AiGateway
+                  ? Ai
+                  : T extends Cloudflare.SendEmail
+                    ? SendEmail
+                    : T extends Cloudflare.AnalyticsEngineDataset
+                      ? AnalyticsEngineDataset
+                      : T extends Cloudflare.Artifacts
+                        ? Artifacts
+                        : T extends Cloudflare.Images
+                          ? ImagesBinding
+                          : T extends Cloudflare.Hyperdrive
+                            ? Hyperdrive
+                            : T extends Cloudflare.DurableObjectNamespaceLike
+                              ? DurableObjectNamespace<
+                                  Exclude<T["Shape"], undefined>
+                                >
+                              : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.
@@ -43,33 +76,3 @@ export type RpcWireShape<Shape> = {
             ? (...args: A) => Promise<Awaited<R>>
             : Promise<Shape[K]>;
 };
-
-export type GetBindingType<T> = T extends Cloudflare.Assets
-  ? Service
-  : T extends Rpc<infer Shape extends object>
-    ? RpcWireShape<Shape> & Service
-    : T extends Cloudflare.D1Database
-      ? D1Database
-      : T extends Cloudflare.R2Bucket
-        ? R2Bucket
-        : T extends Cloudflare.KVNamespace
-          ? KVNamespace
-          : T extends Cloudflare.Queue
-            ? Queue<unknown>
-            : T extends Cloudflare.AiGateway
-              ? Ai
-              : T extends Cloudflare.SendEmail
-                ? SendEmail
-                : T extends Cloudflare.AnalyticsEngineDataset
-                  ? AnalyticsEngineDataset
-                  : T extends Cloudflare.Artifacts
-                    ? Artifacts
-                    : T extends Cloudflare.Images
-                      ? ImagesBinding
-                      : T extends Cloudflare.Hyperdrive
-                        ? Hyperdrive
-                        : T extends Cloudflare.DurableObjectNamespaceLike
-                          ? DurableObjectNamespace<
-                              Exclude<T["Shape"], undefined>
-                            >
-                          : never;

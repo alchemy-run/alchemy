@@ -1,6 +1,7 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import type { Counter as CounterClass } from "./src/worker.ts";
 
 export const DB = Cloudflare.D1Database("DB");
@@ -26,6 +27,9 @@ export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
   assets: {
     directory: "./public",
+  },
+  env: {
+    API_KEY: Redacted.make("SOME_API_KEY"),
   },
   bindings: {
     DB,

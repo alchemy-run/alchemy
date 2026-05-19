@@ -140,6 +140,17 @@ export type WorkerServices = Worker | Request | WorkerExecutionContext;
 
 export type WorkerShape = Main<WorkerServices | WorkerEnvironment>;
 
+export type WorkerEnv = Record<
+  string,
+  | string
+  | number
+  | boolean
+  | null
+  | readonly unknown[]
+  | { readonly [key: string]: unknown }
+  | Redacted.Redacted<string>
+>;
+
 export type WorkerBindingProps = {
   [bindingName in string]:
     | WorkerBindingResource
@@ -163,6 +174,7 @@ export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
 
 export interface WorkerProps<
   Bindings extends WorkerBindingProps = any,
+  Env extends WorkerEnv = WorkerEnv,
   Assets extends WorkerAssetsConfig | undefined =
     | WorkerAssetsConfig
     | undefined,
@@ -212,16 +224,7 @@ export interface WorkerProps<
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
-  env?: Record<
-    string,
-    | string
-    | number
-    | boolean
-    | null
-    | readonly unknown[]
-    | { readonly [key: string]: unknown }
-    | Redacted.Redacted<string>
-  >;
+  env?: Env;
   exports?: string[];
   bindings?: Bindings;
   /**
@@ -648,21 +651,32 @@ export const Worker: Platform<
   WorkerRuntimeContext
 > & {
   <
-    const Bindings extends WorkerBindingProps,
+    const Bindings extends WorkerBindingProps = {},
+    const Env extends WorkerEnv = {},
     const Assets extends WorkerAssetsConfig | undefined = undefined,
     Req = never,
   >(
     id: string,
     props:
-      | InputProps<WorkerProps<Bindings, Assets>>
-      | Effect.Effect<InputProps<WorkerProps<Bindings, Assets>>, never, Req>,
+      | WorkerProps<Bindings, Env, Assets>
+      | Effect.Effect<
+          InputProps<WorkerProps<Bindings, Env, Assets>>,
+          never,
+          Req
+        >,
   ): Effect.Effect<
-    Worker<{
-      [binding in keyof NormalizedBindings<
-        Bindings,
-        Assets
-      >]: NormalizedBindings<Bindings, Assets>[binding];
-    }>,
+    Worker<
+      {
+        [binding in keyof NormalizedBindings<
+          Bindings,
+          Assets
+        >]: NormalizedBindings<Bindings, Assets>[binding];
+      } & {
+        [K in keyof Env]: Env[K] extends Redacted.Redacted<infer T>
+          ? T
+          : Env[K];
+      }
+    >,
     never,
     Req | Providers
   >;

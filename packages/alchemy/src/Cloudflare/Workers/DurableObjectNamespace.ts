@@ -113,7 +113,7 @@ export interface DurableObjectNamespaceClass extends Effect.Effect<
   DurableObjectNamespace
 > {
   <Self>(): {
-    <Shape extends DurableObjectShape, InitReq = never>(
+    <Shape, InitReq = never>(
       name: string,
       impl: Effect.Effect<
         Effect.Effect<Shape, never, DurableObjectServices>,
@@ -128,11 +128,11 @@ export interface DurableObjectNamespaceClass extends Effect.Effect<
       new (_: never): Shape;
     };
   };
-  <Shape extends DurableObjectShape>(
+  <Shape>(
     name: string,
     props?: DurableObjectNamespaceProps,
   ): DurableObjectNamespaceLike<Shape>;
-  <Shape extends DurableObjectShape, InitReq = never>(
+  <Shape, InitReq = never>(
     name: string,
     impl: Effect.Effect<
       Effect.Effect<Shape, never, DurableObjectServices>,
