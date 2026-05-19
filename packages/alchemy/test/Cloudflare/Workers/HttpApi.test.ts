@@ -1,5 +1,5 @@
-import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -37,10 +37,18 @@ const Stack = Alchemy.Stack(
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
+const testTimeout = 5_000;
+const requestTimeout = "1 second";
+const readinessRetry = {
+  schedule: Schedule.exponential("100 millis"),
+  times: 2,
+} as const;
+
 test(
   "deployed http-api worker handles createTask + getTask via HttpClient",
   Effect.gen(function* () {
     const { url } = yield* stack;
+    console.log("url", url);
     expect(url).toBeTypeOf("string");
     const client = yield* HttpClient.HttpClient;
 
@@ -56,10 +64,8 @@ test(
             ? Effect.succeed(res)
             : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
         ),
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 15,
-        }),
+        Effect.timeout(requestTimeout),
+        Effect.retry(readinessRetry),
       );
     const createdBody = (yield* created.json) as {
       id: string;
@@ -85,7 +91,7 @@ test(
     expect(missingBody._tag).toBe("TaskNotFound");
     expect(missingBody.id).toBe("does-not-exist");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: testTimeout },
 );
 
 test(
@@ -104,15 +110,10 @@ test(
           }),
         ),
       )
-      .pipe(
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 10,
-        }),
-      );
+      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
     expect(res.headers["access-control-allow-origin"]).toBeDefined();
   }).pipe(logLevel),
-  { timeout: 60_000 },
+  { timeout: testTimeout },
 );
 
 test(
@@ -133,10 +134,8 @@ test(
             ? Effect.succeed(res)
             : Effect.fail(new Error(`warmup not ready: ${res.status}`)),
         ),
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 15,
-        }),
+        Effect.timeout(requestTimeout),
+        Effect.retry(readinessRetry),
       );
 
     const N = 200;
@@ -150,7 +149,7 @@ test(
                 HttpClientRequest.bodyJsonUnsafe({ title: `task-${i}` }),
               ),
             )
-            .pipe(Effect.timeout("15 seconds"));
+            .pipe(Effect.timeout(requestTimeout));
           if (created.status !== 200) {
             return yield* Effect.fail(
               new Error(`create ${i} -> ${created.status}`),
@@ -170,7 +169,7 @@ test(
     expect(results).toHaveLength(N);
     expect(new Set(results).size).toBe(N);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: testTimeout },
 );
 
 test(
@@ -182,12 +181,8 @@ test(
 
     const created = yield* client.Tasks.createTask({
       payload: { title: "Typed client task" },
-    }).pipe(
-      Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
-      }),
-    );
+    }).pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+    yield* Effect.sleep("1 second");
     expect(created.title).toBe("Typed client task");
     expect(created.completed).toBe(false);
 
@@ -197,5 +192,5 @@ test(
     expect(fetched.id).toBe(created.id);
     expect(fetched.title).toBe("Typed client task");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: testTimeout },
 );

@@ -66,7 +66,7 @@ export const Route = createFileRoute("/api/hello")({
               const Cloudflare = await import("alchemy/Cloudflare/Bridge");
               // Wrap the raw wire-shape binding into a Promise<T> view that
               // throws on Effect.fail and unwraps stream envelopes.
-              const backend = Cloudflare.toPromiseApi<Backend>(env.BACKEND);
+              const backend = Cloudflare.toRpcAsync<Backend>(env.BACKEND);
               const value = await backend.hello(key);
               if (value === null)
                 return new Response("Not found", { status: 404 });

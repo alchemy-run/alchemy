@@ -1,3 +1,9 @@
+export {
+  Action,
+  isAction,
+  type Action as ActionInstance,
+  type ActionLike,
+} from "./Action.ts";
 export * as AdoptPolicy from "./AdoptPolicy.ts";
 export * from "./AlchemyContext.ts";
 export * from "./Apply.ts";
@@ -23,12 +29,6 @@ export * from "./Random.ts";
 export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
 export * from "./Resource.ts";
-export {
-  Action,
-  isAction,
-  type ActionLike,
-  type Action as ActionInstance,
-} from "./Action.ts";
 export * as Schema from "./Schema.ts";
 export { Secret } from "./Secret.ts";
 export * as Server from "./Server/index.ts";
@@ -48,6 +48,7 @@ export { Cli } from "./Cli/Cli.ts";
 export type * from "./Platform.ts";
 export { Platform } from "./Platform.ts";
 export type { ProviderCollectionLike } from "./Provider.ts";
+export type * from "./Rpc.ts";
 export {
   RuntimeContext,
   type BaseRuntimeContext,

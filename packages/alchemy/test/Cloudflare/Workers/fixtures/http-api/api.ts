@@ -9,6 +9,8 @@ export class Task extends Schema.Class<Task>("Task")({
   completed: Schema.Boolean,
 }) {}
 
+export const decodeTask = Schema.decodeUnknownSync(Task);
+
 export class TaskNotFound extends Schema.TaggedErrorClass<TaskNotFound>()(
   "TaskNotFound",
   { id: Schema.String },

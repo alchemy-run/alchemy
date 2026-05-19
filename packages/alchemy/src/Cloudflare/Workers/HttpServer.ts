@@ -13,21 +13,21 @@ import { isWorkerEvent, type WorkerServices } from "./Worker.ts";
 
 export type HttpEffect = Http.HttpEffect<WorkerServices>;
 
-export const workersHttpHandler = <Req = never>(
+export const makeRequestHandler = <Req = never>(
   handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>,
 ) => {
   const safeHandler = Http.safeHttpEffect(handler);
   return (event: any) => {
     if (isWorkerEvent(event) && event.type === "fetch") {
       const webRequest = event.input;
-      return serveWebRequest(webRequest, safeHandler, {
+      return makeRequestEffect(webRequest, safeHandler, {
         remoteAddress: webRequest.headers.get("cf-connecting-ip") ?? undefined,
       });
     }
   };
 };
 
-export const serveWebRequest = <Req = never>(
+export const makeRequestEffect = <Req = never>(
   webRequest: cf.Request,
   handler: Effect.Effect<
     HttpServerResponse.HttpServerResponse,

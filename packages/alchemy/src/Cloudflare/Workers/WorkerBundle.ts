@@ -9,7 +9,6 @@ import type * as rolldown from "rolldown";
 import Sonda from "sonda/rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
-import { Self } from "../../Self.ts";
 import {
   isDurableObjectExport,
   type DurableObjectExport,
@@ -173,75 +172,13 @@ import { makeEntrypointLayer } from "alchemy/Runtime";
 
 import entrypoint from ${JSON.stringify(importPath)};
 
-const tag = Context.Service("${Self.key}")
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  NodeServices.layer,
-  FetchHttpClient.layer,
-  // TODO(sam): wire this up to telemetry more directly
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.succeed(
-  Stack,
-  {
-    name: "${stack.name}",
-    stage: "${stack.stage}",
-    bindings: {},
-    resources: {}
-  }
-);
-
-const exportsEffect = tag.pipe(
-  Effect.flatMap(func => func.RuntimeContext.exports),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          ConfigProvider.orElse(
-            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-            ConfigProvider.fromUnknown(env),
-          ),
-        ),
-      ),
-      Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),
-      Layer.provideMerge(
-        Layer.succeed(MinimumLogLevel, env.DEBUG ? "Debug" : "Info"),
-      ),
-    ),
-  ),
-  Effect.scoped,
-);
-
-// TODO(sam): we could kick this off during module init, but any I/O will break deploy
-// let exportsPromise = Effect.runPromise(exportsEffect);
-
-// for now, we delay initializing the worker until the first request
-let exportsPromise;
-
-// don't initialize the workerEffect during module init because Cloudflare does not allow I/O during module init
-// we cache it synchronously (??=) to guarnatee only one initialization ever happens
-const getExports = () => (exportsPromise ??= Effect.runPromise(exportsEffect))
-const getExport = (name) => getExports().then(exports => exports[name]?.make)
-const getDefault = () => getExports().then(exports => exports.default)
-const getRpc = () => getExports().then(exports => exports.__rpc__ ?? {})
-
-// Bridge the user's default-export shape onto a real \`WorkerEntrypoint\`
-// subclass so Cloudflare service bindings can dispatch both the standard
-// handler methods (fetch, scheduled, …) and any user-defined RPC methods.
-// RPC method results are wire-encoded by \`runtimeContext.exports\`;
-// consumers unwrap them with \`Cloudflare.toPromiseApi(env.X)\` (Promise
-// API) or \`bindWorker(WorkerClass)\` (Effect API).
-export default makeWorkerBridge(
-  WorkerEntrypoint,
-  ExportedHandlerMethods,
-  getDefault,
-  getRpc,
-);
+export default makeWorkerBridge(WorkerEntrypoint, {
+  entrypoint,
+  stack: {
+    name: ${JSON.stringify(stack.name)},
+    stage: ${JSON.stringify(stack.stage)},
+  },
+});
 
 // export class proxy stubs for Durable Objects and Workflows
 ${[

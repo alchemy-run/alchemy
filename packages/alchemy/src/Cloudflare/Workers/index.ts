@@ -1,6 +1,7 @@
 export * from "./Assets.ts";
 export * from "./ConfigProvider.ts";
 export * from "./CronEventSource.ts";
+export * from "./DurableObjectBridge.ts";
 export * from "./DurableObjectNamespace.ts";
 export * from "./DurableObjectState.ts";
 export * from "./DurableObjectStorage.ts";
@@ -14,4 +15,7 @@ export * from "./Rpc.ts";
 export * from "./ScheduledEvents.ts";
 export * from "./WebSocket.ts";
 export * from "./Worker.ts";
+export * from "./WorkerBinding.ts";
+export * from "./WorkerBridge.ts";
 export * from "./Workflow.ts";
+export * from "./WorkflowBridge.ts";

@@ -1,7 +1,7 @@
-export * from "./ApiToken/index.ts";
-export * from "./Artifacts/index.ts";
 export * from "./AiGateway/index.ts";
 export * from "./AnalyticsEngine/index.ts";
+export * from "./ApiToken/index.ts";
+export * from "./Artifacts/index.ts";
 export * from "./CloudflareEnvironment.ts";
 export * from "./Container/index.ts";
 export * from "./D1/index.ts";
@@ -19,3 +19,4 @@ export * from "./Tunnel/index.ts";
 export * from "./VpcService/index.ts";
 export * from "./Website/index.ts";
 export * from "./Workers/index.ts";
+export * from "./Workers/RpcAsync.ts";

@@ -2,7 +2,7 @@
 
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
-import type { Rpc } from "../../Platform.ts";
+import type { Rpc } from "../../Rpc.ts";
 import type { UnwrapEffect } from "../../Util/effect.ts";
 import type * as Cloudflare from "../index.ts";
 import type { RpcErrorEnvelope, RpcStreamEnvelope } from "./Rpc.ts";
@@ -39,45 +39,6 @@ export type RpcWireShape<Shape> = {
         ? Promise<T | RpcErrorEnvelope>
         : Shape[K] extends Stream.Stream<any, any, any>
           ? Promise<RpcStreamEnvelope | RpcErrorEnvelope>
-          : Shape[K] extends (...args: infer A) => infer R
-            ? (...args: A) => Promise<Awaited<R>>
-            : Promise<Shape[K]>;
-};
-
-/**
- * Recover the user's RPC `Shape` from any of the forms a caller might pass
- * to {@link toPromiseApi}:
- *
- *   - the Worker class value's type, e.g. `typeof Backend`, which extends
- *     `Effect.Effect<Worker & Rpc<Shape>, …>`
- *   - the unwrapped `Worker & Rpc<Shape>` type
- *   - a bare `Shape` (when the caller types it explicitly)
- */
-export type ExtractRpcShape<W> =
-  W extends Effect.Effect<infer R, any, any>
-    ? R extends Rpc<infer Shape>
-      ? Shape
-      : R
-    : W extends Rpc<infer Shape>
-      ? Shape
-      : W;
-
-/**
- * Promise-flavored consumer view returned by {@link toPromiseApi}: error
- * envelopes are thrown as exceptions and stream envelopes are unwrapped to
- * their raw `ReadableStream<Uint8Array>` body.
- */
-export type RpcPromiseShape<Shape> = {
-  [K in keyof Shape as K extends "fetch" ? never : K]: Shape[K] extends (
-    ...args: infer A
-  ) => Effect.Effect<infer T, any, any>
-    ? (...args: A) => Promise<T>
-    : Shape[K] extends (...args: infer A) => Stream.Stream<any, any, any>
-      ? (...args: A) => Promise<ReadableStream<Uint8Array>>
-      : Shape[K] extends Effect.Effect<infer T, any, any>
-        ? Promise<T>
-        : Shape[K] extends Stream.Stream<any, any, any>
-          ? Promise<ReadableStream<Uint8Array>>
           : Shape[K] extends (...args: infer A) => infer R
             ? (...args: A) => Promise<Awaited<R>>
             : Promise<Shape[K]>;
