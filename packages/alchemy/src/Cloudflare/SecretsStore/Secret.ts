@@ -79,6 +79,35 @@ export type Secret = Resource<
  * // Or call `.get()` explicitly:
  * const value = yield* apiKey.get();
  * ```
+ *
+ * @example Reading a secret with a binding tag
+ * ```typescript
+ * const ApiKey = Cloudflare.StoreSecret("ApiKey", {
+ *   store,
+ *   value: Redacted.make(process.env.API_KEY!),
+ * });
+ *
+ * class RuntimeApiKey extends Cloudflare.StoreSecret.Tag<RuntimeApiKey>()(
+ *   "RuntimeApiKey",
+ *   { resource: ApiKey },
+ * ) {}
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const RuntimeApiKeyLive = yield* RuntimeApiKey.layer;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const apiKey = yield* RuntimeApiKey;
+ *         const value = yield* apiKey.get();
+ *         return Response.json({ configured: value.length > 0 });
+ *       }).pipe(Effect.provide(RuntimeApiKeyLive)),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.SecretBindingLive)),
+ * );
+ * ```
  */
 export const Secret = Resource<Secret>("Cloudflare.SecretsStore.Secret")({
   bind: SecretBinding.bind,

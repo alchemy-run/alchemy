@@ -42,6 +42,32 @@ export type AnalyticsEngineDatasetProps = {
  * const analytics = yield* Cloudflare.AnalyticsEngineDataset.bind(Analytics);
  * yield* analytics.writeDataPoint({ blobs: ["signup"] });
  * ```
+ *
+ * @example Effect-style worker with a binding tag
+ * ```typescript
+ * const Analytics = Cloudflare.AnalyticsEngineDataset("Analytics");
+ *
+ * class Events extends Cloudflare.AnalyticsEngineDataset.Tag<Events>()(
+ *   "Events",
+ *   { resource: Analytics },
+ * ) {}
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const EventsLive = yield* Events.layer;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const events = yield* Events;
+ *         yield* events.writeDataPoint({ blobs: ["signup"] });
+ *         return new Response("ok");
+ *       }).pipe(Effect.provide(EventsLive)),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.AnalyticsEngineDatasetBindingLive)),
+ * );
+ * ```
  */
 export type AnalyticsEngineDataset = {
   kind: AnalyticsEngineDatasetTypeId;

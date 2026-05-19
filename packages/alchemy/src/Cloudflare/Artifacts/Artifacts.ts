@@ -107,6 +107,34 @@ export const isArtifacts = (value: unknown): value is Artifacts =>
  *   setDefaultBranch: "main",
  * });
  * ```
+ *
+ * @example Effect-style worker with a binding tag
+ * ```typescript
+ * const Repos = Cloudflare.Artifacts("Repos");
+ *
+ * class RepositoryStore extends Cloudflare.Artifacts.Tag<RepositoryStore>()(
+ *   "RepositoryStore",
+ *   { resource: Repos },
+ * ) {}
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const RepositoryStoreLive = yield* RepositoryStore.layer;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const artifacts = yield* RepositoryStore;
+ *         const repo = yield* artifacts.create("starter-repo", {
+ *           setDefaultBranch: "main",
+ *         });
+ *         return Response.json({ remote: repo.remote });
+ *       }).pipe(Effect.provide(RepositoryStoreLive)),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.ArtifactsBindingLive)),
+ * );
+ * ```
  */
 export const Artifacts: {
   (

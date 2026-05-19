@@ -92,6 +92,35 @@ export const isImages = (value: unknown): value is Images =>
  * //   { MEDIA: ImagesBinding }
  * ```
  *
+ * @section Binding to a Worker with tags
+ * @example Effect-style worker with an Images binding tag
+ * ```typescript
+ * const Pipeline = Cloudflare.Images({ name: "MEDIA" });
+ *
+ * class Media extends Cloudflare.Images.Tag<Media>()("Media", {
+ *   resource: Pipeline,
+ * }) {}
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const MediaLive = yield* Media.layer;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const media = yield* Media;
+ *         const result = yield* (yield* media.input(request.stream))
+ *           .transform({ width: 128 })
+ *           .output({ format: "image/jpeg" });
+ *
+ *         return yield* result.response;
+ *       }).pipe(Effect.provide(MediaLive)),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.ImagesBindingLive)),
+ * );
+ * ```
+ *
  * Inside the Worker, the raw Cloudflare runtime binding is reachable via
  * `client.raw` if you need to call `info()` / `input()` directly with
  * `async`/`await`. The Effect-native interface is preferred — it returns

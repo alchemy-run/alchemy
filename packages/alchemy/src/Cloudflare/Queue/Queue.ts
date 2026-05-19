@@ -88,6 +88,31 @@ export type Queue = Resource<
  *   }).pipe(Effect.provide(Cloudflare.QueueBindingLive)),
  * );
  * ```
+ *
+ * @example Sending messages with a binding tag
+ * ```typescript
+ * export const Queue = Cloudflare.Queue("Queue");
+ *
+ * class Jobs extends Cloudflare.Queue.Tag<Jobs>()("Jobs", {
+ *   resource: Queue,
+ * }) {}
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const JobsLive = yield* Jobs.layer;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const jobs = yield* Jobs;
+ *         yield* jobs.send({ kind: "resize", imageId: "img_123" });
+ *         return new Response(null, { status: 202 });
+ *       }).pipe(Effect.provide(JobsLive)),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.QueueBindingLive)),
+ * );
+ * ```
  */
 export const Queue = Resource<Queue>("Cloudflare.Queue")({
   bind: QueueBinding.bind,

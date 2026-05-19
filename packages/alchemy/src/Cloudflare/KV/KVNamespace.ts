@@ -56,6 +56,32 @@ export type KVNamespace = Resource<
  * // Write a value
  * yield* kv.put("my-key", "hello world");
  * ```
+ *
+ * @example Using a KV binding tag
+ * ```typescript
+ * const MyKV = Cloudflare.KVNamespace("MyKV");
+ *
+ * class Cache extends Cloudflare.KVNamespace.Tag<Cache>()("Cache", {
+ *   resource: MyKV,
+ * }) {}
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const CacheLive = yield* Cache.layer;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const cache = yield* Cache;
+ *         const value = yield* cache.get("my-key");
+ *         yield* cache.put("my-key", value ?? "hello world");
+ *         return new Response(value ?? "cached");
+ *       }).pipe(Effect.provide(CacheLive)),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.KVNamespaceBindingLive)),
+ * );
+ * ```
  */
 export const KVNamespace = Resource<KVNamespace>("Cloudflare.KVNamespace")({
   bind: KVNamespaceBinding.bind,

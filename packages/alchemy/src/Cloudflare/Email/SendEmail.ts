@@ -59,6 +59,38 @@ export type SendEmailProps = {
  *   destinationAddress: "ops@example.com",
  * });
  * ```
+ *
+ * @example Sending email with a binding tag
+ * ```typescript
+ * const Email = Cloudflare.SendEmail("Email", {
+ *   destinationAddress: "ops@example.com",
+ * });
+ *
+ * class Mailer extends Cloudflare.SendEmail.Tag<Mailer>()("Mailer", {
+ *   resource: Email,
+ * }) {}
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const MailerLive = yield* Mailer.layer;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const mailer = yield* Mailer;
+ *         yield* mailer.send({
+ *           from: "noreply@example.com",
+ *           to: "user@example.com",
+ *           subject: "Hello",
+ *           text: "Hi from Alchemy",
+ *         });
+ *         return new Response("sent");
+ *       }).pipe(Effect.provide(MailerLive)),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.SendEmailBindingLive)),
+ * );
+ * ```
  */
 export type SendEmail = SendEmailProps & {
   kind: SendEmailTypeId;

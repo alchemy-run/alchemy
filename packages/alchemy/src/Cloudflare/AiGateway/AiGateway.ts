@@ -262,6 +262,36 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  *   logManagementStrategy: "STOP_INSERTING",
  * });
  * ```
+ *
+ * @section Binding to a Worker
+ * @example Using an AI Gateway binding tag
+ * ```typescript
+ * const Gateway = Cloudflare.AiGateway("Gateway");
+ *
+ * class Ai extends Cloudflare.AiGateway.Tag<Ai>()("Ai", {
+ *   resource: Gateway,
+ * }) {}
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const AiLive = yield* Ai.layer;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const ai = yield* Ai;
+ *         return yield* ai.run({
+ *           provider: "workers-ai",
+ *           endpoint: "@cf/meta/llama-3.1-8b-instruct",
+ *           headers: { "content-type": "application/json" },
+ *           query: { prompt: "Write a concise status update" },
+ *         });
+ *       }).pipe(Effect.provide(AiLive)),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.AiGatewayBindingLive)),
+ * );
+ * ```
  */
 export const AiGateway = Resource<AiGateway>("Cloudflare.AiGateway")({
   /**

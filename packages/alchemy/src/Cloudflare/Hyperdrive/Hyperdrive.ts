@@ -152,6 +152,40 @@ export type Hyperdrive = Resource<
  * const hd = yield* Cloudflare.Hyperdrive.bind(MyDB);
  * const url = yield* hd.connectionString;
  * ```
+ *
+ * @example Using a Hyperdrive binding tag
+ * ```typescript
+ * const MyDB = Cloudflare.Hyperdrive("my-pg", {
+ *   origin: {
+ *     scheme: "postgres",
+ *     host: "db.example.com",
+ *     port: 5432,
+ *     database: "app",
+ *     user: "app",
+ *     password: alchemy.secret.env.DB_PASSWORD,
+ *   },
+ * });
+ *
+ * class Database extends Cloudflare.Hyperdrive.Tag<Database>()("Database", {
+ *   resource: MyDB,
+ * }) {}
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const DatabaseLive = yield* Database.layer;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const database = yield* Database;
+ *         const url = yield* database.connectionString;
+ *         return Response.json({ configured: url.toString().length > 0 });
+ *       }).pipe(Effect.provide(DatabaseLive)),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.HyperdriveBindingLive)),
+ * );
+ * ```
  */
 export const Hyperdrive = Resource<Hyperdrive>("Cloudflare.Hyperdrive")({
   bind: HyperdriveBinding.bind,
