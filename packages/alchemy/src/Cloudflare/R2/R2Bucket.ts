@@ -189,6 +189,44 @@ export type R2Bucket = Resource<
  * });
  * ```
  *
+ * @example Binding multiple R2 buckets with tags
+ * ```typescript
+ * const PublicBucket = Cloudflare.R2Bucket("PublicAssets");
+ * const PrivateBucket = Cloudflare.R2Bucket("PrivateAssets");
+ *
+ * class PublicAssets extends Cloudflare.R2Bucket.Tag<PublicAssets>()(
+ *   "PublicAssets",
+ *   { resource: PublicBucket },
+ * ) {}
+ *
+ * class PrivateAssets extends Cloudflare.R2Bucket.Tag<PrivateAssets>()(
+ *   "PrivateAssets",
+ *   { resource: PrivateBucket },
+ * ) {}
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const PublicAssetsLive = yield* PublicAssets.layer;
+ *     const PrivateAssetsLive = yield* PrivateAssets.layer;
+ *     const AppBindings = Layer.mergeAll(PublicAssetsLive, PrivateAssetsLive);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const publicAssets = yield* PublicAssets;
+ *         const privateAssets = yield* PrivateAssets;
+ *
+ *         yield* publicAssets.put("index.html", "<h1>Hello</h1>");
+ *         yield* privateAssets.put("audit.json", "{}");
+ *
+ *         return new Response("ok");
+ *       }).pipe(Effect.provide(AppBindings)),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
+ * );
+ * ```
+ *
  * @section Custom Domains
  *
  * Attach one or more custom domains to serve bucket objects from a hostname

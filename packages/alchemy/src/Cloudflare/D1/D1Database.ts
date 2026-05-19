@@ -240,6 +240,35 @@ export type D1Database = Resource<
  *   .run();
  * ```
  *
+ * @example Using a D1 binding tag
+ * ```typescript
+ * const MyDB = Cloudflare.D1Database("MyDB");
+ *
+ * class DB extends Cloudflare.D1Database.Tag<DB>()("DB", {
+ *   resource: MyDB,
+ * }) {}
+ *
+ * export default Cloudflare.Worker(
+ *   "Worker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const DBLive = yield* DB.layer;
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const db = yield* DB;
+ *         const user = yield* db
+ *           .prepare("SELECT * FROM users WHERE id = ?")
+ *           .bind("user-123")
+ *           .first();
+ *
+ *         return Response.json(user);
+ *       }).pipe(Effect.provide(DBLive)),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.D1ConnectionLive)),
+ * );
+ * ```
+ *
  * @see https://developers.cloudflare.com/d1/
  */
 export const D1Database = Resource<D1Database>("Cloudflare.D1Database")({
