@@ -1,30 +1,8 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-
-const DurableObjectWorkerEnvironmentKV = Cloudflare.KVNamespace(
-  "DurableObjectWorkerEnvironmentKV",
-  {
-    title: "durable-object-worker-environment-kv",
-  },
-);
-
-export class WorkerEnvironmentKVObject extends Cloudflare.DurableObjectNamespace<WorkerEnvironmentKVObject>()(
-  "WorkerEnvironmentKVObject",
-  Effect.gen(function* () {
-    const kv = yield* Cloudflare.KVNamespace.bind(
-      DurableObjectWorkerEnvironmentKV,
-    );
-
-    return Effect.gen(function* () {
-      return {
-        put: (key: string, value: string) => kv.put(key, value),
-        get: (key: string) => kv.get(key),
-      };
-    });
-  }).pipe(Effect.provide(Cloudflare.KVNamespaceBindingLive)),
-) {}
+import { WorkerEnvironmentKVObject } from "./object.ts";
 
 export default class DurableObjectWorkerEnvironmentWorker extends Cloudflare.Worker<DurableObjectWorkerEnvironmentWorker>()(
   "DurableObjectWorkerEnvironmentWorker",

@@ -18,7 +18,7 @@ import {
 } from "./DurableObjectState.ts";
 import { makeRequestEffect } from "./HttpServer.ts";
 import { fromWebSocket } from "./WebSocket.ts";
-import { getWorkerExport } from "./WorkerBridge.ts";
+import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
 
 /**
  * Create a DurableObjectBridge class that proxies RPC method calls through
@@ -78,10 +78,32 @@ export const makeDurableObjectBridge =
             Effect.runPromise,
           ),
         );
+
+        return new Proxy(this, {
+          get: (target, prop) => {
+            console.log(target, prop, prop in target);
+            const bind = (f: any) =>
+              typeof f === "function" ? f.bind(target) : f;
+            if (typeof prop !== "string") return bind((target as any)[prop]);
+            if (prop in target) return bind((target as any)[prop]);
+            return async (...args: any[]) =>
+              this.#execute((instance) => {
+                const method = instance[prop as keyof DurableObjectShape];
+                if (typeof method === "function") {
+                  return (method as any)(...args);
+                } else if (Effect.isEffect(method)) {
+                  return method;
+                } else {
+                  return Effect.succeed(method);
+                }
+              }, handleRpcExit);
+          },
+        });
       }
 
       async #execute(
         fn: (instance: DurableObjectShape) => Effect.Effect<any, any, any>,
+        onExit?: (exit: Exit.Exit<any, any>) => Promise<any>,
       ) {
         const scope = Scope.makeUnsafe();
 
@@ -101,10 +123,12 @@ export const makeDurableObjectBridge =
             ),
             Effect.runPromiseExit,
           )
-          .then((exit) =>
-            exit._tag === "Success"
-              ? Promise.resolve(exit.value)
-              : Promise.reject(Cause.squash(exit.cause)),
+          .then(
+            onExit ??
+              ((exit) =>
+                exit._tag === "Success"
+                  ? Promise.resolve(exit.value)
+                  : Promise.reject(Cause.squash(exit.cause))),
           )
           .finally(() =>
             Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>

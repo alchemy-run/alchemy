@@ -249,27 +249,28 @@ export const makeRpcProxy = (
             }),
             processEvent,
           )
-          .then(async (exit) => {
-            if (exit._tag === "Success") {
-              if (Stream.isStream(exit.value)) {
-                return await Effect.runPromise(
-                  toRpcStream(exit.value) as Effect.Effect<RpcStreamEnvelope>,
-                );
-              }
-              return exit.value;
-            }
-            const failReason = exit.cause.reasons.find(Cause.isFailReason);
-            if (failReason) {
-              return {
-                _tag: ErrorTag,
-                error: encodeRpcError(failReason.error),
-              } satisfies RpcErrorEnvelope;
-            }
-            const dieReason = exit.cause.reasons.find(Cause.isDieReason);
-            throw (
-              dieReason?.defect ??
-              new Error("RPC method failed with an unexpected cause")
-            );
-          });
+          .then(handleRpcExit);
     },
   });
+
+export const handleRpcExit = async (exit: Exit.Exit<any, any>) => {
+  if (exit._tag === "Success") {
+    if (Stream.isStream(exit.value)) {
+      return await Effect.runPromise(
+        toRpcStream(exit.value) as Effect.Effect<RpcStreamEnvelope>,
+      );
+    }
+    return exit.value;
+  }
+  const failReason = exit.cause.reasons.find(Cause.isFailReason);
+  if (failReason) {
+    return {
+      _tag: ErrorTag,
+      error: encodeRpcError(failReason.error),
+    } satisfies RpcErrorEnvelope;
+  }
+  const dieReason = exit.cause.reasons.find(Cause.isDieReason);
+  throw (
+    dieReason?.defect ?? new Error("RPC method failed with an unexpected cause")
+  );
+};
