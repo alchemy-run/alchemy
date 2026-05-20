@@ -681,8 +681,16 @@ export const Worker: Platform<
     Req | Providers
   >;
 } = Platform(WorkerTypeId, {
-  onCreate: bindWorkerAsyncBindings,
-  createRuntimeContext: makeWorkerRuntimeContext,
+  // Both hooks are wrapped in arrows so the imported references are resolved
+  // at call time rather than at module-load time. Worker.ts forms import
+  // cycles with both WorkerAsyncBindings.ts (which imports `isWorker` here)
+  // and WorkerRuntimeContext.ts (which imports `WorkerTypeId`/`WorkerEnvironment`
+  // here). Reading either binding eagerly here hits TDZ when Bun loads the
+  // package from node_modules in a different module-init order than the local
+  // workspace.
+  onCreate: (resource, props) =>
+    bindWorkerAsyncBindings(resource as Worker, props),
+  createRuntimeContext: (id) => makeWorkerRuntimeContext(id),
 });
 
 class MissingDurableObjectNamespaces extends Data.TaggedError(
