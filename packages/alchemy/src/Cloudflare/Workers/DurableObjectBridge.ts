@@ -7,7 +7,11 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 
-import type { DurableObjectExport } from "./DurableObjectNamespace.ts";
+import { HttpServerResponse } from "effect/unstable/http";
+import type {
+  DurableObjectExport,
+  DurableObjectShape,
+} from "./DurableObjectNamespace.ts";
 import {
   DurableObjectState,
   fromDurableObjectState,
@@ -39,15 +43,13 @@ export const makeDurableObjectBridge =
   ) =>
   (className: string) =>
     class DurableObjectBridge extends DurableObject {
-      #state: cf.DurableObjectState;
-
+      #state;
+      #globalContext;
+      #exported;
+      #instance;
       constructor(state: cf.DurableObjectState, env: any) {
         super(state as any, env);
         this.#state = state;
-      }
-
-      async fetch(request: Request): Promise<any> {
-        const scope = Scope.makeUnsafe();
 
         const { globalContext, exported } =
           getWorkerExport<DurableObjectExport>({
@@ -56,25 +58,47 @@ export const makeDurableObjectBridge =
             exportName: className,
           });
 
-        return exported
-          .pipe(
+        this.#globalContext = globalContext;
+        this.#exported = exported;
+
+        this.#instance = state.blockConcurrencyWhile(() =>
+          this.#exported.pipe(
             Effect.flatMap(({ constructor, services }) =>
               constructor.pipe(
-                Effect.flatMap((instance) =>
-                  makeRequestEffect(request as any, instance.fetch!),
-                ),
                 Effect.provide(
                   Layer.succeed(
                     DurableObjectState,
                     fromDurableObjectState(this.#state),
-                  ).pipe(
-                    Layer.provideMerge(Layer.succeed(Scope.Scope, scope)),
-                    Layer.provideMerge(Layer.succeedContext(services)),
-                  ),
+                  ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
                 ),
+                Effect.map((instance) => ({ instance, services })),
               ),
             ),
-            Effect.provide(globalContext),
+            Effect.provide(this.#globalContext),
+            Effect.runPromise,
+          ),
+        );
+      }
+
+      async #execute(
+        fn: (instance: DurableObjectShape) => Effect.Effect<any, any, any>,
+      ) {
+        const scope = Scope.makeUnsafe();
+
+        const { instance, services } = await this.#instance;
+
+        return fn(instance)
+          .pipe(
+            Effect.provide(
+              Layer.succeed(
+                DurableObjectState,
+                fromDurableObjectState(this.#state),
+              ).pipe(
+                Layer.provideMerge(Layer.succeed(Scope.Scope, scope)),
+                Layer.provideMerge(Layer.succeedContext(services)),
+              ),
+            ),
+            Effect.provide(this.#globalContext),
             Effect.runPromiseExit,
           )
           .then((exit) =>
@@ -89,24 +113,28 @@ export const makeDurableObjectBridge =
           );
       }
 
+      async fetch(request: Request): Promise<any> {
+        return this.#execute((instance) =>
+          instance.fetch
+            ? makeRequestEffect(request as any, instance.fetch)
+            : Effect.succeed(
+                HttpServerResponse.text("Not implemented", {
+                  status: 404,
+                }),
+              ),
+        );
+      }
+
       async alarm(alarmInfo?: cf.AlarmInvocationInfo) {
-        const methods = await this.#instance;
-        if (methods.alarm) {
-          await methods
-            .alarm(alarmInfo)
-            .pipe(Effect.provide(this.#services), Effect.runPromise);
-        }
+        return this.#execute((instance) => instance.alarm!(alarmInfo));
       }
 
       async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer) {
-        const methods = await this.#instance;
-        if (methods.webSocketMessage) {
-          const socket = fromWebSocket(ws as any);
-          const value = methods.webSocketMessage(socket, message);
-          if (Effect.isEffect(value)) {
-            await value.pipe(Effect.provide(this.#services), Effect.runPromise);
-          }
-        }
+        return this.#execute(
+          (instance) =>
+            instance.webSocketMessage?.(fromWebSocket(ws as any), message) ??
+            Effect.void,
+        );
       }
 
       async webSocketClose(
@@ -115,13 +143,14 @@ export const makeDurableObjectBridge =
         reason: string,
         wasClean: boolean,
       ) {
-        const methods = await this.#instance;
-        if (methods.webSocketClose) {
-          const socket = fromWebSocket(ws as any);
-          const value = methods.webSocketClose(socket, code, reason, wasClean);
-          if (Effect.isEffect(value)) {
-            await value.pipe(Effect.provide(this.#services), Effect.runPromise);
-          }
-        }
+        return this.#execute(
+          (instance) =>
+            instance.webSocketClose?.(
+              fromWebSocket(ws as any),
+              code,
+              reason,
+              wasClean,
+            ) ?? Effect.void,
+        );
       }
     } as any;
