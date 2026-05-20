@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
-export interface D1SqlFile {
+export interface SqlFile {
   id: string;
   sql: string;
   hash: string;
@@ -43,9 +43,31 @@ export const readSqlFile = (directory: string, name: string) =>
     const path = yield* Path.Path;
     const sql = yield* fs.readFileString(path.resolve(directory, name));
     const hash = crypto.createHash("sha256").update(sql).digest("hex");
-    const file: D1SqlFile = { id: name, sql, hash };
+    const file: SqlFile = { id: name, sql, hash };
     Object.defineProperty(file, "sql", { enumerable: false });
     return file;
+  });
+
+export const hashMigrations = (migrationsDir: string) =>
+  listSqlFiles(migrationsDir).pipe(
+    Effect.map((files) => {
+      const hashes: Record<string, string> = {};
+      for (const file of files) hashes[file.id] = file.hash;
+      return hashes;
+    }),
+  );
+
+export const hashImports = (
+  importFiles: ReadonlyArray<string>,
+  rootDir: string,
+) =>
+  Effect.gen(function* () {
+    const hashes: Record<string, string> = {};
+    for (const filePath of importFiles) {
+      const file = yield* readSqlFile(rootDir, filePath);
+      hashes[filePath] = file.hash;
+    }
+    return hashes;
   });
 
 const getPrefix = (name: string): number | null => {

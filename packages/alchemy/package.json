@@ -196,6 +196,18 @@
       "worker": "./src/Output.ts",
       "import": "./lib/Output.js"
     },
+    "./Planetscale": {
+      "types": "./lib/Planetscale/index.d.ts",
+      "bun": "./src/Planetscale/index.ts",
+      "worker": "./src/Planetscale/index.ts",
+      "import": "./lib/Planetscale/index.js"
+    },
+    "./Planetscale/*": {
+      "types": "./lib/Planetscale/*/index.d.ts",
+      "bun": "./src/Planetscale/*/index.ts",
+      "worker": "./src/Planetscale/*/index.ts",
+      "import": "./lib/Planetscale/*/index.js"
+    },
     "./Runtime": {
       "types": "./lib/Runtime.d.ts",
       "bun": "./src/Runtime.ts",
@@ -286,6 +298,7 @@
     "@distilled.cloud/cloudflare-runtime": "catalog:",
     "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
     "@distilled.cloud/core": "catalog:",
+    "@distilled.cloud/planetscale": "catalog:",
     "@distilled.cloud/neon": "catalog:",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
@@ -303,6 +316,7 @@
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
     "magic-string": "^0.30.21",
+    "mysql2": "^3.15.3",
     "pathe": "^2.0.3",
     "pg": "^8.13.0",
     "picomatch": "^4.0.4",
