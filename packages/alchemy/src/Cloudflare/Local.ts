@@ -5,7 +5,7 @@ import * as Path from "effect/Path";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as AlchemyContext from "../AlchemyContext.ts";
 import * as RpcProcessContext from "../Local/RpcProcessContext.ts";
-import { RpcServerBun } from "../Local/RpcServerBun.ts";
+import * as RpcServer from "../Local/RpcServer.ts";
 import { PlatformServices, runMain } from "../Util/PlatformServices.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
@@ -36,7 +36,7 @@ const cloudflareServices = Layer.provide(
   CloudflareAuth,
 );
 
-const server = RpcServerBun.pipe(
+const server = RpcServer.layer.pipe(
   Layer.provide(LocalWorkerProvider()),
   Layer.provide(Layer.merge(runtime, RuntimeServices.layerLocalProxy(1337))),
   Layer.provide(cloudflareServices),

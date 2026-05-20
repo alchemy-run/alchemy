@@ -3,6 +3,7 @@ import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 import type { ProviderService } from "../Provider.ts";
 import { serializeRpcHandlers, type Rpc } from "./RpcSerialization.ts";
@@ -18,6 +19,18 @@ export type RpcProvider = {
 export interface RpcApi {
   getProvider: (key: string) => RpcProvider;
 }
+
+export const layer = Layer.unwrap(
+  Effect.promise(async () => {
+    if (typeof globalThis.Bun !== "undefined") {
+      const { RpcServerBun } = await import("./RpcServerBun.ts");
+      return RpcServerBun;
+    } else {
+      const { RpcServerNode } = await import("./RpcServerNode.js");
+      return RpcServerNode;
+    }
+  }),
+);
 
 export const make = Effect.fnUntraced(function* (
   serve: <T extends RpcCompatible<T>>(handlers: {
