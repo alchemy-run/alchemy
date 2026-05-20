@@ -416,6 +416,14 @@ const executeNode = (
         // resource's "created"/"updated" event to the end of apply(), which
         // makes long-running siblings appear stuck in "creating" until the
         // entire deploy finishes.
+        //
+        // Cycle members are exempt: their initial pass produces an
+        // intermediate result that Phase 3 (`converge`) will overwrite once
+        // the SCC reaches a fixed point. Emitting "created"/"updated" here
+        // would surface that intermediate state to the CLI before the real
+        // terminal status is known. Their final status is flushed from
+        // `terminalStatuses` after `converge` completes.
+        if (inCycle) return;
         yield* session.emit({
           kind: "status-change",
           id: logicalId,
