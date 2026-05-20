@@ -681,7 +681,13 @@ export const Worker: Platform<
     Req | Providers
   >;
 } = Platform(WorkerTypeId, {
-  onCreate: bindWorkerAsyncBindings,
+  // Wrap in an arrow so the `bindWorkerAsyncBindings` reference is resolved
+  // at call time rather than at module-load time. Worker.ts <-> WorkerAsyncBindings.ts
+  // form an import cycle (the latter imports `isWorker` from this file), and
+  // reading the binding eagerly here hits TDZ when Bun loads the package from
+  // node_modules in a different module-init order than the local workspace.
+  onCreate: (resource, props) =>
+    bindWorkerAsyncBindings(resource as Worker, props),
   createRuntimeContext: makeWorkerRuntimeContext,
 });
 
