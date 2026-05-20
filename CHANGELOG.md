@@ -1,3 +1,40 @@
+## v2.0.0-beta.42
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - **Worker**: Defer Platform hook bindings to avoid TDZ from npm &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/378 [<samp>(1b498)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1b498227)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.41...HEAD)
+
+---
+
+## v2.0.0-beta.41
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **Cloudflare**: Include WorkerProps.env in InferEnv &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/351 [<samp>(f157e)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f157ed89)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - Fix RPC and HTTP APIs by scoping runtime effects per request &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/374 [<samp>(b7cdc)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b7cdca09)
+- **cloudflare**:
+  - Externalize lightningcss + fsevents in worker bundler &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/363 [<samp>(5dc95)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/5dc95a0e)
+  - Provide worker env to do methods &nbsp;-&nbsp; by **Dillon Mulroy** in https://github.com/alchemy-run/alchemy-effect/issues/369 [<samp>(7b5be)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/7b5be8be)
+  - Add WorkerExecutionContext and ExecutionContext to worker fetch types &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/358 [<samp>(d2d0f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d2d0fa8d)
+  - **worker**: Force delete scripts on teardown &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/348 [<samp>(f37d0)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f37d06cf)
+- **core**:
+  - Eager terminal status events + pending while waiting on deps &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/376 [<samp>(b307e)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b307ee5a)
+- **sidecar**:
+  - Preserve Redacted values across RPC serialization &nbsp;-&nbsp; by **Juliaan** in https://github.com/alchemy-run/alchemy-effect/issues/356 [<samp>(b2334)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b2334c5e)
+- **state**:
+  - Remove that one log we don't want, if you know you know &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/347 [<samp>(ab648)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ab648e16)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.40...HEAD)
+
+---
+
 ## v2.0.0-beta.40
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

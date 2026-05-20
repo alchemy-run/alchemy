@@ -18,7 +18,7 @@ import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
 import { type Project, waitForOperations } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
-import { listSqlFiles, readSqlFile } from "./SqlFile.ts";
+import { listSqlFiles, readSqlFile } from "../Sql/SqlFile.ts";
 
 const findBranchByName = (projectId: string, name: string) =>
   Effect.gen(function* () {

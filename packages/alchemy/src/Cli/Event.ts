@@ -12,7 +12,7 @@ export type ApplyStatus =
   | "deleted"
   | "replacing"
   | "replaced"
-  // Task lifecycle (see {@link Task})
+  // Action lifecycle (see {@link Action})
   | "running"
   | "ran"
   | "skipped"

@@ -12,6 +12,7 @@ import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
+import type { Rpc } from "./Rpc.ts";
 import { RuntimeContext, type BaseRuntimeContext } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
@@ -34,10 +35,6 @@ export type Main<InitServices = never> = void | {
         never,
         InitServices | PlatformServices
       >;
-};
-
-export type Rpc<Shape> = {
-  "~alchemy/rpc": Shape;
 };
 
 // services provided to the Resource

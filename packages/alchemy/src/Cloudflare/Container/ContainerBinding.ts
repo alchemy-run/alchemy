@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { type Rpc } from "../../Platform.ts";
+import { type Rpc } from "../../Rpc.ts";
 import {
   fromCloudflareFetcher,
   toCloudflareFetcher,

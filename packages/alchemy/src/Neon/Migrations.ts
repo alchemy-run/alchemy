@@ -2,7 +2,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Client } from "pg";
-import type { SqlFile } from "./SqlFile.ts";
+import type { SqlFile } from "../Sql/SqlFile.ts";
 
 export class PgError extends Data.TaggedError("PgError")<{
   message: string;

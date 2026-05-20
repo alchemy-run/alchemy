@@ -22,18 +22,17 @@ import type { Input } from "./Input.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
+  type ActionApply,
   type Apply,
   type Delete,
   type Plan,
-  type ActionApply,
-  type ActionDelete,
 } from "./Plan.ts";
 import { findProviderByType } from "./Provider.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
-import { recordResourceOp, type ResourceOp } from "./Telemetry/Metrics.ts";
 import {
+  type ActionState,
   type CreatedResourceState,
   type CreatingResourceState,
   type DeletingResourceState,
@@ -43,12 +42,12 @@ import {
   type ReplacingResourceState,
   type ResourceState,
   type RunningActionState,
-  type ActionState,
   type UpdatedResourceState,
   type UpdatingReourceState,
   State,
   StateStoreError,
 } from "./State/index.ts";
+import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
 import { hashInput } from "./Util/hash.ts";
 
 export type ApplyEffect<
@@ -405,8 +404,27 @@ const executeNode = (
       });
 
     const markTerminal = (status: "created" | "updated") =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         terminalStatuses.set(fqn, {
+          id: logicalId,
+          type: node.resource.Type,
+          status,
+        });
+        // Emit immediately so the CLI surfaces the terminal status as soon
+        // as the resource is actually done — instead of batching every
+        // resource's "created"/"updated" event to the end of apply(), which
+        // makes long-running siblings appear stuck in "creating" until the
+        // entire deploy finishes.
+        //
+        // Cycle members are exempt: their initial pass produces an
+        // intermediate result that Phase 3 (`converge`) will overwrite once
+        // the SCC reaches a fixed point. Emitting "created"/"updated" here
+        // would surface that intermediate state to the CLI before the real
+        // terminal status is known. Their final status is flushed from
+        // `terminalStatuses` after `converge` completes.
+        if (inCycle) return;
+        yield* session.emit({
+          kind: "status-change",
           id: logicalId,
           type: node.resource.Type,
           status,
@@ -576,11 +594,16 @@ const executeNode = (
           });
         }
 
-        yield* report("creating");
+        // While we're waiting on upstream outputs the resource isn't actually
+        // creating anything yet — surface that as "pending" so the CLI doesn't
+        // look stuck in "creating" for slow-upstream deploys.
+        yield* report("pending");
 
         // Create runs against fully resolved upstream outputs and bindings, not the
         // raw Output expressions stored in the plan.
         yield* waitForDeps(allUpstreamFqns());
+
+        yield* report("creating");
         const outputs = getOutputs();
 
         const news = (yield* Output.evaluate(node.props, outputs)) as Record<
@@ -662,6 +685,9 @@ const executeNode = (
           });
         }
 
+        // See create-flow note: while we're waiting on upstream outputs
+        // this resource isn't actually updating yet.
+        yield* report("pending");
         yield* waitForDeps(allUpstreamFqns());
         const outputs = getOutputs();
 
@@ -867,11 +893,15 @@ const executeNode = (
           });
         }
 
-        yield* report("creating replacement");
+        // See create-flow note: while we're waiting on upstream outputs
+        // the replacement isn't actually being created yet.
+        yield* report("pending");
 
         // Replacement create is evaluated exactly like create, but against the new
         // generation's instance id and with the previous generations preserved in `old`.
         yield* waitForDeps(allUpstreamFqns());
+
+        yield* report("creating replacement");
         const outputs = getOutputs();
 
         const news = (yield* Output.evaluate(node.props, outputs)) as Record<
@@ -1052,13 +1082,16 @@ const executeActionNode = (
         type: task.Type,
         status: "skipped",
       });
+      yield* report("skipped");
       return;
     }
 
     // ── run ──
-    // Wait for stable (post-reconcile) upstream attrs — not precreate stubs.
-    // This is `waitForStableDeps` at the call site, passed in as the
-    // `waitForDeps` parameter here.
+    // Tasks wait on `waitForStableDeps` (post-reconcile attrs) for their
+    // upstreams, which is often the slowest dep chain in the deploy.
+    // Surface that as "pending" instead of having the task show no status
+    // until its run actually starts.
+    yield* report("pending");
     yield* waitForDeps(
       Object.keys(Output.resolveUpstream(node.input)).filter(
         (f) => f in readyStable,
@@ -1108,6 +1141,7 @@ const executeActionNode = (
       type: task.Type,
       status: "ran",
     });
+    yield* report("ran");
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.gen(function* () {
