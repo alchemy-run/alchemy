@@ -22,18 +22,17 @@ import type { Input } from "./Input.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
+  type ActionApply,
   type Apply,
   type Delete,
   type Plan,
-  type ActionApply,
-  type ActionDelete,
 } from "./Plan.ts";
 import { findProviderByType } from "./Provider.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
-import { recordResourceOp, type ResourceOp } from "./Telemetry/Metrics.ts";
 import {
+  type ActionState,
   type CreatedResourceState,
   type CreatingResourceState,
   type DeletingResourceState,
@@ -43,12 +42,12 @@ import {
   type ReplacingResourceState,
   type ResourceState,
   type RunningActionState,
-  type ActionState,
   type UpdatedResourceState,
   type UpdatingReourceState,
   State,
   StateStoreError,
 } from "./State/index.ts";
+import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
 import { hashInput } from "./Util/hash.ts";
 
 export type ApplyEffect<
@@ -416,6 +415,14 @@ const executeNode = (
         // resource's "created"/"updated" event to the end of apply(), which
         // makes long-running siblings appear stuck in "creating" until the
         // entire deploy finishes.
+        //
+        // Cycle members are exempt: their initial pass produces an
+        // intermediate result that Phase 3 (`converge`) will overwrite once
+        // the SCC reaches a fixed point. Emitting "created"/"updated" here
+        // would surface that intermediate state to the CLI before the real
+        // terminal status is known. Their final status is flushed from
+        // `terminalStatuses` after `converge` completes.
+        if (inCycle) return;
         yield* session.emit({
           kind: "status-change",
           id: logicalId,

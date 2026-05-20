@@ -6,11 +6,12 @@ import {
   getProjectOperation,
   listProjectBranchDatabases,
   listProjectBranches,
-  type ListProjectsOutput,
   listProjects,
+  type ListProjectsOutput,
   createProject as sdkCreateProject,
   updateProject,
 } from "@distilled.cloud/neon";
+import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -586,6 +587,7 @@ export const ProjectProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* deleteProject({ project_id: output.projectId }).pipe(
+            Effect.tapError(Console.log),
             Effect.catchTag("NotFound", () => Effect.void),
           );
         }),

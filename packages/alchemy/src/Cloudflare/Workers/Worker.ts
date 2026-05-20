@@ -1,69 +1,31 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
-import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
-import * as Binding from "../../Binding.ts";
 import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
-import { ExecutionContext } from "../../ExecutionContext.ts";
-import type { HttpEffect } from "../../Http.ts";
 import type { InputProps } from "../../Input.ts";
-import * as Output from "../../Output.ts";
-import {
-  Platform,
-  type Main,
-  type PlatformProps,
-  type Rpc,
-} from "../../Platform.ts";
+import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
-import { isYieldableEffectLike } from "../../Util/effect.ts";
-import type { AiGateway } from "../AiGateway/AiGateway.ts";
-import {
-  isAnalyticsEngineDataset,
-  type AnalyticsEngineDataset,
-} from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
-import {
-  isArtifacts as isArtifactsBinding,
-  type Artifacts as ArtifactsBinding,
-} from "../Artifacts/Artifacts.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { D1Database } from "../D1/D1Database.ts";
-import { isSendEmail, type SendEmail } from "../Email/SendEmail.ts";
-import type {
-  Hyperdrive,
-  HyperdriveDevOrigin,
-} from "../Hyperdrive/Hyperdrive.ts";
-import {
-  isImages as isImagesBinding,
-  type Images as ImagesBinding,
-} from "../Images/Images.ts";
-import type { KVNamespace } from "../KV/KVNamespace.ts";
+import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
 import { SidecarLive } from "../Local/Sidecar.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
-import type { Queue as CloudflareQueue } from "../Queue/Queue.ts";
-import type { R2Bucket } from "../R2/R2Bucket.ts";
 import {
-  isAssets,
   readAssets,
   uploadAssets,
   type Assets,
@@ -71,28 +33,29 @@ import {
   type AssetsProps,
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import {
-  isDurableObjectExport,
-  isDurableObjectNamespaceLike,
-  type DurableObjectNamespaceLike,
-} from "./DurableObjectNamespace.ts";
-import { workersHttpHandler } from "./HttpServer.ts";
+import { isDurableObjectExport } from "./DurableObjectNamespace.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
-import {
-  encodeRpcError,
-  ErrorTag,
-  makeRpcStub,
-  toRpcStream,
-  type RpcErrorEnvelope,
-  type RpcStreamEnvelope,
-} from "./Rpc.ts";
 import * as Vite from "./Vite.ts";
+import {
+  bindWorkerAsyncBindings,
+  getCronBindings,
+} from "./WorkerAsyncBindings.ts";
+import type {
+  WorkerBinding,
+  WorkerBindingResource,
+  WorkerBindings,
+  WorkerSettingsBinding,
+} from "./WorkerBinding.ts";
 import { WorkerBundle } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
+import {
+  makeWorkerRuntimeContext,
+  type WorkerRuntimeContext,
+} from "./WorkerRuntimeContext.ts";
 
-const WorkerTypeId = "Cloudflare.Worker";
-type WorkerTypeId = typeof WorkerTypeId;
+export const WorkerTypeId = "Cloudflare.Worker";
+export type WorkerTypeId = typeof WorkerTypeId;
 
 export const isWorker = <T>(value: T): value is T & Worker =>
   typeof value === "object" &&
@@ -162,16 +125,6 @@ export type WorkerPlacement = Exclude<
   undefined
 >;
 
-export type WorkerBinding = Exclude<
-  workers.PutScriptRequest["metadata"]["bindings"],
-  undefined
->[number];
-
-type WorkerSettingsBinding = Exclude<
-  workers.GetScriptScriptAndVersionSettingResponse["bindings"],
-  null | undefined
->[number];
-
 export const ExportedHandlerMethods = [
   "fetch",
   "tail",
@@ -183,28 +136,9 @@ export const ExportedHandlerMethods = [
   "queue",
 ] as const satisfies (keyof cf.ExportedHandler)[];
 
-export interface WorkerRuntimeContext extends Serverless.FunctionContext {
-  export(name: string, value: any): Effect.Effect<void>;
-}
-
 export type WorkerServices = Worker | Request | WorkerExecutionContext;
 
 export type WorkerShape = Main<WorkerServices | WorkerEnvironment>;
-
-export type WorkerBindingResource =
-  | Assets
-  | R2Bucket
-  | D1Database
-  | KVNamespace
-  | CloudflareQueue
-  | AiGateway
-  | AnalyticsEngineDataset
-  | SendEmail
-  | ArtifactsBinding
-  | ImagesBinding
-  | Hyperdrive
-  | Worker
-  | DurableObjectNamespaceLike<any>;
 
 export type WorkerEnv = Record<
   string,
@@ -216,9 +150,6 @@ export type WorkerEnv = Record<
   | { readonly [key: string]: unknown }
   | Redacted.Redacted<string>
 >;
-export type WorkerBindings = {
-  [bindingName in string]: WorkerBindingResource;
-};
 
 export type WorkerBindingProps = {
   [bindingName in string]:
@@ -750,406 +681,9 @@ export const Worker: Platform<
     Req | Providers
   >;
 } = Platform(WorkerTypeId, {
-  onCreate: Effect.fnUntraced(function* (
-    resource: Worker,
-    props: InputProps<WorkerProps<WorkerBindingProps>>,
-  ) {
-    if (props.bindings) {
-      for (const bindingName in props.bindings) {
-        // @ts-expect-error
-        const bindingEff = props.bindings?.[bindingName] as
-          | WorkerBindingResource
-          | Effect.Effect<WorkerBindingResource>;
-        // Bindings can be passed as a plain resource value, an Effect that
-        // yields a resource, or an effect-class (e.g. a `Cloudflare.Worker`
-        // class). Resolve the yieldable forms before deriving binding metadata.
-        const binding = isYieldableEffectLike(bindingEff)
-          ? ((yield* bindingEff as Effect.Effect<unknown>) as WorkerBindingResource)
-          : bindingEff;
-
-        const bindingMeta: InputProps<WorkerBinding> | undefined =
-          typeof binding === "string"
-            ? {
-                type: "plain_text",
-                name: bindingName,
-                value: binding,
-              }
-            : Redacted.isRedacted(binding)
-              ? {
-                  type: "secret_text",
-                  name: bindingName,
-                  value: Redacted.value(binding),
-                }
-              : isAssets(binding)
-                ? {
-                    type: "assets",
-                    name: bindingName,
-                  }
-                : isArtifactsBinding(binding)
-                  ? ({
-                      type: "artifacts",
-                      name: bindingName,
-                      namespace: binding.namespace,
-                    } as any)
-                  : isImagesBinding(binding)
-                    ? {
-                        type: "images",
-                        name: bindingName,
-                      }
-                    : isAnalyticsEngineDataset(binding)
-                      ? {
-                          type: "analytics_engine",
-                          name: bindingName,
-                          dataset: binding.dataset,
-                        }
-                      : isSendEmail(binding)
-                        ? {
-                            type: "send_email",
-                            name: bindingName,
-                            destinationAddress: binding.destinationAddress,
-                            allowedDestinationAddresses:
-                              binding.allowedDestinationAddresses,
-                            allowedSenderAddresses:
-                              binding.allowedSenderAddresses,
-                          }
-                        : isDurableObjectNamespaceLike(binding)
-                          ? {
-                              type: "durable_object_namespace",
-                              name: bindingName,
-                              className: binding.className ?? binding.name,
-                            }
-                          : binding.Type === "Cloudflare.D1Database"
-                            ? {
-                                type: "d1",
-                                id: binding.databaseId,
-                                name: bindingName,
-                              }
-                            : binding.Type === "Cloudflare.R2Bucket"
-                              ? {
-                                  type: "r2_bucket",
-                                  name: bindingName,
-                                  bucketName: binding.bucketName,
-                                  jurisdiction: binding.jurisdiction.pipe(
-                                    Output.map((jurisdiction) =>
-                                      jurisdiction === "default"
-                                        ? undefined
-                                        : jurisdiction,
-                                    ),
-                                  ),
-                                }
-                              : binding.Type === "Cloudflare.KVNamespace"
-                                ? {
-                                    type: "kv_namespace",
-                                    name: bindingName,
-                                    namespaceId: binding.namespaceId,
-                                  }
-                                : binding.Type === "Cloudflare.Queue"
-                                  ? {
-                                      type: "queue",
-                                      name: bindingName,
-                                      queueName: binding.queueName,
-                                    }
-                                  : binding.Type === "Cloudflare.AiGateway"
-                                    ? {
-                                        type: "ai",
-                                        name: bindingName,
-                                      }
-                                    : binding.Type === "Cloudflare.Hyperdrive"
-                                      ? {
-                                          type: "hyperdrive",
-                                          name: bindingName,
-                                          id: binding.hyperdriveId,
-                                        }
-                                      : isWorker(binding)
-                                        ? {
-                                            type: "service",
-                                            name: bindingName,
-                                            service: binding.workerName,
-                                          }
-                                        : // TODO(sam): handle others
-                                          undefined;
-
-        if (bindingMeta) {
-          yield* resource.bind`${bindingName}`({
-            bindings: [bindingMeta],
-          });
-        } else {
-          return yield* Effect.die(`Unknown binding type: ${bindingName}`);
-        }
-      }
-    }
-  }),
-  createRuntimeContext: (id: string): WorkerRuntimeContext => {
-    const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
-    const exports: Record<string, any> = {};
-    const env: Record<string, any> = {};
-    let userShape: Record<string, unknown> | undefined;
-
-    const ctx = {
-      Type: WorkerTypeId,
-      id,
-      env,
-      get: (key: string) =>
-        Effect.serviceOption(WorkerEnvironment).pipe(
-          Effect.map(Option.getOrUndefined),
-          Effect.flatMap((env) =>
-            env
-              ? Effect.succeed(env[key])
-              : Effect.die("WorkerEnvironment not found"),
-          ),
-          Effect.flatMap((value) =>
-            value
-              ? Effect.succeed(value)
-              : Effect.die(`Environment variable '${key}' not found`),
-          ),
-          Effect.map((json) => {
-            try {
-              const value = JSON.parse(json);
-              // The `set` path serializes Redacted values as
-              // `{_tag: "Redacted", value: ...}`. After JSON.parse the
-              // result is a plain object — `Redacted.isRedacted` would
-              // always return `false` on it — so detect the marker shape
-              // and rebuild the Redacted wrapper. Plain values pass
-              // through unchanged.
-              if (
-                value !== null &&
-                typeof value === "object" &&
-                (value as { _tag?: unknown })._tag === "Redacted" &&
-                "value" in (value as object)
-              ) {
-                return Redacted.make((value as { value: unknown }).value);
-              }
-              return value;
-            } catch {
-              return json;
-            }
-          }),
-        ) as any,
-      set: (id: string, output: Output.Output) =>
-        Effect.sync(() => {
-          const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          // Preserve `Redacted`-ness across the Output → env → Cloudflare
-          // binding boundary so the put-worker loop can deploy secrets via
-          // `secret_text` instead of leaking them as `plain_text`. The JSON
-          // payload still carries the `{_tag: "Redacted", …}` marker so the
-          // runtime `get` accessor can rebuild the wrapper after Cloudflare
-          // hands the binding back as a plain string.
-          env[key] = output.pipe(
-            Output.map((value) =>
-              Redacted.isRedacted(value)
-                ? Redacted.make(
-                    JSON.stringify({
-                      _tag: "Redacted",
-                      value: Redacted.value(value),
-                    }),
-                  )
-                : JSON.stringify(value),
-            ),
-          );
-          return key;
-        }),
-      serve: <Req = never>(
-        handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>,
-        options?: { shape?: Record<string, unknown> },
-      ) => {
-        // Capture the user's full default-export shape so `exports` can
-        // expose any non-handler methods on it as RPC methods on the
-        // deployed `WorkerEntrypoint` subclass — see `__rpc__` below.
-        if (options?.shape) userShape = options.shape;
-        return ctx.listen(workersHttpHandler(handler));
-      },
-      listen: ((
-        handler:
-          | Serverless.FunctionListener
-          | Effect.Effect<Serverless.FunctionListener>,
-      ) =>
-        Effect.sync(() =>
-          Effect.isEffect(handler)
-            ? listeners.push(handler)
-            : listeners.push(Effect.succeed(handler)),
-        )) as any as Serverless.FunctionContext["listen"],
-      export: (name: string, value: any) =>
-        Effect.sync(() => {
-          exports[name] = value;
-        }),
-      exports: Effect.gen(function* () {
-        const handlers = yield* Effect.all(listeners, {
-          concurrency: "unbounded",
-        });
-        const services = yield* Effect.context();
-
-        // Provide the per-request runtime layer (services + `WorkerExecutionContext`
-        // + a fresh `ExecutionContext`/`Scope`) to a user effect, then run it.
-        // This is the bridge between Cloudflare's request-time callback and
-        // the user's Effect-native handler. Used by both the standard
-        // `handle()` dispatch (fetch/scheduled/…) and the per-RPC dispatchers
-        // below — keeping them on a single layer-provision path.
-        const runUserEffect = <A, E>(
-          eff: Effect.Effect<A, E>,
-          context: cf.ExecutionContext,
-        ): Promise<Exit.Exit<A, E>> => {
-          const scope = Scope.makeUnsafe();
-          return eff
-            .pipe(
-              Effect.provideContext(services),
-              Scope.provide(scope),
-              Effect.provide(Layer.succeed(WorkerExecutionContext, context)),
-              Effect.provide(
-                Layer.succeed(ExecutionContext, { scope, cache: {} }),
-              ),
-              Effect.runPromiseExit,
-            )
-            .finally(() =>
-              context.waitUntil(
-                Effect.runPromise(Scope.close(scope, Exit.void)),
-              ),
-            );
-        };
-
-        const handle =
-          (type: WorkerEvent["type"]) =>
-          (request: any, env: unknown, context: cf.ExecutionContext) => {
-            const event: WorkerEvent = {
-              kind: "Cloudflare.Workers.WorkerEvent",
-              type,
-              input: request,
-              env,
-              context,
-            };
-            for (const handler of handlers) {
-              const eff = handler(event);
-              if (Effect.isEffect(eff)) {
-                return runUserEffect(
-                  eff as Effect.Effect<unknown, unknown>,
-                  context,
-                ).then((exit) => {
-                  if (exit._tag === "Success") return exit.value;
-                  throw Cause.squash(exit.cause);
-                });
-              }
-            }
-            return Promise.reject(new Error("No event handler found"));
-          };
-
-        // RPC method dispatchers — one per non-handler method on the user's
-        // shape. Each dispatcher is invoked by the WorkerEntrypoint bridge
-        // as `dispatcher(args, ctx)`: `args` are the user-facing call args,
-        // `ctx` is the `this.ctx` that Cloudflare hands the bridge per RPC
-        // request. The dispatcher runs the user effect with the same runtime
-        // layer the fetch path uses, then envelope-encodes the result so
-        // `Effect.fail` round-trips as `RpcErrorEnvelope` and `Stream` as
-        // `RpcStreamEnvelope` (consumers wrap the binding with
-        // `toPromiseApi`/`bindWorker` to decode).
-        const exportedHandlerSet = new Set<string>(ExportedHandlerMethods);
-        const rpcDispatchers: Record<
-          string,
-          (args: unknown[], ctx: cf.ExecutionContext) => Promise<unknown>
-        > = {};
-        if (userShape) {
-          for (const [name, value] of Object.entries(userShape)) {
-            if (exportedHandlerSet.has(name)) continue;
-            if (typeof value !== "function") continue;
-            rpcDispatchers[name] = async (
-              args: unknown[],
-              context: cf.ExecutionContext,
-            ) => {
-              const result = (value as (...a: unknown[]) => unknown)(...args);
-              if (!Effect.isEffect(result)) return result;
-              const exit = await runUserEffect(
-                result as Effect.Effect<unknown, unknown>,
-                context,
-              );
-              if (exit._tag === "Success") {
-                if (Stream.isStream(exit.value)) {
-                  return await Effect.runPromise(
-                    toRpcStream(exit.value) as Effect.Effect<RpcStreamEnvelope>,
-                  );
-                }
-                return exit.value;
-              }
-              const failReason = exit.cause.reasons.find(Cause.isFailReason);
-              if (failReason) {
-                return {
-                  _tag: ErrorTag,
-                  error: encodeRpcError(failReason.error),
-                } satisfies RpcErrorEnvelope;
-              }
-              const dieReason = exit.cause.reasons.find(Cause.isDieReason);
-              throw (
-                dieReason?.defect ??
-                new Error("RPC method failed with an unexpected cause")
-              );
-            };
-          }
-        }
-
-        return {
-          ...exports,
-          default: Object.fromEntries(
-            ExportedHandlerMethods.map((method) => [method, handle(method)]),
-          ),
-          __rpc__: rpcDispatchers,
-        };
-      }),
-    };
-    return ctx;
-  },
+  onCreate: bindWorkerAsyncBindings,
+  createRuntimeContext: makeWorkerRuntimeContext,
 });
-
-export const bindWorker = Effect.fnUntraced(function* <Shape, Req = never>(
-  workerEff:
-    | (Worker & Rpc<Shape>)
-    | Effect.Effect<Worker & Rpc<Shape>, never, Req>,
-) {
-  // Worker classes and regular Effects are both yieldable here.
-  const worker = isYieldableEffectLike(workerEff)
-    ? yield* workerEff as Effect.Effect<Worker & Rpc<Shape>, never, Req>
-    : workerEff;
-  const self = yield* Worker;
-  yield* self.bind`${worker}`({
-    bindings: [
-      {
-        type: "service",
-        name: worker.LogicalId,
-        service: worker.workerName,
-      },
-    ],
-  });
-
-  // `bindWorker` runs at *init* phase (both at plantime and at runtime
-  // cold-start). `WorkerEnvironment` only exists at exec phase on the
-  // deployed worker, so we hand `makeRpcStub` an `Effect<stub>` that
-  // resolves the binding lazily on each method call.
-  const stubEff = WorkerEnvironment.pipe(
-    Effect.map((env) => (env as Record<string, unknown>)[worker.LogicalId]),
-  );
-  return makeRpcStub<Shape>(stubEff);
-});
-
-export class BindWorkerPolicy extends Binding.Policy<
-  BindWorkerPolicy,
-  (worker: Worker) => Effect.Effect<void>
->()("Cloudflare.Worker.Bind") {}
-
-export const BindWorkerPolicyLive = BindWorkerPolicy.layer.succeed(
-  Effect.fn(function* (host, worker: Worker) {
-    if (isWorker(host)) {
-      yield* host.bind`${worker}`({
-        bindings: [
-          {
-            type: "service",
-            name: worker.LogicalId,
-            service: worker.workerName,
-          },
-        ],
-      });
-    } else {
-      return yield* Effect.die(
-        new Error(`BindWorkerPolicy does not support runtime '${host.Type}'`),
-      );
-    }
-  }),
-);
 
 class MissingDurableObjectNamespaces extends Data.TaggedError(
   "MissingDurableObjectNamespaces",
@@ -1157,59 +691,6 @@ class MissingDurableObjectNamespaces extends Data.TaggedError(
   scriptName: string;
   expected: string[];
 }> {}
-
-function bumpMigrationTagVersion(
-  oldTag: string | undefined,
-): string | undefined {
-  if (!oldTag) return undefined;
-  const version = oldTag.match(/^(alchemy:)?v(\d+)$/)?.[2];
-  if (!version) return "alchemy:v1";
-  return `alchemy:v${parseInt(version, 10) + 1}`;
-}
-
-function getDurableObjectBindings(
-  bindings: ReadonlyArray<ResourceBinding>,
-  workerName: string,
-) {
-  return bindings.flatMap((binding) =>
-    (binding.data.bindings ?? []).flatMap((item: WorkerBinding) =>
-      item.type === "durable_object_namespace" &&
-      "className" in item &&
-      item.className &&
-      (!("scriptName" in item) ||
-        !item.scriptName ||
-        item.scriptName === workerName)
-        ? [
-            {
-              logicalId: binding.sid,
-              bindingName: item.name,
-              className: item.className,
-            },
-          ]
-        : [],
-    ),
-  );
-}
-
-export function getCronBindings(
-  bindings: ReadonlyArray<ResourceBinding<Worker["Binding"]>>,
-) {
-  return Array.from(new Set(bindings.flatMap((b) => b.data.crons ?? [])));
-}
-
-function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
-  return Object.fromEntries(
-    tags.flatMap((tag) => {
-      if (!tag.startsWith("alchemy:do:")) {
-        return [];
-      }
-      const parts = tag.split(":");
-      const logicalId = parts[2];
-      const className = parts.slice(3).join(":");
-      return logicalId && className ? [[logicalId, className]] : [];
-    }),
-  );
-}
 
 const selectLayer = <
   LayerLive extends Layer.Layer<any, any, any>,
@@ -2594,3 +2075,50 @@ const contentTypeFromExtension = (extension: string) => {
       return "application/octet-stream";
   }
 };
+
+function bumpMigrationTagVersion(
+  oldTag: string | undefined,
+): string | undefined {
+  if (!oldTag) return undefined;
+  const version = oldTag.match(/^(alchemy:)?v(\d+)$/)?.[2];
+  if (!version) return "alchemy:v1";
+  return `alchemy:v${parseInt(version, 10) + 1}`;
+}
+
+function getDurableObjectBindings(
+  bindings: ReadonlyArray<ResourceBinding>,
+  workerName: string,
+) {
+  return bindings.flatMap((binding) =>
+    (binding.data.bindings ?? []).flatMap((item: WorkerBinding) =>
+      item.type === "durable_object_namespace" &&
+      "className" in item &&
+      item.className &&
+      (!("scriptName" in item) ||
+        !item.scriptName ||
+        item.scriptName === workerName)
+        ? [
+            {
+              logicalId: binding.sid,
+              bindingName: item.name,
+              className: item.className,
+            },
+          ]
+        : [],
+    ),
+  );
+}
+
+function getDurableObjectTagMap(tags: ReadonlyArray<string>) {
+  return Object.fromEntries(
+    tags.flatMap((tag) => {
+      if (!tag.startsWith("alchemy:do:")) {
+        return [];
+      }
+      const parts = tag.split(":");
+      const logicalId = parts[2];
+      const className = parts.slice(3).join(":");
+      return logicalId && className ? [[logicalId, className]] : [];
+    }),
+  );
+}

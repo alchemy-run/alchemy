@@ -9,6 +9,10 @@ export class Task extends Schema.Class<Task>("Task")({
   completed: Schema.Boolean,
 }) {}
 
+export const decodeTask = Schema.decodeUnknownEffect(Task);
+
+export const encodeTask = Schema.encodeUnknownSync(Task);
+
 export class TaskNotFound extends Schema.TaggedErrorClass<TaskNotFound>()(
   "TaskNotFound",
   { id: Schema.String },
@@ -19,13 +23,26 @@ const TaskParams = Schema.Struct({
   id: Schema.String,
 });
 
-const getTask = HttpApiEndpoint.get("getTask", "/:id", {
+export const getTask = HttpApiEndpoint.get("getTask", "/:id", {
   params: TaskParams,
   success: Task,
   error: TaskNotFound,
 });
 
-const createTask = HttpApiEndpoint.post("createTask", "/", {
+export const createTask = HttpApiEndpoint.post("createTask", "/", {
+  success: Task,
+  payload: Schema.Struct({
+    title: Schema.String,
+  }),
+});
+
+const getTaskDO = HttpApiEndpoint.get("getTaskDO", "/do/:id", {
+  params: TaskParams,
+  success: Task,
+  error: TaskNotFound,
+});
+
+const createTaskDO = HttpApiEndpoint.post("createTaskDO", "/do", {
   success: Task,
   payload: Schema.Struct({
     title: Schema.String,
@@ -34,6 +51,8 @@ const createTask = HttpApiEndpoint.post("createTask", "/", {
 
 export class TasksGroup extends HttpApiGroup.make("Tasks")
   .add(getTask)
-  .add(createTask) {}
+  .add(createTask)
+  .add(getTaskDO)
+  .add(createTaskDO) {}
 
 export class TaskApi extends HttpApi.make("TaskApi").add(TasksGroup) {}

@@ -44,13 +44,10 @@ import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { getCompatibility } from "../Workers/Compatibility.ts";
-import { getCronBindings } from "../Workers/index.ts";
 import * as Vite from "../Workers/Vite.ts";
-import type {
-  Worker,
-  WorkerAssetsConfig,
-  WorkerBinding,
-} from "../Workers/Worker.ts";
+import type { Worker, WorkerAssetsConfig } from "../Workers/Worker.ts";
+import { getCronBindings } from "../Workers/WorkerAsyncBindings.ts";
+import type { WorkerBinding } from "../Workers/WorkerBinding.ts";
 import {
   WorkerBundle,
   type WorkerBundleOptions,

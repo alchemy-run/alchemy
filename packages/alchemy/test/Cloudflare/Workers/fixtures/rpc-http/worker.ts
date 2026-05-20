@@ -1,37 +1,97 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Cloudflare from "alchemy/Cloudflare";
+import type { HttpEffect } from "alchemy/Http";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as RpcClient from "effect/unstable/rpc/RpcClient";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
-import { PingRpcs } from "./group.ts";
+import { DoRpcs, WorkerRpcs } from "./group.ts";
+import RpcHttpTestObject from "./object.ts";
 
 let counter = 0;
-
-const handlersLayer = PingRpcs.toLayer({
-  Ping: ({ message }) =>
-    Effect.sync(() => ({
-      echo: message,
-      n: ++counter,
-    })),
-  Slow: ({ ms }) => Effect.sleep(`${ms} millis`).pipe(Effect.as({ slept: ms })),
-});
 
 export default class RpcHttpTestWorker extends Cloudflare.Worker<RpcHttpTestWorker>()(
   "RpcHttpTestWorker",
   {
     main: import.meta.filename,
-    subdomain: { enabled: true, previewsEnabled: false },
-    compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   },
   Effect.gen(function* () {
+    const rpcDO = yield* RpcHttpTestObject;
+
+    // Per-request RpcClient transport: dispatches HTTP requests to the
+    // DO's fetch handler (which serves `InnerRpcs` via
+    // `RpcServer.toHttpEffect`). Mirrors the `Cloudflare.toHttpClient`
+    // pattern used by the HttpApi fixture's `getTaskDO` factory.
+    const makeDOClient = (id: string = "default") =>
+      RpcClient.make(DoRpcs).pipe(
+        Effect.provide(
+          RpcClient.layerProtocolHttp({ url: "http://localhost" }).pipe(
+            Layer.provide(
+              Layer.succeed(
+                HttpClient.HttpClient,
+                Cloudflare.toHttpClient(rpcDO.getByName(id)),
+              ),
+            ),
+            Layer.provide(RpcSerialization.layerNdjson),
+          ),
+        ),
+      );
+
+    const handlersLayer = WorkerRpcs.toLayer({
+      Ping: ({ message }) =>
+        Effect.sync(() => ({
+          echo: message,
+          n: ++counter,
+        })),
+      Count: ({ upto }) =>
+        Stream.fromReadableStream<number, never>({
+          evaluate: () => {
+            let next = 1;
+            return new ReadableStream<number>({
+              pull(controller) {
+                if (next > upto) {
+                  controller.close();
+                  return;
+                }
+                controller.enqueue(next++);
+              },
+            });
+          },
+          onError: (cause) => cause as never,
+        }),
+      Echo: ({ messages }) =>
+        Stream.fromIterable(
+          messages.map((message, index) => ({ index, message })),
+        ),
+      PingDO: (payload) =>
+        Effect.gen(function* () {
+          const client = yield* makeDOClient();
+          const result = yield* client.PingDO(payload);
+          return result;
+        }).pipe(Effect.orDie),
+      CountDO: (payload) =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const client = yield* makeDOClient();
+            return client.CountDO(payload).pipe(Stream.orDie);
+          }),
+        ),
+      EchoDO: (payload) =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            return (yield* makeDOClient()).EchoDO(payload).pipe(Stream.orDie);
+          }),
+        ),
+    });
+
     return {
-      fetch: RpcServer.toHttpEffect(PingRpcs).pipe(
+      fetch: RpcServer.toHttpEffect(WorkerRpcs).pipe(
         Effect.provide(
           Layer.mergeAll(handlersLayer, RpcSerialization.layerNdjson),
-          // ^ ndjson is the canonical RpcServer.toHttpEffect protocol;
-          //   it streams one message per line.
         ),
-      ),
+      ) as unknown as HttpEffect,
     };
   }),
 ) {}
