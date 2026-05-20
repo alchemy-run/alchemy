@@ -96,9 +96,9 @@ export const makeDurableObjectBridge =
               ).pipe(
                 Layer.provideMerge(Layer.succeed(Scope.Scope, scope)),
                 Layer.provideMerge(Layer.succeedContext(services)),
+                Layer.provideMerge(this.#globalContext),
               ),
             ),
-            Effect.provide(this.#globalContext),
             Effect.runPromiseExit,
           )
           .then((exit) =>
