@@ -1,3 +1,14 @@
+## v2.0.0-beta.42
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - **Worker**: Defer Platform hook bindings to avoid TDZ from npm &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/378 [<samp>(1b498)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1b498227)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.41...HEAD)
+
+---
+
 ## v2.0.0-beta.41
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
