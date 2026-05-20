@@ -22,18 +22,17 @@ import type { Input } from "./Input.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
+  type ActionApply,
   type Apply,
   type Delete,
   type Plan,
-  type ActionApply,
-  type ActionDelete,
 } from "./Plan.ts";
 import { findProviderByType } from "./Provider.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
-import { recordResourceOp, type ResourceOp } from "./Telemetry/Metrics.ts";
 import {
+  type ActionState,
   type CreatedResourceState,
   type CreatingResourceState,
   type DeletingResourceState,
@@ -43,12 +42,12 @@ import {
   type ReplacingResourceState,
   type ResourceState,
   type RunningActionState,
-  type ActionState,
   type UpdatedResourceState,
   type UpdatingReourceState,
   State,
   StateStoreError,
 } from "./State/index.ts";
+import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
 import { hashInput } from "./Util/hash.ts";
 
 export type ApplyEffect<
