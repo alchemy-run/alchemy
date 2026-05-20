@@ -46,23 +46,17 @@ import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { getCompatibility } from "../Workers/Compatibility.ts";
-import { getCronBindings } from "../Workers/index.ts";
-import * as Vite from "../Workers/Vite.ts";
-import type {
-  WorkerAssetsConfig,
-  WorkerBinding,
-  WorkerProps,
-} from "../Workers/Worker.ts";
-import {
-  WorkerBundle,
-  type WorkerBundleOptions,
-} from "../Workers/WorkerBundle.ts";
-import { createWorkerName } from "../Workers/WorkerName.ts";
+import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
+import { getCompatibility } from "./Compatibility.ts";
+import * as Vite from "./Vite.ts";
 import { Worker } from "./Worker.ts";
+import { getCronBindings } from "./WorkerAsyncBindings.ts";
+import type { WorkerBinding } from "./WorkerBinding.ts";
+import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
+import { createWorkerName } from "./WorkerName.ts";
 
-export class ValidationError extends Schema.TaggedErrorClass<ValidationError>()(
-  "ValidationError",
+export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
+  "WorkerValidationError",
   {
     message: Schema.String,
     hint: Schema.optional(Schema.String),
@@ -92,7 +86,7 @@ export const LocalWorkerProvider = () =>
           if (type === "SourceMap") continue;
           if (type === "Data" || type === "Wasm") {
             if (!(file.content instanceof Uint8Array)) {
-              return yield* new ValidationError({
+              return yield* new WorkerValidationError({
                 message: `Expected Uint8Array for ${file.path} (${type})`,
                 value: file.content,
               });
@@ -104,7 +98,7 @@ export const LocalWorkerProvider = () =>
             });
           } else {
             if (typeof file.content !== "string") {
-              return yield* new ValidationError({
+              return yield* new WorkerValidationError({
                 message: `Expected string for ${file.path} (${type})`,
                 value: file.content,
               });
@@ -280,7 +274,7 @@ export const LocalWorkerProvider = () =>
           hash: number;
           fiber: Fiber.Fiber<
             Worker["Attributes"],
-            Bundle.BundleError | ValidationError | RuntimeError
+            Bundle.BundleError | WorkerValidationError | RuntimeError
           >;
           scope: Scope.Closeable;
         }
@@ -398,7 +392,7 @@ export const LocalWorkerProvider = () =>
 
 const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
   const unsupported = () =>
-    new ValidationError({
+    new WorkerValidationError({
       message: `${b.type} bindings are not supported in local mode`,
       value: b,
     });
