@@ -57,7 +57,6 @@ import {
   type Images as ImagesBinding,
 } from "../Images/Images.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
-import { SidecarLive } from "../Local/Sidecar.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import type { Queue as CloudflareQueue } from "../Queue/Queue.ts";
@@ -1231,7 +1230,7 @@ const selectLayer = <
 export const WorkerProvider = () =>
   selectLayer({
     live: LiveWorkerProvider,
-    dev: () => Layer.provide(LocalWorkerProvider(), SidecarLive),
+    dev: LocalWorkerProvider,
   });
 
 export const LiveWorkerProvider = () =>

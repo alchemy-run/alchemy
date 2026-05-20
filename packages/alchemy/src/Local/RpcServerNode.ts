@@ -1,16 +1,25 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { WebSocketServer, type Server } from "ws";
-import { makeWebSocketRpcSession, RpcServer } from "./RpcServer.ts";
+import * as RpcServer from "./RpcServer.ts";
 
-export const RpcServerNode = Layer.succeed(
-  RpcServer,
-  RpcServer.of({
-    make: Effect.fnUntraced(function* (main) {
+export const RpcServerNode = Layer.effect(
+  RpcServer.RpcServer,
+  RpcServer.make(
+    Effect.fnUntraced(function* (handlers) {
       const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
       const url = yield* Effect.callback<string>((resume) => {
-        server.on("connection", (ws) => {
-          const session = makeWebSocketRpcSession(ws, main);
+        server.on("connection", (ws, req) => {
+          if (req.url?.startsWith("/signal")) {
+            ws.on("open", () => {
+              handlers.connect();
+            });
+            ws.on("close", () => {
+              handlers.disconnect();
+            });
+            return;
+          }
+          const session = handlers.session(ws);
           ws.on("message", (data) => {
             session.dispatch.message(data.toString());
           });
@@ -28,7 +37,7 @@ export const RpcServerNode = Layer.succeed(
       yield* Effect.addFinalizer(() => Effect.sync(() => server.close()));
       return { url };
     }),
-  }),
+  ),
 );
 
 function getServerAddress(server: Server): Effect.Effect<string> {
