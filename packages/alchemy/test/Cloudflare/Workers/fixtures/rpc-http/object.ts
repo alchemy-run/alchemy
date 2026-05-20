@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
-import { DoRpcs, InnerRpcs } from "./group.ts";
+import { DoRpcs } from "./group.ts";
 
 /**
  * Durable Object backing the `*DO` RPCs on the Worker. It exposes the
@@ -20,15 +20,14 @@ export default class RpcHttpTestObject extends Cloudflare.DurableObjectNamespace
 
       const handlersLayer = DoRpcs.toLayer({
         PingDO: ({ message }) => {
-          throw new Error("test");
-          // console.log("Ping");
-          // return Effect.sync(() => {
-          //   console.log("Ping inside");
-          //   return {
-          //     echo: message,
-          //     n: ++counter,
-          //   };
-          // });
+          console.log("Ping");
+          return Effect.sync(() => {
+            console.log("Ping inside");
+            return {
+              echo: message,
+              n: ++counter,
+            };
+          });
         },
         CountDO: ({ upto }) =>
           Stream.fromReadableStream<number, never>({
@@ -53,16 +52,11 @@ export default class RpcHttpTestObject extends Cloudflare.DurableObjectNamespace
       });
 
       return {
-        fetch: Effect.gen(function* () {
-          console.log("fetch");
-          const eff = yield* RpcServer.toHttpEffect(InnerRpcs).pipe(
-            Effect.provide(
-              Layer.mergeAll(handlersLayer, RpcSerialization.layerNdjson),
-            ),
-          );
-          const response = yield* eff;
-          return response;
-        }),
+        fetch: RpcServer.toHttpEffect(DoRpcs).pipe(
+          Effect.provide(
+            Layer.mergeAll(handlersLayer, RpcSerialization.layerNdjson),
+          ),
+        ),
       };
     });
   }),

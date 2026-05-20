@@ -81,6 +81,7 @@ export default {
 
 export class Counter extends DurableObject {
   private counter = 0;
+
   async increment() {
     return ++this.counter;
   }

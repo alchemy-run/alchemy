@@ -1,8 +1,11 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
+
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 
 import type { DurableObjectExport } from "./DurableObjectNamespace.ts";
 import {
@@ -36,17 +39,15 @@ export const makeDurableObjectBridge =
   ) =>
   (className: string) =>
     class DurableObjectBridge extends DurableObject {
-      #instance: any;
       #state: cf.DurableObjectState;
-      #exported: Effect.Effect<DurableObjectExport>;
-      #globalContext;
-
-      // @ts-expect-error - it is assigned, just not how TSC expects it
-      #services: Layer.Layer<DurableObjectState>;
 
       constructor(state: cf.DurableObjectState, env: any) {
         super(state as any, env);
         this.#state = state;
+      }
+
+      async fetch(request: Request): Promise<any> {
+        const scope = Scope.makeUnsafe();
 
         const { globalContext, exported } =
           getWorkerExport<DurableObjectExport>({
@@ -55,44 +56,7 @@ export const makeDurableObjectBridge =
             exportName: className,
           });
 
-        this.#exported = exported;
-        this.#globalContext = globalContext;
-
-        // this.#instance = state.blockConcurrencyWhile(() =>
-        //   exported.pipe(
-        //     Effect.flatMap(({ constructor, services }) =>
-        //       constructor.pipe(
-        //         Effect.provide(
-        //           (this.#services = pipe(
-        //             Layer.succeed(
-        //               DurableObjectState,
-        //               fromDurableObjectState(state),
-        //             ),
-        //             Layer.provideMerge(Layer.succeedContext(services)),
-        //           )),
-        //         ),
-        //       ),
-        //     ),
-        //     Effect.provide(globalContext),
-        //     Effect.runPromise,
-        //   ),
-        // );
-      }
-
-      async fetch(request: Request): Promise<any> {
-        // const methods = await this.#instance;
-        // if (!methods.fetch) {
-        //   return new Response("Method not found", { status: 404 }) as any;
-        // }
-        // console.log(
-        //   "DurableObjectBridge.fetch: request",
-        //   request.url,
-        //   util.inspect(methods),
-        // );
-
-        // const scope = Scope.makeUnsafe();
-
-        return this.#exported
+        return exported
           .pipe(
             Effect.flatMap(({ constructor, services }) =>
               constructor.pipe(
@@ -100,33 +64,29 @@ export const makeDurableObjectBridge =
                   makeRequestEffect(request as any, instance.fetch!),
                 ),
                 Effect.provide(
-                  Layer.succeedContext(services).pipe(
-                    Layer.provideMerge(
-                      Layer.succeed(
-                        DurableObjectState,
-                        fromDurableObjectState(this.#state),
-                      ),
-                    ),
-                    // Layer.provideMerge(Layer.succeed(Scope.Scope, scope)),
+                  Layer.succeed(
+                    DurableObjectState,
+                    fromDurableObjectState(this.#state),
+                  ).pipe(
+                    Layer.provideMerge(Layer.succeed(Scope.Scope, scope)),
+                    Layer.provideMerge(Layer.succeedContext(services)),
                   ),
                 ),
-                Effect.timeout("2 seconds"),
               ),
             ),
-            Effect.provide(this.#globalContext),
-            Effect.scoped,
+            Effect.provide(globalContext),
             Effect.runPromiseExit,
           )
           .then((exit) =>
             exit._tag === "Success"
               ? Promise.resolve(exit.value)
               : Promise.reject(Cause.squash(exit.cause)),
+          )
+          .finally(() =>
+            Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>
+              this.#state.waitUntil(promise),
+            ),
           );
-        // .finally(() =>
-        //   Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>
-        //     this.#state.waitUntil(promise),
-        //   ),
-        // );
       }
 
       async alarm(alarmInfo?: cf.AlarmInvocationInfo) {

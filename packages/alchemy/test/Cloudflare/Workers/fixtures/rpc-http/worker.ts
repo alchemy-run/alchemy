@@ -7,7 +7,6 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
-import util from "node:util";
 import { DoRpcs, WorkerRpcs } from "./group.ts";
 import RpcHttpTestObject from "./object.ts";
 
@@ -68,22 +67,8 @@ export default class RpcHttpTestWorker extends Cloudflare.Worker<RpcHttpTestWork
         ),
       PingDO: (payload) =>
         Effect.gen(function* () {
-          console.log("PingDO: building client");
           const client = yield* makeDOClient();
-          console.log("PingDO: calling DO");
-          const result = yield* client
-            .PingDO(payload)
-            .pipe(
-              Effect.tapCause((cause) =>
-                Effect.sync(() =>
-                  console.log(
-                    "PingDO DO call cause:",
-                    util.inspect(cause, { depth: null, colors: true }),
-                  ),
-                ),
-              ),
-            );
-          console.log("PingDO: got result", result);
+          const result = yield* client.PingDO(payload);
           return result;
         }).pipe(Effect.orDie),
       CountDO: (payload) =>

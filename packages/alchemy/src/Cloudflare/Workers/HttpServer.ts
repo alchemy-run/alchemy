@@ -52,7 +52,6 @@ export const makeRequestEffect = <Req = never>(
         Layer.succeed(Request, webRequest as any),
       ]),
       Effect.catchCause((cause) => {
-        console.log({ cause });
         const message = Option.match(Cause.findErrorOption(cause), {
           onNone: () => "Internal Server Error",
           onSome: (error: any) =>
