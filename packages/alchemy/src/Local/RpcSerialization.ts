@@ -1,4 +1,3 @@
-import type { RpcCompatible } from "capnweb";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -9,141 +8,122 @@ import * as Stream from "effect/Stream";
 import * as NodeUtil from "node:util";
 import * as Output from "../Output.ts";
 
-type RpcHandler<Args extends Array<any>, Success, Error> = (
-  ...args: Args
-) => Effect.Effect<Success, Error>;
-type SerializedRpcHandler<Args extends Array<any>, Success, Error> = (
-  args: Args,
-) => Promise<SerializedExit<Success, Error>>;
-type RpcStreamHandler<Args extends Array<any>, Success, Error> = (
-  ...args: Args
-) => Stream.Stream<Success, Error>;
-type SerializedRpcStreamHandler<Args extends Array<any>, Success, Error> = (
-  args: Args,
-) => ReadableStream<Success>;
+export declare namespace Rpc {
+  type EffectHandler<Args extends Array<any>, Success, Error> = (
+    ...args: Args
+  ) => Effect.Effect<Success, Error>;
 
-export type SerializedRpc<T> =
-  T extends RpcHandler<infer Args, infer Success, infer Error>
-    ? SerializedRpcHandler<Args, Success, Error>
-    : T extends RpcStreamHandler<infer Args, infer Success, infer Error>
-      ? SerializedRpcStreamHandler<Args, Success, Error>
-      : T;
+  type SerializedEffectHandler<Args extends Array<any>, Success, Error> = (
+    args: Args,
+  ) => Promise<SerializedExit<Success, Error>>;
 
-type SerializedExit<Success, Error> =
-  | { _tag: "Success"; value: Success }
-  | {
-      _tag: "Failure";
-      cause: Array<SerializedCause<Error>>;
-    };
+  type StreamHandler<Args extends Array<any>, Success, Error> = (
+    ...args: Args
+  ) => Stream.Stream<Success, Error>;
 
-type SerializedCause<Error> =
-  | { _tag: "Fail"; error: Error }
-  | { _tag: "Die"; defect: unknown }
-  | { _tag: "Interrupt"; fiberId: number | undefined };
+  type SerializedStreamHandler<Args extends Array<any>, Success, Error> = (
+    args: Args,
+  ) => SerializedStream<Success, Error>;
 
-const encodeError = Schema.encodeSync(Schema.Defect);
+  type SerializedStream<Success, _Error> = ReadableStream<Success>;
 
-export type RpcHandlers = Record<string, RpcHandler<any, any, any> | undefined>;
+  type SerializedExit<Success, Error> =
+    | { _tag: "Success"; value: Success }
+    | { _tag: "Failure"; cause: Array<SerializedCause<Error>> };
 
-export type SerializedRpcHandlers<T extends RpcHandlers> = {
-  [K in keyof T]: T[K] extends RpcHandler<
-    infer Args,
-    infer Success,
-    infer Error
-  >
-    ? SerializedRpcHandler<Args, Success, Error>
-    : T[K] extends RpcStreamHandler<infer Args, infer Success, infer Error>
-      ? SerializedRpcStreamHandler<Args, Success, Error>
-      : never;
-} extends infer O extends object & RpcCompatible<O>
-  ? O
-  : never;
+  type SerializedCause<Error> =
+    | { _tag: "Fail"; error: Error }
+    | { _tag: "Die"; defect: unknown }
+    | { _tag: "Interrupt"; fiberId: number | undefined };
 
-export const serializeRpcStreamHandler = <
-  Args extends Array<any>,
-  Success,
-  Error,
->(
-  handler: RpcStreamHandler<Args, Success, Error>,
-): SerializedRpcStreamHandler<Args, Success, Error> =>
-  flow(
-    (args): Args => encodeRpcArgs(args) as Args,
-    (args) => handler(...args),
-    (stream) => Stream.toReadableStream(stream),
-  );
+  type ToSerialized<T> =
+    T extends EffectHandler<infer Args, infer Success, infer Error>
+      ? SerializedEffectHandler<Args, Success, Error>
+      : T extends StreamHandler<infer Args, infer Success, infer Error>
+        ? SerializedStreamHandler<Args, Success, Error>
+        : T;
 
-export const deserializeRpcStreamHandler = <
-  Args extends Array<any>,
-  Success,
-  Error,
->(
-  handler: SerializedRpcStreamHandler<Args, Success, Error>,
-): RpcStreamHandler<Args, Success, Error> =>
-  flow(
-    (...args): Args => decodeRpcArgs(args) as Args,
-    (args) => handler(args),
-    (stream) =>
-      Stream.fromReadableStream({
-        evaluate: () => stream,
-        onError: (error) => error as Error,
-      }),
-  );
+  type FromSerialized<T> =
+    T extends SerializedEffectHandler<infer Args, infer Success, infer Error>
+      ? EffectHandler<Args, Success, Error>
+      : T extends SerializedStreamHandler<
+            infer Args,
+            infer Success,
+            infer Error
+          >
+        ? StreamHandler<Args, Success, Error>
+        : T;
 
-export const serializeRpcHandlers = <T extends RpcHandlers>(
+  type ToSerializedRecord<T extends Record<string, any>> = {
+    [K in keyof T]: ToSerialized<T[K]>;
+  };
+
+  type FromSerializedRecord<T extends Record<string, any>> = {
+    [K in keyof T]: FromSerialized<T[K]>;
+  };
+}
+
+export const serializeRpcHandlers = <T extends Record<string, any>>(
   handlers: T,
-): SerializedRpcHandlers<T> =>
-  Object.fromEntries(
+  streamKeys?: Array<keyof T>,
+): Rpc.ToSerializedRecord<T> => {
+  return Object.fromEntries(
     Object.entries(handlers).map(([key, value]) => [
       key,
-      value ? encodeRpcHandler(value) : undefined,
+      typeof value === "function"
+        ? streamKeys?.includes(key)
+          ? serializeRpcStreamHandler(value)
+          : serializeRpcEffectHandler(value)
+        : typeof value === "object" && value !== null
+          ? serializeRpcHandlers(value)
+          : value,
     ]),
-  ) as SerializedRpcHandlers<T>;
+  ) as Rpc.ToSerializedRecord<T>;
+};
 
-export const deserializeRpcHandlers = <T extends RpcHandlers>(
-  handlers: SerializedRpcHandlers<T>,
-): T =>
-  Object.fromEntries(
+export const deserializeRpcHandlers = <T extends Record<string, any>>(
+  handlers: Rpc.ToSerializedRecord<T>,
+  streamKeys?: Array<keyof T>,
+): Rpc.FromSerializedRecord<T> => {
+  return Object.fromEntries(
     Object.entries(handlers).map(([key, value]) => [
       key,
-      value ? decodeRpcHandler(value) : undefined,
+      typeof value === "function"
+        ? streamKeys?.includes(key)
+          ? deserializeRpcStreamHandler(value)
+          : deserializeRpcEffectHandler(value)
+        : typeof value === "object" && value !== null
+          ? deserializeRpcHandlers(value)
+          : value,
     ]),
-  ) as T;
+  ) as Rpc.FromSerializedRecord<T>;
+};
 
-export const encodeRpcHandler = <Args extends Array<any>, Success, Error>(
-  handler: RpcHandler<Args, Success, Error>,
-): SerializedRpcHandler<Args, Success, Error> =>
+const serializeError = Schema.encodeSync(Schema.Defect);
+
+export const serializeRpcEffectHandler = <
+  Args extends Array<any>,
+  Success,
+  Error,
+>(
+  handler: Rpc.EffectHandler<Args, Success, Error>,
+): Rpc.SerializedEffectHandler<Args, Success, Error> =>
   flow(
     (args): Args => decodeRpcArgs(args) as Args,
     (args) => handler(...args),
-    encodeRpcResult<Success, Error>,
-  );
-
-export const decodeRpcHandler = <Args extends Array<any>, Success, Error>(
-  handler: SerializedRpcHandler<Args, Success, Error>,
-): RpcHandler<Args, Success, Error> =>
-  flow(
-    (...args): Args => encodeRpcArgs(args) as Args,
-    (args) => handler(args),
-    decodeRpcResult<Success, Error>,
-  );
-
-export const encodeRpcResult = <Success, Error>(
-  self: Effect.Effect<Success, Error>,
-): Promise<SerializedExit<Success, Error>> =>
-  self.pipe(
     Effect.exit,
-    Effect.map((exit): SerializedExit<Success, Error> => {
+    Effect.map((exit): Rpc.SerializedExit<Success, Error> => {
       if (exit._tag === "Success") {
         return { _tag: "Success", value: exit.value };
       }
       return {
         _tag: "Failure",
-        cause: exit.cause.reasons.map((reason): SerializedCause<Error> => {
+        cause: exit.cause.reasons.map((reason): Rpc.SerializedCause<Error> => {
           switch (reason._tag) {
             case "Fail":
-              return { _tag: "Fail", error: encodeError(reason.error) };
+              return { _tag: "Fail", error: serializeError(reason.error) };
             case "Die":
-              return { _tag: "Die", defect: encodeError(reason.defect) };
+              return { _tag: "Die", defect: serializeError(reason.defect) };
             case "Interrupt":
               return { _tag: "Interrupt", fiberId: reason.fiberId };
           }
@@ -153,10 +133,29 @@ export const encodeRpcResult = <Success, Error>(
     Effect.runPromise,
   );
 
-export const decodeRpcResult = <Success, Error>(
-  self: Promise<SerializedExit<Success, Error>>,
-): Effect.Effect<Success, Error> =>
-  Effect.promise(() => self).pipe(
+export const serializeRpcStreamHandler = <
+  Args extends Array<any>,
+  Success,
+  Error,
+>(
+  handler: Rpc.StreamHandler<Args, Success, Error>,
+): Rpc.SerializedStreamHandler<Args, Success, Error> =>
+  flow(
+    (args): Args => decodeRpcArgs(args) as Args,
+    (args) => handler(...args),
+    (stream) => Stream.toReadableStream(stream),
+  );
+
+export const deserializeRpcEffectHandler = <
+  Args extends Array<any>,
+  Success,
+  Error,
+>(
+  handler: Rpc.SerializedEffectHandler<Args, Success, Error>,
+): Rpc.EffectHandler<Args, Success, Error> =>
+  flow(
+    (...args): Args => encodeRpcArgs(args) as Args,
+    (args) => Effect.promise(() => handler(args)),
     Effect.flatMap((exit): Exit.Exit<Success, Error> => {
       if (exit._tag === "Success") {
         return Exit.succeed(exit.value);
@@ -178,7 +177,24 @@ export const decodeRpcResult = <Success, Error>(
     }),
   );
 
-export const encodeRpcArgs = (value: unknown): unknown => {
+export const deserializeRpcStreamHandler = <
+  Args extends Array<any>,
+  Success,
+  Error,
+>(
+  handler: Rpc.SerializedStreamHandler<Args, Success, Error>,
+): Rpc.StreamHandler<Args, Success, Error> =>
+  flow(
+    (...args): Args => encodeRpcArgs(args) as Args,
+    (args) => handler(args),
+    (stream) =>
+      Stream.fromReadableStream({
+        evaluate: () => stream,
+        onError: (error) => error as Error,
+      }),
+  );
+
+const encodeRpcArgs = (value: unknown): unknown => {
   if (Redacted.isRedacted(value)) {
     return { _tag: "Redacted", value: Redacted.value(value) };
   }
@@ -199,7 +215,7 @@ export const encodeRpcArgs = (value: unknown): unknown => {
   return value;
 };
 
-export const decodeRpcArgs = (value: unknown): unknown => {
+const decodeRpcArgs = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map(decodeRpcArgs);
   } else if (typeof value === "object" && value !== null) {

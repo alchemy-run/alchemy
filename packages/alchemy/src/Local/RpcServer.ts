@@ -5,18 +5,14 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
 import type { ProviderService } from "../Provider.ts";
-import {
-  serializeRpcHandlers,
-  serializeRpcStreamHandler,
-  type SerializedRpc,
-} from "./RpcSerialization.ts";
+import { serializeRpcHandlers, type Rpc } from "./RpcSerialization.ts";
 
 export class RpcServer extends Context.Service<RpcServer, never>()(
   "RpcServer",
 ) {}
 
 export type RpcProvider = {
-  [K in keyof ProviderService]: SerializedRpc<ProviderService[K]>;
+  [K in keyof ProviderService]: Rpc.ToSerialized<ProviderService[K]>;
 };
 
 export interface RpcApi {
@@ -39,14 +35,7 @@ export const make = Effect.fnUntraced(function* (
       if (!provider) {
         throw new Error(`Provider "${key}" not found`);
       }
-      const { version, stables, tail, ...handlers } =
-        provider as ProviderService;
-      return {
-        version,
-        stables,
-        tail: tail ? serializeRpcStreamHandler(tail) : undefined,
-        ...serializeRpcHandlers(handlers),
-      };
+      return serializeRpcHandlers(provider as ProviderService, ["tail"]);
     },
   };
   const { url } = yield* serve({

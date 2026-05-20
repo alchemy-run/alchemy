@@ -1,3 +1,4 @@
+import { newWebSocketRpcSession } from "capnweb";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -5,16 +6,20 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { HttpClientError } from "effect/unstable/http/HttpClientError";
 import { AlchemyContext } from "../AlchemyContext.ts";
+import type { ProviderService } from "../Provider.ts";
 import { Stack } from "../Stack.ts";
+import { deserializeRpcHandlers } from "./RpcSerialization.ts";
+import type { RpcApi, RpcProvider } from "./RpcServer.ts";
 
 export class RpcProviderClient extends Context.Service<
   RpcProviderClient,
   {
     readonly url: string;
-    readonly register: (
+    readonly get: (
       mainUrl: string,
+      providerName: string,
     ) => Effect.Effect<
-      string,
+      ProviderService,
       HttpClientError | HttpBody.HttpBodyError,
       AlchemyContext | Stack
     >;
@@ -28,7 +33,7 @@ const make = Effect.fnUntraced(function* (url: string) {
 
   return RpcProviderClient.of({
     url,
-    register: Effect.fnUntraced(function* (mainUrl) {
+    get: Effect.fnUntraced(function* (mainUrl, providerName) {
       const alchemyContext = yield* AlchemyContext;
       const stack = yield* Stack;
       const response = yield* client.post(url, {
@@ -37,7 +42,12 @@ const make = Effect.fnUntraced(function* (url: string) {
           context: { alchemyContext, stack },
         }),
       });
-      return yield* response.text;
+      const websocketUrl = yield* response.text;
+      const session = newWebSocketRpcSession<RpcApi>(websocketUrl);
+      const provider = yield* Effect.promise(
+        () => session.getProvider(providerName) as Promise<RpcProvider>,
+      );
+      return deserializeRpcHandlers(provider, ["tail"]);
     }),
   });
 });
