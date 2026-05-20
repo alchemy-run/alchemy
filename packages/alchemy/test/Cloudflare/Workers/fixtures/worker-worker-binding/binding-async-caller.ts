@@ -20,9 +20,12 @@ export default {
   ): Promise<Response> {
     const name = new URL(request.url).searchParams.get("name") ?? "world";
     try {
+      console.log("async caller calling target");
       const greeting = await env.TARGET.greet(name);
+      console.log("async caller got greeting", greeting);
       return new Response(String(greeting));
     } catch (err) {
+      console.log("async caller failed", err);
       const message = err instanceof Error ? err.message : String(err);
       return new Response(`async caller failed: ${message}`, { status: 500 });
     }

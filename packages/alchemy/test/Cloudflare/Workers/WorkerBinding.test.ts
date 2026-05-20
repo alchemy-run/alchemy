@@ -1,4 +1,3 @@
-import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
@@ -6,9 +5,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as pathe from "pathe";
-import BindingEffectCaller from "./fixtures/binding-effect-caller.ts";
-import BindingTargetWorker from "./fixtures/binding-target-worker.ts";
+import Stack from "./fixtures/worker-worker-binding/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -17,48 +14,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
-);
-
-const asyncCallerMain = pathe.resolve(
-  import.meta.dirname,
-  "fixtures/binding-async-caller.ts",
-);
-
-/**
- * Stack with three workers:
- *
- * - `BindingTargetWorker` — Effect-native target exposing `greet` (RPC) +
- *   `fetch`.
- * - `BindingAsyncCaller` — plain `{ fetch }` Cloudflare worker that calls
- *   `env.TARGET.greet(name)` over a service binding.
- * - `BindingEffectCaller` — Effect-native worker that uses
- *   `Cloudflare.bindWorker(BindingTargetWorker)` to call `greet` from
- *   inside an Effect.
- */
-const Stack = Alchemy.Stack(
-  "WorkerBindingStack",
-  {
-    providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
-  },
-  Effect.gen(function* () {
-    const target = yield* BindingTargetWorker;
-
-    const asyncCaller = yield* Cloudflare.Worker("BindingAsyncCaller", {
-      main: asyncCallerMain,
-      bindings: {
-        TARGET: target,
-      },
-    });
-
-    const effectCaller = yield* BindingEffectCaller;
-
-    return {
-      targetUrl: target.url.as<string>(),
-      asyncCallerUrl: asyncCaller.url.as<string>(),
-      effectCallerUrl: effectCaller.url.as<string>(),
-    };
-  }),
 );
 
 const stack = beforeAll(deploy(Stack));

@@ -15,7 +15,7 @@ import {
 
 export interface WorkerRuntimeContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
-  shape: () => Record<string, unknown>;
+  shape: () => Record<string, any>;
 }
 
 export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {

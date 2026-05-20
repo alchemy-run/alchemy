@@ -57,7 +57,7 @@ export const makeWorkerBridge = (
 
   const processEvent = (
     eff: Effect.Effect<
-      [Effect.Effect<any, any, any>, Context.Context<never>],
+      readonly [Effect.Effect<any, any, any>, Context.Context<never>],
       any,
       any
     >,
@@ -121,7 +121,34 @@ export const makeWorkerBridge = (
             );
       }
 
-      return makeRpcProxy(this, shape, (eff) => processEvent(eff, this.ctx));
+      return new Proxy(this, {
+        get: (target, prop) => {
+          if (typeof prop !== "string") return (target as any)[prop];
+          if (prop in target) return (target as any)[prop];
+          return (...args: unknown[]) =>
+            shape
+              .pipe(
+                Effect.map((shape: any) => shape[prop]),
+                Effect.flatMap((dispatcher) => {
+                  if (typeof dispatcher !== "function") {
+                    return Effect.die(
+                      new Error(
+                        `Method "${prop}" not found on worker. ` +
+                          `Make sure it's returned from the worker's default export.`,
+                      ),
+                    );
+                  }
+                  console.log("dispatcher", dispatcher.toString());
+                  return Effect.succeed([
+                    dispatcher(...args) as Effect.Effect<any>,
+                    Context.empty(),
+                  ] as const);
+                }),
+                (eff) => processEvent(eff, this.ctx),
+              )
+              .then(handleRpcExit);
+        },
+      });
     }
   }
 
@@ -245,6 +272,7 @@ export const makeRpcProxy = (
                   ),
                 );
               }
+              console.log("dispatcher", dispatcher.toString());
               return dispatcher(...args) as Effect.Effect<any>;
             }),
             processEvent,
