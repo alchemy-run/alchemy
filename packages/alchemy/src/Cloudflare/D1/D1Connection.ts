@@ -1,7 +1,6 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Binding from "../../Binding.ts";
 import { WorkerEnvironment } from "../Workers/Worker.ts";
 import type { D1Database } from "./D1Database.ts";
@@ -121,13 +120,12 @@ export const D1ConnectionLive = Layer.effect(
   D1Connection,
   Effect.gen(function* () {
     const Policy = yield* D1ConnectionPolicy;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (database: D1Database) {
       yield* Policy(database);
-      const rawEff = yield* Effect.serviceOption(WorkerEnvironment).pipe(
-        Effect.map(Option.getOrUndefined),
-        Effect.map((env) => env?.[database.LogicalId]! as runtime.D1Database),
-        Effect.cached,
+      const rawEff = Effect.sync(
+        () => (env as Record<string, runtime.D1Database>)[database.LogicalId]!,
       );
 
       return {

@@ -2,21 +2,22 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Queue } from "./Queue.ts";
 
 export interface QueueSender {
-  raw: Effect.Effect<any, never, WorkerEnvironment>;
+  raw: Effect.Effect<any, never, RuntimeContext>;
   send(
     body: unknown,
     options?: { contentType?: "json" | "text" },
-  ): Effect.Effect<void, QueueSendError, WorkerEnvironment>;
+  ): Effect.Effect<void, QueueSendError, RuntimeContext>;
   sendBatch(
     messages: ReadonlyArray<{
       body: unknown;
       contentType?: "json" | "text";
     }>,
-  ): Effect.Effect<void, QueueSendError, WorkerEnvironment>;
+  ): Effect.Effect<void, QueueSendError, RuntimeContext>;
 }
 
 import * as Data from "effect/Data";
@@ -68,12 +69,12 @@ export const QueueBindingLive = Layer.effect(
   QueueBinding,
   Effect.gen(function* () {
     const bind = yield* QueueBindingPolicy;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (queue: Queue) {
       yield* bind(queue);
-      const env = WorkerEnvironment;
-      const raw = env.pipe(
-        Effect.map((env) => (env as Record<string, any>)[queue.LogicalId]),
+      const raw = Effect.sync(
+        () => (env as Record<string, any>)[queue.LogicalId],
       );
 
       const tryPromise = <T>(

@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Secret } from "./Secret.ts";
 
@@ -21,16 +22,16 @@ export class SecretError extends Data.TaggedError("SecretError")<{
 export interface SecretClient extends Effect.Effect<
   string,
   SecretError,
-  WorkerEnvironment
+  RuntimeContext
 > {
   /**
    * Effect that resolves to the raw Cloudflare `SecretsStoreSecret` binding.
    */
-  raw: Effect.Effect<runtime.SecretsStoreSecret, never, WorkerEnvironment>;
+  raw: Effect.Effect<runtime.SecretsStoreSecret, never, RuntimeContext>;
   /**
    * Read the current value of the secret.
    */
-  get(): Effect.Effect<string, SecretError, WorkerEnvironment>;
+  get(): Effect.Effect<string, SecretError, RuntimeContext>;
 }
 
 export class SecretBinding extends Binding.Service<
@@ -42,17 +43,13 @@ export const SecretBindingLive = Layer.effect(
   SecretBinding,
   Effect.gen(function* () {
     const bind = yield* SecretBindingPolicy;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (secret: Secret) {
       yield* bind(secret);
-      const env = WorkerEnvironment;
-      const raw = env.pipe(
-        Effect.map(
-          (env) =>
-            (env as Record<string, runtime.SecretsStoreSecret>)[
-              secret.LogicalId
-            ],
-        ),
+      const raw = Effect.sync(
+        () =>
+          (env as Record<string, runtime.SecretsStoreSecret>)[secret.LogicalId],
       );
       const tryPromise = <T>(
         fn: () => Promise<T>,
@@ -66,8 +63,9 @@ export const SecretBindingLive = Layer.effect(
             }),
         });
 
-      const getEffect: Effect.Effect<string, SecretError, WorkerEnvironment> =
-        raw.pipe(Effect.flatMap((raw) => tryPromise(() => raw.get())));
+      const getEffect: Effect.Effect<string, SecretError> = raw.pipe(
+        Effect.flatMap((raw) => tryPromise(() => raw.get())),
+      );
 
       return Object.assign(
         Effect.suspend(() => getEffect),

@@ -1,7 +1,7 @@
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
+import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -99,12 +99,9 @@ export const sleepUntil = (
  * reflect that or `yield* WorkerEnvironment` fails to type-check inside a
  * body even though it succeeds at runtime.
  */
-export type WorkflowRunServices =
-  | WorkflowEvent
-  | WorkflowStep
-  | WorkerEnvironment;
+export type WorkflowRunServices = WorkflowEvent | WorkflowStep | WorkerServices;
 
-export type WorkflowServices = WorkerServices | PlatformServices;
+export type WorkflowServices = WorkflowRunServices | PlatformServices;
 
 /**
  * Metadata stored in the worker export map to distinguish workflow exports
@@ -122,7 +119,7 @@ export interface WorkflowExport {
  */
 export type WorkflowImpl<Input = unknown, Result = unknown> = (
   input: Input,
-) => Effect.Effect<Result, never, WorkflowRunServices>;
+) => Effect.Effect<Result, never, WorkflowServices>;
 
 export const isWorkflowExport = (value: unknown): value is WorkflowExport =>
   typeof value === "object" &&
@@ -391,10 +388,12 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
           const services =
             yield* Effect.context<Effect.Services<typeof impl>>();
 
-          const binding = yield* Effect.serviceOption(WorkerEnvironment).pipe(
-            Effect.map(Option.getOrUndefined),
-            Effect.flatMap((env) => {
-              if (env === undefined) {
+          const binding = yield* Effect.all([
+            WorkerEnvironment,
+            ALCHEMY_PHASE,
+          ]).pipe(
+            Effect.flatMap(([env, phase]) => {
+              if (env === undefined || phase === "plan") {
                 return Effect.succeed(undefined as any);
               }
               const wf = env[name];

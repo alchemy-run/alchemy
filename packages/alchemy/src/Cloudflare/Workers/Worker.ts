@@ -136,9 +136,13 @@ export const ExportedHandlerMethods = [
   "queue",
 ] as const satisfies (keyof cf.ExportedHandler)[];
 
-export type WorkerServices = Worker | Request | WorkerExecutionContext;
+export type WorkerServices =
+  | Worker
+  | Request
+  | WorkerExecutionContext
+  | WorkerEnvironment;
 
-export type WorkerShape = Main<WorkerServices | WorkerEnvironment>;
+export type WorkerShape = Main<WorkerServices>;
 
 export type WorkerEnv = Record<
   string,

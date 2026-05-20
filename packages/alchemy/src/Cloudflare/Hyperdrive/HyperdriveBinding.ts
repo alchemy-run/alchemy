@@ -1,7 +1,6 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Binding from "../../Binding.ts";
@@ -67,13 +66,13 @@ export const HyperdriveBindingLive = Layer.effect(
   HyperdriveBinding,
   Effect.gen(function* () {
     const Policy = yield* HyperdriveBindingPolicy;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (hyperdrive: Hyperdrive) {
       yield* Policy(hyperdrive);
-      const hd = yield* Effect.serviceOption(WorkerEnvironment).pipe(
-        Effect.map(Option.getOrUndefined),
-        Effect.map((env) => env?.[hyperdrive.LogicalId]! as runtime.Hyperdrive),
-        Effect.cached,
+      const hd = Effect.sync(
+        () =>
+          (env as Record<string, runtime.Hyperdrive>)[hyperdrive.LogicalId]!,
       );
 
       return {
