@@ -17,6 +17,7 @@ export * from "./R2/index.ts";
 export * from "./SecretsStore/index.ts";
 export * from "./StateStore/index.ts";
 export * from "./Tunnel/index.ts";
+export * from "./Vectorize/index.ts";
 export * from "./VpcService/index.ts";
 export * from "./Website/index.ts";
 export * from "./Workers/index.ts";

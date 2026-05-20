@@ -29,6 +29,7 @@ import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
 import * as SecretsStore from "./SecretsStore/index.ts";
 import * as Tunnel from "./Tunnel/index.ts";
+import * as Vectorize from "./Vectorize/index.ts";
 import * as VpcService from "./VpcService/index.ts";
 import * as Workers from "./Workers/index.ts";
 import * as Workflows from "./Workers/Workflow.ts";
@@ -77,6 +78,8 @@ export const providers = () =>
       SecretsStore.SecretsStore,
       SecretsStore.Secret,
       Tunnel.Tunnel,
+      Vectorize.VectorizeConnectionPolicy,
+      Vectorize.VectorizeIndex,
       VpcService.VpcService,
       Random,
       Workers.BindWorkerPolicy,
@@ -116,6 +119,8 @@ export const providers = () =>
         SecretsStore.SecretsStoreProvider(),
         SecretsStore.StoreSecretProvider(),
         Tunnel.TunnelProvider(),
+        Vectorize.VectorizeConnectionPolicyLive,
+        Vectorize.VectorizeIndexProvider(),
         VpcService.VpcServiceProvider(),
         Workers.BindWorkerPolicyLive,
         Workers.CronEventSourcePolicyLive,
