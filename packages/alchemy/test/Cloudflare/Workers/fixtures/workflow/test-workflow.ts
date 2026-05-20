@@ -1,4 +1,4 @@
-import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
 /**
@@ -14,6 +14,7 @@ export default class TestWorkflow extends Cloudflare.Workflow<TestWorkflow>()(
   "TestWorkflow",
   Effect.gen(function* () {
     return Effect.fn(function* (input: { value: string }) {
+      console.log("greeted");
       const env = yield* Cloudflare.WorkerEnvironment;
 
       const greeted = yield* Cloudflare.task(

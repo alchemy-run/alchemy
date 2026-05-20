@@ -1,8 +1,11 @@
 import * as Effect from "effect/Effect";
 import {
   WorkflowEvent as WorkflowEventService,
+  type WorkflowExport,
+  type WorkflowImpl,
   WorkflowStep,
 } from "./Workflow.ts";
+import { getWorkerExport } from "./WorkerBridge.ts";
 
 /**
  * Create a WorkflowBridge class that extends `WorkflowEntrypoint` and
@@ -19,27 +22,32 @@ export const makeWorkflowBridge =
       ctx: unknown,
       env: unknown,
     ) => { run(event: any, step: any): Promise<unknown> },
-    getExport: (
-      name: string,
-    ) => Promise<
-      (
-        env: unknown,
-      ) => Effect.Effect<(input: unknown) => Effect.Effect<unknown, never, any>>
-    >,
+    {
+      entrypoint,
+      stack,
+    }: {
+      entrypoint: Effect.Effect<Record<string, any>>;
+      stack: { name: string; stage: string };
+    },
   ) =>
   (className: string) =>
     class WorkflowBridge extends WorkflowEntrypoint {
-      readonly fn: Promise<
-        (input: unknown) => Effect.Effect<unknown, never, any>
-      >;
-      readonly env: unknown;
+      readonly fn: Promise<WorkflowImpl<unknown, unknown>>;
 
       constructor(ctx: unknown, env: unknown) {
         super(ctx, env);
-        this.env = env;
-        this.fn = getExport(className).then((factory) =>
-          Effect.runPromise(factory(env)),
-        );
+
+        const { globalContext, exported } = getWorkerExport<WorkflowExport>({
+          entrypoint,
+          stack,
+          exportName: className,
+        });
+
+        this.fn = exported.pipe(
+          Effect.flatMap((wf) => wf.make(env)),
+          Effect.provide(globalContext),
+          Effect.runPromise,
+        ) as Promise<WorkflowImpl<unknown, unknown>>;
       }
 
       async run(event: any, step: any): Promise<unknown> {
