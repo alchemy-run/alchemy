@@ -395,6 +395,38 @@ export class PutRecordPolicy extends Binding.Policy<...>()("AWS.Kinesis.PutRecor
 export const PutRecordPolicyLive = Layer.effect(PutRecordPolicy, ...);
 ```
 
+### Runtime-only methods: color with `Alchemy.RuntimeContext`
+
+The runtime callable returned by a `Binding.Service` (the inner Effect inside `.bind(resource)`'s return) **must** declare `Alchemy.RuntimeContext` as a requirement. This is how Alchemy models "this code can only run inside a deployed Function/Worker" at the type level — analogous to a colored function.
+
+```ts
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+
+export class GetItem extends Binding.Service<
+  GetItem,
+  <T extends Table>(
+    table: T,
+  ) => Effect.Effect<
+    (
+      request: GetItemRequest,
+    ) => Effect.Effect<
+      DynamoDB.GetItemOutput,
+      DynamoDB.GetItemError,
+      RuntimeContext // ← runtime-only
+    >
+  >
+>()("AWS.DynamoDB.GetItem") {}
+```
+
+Rules:
+
+- **Outer Effect** (the `bind(resource)` setup) runs at the Function's init phase. It does NOT require `RuntimeContext`.
+- **Inner Effect** (the actual SDK invocation) only makes sense inside a running Function. It MUST require `RuntimeContext`.
+- Resolve cloud-environment services (`WorkerEnvironment`, AWS SDK clients, etc.) once during Layer construction and close over them. Do NOT leak `WorkerEnvironment` / `Lambda.FunctionEnvironment` onto the runtime callable — that couples downstream service code to a specific cloud and breaks Layer encapsulation. The Function/Worker runtime satisfies `RuntimeContext` automatically.
+- The implementation can return `Effect.Effect<A, E>` without explicitly providing `RuntimeContext` (it's contravariant in `R`); just declare it on the interface.
+
+Why this matters: consumers can build cloud-agnostic services on top of bindings using `Layer.effect(Tag, ...)` without polluting their service interface with `WorkerEnvironment`. See [Layers concept](./website/src/content/docs/concepts/layers.mdx).
+
 After implementing, register the Policy in `AWS.providers()()`:
 
 - Add the `*PolicyLive` layer to `bindings()` in [Providers.ts](./packages/alchemy/src/AWS/Providers.ts)

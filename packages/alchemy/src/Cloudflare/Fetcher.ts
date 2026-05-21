@@ -6,7 +6,11 @@ import { pipe } from "effect/Function";
 import * as Latch from "effect/Latch";
 import * as Scope from "effect/Scope";
 import * as HttpBody from "effect/unstable/http/HttpBody";
-import { HttpClientError } from "effect/unstable/http/HttpClientError";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import {
+  HttpClientError,
+  TransportError,
+} from "effect/unstable/http/HttpClientError";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
@@ -117,6 +121,39 @@ export const fromCloudflareFetcher = (fetcher: cf.Fetcher): Fetcher => {
           ),
   };
 };
+
+/**
+ * Adapt anything that exposes a server-shaped `fetch` (e.g. a Durable Object
+ * stub, a Worker service binding) into an Effect `HttpClient`. Lets HttpApi
+ * clients address bindings without a base URL via `transformClient`.
+ */
+export const toHttpClient = (fetcher: {
+  fetch: (
+    request: HttpServerRequest.HttpServerRequest,
+  ) => Effect.Effect<HttpServerResponse.HttpServerResponse, HttpServerError>;
+}) =>
+  HttpClient.make((request) => {
+    console.log("toHttpClient: request", request.url);
+    return fetcher.fetch(HttpServerRequest.fromClientRequest(request)).pipe(
+      Effect.map((response) => {
+        console.log("toHttpClient: response", response);
+        return HttpClientResponse.fromWeb(
+          request,
+          HttpServerResponse.toWeb(response),
+        );
+      }),
+      Effect.mapError(
+        (cause) =>
+          new HttpClientError({
+            reason: new TransportError({
+              request,
+              cause,
+              description: "Fetcher-backed HttpClient request failed",
+            }),
+          }),
+      ),
+    );
+  });
 
 export const fromCloudflareSocket = (cfSocket: cf.Socket): Socket.Socket => {
   const latch = Latch.makeUnsafe(false);

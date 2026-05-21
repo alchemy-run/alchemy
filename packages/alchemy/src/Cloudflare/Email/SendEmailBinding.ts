@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { SendEmail } from "./SendEmail.ts";
 
@@ -35,20 +36,20 @@ export interface SendEmailClient {
    * access to the Cloudflare object (e.g. to send a pre-built
    * `EmailMessage` from `cloudflare:email`).
    */
-  raw: Effect.Effect<runtime.SendEmail, never, WorkerEnvironment>;
+  raw: Effect.Effect<runtime.SendEmail, never, RuntimeContext>;
   /**
    * Send an email using the builder form. Equivalent to calling
    * `env.<name>.send({ from, to, subject, text, html, ... })`.
    */
   send(
     message: SendEmailMessage,
-  ): Effect.Effect<runtime.EmailSendResult, SendEmailError, WorkerEnvironment>;
+  ): Effect.Effect<runtime.EmailSendResult, SendEmailError, RuntimeContext>;
   /**
    * Send a raw `EmailMessage` (constructed via `cloudflare:email`).
    */
   sendRaw(
     message: runtime.EmailMessage,
-  ): Effect.Effect<runtime.EmailSendResult, SendEmailError, WorkerEnvironment>;
+  ): Effect.Effect<runtime.EmailSendResult, SendEmailError, RuntimeContext>;
 }
 
 /**
@@ -65,12 +66,13 @@ export const SendEmailBindingLive = Layer.effect(
   SendEmailBinding,
   Effect.gen(function* () {
     const bind = yield* SendEmailBindingPolicy;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fnUntraced(function* (sender: SendEmail) {
       yield* bind(sender);
 
-      const raw = WorkerEnvironment.useSync(
-        (env) => (env as Record<string, runtime.SendEmail>)[sender.name]!,
+      const raw = Effect.sync(
+        () => (env as Record<string, runtime.SendEmail>)[sender.name]!,
       );
 
       const tryPromise = <T>(

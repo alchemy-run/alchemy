@@ -1,5 +1,5 @@
-import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -37,61 +37,51 @@ const Stack = Alchemy.Stack(
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
+const testTimeout = 30_000;
+const requestTimeout = "5 seconds";
+const readinessRetry = {
+  schedule: Schedule.exponential("250 millis"),
+  times: 6,
+} as const;
+
+const makeClient = (url: string) =>
+  HttpApiClient.make(TaskApi, { baseUrl: url });
+
 test(
-  "deployed http-api worker handles createTask + getTask via HttpClient",
+  "deployed http-api worker handles createTask + getTask via typed HttpApiClient",
   Effect.gen(function* () {
     const { url } = yield* stack;
     expect(url).toBeTypeOf("string");
-    const client = yield* HttpClient.HttpClient;
+    const client = yield* makeClient(url);
 
-    const created = yield* client
-      .execute(
-        HttpClientRequest.post(`${url}/`).pipe(
-          HttpClientRequest.bodyJsonUnsafe({ title: "Write docs" }),
-        ),
-      )
-      .pipe(
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? Effect.succeed(res)
-            : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
-        ),
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 15,
-        }),
-      );
-    const createdBody = (yield* created.json) as {
-      id: string;
-      title: string;
-      completed: boolean;
-    };
-    expect(createdBody.title).toBe("Write docs");
-    expect(createdBody.completed).toBe(false);
-    expect(createdBody.id).toBeTypeOf("string");
+    const created = yield* client.Tasks.createTask({
+      payload: { title: "Write docs" },
+    }).pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+    expect(created.title).toBe("Write docs");
+    expect(created.completed).toBe(false);
+    expect(created.id).toBeTypeOf("string");
 
-    const fetched = yield* client.get(`${url}/${createdBody.id}`);
-    expect(fetched.status).toBe(200);
-    const fetchedBody = (yield* fetched.json) as { id: string; title: string };
-    expect(fetchedBody.id).toBe(createdBody.id);
-    expect(fetchedBody.title).toBe("Write docs");
+    const fetched = yield* client.Tasks.getTask({ params: { id: created.id } });
+    expect(fetched.id).toBe(created.id);
+    expect(fetched.title).toBe("Write docs");
 
-    const missing = yield* client.get(`${url}/does-not-exist`);
-    expect(missing.status).toBe(404);
-    const missingBody = (yield* missing.json) as {
-      _tag: string;
-      id: string;
-    };
-    expect(missingBody._tag).toBe("TaskNotFound");
-    expect(missingBody.id).toBe("does-not-exist");
+    const missing = yield* client.Tasks.getTask({
+      params: { id: "does-not-exist" },
+    }).pipe(Effect.flip);
+    expect(missing._tag).toBe("TaskNotFound");
+    if (missing._tag === "TaskNotFound") {
+      expect(missing.id).toBe("does-not-exist");
+    }
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: testTimeout },
 );
 
 test(
   "cors middleware adds Access-Control-Allow-Origin header on preflight",
   Effect.gen(function* () {
     const { url } = yield* stack;
+    // CORS preflight (OPTIONS) is transport-level and not part of the typed
+    // HttpApi surface, so this single check uses the raw HttpClient.
     const client = yield* HttpClient.HttpClient;
 
     const res = yield* client
@@ -104,65 +94,37 @@ test(
           }),
         ),
       )
-      .pipe(
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 10,
-        }),
-      );
+      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
     expect(res.headers["access-control-allow-origin"]).toBeDefined();
   }).pipe(logLevel),
-  { timeout: 60_000 },
+  { timeout: testTimeout },
 );
 
 test(
-  "concurrent createTask + getTask survive scope-lifecycle pressure",
+  "concurrent createTask survives scope-lifecycle pressure",
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const client = yield* HttpClient.HttpClient;
+    const client = yield* makeClient(url);
 
-    yield* client
-      .execute(
-        HttpClientRequest.post(`${url}/`).pipe(
-          HttpClientRequest.bodyJsonUnsafe({ title: "warmup" }),
-        ),
-      )
-      .pipe(
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? Effect.succeed(res)
-            : Effect.fail(new Error(`warmup not ready: ${res.status}`)),
-        ),
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 15,
-        }),
-      );
+    yield* client.Tasks.createTask({ payload: { title: "warmup" } }).pipe(
+      Effect.timeout(requestTimeout),
+      Effect.retry(readinessRetry),
+    );
 
     const N = 200;
     const results = yield* Effect.forEach(
       Array.from({ length: N }, (_, i) => i),
       (i) =>
         Effect.gen(function* () {
-          const created = yield* client
-            .execute(
-              HttpClientRequest.post(`${url}/`).pipe(
-                HttpClientRequest.bodyJsonUnsafe({ title: `task-${i}` }),
-              ),
-            )
-            .pipe(Effect.timeout("15 seconds"));
-          if (created.status !== 200) {
+          const created = yield* client.Tasks.createTask({
+            payload: { title: `task-${i}` },
+          }).pipe(Effect.timeout(requestTimeout));
+          if (created.title !== `task-${i}`) {
             return yield* Effect.fail(
-              new Error(`create ${i} -> ${created.status}`),
+              new Error(`create ${i} title mismatch: ${created.title}`),
             );
           }
-          const body = (yield* created.json) as { id: string; title: string };
-          if (body.title !== `task-${i}`) {
-            return yield* Effect.fail(
-              new Error(`create ${i} title mismatch: ${body.title}`),
-            );
-          }
-          return body.id;
+          return created.id;
         }),
       { concurrency: 64 },
     );
@@ -170,32 +132,41 @@ test(
     expect(results).toHaveLength(N);
     expect(new Set(results).size).toBe(N);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: testTimeout },
 );
 
 test(
-  "deployed http-api worker is consumable via typed HttpApiClient",
+  "createTaskDO + getTaskDO round-trip 100x in parallel through the DO HttpApi",
   Effect.gen(function* () {
     const { url } = yield* stack;
+    const client = yield* makeClient(url);
 
-    const client = yield* HttpApiClient.make(TaskApi, { baseUrl: url });
-
-    const created = yield* client.Tasks.createTask({
-      payload: { title: "Typed client task" },
-    }).pipe(
-      Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
-      }),
+    yield* client.Tasks.createTaskDO({ payload: { title: "warmup" } }).pipe(
+      Effect.timeout(requestTimeout),
+      Effect.retry(readinessRetry),
     );
-    expect(created.title).toBe("Typed client task");
-    expect(created.completed).toBe(false);
 
-    const fetched = yield* client.Tasks.getTask({
-      params: { id: created.id },
-    });
-    expect(fetched.id).toBe(created.id);
-    expect(fetched.title).toBe("Typed client task");
+    const N = 100;
+    yield* Effect.forEach(
+      Array.from({ length: N }, (_, i) => i),
+      (i) =>
+        Effect.gen(function* () {
+          const title = `do-task-${i}`;
+          const created = yield* client.Tasks.createTaskDO({
+            payload: { title },
+          }).pipe(Effect.timeout(requestTimeout));
+          expect(created.title).toBe(title);
+          expect(created.completed).toBe(false);
+          expect(created.id).toBeTypeOf("string");
+
+          const fetched = yield* client.Tasks.getTaskDO({
+            params: { id: created.id },
+          }).pipe(Effect.timeout(requestTimeout));
+          expect(fetched.id).toBe(created.id);
+          expect(fetched.title).toBe(title);
+        }),
+      { concurrency: 32 },
+    );
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: testTimeout },
 );

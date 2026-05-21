@@ -70,6 +70,9 @@ import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import { Task, TaskNotFound } from "./task.ts";
 
+export const decodeTask = Schema.decodeUnknownEffect(Task);
+export const encodeTask = Schema.encodeUnknownSync(Task);
+
 const getTask = HttpApiEndpoint.get("getTask", "/:id", {
   success: Task,
   error: TaskNotFound,
@@ -407,6 +410,150 @@ TASK_API_URL=https://your-worker.workers.dev bun scripts/client.ts
 `client.Tasks.getTask` returns `Effect<Task, TaskNotFound | HttpClientError>`.
 The `TaskNotFound` branch is a real typed value you can pattern-match
 on, not an HTTP status code you have to interpret.
+
+## Bonus: route some endpoints to a Durable Object
+
+The same `HttpApi` machinery can run *inside* a Durable Object. The
+DO becomes a typed sub-API that the Worker delegates to, while the
+public `TaskApi` shape remains a single value clients can import.
+
+### Define a DO-side group
+
+The DO exposes its own group built from the same endpoint
+declarations. Add two more endpoints to the public spec — one for
+`get` and one for `create` — that the Worker will proxy to the DO,
+then make a private group for the DO with just the two original
+endpoints:
+
+```typescript
+// src/api.ts
+const getTaskDO = HttpApiEndpoint.get("getTaskDO", "/do/:id", {
+  success: Task,
+  error: TaskNotFound,
+});
+
+const createTaskDO = HttpApiEndpoint.post("createTaskDO", "/do", {
+  success: Task,
+  payload: Schema.Struct({ title: Schema.String }),
+});
+
+export class TasksGroup extends HttpApiGroup.make("Tasks")
+  .add(getTask)
+  .add(createTask)
+  .add(getTaskDO)
+  .add(createTaskDO) {}
+
+export class TasksDOGroup extends HttpApiGroup.make("TasksDO")
+  .add(getTask)
+  .add(createTask) {}
+
+export class TaskDOApi extends HttpApi.make("TaskDOApi").add(TasksDOGroup) {}
+```
+
+### Implement the DO
+
+The DO's Init returns `{ fetch }` — an `HttpEffect` produced exactly
+the same way the Worker produces one, just scoped to its own
+`TaskDOApi`. Storage is the DO's transactional `state.storage`
+instead of R2.
+
+```typescript
+// src/object.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import { TaskDOApi, decodeTask, encodeTask } from "./api.ts";
+import { Task } from "./task.ts";
+
+export default class TasksObject extends Cloudflare.DurableObjectNamespace<TasksObject>()(
+  "TasksObject",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
+
+      const tasksGroup = HttpApiBuilder.group(TaskDOApi, "TasksDO", (handlers) =>
+        handlers
+          .handle("getTask", ({ path }) =>
+            state.storage.get<Task>(path.id).pipe(
+              Effect.flatMap(decodeTask),
+              Effect.orDie,
+            ),
+          )
+          .handle("createTask", ({ payload }) => {
+            const task = new Task({
+              id: crypto.randomUUID(),
+              title: payload.title,
+              completed: false,
+            });
+            return state.storage.put(task.id, encodeTask(task)).pipe(Effect.as(task));
+          }),
+      );
+
+      return {
+        fetch: HttpApiBuilder.layer(TaskDOApi).pipe(
+          Layer.provide(tasksGroup),
+          HttpRouter.toHttpEffect,
+        ),
+      };
+    });
+  }),
+) {}
+```
+
+### Bridge the DO into a typed client
+
+Inside the Worker's Init, `Cloudflare.toHttpClient(stub)` wraps a DO
+stub as an `HttpClient`. Hand that client to `HttpApiClient.makeWith`
+and you get a fully typed client whose every call is a DO `fetch`
+under the hood:
+
+```diff lang="typescript"
++import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
++import TasksObject, { TaskDOApi } from "./object.ts";
+
+  Effect.gen(function* () {
+    const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
++   const tasksDO = yield* TasksObject;
++
++   const getTaskDOClient = (id: string = "default") =>
++     HttpApiClient.makeWith(TaskDOApi, {
++       baseUrl: "http://localhost",
++       httpClient: Cloudflare.toHttpClient(tasksDO.getByName(id)),
++     });
+```
+
+The `baseUrl` is irrelevant — requests never leave the isolate; the
+`httpClient` short-circuits straight to `tasksDO.getByName(id).fetch`.
+
+### Wire the proxy handlers
+
+The Worker's two new handlers just construct a per-request DO client
+and forward the typed call. Errors from the DO already match the
+public endpoint's error schema, so there's no remapping:
+
+```diff lang="typescript"
+    const tasksGroup = HttpApiBuilder.group(TaskApi, "Tasks", (handlers) =>
+      handlers
+        .handle("getTask", /* ... R2 implementation ... */)
+        .handle("createTask", /* ... R2 implementation ... */)
++       .handle("getTaskDO", ({ path }) =>
++         getTaskDOClient().pipe(
++           Effect.flatMap((client) => client.TasksDO.getTask({ path })),
++         ),
++       )
++       .handle("createTaskDO", ({ payload }) =>
++         getTaskDOClient().pipe(
++           Effect.flatMap((client) => client.TasksDO.createTask({ payload })),
++         ),
++       ),
+    );
+```
+
+`GET /do/:id` and `POST /do` now hit the DO; `GET /:id` and `POST /`
+still hit R2. Same `TaskApi`, same client, two different storage
+backends behind the scenes.
 
 ## Recap
 

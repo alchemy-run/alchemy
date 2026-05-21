@@ -183,7 +183,7 @@ export const SetStackOutput = HttpApiEndpoint.put(
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
-export const STATE_STORE_VERSION = 4 as const;
+export const STATE_STORE_VERSION = 5 as const;
 
 /** Response shape for the unauthenticated `/version` probe. */
 export const VersionResponse = Schema.Struct({

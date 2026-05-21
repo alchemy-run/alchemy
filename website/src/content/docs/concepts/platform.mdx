@@ -33,7 +33,7 @@ export default Cloudflare.Worker(
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
 
     return {
-      // Exec: per-request handler.
+      // Runtime: per-request handler.
       fetch: Effect.gen(function* () {
         const obj = yield* bucket.get("hello.txt");
         return obj

@@ -2,6 +2,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
 import { ChildProcess } from "effect/unstable/process";
 import { exec } from "../Util/exec.ts";
 
@@ -66,8 +67,6 @@ export const writeContextFiles = Effect.fn(function* (
   }
 });
 
-const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
-
 export const runDockerCommand = Effect.fn(function* (
   args: ReadonlyArray<string>,
   options?: {
@@ -77,24 +76,22 @@ export const runDockerCommand = Effect.fn(function* (
     stdin?: string;
   },
 ) {
-  const command = `docker ${args.map(shellQuote).join(" ")}`;
-  const shellCommand =
-    options?.stdin === undefined
-      ? command
-      : `printf '%s' "$ALCHEMY_DOCKER_STDIN" | ${command}`;
-  const env = {
-    ...process.env,
-    ...options?.env,
-    ...(options?.stdin === undefined
-      ? {}
-      : { ALCHEMY_DOCKER_STDIN: options.stdin }),
+  const command = `docker ${args.join(" ")}`;
+  const env = { ...process.env, ...options?.env };
+  const commandOptions: ChildProcess.CommandOptions = {
+    env,
+    ...(options?.stdin !== undefined
+      ? {
+          stdin: Stream.succeed(new TextEncoder().encode(options.stdin)),
+        }
+      : {}),
   };
   const child = options?.cwd
     ? ChildProcess.setCwd(
-        ChildProcess.make(shellCommand, [], { shell: true, env }),
+        ChildProcess.make("docker", args, commandOptions),
         options.cwd,
       )
-    : ChildProcess.make(shellCommand, [], { shell: true, env });
+    : ChildProcess.make("docker", args, commandOptions);
 
   const { stdout, stderr, exitCode } = yield* exec(child).pipe(
     Effect.catch((e) =>

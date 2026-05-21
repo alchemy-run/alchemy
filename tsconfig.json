@@ -70,6 +70,12 @@
       "path": "./examples/cloudflare-neon-drizzle/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-planetscale-mysql-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-planetscale-postgres-drizzle/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-secrets-store/tsconfig.json"
     },
     {

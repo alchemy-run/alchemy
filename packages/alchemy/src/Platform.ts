@@ -7,10 +7,13 @@ import type { Scope } from "effect/Scope";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { SingleShotGen } from "effect/Utils";
 import type { PolicyLike } from "./Binding.ts";
+import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
+import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
+import type { Rpc } from "./Rpc.ts";
 import { RuntimeContext, type BaseRuntimeContext } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
@@ -35,13 +38,10 @@ export type Main<InitServices = never> = void | {
       >;
 };
 
-export type Rpc<Shape> = {
-  "~alchemy/rpc": Shape;
-};
-
 // services provided to the Resource
 export type PlatformServices =
   | RuntimeContext
+  | ExecutionContext
   | HttpClient
   | PolicyLike
   | Provider<any>
@@ -193,7 +193,7 @@ export const Platform = <
   type Impl = Effect.Effect<any>;
 
   const resource = Resource(type);
-  const PlatformContext = RuntimeContext(type);
+  const PlatformContext = RuntimeContext;
 
   const constructor = (
     id?: string,
@@ -352,6 +352,17 @@ export const Platform = <
                       Layer.succeed(resource.Self, instance),
                       Layer.succeed(Platform.Self, instance),
                       Layer.succeed(Self, instance),
+                      runtimeContext.planServices
+                        ? Layer.unwrap(
+                            ALCHEMY_PHASE.pipe(
+                              Effect.map((phase) =>
+                                phase === "plan"
+                                  ? runtimeContext.planServices!
+                                  : Layer.empty,
+                              ),
+                            ),
+                          )
+                        : Layer.empty,
                     ),
                     Layer.succeedContext(outerServices),
                   ),

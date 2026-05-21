@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
+import { ALCHEMY_PHASE } from "../../Phase.ts";
 import { fromCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
@@ -162,10 +162,9 @@ export const DynamicWorkerLoader = Effect.fnUntraced(function* (name: string) {
     bindings: [{ type: "worker_loader", name } as any],
   });
 
-  const binding = yield* Effect.serviceOption(WorkerEnvironment).pipe(
-    Effect.map(Option.getOrUndefined),
-    Effect.flatMap((env) => {
-      if (env === undefined) {
+  const binding = yield* Effect.all([WorkerEnvironment, ALCHEMY_PHASE]).pipe(
+    Effect.flatMap(([env, phase]) => {
+      if (env === undefined || phase === "plan") {
         return Effect.succeed(undefined as any);
       }
       const loader = env[name];

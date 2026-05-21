@@ -6,6 +6,7 @@ import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { getRawStream } from "../../Util/Stream.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { R2Bucket } from "./R2Bucket.ts";
@@ -66,18 +67,18 @@ export type R2UploadedPart = runtime.R2UploadedPart;
 export interface R2UploadPartOptions extends runtime.R2UploadPartOptions {}
 
 export interface R2BucketClient {
-  raw: Effect.Effect<runtime.R2Bucket, never, WorkerEnvironment>;
-  head(key: string): Effect.Effect<R2Object | null, R2Error, WorkerEnvironment>;
+  raw: Effect.Effect<runtime.R2Bucket, never, RuntimeContext>;
+  head(key: string): Effect.Effect<R2Object | null, R2Error, RuntimeContext>;
   get(
     key: string,
     options: R2GetOptions & {
       onlyIf: runtime.R2Conditional | Headers;
     },
-  ): Effect.Effect<R2ObjectBody | R2Object | null, R2Error, WorkerEnvironment>;
+  ): Effect.Effect<R2ObjectBody | R2Object | null, R2Error, RuntimeContext>;
   get(
     key: string,
     options?: R2GetOptions,
-  ): Effect.Effect<R2ObjectBody | null, R2Error, WorkerEnvironment>;
+  ): Effect.Effect<R2ObjectBody | null, R2Error, RuntimeContext>;
   put<Err = never>(
     key: string,
     value:
@@ -92,7 +93,7 @@ export interface R2BucketClient {
       onlyIf: R2Conditional | Headers;
       contentLength?: number;
     },
-  ): Effect.Effect<R2Object | null, R2Error | Err, WorkerEnvironment>;
+  ): Effect.Effect<R2Object | null, R2Error | Err, RuntimeContext>;
   put<Err = never>(
     key: string,
     value:
@@ -103,7 +104,7 @@ export interface R2BucketClient {
       | null
       | Blob,
     options?: R2PutOptions,
-  ): Effect.Effect<R2Object, R2Error | Err, WorkerEnvironment>;
+  ): Effect.Effect<R2Object, R2Error | Err, RuntimeContext>;
   put<Err = never>(
     key: string,
     value:
@@ -117,21 +118,19 @@ export interface R2BucketClient {
     options: R2PutOptions & {
       contentLength: number;
     },
-  ): Effect.Effect<R2Object, R2Error | Err, WorkerEnvironment>;
-  delete(
-    keys: string | string[],
-  ): Effect.Effect<void, R2Error, WorkerEnvironment>;
+  ): Effect.Effect<R2Object, R2Error | Err, RuntimeContext>;
+  delete(keys: string | string[]): Effect.Effect<void, R2Error, RuntimeContext>;
   list(
     options?: R2ListOptions,
-  ): Effect.Effect<R2Objects, R2Error, WorkerEnvironment>;
+  ): Effect.Effect<R2Objects, R2Error, RuntimeContext>;
   createMultipartUpload(
     key: string,
     options?: R2MultipartOptions,
-  ): Effect.Effect<R2MultipartUpload, R2Error, WorkerEnvironment>;
+  ): Effect.Effect<R2MultipartUpload, R2Error, RuntimeContext>;
   resumeMultipartUpload(
     key: string,
     uploadId: string,
-  ): Effect.Effect<R2MultipartUpload, R2Error, WorkerEnvironment>;
+  ): Effect.Effect<R2MultipartUpload, R2Error, RuntimeContext>;
 }
 
 export class R2BucketBinding extends Binding.Service<
@@ -143,14 +142,12 @@ export const R2BucketBindingLive = Layer.effect(
   R2BucketBinding,
   Effect.gen(function* () {
     const bind = yield* R2BucketBindingPolicy;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (bucket: R2Bucket) {
       yield* bind(bucket);
-      const env = WorkerEnvironment;
-      const raw = env.pipe(
-        Effect.map(
-          (env) => (env as Record<string, runtime.R2Bucket>)[bucket.LogicalId],
-        ),
+      const raw = Effect.sync(
+        () => (env as Record<string, runtime.R2Bucket>)[bucket.LogicalId]!,
       );
       const tryPromise = <T>(fn: () => Promise<T>): Effect.Effect<T, R2Error> =>
         Effect.tryPromise({
@@ -164,7 +161,7 @@ export const R2BucketBindingLive = Layer.effect(
 
       const use = <T>(
         fn: (raw: runtime.R2Bucket) => Promise<T>,
-      ): Effect.Effect<T, R2Error, WorkerEnvironment> =>
+      ): Effect.Effect<T, R2Error> =>
         raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
 
       const wrapR2Object = (object: runtime.R2Object): R2Object => ({
