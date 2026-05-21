@@ -33,7 +33,10 @@ import {
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObjectNamespace.ts";
-import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import {
+  LocalWorkerProvider,
+  localRuntimeServices,
+} from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
 import * as Vite from "./Vite.ts";
 import {
@@ -719,7 +722,7 @@ const selectLayer = <
 export const WorkerProvider = () =>
   selectLayer({
     live: LiveWorkerProvider,
-    dev: LocalWorkerProvider,
+    dev: () => Layer.provide(LocalWorkerProvider(), localRuntimeServices()),
   });
 
 export const LiveWorkerProvider = () =>

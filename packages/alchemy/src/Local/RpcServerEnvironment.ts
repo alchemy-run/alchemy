@@ -10,7 +10,7 @@ import { Stack } from "../Stack.ts";
 import { Stage } from "../Stage.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 
-export interface RpcProcessContext {
+export interface RpcServerEnvironment {
   alchemyContext: AlchemyContext["Service"];
   profile: string | undefined;
   envFile: string | undefined;
@@ -20,38 +20,44 @@ export interface RpcProcessContext {
   };
 }
 
-export const CONTEXT_ENV_KEY = "ALCHEMY_RPC_PROCESS_CONTEXT" as const;
+export type RpcEnvironmentServices = Layer.Success<ReturnType<typeof layer>>;
 
-export const fromEnv = () => {
-  try {
-    const context = JSON.parse(
-      process.env[CONTEXT_ENV_KEY]!,
-    ) as RpcProcessContext;
-    return layer(context);
-  } catch (cause) {
-    throw new Error(`Failed to parse ${CONTEXT_ENV_KEY} environment variable`, {
-      cause,
-    });
-  }
-};
-
-export const layer = (context: RpcProcessContext) =>
+export const layer = (environment: RpcServerEnvironment) =>
   Layer.mergeAll(
     ProfileLive,
     CredentialsStoreLive,
     Layer.succeed(AuthProviders, {}),
     ConfigProvider.layer(
-      loadConfigProvider(Option.fromUndefinedOr(context.envFile)).pipe(
-        Effect.map((base) => withProfileOverride(base, context.profile)),
+      loadConfigProvider(Option.fromUndefinedOr(environment.envFile)).pipe(
+        Effect.map((base) => withProfileOverride(base, environment.profile)),
       ),
     ),
-    Layer.succeed(AlchemyContext, context.alchemyContext),
+    Layer.succeed(AlchemyContext, environment.alchemyContext),
     Layer.succeed(Stack, {
-      name: context.stack.name,
-      stage: context.stack.stage,
+      name: environment.stack.name,
+      stage: environment.stack.stage,
       resources: {},
       bindings: {},
       actions: {},
     }),
-    Layer.succeed(Stage, context.stack.stage),
+    Layer.succeed(Stage, environment.stack.stage),
   );
+
+export const RPC_SERVER_ENVIRONMENT_KEY =
+  "ALCHEMY_RPC_SERVER_ENVIRONMENT" as const;
+
+export const fromEnv = () => {
+  try {
+    const environment = JSON.parse(
+      process.env[RPC_SERVER_ENVIRONMENT_KEY]!,
+    ) as RpcServerEnvironment;
+    return layer(environment);
+  } catch (cause) {
+    throw new Error(
+      `Failed to parse ${RPC_SERVER_ENVIRONMENT_KEY} environment variable`,
+      {
+        cause,
+      },
+    );
+  }
+};

@@ -1,4 +1,6 @@
 import {
+  layerLocalProxy,
+  layerRuntime,
   Runtime,
   RuntimeError,
   type BindingHook,
@@ -33,12 +35,14 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Hash from "effect/Hash";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { InstanceId } from "../../InstanceId.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
@@ -63,6 +67,26 @@ export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidat
     value: Schema.Unknown,
   },
 ) {}
+
+export const localRuntimeServices = (options: { port?: number } = {}) =>
+  RpcProvider.providerServicesEffect(
+    Effect.gen(function* () {
+      const { accountId } = yield* CloudflareEnvironment;
+      const { dotAlchemy } = yield* AlchemyContext;
+      const path = yield* Path.Path;
+      return Layer.merge(
+        layerRuntime({
+          api: {
+            accountId,
+          },
+          storage: {
+            directory: path.join(dotAlchemy, "local"),
+          },
+        }),
+        layerLocalProxy(options.port ?? 0),
+      );
+    }),
+  );
 
 export const LocalWorkerProvider = () =>
   RpcProvider.effect(

@@ -1,10 +1,9 @@
 import { exitHook } from "@alchemy.run/node-utils";
-import { Deferred } from "effect";
+import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as MutableHashMap from "effect/MutableHashMap";
-import * as Option from "effect/Option";
 import type { PlatformError } from "effect/PlatformError";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -17,47 +16,50 @@ import * as NodeChildProcess from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { httpServer } from "../Util/PlatformServices.ts";
 import {
-  CONTEXT_ENV_KEY,
-  type RpcProcessContext,
-} from "./RpcProcessContext.ts";
+  RPC_SERVER_ENVIRONMENT_KEY,
+  type RpcServerEnvironment,
+} from "./RpcServerEnvironment.ts";
 
 export class RpcSpawner extends Context.Service<
   RpcSpawner,
   {
     readonly url: string;
   }
->()("RpcSpawner") {}
+>()("alchemy/Local/RpcSpawner") {}
+
+export interface RpcSpawnPayload extends Pick<
+  RpcServerEnvironment,
+  "alchemyContext" | "stack"
+> {
+  serverEntryUrl: string;
+}
 
 export const make = Effect.fnUntraced(function* ({
   profile,
   envFile,
-}: Pick<RpcProcessContext, "profile" | "envFile">) {
+}: Pick<RpcServerEnvironment, "profile" | "envFile">) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const scope = yield* Effect.scope;
-  const processes = MutableHashMap.empty<
-    string,
-    {
-      url: string;
-      isRunning: Effect.Effect<boolean, PlatformError, never>;
-      kill: Effect.Effect<void, PlatformError, never>;
-    }
-  >();
+  const cache = yield* Cache.make({
+    lookup: (payload: RpcSpawnPayload) =>
+      spawn(payload).pipe(Scope.provide(scope)),
+    capacity: Infinity,
+  });
 
-  const spawn = Effect.fnUntraced(function* (
-    mainUrl: string,
-    {
-      alchemyContext,
-      stack,
-    }: Pick<RpcProcessContext, "alchemyContext" | "stack">,
-  ) {
+  const spawn = Effect.fnUntraced(function* ({
+    serverEntryUrl,
+    alchemyContext,
+    stack,
+  }: RpcSpawnPayload) {
     const bin = typeof globalThis.Bun !== "undefined" ? "bun" : "node";
-    const main = fileURLToPath(mainUrl);
-    const context: RpcProcessContext = {
+    const main = fileURLToPath(serverEntryUrl);
+    const environment: RpcServerEnvironment = {
       profile,
       envFile,
       alchemyContext,
       stack,
     };
+    console.log("spawning", bin, main);
     const command = ChildProcess.make(
       bin,
       { bun: ["run", main], node: [main.replace(".ts", ".js")] }[bin],
@@ -66,49 +68,33 @@ export const make = Effect.fnUntraced(function* ({
         stderr: "inherit",
         detached: false,
         env: {
-          [CONTEXT_ENV_KEY]: JSON.stringify(context),
+          [RPC_SERVER_ENVIRONMENT_KEY]: JSON.stringify(environment),
         },
         extendEnv: true,
       },
     );
     const handle = yield* spawner.spawn(command);
     const unregister = exitHook(() => {
-      console.log("unregistering", handle.pid);
       killProcessGroup(handle.pid, "SIGKILL");
     });
     const kill = handle
       .kill({ forceKillAfter: "500 millis" })
       .pipe(Effect.tap(() => Effect.sync(unregister)));
     yield* Effect.addFinalizer(() => kill.pipe(Effect.ignore));
-    const urlResult = yield* Deferred.make<string>();
-    let done = false;
-    yield* handle.stdout.pipe(
-      Stream.decodeText,
-      Stream.splitLines,
-      Stream.runForEach((line) => {
-        if (!done) {
-          const match = line.match(RPC_ADDRESS_REGEX);
-          if (match) {
-            done = true;
-            return Deferred.succeed(urlResult, match[2]);
-          }
-          return Effect.void;
-        }
-        console.log("[stdout]", line);
-        return Effect.void;
-      }),
-      Effect.forkScoped,
-    );
-    const url = yield* Deferred.await(urlResult);
+    const url = yield* getRpcAddress(handle.stdout);
     const ws = yield* Effect.acquireRelease(
-      Effect.sync(() => new WebSocket(new URL("/signal", url))),
+      Effect.sync(() => new WebSocket(new URL("/parent", url))),
       (ws) => Effect.sync(() => ws.close()),
     );
     return {
       url,
       isRunning: Effect.zipWith(
         handle.isRunning,
-        Effect.sync(() => ws.readyState === WebSocket.OPEN),
+        Effect.sync(
+          () =>
+            ws.readyState === WebSocket.CONNECTING ||
+            ws.readyState === WebSocket.OPEN,
+        ),
         (a, b) => a && b,
         { concurrent: true },
       ),
@@ -117,25 +103,23 @@ export const make = Effect.fnUntraced(function* ({
   });
 
   const register = Effect.fnUntraced(function* (
-    mainUrl: string,
-    context: Pick<RpcProcessContext, "alchemyContext" | "stack">,
-  ) {
-    const existing = MutableHashMap.get(processes, mainUrl);
-    if (Option.isSome(existing)) {
-      if (yield* existing.value.isRunning) {
-        console.log("existing", existing.value.url);
-        return existing.value.url;
-      }
-      console.log("killing", mainUrl);
-      yield* existing.value.kill;
-      console.log("killed", mainUrl);
-      MutableHashMap.remove(processes, mainUrl);
+    payload: RpcSpawnPayload,
+    attempt = 0,
+  ): Effect.fn.Return<string, PlatformError> {
+    const child = yield* Cache.get(cache, payload);
+    if (yield* child.isRunning) {
+      return child.url;
     }
-    console.log("spawning", mainUrl);
-    const child = yield* spawn(mainUrl, context).pipe(Scope.provide(scope));
-    MutableHashMap.set(processes, mainUrl, child);
-    console.log("spawned", mainUrl, child.url);
-    return child.url;
+    if (attempt > 3) {
+      return yield* Effect.die(
+        new Error(
+          `Failed to spawn RPC server for "${payload.serverEntryUrl}" after ${attempt} attempts.`,
+        ),
+      );
+    }
+    yield* child.kill;
+    yield* Cache.invalidate(cache, payload);
+    return yield* register(payload, attempt + 1);
   });
 
   const server = yield* HttpServer.HttpServer;
@@ -143,11 +127,8 @@ export const make = Effect.fnUntraced(function* ({
   yield* server.serve(
     Effect.gen(function* () {
       const request = yield* HttpServerRequest;
-      const { mainUrl, context } = yield* request.json as Effect.Effect<{
-        mainUrl: string;
-        context: Pick<RpcProcessContext, "alchemyContext" | "stack">;
-      }>;
-      const url = yield* register(mainUrl, context);
+      const payload = (yield* request.json) as unknown as RpcSpawnPayload;
+      const url = yield* register(payload);
       return HttpServerResponse.text(url);
     }),
   );
@@ -158,35 +139,36 @@ export const make = Effect.fnUntraced(function* ({
 });
 
 export const layerServer = (
-  context: Pick<RpcProcessContext, "profile" | "envFile">,
-) => Layer.effect(RpcSpawner, make(context)).pipe(Layer.provide(httpServer()));
+  environment: Pick<RpcServerEnvironment, "profile" | "envFile">,
+) =>
+  Layer.effect(RpcSpawner, make(environment)).pipe(Layer.provide(httpServer()));
 
 const RPC_ADDRESS_REGEX =
   /(<ALCHEMY_RPC_ADDRESS>)(.+)(<\/ALCHEMY_RPC_ADDRESS>)/;
 
-const getRpcAddress = (stdout: Stream.Stream<Uint8Array, PlatformError>) => {
-  const deferred = Deferred.makeUnsafe<string>();
-  let done = false;
-
-  const fiber = stdout.pipe(
-    Stream.decodeText,
-    Stream.splitLines,
-    Stream.runForEach((line) => {
-      console.log("stdout", line);
-      if (!done) {
-        const match = line.match(RPC_ADDRESS_REGEX);
-        if (match) {
-          return Deferred.succeed(deferred, match[2]);
+const getRpcAddress = (stdout: Stream.Stream<Uint8Array, PlatformError>) =>
+  Effect.gen(function* () {
+    const address = yield* Deferred.make<string>();
+    let done = false;
+    yield* stdout.pipe(
+      Stream.decodeText,
+      Stream.splitLines,
+      Stream.runForEach((line) => {
+        if (!done) {
+          const match = line.match(RPC_ADDRESS_REGEX);
+          if (match) {
+            done = true;
+            return Deferred.succeed(address, match[2]);
+          }
+          return Effect.void;
         }
-      }
-      return Effect.void;
-    }),
-    Effect.forkChild,
-  );
-  return Effect.all([Deferred.await(deferred), fiber]).pipe(
-    Effect.map(([url]) => url),
-  );
-};
+        console.log("[stdout]", line);
+        return Effect.void;
+      }),
+      Effect.forkScoped,
+    );
+    return yield* Deferred.await(address);
+  });
 
 const killProcessGroup = (pid: number, signal: NodeJS.Signals) => {
   try {

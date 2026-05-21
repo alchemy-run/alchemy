@@ -1,43 +1,43 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { WebSocketServer, type Server } from "ws";
 import * as RpcServer from "./RpcServer.ts";
 
-export const RpcServerNode = Layer.effect(
-  RpcServer.RpcServer,
-  RpcServer.make(
-    Effect.fnUntraced(function* (handlers) {
-      const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
-      const url = yield* Effect.callback<string>((resume) => {
-        server.on("connection", (ws, req) => {
-          if (req.url?.startsWith("/signal")) {
-            ws.on("open", () => {
-              handlers.connect();
-            });
-            ws.on("close", () => {
-              handlers.disconnect();
-            });
-            return;
-          }
-          const session = handlers.session(ws);
-          ws.on("message", (data) => {
-            session.dispatch.message(data.toString());
+export const RpcServerNode = RpcServer.layerServer(
+  Effect.fnUntraced(function* ({
+    parentConnected,
+    parentDisconnected,
+    createRpcSession,
+  }) {
+    const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+    const url = yield* Effect.callback<string>((resume) => {
+      server.on("connection", (ws, req) => {
+        if (req.url?.startsWith("/parent")) {
+          ws.on("open", () => {
+            parentConnected();
           });
-          ws.on("close", (code, reason) => {
-            session.dispatch.close(code, reason.toString());
+          ws.on("close", () => {
+            parentDisconnected();
           });
+          return;
+        }
+        const session = createRpcSession(ws);
+        ws.on("message", (data) => {
+          session.dispatch.message(data.toString());
         });
-        server.on("error", (error) => {
-          resume(Effect.die(error));
-        });
-        server.on("listening", () => {
-          resume(getServerAddress(server));
+        ws.on("close", (code, reason) => {
+          session.dispatch.close(code, reason.toString());
         });
       });
-      yield* Effect.addFinalizer(() => Effect.sync(() => server.close()));
-      return { url };
-    }),
-  ),
+      server.on("error", (error) => {
+        resume(Effect.die(error));
+      });
+      server.on("listening", () => {
+        resume(getServerAddress(server));
+      });
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(() => server.close()));
+    return { url };
+  }),
 );
 
 function getServerAddress(server: Server): Effect.Effect<string> {

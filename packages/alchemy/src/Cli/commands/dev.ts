@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
-import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderClient.ts";
+import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
 import { envFile, force, profile, script, stage } from "./_shared.ts";
 import { ExecStackOptions } from "./deploy.ts";
