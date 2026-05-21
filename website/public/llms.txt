@@ -76,7 +76,6 @@ Standalone how-to pages. Each solves a specific problem; read in any order.
 - [Frontend frameworks](https://v2.alchemy.run/guides/frontends) — Deploy Vite-based frameworks (TanStack Start, Astro, SolidStart, Nuxt, React) and any custom-built static site (Hugo, Eleventy) to Cloudflare with one declaration.
 - [Migrating from v1](https://v2.alchemy.run/guides/migrating-from-v1) — Migrate your Alchemy v1 (async/await) project to Alchemy v2.
 - [Monorepos](https://v2.alchemy.run/guides/monorepo) — Two patterns for organizing an Alchemy monorepo with a backend API and a frontend website — one shared stack (recommended) or one stack per package — with the trade-offs and a working example for each.
-- [Privacy & Telemetry](https://v2.alchemy.run/guides/privacy) — What data the Alchemy CLI and Cloudflare State Store collect, where it goes, and how to opt out.
 - [Secrets and env vars](https://v2.alchemy.run/guides/secrets) — Wire OPENAI_API_KEY (or any .env value) into a Cloudflare Worker as a secret_text binding using Alchemy.Secret and Effect's Config.
 - [Shared database across stages](https://v2.alchemy.run/guides/shared-database) — Have ephemeral PR-preview stages reference a long-lived Neon Postgres project from staging instead of provisioning their own — fast previews, copy-on-write branches, no extra Postgres clusters.
 
