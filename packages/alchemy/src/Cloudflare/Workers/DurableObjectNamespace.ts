@@ -1,12 +1,12 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
+import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { DurableObjectState } from "./DurableObjectState.ts";
@@ -589,12 +589,12 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
                 ],
               });
 
-              const binding = yield* Effect.serviceOption(
+              const binding = yield* Effect.all([
                 WorkerEnvironment,
-              ).pipe(
-                Effect.map(Option.getOrUndefined),
-                Effect.flatMap((env) => {
-                  if (env === undefined) {
+                ALCHEMY_PHASE,
+              ]).pipe(
+                Effect.flatMap(([env, phase]) => {
+                  if (env === undefined || phase === "plan") {
                     // should be fine to return undefined here (it is only undefined at plantime)
                     return Effect.succeed(undefined);
                   }

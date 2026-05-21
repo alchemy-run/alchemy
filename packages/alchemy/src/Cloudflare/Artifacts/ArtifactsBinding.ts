@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { type Artifacts as ArtifactsLike } from "./Artifacts.ts";
 
@@ -66,32 +67,22 @@ export interface ArtifactsRepoClient {
  */
 export interface ArtifactsClient {
   /** Effect resolving to the raw Cloudflare runtime binding. */
-  raw: Effect.Effect<Artifacts, never, WorkerEnvironment>;
+  raw: Effect.Effect<Artifacts, never, RuntimeContext>;
   create(
     name: string,
     opts?: ArtifactsCreateOptions,
-  ): Effect.Effect<
-    ArtifactsCreateRepoResult,
-    ArtifactsError,
-    WorkerEnvironment
-  >;
+  ): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError, RuntimeContext>;
   /** Look up an existing repo by name. Fails with `ArtifactsError` if missing. */
   get(
     name: string,
-  ): Effect.Effect<ArtifactsRepoClient, ArtifactsError, WorkerEnvironment>;
+  ): Effect.Effect<ArtifactsRepoClient, ArtifactsError, RuntimeContext>;
   list(
     opts?: ArtifactsListOptions,
-  ): Effect.Effect<ArtifactsRepoListResult, ArtifactsError, WorkerEnvironment>;
-  delete(
-    name: string,
-  ): Effect.Effect<boolean, ArtifactsError, WorkerEnvironment>;
+  ): Effect.Effect<ArtifactsRepoListResult, ArtifactsError, RuntimeContext>;
+  delete(name: string): Effect.Effect<boolean, ArtifactsError, RuntimeContext>;
   import(
     opts: ArtifactsImportOptions,
-  ): Effect.Effect<
-    ArtifactsCreateRepoResult,
-    ArtifactsError,
-    WorkerEnvironment
-  >;
+  ): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError, RuntimeContext>;
 }
 
 export class ArtifactsBinding extends Binding.Service<
@@ -103,19 +94,17 @@ export const ArtifactsBindingLive = Layer.effect(
   ArtifactsBinding,
   Effect.gen(function* () {
     const Policy = yield* ArtifactsBindingPolicy;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (artifacts: ArtifactsLike) {
       yield* Policy(artifacts);
-      const env = WorkerEnvironment;
-      const raw = env.pipe(
-        Effect.map(
-          (env) => (env as Record<string, Artifacts>)[artifacts.name]!,
-        ),
+      const raw = Effect.sync(
+        () => (env as Record<string, Artifacts>)[artifacts.name]!,
       );
 
       const use = <T>(
         fn: (raw: Artifacts) => Promise<T>,
-      ): Effect.Effect<T, ArtifactsError, WorkerEnvironment> =>
+      ): Effect.Effect<T, ArtifactsError> =>
         raw.pipe(Effect.flatMap((raw) => tryPromise(() => fn(raw))));
 
       return {

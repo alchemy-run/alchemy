@@ -10,8 +10,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
-const TestRuntime = RuntimeContext("AlchemyTest::Secret");
-
 interface Stored {
   env: Record<string, Output.Output>;
 }
@@ -35,10 +33,7 @@ const makeTestRuntime = () => {
         return key;
       }),
   };
-  const layer = Layer.mergeAll(
-    Layer.succeed(TestRuntime, ctx),
-    Layer.succeed(RuntimeContext, ctx),
-  );
+  const layer = Layer.mergeAll(Layer.succeed(RuntimeContext, ctx));
   return { stored, layer };
 };
 
