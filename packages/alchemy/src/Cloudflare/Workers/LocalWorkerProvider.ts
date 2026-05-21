@@ -212,7 +212,7 @@ export const LocalWorkerProvider = () =>
               // `workerd` uses this for the object's storage path, so it must be safe to use as a file name.
               durableObjectNamespaces[binding.className] =
                 binding.namespaceId ??
-                [id, binding.className].map(encodeURIComponent).join("-");
+                encodeURIComponent(`${id}-${binding.className}`);
             }
             workerBindings.push(yield* toRuntimeBinding(binding));
           }
