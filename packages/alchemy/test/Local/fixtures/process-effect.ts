@@ -1,124 +1,10 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import type * as PlatformError from "effect/PlatformError";
-import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { ChildProcess } from "effect/unstable/process";
-import {
-  ChildProcessSpawner,
-  type ChildProcessHandle,
-} from "effect/unstable/process/ChildProcessSpawner";
-
-/**
- * Effect-shaped helpers for driving real OS child processes in tests.
- *
- * Built on top of `effect/unstable/process` so spawn, stream buffering,
- * exit-code tracking, and signal delivery all flow through the Effect
- * runtime. Callers must provide a `ChildProcessSpawner` (e.g. via
- * `PlatformServices`).
- */
-
-export interface SpawnedProcess {
-  readonly handle: ChildProcessHandle;
-  /** Snapshot of accumulated stdout (utf-8). */
-  readonly stdout: Effect.Effect<string>;
-  /** Snapshot of accumulated stderr (utf-8). */
-  readonly stderr: Effect.Effect<string>;
-}
-
-/**
- * Spawn a child process, fork stdout/stderr into in-memory buffers, and
- * register a SIGTERM/SIGKILL finalizer. The handle's own lifecycle is
- * already scope-bound by `ChildProcessSpawner`, so the surrounding
- * `Effect.scoped` is all that's needed for cleanup.
- */
-export const spawnScoped = (
-  argv: ReadonlyArray<string>,
-  env: Record<string, string | undefined> = {},
-): Effect.Effect<
-  SpawnedProcess,
-  PlatformError.PlatformError,
-  Scope.Scope | ChildProcessSpawner
-> =>
-  Effect.gen(function* () {
-    const handle = yield* ChildProcess.make(argv[0]!, argv.slice(1), {
-      env,
-      extendEnv: true,
-      // We never write to the child's stdin, so close it. stdout/stderr
-      // default to "pipe" which is what we want for the buffering forks
-      // below.
-      stdin: "ignore",
-      // SIGTERM first, escalate to SIGKILL after 1s if the child hasn't
-      // exited. Matches the behavior of the old hand-rolled finalizer.
-      killSignal: "SIGTERM",
-      forceKillAfter: Duration.seconds(1),
-    });
-
-    const stdoutRef = yield* Ref.make("");
-    const stderrRef = yield* Ref.make("");
-
-    yield* Stream.runForEach(Stream.decodeText(handle.stdout), (chunk) =>
-      Ref.update(stdoutRef, (s) => s + chunk),
-    ).pipe(Effect.ignore, Effect.forkScoped);
-    yield* Stream.runForEach(Stream.decodeText(handle.stderr), (chunk) =>
-      Ref.update(stderrRef, (s) => s + chunk),
-    ).pipe(Effect.ignore, Effect.forkScoped);
-
-    return {
-      handle,
-      stdout: Ref.get(stdoutRef),
-      stderr: Ref.get(stderrRef),
-    } satisfies SpawnedProcess;
-  });
-
-/**
- * Poll the accumulated stdout for a regex match. Fails if the child
- * exits before producing a match or if the timeout elapses.
- */
-export const waitForStdoutMatch = (
-  proc: SpawnedProcess,
-  pattern: RegExp,
-  timeout: Duration.Input,
-): Effect.Effect<RegExpMatchArray, Error, ChildProcessSpawner> => {
-  const interval = Duration.millis(50);
-  const totalMs = Duration.toMillis(timeout);
-  const attempts = Math.max(
-    1,
-    Math.ceil(totalMs / Duration.toMillis(interval)),
-  );
-  const checkOnce: Effect.Effect<RegExpMatchArray, Error, ChildProcessSpawner> =
-    Effect.gen(function* () {
-      const stdout = yield* proc.stdout;
-      const m = stdout.match(pattern);
-      if (m) return m;
-      const running = yield* proc.handle.isRunning.pipe(
-        Effect.orElseSucceed(() => false),
-      );
-      if (!running) {
-        const stderr = yield* proc.stderr;
-        return yield* Effect.fail(
-          new Error(
-            `child exited before stdout matched ${pattern}. stderr=${stderr}`,
-          ),
-        );
-      }
-      return yield* Effect.fail(new Error("no match yet"));
-    });
-  return checkOnce.pipe(
-    Effect.retry({ schedule: Schedule.spaced(interval), times: attempts }),
-    Effect.catch((e) =>
-      Effect.flatMap(proc.stderr, (stderr) =>
-        Effect.fail(
-          new Error(
-            `timeout waiting for ${pattern}: ${e.message}. stderr=${stderr}`,
-          ),
-        ),
-      ),
-    ),
-  );
-};
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
 
 /**
  * Wait for the child to exit (with timeout). Uses `handle.isRunning`
@@ -127,10 +13,10 @@ export const waitForStdoutMatch = (
  * is a perfectly normal outcome for the SIGKILL test cases.
  */
 export const waitForExit = (
-  proc: SpawnedProcess,
+  handle: ChildProcessHandle,
   timeout: Duration.Input,
 ): Effect.Effect<void, Error> =>
-  proc.handle.isRunning.pipe(
+  handle.isRunning.pipe(
     Effect.orElseSucceed(() => false),
     Effect.repeat({
       schedule: Schedule.spaced(Duration.millis(50)),

@@ -8,6 +8,9 @@
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { layerServer, RpcSpawner } from "../../../src/Local/RpcSpawner.ts";
 import { PlatformServices } from "../../../src/Util/PlatformServices.ts";
 
@@ -19,10 +22,10 @@ if (!childEntry) {
 
 const program = Effect.gen(function* () {
   const sp = yield* RpcSpawner;
-  const res = yield* Effect.promise(() =>
-    fetch(sp.url, {
-      method: "POST",
-      body: JSON.stringify({
+  const http = yield* HttpClient.HttpClient;
+  const res = yield* http
+    .post(sp.url, {
+      body: yield* HttpBody.json({
         serverEntryUrl: childEntry,
         alchemyContext: {
           dotAlchemy: "/tmp/.alchemy",
@@ -32,30 +35,31 @@ const program = Effect.gen(function* () {
         },
         stack: { name: "test", stage: "dev" },
       }),
-      headers: { "content-type": "application/json" },
-    }).then((r) => r.text()),
-  );
+    })
+    .pipe(Effect.flatMap((res) => res.text));
 
   // The child's pid is whatever owns the listening port returned in res.
   // We surface it for the test harness via stdout.
-  process.stdout.write(`PARENT_PID=${process.pid}\n`);
-  process.stdout.write(`CHILD_URL=${res}\n`);
+  console.log(`PARENT_PID=${process.pid}\n`);
+  console.log(`CHILD_URL=${res}\n`);
 
   const stop = yield* Deferred.make<void>();
   yield* Deferred.await(stop);
 });
 
-Effect.runPromise(
-  program.pipe(
-    Effect.provide(
+program
+  .pipe(
+    Effect.provide([
       Layer.provide(
         layerServer({ profile: undefined, envFile: undefined }),
         PlatformServices,
       ),
-    ),
+      FetchHttpClient.layer,
+    ]),
     Effect.scoped,
-  ),
-).catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+    Effect.runPromise,
+  )
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
