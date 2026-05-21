@@ -16,7 +16,9 @@ import type {
   ResourceLike,
 } from "./Resource.ts";
 
-export interface Provider<R extends ResourceLike = ResourceLike> {
+export interface Provider<
+  R extends ResourceLike = ResourceLike,
+> extends Effect.Effect<ProviderService<R>, never, Provider<R>> {
   asEffect: () => Effect.Effect<ProviderService<R>, never, Provider<R>>;
   [Symbol.iterator]: () => Effect.EffectIterator<Provider<R>>;
   of: <
@@ -316,7 +318,7 @@ export const collection = <
       yield* Effect.all(
         resources.map((resource) =>
           "Provider" in resource
-            ? resource.Provider.asEffect().pipe(
+            ? resource.Provider.pipe(
                 Effect.map((provider) => [resource.Type, provider] as const),
               )
             : Effect.succeed([
@@ -372,7 +374,10 @@ export const tryFindProviderByType: {
 } = Effect.fnUntraced(function* <R extends ResourceLike>(
   resourceType: R["Type"],
 ) {
-  const Tag = Provider<R>(resourceType) as Context.Service<Provider<R>, any>;
+  const Tag = Provider<R>(resourceType) as unknown as Context.Service<
+    Provider<R>,
+    any
+  >;
   const direct = yield* Effect.serviceOption(Tag);
   if (Option.isSome(direct)) {
     return direct;

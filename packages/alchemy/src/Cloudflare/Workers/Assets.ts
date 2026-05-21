@@ -6,6 +6,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { sha256, sha256Object } from "../../Util/index.ts";
+import createIgnore from "../../Util/ignore.ts";
 
 const MAX_ASSET_SIZE = 1024 * 1024 * 25; // 25MB
 const MAX_ASSET_COUNT = 20_000;
@@ -97,12 +98,10 @@ const maybeReadString = Effect.fnUntraced(function* (file: string) {
   );
 });
 
-const createIgnoreMatcher = Effect.fnUntraced(function* (patterns: string[]) {
-  const matcher = yield* Effect.promise(() =>
-    import("ignore").then(({ default: ignore }) => ignore().add(patterns)),
-  );
+const createIgnoreMatcher = (patterns: string[]) => {
+  const matcher = createIgnore().add(patterns);
   return (file: string) => matcher.ignores(file);
-});
+};
 
 export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
   const fs = yield* FileSystem.FileSystem;
@@ -114,7 +113,7 @@ export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
     maybeReadString(path.join(resolvedDirectory, "_headers")),
     maybeReadString(path.join(resolvedDirectory, "_redirects")),
   ]);
-  const ignores = yield* createIgnoreMatcher([
+  const ignores = createIgnoreMatcher([
     ".assetsignore",
     "_headers",
     "_redirects",

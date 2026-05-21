@@ -3,11 +3,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { SingleShotGen } from "effect/Utils";
-import { ExecutionContext } from "./ExecutionContext.ts";
 import * as Namespace from "./Namespace.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import { tryFindProviderByType } from "./Provider.ts";
 import type { ResourceLike } from "./Resource.ts";
+import { RuntimeContext } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
 import { CurrentStack } from "./Stack.ts";
 
@@ -90,7 +90,7 @@ export interface Policy<
   in out Self,
   in out Identifier extends string,
   in out Shape extends (...args: any[]) => Effect.Effect<any, any, any>,
-> extends Effect.Effect<Shape, never, Self | ExecutionContext> {
+> extends Effect.Effect<Shape, never, Self> {
   readonly key: Identifier;
   new (_: never): PolicyShape<Identifier, Shape>;
   layer: {
@@ -113,7 +113,7 @@ export interface Policy<
   ): Effect.Effect<
     Effect.Success<ReturnType<Shape>>,
     Effect.Error<ReturnType<Shape>>,
-    Self | ExecutionContext | Effect.Services<ReturnType<Shape>>
+    Self | RuntimeContext | Effect.Services<ReturnType<Shape>>
   >;
 }
 
@@ -141,7 +141,7 @@ export const Policy =
       Effect.flatMap((service) =>
         service
           ? Effect.succeed(service)
-          : Effect.all([CurrentStack, ALCHEMY_PHASE.asEffect()]).pipe(
+          : Effect.all([CurrentStack, ALCHEMY_PHASE]).pipe(
               Effect.flatMap(([stack, phase]) =>
                 stack && phase === "plan"
                   ? Effect.die(
@@ -154,7 +154,7 @@ export const Policy =
     );
 
     const asEffect = () =>
-      Effect.all([Self.asEffect(), Service]).pipe(
+      Effect.all([Self, Service]).pipe(
         Effect.map(
           ([resource, fn]) =>
             (...args: any[]) =>
@@ -174,7 +174,7 @@ export const Policy =
     // @ts-expect-error
     return Object.assign(self, {
       [Symbol.iterator]() {
-        return new SingleShotGen(this);
+        return new SingleShotGen(asEffect());
       },
       asEffect,
       bind: (...args: any[]) =>
@@ -190,9 +190,7 @@ export const Policy =
             self,
             // @ts-expect-error
             (...args: Parameters<Shape>) =>
-              Self.asEffect().pipe(
-                Effect.flatMap((self) => fn(self as ResourceLike, ...args)),
-              ),
+              Self.use((self) => fn(self as ResourceLike, ...args)),
           ),
         effect: (
           fn: Effect.Effect<
@@ -209,9 +207,7 @@ export const Policy =
               fn,
               (fn) =>
                 (...args: Parameters<Shape>) =>
-                  Effect.flatMap(Self.asEffect(), (self) =>
-                    fn(self as ResourceLike, ...args),
-                  ),
+                  Self.use((self) => fn(self as ResourceLike, ...args)),
             ),
           ),
       },

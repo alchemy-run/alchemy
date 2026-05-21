@@ -11,7 +11,21 @@ import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
 import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
 import * as HttpApiSecurity from "effect/unstable/httpapi/HttpApiSecurity";
 
-export const ResourceStateSchema = Schema.Any;
+/**
+ * Resource-state payload shape on the wire.
+ *
+ * Pinned to JSON encoding via {@link HttpApiSchema.asJson} so that both
+ * sides of the API agree on `Content-Type: application/json`. With a
+ * bare `Schema.Any` the server's payload-decoder map is keyed off the
+ * default content type only — any client request that arrives with a
+ * differently-shaped body (or a transport that drops the
+ * `Content-Type` header entirely) falls into the `payloadBy.get(
+ * contentType)` miss branch in `HttpApiBuilder.decodePayload` and
+ * surfaces as a confusing `415 Unsupported Media Type`. Annotating
+ * the schema makes the encoding explicit on both endpoints and the
+ * client encoder, so the wire format is unambiguous.
+ */
+export const ResourceStateSchema = Schema.Any.pipe(HttpApiSchema.asJson());
 
 export class BearerTokenValidator extends Context.Service<
   BearerTokenValidator,
@@ -141,6 +155,36 @@ export const GetReplacedResources = HttpApiEndpoint.get(
   },
 );
 
+export const GetStackOutput = HttpApiEndpoint.get(
+  "getStackOutput",
+  "/state/stacks/:stack/stages/:stage/output",
+  {
+    params: StackStage,
+    success: Schema.UndefinedOr(ResourceStateSchema),
+  },
+);
+
+export const SetStackOutput = HttpApiEndpoint.put(
+  "setStackOutput",
+  "/state/stacks/:stack/stages/:stage/output",
+  {
+    params: StackStage,
+    payload: ResourceStateSchema,
+    success: ResourceStateSchema,
+  },
+);
+
+/**
+ * Version of the State Store wire / behavioural contract.
+ *
+ * Bump this whenever the wire format or runtime behaviour of an HTTP
+ * state-store changes in a way that an older deployed copy can no
+ * longer satisfy. Clients query `/version` on the deployed worker and
+ * compare against this constant; a mismatch (or 404) triggers a
+ * forced redeploy via the bootstrap flow.
+ */
+export const STATE_STORE_VERSION = 5 as const;
+
 /** Response shape for the unauthenticated `/version` probe. */
 export const VersionResponse = Schema.Struct({
   version: Schema.Number,
@@ -165,6 +209,8 @@ export class StateGroup extends HttpApiGroup.make("state")
   .add(DeleteState)
   .add(GetReplacedResources)
   .add(DeleteStack)
+  .add(GetStackOutput)
+  .add(SetStackOutput)
   .middleware(StateAuth) {}
 
 export class VersionGroup extends HttpApiGroup.make("version").add(

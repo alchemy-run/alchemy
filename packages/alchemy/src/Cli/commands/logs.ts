@@ -6,14 +6,14 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { findProviderByType, type LogLine } from "../..//Provider";
-import { Stage } from "../..//Stage";
-import * as State from "../..//State/index";
-import { loadConfigProvider } from "../..//Util/ConfigProvider";
-import { fileLogger } from "../..//Util/FileLogger";
+import { findProviderByType, type LogLine } from "../../Provider.ts";
+import { Stage } from "../../Stage.ts";
+import * as State from "../../State/index.ts";
+import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
+import { fileLogger } from "../../Util/FileLogger.ts";
 
-import { AuthProviders } from "../..//Auth/AuthProvider";
-import { withProfileOverride } from "../..//Auth/Profile";
+import { AuthProviders } from "../../Auth/AuthProvider.ts";
+import { withProfileOverride } from "../../Auth/Profile.ts";
 import {
   envFile,
   formatLocalTimestamp,
@@ -119,16 +119,16 @@ export const logsCommand = Command.make(
               stage: stack.stage,
               fqn,
             });
-            if (!resourceState?.attr) continue;
+            if (!(resourceState as any)?.attr) continue;
 
             const provider = yield* findProviderByType(resource.Type);
             if (!provider.logs) continue;
 
             const lines = yield* provider.logs({
               id: resource.LogicalId,
-              instanceId: resourceState.instanceId,
-              props: resourceState.props as any,
-              output: resourceState.attr as any,
+              instanceId: (resourceState as any).instanceId,
+              props: (resourceState as any).props,
+              output: (resourceState as any).attr,
               options: { limit, since: sinceDate },
             });
 

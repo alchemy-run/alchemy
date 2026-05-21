@@ -1,11 +1,17 @@
-import * as RuntimeServices from "@distilled.cloud/cloudflare-runtime/RuntimeServices";
+import {
+  layerLocalProxy,
+  layerRuntime,
+} from "@distilled.cloud/cloudflare-runtime/RuntimeServices";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as AlchemyContext from "../../AlchemyContext.ts";
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
+import { CredentialsStoreLive } from "../../Auth/Credentials.ts";
+import { ProfileLive } from "../../Auth/Profile.ts";
 import * as RpcServer from "../../Sidecar/RpcServer.ts";
+import * as RpcServices from "../../Sidecar/RpcServices.ts";
 import {
   httpServer,
   PlatformServices,
@@ -23,9 +29,12 @@ const apiServices = Layer.merge(
 ).pipe(
   Layer.provide(CloudflareAuth),
   Layer.provide(Layer.succeed(AuthProviders, {})),
+  Layer.provide(ProfileLive),
+  Layer.provide(CredentialsStoreLive),
 );
 
 const runtimeServices = SidecarHandlers.pipe(
+  Layer.provide(layerLocalProxy(1337)),
   Layer.provide(
     Layer.unwrap(
       Effect.gen(function* () {
@@ -33,9 +42,13 @@ const runtimeServices = SidecarHandlers.pipe(
           yield* CloudflareEnvironment.CloudflareEnvironment;
         const { dotAlchemy } = yield* AlchemyContext.AlchemyContext;
         const path = yield* Path.Path;
-        return RuntimeServices.layer({
-          accountId,
-          storage: path.join(dotAlchemy, "local"),
+        return layerRuntime({
+          api: {
+            accountId,
+          },
+          storage: {
+            directory: path.join(dotAlchemy, "local"),
+          },
         });
       }),
     ),
@@ -46,11 +59,11 @@ const runtimeServices = SidecarHandlers.pipe(
 );
 
 const services = Layer.provideMerge(
-  Layer.provideMerge(runtimeServices, RpcServer.layerServices(import.meta.url)),
+  Layer.provideMerge(runtimeServices, RpcServices.layer(import.meta.url)),
   PlatformServices,
 );
 
-RpcServer.makeRpcServer(Sidecar.asEffect(), SidecarSchema).pipe(
+RpcServer.makeRpcServer(Sidecar, SidecarSchema).pipe(
   Effect.provide(services),
   Effect.scoped,
   runMain,

@@ -15,7 +15,6 @@ import type { Input } from "../../Input.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import type { ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
@@ -24,15 +23,16 @@ import {
   createInternalTags,
   diffTags,
 } from "../../Tags.ts";
+import { Assets } from "../Assets.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { Assets } from "../Assets.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
-  createEc2HostExecutionContext,
+  createEc2HostRuntimeContext,
   createEc2HostedSupport,
-  type Ec2HostExecutionContext,
+  type Ec2HostRuntimeContext,
 } from "./hosted.ts";
 import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
@@ -263,7 +263,7 @@ export type InstanceServices = ServerHost | Credentials | Region;
 
 export type InstanceShape = Main<InstanceServices>;
 
-export type InstanceExecutionContext = Ec2HostExecutionContext;
+export type InstanceRuntimeContext = Ec2HostRuntimeContext;
 
 /**
  * An EC2 instance that can either act as a low-level compute primitive or run
@@ -306,9 +306,9 @@ export const Instance: Platform<
   Instance,
   InstanceServices,
   InstanceShape,
-  InstanceExecutionContext
+  InstanceRuntimeContext
 > = Platform("AWS.EC2.Instance", {
-  createExecutionContext: createEc2HostExecutionContext("AWS.EC2.Instance"),
+  createRuntimeContext: createEc2HostRuntimeContext("AWS.EC2.Instance"),
 });
 
 export const InstanceProvider = () =>

@@ -5,18 +5,13 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { Command } from "effect/unstable/cli";
 
-import { AuthProviders } from "../..//Auth/AuthProvider";
-import { deleteProfileCredentials } from "../..//Auth/Credentials";
-import {
-  deleteProfile,
-  getProfile,
-  readConfig,
-  withProfileOverride,
-} from "../..//Auth/Profile";
-import { AwsAuth } from "../..//AWS/AuthProvider";
-import { CloudflareAuth } from "../..//Cloudflare/Auth/AuthProvider";
-import { loadConfigProvider } from "../..//Util/ConfigProvider";
-import { fileLogger } from "../../Util/FileLogger";
+import { AuthProviders } from "../../Auth/AuthProvider.ts";
+import { CredentialsStore } from "../../Auth/Credentials.ts";
+import { Profile, withProfileOverride } from "../../Auth/Profile.ts";
+import { AwsAuth } from "../../AWS/AuthProvider.ts";
+import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
+import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
+import { fileLogger } from "../../Util/FileLogger.ts";
 
 import { envFile, instrumentCommand, profile } from "./_shared.ts";
 
@@ -27,9 +22,10 @@ const showCommand = Command.make(
     "alchemy.profile": a.profile,
   }))(
     Effect.fnUntraced(function* ({ profile, envFile }) {
-      const stored = yield* getProfile(profile);
+      const profiles = yield* Profile;
+      const stored = yield* profiles.getProfile(profile);
       if (stored == null) {
-        const config = yield* readConfig;
+        const config = yield* profiles.readConfig;
         const names = Object.keys(config.profiles);
         yield* Console.log(`Profile '${profile}' not found.`);
         if (names.length > 0) {
@@ -96,8 +92,10 @@ const clearCommand = Command.make(
     "alchemy.profile": a.profile,
   }))(
     Effect.fnUntraced(function* ({ profile }) {
-      const removed = yield* deleteProfile(profile);
-      yield* deleteProfileCredentials(profile);
+      const profiles = yield* Profile;
+      const store = yield* CredentialsStore;
+      const removed = yield* profiles.deleteProfile(profile);
+      yield* store.deleteProfile(profile);
       if (removed) {
         yield* Console.log(
           `Cleared profile '${profile}' and all its credentials.`,

@@ -6,35 +6,39 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import { Path } from "effect/Path";
-import type { Scope } from "effect/Scope";
+import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { AlchemyContext, AlchemyContextLive } from "./AlchemyContext.ts";
 import { provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
+import { CredentialsStore, CredentialsStoreLive } from "./Auth/Credentials.ts";
+import { Profile, ProfileLive } from "./Auth/Profile.ts";
 import { Cli } from "./Cli/Cli.ts";
 import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
-import { ref } from "./Ref.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
+import type { ActionLike } from "./Action.ts";
 import type { State } from "./State/State.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
-import { taggedFunction } from "./Util/effect.ts";
+import { effectClass, taggedFunction } from "./Util/effect.ts";
 import { fileLogger } from "./Util/FileLogger.ts";
 import { PlatformServices } from "./Util/PlatformServices.ts";
 
 export type StackServices =
   | Stack
   | Stage
-  | Scope
+  | Scope.Scope
   | FileSystem
   | Path
   | AlchemyContext
   | HttpClient
   | ChildProcessSpawner
   | AuthProviders
+  | Profile
+  | CredentialsStore
   | Cli;
 
 export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
@@ -42,10 +46,12 @@ export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
   Err,
   | PlatformServices
   | HttpClient
-  | Scope
+  | Scope.Scope
   | AuthProviders
   | AlchemyContext
   | Cli
+  | Profile
+  | CredentialsStore
   | State
   | Req
 >;
@@ -92,6 +98,7 @@ export const Stack: Context.ServiceClass<
     (stackName: string): Effect.Effect<Self> & {
       new (_: never): Output.ToOutput<Shape>;
       make: <A, Req>(
+        options: StackProps<NoInfer<Req>>,
         effect: Effect.Effect<A, never, Req>,
       ) => Effect.Effect<CompiledStack<A>>;
       stage: {
@@ -108,35 +115,45 @@ export const Stack: Context.ServiceClass<
   taggedFunction(
     Context.Service<Stack, Omit<StackSpec, "output">>()("Stack"),
     <A, Req>(
-      stackName: string,
-      options: {
-        providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
-        state: Layer.Layer<State, never, StackServices>;
-      },
-      eff: Effect.Effect<A, never, Req>,
-    ) =>
-      eff.pipe(
+      stackName?: string,
+      options?: StackProps<NoInfer<Req>>,
+      eff?: Effect.Effect<A, never, Req>,
+    ) => {
+      if (!stackName) {
+        return (stackName: string) =>
+          Object.assign(
+            // by default, reference the stack at the "current" stage of the importer
+            Output.stackRef<A>(stackName).pipe(effectClass),
+            {
+              stage: createStageProxy(stackName),
+              make: <Req = never>(
+                options: StackProps<NoInfer<Req>>,
+                eff: Effect.Effect<A, never, Req>,
+              ) => Stack(stackName, options, eff),
+            },
+          );
+      }
+      return eff!.pipe(
         make({
           name: stackName,
-          ...options,
+          ...options!,
         }),
         (eff) =>
           Object.assign(eff, {
-            stage: new Proxy(
-              {},
-              {
-                get: (_, stage: string) =>
-                  ref({
-                    stack: stackName,
-                    stage,
-                    id: stackName,
-                  }),
-              },
-            ),
+            stage: createStageProxy(stackName),
           }),
-      ),
+      );
+    },
   ),
 ) as any;
+
+const createStageProxy = (stackName: string) =>
+  new Proxy(
+    {},
+    {
+      get: (_, stage: string) => Output.stackRef(stackName, { stage }),
+    },
+  );
 
 export interface StackSpec<Output = any> {
   name: string;
@@ -147,6 +164,10 @@ export interface StackSpec<Output = any> {
   };
   bindings: {
     [logicalId: string]: ResourceBinding[];
+  };
+  /** Tasks registered on the stack, keyed by FQN. */
+  actions: {
+    [logicalId: string]: ActionLike;
   };
   output: Output;
 }
@@ -205,7 +226,7 @@ export const make =
           Layer.provideMerge(
             Layer.effect(
               Stack,
-              Stage.asEffect().pipe(
+              Stage.pipe(
                 Effect.map(
                   (stage) =>
                     options.stack ?? {
@@ -213,6 +234,7 @@ export const make =
                       stage,
                       resources: {},
                       bindings: {},
+                      actions: {},
                     },
                 ),
               ),
@@ -224,7 +246,7 @@ export const make =
       Effect.flatMap((context) =>
         Effect.all([
           effect,
-          Stack.asEffect(),
+          Stack,
           Effect.context<ROut | StackServices>(),
         ]).pipe(
           Effect.map(
@@ -243,13 +265,15 @@ export const make =
     );
 
 export const CurrentStack = Effect.serviceOption(Stack)
-  .asEffect()
+
   .pipe(Effect.map(Option.getOrUndefined));
 
 const platform = Layer.mergeAll(
   PlatformServices,
   FetchHttpClient.layer,
   Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
+  Layer.provide(ProfileLive, PlatformServices),
+  Layer.provide(CredentialsStoreLive, PlatformServices),
 );
 // override alchemy state store, CLI/reporting, state, and Config
 const alchemy = (overrides?: { dev?: boolean }) =>
@@ -260,9 +284,7 @@ const alchemy = (overrides?: { dev?: boolean }) =>
       ? Layer.provide(
           Layer.effect(
             AlchemyContext,
-            AlchemyContext.asEffect().pipe(
-              Effect.map((ctx) => ({ ...ctx, dev: overrides.dev! })),
-            ),
+            AlchemyContext.useSync((ctx) => ({ ...ctx, dev: overrides.dev! })),
           ),
           AlchemyContextLive,
         )
@@ -275,9 +297,18 @@ export const evalStack = <A, B, Err, Req>(
   options: {
     stage: string;
     dev?: boolean;
+    /**
+     * Optional caller-supplied scope. When provided, scoped resources
+     * (e.g. the dev sidecar process) live until the caller closes this
+     * scope instead of being torn down when `evalStack` resolves. Used
+     * by the test harness so the sidecar survives across `beforeAll`,
+     * tests, and `afterAll`. When omitted, behaves as before with a
+     * private scope closed on completion.
+     */
+    scope?: Scope.Scope;
   },
-) =>
-  Effect.gen(function* () {
+) => {
+  const body = Effect.gen(function* () {
     const stack = yield* effect;
     const configProvider = yield* loadConfigProvider(Option.none());
 
@@ -297,5 +328,9 @@ export const evalStack = <A, B, Err, Req>(
     ),
     Effect.provide(Layer.succeed(Stage, options.stage)),
     Effect.provide(Layer.provideMerge(alchemy({ dev: options.dev }), platform)),
-    Effect.scoped,
   );
+
+  return options.scope === undefined
+    ? Effect.scoped(body)
+    : Scope.provide(body, options.scope);
+};

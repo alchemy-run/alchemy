@@ -7,7 +7,6 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { fileURLToPath } from "node:url";
 import * as Lock from "./Lock.ts";
 import {
   deserializeRpcHandlers,
@@ -39,9 +38,7 @@ export const layer = <Self, T extends RpcHandlers>(
   Layer.effect(
     tag,
     Effect.gen(function* () {
-      const fiber = yield* maybeStartRpcServer(
-        fileURLToPath(options.main),
-      ).pipe(
+      const fiber = yield* maybeStartRpcServer(options.main).pipe(
         Effect.flatMap(() => RpcSession),
         Effect.map((session) =>
           deserializeRpcHandlers(
@@ -56,7 +53,7 @@ export const layer = <Self, T extends RpcHandlers>(
         Effect.forkScoped,
       );
       return new Proxy({} as T, {
-        get(target, prop) {
+        get(_, prop) {
           return (...args: any[]) =>
             Fiber.join(fiber).pipe(
               Effect.flatMap((session) => session[prop as never](...args)),
@@ -69,11 +66,15 @@ export const layer = <Self, T extends RpcHandlers>(
 const maybeStartRpcServer = Effect.fn(function* (main: string) {
   const lock = yield* Lock.Lock;
   if (!(yield* lock.check)) {
+    main = RpcPaths.sanitizeSidecarMain(main);
+    const bin = typeof globalThis.Bun !== "undefined" ? "bun" : "node";
     yield* Effect.logDebug("[RpcClient] Starting RPC server", main);
-    yield* ChildProcess.make("bun", ["run", main], {
+    yield* ChildProcess.make(bin, { bun: ["run", main], node: [main] }[bin], {
       stdout: "inherit",
       stderr: "inherit",
-      detached: true,
+      extendEnv: true,
+      // Effect's default behavior is detached: true on posix and false on Windows.
+      // Ideally we would set detached: true on Windows, but that would create a separate console window for every server instance.
     });
   } else {
     yield* Effect.logDebug("[RpcClient] RPC server already running", main);

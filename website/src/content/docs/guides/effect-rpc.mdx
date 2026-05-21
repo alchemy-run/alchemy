@@ -342,6 +342,194 @@ The errors are typed values: `client.getTask` returns
 `Effect<Task, TaskNotFound>`, and you can `Effect.catchTag(
 "TaskNotFound", ...)` to handle the missing case explicitly.
 
+## Bonus: streaming responses
+
+An RPC's `success` doesn't have to be a single value. Wrapping it in
+`RpcSchema.Stream(item, error)` produces a procedure whose handler
+returns a `Stream` and whose client method also returns a `Stream`.
+The wire format is one frame per item, so pick a streaming-friendly
+serialization like `RpcSerialization.layerNdjson` instead of the
+buffered `layerJson` we used above.
+
+```typescript
+// src/rpcs.ts
+import * as RpcSchema from "effect/unstable/rpc/RpcSchema";
+
+const countTasks = Rpc.make("countTasks", {
+  payload: { upto: Schema.Number },
+  success: RpcSchema.Stream(Schema.Number, Schema.Never),
+});
+
+export class TaskRpcs extends RpcGroup.make(getTask, createTask, countTasks) {}
+```
+
+The handler returns a `Stream<number>` directly:
+
+```diff lang="typescript"
++import * as Stream from "effect/Stream";
+
+    const handlersLayer = TaskRpcs.toLayer({
+      getTask: /* ... */,
+      createTask: /* ... */,
++     countTasks: ({ upto }) =>
++       Stream.fromIterable(Array.from({ length: upto }, (_, i) => i + 1)),
+    });
+
+    return {
+      fetch: RpcServer.toHttpEffect(TaskRpcs).pipe(
+        Effect.provide(handlersLayer),
+-       Effect.provide(RpcSerialization.layerJson),
++       Effect.provide(RpcSerialization.layerNdjson),
+      ),
+    };
+```
+
+On the client, `client.countTasks({ upto: 5 })` is a `Stream<number>`
+you consume with `Stream.runCollect`, `Stream.runForEach`, etc. Each
+emitted item arrives as soon as the server flushes its frame.
+
+## Bonus: route some RPCs to a Durable Object
+
+Just like an HTTP API can delegate endpoints to a DO, an `RpcServer`
+can run inside a Durable Object and the Worker can proxy calls to it
+through a typed `RpcClient`. The bridge is the same
+`Cloudflare.toHttpClient(stub)` helper — it just plugs into
+`RpcClient.layerProtocolHttp` instead of `HttpApiClient.makeWith`.
+
+### Split the RPCs into two groups
+
+Put the procedures the DO implements into one group, and the
+Worker-only proxies into another. `merge` produces the public group
+the Worker exposes:
+
+```typescript
+// src/rpcs.ts
+export const InnerRpcs = RpcGroup.make(getTask, createTask);
+
+export const DoRpcs = RpcGroup.make(
+  Rpc.make("getTaskDO", {
+    payload: { id: Schema.String },
+    success: Task,
+    error: TaskNotFound,
+  }),
+  Rpc.make("createTaskDO", {
+    payload: { title: Schema.String },
+    success: Task,
+    error: CreateTaskFailed,
+  }),
+);
+
+export class TaskRpcs extends InnerRpcs.merge(DoRpcs) {}
+```
+
+### Implement the DO
+
+The DO's Init returns `{ fetch }` produced by
+`RpcServer.toHttpEffect(InnerRpcs)`. State lives in
+`state.storage` instead of R2:
+
+```typescript
+// src/object.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
+import * as RpcServer from "effect/unstable/rpc/RpcServer";
+import { InnerRpcs } from "./rpcs.ts";
+import { Task, TaskNotFound } from "./task.ts";
+
+export default class TasksObject extends Cloudflare.DurableObjectNamespace<TasksObject>()(
+  "TasksObject",
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
+
+      const handlersLayer = InnerRpcs.toLayer({
+        getTask: ({ id }) =>
+          state.storage.get<Task>(id).pipe(
+            Effect.flatMap((task) =>
+              task ? Effect.succeed(task) : Effect.fail(new TaskNotFound({ id })),
+            ),
+          ),
+        createTask: ({ title }) =>
+          Effect.sync(() => new Task({ id: crypto.randomUUID(), title, completed: false }))
+            .pipe(Effect.tap((task) => state.storage.put(task.id, task))),
+      });
+
+      return {
+        fetch: RpcServer.toHttpEffect(InnerRpcs).pipe(
+          Effect.provide(Layer.mergeAll(handlersLayer, RpcSerialization.layerNdjson)),
+        ),
+      };
+    });
+  }),
+) {}
+```
+
+### Bridge the DO into a typed RpcClient
+
+`Cloudflare.toHttpClient(stub)` produces an `HttpClient` whose
+`execute` calls into the DO's `fetch`. Provide that as the transport
+for `RpcClient.layerProtocolHttp` and you get a typed
+`RpcClient<DoRpcs>`:
+
+```diff lang="typescript"
++import * as HttpClient from "effect/unstable/http/HttpClient";
++import * as RpcClient from "effect/unstable/rpc/RpcClient";
++import TasksObject from "./object.ts";
++import { DoRpcs } from "./rpcs.ts";
+
+  Effect.gen(function* () {
+    const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
++   const tasksDO = yield* TasksObject;
++
++   const makeDOClient = (id: string = "default") =>
++     RpcClient.make(DoRpcs).pipe(
++       Effect.provide(
++         RpcClient.layerProtocolHttp({ url: "http://localhost" }).pipe(
++           Layer.provide(
++             Layer.succeed(
++               HttpClient.HttpClient,
++               Cloudflare.toHttpClient(tasksDO.getByName(id)),
++             ),
++           ),
++           Layer.provide(RpcSerialization.layerNdjson),
++         ),
++       ),
++     );
+```
+
+The `url` is a placeholder — the request never hits the network; it
+short-circuits to `tasksDO.getByName(id).fetch`.
+
+### Wire the proxy handlers
+
+The Worker's `*DO` handlers just construct a per-request DO client
+and forward the typed call:
+
+```diff lang="typescript"
+    const handlersLayer = TaskRpcs.toLayer({
+      getTask: /* ... R2 implementation ... */,
+      createTask: /* ... R2 implementation ... */,
++     getTaskDO: (payload) =>
++       makeDOClient().pipe(Effect.flatMap((client) => client.getTask(payload))),
++     createTaskDO: (payload) =>
++       makeDOClient().pipe(Effect.flatMap((client) => client.createTask(payload))),
+    });
+```
+
+For streaming RPCs the same pattern works with `Stream.unwrap`:
+
+```typescript
+countTasksDO: (payload) =>
+  Stream.unwrap(
+    makeDOClient().pipe(Effect.map((client) => client.countTasks(payload))),
+  ),
+```
+
+`getTaskDO` / `createTaskDO` now hit the DO; `getTask` / `createTask`
+still hit R2. One `TaskRpcs` value, one client, two storage backends.
+
 ## HTTP API vs RPC
 
 Both approaches produce the same `HttpEffect` and wire into a Worker

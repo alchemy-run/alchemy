@@ -5,6 +5,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
+import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import { State, StateStoreError, type StateService } from "./State.ts";
 import { encodeState, reviveState } from "./StateEncoding.ts";
 
@@ -46,6 +47,9 @@ export const makeLocalState = () =>
       fqn: string;
     }) => path.join(stateDir, stack, stage, `${encodeFqn(fqn)}.json`);
 
+    const outputFile = ({ stack, stage }: { stack: string; stage: string }) =>
+      path.join(stateDir, stack, stage, `__stack_output__.json`);
+
     const created = new Set<string>();
 
     const ensure = (dir: string) =>
@@ -57,6 +61,7 @@ export const makeLocalState = () =>
 
     const state: StateService = {
       id: "local",
+      getVersion: () => Effect.succeed(STATE_STORE_VERSION),
       listStacks: () =>
         fs.readDirectory(stateDir).pipe(
           recover,
@@ -107,11 +112,32 @@ export const makeLocalState = () =>
       list: (request) =>
         fs.readDirectory(stageDir(request)).pipe(
           recover,
-          Effect.map(
-            (files) =>
-              files?.map((file) => decodeFqn(file.replace(/\.json$/, ""))) ??
-              [],
+          Effect.map((files) =>
+            (files ?? [])
+              // Filter the bookkeeping file before decoding — `decodeFqn`
+              // replaces `__` with `/`, which would turn the literal name
+              // `__stack_output__` into `/stack_output/` and slip past the
+              // filter, leaving the engine to look up a non-existent
+              // resource.
+              .filter((file) => file !== "__stack_output__.json")
+              .map((file) => decodeFqn(file.replace(/\.json$/, ""))),
           ),
+        ),
+      getOutput: (request) =>
+        fs.readFile(outputFile(request)).pipe(
+          Effect.map((file) => JSON.parse(file.toString(), reviveState)),
+          recover,
+        ),
+      setOutput: (request) =>
+        ensure(stageDir(request)).pipe(
+          Effect.flatMap(() =>
+            fs.writeFileString(
+              outputFile(request),
+              JSON.stringify(encodeState(request.value as any), null, 2),
+            ),
+          ),
+          recover,
+          Effect.map(() => request.value),
         ),
     };
     return state;

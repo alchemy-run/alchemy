@@ -18,6 +18,31 @@
 
 ---
 
+A Worker bound to a R2 bucket and serving objects from it:
+
+```typescript
+const Bucket = Cloudflare.R2Bucket("bucket");
+
+export default Cloudflare.Worker(
+  "api",
+  { main: import.meta.path },
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const object = yield* bucket.get(request.url);
+        return HttpServerResponse.stream(object!.body);
+      })
+    };
+  }),
+);
+```
+
+One `bind()` wires the binding, env var, and typed connection — at deploy time and at runtime.
+
+---
+
 - **One program, one language.** Resources, Lambdas/Workers, IAM, and SDKs live in the same Effect program — no YAML, no second runtime.
 - **Bindings, not glue code.** `S3.GetObject.bind(bucket)` wires the IAM policy, env var, and a typed SDK call in a single line.
 - **Errors in the type system.** Every cloud API failure is a tagged Effect error you handle — or don't — on purpose.

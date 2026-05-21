@@ -14,6 +14,35 @@ import * as Schedule from "effect/Schedule";
 class WorkerStillExists extends Data.TaggedError("WorkerStillExists") {}
 
 /**
+ * Poll Cloudflare's `getScriptSubdomain` until it reports `expected`,
+ * then assert. Cloudflare's subdomain toggle is eventually consistent
+ * with respect to a freshly-completed `putScript` /
+ * `createScriptSubdomain` call, so a same-tick read may still return
+ * the previous value for a second or two. Retries indefinitely with a
+ * fixed cadence; the surrounding test's own timeout bounds the wait.
+ */
+export const expectWorkersDevSubdomain = Effect.fn(function* (
+  workerName: string,
+  accountId: string,
+  expected: boolean,
+) {
+  const final = yield* workers
+    .getScriptSubdomain({ accountId, scriptName: workerName })
+    .pipe(
+      Effect.flatMap((s) =>
+        s.enabled === expected
+          ? Effect.succeed(s)
+          : Effect.fail(
+              `subdomain not yet ${expected ? "enabled" : "disabled"}`,
+            ),
+      ),
+      Effect.tapError(Effect.logInfo),
+      Effect.retry({ schedule: Schedule.spaced("500 millis") }),
+    );
+  expect(final.enabled).toBe(expected);
+});
+
+/**
  * Look up a worker by name. Returns `undefined` if no script with that
  * name exists in the account.
  */

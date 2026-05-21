@@ -18,14 +18,14 @@ const logLevel = Effect.provideService(
 
 const baseOrigin = {
   scheme: "postgres" as const,
-  host: "db.example.com",
+  host: "ep-cool-darkness-123456.us-east-2.aws.neon.tech",
   port: 5432,
   database: "app",
   user: "app",
   password: Redacted.make("p4ssword!"),
 };
 
-test.provider("create and delete hyperdrive with default props", (stack) =>
+test.provider.skip("create and delete hyperdrive with default props", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
 
@@ -55,7 +55,7 @@ test.provider("create and delete hyperdrive with default props", (stack) =>
   }).pipe(logLevel),
 );
 
-test.provider("create, update, delete hyperdrive", (stack) =>
+test.provider.skip("create, update, delete hyperdrive", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
 

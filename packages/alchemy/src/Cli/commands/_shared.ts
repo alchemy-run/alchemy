@@ -9,10 +9,10 @@ import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
 
-import { AuthError } from "../../Auth/AuthProvider";
-import type * as Stack from "../../Stack";
-import { recordCli } from "../../Telemetry/Metrics";
-import { PromptCancelled } from "../../Util/Clank";
+import { AuthError } from "../../Auth/AuthProvider.ts";
+import type * as Stack from "../../Stack.ts";
+import { recordCli } from "../../Telemetry/Metrics.ts";
+import { PromptCancelled } from "../../Util/Clank.ts";
 
 export const USER = Config.string("USER").pipe(
   Config.orElse(() => Config.string("USERNAME")),
@@ -21,7 +21,7 @@ export const USER = Config.string("USER").pipe(
 
 export const STAGE = Config.string("stage").pipe(
   Config.option,
-  (a) => a.asEffect(),
+  (a) => a,
   Effect.map(Option.getOrUndefined),
 );
 
@@ -96,7 +96,7 @@ export const stage = Flag.string("stage").pipe(
         ),
         Effect.flatMap((s) =>
           s === undefined
-            ? USER.asEffect().pipe(
+            ? USER.pipe(
                 Effect.map((user) => `dev_${user}`),
                 Effect.catch(() => Effect.succeed("unknown")),
               )

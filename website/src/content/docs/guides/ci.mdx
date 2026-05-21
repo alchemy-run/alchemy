@@ -603,6 +603,11 @@ export default Alchemy.Stack(
     const oidc = yield* AWS.IAM.OpenIDConnectProvider("GitHubOidc", {
       url: "https://token.actions.githubusercontent.com",
       clientIDList: ["sts.amazonaws.com"],
+      // GitHub's well-known OIDC thumbprint. AWS auto-discovers
+      // thumbprints for github.com these days, but the provider's
+      // thumbprint sync still requires a non-empty list.
+      // https://aws.amazon.com/blogs/security/use-iam-roles-to-connect-github-actions-to-actions-in-aws/
+      thumbprintList: ["6938fd4d98bab03faadb97b34396831e3780aea1"],
     });
 
     const role = yield* AWS.IAM.Role("GitHubActionsRole", {
@@ -615,7 +620,7 @@ export default Alchemy.Stack(
             Principal: {
               Federated: oidc.openIDConnectProviderArn,
             },
-            Action: "sts:AssumeRoleWithWebIdentity",
+            Action: ["sts:AssumeRoleWithWebIdentity"],
             Condition: {
               StringEquals: {
                 "token.actions.githubusercontent.com:aud":

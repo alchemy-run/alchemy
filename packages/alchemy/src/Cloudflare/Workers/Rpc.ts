@@ -7,10 +7,8 @@ import * as Option from "effect/Option";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Socket from "effect/unstable/socket/Socket";
-import type { HttpEffect } from "../../Http.ts";
+import { isYieldableEffect } from "../../Util/effect.ts";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
-import { serveWebRequest } from "./HttpServer.ts";
-import { fromWebSocket } from "./WebSocket.ts";
 
 export const StreamTag = "~alchemy/rpc/stream";
 export const ErrorTag = "~alchemy/rpc/error";
@@ -188,252 +186,46 @@ export const decodeRpcResult = (
   return Effect.succeed(decodeRpcValue(value));
 };
 
-export const makeRpcStub = <Shape>(stub: any): Shape => {
-  const fetcher = fromCloudflareFetcher(stub);
+/**
+ * Wrap a Cloudflare service-binding stub (or an `Effect` that resolves
+ * to one — useful when the stub depends on a service like
+ * `WorkerEnvironment` that's only available at *exec* phase) into an
+ * Effect-typed RPC client.
+ *
+ * `Service.fetch`/`Service.connect` are passed through eagerly when the
+ * stub is already resolved; everything else is treated as an RPC method
+ * whose dispatch is deferred until call time, so the user effect runs in
+ * the right runtime layer (which is what `bindWorker` actually wants —
+ * its methods are called at exec, even though it's *defined* at init).
+ */
+export const makeRpcStub = <Shape>(
+  stubSource: unknown | Effect.Effect<unknown, never, never>,
+): Shape => {
+  const isLazy = isYieldableEffect(stubSource);
+  const eagerFetcher = isLazy
+    ? undefined
+    : fromCloudflareFetcher(stubSource as cf.Fetcher);
+  const proxyTarget: object = eagerFetcher ?? {};
 
-  return new Proxy(fetcher, {
-    get: (target: any, prop) =>
-      prop in target
-        ? target[prop]
-        : (...args: any[]) =>
-            Effect.tryPromise({
-              try: () => stub[prop](...args),
-              catch: (cause) =>
-                new RpcCallError({ method: String(prop), cause }),
-            }).pipe(Effect.flatMap(decodeRpcResult)),
+  return new Proxy(proxyTarget, {
+    get: (target: any, prop) => {
+      if (!isLazy && prop in target) return target[prop];
+      if (typeof prop !== "string" && typeof prop !== "symbol") {
+        return target[prop];
+      }
+      return (...args: any[]) =>
+        Effect.gen(function* () {
+          const stub = isLazy
+            ? yield* stubSource as Effect.Effect<any>
+            : stubSource;
+          return yield* Effect.tryPromise({
+            try: () => (stub as any)[prop](...args),
+            catch: (cause) => new RpcCallError({ method: String(prop), cause }),
+          }).pipe(Effect.flatMap(decodeRpcResult));
+        });
+    },
   }) as Shape;
 };
-
-/**
- * Create a DurableObjectBridge class that proxies RPC method calls through
- * the Effect runtime, encoding success/fail/stream results as RPC envelopes.
- *
- * Accepts the `DurableObject` base class and a `getExport` resolver so the
- * implementation lives in real TypeScript instead of a generated string template.
- */
-export const makeDurableObjectBridge =
-  (
-    DurableObject: abstract new (
-      state: unknown,
-      env: unknown,
-    ) => cf.DurableObject,
-    getExport: (
-      name: string,
-    ) => Promise<
-      (state: unknown, env: unknown) => Effect.Effect<Record<string, unknown>>
-    >,
-  ) =>
-  (className: string) =>
-    class DurableObjectBridge extends DurableObject {
-      readonly object: Promise<DurableObjectShape>;
-
-      async fetch(request: cf.Request): Promise<cf.Response> {
-        const methods = await this.object;
-        if (methods.fetch) {
-          const fetch = methods.fetch as HttpEffect<never>;
-          const response = await serveWebRequest(request, fetch).pipe(
-            Effect.runPromise,
-          );
-          return response as any;
-        } else {
-          return new Response("Method not found", { status: 404 }) as any;
-        }
-      }
-
-      async alarm(alarmInfo?: cf.AlarmInvocationInfo) {
-        const methods = await this.object;
-        if (methods.alarm) {
-          await Effect.runPromise(methods.alarm(alarmInfo));
-        }
-      }
-
-      async webSocketMessage(ws: cf.WebSocket, message: string | ArrayBuffer) {
-        const methods = await this.object;
-        if (methods.webSocketMessage) {
-          const socket = fromWebSocket(ws);
-          const value = methods.webSocketMessage(socket, message);
-          if (Effect.isEffect(value)) {
-            await Effect.runPromise(value as Effect.Effect<void>);
-          }
-        }
-      }
-
-      async webSocketClose(
-        ws: cf.WebSocket,
-        code: number,
-        reason: string,
-        wasClean: boolean,
-      ) {
-        const methods = await this.object;
-        if (methods.webSocketClose) {
-          const socket = fromWebSocket(ws);
-          const value = methods.webSocketClose(socket, code, reason, wasClean);
-          if (Effect.isEffect(value)) {
-            await Effect.runPromise(value as Effect.Effect<void>);
-          }
-        }
-      }
-
-      constructor(
-        state: {
-          blockConcurrencyWhile: (
-            fn: () => Promise<unknown>,
-          ) => Promise<unknown>;
-        },
-        env: unknown,
-      ) {
-        super(state, env);
-
-        this.object = state.blockConcurrencyWhile(async () => {
-          const makeDurableObject = await getExport(className);
-          return await Effect.runPromise(makeDurableObject(state, env));
-        }) as Promise<any>;
-
-        return new Proxy(this, {
-          get: (target: any, prop) =>
-            prop in target
-              ? target[prop]
-              : async (...args: unknown[]) => {
-                  const methods = await this.object;
-                  const method = methods[
-                    prop as keyof DurableObjectShape
-                  ] as any; // TODO(sam): what should the type be? Is it safe to always call it?
-                  const value = method(...args);
-                  if (Effect.isEffect(value)) {
-                    const exit = await Effect.runPromiseExit(
-                      value as Effect.Effect<unknown, never>,
-                    );
-                    if (exit._tag === "Success") {
-                      if (Stream.isStream(exit.value)) {
-                        return await Effect.runPromise(
-                          toRpcStream(
-                            exit.value,
-                          ) as Effect.Effect<RpcStreamEnvelope>,
-                        );
-                      }
-                      return exit.value;
-                    }
-                    const failReason = exit.cause.reasons.find(
-                      Cause.isFailReason,
-                    );
-                    if (failReason) {
-                      return {
-                        _tag: ErrorTag,
-                        error: encodeRpcError(failReason.error),
-                      } satisfies RpcErrorEnvelope;
-                    }
-                    const dieReason = exit.cause.reasons.find(
-                      Cause.isDieReason,
-                    );
-                    throw (
-                      dieReason?.defect ??
-                      new Error("RPC method failed with an unexpected cause")
-                    );
-                  }
-                  return value;
-                },
-        });
-      }
-    };
-
-/**
- * Create a WorkflowBridge class that extends `WorkflowEntrypoint` and
- * delegates the `run(event, step)` call to the Effect-native workflow body
- * registered via `worker.export(...)`.
- *
- * The bridge provides `WorkflowEvent` and `WorkflowStep` as Effect
- * services so the user writes `yield* WorkflowEvent` and `yield* task(...)`
- * instead of receiving callback parameters.
- */
-export const makeWorkflowBridge =
-  (
-    WorkflowEntrypoint: abstract new (
-      ctx: unknown,
-      env: unknown,
-    ) => { run(event: any, step: any): Promise<unknown> },
-    getExport: (
-      name: string,
-    ) => Promise<
-      (env: unknown) => Effect.Effect<Effect.Effect<unknown, never, any>>
-    >,
-  ) =>
-  (className: string) =>
-    class WorkflowBridge extends WorkflowEntrypoint {
-      readonly body: Promise<Effect.Effect<unknown, never, any>>;
-      readonly env: unknown;
-
-      constructor(ctx: unknown, env: unknown) {
-        super(ctx, env);
-        this.env = env;
-        this.body = getExport(className).then((factory) =>
-          Effect.runPromise(factory(env)),
-        );
-      }
-
-      async run(event: any, step: any): Promise<unknown> {
-        const body = await this.body;
-        return Effect.runPromise(
-          body.pipe(
-            Effect.provideService(
-              WorkflowEventService,
-              wrapWorkflowEvent(event),
-            ),
-            Effect.provideService(WorkflowStep, wrapWorkflowStep(step)),
-          ) as Effect.Effect<unknown>,
-        );
-      }
-    };
-
-import type { DurableObjectShape } from "./DurableObjectNamespace.ts";
-import {
-  WorkflowEvent as WorkflowEventService,
-  WorkflowStep,
-} from "./Workflow.ts";
-
-const wrapWorkflowEvent = (
-  event: any,
-): { payload: unknown; timestamp: Date; instanceId: string } => ({
-  payload: event.payload,
-  timestamp:
-    event.timestamp instanceof Date
-      ? event.timestamp
-      : new Date(event.timestamp),
-  instanceId: event.instanceId ?? "",
-});
-
-const wrapWorkflowStep = (step: any): WorkflowStep["Service"] => ({
-  do: <T>(name: string, effect: Effect.Effect<T>): Effect.Effect<T> =>
-    Effect.tryPromise(
-      () => step.do(name, () => Effect.runPromise(effect)) as Promise<T>,
-    ),
-  sleep: (name: string, duration: string | number): Effect.Effect<void> =>
-    Effect.tryPromise(() => step.sleep(name, duration)),
-  sleepUntil: (name: string, timestamp: Date | number): Effect.Effect<void> =>
-    Effect.tryPromise(() =>
-      step.sleepUntil(
-        name,
-        timestamp instanceof Date ? timestamp.toISOString() : timestamp,
-      ),
-    ),
-});
-
-const encodeStreamErrorMarker = (cause: Cause.Cause<unknown>): string => {
-  const failReason = cause.reasons.find(Cause.isFailReason);
-  const error = failReason ? encodeRpcError(failReason.error) : undefined;
-  return (
-    JSON.stringify({
-      _tag: StreamErrorTag,
-      error,
-    } satisfies RpcStreamErrorMarker) + "\n"
-  );
-};
-
-const appendStreamErrors = (s: Stream.Stream<string, unknown>) =>
-  s.pipe(
-    Stream.catchCause((cause) =>
-      Stream.succeed(encodeStreamErrorMarker(cause)),
-    ),
-  );
 
 export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
   Effect.scoped(
@@ -480,4 +272,22 @@ export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
       }
       return Effect.die(Cause.squash(cause));
     }),
+  );
+
+const encodeStreamErrorMarker = (cause: Cause.Cause<unknown>): string => {
+  const failReason = cause.reasons.find(Cause.isFailReason);
+  const error = failReason ? encodeRpcError(failReason.error) : undefined;
+  return (
+    JSON.stringify({
+      _tag: StreamErrorTag,
+      error,
+    } satisfies RpcStreamErrorMarker) + "\n"
+  );
+};
+
+const appendStreamErrors = (s: Stream.Stream<string, unknown>) =>
+  s.pipe(
+    Stream.catchCause((cause) =>
+      Stream.succeed(encodeStreamErrorMarker(cause)),
+    ),
   );

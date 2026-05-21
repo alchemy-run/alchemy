@@ -14,12 +14,6 @@ export default Alchemy.Stack(
         flags: ["nodejs_compat"],
       },
       memo: {},
-      assets: {
-        config: {
-          htmlHandling: "auto-trailing-slash",
-          notFoundHandling: "single-page-application",
-        },
-      },
     });
 
     return {

@@ -234,7 +234,7 @@ export const Container: Platform<
 } = Platform(
   "Cloudflare.Container",
   {
-    createExecutionContext: (id: string): Server.ProcessContext => {
+    createRuntimeContext: (id: string): Server.ProcessContext => {
       const runners: Effect.Effect<void, never, any>[] = [];
       const env: Record<string, any> = {};
 
@@ -270,7 +270,7 @@ export const Container: Platform<
           }),
         get: <T>(key: string) =>
           Config.string(key)
-            .asEffect()
+
             .pipe(
               Effect.flatMap((value) =>
                 Effect.try({

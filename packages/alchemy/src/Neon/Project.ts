@@ -1,14 +1,153 @@
+import {
+  type CreateProjectOutput,
+  deleteProject,
+  getConnectionURI,
+  getProject,
+  getProjectOperation,
+  listProjectBranchDatabases,
+  listProjectBranches,
+  listProjects,
+  type ListProjectsOutput,
+  createProject as sdkCreateProject,
+  updateProject,
+} from "@distilled.cloud/neon";
+import * as Console from "effect/Console";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import * as api from "./api.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
 import type { Providers } from "./Providers.ts";
-import { listSqlFiles, readSqlFile } from "./SqlFile.ts";
+import {
+  listSqlFiles,
+  readSqlFile,
+  hashMigrations,
+  hashImports,
+} from "../Sql/SqlFile.ts";
+
+type NeonOperationStatus =
+  | "scheduling"
+  | "running"
+  | "finished"
+  | "failed"
+  | "error"
+  | "cancelling"
+  | "cancelled"
+  | "skipped";
+
+export class OperationFailed extends Data.TaggedError("OperationFailed")<{
+  operationId: string;
+  action: string;
+  status: NeonOperationStatus;
+  error?: string;
+}> {}
+
+class OperationPending extends Data.TaggedError("OperationPending")<{
+  operationId: string;
+}> {}
+
+const isOperationComplete = (status: NeonOperationStatus): boolean =>
+  status === "finished" ||
+  status === "failed" ||
+  status === "error" ||
+  status === "cancelled" ||
+  status === "skipped";
+
+/**
+ * Wait for the given operations to reach a terminal state. Polls every
+ * 500ms with exponential backoff up to ~30s per operation.
+ */
+export const waitForOperations = (
+  operations: ReadonlyArray<{
+    readonly id: string;
+    readonly project_id: string;
+    readonly action: string;
+    readonly status: NeonOperationStatus;
+    readonly error?: string;
+  }>,
+) =>
+  Effect.gen(function* () {
+    for (const op of operations) {
+      if (isOperationComplete(op.status)) {
+        if (op.status === "failed" || op.status === "error") {
+          return yield* new OperationFailed({
+            operationId: op.id,
+            action: op.action,
+            status: op.status,
+            error: op.error,
+          });
+        }
+        continue;
+      }
+      yield* getProjectOperation({
+        project_id: op.project_id,
+        operation_id: op.id,
+      }).pipe(
+        Effect.flatMap(
+          ({
+            operation,
+          }): Effect.Effect<void, OperationFailed | OperationPending> => {
+            const status = operation.status as NeonOperationStatus;
+            if (status === "failed" || status === "error") {
+              return Effect.fail(
+                new OperationFailed({
+                  operationId: operation.id,
+                  action: operation.action,
+                  status,
+                  error: operation.error,
+                }),
+              );
+            }
+            if (!isOperationComplete(status)) {
+              return Effect.fail(new OperationPending({ operationId: op.id }));
+            }
+            return Effect.void;
+          },
+        ),
+        Effect.retry({
+          while: (e: unknown) => {
+            const tag = (e as { _tag?: string })._tag;
+            return (
+              tag === "OperationPending" ||
+              tag === "TooManyRequests" ||
+              tag === "ServiceUnavailable" ||
+              tag === "InternalServerError" ||
+              tag === "BadGateway" ||
+              tag === "GatewayTimeout"
+            );
+          },
+          schedule: Schedule.both(
+            Schedule.exponential(Duration.millis(500), 1.5),
+            Schedule.recurs(60),
+          ),
+        }),
+        Effect.catchTag("OperationPending", () => Effect.void),
+      );
+    }
+  });
+
+const findProjectByName = (name: string) =>
+  Effect.gen(function* () {
+    const matches: ListProjectsOutput["projects"][number][] = [];
+    let cursor: string | undefined;
+    do {
+      const page = yield* listProjects({
+        search: name,
+        ...(cursor !== undefined ? { cursor } : {}),
+      });
+      for (const p of page.projects) {
+        if (p.name === name) matches.push(p);
+      }
+      cursor = page.pagination?.cursor;
+    } while (cursor);
+    return matches;
+  });
 
 export type NeonRegion =
   | "aws-us-east-1"
@@ -75,6 +214,14 @@ export type ProjectProps = {
    */
   orgId?: string;
   /**
+   * Enable Postgres logical replication on the project. Once enabled,
+   * Neon does not support disabling it again.
+   *
+   * @default false
+   * @see https://neon.tech/docs/guides/logical-replication-neon
+   */
+  enableLogicalReplication?: boolean;
+  /**
    * Directory containing `.sql` migration files. Files are sorted by their
    * numeric prefix (e.g. `0001_init.sql`) and applied in order against the
    * default branch's primary database.
@@ -118,6 +265,7 @@ export type Project = Resource<
      */
     origin: PostgresOrigin;
     historyRetentionSeconds: number;
+    enableLogicalReplication: boolean;
     migrationsDir: string | undefined;
     migrationsTable: string | undefined;
     migrationsHashes: Record<string, string>;
@@ -148,6 +296,13 @@ export type Project = Resource<
  * });
  * ```
  *
+ * @example Project with logical replication enabled
+ * ```typescript
+ * const project = yield* Neon.Project("my-project", {
+ *   enableLogicalReplication: true,
+ * });
+ * ```
+ *
  * @section Migrations and seed data
  * @example Apply migrations and seed files
  * ```typescript
@@ -168,21 +323,11 @@ export type Project = Resource<
  */
 export const Project = Resource<Project>("Neon.Project");
 
-const getRoleName = (creation: api.CreateProjectOutput) =>
+const getRoleName = (creation: CreateProjectOutput) =>
   creation.roles.find((r) => !r.protected)?.name ?? creation.roles[0]?.name;
 
-const getDatabaseName = (creation: api.CreateProjectOutput) =>
+const getDatabaseName = (creation: CreateProjectOutput) =>
   creation.databases[0]?.name ?? "neondb";
-
-const buildConnectionUri = (
-  uri: string,
-  pooledHost: string,
-): { uri: string; pooled: string } => {
-  const url = new URL(uri);
-  const pooledUrl = new URL(uri);
-  pooledUrl.host = pooledHost;
-  return { uri: url.toString(), pooled: pooledUrl.toString() };
-};
 
 const resolveConnection = (
   projectId: string,
@@ -191,13 +336,15 @@ const resolveConnection = (
   roleName: string,
 ) =>
   Effect.gen(function* () {
-    const direct = yield* api.getConnectionUri(projectId, {
+    const direct = yield* getConnectionURI({
+      project_id: projectId,
       branch_id: branchId,
       database_name: databaseName,
       role_name: roleName,
       pooled: false,
     });
-    const pooled = yield* api.getConnectionUri(projectId, {
+    const pooled = yield* getConnectionURI({
+      project_id: projectId,
       branch_id: branchId,
       database_name: databaseName,
       role_name: roleName,
@@ -242,6 +389,12 @@ export const ProjectProvider = () =>
           ) {
             return { action: "update" } as const;
           }
+          if (
+            (news.enableLogicalReplication ?? false) !==
+            (output?.enableLogicalReplication ?? false)
+          ) {
+            return { action: "update" } as const;
+          }
           if (news.migrationsDir) {
             const newHashes = yield* hashMigrations(news.migrationsDir);
             if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
@@ -264,31 +417,32 @@ export const ProjectProvider = () =>
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
           if (output?.projectId) {
-            return yield* api.getProject(output.projectId).pipe(
+            return yield* getProject({ project_id: output.projectId }).pipe(
               Effect.map(({ project }) => ({
                 ...output,
                 projectName: project.name,
                 historyRetentionSeconds: project.history_retention_seconds,
+                enableLogicalReplication:
+                  project.settings?.enable_logical_replication === true,
               })),
-              Effect.catchTag("ProjectNotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
             );
           }
           const name = yield* createProjectName(id, olds?.name);
-          const matches = yield* api.findProjectByName(name);
+          const matches = yield* findProjectByName(name);
           const match = matches[0];
           if (!match) return undefined;
-          const branches = yield* api.listProjectBranches(match.id, {
+          const branches = yield* listProjectBranches({
+            project_id: match.id,
             search: olds?.defaultBranchName ?? "main",
           });
           const defaultBranch =
             branches.branches.find((b) => b.default) ?? branches.branches[0];
           if (!defaultBranch) return undefined;
-          const databases = yield* api.listProjectBranchDatabases(
-            match.id,
-            defaultBranch.id,
-          );
+          const databases = yield* listProjectBranchDatabases({
+            project_id: match.id,
+            branch_id: defaultBranch.id,
+          });
           const db = databases.databases[0];
           if (!db) return undefined;
           const conn = yield* resolveConnection(
@@ -309,7 +463,9 @@ export const ProjectProvider = () =>
             connectionUri: conn.uri,
             pooledConnectionUri: conn.pooled,
             origin: parsePostgresOrigin(conn.uri),
-            historyRetentionSeconds: match.history_retention_seconds,
+            historyRetentionSeconds: match.history_retention_seconds ?? 86400,
+            enableLogicalReplication:
+              match.settings?.enable_logical_replication === true,
             migrationsDir: olds?.migrationsDir,
             migrationsTable: olds?.migrationsTable,
             migrationsHashes: {},
@@ -321,44 +477,60 @@ export const ProjectProvider = () =>
           // (and let `read` upstream decide adoption); otherwise update
           // the mutable scalar fields on the existing project.
           const projectInfo = output
-            ? yield* api
-                .updateProject(output.projectId, {
+            ? yield* updateProject({
+                project_id: output.projectId,
+                project: {
                   name: news.name,
                   history_retention_seconds: news.historyRetentionSeconds,
-                })
-                .pipe(
-                  Effect.map((r) => ({
-                    projectId: output.projectId,
-                    projectName: r.project.name,
-                    region: output.region,
-                    pgVersion: output.pgVersion,
-                    defaultBranchId: output.defaultBranchId,
-                    defaultBranchName: output.defaultBranchName,
-                    databaseName: output.databaseName,
-                    roleName: output.roleName,
-                    connectionUri: output.connectionUri,
-                    pooledConnectionUri: output.pooledConnectionUri,
-                    origin: output.origin,
-                    historyRetentionSeconds:
-                      r.project.history_retention_seconds ??
-                      output.historyRetentionSeconds,
-                  })),
-                )
+                  settings:
+                    (news.enableLogicalReplication ?? false) !==
+                    (output.enableLogicalReplication ?? false)
+                      ? {
+                          enable_logical_replication:
+                            news.enableLogicalReplication ?? false,
+                        }
+                      : undefined,
+                },
+              }).pipe(
+                Effect.map((r) => ({
+                  projectId: output.projectId,
+                  projectName: r.project.name,
+                  region: output.region,
+                  pgVersion: output.pgVersion,
+                  defaultBranchId: output.defaultBranchId,
+                  defaultBranchName: output.defaultBranchName,
+                  databaseName: output.databaseName,
+                  roleName: output.roleName,
+                  connectionUri: output.connectionUri,
+                  pooledConnectionUri: output.pooledConnectionUri,
+                  origin: output.origin,
+                  historyRetentionSeconds:
+                    r.project.history_retention_seconds ??
+                    output.historyRetentionSeconds,
+                  enableLogicalReplication:
+                    r.project.settings?.enable_logical_replication === true,
+                })),
+              )
             : yield* Effect.gen(function* () {
                 const name = yield* createProjectName(id, news.name);
-                const created = yield* api.createProject({
-                  name,
-                  region_id: news.region,
-                  pg_version: news.pgVersion,
-                  default_branch: {
-                    name: news.defaultBranchName,
-                    role_name: news.roleName,
-                    database_name: news.databaseName,
+                const created = yield* sdkCreateProject({
+                  project: {
+                    name,
+                    region_id: news.region,
+                    pg_version: news.pgVersion,
+                    branch: {
+                      name: news.defaultBranchName,
+                      role_name: news.roleName,
+                      database_name: news.databaseName,
+                    },
+                    history_retention_seconds: news.historyRetentionSeconds,
+                    org_id: news.orgId,
+                    settings: news.enableLogicalReplication
+                      ? { enable_logical_replication: true }
+                      : undefined,
                   },
-                  history_retention_seconds: news.historyRetentionSeconds,
-                  org_id: news.orgId,
                 });
-                yield* api.waitForOperations(created.operations);
+                yield* waitForOperations(created.operations);
 
                 const branchId = created.branch.id;
                 const databaseName = getDatabaseName(created);
@@ -383,6 +555,9 @@ export const ProjectProvider = () =>
                   origin: parsePostgresOrigin(conn.uri),
                   historyRetentionSeconds:
                     created.project.history_retention_seconds ?? 86400,
+                  enableLogicalReplication:
+                    created.project.settings?.enable_logical_replication ===
+                    true,
                 };
               });
 
@@ -416,7 +591,10 @@ export const ProjectProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* api.deleteProject(output.projectId);
+          yield* deleteProject({ project_id: output.projectId }).pipe(
+            Effect.tapError(Console.log),
+            Effect.catchTag("NotFound", () => Effect.void),
+          );
         }),
       };
     }),
@@ -461,25 +639,6 @@ const runImports = (
     const tracked = new Set(importFiles);
     for (const key of Object.keys(hashes)) {
       if (!tracked.has(key)) delete hashes[key];
-    }
-    return hashes;
-  });
-
-const hashMigrations = (migrationsDir: string) =>
-  listSqlFiles(migrationsDir).pipe(
-    Effect.map((files) => {
-      const hashes: Record<string, string> = {};
-      for (const file of files) hashes[file.id] = file.hash;
-      return hashes;
-    }),
-  );
-
-const hashImports = (importFiles: ReadonlyArray<string>, rootDir: string) =>
-  Effect.gen(function* () {
-    const hashes: Record<string, string> = {};
-    for (const filePath of importFiles) {
-      const file = yield* readSqlFile(rootDir, filePath);
-      hashes[filePath] = file.hash;
     }
     return hashes;
   });

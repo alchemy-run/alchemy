@@ -40,3 +40,16 @@ const ogImage = new URL(`/og/${ogSlug}.png`, Astro.site);
 <meta name="twitter:image" content={ogImage.href} />
 
 <PostHog />
+
+<script>
+  // Copy the heading link to the clipboard whenever a user clicks one of
+  // Starlight's auto-generated anchor buttons. Navigation still happens
+  // normally — we just piggyback the copy on top of it.
+  document.addEventListener("click", (event) => {
+    const target = event.target as Element | null;
+    const link = target?.closest?.("a.sl-anchor-link") as HTMLAnchorElement | null;
+    if (!link) return;
+    // `link.href` resolves to the absolute URL including the hash.
+    void navigator.clipboard?.writeText(link.href).catch(() => {});
+  });
+</script>

@@ -1,6 +1,6 @@
 ---
 title: CLI Reference
-description: All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, bootstrap, login, profile, and state.
+description: All Alchemy CLI commands — deploy, destroy, plan, dev, tail, logs, aws, cloudflare, login, profile, and state.
 sidebar:
   order: 1
 ---
@@ -285,26 +285,22 @@ alchemy logs --filter Worker --since 1h
 alchemy logs --stage prod --since 2026-04-01T00:00:00Z
 ```
 
-## `bootstrap`
+## `aws`
 
-Set up the per-cloud infrastructure that Alchemy itself relies on —
-the AWS assets bucket used for Lambda artifacts, or the Cloudflare
-state-store worker that holds your remote stack state.
+Cloud-provider commands for AWS — managing the per-account
+infrastructure that Alchemy itself relies on.
 
 ```sh
-alchemy bootstrap <provider> [options]
+alchemy aws <subcommand> [options]
 ```
 
-The `bootstrap` command is split into provider-specific subcommands.
-Run `alchemy bootstrap <provider> --help` to see the flags for each.
-
-### `bootstrap aws`
+### `aws bootstrap`
 
 Set up the AWS assets bucket required for deploying Lambda functions
 and other AWS resources that need artifact storage.
 
 ```sh
-alchemy bootstrap aws [options]
+alchemy aws bootstrap [options]
 ```
 
 | Option              | Description                                                |
@@ -316,16 +312,25 @@ alchemy bootstrap aws [options]
 
 ```sh
 # Bootstrap with the default profile
-alchemy bootstrap aws
+alchemy aws bootstrap
 
 # Bootstrap a specific region and profile
-alchemy bootstrap aws --profile prod --region us-west-2
+alchemy aws bootstrap --profile prod --region us-west-2
 
 # Remove bootstrap resources
-alchemy bootstrap aws --destroy
+alchemy aws bootstrap --destroy
 ```
 
-### `bootstrap cloudflare`
+## `cloudflare`
+
+Cloud-provider commands for Cloudflare — managing the state-store
+worker that backs `Cloudflare.state(...)`, and inspecting its logs.
+
+```sh
+alchemy cloudflare <subcommand> [options]
+```
+
+### `cloudflare bootstrap`
 
 Manually deploy (or repair) the Cloudflare-hosted HTTP State Store —
 the worker + Secrets Store + auth-token secret that back the
@@ -338,7 +343,7 @@ typically to recover from a previous deploy that was interrupted
 mid-bootstrap.
 
 ```sh
-alchemy bootstrap cloudflare [options]
+alchemy cloudflare bootstrap [options]
 ```
 
 | Option                  | Description                                                                                                                       |
@@ -367,13 +372,49 @@ The bootstrap is idempotent and self-healing:
 
 ```sh
 # First-time bootstrap (or repair after a failed deploy)
-alchemy bootstrap cloudflare
+alchemy cloudflare bootstrap
 
 # Bootstrap a separate profile
-alchemy bootstrap cloudflare --profile staging
+alchemy cloudflare bootstrap --profile staging
 
 # Force a full redeploy (e.g. to roll out an updated state-store worker)
-alchemy bootstrap cloudflare --force
+alchemy cloudflare bootstrap --force
+```
+
+### `cloudflare state logs`
+
+Get or tail logs from the `alchemy-state-store` Worker on your
+Cloudflare account. Talks directly to the Workers Observability
+Telemetry API — no stack file required — so you can debug the
+state-store itself.
+
+```sh
+alchemy cloudflare state logs [options]
+```
+
+Requires `workers_observability:read` and
+`workers_observability_telemetry:write` OAuth scopes (included in the
+default scope set; existing profiles need to re-run `alchemy login`
+to pick them up).
+
+| Option                 | Description                                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `--tail`               | Stream logs in real time via the Cloudflare tail websocket instead of fetching past entries                  |
+| `--limit <n>`          | Number of log entries to fetch when not tailing (default: 100)                                               |
+| `--since <time>`       | Fetch logs since this time — a duration (`1h`, `30m`, `2d`) or ISO date                                       |
+| `--worker-name <name>` | Override the default state-store worker name. Only needed if you run multiple state stores per account.       |
+| `--profile <name>`     | Alchemy auth profile (defaults to `default` or `$ALCHEMY_PROFILE`)                                           |
+| `--env-file <path>`    | Load environment variables from a file                                                                        |
+
+```sh
+# Last hour of state-store logs
+alchemy cloudflare state logs
+
+# Stream live in a separate terminal while you reproduce a bug
+alchemy cloudflare state logs --tail
+
+# Just the last 30 minutes
+alchemy cloudflare state logs --since 30m --limit 200
 ```
 
 ## `login`

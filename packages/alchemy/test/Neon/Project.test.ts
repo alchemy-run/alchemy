@@ -1,6 +1,6 @@
 import * as Neon from "@/Neon";
-import * as api from "@/Neon/api";
 import * as Test from "@/Test/Vitest";
+import { getProject } from "@distilled.cloud/neon";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -29,8 +29,43 @@ test.provider("create and delete project with default props", (stack) =>
     expect(project.defaultBranchId).toBeDefined();
     expect(project.connectionUri).toContain("postgres");
 
-    const fetched = yield* api.getProject(project.projectId);
+    const fetched = yield* getProject({ project_id: project.projectId });
     expect(fetched.project.id).toEqual(project.projectId);
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+test.provider("enable logical replication on update", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Neon.Project("LogicalReplicationProject", {
+          name: "alchemy-test-logical-replication",
+          region: "aws-us-east-1",
+        });
+      }),
+    );
+    expect(initial.enableLogicalReplication).toEqual(false);
+
+    const enabled = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Neon.Project("LogicalReplicationProject", {
+          name: "alchemy-test-logical-replication",
+          region: "aws-us-east-1",
+          enableLogicalReplication: true,
+        });
+      }),
+    );
+    expect(enabled.projectId).toEqual(initial.projectId);
+    expect(enabled.enableLogicalReplication).toEqual(true);
+
+    const fetched = yield* getProject({ project_id: enabled.projectId });
+    expect(fetched.project.settings).toMatchObject({
+      enable_logical_replication: true,
+    });
 
     yield* stack.destroy();
   }).pipe(logLevel),

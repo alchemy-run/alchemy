@@ -15,8 +15,15 @@
       "path": "./packages/alchemy/tsconfig.test.json"
     },
     {
-      "path": "./website/tsconfig.json"
+      "path": "./packages/better-auth/tsconfig.json"
     },
+    {
+      "path": "./packages/pr-package/tsconfig.json"
+    },
+    // TODO(sam): fix by upgrading starlight to ^0.39.2
+    // {
+    //   "path": "./website/tsconfig.json"
+    // },
     {
       "path": "./examples/aws-ec2/tsconfig.json"
     },
@@ -57,7 +64,16 @@
       "path": "./examples/cloudflare-worker/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-email/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-neon-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-planetscale-mysql-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-planetscale-postgres-drizzle/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-secrets-store/tsconfig.json"
@@ -66,13 +82,10 @@
       "path": "./examples/cloudflare-worker-async/tsconfig.json"
     },
     {
-      "path": "./examples/cloudflare-hyperdrive/tsconfig.json"
+      "path": "./examples/monorepo-single-stack/tsconfig.json"
     },
     {
-      "path": "./packages/better-auth/tsconfig.json"
-    },
-    {
-      "path": "./packages/pr-package/tsconfig.json"
+      "path": "./examples/monorepo-multi-stack/tsconfig.json"
     }
   ],
   "compilerOptions": {

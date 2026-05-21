@@ -70,8 +70,5 @@ export const notifications = <
     process: (
       stream: Stream.Stream<BucketNotification, never, StreamReq>,
     ) => Effect.Effect<void, never, Req>,
-  ) =>
-    BucketEventSource.asEffect().pipe(
-      Effect.flatMap((source) => source(bucket, props, process)),
-    ),
+  ) => BucketEventSource.use((source) => source(bucket, props, process)),
 });

@@ -68,10 +68,7 @@ export const events = (...args: any[]) => {
       process: (
         events: Stream.Stream<EventRecord<Detail>, never, StreamReq>,
       ) => Effect.Effect<void, never, Req>,
-    ) =>
-      EventSource.asEffect().pipe(
-        Effect.flatMap((source) => source(descriptor, process)),
-      ),
+    ) => EventSource.use((source) => source(descriptor, process)),
     toLambda: (fn: LambdaFunction, props: LambdaRouteTargetProps = {}) =>
       createLambdaRoute(descriptor, fn, props),
     toQueue: (queue: Queue, props: QueueRouteTargetProps = {}) =>

@@ -1,5 +1,4 @@
 import { Credentials } from "@distilled.cloud/aws/Credentials";
-import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { AWSEnvironment } from "./Environment.ts";
 
@@ -12,5 +11,5 @@ export { Credentials } from "@distilled.cloud/aws/Credentials";
  */
 export const fromEnvironment = Layer.effect(
   Credentials,
-  Effect.map(AWSEnvironment.asEffect(), (env) => env.credentials),
+  AWSEnvironment.useSync((env) => env.credentials),
 );

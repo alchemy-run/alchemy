@@ -2,13 +2,13 @@ import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { Credentials } from "@distilled.cloud/cloudflare/Credentials";
-import type { D1SqlFile } from "./D1SqlFile.ts";
+import type { SqlFile } from "../../Sql/SqlFile.ts";
 
 export interface ApplyMigrationsOptions {
   accountId: string;
   databaseId: string;
   migrationsTable: string;
-  migrationsFiles: ReadonlyArray<D1SqlFile>;
+  migrationsFiles: ReadonlyArray<SqlFile>;
 }
 
 interface TableColumn {

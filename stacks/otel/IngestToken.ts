@@ -6,7 +6,7 @@ import { Logs, Metrics, Traces } from "./Datasets.ts";
 
 export const IngestToken = Axiom.ApiToken(
   "IngestToken",
-  Effect.all([Alchemy.Stack.asEffect(), Traces, Logs, Metrics]).pipe(
+  Effect.all([Alchemy.Stack, Traces, Logs, Metrics]).pipe(
     Effect.map(([stack, traces, logs, metrics]) => ({
       name: `${stack.stage}-otel-ingest`,
       description: `Ingest-only token for ${stack.stage} OTEL datasets`,

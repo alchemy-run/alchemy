@@ -186,34 +186,58 @@ export const watch = (
     ),
   );
 
-const ENTRY_MODULE_ID = "virtual:alchemy-entry";
-const ENTRY_MODULE_REGEX = new RegExp(`^${ENTRY_MODULE_ID}$`);
+const ENTRY_PREFIX = "\0virtual:alchemy-entry:";
+// oxlint-disable-next-line no-control-regex
+const ENTRY_REGEX = /^\0virtual:alchemy-entry:/;
 
 export const virtualEntryPlugin = Effect.gen(function* () {
   const path = yield* Path.Path;
+
+  const normalizeInput = (
+    input: rolldown.InputOption,
+  ): Record<string, string> => {
+    if (typeof input === "string") {
+      return { [path.parse(input).name || "index"]: input };
+    } else if (Array.isArray(input)) {
+      return Object.fromEntries(input.map((p) => [path.parse(p).name, p]));
+    } else {
+      return input;
+    }
+  };
+
   return (content: (importPath: string) => string) => {
-    let importPath: string | undefined;
+    const entries = new Map<string, string>();
     return {
       name: "alchemy:virtual-entry",
-      options(inputOptions) {
-        assert(
-          typeof inputOptions.input === "string",
-          "input must be a string",
-        );
-        importPath = `./${path.relative(inputOptions.cwd ?? process.cwd(), inputOptions.input).replaceAll("\\", "/")}`;
-        inputOptions.input = ENTRY_MODULE_ID;
+      options: {
+        order: "pre",
+        handler(inputOptions) {
+          const cwd = inputOptions.cwd ?? process.cwd();
+          const input = normalizeInput(inputOptions.input ?? {});
+          inputOptions.input = Object.fromEntries(
+            Object.entries(input).map(([name, p]) => {
+              const id = `${ENTRY_PREFIX}${name}`;
+              entries.set(id, path.resolve(cwd, p));
+              return [name, id];
+            }),
+          );
+        },
       },
       resolveId: {
-        filter: { id: ENTRY_MODULE_REGEX },
-        handler() {
-          return { id: ENTRY_MODULE_ID };
+        filter: { id: ENTRY_REGEX },
+        handler(id) {
+          return entries.has(id) ? { id } : null;
         },
       },
       load: {
-        filter: { id: ENTRY_MODULE_REGEX },
-        handler() {
-          assert(importPath !== undefined, "importPath must be defined");
-          return { code: content(importPath), moduleType: "ts" };
+        filter: { id: ENTRY_REGEX },
+        handler(id) {
+          const entry = entries.get(id);
+          assert(entry !== undefined, `unknown alchemy entry: ${id}`);
+          return {
+            code: content(entry),
+            moduleType: "ts",
+          };
         },
       },
     } satisfies rolldown.Plugin;

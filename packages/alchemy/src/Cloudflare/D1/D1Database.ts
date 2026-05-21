@@ -10,7 +10,7 @@ import type { Providers } from "../Providers.ts";
 import { cloneD1Database } from "./D1Clone.ts";
 import { importD1Database } from "./D1Import.ts";
 import { applyMigrations } from "./D1Migrations.ts";
-import { listSqlFiles, readSqlFile } from "./D1SqlFile.ts";
+import { listSqlFiles, readSqlFile } from "../../Sql/SqlFile.ts";
 
 export type Jurisdiction = "default" | "eu" | "fedramp";
 export type PrimaryLocationHint =

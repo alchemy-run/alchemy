@@ -1,30 +1,18 @@
 import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import type { HttpEffect } from "./Http.ts";
-import type { Output } from "./Output.ts";
-import { GenericService } from "./Util/service.ts";
+import type { Scope } from "effect/Scope";
 
-export interface BaseExecutionContext {
-  Type: string;
-  id: string;
-  env: Record<string, any>;
-  get<T>(key: string): Effect.Effect<T>;
-  set(id: string, output: Output): Effect.Effect<string>;
-  exports?: Effect.Effect<Record<string, any>>;
-  serve?<Req = never>(
-    handler: HttpEffect<Req>,
-  ): Effect.Effect<void, never, Req>;
-}
-
-export interface ExecutionContext<
-  Ctx extends BaseExecutionContext = BaseExecutionContext,
-> extends Context.Service<`ExecutionContext<${Ctx["Type"]}>`, Ctx> {}
-
-export const ExecutionContext = GenericService<{
-  <Ctx extends BaseExecutionContext>(type: Ctx["Type"]): ExecutionContext<Ctx>;
-}>()("Alchemy::ExecutionContext");
-
-export const CurrentExecutionContext = Effect.serviceOption(
+/**
+ * The context of an execution in the runtime.
+ *
+ * E.g. the context of a request/event being handled in a Worker or Lambda Function.
+ * E.g. in a serverful environment, it has the lifetime of the whole runtime.
+ */
+export class ExecutionContext extends Context.Service<
   ExecutionContext,
-).pipe(Effect.map(Option.getOrUndefined));
+  {
+    scope: Scope;
+    cache: {
+      [key: symbol | string]: any;
+    };
+  }
+>()("ExecutionContext") {}
