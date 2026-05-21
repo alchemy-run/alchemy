@@ -34,31 +34,44 @@ export type RpcAsync<Shape> = {
  *   `try/catch` sees an `Error` (or a tagged error object), and
  *   `RpcStreamEnvelope` is flattened to its `ReadableStream` body.
  *
- * @example Calling a Worker RPC from a TanStack Start route handler
+ * @example Three ways to reach a value from a plain Worker — direct binding, fetch, RPC
  * ```ts
- * // examples/cloudflare-tanstack/src/routes/api.hello.ts
- * import { createFileRoute } from "@tanstack/react-router";
  * import { toRpcAsync } from "alchemy/Cloudflare/Bridge";
- * import type Backend from "../backend.ts";
- * import { env } from "../env.ts";
+ * import type Backend from "./backend.ts";
  *
- * export const Route = createFileRoute("/api/hello")({
- *   server: {
- *     handlers: {
- *       GET: async ({ request }) => {
- *         const key = new URL(request.url).searchParams.get("key");
- *         if (!key) return new Response("Missing 'key'", { status: 400 });
+ * interface Env {
+ *   BUCKET: R2Bucket;
+ *   BACKEND: Service<Backend>;
+ * }
  *
- *         // Wrap the raw wire-shape binding into a Promise<T> view that
- *         // throws on Effect.fail and unwraps stream envelopes.
- *         const backend = toRpcAsync<Backend>(env.BACKEND);
- *         const value = await backend.hello(key);
- *         if (value === null) return new Response("Not found", { status: 404 });
- *         return new Response(value);
- *       },
- *     },
+ * export default {
+ *   async fetch(request: Request, env: Env): Promise<Response> {
+ *     const url = new URL(request.url);
+ *     const key = url.searchParams.get("key");
+ *     const via = url.searchParams.get("via") ?? "binding";
+ *     if (!key) return new Response("Missing 'key'", { status: 400 });
+ *
+ *     // option 1 — use the async binding directly
+ *     if (via === "binding") {
+ *       const object = await env.BUCKET.get(key);
+ *       if (!object) return new Response("Not found", { status: 404 });
+ *       return new Response(object.body);
+ *     }
+ *
+ *     // option 2 — call the Effect worker's fetch handler
+ *     if (via === "fetch") {
+ *       return env.BACKEND.fetch(
+ *         `https://backend/?key=${encodeURIComponent(key)}`,
+ *       );
+ *     }
+ *
+ *     // option 3 — call an Effect worker RPC method as a Promise
+ *     const backend = toRpcAsync<Backend>(env.BACKEND);
+ *     const value = await backend.hello(key);
+ *     if (value === null) return new Response("Not found", { status: 404 });
+ *     return new Response(value);
  *   },
- * });
+ * };
  * ```
  */
 export const toRpcAsync = <W>(stub: any): RpcAsync<Rpc.Shape<W>> & Service =>
