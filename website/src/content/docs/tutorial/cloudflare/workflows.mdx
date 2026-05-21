@@ -301,7 +301,7 @@ input shapes (literals, `Effect`, `Config`, …).
 
 ## Use the secret in a task
 
-The accessor returned in init is yielded inside Exec to resolve a
+The accessor returned in init is yielded inside the Runtime phase to resolve a
 `Redacted<string>`. Unwrap with `Redacted.value` only at the call
 site that needs it (here, an `Authorization` header):
 
@@ -348,7 +348,7 @@ site that needs it (here, an `Authorization` header):
  ) {}
 ```
 
-`yield* apiKey` lives inside the body Effect — the Exec phase —
+`yield* apiKey` lives inside the body Effect — the Runtime phase —
 not at module scope. `HttpClient.execute` runs inside
 `Cloudflare.task`, so the response is checkpointed and the
 request only fires once across replays. `Redacted.value` is

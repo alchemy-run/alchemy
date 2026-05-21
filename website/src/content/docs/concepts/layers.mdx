@@ -1,215 +1,279 @@
 ---
 title: Layers
-description: Use Effect Layers to encapsulate infrastructure behind a clean interface — define a service once, swap implementations across stacks, providers, and tests.
+description: A Layer encapsulates a slice of infrastructure (resources, bindings, runtime logic) behind a typed service interface. Code that depends on the interface stays cloud-agnostic; swapping the implementation swaps the underlying infrastructure.
 sidebar:
   order: 9
 ---
 
-A [Binding](/concepts/binding) is the smallest unit of "use this
-resource". A **Layer** is the next step up: take a *group* of
-resources and bindings, hide them behind a typed interface, and
-hand callers an object that just **does the thing**.
+A [Binding](/concepts/binding) connects one [Resource](/concepts/resource)
+to a [Platform](/concepts/platform). A **Layer** is the next abstraction
+up: a unit of *encapsulated infrastructure*. It owns whatever resources
+and bindings it needs, returns a typed implementation of a service
+interface, and hides everything behind that interface.
 
-This is how alchemy lets a single Worker swap from D1 to Postgres,
-or from in-memory mocks to live cloud, by changing one line of
-configuration.
+Layers are the mechanism that makes Alchemy code portable. A Worker
+written against an abstract `JobService` doesn't know whether its
+underlying storage is a KV namespace, a DynamoDB table, or an
+in-memory map — it depends on the *service*, and a Layer wires up
+the rest.
 
-## The problem layers solve
+## The encapsulation problem
 
-A real authentication module needs at least:
-
-- A database
-- A connection
-- A secret
-- Adapter glue between an HTTP handler and the auth library
-
-Inlining all of that in every Worker that needs auth is fine for
-one project. By the fifth Worker, you've copy-pasted four versions
-of the same setup with subtle differences. By the time you want to
-move from D1 to Postgres, every Worker has to change.
-
-Layers fix this by defining the **contract** once and the
-**implementation** separately.
-
-## Step 1 — Define the service interface
-
-A service is a `Context.Service` — a typed Tag that says "somewhere
-in the program, an implementation of this exists":
+Say you want a simple `getJob(id)` function backed by a KV namespace.
+The straightforward thing is to call the binding directly:
 
 ```typescript
-// packages/better-auth/src/BetterAuth.ts
-import type { HttpEffect } from "alchemy/Http";
-import { type Auth } from "better-auth";
-import * as Context from "effect/Context";
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
-export class BetterAuth extends Context.Service<
-  BetterAuth,
-  {
-    auth: Effect.Effect<Auth<any>>;
-    fetch: HttpEffect;
-  }
->()("BetterAuth") {}
+const getJob = (id: string) =>
+  Effect.gen(function* () {
+    const kv = yield* Cloudflare.KVNamespaceBinding.bind(MyKV);
+    return yield* kv.get<Job>(id, "json");
+  });
 ```
 
-Anyone who depends on `BetterAuth` writes `yield* BetterAuth` and
-gets the typed object — no idea where it comes from. That's the
-whole point.
-
-## Step 2 — Implement it as a Layer
-
-A Layer creates whatever resources it needs and returns a value
-satisfying the service. Here's the real
-[`@alchemy/better-auth`](https://github.com/alchemy-run/alchemy-effect/blob/main/packages/better-auth/src/CloudflareD1.ts)
-implementation backed by Cloudflare D1:
+Look at the inferred type:
 
 ```typescript
-// packages/better-auth/src/CloudflareD1.ts
-import { Random } from "alchemy";
+const getJob: (id: string) => Effect.Effect<
+  Job | null,
+  KVNamespaceError,
+  WorkerEnvironment  // ← leaks Cloudflare runtime
+>;
+```
+
+`WorkerEnvironment` is only available inside a deployed Cloudflare
+Worker. By appearing in `getJob`'s signature, it pins the function
+— and everything that calls it — to running inside a Cloudflare
+Worker. You can't reuse `getJob` from a Lambda, a container, a
+test, or any other runtime; the type system has tied it to one
+specific cloud.
+
+A Layer is the answer.
+
+## A service is a contract
+
+A service is a `Context.Service` — a typed Tag that names a
+capability without saying how it's provided:
+
+```typescript
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Alchemy from "alchemy";
+
+export class JobService extends Context.Service<
+  JobService,
+  {
+    getJob(id: string): Effect.Effect<Job, JobError, Alchemy.RuntimeContext>;
+  }
+>()("JobService") {}
+```
+
+A consumer writes `yield* JobService` and gets the typed object —
+nothing else. The signature deliberately mentions
+`Alchemy.RuntimeContext` (more on this below) but says nothing about
+KV, DynamoDB, or any specific cloud primitive.
+
+## A Layer encapsulates the infrastructure
+
+A Layer is the implementation side of a service. It declares the
+resources it needs, wires up bindings, and returns the typed value:
+
+```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
-import { betterAuth as makeBetterAuth } from "better-auth";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { BetterAuth } from "./BetterAuth.ts";
 
-export const CloudflareD1 = Layer.effect(
-  BetterAuth,
+export const JobServiceKV = Layer.effect(
+  JobService,
   Effect.gen(function* () {
-    // 1. Declare the infrastructure this Layer needs.
-    const d1 = yield* Cloudflare.D1Database("BetterAuth");
-    const connection = yield* Cloudflare.D1Connection.bind(d1);
-    const secret = yield* Random("BETTER_AUTH_SECRET");
+    const MyKV = yield* Cloudflare.KVNamespace("MyKV");
+    const kv = yield* Cloudflare.KVNamespaceBinding.bind(MyKV);
 
-    // 2. Build the better-auth instance, cached so it's created once.
-    const betterAuth = yield* Effect.gen(function* () {
-      return makeBetterAuth({
-        database: yield* connection.raw,
-        secret: yield* secret.text.pipe(Effect.map(Redacted.value)),
-      });
-    }).pipe(Effect.cached);
-
-    // 3. Return the service implementation.
     return {
-      auth: betterAuth,
-      fetch: Effect.gen(function* () {
-        const request = yield* HttpServerRequest;
-        const auth = yield* betterAuth;
-        const response = yield* Effect.promise(() =>
-          auth.handler(request.source as Request),
-        );
-        return HttpServerResponse.fromWeb(response);
+      getJob: Effect.fn(function* (id: string) {
+        return yield* kv.get<Job>(id, "json");
       }),
     };
   }),
-).pipe(Layer.provide(Cloudflare.D1ConnectionLive));
+);
 ```
 
 Three things happen in one expression:
 
-1. **Infrastructure is declared** — the D1 database and connection
-   are real resources. They go through plan/create/update like any
-   other.
-2. **Bindings are wired** — `D1Connection.bind(d1)` connects the
-   database to whatever Worker eventually consumes this Layer.
-3. **A typed implementation is returned** — `auth` and `fetch`
-   satisfy the `BetterAuth` interface.
+1. **The KV namespace is a real resource.** It joins the
+   [Stack](/concepts/stack), goes through plan/create/update like
+   anything else.
+2. **The binding is wired** — `KVNamespaceBinding.bind(MyKV)`
+   attaches the KV namespace to whichever Worker eventually consumes
+   this Layer.
+3. **A typed `JobService` is returned.** Callers see only `getJob`.
 
-## Step 3 — Provide the Layer to a Platform
+## Cloud-agnostic consumers
 
-A Worker that wants auth doesn't reach for D1 or `better-auth`
-directly. It depends on `BetterAuth` and provides whichever
-implementation it likes:
+A Worker that wants jobs depends on `JobService` and provides a
+Layer to satisfy it:
 
 ```typescript
-// src/Api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import { BetterAuth, CloudflareD1 } from "@alchemy/better-auth";
-import * as Effect from "effect/Effect";
-
 export default Cloudflare.Worker(
   "Api",
-  { main: import.meta.path },
+  { main: import.meta.filename },
   Effect.gen(function* () {
-    const auth = yield* BetterAuth;
+    const jobs = yield* JobService;
 
     return {
-      fetch: auth.fetch,
+      fetch: Effect.gen(function* () {
+        return yield* jobs.getJob("job-1");
+      }),
     };
-  }).pipe(Effect.provide(CloudflareD1)),
+  }).pipe(Effect.provide(JobServiceKV)),
 );
 ```
 
-The Worker handler doesn't know D1 exists. It asks for `BetterAuth`
-and gets it. `Effect.provide(CloudflareD1)` wires in the D1 layer
-— and along with it, the database resource itself joins the Stack.
+The handler never mentions KV. Swapping the implementation is a
+one-line change:
 
-## Step 4 — Swap the implementation
-
-Because the Worker depends on `BetterAuth`, not `CloudflareD1`,
-moving from D1 to Postgres is a one-line change. Imagine a
-hypothetical `PostgresLayer`:
-
-```typescript
-// before
-.pipe(Effect.provide(CloudflareD1))
-
-// after
-.pipe(Effect.provide(BetterAuthPostgres))
+```diff lang="typescript"
+-.pipe(Effect.provide(JobServiceKV))
++.pipe(Effect.provide(JobServiceDynamo))
 ```
 
-The next deploy:
+The next deploy tears down the KV namespace and creates whatever
+`JobServiceDynamo` declares. The handler is untouched.
 
-- Tears down the D1 database (no longer declared)
-- Creates whatever `BetterAuthPostgres` declares (a `Hyperdrive`
-  binding, a Neon database…)
-- Updates the Worker's bindings accordingly
-- Leaves the handler code untouched
+## Where runtime requirements live
 
-The same trick works in tests: provide an in-memory layer, run the
-Worker as a normal Effect, assert on the result.
-
-## Composing layers
-
-Layers compose with the standard Effect combinators:
-
-| Combinator              | Use it for                                                |
-| ----------------------- | --------------------------------------------------------- |
-| `Layer.mergeAll(a, b)`  | Provide multiple independent services                     |
-| `Layer.provideMerge`    | A Layer that supplies *and* exposes a service             |
-| `Layer.provide`         | Satisfy a Layer's dependencies privately                  |
-
-A typical app stack looks like this:
+The leaky `getJob` from earlier:
 
 ```typescript
-.pipe(Effect.provide(Layer.mergeAll(
-  CloudflareD1,        // provides BetterAuth
-  JobStorageDynamoDB,  // provides JobStorage
-  RateLimiterKV,       // provides RateLimiter
-)))
+Effect.Effect<Job | null, KVNamespaceError, WorkerEnvironment>
 ```
 
-For the deploy-time mechanics that make these layers work — IAM,
-typed clients, env injection — see [Binding](/concepts/binding).
-For Workers that reference each other across Layers, see
-[Circular Bindings](/guides/circular-bindings).
+The Layer-wrapped equivalent:
 
-## Why this works
+```typescript
+Effect.Effect<Job, NotFound, Alchemy.RuntimeContext>
+```
 
-The trick is that **resources are Effects**. They participate in
-Effect's dependency injection like any other value. So a `Layer`
-that creates a database, binds it, and returns a typed service is
-just a normal Effect Layer — no special mechanism, no extra runtime.
+`WorkerEnvironment` is gone. It hasn't disappeared — it's been
+absorbed by the Layer:
 
-That means:
+```typescript
+export const KVNamespaceBindingLive = Layer.effect(
+  KVNamespaceBinding,
+  Effect.gen(function* () {
+    const env = yield* WorkerEnvironment; // ← required here, once
+    // ...returns a client that closes over env
+  }),
+);
+```
 
-- **Distribute on npm** — A Service is just a TypeScript module
-  exporting an interface and a Layer. Publish `@org/sessions`,
-  `npm install` it elsewhere, `Effect.provide` it.
-- **Test against any backend** — Provide an in-memory Layer in
-  tests; provide the cloud Layer in CI. The handler under test
-  never changes.
-- **Migrate without rewrites** — Moving from one cloud primitive
-  to another is a Layer swap, not a Worker rewrite.
+The Worker that consumes `KVNamespaceBindingLive` satisfies
+`WorkerEnvironment` in one place; downstream callers see only
+`RuntimeContext`. Try the swap on a Cloudflare Worker:
+
+```diff lang="typescript"
+-.pipe(Effect.provide(JobServiceKV))         // requires WorkerEnvironment ✓
++.pipe(Effect.provide(JobServiceDynamo))     // requires AWS.FunctionEnvironment ✗
+```
+
+The Cloudflare Worker can't satisfy `AWS.FunctionEnvironment`, so
+the program won't type-check. Platforms and Layers fit together by
+type, not by convention.
+
+## Runtime as a colored function
+
+A Platform program has two [phases](/concepts/phases): the **init**
+closure (outer) runs at both plantime and cold start, and the
+**runtime** closure (inner) runs only inside the deployed handler.
+Bindings live in init; the actual cloud calls live in runtime:
+
+```typescript
+Cloudflare.Worker(
+  "Api",
+  { main: import.meta.filename },
+  Effect.gen(function* () {
+    // ─── Init: declare dependencies ───
+    const kv = yield* Cloudflare.KVNamespaceBinding.bind(MyKV);
+
+    return {
+      // ─── Runtime: use them ───
+      fetch: Effect.gen(function* () {
+        return yield* kv.get<Job>("job-1", "json");
+      }),
+    };
+  }),
+);
+```
+
+`Alchemy.RuntimeContext` is the Effect service that exists *only*
+inside the runtime closure. It is not provided at plantime, cold
+start init, or anywhere else. So an Effect like:
+
+```typescript
+kv.get(...): Effect.Effect<Job | null, KVNamespaceError, Alchemy.RuntimeContext>
+```
+
+is one the type system *guarantees* can only run in the runtime
+phase. Move that call up into the init closure and the type checker
+rejects it — `RuntimeContext` is not satisfied there.
+
+You can think of it as a "color" in the sense of
+[colored functions](https://journal.stuffwithstuff.com/2015/02/01/what-color-is-your-function/):
+
+```ts
+runtime function getJob(id: string): Job
+```
+
+TypeScript doesn't have keyword-level coloring, so Alchemy encodes
+the color as an Effect requirement. The compiler enforces the
+init/runtime boundary for you.
+
+## What you compose with
+
+A typical app stack mixes several Layers, one per capability:
+
+```typescript
+.pipe(
+  Effect.provide(Layer.mergeAll(
+    JobServiceKV,         // provides JobService
+    BetterAuthD1,         // provides BetterAuth
+    RateLimiterDurable,   // provides RateLimiter
+  )),
+)
+```
+
+Each Layer brings its own resources into the Stack and its own
+typed service into scope. Consumers stay declarative and ignorant
+of the underlying primitives.
+
+| Combinator             | Use it for                                                |
+| ---------------------- | --------------------------------------------------------- |
+| `Layer.mergeAll(a, b)` | Provide multiple independent services                     |
+| `Layer.provideMerge`   | A Layer that supplies *and* exposes a service             |
+| `Layer.provide`        | Satisfy one Layer's dependencies privately from another   |
+
+For the deploy-time mechanics that make Layers possible — typed
+clients, IAM, env injection — see [Binding](/concepts/binding). For
+the step-by-step of building one yourself, see
+[Building Infrastructure Layers](/guides/infrastructure-layers).
+
+## Why this matters
+
+Because Layers are normal Effect Layers, the patterns scale all the
+way out:
+
+- **Distribute on npm.** A service is just a TypeScript module
+  exporting a `Context.Service` and one or more Layers. Publish
+  `@org/jobs`, `npm install` it, `Effect.provide` it.
+- **Substitute for tests.** Provide a `JobServiceMemory` Layer
+  backed by a `Map`; the Worker under test never knows.
+- **Migrate without rewrites.** Moving from KV to DynamoDB is a
+  Layer swap, not a Worker rewrite.
+- **Type-safe portability.** Cloud-specific requirements are
+  confined to Layer construction; the consumer-facing surface
+  speaks only `RuntimeContext`.
+
+Infrastructure becomes a value you can encapsulate, name, and
+substitute — like any other module.
