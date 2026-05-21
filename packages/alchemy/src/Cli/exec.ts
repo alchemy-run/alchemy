@@ -7,17 +7,22 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
+import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { execStack, ExecStackOptions } from "./commands/deploy.ts";
 import { selectCli } from "./selectCli.ts";
 
-const services = Layer.mergeAll(
-  Layer.provideMerge(AlchemyContextLive, PlatformServices),
-  Layer.provide(ProfileLive, PlatformServices),
-  Layer.provide(CredentialsStoreLive, PlatformServices),
-  FetchHttpClient.layer,
-  ConfigProvider.layer(ConfigProvider.fromEnv()),
-  selectCli(),
+const services = Layer.merge(selectCli(), RpcProviderProxy.fromEnv()).pipe(
+  Layer.provideMerge(
+    Layer.mergeAll(AlchemyContextLive, ProfileLive, CredentialsStoreLive),
+  ),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      PlatformServices,
+      FetchHttpClient.layer,
+      ConfigProvider.layer(ConfigProvider.fromEnv()),
+    ),
+  ),
 );
 
 export const exec = () =>

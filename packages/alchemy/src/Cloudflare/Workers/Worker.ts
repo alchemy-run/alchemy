@@ -22,7 +22,6 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
-import { SidecarLive } from "../Local/Sidecar.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -34,7 +33,10 @@ import {
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObjectNamespace.ts";
-import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import {
+  LocalWorkerProvider,
+  localRuntimeServices,
+} from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
 import * as Vite from "./Vite.ts";
 import {
@@ -724,7 +726,7 @@ const selectLayer = <
 export const WorkerProvider = () =>
   selectLayer({
     live: LiveWorkerProvider,
-    dev: () => Layer.provide(LocalWorkerProvider(), SidecarLive),
+    dev: () => Layer.provide(LocalWorkerProvider(), localRuntimeServices()),
   });
 
 export const LiveWorkerProvider = () =>
