@@ -34,33 +34,31 @@ export type RpcAsync<Shape> = {
  *   `try/catch` sees an `Error` (or a tagged error object), and
  *   `RpcStreamEnvelope` is flattened to its `ReadableStream` body.
  *
- * @example
+ * @example Calling a Worker RPC from a TanStack Start route handler
  * ```ts
  * // examples/cloudflare-tanstack/src/routes/api.hello.ts
+ * import { createFileRoute } from "@tanstack/react-router";
  * import { toRpcAsync } from "alchemy/Cloudflare/Bridge";
  * import type Backend from "../backend.ts";
  * import { env } from "../env.ts";
  *
- * // `env.BACKEND` is the raw wire-shape Service binding; `backend` is the
- * // Promise<T> view of the Worker's RPC shape.
- * const backend = toRpcAsync<Backend>(env.BACKEND);
+ * export const Route = createFileRoute("/api/hello")({
+ *   server: {
+ *     handlers: {
+ *       GET: async ({ request }) => {
+ *         const key = new URL(request.url).searchParams.get("key");
+ *         if (!key) return new Response("Missing 'key'", { status: 400 });
  *
- * const value = await backend.hello("some-key");
- * //    ^? string | null   — Effect<string | null> on the worker side
- * ```
- *
- * @example Error handling
- * ```ts
- * // Effect.fail(new MyTaggedError(...)) on the worker side surfaces here as
- * // a thrown value preserving `_tag`, so existing tagged-error checks work.
- * try {
- *   await backend.doThing();
- * } catch (e) {
- *   if ((e as any)._tag === "MyTaggedError") {
- *     // handle it
- *   }
- *   throw e;
- * }
+ *         // Wrap the raw wire-shape binding into a Promise<T> view that
+ *         // throws on Effect.fail and unwraps stream envelopes.
+ *         const backend = toRpcAsync<Backend>(env.BACKEND);
+ *         const value = await backend.hello(key);
+ *         if (value === null) return new Response("Not found", { status: 404 });
+ *         return new Response(value);
+ *       },
+ *     },
+ *   },
+ * });
  * ```
  */
 export const toRpcAsync = <W>(stub: any): RpcAsync<Rpc.Shape<W>> & Service =>
