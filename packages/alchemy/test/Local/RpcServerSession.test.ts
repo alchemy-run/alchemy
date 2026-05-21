@@ -4,43 +4,7 @@ import {
 } from "@/Local/RpcServerSession.ts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-
-/**
- * Wire two `ServerRpcSession`s together over in-memory fake websockets so we
- * can drive `RpcSession.getRemoteMain()` end-to-end without touching the
- * platform WS server.
- */
-const pairSessions = <
-  A extends Record<string, any>,
-  B extends Record<string, any>,
->(
-  mainA: A,
-  mainB: B,
-) => {
-  const closes: Array<{ side: "a" | "b"; code?: number; reason?: string }> = [];
-  let a!: ReturnType<typeof makeServerRpcSession<A>>;
-  let b!: ReturnType<typeof makeServerRpcSession<B>>;
-
-  const wsA: ServerWebSocketLike = {
-    send: (msg) => {
-      queueMicrotask(() => b.dispatch.message(msg));
-    },
-    close: (code, reason) => {
-      closes.push({ side: "a", code, reason });
-    },
-  };
-  const wsB: ServerWebSocketLike = {
-    send: (msg) => {
-      queueMicrotask(() => a.dispatch.message(msg));
-    },
-    close: (code, reason) => {
-      closes.push({ side: "b", code, reason });
-    },
-  };
-  a = makeServerRpcSession<A>(wsA, mainA);
-  b = makeServerRpcSession<B>(wsB, mainB);
-  return { a, b, wsA, wsB, closes };
-};
+import * as Exit from "effect/Exit";
 
 describe("Local.RpcServerSession", () => {
   it.effect("happy path: paired sessions round-trip a method call", () =>
@@ -113,13 +77,48 @@ describe("Local.RpcServerSession", () => {
       };
       const inFlight = remote.ping(1);
       dispatch.close(1006, "abnormal");
-      const outcome = yield* Effect.promise(() =>
-        inFlight.then(
-          (v) => ({ ok: true as const, v }),
-          (e) => ({ ok: false as const, e }),
-        ),
-      );
-      expect(outcome.ok).toBe(false);
+      // The dropped outbound traffic means the only way `inFlight` can
+      // resolve is by rejection after `dispatch.close`. Wrap it as an
+      // Effect that fails on rejection so we can assert with `Exit`.
+      const exit = yield* Effect.exit(Effect.tryPromise(() => inFlight));
+      expect(Exit.isFailure(exit)).toBe(true);
     }),
   );
 });
+
+/**
+ * Wire two `ServerRpcSession`s together over in-memory fake websockets so we
+ * can drive `RpcSession.getRemoteMain()` end-to-end without touching the
+ * platform WS server.
+ */
+const pairSessions = <
+  A extends Record<string, any>,
+  B extends Record<string, any>,
+>(
+  mainA: A,
+  mainB: B,
+) => {
+  const closes: Array<{ side: "a" | "b"; code?: number; reason?: string }> = [];
+  let a!: ReturnType<typeof makeServerRpcSession<A>>;
+  let b!: ReturnType<typeof makeServerRpcSession<B>>;
+
+  const wsA: ServerWebSocketLike = {
+    send: (msg) => {
+      queueMicrotask(() => b.dispatch.message(msg));
+    },
+    close: (code, reason) => {
+      closes.push({ side: "a", code, reason });
+    },
+  };
+  const wsB: ServerWebSocketLike = {
+    send: (msg) => {
+      queueMicrotask(() => a.dispatch.message(msg));
+    },
+    close: (code, reason) => {
+      closes.push({ side: "b", code, reason });
+    },
+  };
+  a = makeServerRpcSession<A>(wsA, mainA);
+  b = makeServerRpcSession<B>(wsB, mainB);
+  return { a, b, wsA, wsB, closes };
+};

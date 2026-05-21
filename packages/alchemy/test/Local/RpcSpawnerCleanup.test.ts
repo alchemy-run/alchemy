@@ -1,10 +1,20 @@
-import { afterEach, describe, expect, it } from "@effect/vitest";
-import {
-  spawn,
-  spawnSync,
-  type ChildProcess as NodeChildProcess,
-} from "node:child_process";
+import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { describe, expect, it } from "@effect/vitest";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import type * as Scope from "effect/Scope";
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { fileURLToPath } from "node:url";
+import {
+  assertPidExited,
+  isAlive,
+  killPid,
+  pidListeningOn,
+  spawnScoped,
+  waitForExit,
+  type SpawnedProcess,
+} from "./fixtures/process-effect.ts";
 import { runtimes } from "./fixtures/runtimes.ts";
 
 const PARENT_TS = fileURLToPath(
@@ -15,140 +25,113 @@ const CHILD_TS_URL = new URL(
   import.meta.url,
 ).toString();
 
-const isAlive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const pidOf = (wsUrl: string): number | undefined => {
-  const port = new URL(wsUrl).port;
-  const r = spawnSync("lsof", ["-iTCP:" + port, "-sTCP:LISTEN", "-t"], {
-    encoding: "utf-8",
-  });
-  if (r.status !== 0) return undefined;
-  const pid = Number.parseInt(r.stdout.trim().split("\n")[0]!, 10);
-  return Number.isFinite(pid) ? pid : undefined;
-};
-
-const waitUntil = async (
-  predicate: () => boolean,
-  timeoutMs: number,
-): Promise<boolean> => {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (predicate()) return true;
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  return predicate();
-};
-
-interface ParentHandle {
-  readonly proc: NodeChildProcess;
-  readonly parentPid: number;
-  readonly childPid: number;
-}
-
-const startParent = (argv: Array<string>): Promise<ParentHandle> =>
-  new Promise<ParentHandle>((resolve, reject) => {
-    const proc = spawn(argv[0]!, argv.slice(1), {
-      env: { ...process.env },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    const t = setTimeout(
-      () =>
-        reject(
-          new Error(
-            `parent never reported CHILD_URL. stdout=${stdout} stderr=${stderr}`,
+for (const runtime of runtimes()) {
+  describe(`Local.RpcSpawner cleanup (${runtime.name})`, () => {
+    const launch = startParent([...runtime.argv(PARENT_TS), CHILD_TS_URL]).pipe(
+      Effect.tap(({ childPid }) =>
+        Effect.addFinalizer(() =>
+          // The child should die with its parent, but if a test fails
+          // or interrupts mid-flight, make sure we don't leak a real
+          // RPC server.
+          Effect.flatMap(isAlive(childPid), (alive) =>
+            alive ? killPid(childPid, "SIGKILL") : Effect.void,
           ),
         ),
-      30_000,
+      ),
     );
-    proc.stdout!.on("data", (d) => {
-      stdout += d.toString();
+
+    it.live(
+      "child dies after parent receives SIGTERM",
+      () =>
+        Effect.gen(function* () {
+          const { proc, parentPid, childPid } = yield* launch;
+          expect(yield* isAlive(childPid)).toBe(true);
+          yield* killPid(parentPid, "SIGTERM");
+          // waitForExit wraps `handle.exitCode`, which resolves once
+          // the OS reports the parent's exit.
+          yield* waitForExit(proc, Duration.seconds(10));
+          yield* assertPidExited(childPid);
+        }).pipe(Effect.provide(PlatformServices)),
+      { timeout: 45_000 },
+    );
+
+    it.live(
+      "child dies after parent receives SIGKILL",
+      () =>
+        Effect.gen(function* () {
+          const { proc, parentPid, childPid } = yield* launch;
+          expect(yield* isAlive(childPid)).toBe(true);
+          yield* killPid(parentPid, "SIGKILL");
+          yield* waitForExit(proc, Duration.seconds(10));
+          yield* assertPidExited(childPid);
+        }).pipe(Effect.provide(PlatformServices)),
+      { timeout: 45_000 },
+    );
+  });
+}
+
+/**
+ * Boots the parent fixture and waits until it has reported both its own
+ * pid and the child's RPC url (from which we resolve the child's pid via
+ * `lsof`). Retries the stdout parse on a schedule until both fields are
+ * populated.
+ */
+const startParent = (
+  argv: ReadonlyArray<string>,
+): Effect.Effect<
+  {
+    readonly proc: SpawnedProcess;
+    readonly parentPid: number;
+    readonly childPid: number;
+  },
+  Error,
+  Scope.Scope | ChildProcessSpawner
+> =>
+  Effect.gen(function* () {
+    const proc = yield* spawnScoped(argv).pipe(Effect.orDie);
+
+    const parse = Effect.gen(function* () {
+      const running = yield* proc.handle.isRunning.pipe(
+        Effect.orElseSucceed(() => false),
+      );
+      if (!running) {
+        const stderr = yield* proc.stderr;
+        return yield* Effect.fail(
+          new Error(
+            `parent exited before reporting CHILD_URL. stderr=${stderr}`,
+          ),
+        );
+      }
+      const stdout = yield* proc.stdout;
       const childUrlMatch = stdout.match(/CHILD_URL=(\S+)/);
       const parentPidMatch = stdout.match(/PARENT_PID=(\d+)/);
-      if (childUrlMatch && parentPidMatch) {
-        const childPid = pidOf(childUrlMatch[1]!);
-        if (childPid !== undefined) {
-          clearTimeout(t);
-          resolve({
-            proc,
-            parentPid: Number.parseInt(parentPidMatch[1]!, 10),
-            childPid,
-          });
-        }
+      if (!childUrlMatch || !parentPidMatch) {
+        return yield* Effect.fail(new Error("parent has not reported yet"));
       }
-    });
-    proc.stderr!.on("data", (d) => {
-      stderr += d.toString();
-    });
-    proc.on("exit", () => {
-      clearTimeout(t);
-      reject(
-        new Error(
-          `parent exited before reporting CHILD_URL. stdout=${stdout} stderr=${stderr}`,
-        ),
-      );
-    });
-  });
-
-for (const runtime of runtimes()) {
-  describe.skipIf(!runtime.available)(
-    `Local.RpcSpawner cleanup (${runtime.name})`,
-    () => {
-      const cleanups: Array<() => void> = [];
-
-      afterEach(() => {
-        for (const c of cleanups.splice(0)) c();
-      });
-
-      const launch = async () => {
-        const argv = runtime.argv(PARENT_TS).concat([CHILD_TS_URL]);
-        const handle = await startParent(argv);
-        cleanups.push(() => {
-          try {
-            handle.proc.kill("SIGKILL");
-          } catch {}
-          if (isAlive(handle.childPid)) {
-            try {
-              process.kill(handle.childPid, "SIGKILL");
-            } catch {}
-          }
-        });
-        return handle;
+      const childPid = yield* pidListeningOn(childUrlMatch[1]!);
+      if (childPid === undefined) {
+        return yield* Effect.fail(new Error("child not yet listening"));
+      }
+      return {
+        proc,
+        parentPid: Number.parseInt(parentPidMatch[1]!, 10),
+        childPid,
       };
+    });
 
-      it("child dies after parent receives SIGTERM", async () => {
-        const { proc, parentPid, childPid } = await launch();
-        expect(isAlive(childPid)).toBe(true);
-        process.kill(parentPid, "SIGTERM");
-        const parentExited = await waitUntil(
-          () => proc.exitCode !== null,
-          10_000,
-        );
-        expect(parentExited).toBe(true);
-        const childDead = await waitUntil(() => !isAlive(childPid), 5_000);
-        expect(childDead).toBe(true);
-      }, 45_000);
-
-      it("child dies after parent receives SIGKILL", async () => {
-        const { proc, parentPid, childPid } = await launch();
-        expect(isAlive(childPid)).toBe(true);
-        process.kill(parentPid, "SIGKILL");
-        const parentExited = await waitUntil(
-          () => proc.exitCode !== null || proc.signalCode !== null,
-          10_000,
-        );
-        expect(parentExited).toBe(true);
-        const childDead = await waitUntil(() => !isAlive(childPid), 5_000);
-        expect(childDead).toBe(true);
-      }, 45_000);
-    },
-  );
-}
+    return yield* parse.pipe(
+      Effect.retry({
+        schedule: Schedule.spaced(Duration.millis(100)),
+        times: 300,
+      }),
+      Effect.catch((e) =>
+        Effect.flatMap(proc.stderr, (stderr) =>
+          Effect.fail(
+            new Error(
+              `parent never reported CHILD_URL: ${e.message}. stderr=${stderr}`,
+            ),
+          ),
+        ),
+      ),
+    );
+  });

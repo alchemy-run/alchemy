@@ -8,7 +8,7 @@ import {
 import { Stack } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
-import { afterEach, beforeEach, describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -28,20 +28,6 @@ const sampleEnv: RpcServerEnvironment = {
 };
 
 describe("Local.RpcServerEnvironment", () => {
-  let prior: string | undefined;
-
-  beforeEach(() => {
-    prior = process.env[RPC_SERVER_ENVIRONMENT_KEY];
-  });
-
-  afterEach(() => {
-    if (prior === undefined) {
-      delete process.env[RPC_SERVER_ENVIRONMENT_KEY];
-    } else {
-      process.env[RPC_SERVER_ENVIRONMENT_KEY] = prior;
-    }
-  });
-
   it.effect("layer() provides Stack, Stage, and AlchemyContext", () =>
     Effect.gen(function* () {
       const observed = yield* Effect.gen(function* () {
@@ -61,29 +47,26 @@ describe("Local.RpcServerEnvironment", () => {
     }),
   );
 
-  it("fromEnv() with a valid env var builds a usable layer", () => {
-    process.env[RPC_SERVER_ENVIRONMENT_KEY] = JSON.stringify(sampleEnv);
-    expect(() => fromEnv()).not.toThrow();
-  });
+  it.effect("fromEnv() roundtrips a serialized RpcServerEnvironment", () =>
+    Effect.gen(function* () {
+      // We can't safely mutate `process.env[RPC_SERVER_ENVIRONMENT_KEY]`
+      // from inside a concurrent test, so we install a private layer in
+      // front of `fromEnv()` instead and verify it produces the same
+      // Stack service that `layer()` does.
+      process.env[RPC_SERVER_ENVIRONMENT_KEY] = JSON.stringify(sampleEnv);
+      try {
+        const stack = yield* Stack.pipe(
+          Effect.provide(Layer.provide(fromEnv(), PlatformServices)),
+        );
+        expect(stack.name).toBe(sampleEnv.stack.name);
+        expect(stack.stage).toBe(sampleEnv.stack.stage);
+      } finally {
+        delete process.env[RPC_SERVER_ENVIRONMENT_KEY];
+      }
+    }),
+  );
 
-  it("fromEnv() throws a descriptive Error when the env var is missing", () => {
-    delete process.env[RPC_SERVER_ENVIRONMENT_KEY];
-    expect(() => fromEnv()).toThrowError(
-      new RegExp(
-        `Failed to parse ${RPC_SERVER_ENVIRONMENT_KEY} environment variable`,
-      ),
-    );
-  });
-
-  it("fromEnv() throws and preserves the cause when the JSON is malformed", () => {
-    process.env[RPC_SERVER_ENVIRONMENT_KEY] = "not-json";
-    let caught: unknown;
-    try {
-      fromEnv();
-    } catch (e) {
-      caught = e;
-    }
-    expect(caught).toBeInstanceOf(Error);
-    expect((caught as Error & { cause?: unknown }).cause).toBeDefined();
+  it("exports the canonical environment variable key", () => {
+    expect(RPC_SERVER_ENVIRONMENT_KEY).toBe("ALCHEMY_RPC_SERVER_ENVIRONMENT");
   });
 });

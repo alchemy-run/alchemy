@@ -6,13 +6,23 @@ import {
   type RpcSpawnPayload,
 } from "@/Local/RpcSpawner.ts";
 import { PlatformServices } from "@/Util/PlatformServices.ts";
+import { describe, expect, it } from "@effect/vitest";
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
-import { afterEach, describe, expect, it } from "@effect/vitest";
-import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
-import { spawnSync } from "node:child_process";
+import * as Schedule from "effect/Schedule";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import {
+  assertPidExited,
+  canOpenWebSocket,
+  isAlive,
+  openWebSocket,
+  pidListeningOn,
+} from "./fixtures/process-effect.ts";
 
 const FIXTURE_TS_URL = new URL(
   "./fixtures/rpc-server-entry.ts",
@@ -37,215 +47,164 @@ const samplePayload = (
   stack: { name: stackName, stage: "dev" },
 });
 
-/**
- * Boots an `RpcSpawner` on a background fiber and returns its url. Closing
- * the returned `close` interrupts the fiber, which runs the layer/scope
- * finalizers (killing all spawned children).
- */
-const withSpawner = async () => {
-  const SpawnerLayer = layerServer({ profile: undefined, envFile: undefined });
-  const urlDeferred = await Effect.runPromise(Deferred.make<string>());
-  const stop = await Effect.runPromise(Deferred.make<void>());
-  const fiber = Effect.runFork(
-    Effect.gen(function* () {
-      const sp = yield* RpcSpawner;
-      yield* Deferred.succeed(urlDeferred, sp.url);
-      yield* Deferred.await(stop);
-    }).pipe(
-      Effect.provide(Layer.provide(SpawnerLayer, PlatformServices)),
-      Effect.scoped,
-    ),
+// The spawner inherits the runtime that vitest itself is running under
+// (it shells out to `bun` or `node` based on `typeof Bun`). These tests
+// only verify behavior for the active runtime; run vitest under both to
+// get full coverage.
+describe(`Local.RpcSpawner (runtime=${typeof globalThis.Bun !== "undefined" ? "bun" : "node"})`, () => {
+  /**
+   * The Spawner layer (and any child processes it spawns) is torn down
+   * when the surrounding test scope closes, so we provide it at the test
+   * boundary rather than wrapping a sub-effect — that would tear the
+   * server down the moment the sub-effect returned.
+   */
+  const services = Layer.provideMerge(
+    layerServer({ profile: undefined, envFile: undefined }),
+    Layer.merge(PlatformServices, FetchHttpClient.layer),
   );
-  const url = await Effect.runPromise(Deferred.await(urlDeferred));
-  let closed = false;
-  const close = async () => {
-    if (closed) return;
-    closed = true;
-    await Effect.runPromise(Deferred.succeed(stop, void 0));
-    await Effect.runPromise(Fiber.join(fiber));
-  };
-  return { url, close };
-};
+
+  it.live(
+    "POST returns a ws url whose RPC end-to-end call hits the fixture",
+    () =>
+      Effect.gen(function* () {
+        const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+        const wsUrl = yield* post(url, samplePayload(FIXTURE_TS_URL));
+        expect(wsUrl).toMatch(/^ws:\/\//);
+        const result = yield* echoWebSocket(wsUrl, "hello");
+        expect(result).toBe("echo:hello");
+      }).pipe(Effect.provide(services)),
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "caches the child by payload: a second POST returns the same url",
+    () =>
+      Effect.gen(function* () {
+        const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+        const payload = samplePayload(FIXTURE_TS_URL);
+        const first = yield* post(url, payload);
+        const second = yield* post(url, payload);
+        expect(second).toBe(first);
+        const pid = yield* pidListeningOn(first);
+        if (pid !== undefined) {
+          expect(yield* isAlive(pid)).toBe(true);
+        }
+      }).pipe(Effect.provide(services)),
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "distinct payloads spawn distinct children with distinct urls",
+    () =>
+      Effect.gen(function* () {
+        const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+        const a = yield* post(url, samplePayload(FIXTURE_TS_URL, "stack-a"));
+        const b = yield* post(url, samplePayload(FIXTURE_TS_URL, "stack-b"));
+        expect(a).not.toBe(b);
+      }).pipe(Effect.provide(services)),
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "closing the spawner's scope kills all spawned children",
+    () =>
+      Effect.gen(function* () {
+        // Boot the spawner in an inner scope so we can close it while
+        // the outer test scope is still alive, then assert against the
+        // pid we recorded.
+        const pid = yield* Effect.gen(function* () {
+          const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+          const wsUrl = yield* post(url, samplePayload(FIXTURE_TS_URL));
+          return yield* pidListeningOn(wsUrl);
+        }).pipe(Effect.provide(services), Effect.scoped);
+
+        if (pid === undefined) return;
+        yield* assertPidExited(pid);
+      }),
+    { timeout: 60_000 },
+  );
+
+  it.live(
+    "url returned for a crash-on-boot fixture is not a usable RPC endpoint",
+    () =>
+      Effect.gen(function* () {
+        // The crash fixture prints the address marker then exits. The
+        // spawner's health check is best-effort: depending on race
+        // timing the POST may return a bogus url, or surface a 500
+        // once the retry budget drains. The invariant we *can*
+        // assert is that callers cannot open a parent websocket to
+        // the returned url.
+        const url = yield* RpcSpawner.useSync((spawner) => spawner.url);
+        yield* Effect.gen(function* () {
+          const r = yield* postRaw(url, samplePayload(CRASH_FIXTURE_TS_URL));
+          if (r.status !== 200) {
+            return { unusable: true } as const;
+          }
+          const usable = yield* canOpenWebSocket(new URL("/parent", r.body));
+          return { unusable: !usable } as const;
+        }).pipe(
+          Effect.flatMap((r) =>
+            r.unusable
+              ? Effect.void
+              : Effect.fail(new Error("endpoint was still usable")),
+          ),
+          // Mirrors the original `for (let i = 0; i < 4 && !failed; i++)`
+          // loop: up to 4 retries spaced 250ms apart.
+          Effect.retry({
+            schedule: Schedule.spaced(Duration.millis(250)),
+            times: 4,
+          }),
+        );
+      }).pipe(Effect.provide(services)),
+    { timeout: 60_000 },
+  );
+});
 
 interface PostResult {
   readonly status: number;
   readonly body: string;
 }
 
-const postRaw = async (url: string, body: unknown): Promise<PostResult> => {
-  const res = await fetch(url, {
-    method: "POST",
-    body: JSON.stringify(body),
-    headers: { "content-type": "application/json" },
-  });
-  return { status: res.status, body: await res.text() };
-};
-
-const post = async (url: string, body: unknown): Promise<string> => {
-  const r = await postRaw(url, body);
-  if (r.status !== 200) {
-    throw new Error(`spawn POST failed: ${r.status} ${r.body}`);
-  }
-  return r.body;
-};
-
-const pidOf = (wsUrl: string): number | undefined => {
-  const port = new URL(wsUrl).port;
-  const r = spawnSync("lsof", ["-iTCP:" + port, "-sTCP:LISTEN", "-t"], {
-    encoding: "utf-8",
-  });
-  if (r.status !== 0) return undefined;
-  const pid = Number.parseInt(r.stdout.trim().split("\n")[0]!, 10);
-  return Number.isFinite(pid) ? pid : undefined;
-};
-
-const isAlive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const waitUntil = async (
-  predicate: () => boolean,
-  timeoutMs: number,
-): Promise<boolean> => {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (predicate()) return true;
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  return predicate();
-};
-
-const callEcho = async (rpcUrl: string, msg: string): Promise<string> => {
-  const parent = new WebSocket(new URL("/parent", rpcUrl));
-  await new Promise<void>((resolve, reject) => {
-    parent.addEventListener("open", () => resolve(), { once: true });
-    parent.addEventListener(
-      "error",
-      () => reject(new Error("parent ws failed")),
-      { once: true },
+const postRaw = (
+  url: string,
+  body: unknown,
+): Effect.Effect<PostResult, never, HttpClient.HttpClient> =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const req = HttpClientRequest.post(url).pipe(
+      HttpClientRequest.setBody(
+        HttpBody.text(JSON.stringify(body), "application/json"),
+      ),
     );
-  });
-  try {
-    const stub = newWebSocketRpcSession(rpcUrl) as RpcStub<RpcProxyApi>;
-    const provider = await stub.getProvider("Test.Echo");
-    const handlers = unwrapRpcHandlers(provider as any) as {
-      echo: (m: string) => Effect.Effect<string>;
-    };
-    return await Effect.runPromise(handlers.echo(msg));
-  } finally {
-    parent.close();
-  }
-};
+    const res = yield* client.execute(req);
+    const text = yield* res.text;
+    return { status: res.status, body: text };
+  }).pipe(Effect.orDie);
 
-// The spawner picks the current runtime when spawning children. These tests
-// only verify behavior under whichever runtime vitest is in. Run vitest under
-// both bun and node to get full coverage.
-describe(`Local.RpcSpawner (runtime=${typeof globalThis.Bun !== "undefined" ? "bun" : "node"})`, () => {
-  const cleanups: Array<() => Promise<unknown>> = [];
+const post = (
+  url: string,
+  body: unknown,
+): Effect.Effect<string, Error, HttpClient.HttpClient> =>
+  postRaw(url, body).pipe(
+    Effect.flatMap((r) =>
+      r.status === 200
+        ? Effect.succeed(r.body)
+        : Effect.fail(new Error(`spawn POST failed: ${r.status} ${r.body}`)),
+    ),
+  );
 
-  afterEach(async () => {
-    await Promise.all(cleanups.splice(0).map((c) => c().catch(() => {})));
-  });
-
-  it("POST returns a ws url whose RPC end-to-end call hits the fixture", async () => {
-    const { url, close } = await withSpawner();
-    cleanups.push(close);
-    const wsUrl = await post(url, samplePayload(FIXTURE_TS_URL));
-    expect(wsUrl).toMatch(/^ws:\/\//);
-    const result = await callEcho(wsUrl, "hello");
-    expect(result).toBe("echo:hello");
-  }, 60_000);
-
-  it("caches the child by payload: a second POST returns the same url", async () => {
-    const { url, close } = await withSpawner();
-    cleanups.push(close);
-    const payload = samplePayload(FIXTURE_TS_URL);
-    const first = await post(url, payload);
-    const second = await post(url, payload);
-    expect(second).toBe(first);
-    const pid = pidOf(first);
-    if (pid !== undefined) {
-      expect(isAlive(pid)).toBe(true);
-    }
-  }, 60_000);
-
-  it("distinct payloads spawn distinct children with distinct urls", async () => {
-    const { url, close } = await withSpawner();
-    cleanups.push(close);
-    const a = await post(url, samplePayload(FIXTURE_TS_URL, "stack-a"));
-    const b = await post(url, samplePayload(FIXTURE_TS_URL, "stack-b"));
-    expect(a).not.toBe(b);
-  }, 60_000);
-
-  it("closing the spawner's scope kills all spawned children", async () => {
-    const { url, close } = await withSpawner();
-    const wsUrl = await post(url, samplePayload(FIXTURE_TS_URL));
-    const pid = pidOf(wsUrl);
-    await close();
-    if (pid !== undefined) {
-      const dead = await waitUntil(() => !isAlive(pid), 5_000);
-      expect(dead).toBe(true);
-    }
-  }, 60_000);
-
-  it("url returned for a crash-on-boot fixture is not a usable RPC endpoint", async () => {
-    // The crash fixture prints the address marker then exits. The
-    // spawner's health check is best-effort: depending on race-timing the
-    // POST may return a bogus url or surface a 500 once the retry budget
-    // is drained. The invariant we *can* assert is that callers cannot
-    // successfully open a parent websocket to the returned url.
-    const { url, close } = await withSpawner();
-    cleanups.push(close);
-    let failed = false;
-    for (let i = 0; i < 4 && !failed; i++) {
-      const r = await postRaw(url, samplePayload(CRASH_FIXTURE_TS_URL));
-      if (r.status !== 200) {
-        failed = true;
-        break;
-      }
-      const usable = await new Promise<boolean>((resolve) => {
-        const ws = new WebSocket(new URL("/parent", r.body));
-        const t = setTimeout(() => {
-          ws.close();
-          resolve(false);
-        }, 1_500);
-        ws.addEventListener(
-          "open",
-          () => {
-            clearTimeout(t);
-            ws.close();
-            resolve(true);
-          },
-          { once: true },
-        );
-        ws.addEventListener(
-          "error",
-          () => {
-            clearTimeout(t);
-            resolve(false);
-          },
-          { once: true },
-        );
-        ws.addEventListener(
-          "close",
-          () => {
-            clearTimeout(t);
-            resolve(false);
-          },
-          { once: true },
-        );
-      });
-      if (!usable) {
-        failed = true;
-        break;
-      }
-      await new Promise((r) => setTimeout(r, 250));
-    }
-    expect(failed).toBe(true);
-  }, 60_000);
-});
+const echoWebSocket = (
+  rpcUrl: string,
+  msg: string,
+): Effect.Effect<string, Error> =>
+  Effect.gen(function* () {
+    yield* openWebSocket(new URL("/parent", rpcUrl));
+    return yield* Effect.promise(async () => {
+      const stub = newWebSocketRpcSession(rpcUrl) as RpcStub<RpcProxyApi>;
+      const provider = await stub.getProvider("Test.Echo");
+      const handlers = unwrapRpcHandlers(provider as any) as {
+        echo: (m: string) => Effect.Effect<string>;
+      };
+      return await Effect.runPromise(handlers.echo(msg));
+    });
+  }).pipe(Effect.scoped);
