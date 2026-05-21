@@ -1,3 +1,5 @@
+import { isPlainObject } from "./data.ts";
+
 export const normalizeNulls = <T>(value: T): T => {
   if (value === null) {
     return undefined as T;
@@ -5,11 +7,7 @@ export const normalizeNulls = <T>(value: T): T => {
   if (Array.isArray(value)) {
     return value.map((item) => normalizeNulls(item)) as T;
   }
-  if (
-    value &&
-    typeof value === "object" &&
-    Object.getPrototypeOf(value) === Object.prototype
-  ) {
+  if (isPlainObject(value)) {
     return Object.fromEntries(
       Object.entries(value)
         .map(([key, nested]) => [key, normalizeNulls(nested)])
@@ -23,11 +21,7 @@ export const stableValue = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map(stableValue);
   }
-  if (
-    value &&
-    typeof value === "object" &&
-    Object.getPrototypeOf(value) === Object.prototype
-  ) {
+  if (isPlainObject(value)) {
     return Object.fromEntries(
       Object.entries(value)
         .sort(([a], [b]) => a.localeCompare(b))
