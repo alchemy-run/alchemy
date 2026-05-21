@@ -154,15 +154,15 @@ const getRpcAddress = (stdout: Stream.Stream<Uint8Array, PlatformError>) =>
       Stream.decodeText,
       Stream.splitLines,
       Stream.runForEach((line) => {
-        if (!done) {
+        if (done) {
+          console.log(line);
+        } else {
           const match = line.match(RPC_ADDRESS_REGEX);
           if (match) {
             done = true;
             return Deferred.succeed(address, match[2]);
           }
-          return Effect.void;
         }
-        console.log("[stdout]", line);
         return Effect.void;
       }),
       Effect.forkScoped,
