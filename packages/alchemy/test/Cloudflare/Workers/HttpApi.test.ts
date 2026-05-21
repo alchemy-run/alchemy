@@ -101,6 +101,26 @@ test(
 );
 
 test(
+  "cors middleware adds Access-Control-Allow-Origin header on actual requests",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+
+    const res = yield* client
+      .execute(
+        HttpClientRequest.post(`${url}/`).pipe(
+          HttpClientRequest.setHeaders({ Origin: "https://example.com" }),
+          HttpClientRequest.bodyJsonUnsafe({ title: "cors-check" }),
+        ),
+      )
+      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+    expect(res.status).toBe(200);
+    expect(res.headers["access-control-allow-origin"]).toBeDefined();
+  }).pipe(logLevel),
+  { timeout: testTimeout },
+);
+
+test(
   "concurrent createTask survives scope-lifecycle pressure",
   Effect.gen(function* () {
     const { url } = yield* stack;

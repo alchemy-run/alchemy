@@ -1,9 +1,9 @@
 import type * as cf from "@cloudflare/workers-types";
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Scope } from "effect/Scope";
+import * as EffectHttp from "effect/unstable/http/HttpEffect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as Http from "../../Http.ts";
@@ -46,28 +46,20 @@ export const makeRequestEffect = <Req = never>(
         }),
     });
 
-    const response = yield* safeHandler.pipe(
+    let webResponse: Response | undefined;
+    yield* EffectHttp.toHandled(safeHandler, (request, response) => {
+      webResponse = HttpServerResponse.toWeb(
+        EffectHttp.scopeTransferToStream(response),
+        { withoutBody: request.method === "HEAD" },
+      );
+      return Effect.void;
+    }).pipe(
       Effect.provide([
         Layer.succeed(HttpServerRequest.HttpServerRequest, request),
         Layer.succeed(Request, webRequest as any),
       ]),
-      Effect.catchCause((cause) => {
-        const message = Option.match(Cause.findErrorOption(cause), {
-          onNone: () => "Internal Server Error",
-          onSome: (error: any) =>
-            error instanceof Error && error.message
-              ? error.message
-              : "Internal Server Error",
-        });
-        return Effect.succeed(
-          HttpServerResponse.text(message, {
-            status: 500,
-            statusText: message,
-          }),
-        );
-      }),
     );
 
-    return HttpServerResponse.toWeb(response);
+    return webResponse!;
   }) as any;
 };
