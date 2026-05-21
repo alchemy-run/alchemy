@@ -55,7 +55,7 @@ export interface Provider<
   >;
 }
 
-export type LifecycleServices = InstanceId | Artifacts;
+type LifecycleServices = InstanceId | Artifacts;
 
 export const Provider = <R extends ResourceLike>(
   type: R["Type"],
