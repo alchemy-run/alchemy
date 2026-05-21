@@ -16,9 +16,8 @@ const cloudflareServices = Layer.provide(
   CloudflareAuth,
 );
 
-RpcServer.launch(
-  LocalWorkerProvider().pipe(
-    Layer.provide(localRuntimeServices({ port: 1337 })),
-    Layer.provide(cloudflareServices),
-  ),
+LocalWorkerProvider().pipe(
+  Layer.provide(localRuntimeServices({ port: 1337 })),
+  Layer.provide(cloudflareServices),
+  RpcServer.launch,
 );
