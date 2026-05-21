@@ -662,7 +662,7 @@ export const Worker: Platform<
   >(
     id: string,
     props:
-      | WorkerProps<Bindings, Env, Assets>
+      | InputProps<WorkerProps<Bindings, Env, Assets>>
       | Effect.Effect<
           InputProps<WorkerProps<Bindings, Env, Assets>>,
           never,
