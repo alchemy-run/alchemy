@@ -63,33 +63,11 @@ with no options is "the `foo` in this same stack and stage" —
 useful for adopting a resource that another part of the program
 already declared.
 
-## Reference a whole stack
+## Reference a whole stack — `yield* MyStack`
 
 Sometimes one resource isn't the right unit — you want the
-**outputs** the upstream stack chose to expose. `Output.stackRef`
-returns the entire stack-output record:
-
-```typescript
-import * as Output from "alchemy/Output";
-
-const backend = yield* Output.stackRef<{ url: string }>("Backend", {
-  stage: "prod",
-});
-
-backend.url; // Output<string>
-```
-
-At the end of every successful `apply`, Alchemy persists
-whatever the stack's effect returned as a per-stack-per-stage
-**stack output** record. `stackRef` reads that record. The proxy
-on the return value turns property access into typed Outputs, so
-`backend.url` is `Output<string>` even though `A` isn't a
-resource type.
-
-## Typed stack handles — `yield* MyStack`
-
-Once you declare a typed handle, two ergonomic forms wrap
-`Output.stackRef`:
+**outputs** the upstream stack chose to expose. Declare a typed
+stack handle and `yield*` it:
 
 ```typescript
 // backend/src/Stack.ts
@@ -113,9 +91,15 @@ const c = yield* Backend.stage["pr-42"]; // any stage name
   you need to **break** stage symmetry — e.g. a feature-branch
   frontend that must always read `prod`'s backend.
 
+At the end of every successful `apply`, Alchemy persists
+whatever the stack's effect returned as a per-stack-per-stage
+**stack output** record. `yield* Backend` reads that record and
+returns a proxy that turns property access into typed Outputs,
+so `(yield* Backend).url` is `Output<string>`.
+
 See [Monorepos](/guides/monorepo) for the full walkthrough.
 
-## Escape hatch — `Output.ref`
+## Escape hatches — `Output.ref` and `Output.stackRef`
 
 When the resource constructor isn't in scope (e.g. inside a
 generic helper), use the underlying `Output.ref` primitive:
@@ -135,6 +119,20 @@ Same `{ stack, stage, id }` lookup, same `InvalidReferenceError`
 failure mode. Prefer `Resource.ref` whenever you can — the
 proxied attribute access is identical, and the type erases to
 the resource interface instead of a bare `Output`.
+
+Similarly, when a typed stack handle isn't in scope, `Output.stackRef`
+reads the stack-output record directly:
+
+```typescript
+const backend = yield* Output.stackRef<{ url: string }>("Backend", {
+  stage: "prod",
+});
+
+backend.url; // Output<string>
+```
+
+Prefer `yield* MyStack` whenever you can — it's the same lookup
+with a real type binding instead of an inline shape.
 
 ## How resolution works
 
