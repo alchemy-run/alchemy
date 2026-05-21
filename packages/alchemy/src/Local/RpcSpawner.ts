@@ -1,4 +1,4 @@
-import { exitHook } from "@alchemy.run/node-utils";
+import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Cache from "effect/Cache";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
