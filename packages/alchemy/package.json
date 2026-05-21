@@ -298,8 +298,8 @@
     "@distilled.cloud/cloudflare-runtime": "catalog:",
     "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
     "@distilled.cloud/core": "catalog:",
-    "@distilled.cloud/planetscale": "catalog:",
     "@distilled.cloud/neon": "catalog:",
+    "@distilled.cloud/planetscale": "catalog:",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
@@ -322,7 +322,6 @@
     "picomatch": "^4.0.4",
     "react": "^19.2.0",
     "rolldown": "catalog:",
-    "sonda": "catalog:",
     "undici": "^7.16.0",
     "yaml": "catalog:"
   },
