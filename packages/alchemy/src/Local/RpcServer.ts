@@ -48,7 +48,7 @@ const serverPlatformLayer = platformLayer({
     return RpcServerBun;
   },
   node: async () => {
-    const { RpcServerNode } = await import("./RpcServerNode.js");
+    const { RpcServerNode } = await import("./RpcServerNode.ts");
     return RpcServerNode;
   },
 });

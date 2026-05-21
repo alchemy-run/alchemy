@@ -91,7 +91,16 @@ export const localRuntimeServices = (options: { port?: number } = {}) =>
 export const LocalWorkerProvider = () =>
   RpcProvider.effect(
     Worker,
-    import.meta.resolve("../Local.ts", import.meta.url),
+    import.meta.resolve(
+      // `import.meta.resolve(<string>)` is a runtime API — TypeScript's
+      // `rewriteRelativeImportExtensions` does NOT touch the string literal, so
+      // we have to pick the right extension ourselves. `import.meta.url` reflects
+      // the actual on-disk extension of *this* file (`.ts` when loaded from
+      // `src/` under Bun or vitest, `.js` when loaded from the compiled `lib/`
+      // under Node), which is exactly the signal we need.
+      import.meta.url.endsWith(".ts") ? "../Local.ts" : "../Local.js",
+      import.meta.url,
+    ),
     Effect.gen(function* () {
       const { accountId } = yield* CloudflareEnvironment;
       const bundler = yield* WorkerBundle;

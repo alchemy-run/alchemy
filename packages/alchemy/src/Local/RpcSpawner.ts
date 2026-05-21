@@ -59,10 +59,23 @@ export const make = Effect.fnUntraced(function* ({
       alchemyContext,
       stack,
     };
-    console.log("spawning", bin, main);
     const command = ChildProcess.make(
       bin,
-      { bun: ["run", main], node: [main.replace(".ts", ".js")] }[bin],
+      {
+        bun: ["run", main],
+        // Under Node, transparently strip TypeScript types so that `.ts`
+        // entry points work the same way they do under Bun. Mirrors what
+        // `dev.ts` already does for the outer process, so the dev experience
+        // is symmetric on both runtimes whether the entry came from `src/`
+        // (dev/tests) or `lib/` (published packages).
+        node: main.endsWith(".ts")
+          ? [
+              "--experimental-transform-types",
+              "--no-warnings=ExperimentalWarning",
+              main,
+            ]
+          : [main],
+      }[bin],
       {
         stdout: "pipe",
         stderr: "inherit",

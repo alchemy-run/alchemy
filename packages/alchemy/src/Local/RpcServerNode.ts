@@ -12,9 +12,7 @@ export const RpcServerNode = RpcServer.layerServer(
     const url = yield* Effect.callback<string>((resume) => {
       server.on("connection", (ws, req) => {
         if (req.url?.startsWith("/parent")) {
-          ws.on("open", () => {
-            parentConnected();
-          });
+          parentConnected();
           ws.on("close", () => {
             parentDisconnected();
           });
