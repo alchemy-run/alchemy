@@ -150,7 +150,7 @@ export const LocalWorkerProvider = () =>
         worker: WorkerConfig,
         bundle: Bundle.BundleOutput,
       ) {
-        const scope = yield* Effect.flatMap(Effect.scope, Scope.fork);
+        const scope = yield* Effect.scope.pipe(Effect.flatMap(Scope.fork));
         const address = yield* runtime
           .start({
             name: worker.name,

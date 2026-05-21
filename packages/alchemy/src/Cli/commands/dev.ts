@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
@@ -61,8 +62,7 @@ export const devCommand = Command.make(
       Effect.provide(
         RpcSpawner.layerServer({
           profile: args.profile,
-          envFile:
-            args.envFile._tag === "Some" ? args.envFile.value : undefined,
+          envFile: Option.getOrUndefined(args.envFile),
         }),
       )(effect),
   ),

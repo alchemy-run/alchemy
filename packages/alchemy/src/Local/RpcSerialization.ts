@@ -199,6 +199,8 @@ const deserializeRpcArgs = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map(deserializeRpcArgs);
   } else if (typeof value === "object" && value !== null) {
+    // These values are serialized as `{_tag: "Redacted", value: ...}` and `{_tag: "Output", description: ...}`,
+    // so we need to detect them manually - Redacted.isRedacted and Output.isOutput do not work.
     if ("_tag" in value && value._tag === "Redacted" && "value" in value) {
       return Redacted.make(value.value);
     } else if (

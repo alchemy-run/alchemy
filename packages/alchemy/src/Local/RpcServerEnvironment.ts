@@ -1,3 +1,4 @@
+import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -46,18 +47,9 @@ export const layer = (environment: RpcServerEnvironment) =>
 export const RPC_SERVER_ENVIRONMENT_KEY =
   "ALCHEMY_RPC_SERVER_ENVIRONMENT" as const;
 
-export const fromEnv = () => {
-  try {
-    const environment = JSON.parse(
-      process.env[RPC_SERVER_ENVIRONMENT_KEY]!,
-    ) as RpcServerEnvironment;
-    return layer(environment);
-  } catch (cause) {
-    throw new Error(
-      `Failed to parse ${RPC_SERVER_ENVIRONMENT_KEY} environment variable`,
-      {
-        cause,
-      },
-    );
-  }
-};
+export const fromEnv = () =>
+  Config.string(RPC_SERVER_ENVIRONMENT_KEY).pipe(
+    Config.map(JSON.parse),
+    Effect.map((environment) => layer(environment)),
+    Layer.unwrap,
+  );

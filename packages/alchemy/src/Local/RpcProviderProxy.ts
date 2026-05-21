@@ -1,5 +1,6 @@
 import { newWebSocketRpcSession, type RpcStub } from "capnweb";
 import * as Cache from "effect/Cache";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -81,13 +82,5 @@ export const layer = (url: string) => Layer.effect(RpcProviderProxy, make(url));
 export const fromEnv = () =>
   Layer.effect(
     RpcProviderProxy,
-    Effect.suspend(() => {
-      const url = process.env[SPAWNER_URL_ENV_KEY];
-      if (!url) {
-        return Effect.die(
-          new Error(`${SPAWNER_URL_ENV_KEY} environment variable is not set`),
-        );
-      }
-      return make(url);
-    }),
+    Config.string(SPAWNER_URL_ENV_KEY).pipe(Effect.flatMap(make)),
   );
