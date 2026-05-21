@@ -138,9 +138,13 @@ export const ExportedHandlerMethods = [
   "queue",
 ] as const satisfies (keyof cf.ExportedHandler)[];
 
-export type WorkerServices = Worker | Request | WorkerExecutionContext;
+export type WorkerServices =
+  | Worker
+  | Request
+  | WorkerExecutionContext
+  | WorkerEnvironment;
 
-export type WorkerShape = Main<WorkerServices | WorkerEnvironment>;
+export type WorkerShape = Main<WorkerServices>;
 
 export type WorkerEnv = Record<
   string,
@@ -660,7 +664,7 @@ export const Worker: Platform<
   >(
     id: string,
     props:
-      | WorkerProps<Bindings, Env, Assets>
+      | InputProps<WorkerProps<Bindings, Env, Assets>>
       | Effect.Effect<
           InputProps<WorkerProps<Bindings, Env, Assets>>,
           never,

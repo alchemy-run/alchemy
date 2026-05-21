@@ -1,3 +1,23 @@
+## v2.0.0-beta.43
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **planetscale**: Add planetscale resources &nbsp;-&nbsp; by **Lucas Thevenet** and **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/113 [<samp>(ce5ea)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ce5eabbf)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **Cloudflare**:
+  - Move WorkerEnvironment requirement to the Layer instead of the binding API call &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/383 [<samp>(ab3a0)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ab3a0268)
+  - Allow Outputs as input to Cloudflare.Worker &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/394 [<samp>(b9ea9)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b9ea9315)
+- **core**:
+  - Remove actions when destroying &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(d8551)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d8551e21)
+- **docker**:
+  - Proper docker command on windows &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/377 [<samp>(d1c42)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d1c421af)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.42...HEAD)
+
+---
+
 ## v2.0.0-beta.42
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes

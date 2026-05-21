@@ -1,12 +1,12 @@
 import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { Hyperdrive } from "./Hyperdrive.ts";
 import { defaultPort, type HyperdriveDevOrigin } from "./Hyperdrive.ts";
@@ -16,32 +16,36 @@ export interface HyperdriveBindingClient {
    * The raw runtime `Hyperdrive` binding. Use this when integrating with a
    * driver that wants direct access to the Cloudflare object.
    */
-  raw: Effect.Effect<runtime.Hyperdrive>;
+  raw: Effect.Effect<runtime.Hyperdrive, never, RuntimeContext>;
   /**
    * A valid DB connection string for use with a driver/ORM.
    */
-  connectionString: Effect.Effect<Redacted.Redacted<string>>;
+  connectionString: Effect.Effect<
+    Redacted.Redacted<string>,
+    never,
+    RuntimeContext
+  >;
   /**
    * Hostname valid only within the current Worker invocation.
    */
-  host: Effect.Effect<string>;
+  host: Effect.Effect<string, never, RuntimeContext>;
   /**
    * Port to pair with `host`.
    */
-  port: Effect.Effect<number>;
+  port: Effect.Effect<number, never, RuntimeContext>;
   /**
    * Database user.
    */
-  user: Effect.Effect<string>;
+  user: Effect.Effect<string, never, RuntimeContext>;
   /**
    * Randomly generated password valid only within the current Worker
    * invocation.
    */
-  password: Effect.Effect<Redacted.Redacted<string>>;
+  password: Effect.Effect<Redacted.Redacted<string>, never, RuntimeContext>;
   /**
    * Database name.
    */
-  database: Effect.Effect<string>;
+  database: Effect.Effect<string, never, RuntimeContext>;
 }
 
 /**
@@ -67,13 +71,13 @@ export const HyperdriveBindingLive = Layer.effect(
   HyperdriveBinding,
   Effect.gen(function* () {
     const Policy = yield* HyperdriveBindingPolicy;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (hyperdrive: Hyperdrive) {
       yield* Policy(hyperdrive);
-      const hd = yield* Effect.serviceOption(WorkerEnvironment).pipe(
-        Effect.map(Option.getOrUndefined),
-        Effect.map((env) => env?.[hyperdrive.LogicalId]! as runtime.Hyperdrive),
-        Effect.cached,
+      const hd = Effect.sync(
+        () =>
+          (env as Record<string, runtime.Hyperdrive>)[hyperdrive.LogicalId]!,
       );
 
       return {

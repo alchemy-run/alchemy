@@ -21,3 +21,4 @@ export * from "./VpcService/index.ts";
 export * from "./Website/index.ts";
 export * from "./Workers/index.ts";
 export * from "./Workers/RpcAsync.ts";
+export * from "./Zaraz/index.ts";

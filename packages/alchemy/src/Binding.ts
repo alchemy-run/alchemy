@@ -90,7 +90,7 @@ export interface Policy<
   in out Self,
   in out Identifier extends string,
   in out Shape extends (...args: any[]) => Effect.Effect<any, any, any>,
-> extends Effect.Effect<Shape, never, Self | RuntimeContext> {
+> extends Effect.Effect<Shape, never, Self> {
   readonly key: Identifier;
   new (_: never): PolicyShape<Identifier, Shape>;
   layer: {

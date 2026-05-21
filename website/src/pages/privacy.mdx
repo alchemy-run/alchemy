@@ -1,9 +1,13 @@
 ---
-title: Privacy & Telemetry
+layout: ../layouts/Marketing.astro
+title: "Privacy & Telemetry — alchemy"
 description: What data the Alchemy CLI and Cloudflare State Store collect, where it goes, and how to opt out.
-sidebar:
-  order: 9
 ---
+import "../styles/privacy.css";
+
+<div class="alc-privacy">
+
+# Privacy & Telemetry
 
 The Alchemy CLI and the Cloudflare State Store worker emit
 OpenTelemetry traces, metrics, and logs to a relay we operate at
@@ -142,9 +146,11 @@ NO_TRACK=1 alchemy deploy
 `noTrack` only suppresses the account-hash attribute on state-store
 spans. To stop the worker from emitting signals at all, you'd need
 to remove the OTLP layer in your own fork of `Api.ts`, or run a
-custom HTTP state store via [`makeHttpStateStore`](/guides/custom-state-store).
+custom HTTP state store via [/guides/custom-state-store](/guides/custom-state-store).
 
 ## Questions
 
 Email [sam@alchemy.run](mailto:sam@alchemy.run) or open an issue at
 [alchemy-run/alchemy-effect](https://github.com/alchemy-run/alchemy-effect/issues).
+
+</div>
