@@ -323,7 +323,6 @@ export const LocalWorkerProvider = () =>
         const config = yield* buildConfig(options);
         const url = yield* localProxy.registerWorker(id);
         if (props.vite) {
-          console.log("starting vite dev server", id);
           const devServer = yield* Vite.viteDev(
             props.vite.rootDir,
             props.env ?? {},
@@ -342,7 +341,6 @@ export const LocalWorkerProvider = () =>
               context,
             },
           );
-          console.log("vite dev server started", id);
           const localAddress = devServer.resolvedUrls!.local[0].slice(0, -1);
           yield* localProxy.setLocalAddress(id, localAddress);
         } else {
