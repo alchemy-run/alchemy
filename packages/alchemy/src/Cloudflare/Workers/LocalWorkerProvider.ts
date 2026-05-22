@@ -196,8 +196,17 @@ export const LocalWorkerProvider = () =>
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
-            if (binding.type === "durable_object_namespace") {
-              durableObjectNamespaces[binding.name] = binding.className!;
+            if (
+              binding.type === "durable_object_namespace" &&
+              // The `durableObjectNamespaces` property is only used to declare DOs in this worker.
+              // Otherwise, it's a cross-worker durable object binding, which cloudflare-runtime handles automatically.
+              (!binding.scriptName || binding.scriptName === name)
+            ) {
+              // Reuse the existing namespace id if it was provided, otherwise generate a new one.
+              // `workerd` uses this for the object's storage path, so it must be safe to use as a file name.
+              durableObjectNamespaces[binding.className] =
+                binding.namespaceId ??
+                encodeURIComponent(`${id}-${binding.className}`);
             }
             workerBindings.push(yield* toRuntimeBinding(binding));
           }
