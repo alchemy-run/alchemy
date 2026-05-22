@@ -7,7 +7,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import VectorizeWorker from "./vectorize-worker.ts";
+import VectorizeWorker from "./fixtures/vectorize-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
