@@ -51,11 +51,11 @@ Reference pages explaining what each primitive means and how they fit together. 
 - [Resource Lifecycle](https://v2.alchemy.run/concepts/resource-lifecycle) — How alchemy plans, applies, replaces, and destroys resources — and how to think about idempotency and recovery.
 - [Stack](https://v2.alchemy.run/concepts/stack) — A Stack is a collection of Resources deployed together as a unit.
 - [Stages](https://v2.alchemy.run/concepts/stages) — Stages are isolated instances of a Stack — dev_sam, staging, prod, pr-42 — each with their own state and physical names.
-- [Phases](https://v2.alchemy.run/concepts/phases) — Alchemy programs run in two phases — plantime/init drives the deploy, runtime/exec handles requests. Knowing which is which is the key to using Platforms.
+- [Phases](https://v2.alchemy.run/concepts/phases) — Alchemy programs run in two phases — plantime/init drives the deploy, runtime handles requests. Knowing which is which is the key to using Platforms.
 - [Platform](https://v2.alchemy.run/concepts/platform) — A Platform bundles infrastructure with the runtime code that runs on it — Workers, Lambda Functions, Containers — so your handler ships with its bindings.
 - [Binding](https://v2.alchemy.run/concepts/binding) — A binding connects a resource to a Worker or Lambda. It generates IAM policies, env vars, and a typed SDK in one call.
 - [Inputs and Outputs](https://v2.alchemy.run/concepts/outputs) — Output<T> is alchemy's lazy reference type — the lazy values that flow between resources, get composed with .pipe, mapped, interpolated, and resolved during deploy.
-- [Layers](https://v2.alchemy.run/concepts/layers) — Use Effect Layers to encapsulate infrastructure behind a clean interface — define a service once, swap implementations across stacks, providers, and tests.
+- [Layers](https://v2.alchemy.run/concepts/layers) — A Layer encapsulates a slice of infrastructure (resources, bindings, runtime logic) behind a typed service interface. Code that depends on the interface stays cloud-agnostic; swapping the implementation swaps the underlying infrastructure.
 - [State Store](https://v2.alchemy.run/concepts/state-store) — How Alchemy persists resource state between deploys to compute diffs and track infrastructure.
 - [Profiles](https://v2.alchemy.run/concepts/profiles) — Profiles store cloud credentials per environment in ~/.alchemy/profiles.json — switch between work and personal accounts, or between staging and prod credentials.
 - [Local Development](https://v2.alchemy.run/concepts/local-development) — How alchemy dev provides hot reloading, local workerd execution, and cloud-backed resources for fast iteration.
@@ -74,6 +74,7 @@ Standalone how-to pages. Each solves a specific problem; read in any order.
 - [Effect HTTP API](https://v2.alchemy.run/guides/effect-http-api) — Build a schema-validated HTTP API with Effect's HttpApi module and deploy it as a Cloudflare Worker.
 - [Effect RPC](https://v2.alchemy.run/guides/effect-rpc) — Build a typed RPC API with Effect's Rpc module and deploy it as a Cloudflare Worker.
 - [Frontend frameworks](https://v2.alchemy.run/guides/frontends) — Deploy Vite-based frameworks (TanStack Start, Astro, SolidStart, Nuxt, React) and any custom-built static site (Hugo, Eleventy) to Cloudflare with one declaration.
+- [Building Infrastructure Layers](https://v2.alchemy.run/guides/infrastructure-layers) — Package resources + bindings + runtime glue into a typed Effect Layer, then swap a KV-backed implementation for an R2-backed one without touching the consumer.
 - [Migrating from v1](https://v2.alchemy.run/guides/migrating-from-v1) — Migrate your Alchemy v1 (async/await) project to Alchemy v2.
 - [Monorepos](https://v2.alchemy.run/guides/monorepo) — Two patterns for organizing an Alchemy monorepo with a backend API and a frontend website — one shared stack (recommended) or one stack per package — with the trade-offs and a working example for each.
 - [Secrets and env vars](https://v2.alchemy.run/guides/secrets) — Wire OPENAI_API_KEY (or any .env value) into a Cloudflare Worker as a secret_text binding using Alchemy.Secret and Effect's Config.
@@ -88,6 +89,7 @@ Standalone how-to pages. Each solves a specific problem; read in any order.
 - [alchemy@2.0.0-beta.38](https://v2.alchemy.run/blog/2026-05-13-beta-38) — Cloudflare Email Routing and the `send_email` Worker binding, a new `Action` plan node for arbitrary Effects that run during apply, a leaner Neon provider on the typed `@distilled.cloud/neon` SDK, and a transport-error retry fix.
 - [alchemy@2.0.0-beta.39](https://v2.alchemy.run/blog/2026-05-13-beta-39) — A small, high-impact fix release — `VITE_*` env props are now inlined into the client bundle, the Cloudflare Worker HTTP adapter runs handlers through Effect's standard HTTP lifecycle (unblocking `RpcServer.toHttpEffect`), and the `SendEmail` binding from beta.38 is now wired into Worker binding inference.
 - [alchemy@2.0.0-beta.40](https://v2.alchemy.run/blog/2026-05-15-beta-40) — Cloudflare local dev gains a real Vite dev server (HMR, SSR, client + worker in one process), AiGateway stops reporting spurious updates on every deploy, the Worker HTTP server returns generic 500s while logging the full Cause server-side, and a handful of fixes around entrypoint generation, container startup, and the dev lockfile.
+- [alchemy@2.0.0-beta.41](https://v2.alchemy.run/blog/2026-05-20-beta-41) — A big internal rewrite of the Cloudflare Worker runtime fixes hung requests and dropped responses from RPC and HTTP API workers. The Worker entrypoint is now a thin shell over `WorkerBridge.ts`, scopes are linearized per request, and the same schema-driven pattern (HTTP API, RPC, and Durable Object proxies) is now stable end-to-end.
 
 ## Providers — auto-generated API reference
 
