@@ -1,15 +1,14 @@
 ---
 title: Building Infrastructure Layers
-description: Package resources + bindings + runtime glue into a typed Effect Layer, then implement the same service on Cloudflare KV and AWS DynamoDB without changing the consumer.
+description: Package resources + bindings + runtime glue into a typed Effect Layer, then swap a KV-backed implementation for an R2-backed one without touching the consumer.
 sidebar:
   order: 7
 ---
 
 A [Layer](/concepts/layers) packages infrastructure behind a typed
 service. This guide builds a `JobService` backed by a Cloudflare KV
-namespace and plugs it into a Worker, then implements the same
-service against an AWS DynamoDB table and plugs it into a Lambda —
-without touching the consumer.
+namespace, plugs it into a Worker, then swaps the storage backend
+to an R2 bucket — without touching the Worker.
 
 ## Define the service interface
 
@@ -257,46 +256,34 @@ has a stable logical id:
 The Stack ends up with one `Jobs` KV namespace, bound to both `Api`
 and `Admin` with the correct env vars on each.
 
-## Swap the backend to DynamoDB
+## Swap the backend to R2
 
-`JobService` is a contract, not a cloud. The same Worker can run
-against a DynamoDB table instead of a KV namespace — only the
-Layer implementation and the runtime bindings provided to it
+`JobService` is a contract, not a resource. The same Worker can
+run against an R2 bucket instead of a KV namespace — only the
+Layer implementation and the runtime binding provided to it
 change. Drop a second implementation alongside `JobService.KV.ts`:
 
 ```typescript
-// src/JobService.DynamoDB.ts
-import * as DynamoDB from "alchemy/AWS/DynamoDB";
+// src/JobService.R2.ts
+import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { JobService, type Job } from "./JobService.ts";
 
-export const JobServiceDynamoDB = Layer.effect(
+export const JobServiceR2 = Layer.effect(
   JobService,
   Effect.gen(function* () {
-    const table = yield* DynamoDB.Table("Jobs", {
-      partitionKey: "id",
-      attributes: { id: "S" },
-    });
-    const getItem = yield* DynamoDB.GetItem.bind(table);
-    const putItem = yield* DynamoDB.PutItem.bind(table);
+    const Bucket = yield* Cloudflare.R2Bucket("Jobs");
+    const r2 = yield* Cloudflare.R2BucketBinding.bind(Bucket);
 
     return {
       getJob: Effect.fn(function* (id: string) {
-        const result = yield* getItem({ Key: { id: { S: id } } });
-        if (!result.Item) return null;
-        return {
-          id: result.Item.id!.S!,
-          status: result.Item.status!.S! as Job["status"],
-        };
+        const object = yield* r2.get(id);
+        if (!object) return null;
+        return yield* object.json<Job>();
       }),
       putJob: Effect.fn(function* (job: Job) {
-        yield* putItem({
-          Item: {
-            id: { S: job.id },
-            status: { S: job.status },
-          },
-        });
+        yield* r2.put(job.id, JSON.stringify(job));
       }),
     };
   }),
@@ -304,31 +291,27 @@ export const JobServiceDynamoDB = Layer.effect(
 ```
 
 Same `Layer.effect(JobService, …)` shape, same `getJob`/`putJob`
-contract — internally it yields a `DynamoDB.Table` resource and
-binds `GetItem`/`PutItem` instead of yielding a KV namespace.
+contract — internally it yields an `R2Bucket` resource and binds
+it instead of a KV namespace.
 
 ## Swap the Layer on the Worker
 
 The Worker doesn't change. Only the Layer it provides — and the
-runtime bindings provided to that Layer — swap over:
+runtime binding provided to that Layer — swap over:
 
 ```diff lang="typescript"
    }).pipe(
      Effect.provide(
 -      JobServiceKV.pipe(Layer.provide(Cloudflare.KVNamespaceBindingLive)),
-+      JobServiceDynamoDB.pipe(
-+        Layer.provide(
-+          Layer.mergeAll(DynamoDB.GetItemLive, DynamoDB.PutItemLive),
-+        ),
-+      ),
++      JobServiceR2.pipe(Layer.provide(Cloudflare.R2BucketBindingLive)),
      ),
    ),
 ```
 
 The Worker still yields `JobService` and calls `getJob`/`putJob`;
 `fetch` is byte-for-byte unchanged. The Stack now contains a
-`Jobs` DynamoDB table (no KV namespace) and the Worker is
-configured to talk to it.
+`Jobs` R2 bucket (no KV namespace) and the Worker is configured
+to talk to it.
 
 ## Related
 
