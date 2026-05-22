@@ -18,8 +18,9 @@ import type { DurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
 
-export type WorkerBinding = NonNullable<
-  workers.PutScriptRequest["metadata"]["bindings"]
+export type WorkerBinding = Exclude<
+  workers.PutScriptRequest["metadata"]["bindings"],
+  undefined
 >[number];
 
 export type WorkerSettingsBinding = Exclude<
