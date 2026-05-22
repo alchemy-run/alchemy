@@ -242,7 +242,7 @@ export const LocalWorkerProvider = () =>
               ? { kind: "external" }
               : { kind: "effect", exports: (props.exports ?? {}) as any },
             stack: { name: stack.name, stage: stack.stage },
-            userOptions: props.build,
+            extraOptions: props.build,
           } satisfies WorkerBundleOptions,
           assets: props.assets,
         };
