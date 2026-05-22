@@ -203,10 +203,12 @@ export const LocalWorkerProvider = () =>
               (!binding.scriptName || binding.scriptName === name)
             ) {
               if (!binding.className) {
-                return yield* new WorkerValidationError({
-                  message: `Durable object namespace ${binding.name} must have a className`,
-                  value: binding,
-                });
+                return yield* Effect.die(
+                  new WorkerValidationError({
+                    message: `Durable object namespace ${binding.name} must have a className`,
+                    value: binding,
+                  }),
+                );
               }
               // Reuse the existing namespace id if it was provided, otherwise generate a new one.
               // `workerd` uses this for the object's storage path, so it must be safe to use as a file name.
