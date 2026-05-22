@@ -1,6 +1,6 @@
 ---
 title: Building Infrastructure Layers
-description: Package resources + bindings + runtime glue into a typed Effect Layer that callers can swap between clouds or replace with an in-memory mock.
+description: Package resources + bindings + runtime glue into a typed Effect Layer, then swap a KV-backed implementation for an R2-backed one without touching the consumer.
 sidebar:
   order: 7
 ---
@@ -8,7 +8,7 @@ sidebar:
 A [Layer](/concepts/layers) packages infrastructure behind a typed
 service. This guide builds a `JobService` backed by a Cloudflare KV
 namespace, plugs it into a Worker, then swaps the storage backend
-to an in-memory implementation without touching the Worker.
+to an R2 bucket — without touching the Worker.
 
 ## Define the service interface
 
@@ -255,6 +255,63 @@ has a stable logical id:
 
 The Stack ends up with one `Jobs` KV namespace, bound to both `Api`
 and `Admin` with the correct env vars on each.
+
+## Swap the backend to R2
+
+`JobService` is a contract, not a resource. The same Worker can
+run against an R2 bucket instead of a KV namespace — only the
+Layer implementation and the runtime binding provided to it
+change. Drop a second implementation alongside `JobService.KV.ts`:
+
+```typescript
+// src/JobService.R2.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { JobService, type Job } from "./JobService.ts";
+
+export const JobServiceR2 = Layer.effect(
+  JobService,
+  Effect.gen(function* () {
+    const Bucket = yield* Cloudflare.R2Bucket("Jobs");
+    const r2 = yield* Cloudflare.R2BucketBinding.bind(Bucket);
+
+    return {
+      getJob: Effect.fn(function* (id: string) {
+        const object = yield* r2.get(id);
+        if (!object) return null;
+        return yield* object.json<Job>();
+      }),
+      putJob: Effect.fn(function* (job: Job) {
+        yield* r2.put(job.id, JSON.stringify(job));
+      }),
+    };
+  }),
+);
+```
+
+Same `Layer.effect(JobService, …)` shape, same `getJob`/`putJob`
+contract — internally it yields an `R2Bucket` resource and binds
+it instead of a KV namespace.
+
+## Swap the Layer on the Worker
+
+The Worker doesn't change. Only the Layer it provides — and the
+runtime binding provided to that Layer — swap over:
+
+```diff lang="typescript"
+   }).pipe(
+     Effect.provide(
+-      JobServiceKV.pipe(Layer.provide(Cloudflare.KVNamespaceBindingLive)),
++      JobServiceR2.pipe(Layer.provide(Cloudflare.R2BucketBindingLive)),
+     ),
+   ),
+```
+
+The Worker still yields `JobService` and calls `getJob`/`putJob`;
+`fetch` is byte-for-byte unchanged. The Stack now contains a
+`Jobs` R2 bucket (no KV namespace) and the Worker is configured
+to talk to it.
 
 ## Related
 

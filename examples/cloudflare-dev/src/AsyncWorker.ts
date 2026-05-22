@@ -15,7 +15,7 @@ export default {
       const instance = (await WebAssembly.instantiate(wasm)) as AddInstance;
       return Response.json({ result: instance.exports.add(3, 4) });
     }
-    const counter = env.Counter.getByName("my-counter");
+    const counter = env.COUNTER.getByName("my-counter");
     const count = await counter.increment();
     return new Response(`Hello, world! ${count}`);
   },

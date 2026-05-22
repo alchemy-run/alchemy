@@ -245,24 +245,11 @@ export interface WorkerProps<
    * already exist in the account.
    */
   domain?: string | string[];
-  build?: {
-    /**
-     * Whether to generate a metafile for the worker bundle.
-     * @default false
-     */
-    metafile?: boolean;
-    /**
-     * Configures the {@link Bundle.purePlugin} which annotates top-level
-     * call/new expressions in matching packages with `/*#__PURE__*\/`
-     * so rolldown can tree-shake them.
-     *
-     * - `undefined` (default): plugin is enabled with default packages
-     *   (`effect`, `@effect/*`).
-     * - `PurePluginOptions`: plugin is enabled with the provided options.
-     * - `false`: plugin is disabled.
-     */
-    pure?: Bundle.BundleExtraOptions["pure"];
-  };
+  /**
+   * Extra bundler options applied on top of the standard rolldown input/output
+   * options used to build this Worker. See {@link Bundle.BundleExtraOptions}.
+   */
+  build?: Bundle.BundleExtraOptions;
 }
 
 export type Worker<Bindings extends WorkerBindings = any> = Resource<
@@ -1123,7 +1110,7 @@ export const LiveWorkerProvider = () =>
                   exports: (props.exports ?? {}) as any,
                 },
             stack: { name: stack.name, stage: stack.stage },
-            userOptions: props.build,
+            extraOptions: props.build,
           })
           .pipe(Artifacts.cached("build"));
 

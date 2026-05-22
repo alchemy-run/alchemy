@@ -138,7 +138,6 @@ export const makeWorkerBridge = (
                       ),
                     );
                   }
-                  console.log("dispatcher", dispatcher.toString());
                   return Effect.succeed([
                     dispatcher(...args) as Effect.Effect<any>,
                     Context.empty(),
@@ -272,7 +271,6 @@ export const makeRpcProxy = (
                   ),
                 );
               }
-              console.log("dispatcher", dispatcher.toString());
               return dispatcher(...args) as Effect.Effect<any>;
             }),
             processEvent,

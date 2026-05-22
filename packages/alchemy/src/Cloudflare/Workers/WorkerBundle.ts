@@ -6,14 +6,12 @@ import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { fileURLToPath } from "node:url";
 import type * as rolldown from "rolldown";
-import Sonda from "sonda/rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
 import {
   isDurableObjectExport,
   type DurableObjectExport,
 } from "./DurableObjectNamespace.ts";
-import type { WorkerProps } from "./Worker.ts";
 import { isWorkflowExport, type WorkflowExport } from "./Workflow.ts";
 
 export interface WorkerBundleOptions {
@@ -32,7 +30,7 @@ export interface WorkerBundleOptions {
         exports: Record<string, DurableObjectExport | WorkflowExport>;
       };
   stack: { name: string; stage: string };
-  userOptions: WorkerProps["build"] | undefined;
+  extraOptions: Bundle.BundleExtraOptions | undefined;
 }
 
 export const WorkerBundle = Effect.gen(function* () {
@@ -74,7 +72,6 @@ export const WorkerBundle = Effect.gen(function* () {
               ),
             ]
           : undefined,
-        ...(options.userOptions?.metafile ? [Sonda({ open: false })] : []),
       ],
       checks: {
         // Suppress unresolved import warnings for unrelated AWS packages
@@ -88,10 +85,7 @@ export const WorkerBundle = Effect.gen(function* () {
       keepNames: true,
       dir: `.alchemy/bundles/${options.id}`,
     };
-    const extraOptions: Bundle.BundleExtraOptions = {
-      pure: options.userOptions?.pure,
-    };
-    return { inputOptions, outputOptions, extraOptions };
+    return { inputOptions, outputOptions, extraOptions: options.extraOptions };
   });
 
   const sanitizeMain = (main: string) =>
