@@ -1,7 +1,6 @@
 import type * as cf from "@cloudflare/workers-types";
-import { NodeServices } from "@effect/platform-node";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import type { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
-import { Stream } from "effect";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -12,7 +11,8 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import { MinimumLogLevel } from "effect/References";
 import * as Scope from "effect/Scope";
-import { FetchHttpClient } from "effect/unstable/http";
+import * as Stream from "effect/Stream";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { ExecutionContext } from "../../ExecutionContext.ts";
 import { makeEntrypointLayer } from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
