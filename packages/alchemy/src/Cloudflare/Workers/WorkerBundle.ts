@@ -76,6 +76,8 @@ export const WorkerBundle = Effect.gen(function* () {
       checks: {
         // Suppress unresolved import warnings for unrelated AWS packages
         unresolvedImport: false,
+        // Suppress warning caused by static import of `@effect/platform-node/NodeServices` in `WorkerBridge.ts`
+        ineffectiveDynamicImport: false,
       },
     };
     const outputOptions: rolldown.OutputOptions = {
