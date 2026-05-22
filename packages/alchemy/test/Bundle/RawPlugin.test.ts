@@ -1,13 +1,14 @@
 import * as Bundle from "@/Bundle/Bundle";
-import { rawPlugin, RAW_RE, splitFileAndPostfix } from "@/Bundle/RawPlugin";
+import { RAW_RE, rawPlugin, splitFileAndPostfix } from "@/Bundle/RawPlugin";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "@effect/vitest";
+import { assert, describe, expect, it, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as nodeFs from "node:fs/promises";
+import * as Predicate from "effect/Predicate";
+import * as NodeFs from "node:fs/promises";
 
-describe("Bundle.build with rawPlugin", () => {
+layer(NodeServices.layer)("Bundle.build with rawPlugin", (it) => {
   it.effect("inlines a sibling file imported with ?raw", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -41,7 +42,7 @@ describe("Bundle.build with rawPlugin", () => {
       );
 
       yield* fs.remove(root, { recursive: true });
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }),
   );
 
   it.effect("resolves ?raw imports through subdirectories", () =>
@@ -74,11 +75,31 @@ describe("Bundle.build with rawPlugin", () => {
       expect(code).toContain("SUBDIR_RAW_MARKER");
 
       yield* fs.remove(root, { recursive: true });
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }),
   );
 });
 
-describe("rawPlugin load hook", () => {
+layer(NodeServices.layer)("rawPlugin load hook", (it) => {
+  /**
+   * Invokes a plugin's `load` hook directly with a stubbed plugin
+   * context. The handler reads through `this.fs` (rolldown's
+   * plugin-context filesystem); we stub it with `node:fs/promises` so the
+   * disk read works without booting a full rolldown build.
+   */
+  const load = (id: string) =>
+    Effect.promise(async () => {
+      const plugin = rawPlugin();
+      assert(
+        Predicate.hasProperty(plugin, "load") &&
+          Predicate.hasProperty(plugin.load, "handler") &&
+          typeof plugin.load.handler === "function",
+        "plugin has no load hook",
+      );
+      const result = await plugin.load.handler.call({ fs: NodeFs } as any, id);
+      assert(Predicate.isObject(result), "load hook returned non-object");
+      return result;
+    });
+
   it.effect("inlines a .txt file as a JSON-encoded default export", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -87,16 +108,13 @@ describe("rawPlugin load hook", () => {
       const file = path.join(root, "hello.txt");
       yield* fs.writeFileString(file, "Hello, World!\n");
 
-      const plugin = rawPlugin();
-      const result = (yield* Effect.promise(() =>
-        callLoad(plugin, `${file}?raw`),
-      )) as { code: string; moduleType: string };
+      const result = yield* load(file);
 
       expect(result.code).toBe(`export default "Hello, World!\\n";`);
       expect(result.moduleType).toBe("js");
 
       yield* fs.remove(root, { recursive: true });
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }),
   );
 
   it.effect("inlines a .json file verbatim (no parsing)", () =>
@@ -108,15 +126,12 @@ describe("rawPlugin load hook", () => {
       const raw = `{"a": 1, "b": "two"}`;
       yield* fs.writeFileString(file, raw);
 
-      const plugin = rawPlugin();
-      const result = (yield* Effect.promise(() =>
-        callLoad(plugin, `${file}?raw`),
-      )) as { code: string };
+      const result = yield* load(`${file}?raw`);
 
       expect(result.code).toBe(`export default ${JSON.stringify(raw)};`);
 
       yield* fs.remove(root, { recursive: true });
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }),
   );
 
   it.effect("strips additional query params before reading the file", () =>
@@ -127,15 +142,12 @@ describe("rawPlugin load hook", () => {
       const file = path.join(root, "page.html");
       yield* fs.writeFileString(file, "<h1>hi</h1>");
 
-      const plugin = rawPlugin();
-      const result = (yield* Effect.promise(() =>
-        callLoad(plugin, `${file}?raw&t=12345`),
-      )) as { code: string };
+      const result = yield* load(`${file}?raw&t=12345`);
 
       expect(result.code).toBe(`export default "<h1>hi</h1>";`);
 
       yield* fs.remove(root, { recursive: true });
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }),
   );
 });
 
@@ -182,24 +194,3 @@ describe("splitFileAndPostfix", () => {
     ]);
   });
 });
-
-/**
- * Invokes a plugin's `load` hook directly with a stubbed plugin
- * context. The handler reads through `this.fs` (rolldown's
- * plugin-context filesystem); we stub it with `node:fs/promises` so the
- * disk read works without booting a full rolldown build.
- */
-async function callLoad(
-  plugin: ReturnType<typeof rawPlugin>,
-  id: string,
-): Promise<unknown> {
-  const load = plugin.load;
-  if (load === undefined) throw new Error("plugin has no load hook");
-  const handler = typeof load === "function" ? load : load.handler;
-  return await (handler as (...args: any[]) => unknown).call(
-    { fs: nodeFs } as any,
-    id,
-  );
-}
-
-void Bundle;
