@@ -18,10 +18,20 @@ import type { DurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
 
-export type WorkerBinding = Exclude<
-  workers.PutScriptRequest["metadata"]["bindings"],
-  undefined
->[number];
+export type WorkerBinding =
+  // This is a workaround so that `className` is required in the type of `durable_object_namespace` bindings.
+  | Exclude<
+      NonNullable<workers.PutScriptRequest["metadata"]["bindings"]>[number],
+      { type: "durable_object_namespace" }
+    >
+  | {
+      name: string;
+      type: "durable_object_namespace";
+      className: string;
+      environment?: string;
+      namespaceId?: string;
+      scriptName?: string;
+    };
 
 export type WorkerSettingsBinding = Exclude<
   workers.GetScriptScriptAndVersionSettingResponse["bindings"],
