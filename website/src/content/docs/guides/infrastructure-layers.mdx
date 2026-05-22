@@ -1,14 +1,15 @@
 ---
 title: Building Infrastructure Layers
-description: Package resources + bindings + runtime glue into a typed Effect Layer that callers can swap between clouds or replace with an in-memory mock.
+description: Package resources + bindings + runtime glue into a typed Effect Layer, then implement the same service on Cloudflare KV and AWS DynamoDB without changing the consumer.
 sidebar:
   order: 7
 ---
 
 A [Layer](/concepts/layers) packages infrastructure behind a typed
 service. This guide builds a `JobService` backed by a Cloudflare KV
-namespace, plugs it into a Worker, then swaps the storage backend
-to an in-memory implementation without touching the Worker.
+namespace and plugs it into a Worker, then implements the same
+service against an AWS DynamoDB table and plugs it into a Lambda —
+without touching the consumer.
 
 ## Define the service interface
 
@@ -255,6 +256,163 @@ has a stable logical id:
 
 The Stack ends up with one `Jobs` KV namespace, bound to both `Api`
 and `Admin` with the correct env vars on each.
+
+## Implement the same service on AWS
+
+`JobService` is a contract, not a cloud. Anything that can satisfy
+the `getJob`/`putJob` interface is fair game — including a DynamoDB
+table read from inside a Lambda Function. Drop a second
+implementation alongside `JobService.KV.ts`:
+
+```typescript
+// src/JobService.DynamoDB.ts
+import * as DynamoDB from "alchemy/AWS/DynamoDB";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { JobService, type Job } from "./JobService.ts";
+
+export const JobServiceDynamoDB = Layer.effect(
+  JobService,
+  Effect.gen(function* () {
+    return {
+      getJob: Effect.fn(function* (id: string) {
+        // TODO: read from DynamoDB
+      }),
+      putJob: Effect.fn(function* (job: Job) {
+        // TODO: write to DynamoDB
+      }),
+    };
+  }),
+);
+```
+
+The `Layer.effect(JobService, …)` shape is identical to the KV
+version — only the body changes.
+
+## Declare the DynamoDB table
+
+`DynamoDB.Table("Jobs", { … })` describes a real AWS table. Yielding
+it inside the Layer attaches it to whichever Stack consumes the
+Layer, just like the KV namespace did on Cloudflare:
+
+```diff lang="typescript"
+ export const JobServiceDynamoDB = Layer.effect(
+   JobService,
+   Effect.gen(function* () {
++    const table = yield* DynamoDB.Table("Jobs", {
++      partitionKey: "id",
++      attributes: { id: "S" },
++    });
++
+     return {
+       // ...
+     };
+   }),
+ );
+```
+
+`attributes` only needs to list the attributes used by the
+partition key — DynamoDB itself is schemaless on the rest of the
+row.
+
+## Bind GetItem and PutItem
+
+DynamoDB exposes one binding per IAM action, so the storage read
+and write paths get their own bindings:
+
+```diff lang="typescript"
+ export const JobServiceDynamoDB = Layer.effect(
+   JobService,
+   Effect.gen(function* () {
+     const table = yield* DynamoDB.Table("Jobs", { /* ... */ });
++    const getItem = yield* DynamoDB.GetItem.bind(table);
++    const putItem = yield* DynamoDB.PutItem.bind(table);
+
+     return {
+       // ...
+     };
+   }),
+ );
+```
+
+`.bind(table)` wires the table into the consuming Lambda — IAM
+policy, env injection, typed client — and gives you back a
+callable scoped to that table's ARN.
+
+## Implement the methods
+
+Replace the TODO bodies with calls to the typed callables.
+DynamoDB takes attribute values in their native typed form, so map
+to/from the `Job` shape at the boundary:
+
+```diff lang="typescript"
+     return {
+       getJob: Effect.fn(function* (id: string) {
+-        // TODO: read from DynamoDB
++        const result = yield* getItem({ Key: { id: { S: id } } });
++        if (!result.Item) return null;
++        return {
++          id: result.Item.id!.S!,
++          status: result.Item.status!.S! as Job["status"],
++        };
+       }),
+       putJob: Effect.fn(function* (job: Job) {
+-        // TODO: write to DynamoDB
++        yield* putItem({
++          Item: {
++            id: { S: job.id },
++            status: { S: job.status },
++          },
++        });
+       }),
+     };
+```
+
+## Plug into a Lambda Function
+
+The Lambda consumer is the mirror image of the Worker — yield
+`JobService`, call it from `fetch`, provide the DynamoDB Layer.
+`Layer.mergeAll` covers both bindings' runtime layers in one go:
+
+```typescript
+// src/Api.lambda.ts
+import * as AWS from "alchemy/AWS";
+import * as DynamoDB from "alchemy/AWS/DynamoDB";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { JobService } from "./JobService.ts";
+import { JobServiceDynamoDB } from "./JobService.DynamoDB.ts";
+
+export default class Api extends AWS.Lambda.Function<Api>()(
+  "Api",
+  { main: import.meta.filename, url: true },
+  Effect.gen(function* () {
+    const jobs = yield* JobService;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const job = yield* jobs.getJob("job-1");
+        return yield* HttpServerResponse.json(job);
+      }),
+    };
+  }).pipe(
+    Effect.provide(
+      JobServiceDynamoDB.pipe(
+        Layer.provide(
+          Layer.mergeAll(DynamoDB.GetItemLive, DynamoDB.PutItemLive),
+        ),
+      ),
+    ),
+  ),
+) {}
+```
+
+The `fetch` body is byte-for-byte identical to the Cloudflare
+Worker's — it only sees `JobService`. The Stack ends up with a
+`Jobs` DynamoDB table, an IAM role scoped to `dynamodb:GetItem` and
+`dynamodb:PutItem` on that table's ARN, and a Function URL serving
+the Lambda.
 
 ## Related
 
