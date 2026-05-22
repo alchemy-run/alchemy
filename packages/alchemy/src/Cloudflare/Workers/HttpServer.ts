@@ -46,20 +46,17 @@ export const makeRequestEffect = <Req = never>(
         }),
     });
 
-    let webResponse: Response | undefined;
-    yield* EffectHttp.toHandled(safeHandler, (request, response) => {
-      webResponse = HttpServerResponse.toWeb(
-        EffectHttp.scopeTransferToStream(response),
-        { withoutBody: request.method === "HEAD" },
-      );
-      return Effect.void;
-    }).pipe(
+    return yield* EffectHttp.toHandled(safeHandler, (request, response) =>
+      Effect.succeed(
+        HttpServerResponse.toWeb(EffectHttp.scopeTransferToStream(response), {
+          withoutBody: request.method === "HEAD",
+        }),
+      ),
+    ).pipe(
       Effect.provide([
         Layer.succeed(HttpServerRequest.HttpServerRequest, request),
         Layer.succeed(Request, webRequest as any),
       ]),
     );
-
-    return webResponse!;
   }) as any;
 };

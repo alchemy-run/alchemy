@@ -1,5 +1,4 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -9,7 +8,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import { TaskApi } from "./fixtures/http-api/api.ts";
-import HttpApiTestWorker from "./fixtures/http-api/worker.ts";
+import Stack from "./fixtures/http-api/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -20,24 +19,10 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const Stack = Alchemy.Stack(
-  "HttpApiTestStack",
-  {
-    providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
-  },
-  Effect.gen(function* () {
-    const worker = yield* HttpApiTestWorker;
-    return {
-      url: worker.url.as<string>(),
-    };
-  }),
-);
-
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-const testTimeout = 30_000;
+const testTimeout = 15_000;
 const requestTimeout = "5 seconds";
 const readinessRetry = {
   schedule: Schedule.exponential("250 millis"),
