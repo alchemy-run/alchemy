@@ -65,7 +65,7 @@
       "examples/monorepo-multi-stack/*"
     ],
     "catalog": {
-      "@alchemy.run/node-utils": "0.0.2",
+      "@alchemy.run/node-utils": "0.0.3",
       "@aws-sdk/credential-providers": "^3.0.0",
       "@cloudflare/containers": "^0.1.1",
       "@cloudflare/vite-plugin": "^1.13.12",
