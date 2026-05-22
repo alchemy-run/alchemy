@@ -39,7 +39,7 @@ const forbiddenPatterns = [
 
 const documentedResources = [
   "Branch",
-  "ComputeApp",
+  "Compute",
   "ComputeService",
   "ComputeVersion",
   "Connection",

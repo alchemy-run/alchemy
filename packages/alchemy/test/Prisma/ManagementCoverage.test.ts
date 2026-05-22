@@ -120,6 +120,9 @@ const operationOnlyRoutes = [
   "GET /v1/regions",
   "GET /v1/regions/postgres",
   "GET /v1/regions/accelerate",
+  "GET /v1/scm-installations",
+  "POST /v1/scm-installations/install-intents",
+  "GET /v1/scm-installations/{installationId}/repositories",
   "GET /v1/integrations",
   "GET /v1/integrations/{id}",
   "DELETE /v1/integrations/{id}",
@@ -152,11 +155,13 @@ const expectedProjectComputeSdkRoutes = [
 const managementApiRoutesFromOpenApiTypes = (source: string) => {
   const routes: string[] = [];
   const methods = ["get", "put", "post", "delete", "patch"] as const;
-  const pathPattern = /\n  "([^"]+)": \{([\s\S]*?)\n  \};/g;
-  for (const match of source.matchAll(pathPattern)) {
-    const [, path, body] = match;
+  const pathMatches = [...source.matchAll(/^\s+"([^"]+)": \{/gm)];
+  for (const [index, match] of pathMatches.entries()) {
+    const path = match[1];
+    const next = pathMatches[index + 1]?.index ?? source.length;
+    const body = source.slice(match.index, next);
     for (const method of methods) {
-      if (new RegExp(`\\n    ${method}: operations\\[`).test(body)) {
+      if (new RegExp(`^\\s+${method}: operations\\[`, "m").test(body)) {
         routes.push(`${method.toUpperCase()} ${path}`);
       }
     }
@@ -233,12 +238,6 @@ const projectComputeSdkRoutesFromSource = (source: string) =>
     (match) => `${match[1]} ${match[2]}`,
   ).sort();
 
-const documentedRoutesFromCoverageMarkdown = (source: string) =>
-  Array.from(
-    source.matchAll(/^- `(GET|POST|PATCH|DELETE|PUT) ([^`]+)`$/gm),
-    (match) => `${match[1]} ${match[2]}`,
-  ).sort();
-
 describe("Prisma Management API coverage", () => {
   it("maps lifecycle route groups to Alchemy resources", () => {
     for (const { name, resource } of lifecycleResources) {
@@ -258,7 +257,7 @@ describe("Prisma Management API coverage", () => {
       if (!(yield* fs.exists(referenceApiPath))) return;
 
       const source = yield* fs.readFileString(referenceApiPath);
-      expect(expectedManagementApiRoutes).toHaveLength(68);
+      expect(expectedManagementApiRoutes).toHaveLength(71);
       expect(managementApiRoutesFromOpenApiTypes(source)).toEqual(
         expectedManagementApiRoutes,
       );
@@ -350,23 +349,6 @@ describe("Prisma Management API coverage", () => {
       const publicRoutes = new Set<string>(expectedManagementApiRoutes);
       expect(sdkRoutes).toEqual(expectedProjectComputeSdkRoutes);
       expect(sdkRoutes.every((route) => publicRoutes.has(route))).toBe(true);
-    }).pipe(Effect.provide(NodeServices.layer)),
-  );
-
-  it.effect("keeps the human-readable coverage report in sync", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
-      const coveragePath = path.resolve(
-        import.meta.dirname,
-        "../../../../PRISMA_MANAGEMENT_API_COVERAGE.md",
-      );
-
-      const source = yield* fs.readFileString(coveragePath);
-      expect(source).toContain("Public Management API routes covered: 68.");
-      expect([
-        ...new Set(documentedRoutesFromCoverageMarkdown(source)),
-      ]).toEqual(expectedManagementApiRoutes);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

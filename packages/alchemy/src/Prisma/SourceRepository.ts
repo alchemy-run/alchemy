@@ -32,6 +32,11 @@ export interface SourceRepositoryProps {
    * Numeric provider repository ID.
    */
   providerRepositoryId: number;
+  /**
+   * Optional SCM installation ID to use for linking. When omitted, Prisma
+   * auto-picks the workspace's installation.
+   */
+  installationId?: string;
 }
 
 export interface SourceRepository extends Resource<
@@ -152,7 +157,8 @@ export const SourceRepositoryProvider = () =>
           if (
             newProjectId !== oldProjectId ||
             (news.provider ?? "github") !== (olds.provider ?? "github") ||
-            news.providerRepositoryId !== olds.providerRepositoryId
+            news.providerRepositoryId !== olds.providerRepositoryId ||
+            news.installationId !== olds.installationId
           ) {
             return { action: "replace" } as const;
           }
@@ -202,6 +208,7 @@ export const SourceRepositoryProvider = () =>
                 projectId,
                 provider: news.provider ?? "github",
                 providerRepositoryId: news.providerRepositoryId,
+                installationId: news.installationId,
               })
               .pipe(
                 Effect.catchIf(isConflict, () =>

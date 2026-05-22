@@ -451,8 +451,16 @@ export const DatabaseProvider = () =>
             password: secrets.password ?? output?.password,
           });
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, session }) {
           if (isPrismaDevId(output.databaseId)) return;
+          if (output.isDefault) {
+            // Prisma treats the default database as project-owned state, not
+            // an independently deletable resource.
+            yield* session.note(
+              "Skipping direct delete for default Prisma database; Prisma removes it when the owning project is deleted.",
+            );
+            return;
+          }
           yield* client
             .deleteDatabase(output.databaseId)
             .pipe(Effect.catchIf(isNotFound, () => Effect.void));

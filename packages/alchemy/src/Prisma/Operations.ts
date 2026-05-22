@@ -20,6 +20,7 @@ import type {
   ProjectTransferInput,
   ProjectUpdateInput,
   RestoreDatabaseInput,
+  ScmInstallIntentCreateInput,
   ServiceComputeVersionCreateInput,
   SourceRepositoryCreateInput,
 } from "./Types.ts";
@@ -247,6 +248,21 @@ export const revokeWorkspaceIntegration = (
 ) =>
   withClient((client) =>
     client.revokeWorkspaceIntegration(workspaceId, clientId),
+  );
+
+export const listScmInstallations = (query: {
+  workspaceId: string;
+  cursor?: string | null;
+  limit?: number;
+}) => withClient((client) => client.listScmInstallations(query));
+export const createScmInstallIntent = (input: ScmInstallIntentCreateInput) =>
+  withClient((client) => client.createScmInstallIntent(input));
+export const listScmInstallationRepositories = (
+  installationId: string,
+  query?: { cursor?: string | null; limit?: number },
+) =>
+  withClient((client) =>
+    client.listScmInstallationRepositories(installationId, query),
   );
 
 export const listSourceRepositories = (query: {

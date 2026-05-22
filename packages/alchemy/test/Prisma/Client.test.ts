@@ -80,6 +80,8 @@ const expectedManagementApiRoutes = [
   "GET /v1/regions",
   "GET /v1/regions/accelerate",
   "GET /v1/regions/postgres",
+  "GET /v1/scm-installations",
+  "GET /v1/scm-installations/{installationId}/repositories",
   "GET /v1/source-repositories",
   "GET /v1/source-repositories/{id}",
   "GET /v1/versions",
@@ -108,6 +110,7 @@ const expectedManagementApiRoutes = [
   "POST /v1/projects/{projectId}/branches",
   "POST /v1/projects/{projectId}/compute-services",
   "POST /v1/projects/{projectId}/databases",
+  "POST /v1/scm-installations/install-intents",
   "POST /v1/source-repositories",
   "POST /v1/versions",
   "POST /v1/versions/{versionId}/start",
@@ -195,6 +198,11 @@ const concreteRouteTemplates = new Map([
   ["GET /v1/regions", "GET /v1/regions"],
   ["GET /v1/regions/accelerate", "GET /v1/regions/accelerate"],
   ["GET /v1/regions/postgres", "GET /v1/regions/postgres"],
+  ["GET /v1/scm-installations", "GET /v1/scm-installations"],
+  [
+    "GET /v1/scm-installations/scminstall-1/repositories",
+    "GET /v1/scm-installations/{installationId}/repositories",
+  ],
   ["GET /v1/source-repositories", "GET /v1/source-repositories"],
   ["GET /v1/source-repositories/repo-1", "GET /v1/source-repositories/{id}"],
   ["GET /v1/versions", "GET /v1/versions"],
@@ -262,6 +270,10 @@ const concreteRouteTemplates = new Map([
     "POST /v1/projects/project-1/databases",
     "POST /v1/projects/{projectId}/databases",
   ],
+  [
+    "POST /v1/scm-installations/install-intents",
+    "POST /v1/scm-installations/install-intents",
+  ],
   ["POST /v1/source-repositories", "POST /v1/source-repositories"],
   ["POST /v1/versions", "POST /v1/versions"],
   ["POST /v1/versions/version-1/start", "POST /v1/versions/{versionId}/start"],
@@ -283,11 +295,13 @@ const routeInventoryFrom = (captured: Captured[]) => {
 const managementApiRoutesFromOpenApiTypes = (source: string) => {
   const routes: string[] = [];
   const methods = ["get", "put", "post", "delete", "patch"] as const;
-  const pathPattern = /\n  "([^"]+)": \{([\s\S]*?)\n  \};/g;
-  for (const match of source.matchAll(pathPattern)) {
-    const [, path, body] = match;
+  const pathMatches = [...source.matchAll(/^\s+"([^"]+)": \{/gm)];
+  for (const [index, match] of pathMatches.entries()) {
+    const path = match[1];
+    const next = pathMatches[index + 1]?.index ?? source.length;
+    const body = source.slice(match.index, next);
     for (const method of methods) {
-      if (new RegExp(`\\n    ${method}: operations\\[`).test(body)) {
+      if (new RegExp(`^\\s+${method}: operations\\[`, "m").test(body)) {
         routes.push(`${method.toUpperCase()} ${path}`);
       }
     }
@@ -937,12 +951,22 @@ describe("PrismaClient", () => {
           yield* client.deleteIntegration("integration-1");
           yield* client.revokeWorkspaceIntegration("workspace-1", "client-1");
 
+          yield* client.listScmInstallations({ workspaceId: "workspace-1" });
+          yield* client.createScmInstallIntent({
+            provider: "github",
+            workspaceId: "workspace-1",
+          });
+          yield* client.listScmInstallationRepositories("scminstall-1", {
+            limit: 10,
+          });
+
           yield* client.listSourceRepositories({ projectId: "project-1" });
           yield* client.getSourceRepository("repo-1");
           yield* client.createSourceRepository({
             projectId: "project-1",
             provider: "github",
             providerRepositoryId: 123,
+            installationId: "scminstall-1",
           });
           yield* client.deleteSourceRepository("repo-1");
 
@@ -1021,6 +1045,9 @@ describe("PrismaClient", () => {
             ["GET", "/v1/integrations/integration-1"],
             ["DELETE", "/v1/integrations/integration-1"],
             ["DELETE", "/v1/workspaces/workspace-1/integrations/client-1"],
+            ["GET", "/v1/scm-installations?workspaceId=workspace-1"],
+            ["POST", "/v1/scm-installations/install-intents"],
+            ["GET", "/v1/scm-installations/scminstall-1/repositories?limit=10"],
             ["GET", "/v1/source-repositories?projectId=project-1"],
             ["GET", "/v1/source-repositories/repo-1"],
             ["POST", "/v1/source-repositories"],
@@ -1029,7 +1056,7 @@ describe("PrismaClient", () => {
           expect(routeInventoryFrom(captured)).toEqual(
             expectedManagementApiRoutes,
           );
-          expect(expectedManagementApiRoutes).toHaveLength(68);
+          expect(expectedManagementApiRoutes).toHaveLength(71);
           expect(captured[10]?.bodyJson).toEqual({
             recipientAccessToken: "recipient-token",
           });
@@ -1134,6 +1161,17 @@ describe("PrismaClient", () => {
             projectId: "project-1",
             provider: "github",
             providerRepositoryId: 123,
+            installationId: "scminstall-1",
+          });
+
+          const installIntentRequest = captured.find(
+            (request) =>
+              request.method === "POST" &&
+              request.pathname === "/v1/scm-installations/install-intents",
+          );
+          expect(installIntentRequest?.bodyJson).toEqual({
+            provider: "github",
+            workspaceId: "workspace-1",
           });
         }),
       ).pipe(Effect.provide(layer));

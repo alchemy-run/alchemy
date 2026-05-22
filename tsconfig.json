@@ -82,12 +82,6 @@
       "path": "./examples/cloudflare-worker-async/tsconfig.json"
     },
     {
-      "path": "./examples/prisma-compute/tsconfig.json"
-    },
-    {
-      "path": "./examples/prisma-nextjs/tsconfig.json"
-    },
-    {
       "path": "./examples/prisma-tanstack-start/tsconfig.json"
     },
     {

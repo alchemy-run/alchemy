@@ -187,8 +187,16 @@ export const BranchProvider = () =>
           }
           return attrsFrom(branch);
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, session }) {
           if (isPrismaDevId(output.branchId)) return;
+          if (output.isDefault) {
+            // Prisma treats the default branch as project-owned state, not an
+            // independently deletable resource.
+            yield* session.note(
+              "Skipping direct delete for default Prisma branch; Prisma removes it when the owning project is deleted.",
+            );
+            return;
+          }
           yield* client
             .deleteBranch(output.branchId)
             .pipe(Effect.catchIf(isNotFound, () => Effect.void));

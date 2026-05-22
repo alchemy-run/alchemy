@@ -79,6 +79,9 @@ const expectedOperationHelpers = [
   "getIntegration",
   "deleteIntegration",
   "revokeWorkspaceIntegration",
+  "listScmInstallations",
+  "createScmInstallIntent",
+  "listScmInstallationRepositories",
   "listSourceRepositories",
   "getSourceRepository",
   "createSourceRepository",
@@ -211,6 +214,15 @@ describe("Prisma operation helpers", () => {
       yield* Prisma.getIntegration("integration-1");
       yield* Prisma.deleteIntegration("integration-1");
       yield* Prisma.revokeWorkspaceIntegration("workspace-1", "client-1");
+
+      yield* Prisma.listScmInstallations({ workspaceId: "workspace-1" });
+      yield* Prisma.createScmInstallIntent({
+        provider: "github",
+        workspaceId: "workspace-1",
+      });
+      yield* Prisma.listScmInstallationRepositories("scminstall-1", {
+        limit: 10,
+      });
 
       yield* Prisma.listSourceRepositories({ projectId: "project-1" });
       yield* Prisma.getSourceRepository("repo-1");

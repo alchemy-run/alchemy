@@ -1,8 +1,8 @@
 import {
-  ComputeApp,
-  ComputeAppProvider,
-  syncComputeAppEnvironment,
-} from "@/Prisma/ComputeApp";
+  Compute,
+  ComputeProvider,
+  syncComputeEnvironment,
+} from "@/Prisma/Compute";
 import {
   PrismaApiError,
   PrismaClient,
@@ -23,12 +23,12 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { gunzipSync } from "node:zlib";
 import { WebSocketServer } from "ws";
 
-describe("Prisma ComputeApp", () => {
+describe("Prisma Compute", () => {
   it.effect("rejects destroyOldVersion when promotion is skipped", () => {
     const client = {} as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* ComputeApp.Provider;
+      const provider = yield* Compute.Provider;
       const error = yield* provider
         .reconcile({
           id: "App",
@@ -51,7 +51,7 @@ describe("Prisma ComputeApp", () => {
         "destroyOldVersion cannot be combined with skipPromote",
       );
     }).pipe(
-      Effect.provide(ComputeAppProvider()),
+      Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
     );
   });
@@ -60,7 +60,7 @@ describe("Prisma ComputeApp", () => {
     const client = {} as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* ComputeApp.Provider;
+      const provider = yield* Compute.Provider;
       const error = yield* provider
         .reconcile({
           id: "App",
@@ -83,7 +83,7 @@ describe("Prisma ComputeApp", () => {
         "branchId and branchGitName are mutually exclusive",
       );
     }).pipe(
-      Effect.provide(ComputeAppProvider()),
+      Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
     );
   });
@@ -158,7 +158,7 @@ describe("Prisma ComputeApp", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* ComputeApp.Provider;
+        const provider = yield* Compute.Provider;
         const output = yield* provider.reconcile({
           id: "App",
           instanceId: "00000000000000000000000000000000",
@@ -210,7 +210,7 @@ describe("Prisma ComputeApp", () => {
         expect(updateIndex).toBeGreaterThan(-1);
         expect(versionIndex).toBeGreaterThan(updateIndex);
       }).pipe(
-        Effect.provide(ComputeAppProvider()),
+        Effect.provide(ComputeProvider()),
         Effect.provide(Layer.succeed(PrismaClient, client)),
       );
     },
@@ -243,7 +243,7 @@ describe("Prisma ComputeApp", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* ComputeApp.Provider;
+      const provider = yield* Compute.Provider;
       const error = yield* provider
         .reconcile({
           id: "App",
@@ -283,7 +283,7 @@ describe("Prisma ComputeApp", () => {
         "did not return an upload URL",
       );
     }).pipe(
-      Effect.provide(ComputeAppProvider()),
+      Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(PlatformServices),
     );
@@ -349,7 +349,7 @@ describe("Prisma ComputeApp", () => {
       const artifactPath = path.join(root, "app.tar.gz");
       yield* fs.writeFileString(artifactPath, "prebuilt-archive");
 
-      const provider = yield* ComputeApp.Provider;
+      const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
         instanceId: "00000000000000000000000000000000",
@@ -389,7 +389,7 @@ describe("Prisma ComputeApp", () => {
         "prebuilt-archive",
       );
     }).pipe(
-      Effect.provide(ComputeAppProvider()),
+      Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -467,7 +467,7 @@ describe("Prisma ComputeApp", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const result = yield* syncComputeAppEnvironment(
+      const result = yield* syncComputeEnvironment(
         client,
         "project-1",
         "production",
@@ -526,7 +526,7 @@ describe("Prisma ComputeApp", () => {
     });
   });
 
-  it.effect("does not expose redacted env values in ComputeApp outputs", () => {
+  it.effect("does not expose redacted env values in Compute outputs", () => {
     const calls: Array<[string, unknown]> = [];
     const client = {
       getComputeService: (id: string) => {
@@ -595,7 +595,7 @@ describe("Prisma ComputeApp", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* ComputeApp.Provider;
+      const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
         instanceId: "00000000000000000000000000000000",
@@ -644,7 +644,7 @@ describe("Prisma ComputeApp", () => {
         },
       ]);
     }).pipe(
-      Effect.provide(ComputeAppProvider()),
+      Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -753,7 +753,7 @@ describe("Prisma ComputeApp", () => {
         ].join("\n"),
       );
 
-      const provider = yield* ComputeApp.Provider;
+      const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
         instanceId: "00000000000000000000000000000000",
@@ -797,7 +797,7 @@ describe("Prisma ComputeApp", () => {
         },
       ]);
     }).pipe(
-      Effect.provide(ComputeAppProvider()),
+      Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -888,7 +888,7 @@ describe("Prisma ComputeApp", () => {
         "console.log('auto app');",
       );
 
-      const provider = yield* ComputeApp.Provider;
+      const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
         instanceId: "00000000000000000000000000000000",
@@ -925,14 +925,14 @@ describe("Prisma ComputeApp", () => {
         },
       ]);
     }).pipe(
-      Effect.provide(ComputeAppProvider()),
+      Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
   });
 
-  it.effect("uses framework auto-build default ports in ComputeApp", () => {
+  it.effect("uses framework auto-build default ports in Compute", () => {
     const calls: Array<[string, unknown]> = [];
     const client = {
       listProjectComputeServices: (projectId: string, query: unknown) => {
@@ -1012,7 +1012,7 @@ describe("Prisma ComputeApp", () => {
       );
       yield* fs.chmod(nextBin, 0o755);
 
-      const provider = yield* ComputeApp.Provider;
+      const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
         instanceId: "00000000000000000000000000000000",
@@ -1042,7 +1042,7 @@ describe("Prisma ComputeApp", () => {
         },
       ]);
     }).pipe(
-      Effect.provide(ComputeAppProvider()),
+      Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -1144,7 +1144,7 @@ describe("Prisma ComputeApp", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* ComputeApp.Provider;
+        const provider = yield* Compute.Provider;
         const output = yield* provider.reconcile({
           id: "App",
           instanceId: "00000000000000000000000000000000",
@@ -1201,7 +1201,7 @@ describe("Prisma ComputeApp", () => {
           ["getComputeServiceVersion", "version-1"],
         ]);
       }).pipe(
-        Effect.provide(ComputeAppProvider()),
+        Effect.provide(ComputeProvider()),
         Effect.provide(Layer.succeed(PrismaClient, client)),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -1357,7 +1357,7 @@ describe("Prisma ComputeApp", () => {
       );
 
       return Effect.gen(function* () {
-        const provider = yield* ComputeApp.Provider;
+        const provider = yield* Compute.Provider;
         const first = yield* provider.reconcile({
           id: "App",
           instanceId: "00000000000000000000000000000000",
@@ -1485,7 +1485,7 @@ describe("Prisma ComputeApp", () => {
           ["deleteComputeService", "service-1"],
         ]);
       }).pipe(
-        Effect.provide(ComputeAppProvider()),
+        Effect.provide(ComputeProvider()),
         Effect.provide(Layer.succeed(PrismaClient, client)),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
@@ -1565,7 +1565,7 @@ describe("Prisma ComputeApp", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* ComputeApp.Provider;
+        const provider = yield* Compute.Provider;
         const output = yield* provider.reconcile({
           id: "App",
           instanceId: "00000000000000000000000000000000",
@@ -1639,7 +1639,7 @@ describe("Prisma ComputeApp", () => {
           ["getComputeServiceVersion", "version-new"],
         ]);
       }).pipe(
-        Effect.provide(ComputeAppProvider()),
+        Effect.provide(ComputeProvider()),
         Effect.provide(Layer.succeed(PrismaClient, client)),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -1762,7 +1762,7 @@ describe("Prisma ComputeApp", () => {
       );
 
       return Effect.gen(function* () {
-        const provider = yield* ComputeApp.Provider;
+        const provider = yield* Compute.Provider;
         const error = yield* provider
           .reconcile({
             id: "App",
@@ -1814,7 +1814,7 @@ describe("Prisma ComputeApp", () => {
         ]);
         expect(calls).toContainEqual(["deleteComputeVersion", "version-1"]);
       }).pipe(
-        Effect.provide(ComputeAppProvider()),
+        Effect.provide(ComputeProvider()),
         Effect.provide(Layer.succeed(PrismaClient, client)),
         Effect.provideService(HttpClient.HttpClient, http),
         Effect.provide(PlatformServices),
@@ -1907,7 +1907,7 @@ describe("Prisma ComputeApp", () => {
     );
 
     return Effect.gen(function* () {
-      const provider = yield* ComputeApp.Provider;
+      const provider = yield* Compute.Provider;
       const error = yield* provider
         .reconcile({
           id: "App",
@@ -1968,14 +1968,14 @@ describe("Prisma ComputeApp", () => {
         ["deleteComputeServiceVersion", "version-new"],
       ]);
     }).pipe(
-      Effect.provide(ComputeAppProvider()),
+      Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
   });
 
-  it.effect("deletes env vars removed from ComputeApp props on update", () => {
+  it.effect("deletes env vars removed from Compute props on update", () => {
     const calls: Array<[string, unknown]> = [];
     const byKey = new Map([
       [
@@ -2091,7 +2091,7 @@ describe("Prisma ComputeApp", () => {
     );
 
     return Effect.gen(function* () {
-      const provider = yield* ComputeApp.Provider;
+      const provider = yield* Compute.Provider;
       const output = yield* provider.reconcile({
         id: "App",
         instanceId: "00000000000000000000000000000000",
@@ -2197,7 +2197,7 @@ describe("Prisma ComputeApp", () => {
         ["getComputeServiceVersion", "version-new"],
       ]);
     }).pipe(
-      Effect.provide(ComputeAppProvider()),
+      Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
@@ -2208,7 +2208,7 @@ describe("Prisma ComputeApp", () => {
     "returns an empty tail stream before a compute version exists",
     () =>
       Effect.gen(function* () {
-        const provider = yield* ComputeApp.Provider;
+        const provider = yield* Compute.Provider;
         const chunks = yield* Stream.runCollect(
           provider.tail!({
             id: "App",
@@ -2238,7 +2238,7 @@ describe("Prisma ComputeApp", () => {
 
         expect(chunks).toEqual([]);
       }).pipe(
-        Effect.provide(ComputeAppProvider()),
+        Effect.provide(ComputeProvider()),
         Effect.provide(
           Layer.succeed(PrismaClient, {} as unknown as PrismaManagementClient),
         ),
@@ -2247,7 +2247,7 @@ describe("Prisma ComputeApp", () => {
       ),
   );
 
-  it.effect("deletes ComputeApp env vars on provider destroy", () => {
+  it.effect("deletes Compute env vars on provider destroy", () => {
     const calls: Array<[string, unknown]> = [];
     const client = {
       listEnvironmentVariables: (query: unknown) => {
@@ -2286,7 +2286,7 @@ describe("Prisma ComputeApp", () => {
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
-      const provider = yield* ComputeApp.Provider;
+      const provider = yield* Compute.Provider;
       yield* provider.delete({
         id: "App",
         instanceId: "00000000000000000000000000000000",
@@ -2336,7 +2336,7 @@ describe("Prisma ComputeApp", () => {
         ["deleteComputeService", "service-1"],
       ]);
     }).pipe(
-      Effect.provide(ComputeAppProvider()),
+      Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
@@ -2344,7 +2344,7 @@ describe("Prisma ComputeApp", () => {
   });
 
   it.effect(
-    "continues ComputeApp destroy when managed env vars are already gone",
+    "continues Compute destroy when managed env vars are already gone",
     () => {
       const calls: Array<[string, unknown]> = [];
       const client = {
@@ -2377,7 +2377,7 @@ describe("Prisma ComputeApp", () => {
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const provider = yield* ComputeApp.Provider;
+        const provider = yield* Compute.Provider;
         yield* provider.delete({
           id: "App",
           instanceId: "00000000000000000000000000000000",
@@ -2425,7 +2425,7 @@ describe("Prisma ComputeApp", () => {
           ["deleteComputeService", "service-1"],
         ]);
       }).pipe(
-        Effect.provide(ComputeAppProvider()),
+        Effect.provide(ComputeProvider()),
         Effect.provide(Layer.succeed(PrismaClient, client)),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
@@ -2433,7 +2433,7 @@ describe("Prisma ComputeApp", () => {
     },
   );
 
-  it.effect("tails ComputeApp logs through the provider", () =>
+  it.effect("tails Compute logs through the provider", () =>
     withWebSocketServer((server) =>
       Effect.gen(function* () {
         const url = yield* listenUrl(server);
@@ -2478,8 +2478,8 @@ describe("Prisma ComputeApp", () => {
             }),
         } as unknown as PrismaManagementClient;
 
-        const provider = yield* ComputeApp.Provider.pipe(
-          Effect.provide(ComputeAppProvider()),
+        const provider = yield* Compute.Provider.pipe(
+          Effect.provide(ComputeProvider()),
           Effect.provide(Layer.succeed(PrismaClient, client)),
         );
         const lines = yield* provider.tail!({

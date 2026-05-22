@@ -30,13 +30,13 @@ const logLevel = Effect.provideService(
 
 if (wantsLive && !hasLiveCredentials) {
   test(
-    "requires Prisma credentials for the live ComputeApp smoke",
+    "requires Prisma credentials for the live Compute smoke",
     Effect.fail(
       new Error(
         [
           "Live Prisma Compute smoke requested but no credentials are configured.",
           "Set PRISMA_SERVICE_TOKEN, set PRISMA_API_TOKEN, or run `alchemy login --configure` and select `Service Token`,",
-          "then use `bun run --cwd examples/prisma-compute test:live:profile`.",
+          "then rerun this live test with ALCHEMY_RUN_LIVE_PRISMA_TESTS=true.",
         ].join(" "),
       ),
     ),
@@ -140,7 +140,7 @@ test.provider.skipIf(!runLive)(
               name,
               createDatabase: false,
             });
-            const app = yield* Prisma.ComputeApp("App", {
+            const app = yield* Prisma.Compute("App", {
               project: project.projectId,
               serviceName: name,
               path: appDir,
@@ -186,10 +186,9 @@ test.provider.skipIf(!runLive)(
                           `PRISMA_CLEANUP_PROJECT_ID=${deployed.projectId} \\`,
                           `PRISMA_CLEANUP_COMPUTE_SERVICE_ID=${deployed.computeServiceId} \\`,
                           `PRISMA_CLEANUP_COMPUTE_VERSION_ID=${deployed.computeVersionId} \\`,
-                          "bun run --cwd examples/prisma-compute cleanup:live",
+                          "ALCHEMY_RUN_LIVE_PRISMA_CLEANUP=true bun vitest run packages/alchemy/test/Prisma/Compute.live.test.ts",
                         ].join(" ")
                       : undefined,
-                    "Known issue notes: PRISMA_COMPUTE_PLATFORM_BUGS.md",
                   ]
                     .filter((line): line is string => line !== undefined)
                     .join(" "),

@@ -98,7 +98,3 @@ The health response should include:
 export PRISMA_SERVICE_TOKEN="..."
 bun run destroy
 ```
-
-Known current platform caveat: stopped Compute version deletion can return HTTP
-500, which blocks full destroy. Details and reproduction IDs are tracked in
-`../../PRISMA_COMPUTE_PLATFORM_BUGS.md`.

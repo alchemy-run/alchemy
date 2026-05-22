@@ -415,6 +415,40 @@ export interface Integration {
   };
 }
 
+export interface ScmInstallation {
+  id: string;
+  type: "scm-installation";
+  url: string;
+  provider: "github";
+  installationId: number;
+  accountId: number;
+  accountLogin: string;
+  accountType: "user" | "organization";
+  suspended: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScmInstallIntentCreateInput {
+  provider: "github";
+  workspaceId: string;
+}
+
+export interface ScmInstallIntent {
+  type: "install-intent";
+  provider: "github";
+  workspaceId: string;
+  installUrl: string;
+}
+
+export interface ScmRepository {
+  id: number;
+  type: "scm-repository";
+  fullName: string;
+  defaultBranch: string;
+  isPrivate: boolean;
+}
+
 export interface SourceRepository {
   id: string;
   type: "source-repository";
@@ -435,6 +469,7 @@ export interface SourceRepositoryCreateInput {
   projectId: string;
   provider: "github";
   providerRepositoryId: number;
+  installationId?: string;
 }
 
 export interface PrismaSecretConnection {

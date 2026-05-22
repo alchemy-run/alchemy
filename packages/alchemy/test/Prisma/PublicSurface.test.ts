@@ -30,9 +30,9 @@ const publicExports = [
   "EnvironmentVariableProvider",
   "SourceRepository",
   "SourceRepositoryProvider",
-  "ComputeApp",
-  "ComputeAppProvider",
-  "ComputeAppDevProvider",
+  "Compute",
+  "ComputeProvider",
+  "ComputeDevProvider",
   "KNOWN_REGION_IDS",
   "REGIONS",
   "PRISMA_API_TOKEN_ENV",
@@ -107,6 +107,9 @@ const publicExports = [
   "getIntegration",
   "deleteIntegration",
   "revokeWorkspaceIntegration",
+  "listScmInstallations",
+  "createScmInstallIntent",
+  "listScmInstallationRepositories",
   "listSourceRepositories",
   "getSourceRepository",
   "createSourceRepository",
@@ -122,7 +125,7 @@ const publicExports = [
   "destroyComputeService",
   "destroyComputeProject",
   "toDeploymentUrl",
-  "syncComputeAppEnvironment",
+  "syncComputeEnvironment",
   "readUploadArtifact",
   "uploadArtifact",
   "extractConnectionSecrets",
@@ -151,9 +154,9 @@ describe("Prisma public surface", () => {
   });
 
   it("supports deep Prisma package path imports", async () => {
-    const [computeApp, operations, client, archive, types, postgres] =
+    const [compute, operations, client, archive, types, postgres] =
       await Promise.all([
-        import("alchemy/Prisma/ComputeApp"),
+        import("alchemy/Prisma/Compute"),
         import("alchemy/Prisma/Operations"),
         import("alchemy/Prisma/Client"),
         import("alchemy/Prisma/ComputeArchive"),
@@ -161,7 +164,7 @@ describe("Prisma public surface", () => {
         import("alchemy/Prisma/Postgres"),
       ]);
 
-    expect(computeApp.ComputeApp.Type).toBe("Prisma.ComputeApp");
+    expect(compute.Compute.Type).toBe("Prisma.Compute");
     expect(typeof operations.listProjects).toBe("function");
     expect(typeof client.PrismaApiError).toBe("function");
     expect(archive.COMPUTE_MANIFEST_VERSION).toBe("1");

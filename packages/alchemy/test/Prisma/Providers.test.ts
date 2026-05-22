@@ -39,7 +39,7 @@ describe("Prisma providers", () => {
         Prisma.Database.Type,
         Prisma.Connection.Type,
         Prisma.Branch.Type,
-        Prisma.ComputeApp.Type,
+        Prisma.Compute.Type,
         Prisma.ComputeService.Type,
         Prisma.ComputeVersion.Type,
         Prisma.EnvironmentVariable.Type,

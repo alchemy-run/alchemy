@@ -9,13 +9,13 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Prisma.providers(), dev: true });
 
-test.provider("dev mode returns a local ComputeApp without a token", (stack) =>
+test.provider("dev mode returns a local Compute without a token", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
     const app = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Prisma.ComputeApp("App", {
+        return yield* Prisma.Compute("App", {
           project: "project-dev",
           serviceName: "api",
           port: 8787,
@@ -44,7 +44,7 @@ test.provider("dev mode supports the same stack shape with Project", (stack) =>
           name: "local-project",
           createDatabase: false,
         });
-        const app = yield* Prisma.ComputeApp("AppWithProject", {
+        const app = yield* Prisma.Compute("AppWithProject", {
           project,
           serviceName: "api",
           port: 8787,
@@ -171,7 +171,7 @@ test.provider(
 
       const app = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Prisma.ComputeApp("AppWithCommand", {
+          return yield* Prisma.Compute("AppWithCommand", {
             project: "project-dev",
             serviceName: "api",
             path: root,

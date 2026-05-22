@@ -1999,6 +1999,86 @@ describe("Prisma resource providers", () => {
     );
   });
 
+  it.effect("skips direct delete for a default Prisma database", () => {
+    const calls: Call[] = [];
+    const client = {
+      deleteDatabase: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteDatabase", id]);
+        }),
+    } as unknown as PrismaManagementClient;
+
+    const session = {
+      note: (message: string) =>
+        Effect.sync(() => {
+          calls.push(["note", message]);
+        }),
+    };
+
+    return Effect.gen(function* () {
+      const databaseProvider = yield* PrismaDatabase.Provider;
+      yield* databaseProvider.delete({
+        id: "Postgres",
+        instanceId: "00000000000000000000000000000000",
+        olds: {} as never,
+        output: {
+          databaseId: "database-1",
+          projectId: "project-1",
+          isDefault: true,
+        },
+        session,
+        bindings: [],
+      } as never);
+
+      expect(calls).toEqual([
+        [
+          "note",
+          "Skipping direct delete for default Prisma database; Prisma removes it when the owning project is deleted.",
+        ],
+      ]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
+  it.effect("skips direct delete for a default Prisma branch", () => {
+    const calls: Call[] = [];
+    const client = {
+      deleteBranch: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteBranch", id]);
+        }),
+    } as unknown as PrismaManagementClient;
+
+    const session = {
+      note: (message: string) =>
+        Effect.sync(() => {
+          calls.push(["note", message]);
+        }),
+    };
+
+    return Effect.gen(function* () {
+      const branchProvider = yield* PrismaBranch.Provider;
+      yield* branchProvider.delete({
+        id: "MainBranch",
+        instanceId: "00000000000000000000000000000000",
+        olds: {} as never,
+        output: {
+          branchId: "branch-1",
+          projectId: "project-1",
+          isDefault: true,
+        },
+        session,
+        bindings: [],
+      } as never);
+
+      expect(calls).toEqual([
+        [
+          "note",
+          "Skipping direct delete for default Prisma branch; Prisma removes it when the owning project is deleted.",
+        ],
+      ]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
   it.effect("re-reads resources after create conflict races", () => {
     const calls: Call[] = [];
     const visible = new Set<string>();

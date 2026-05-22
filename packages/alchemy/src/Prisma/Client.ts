@@ -47,6 +47,10 @@ import type {
   PromoteComputeServiceResult,
   Region,
   RestoreDatabaseInput,
+  ScmInstallIntent,
+  ScmInstallIntentCreateInput,
+  ScmInstallation,
+  ScmRepository,
   ServiceComputeVersionCreateInput,
   SourceRepository,
   SourceRepositoryCreateInput,
@@ -343,6 +347,18 @@ export interface PrismaManagementClient {
     workspaceId: string,
     clientId: string,
   ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  listScmInstallations(query: {
+    workspaceId: string;
+    cursor?: string | null;
+    limit?: number;
+  }): Effect.Effect<ScmInstallation[], PrismaApiError | PrismaApiDecodeError>;
+  createScmInstallIntent(
+    input: ScmInstallIntentCreateInput,
+  ): Effect.Effect<ScmInstallIntent, PrismaApiError | PrismaApiDecodeError>;
+  listScmInstallationRepositories(
+    installationId: string,
+    query?: PaginationQuery,
+  ): Effect.Effect<ScmRepository[], PrismaApiError | PrismaApiDecodeError>;
   listSourceRepositories(
     query: SourceRepositoryListQuery,
   ): Effect.Effect<SourceRepository[], PrismaApiError | PrismaApiDecodeError>;
@@ -832,6 +848,22 @@ function makePrismaClient(): Effect.Effect<
         request<void>(
           "DELETE",
           `/v1/workspaces/${workspaceId}/integrations/${clientId}`,
+        ),
+
+      listScmInstallations: (query) =>
+        paginate<ScmInstallation>("/v1/scm-installations", query),
+      createScmInstallIntent: (input) =>
+        data<ScmInstallIntent>(
+          "POST",
+          "/v1/scm-installations/install-intents",
+          {
+            body: input,
+          },
+        ),
+      listScmInstallationRepositories: (installationId, query) =>
+        paginate<ScmRepository>(
+          `/v1/scm-installations/${installationId}/repositories`,
+          query,
         ),
 
       listSourceRepositories: (query) =>

@@ -11,11 +11,7 @@ import type { ResourceClass, ResourceLike } from "../Resource.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
 import { PrismaAuth } from "./AuthProvider.ts";
 import { Branch, BranchProvider } from "./Branch.ts";
-import {
-  ComputeApp,
-  ComputeAppDevProvider,
-  ComputeAppProvider,
-} from "./ComputeApp.ts";
+import { Compute, ComputeDevProvider, ComputeProvider } from "./Compute.ts";
 import { ComputeService, ComputeServiceProvider } from "./ComputeService.ts";
 import { ComputeVersion, ComputeVersionProvider } from "./ComputeVersion.ts";
 import { Connection, ConnectionProvider } from "./Connection.ts";
@@ -105,7 +101,7 @@ export const providers = () =>
       Database,
       Connection,
       Branch,
-      ComputeApp,
+      Compute,
       ComputeService,
       ComputeVersion,
       EnvironmentVariable,
@@ -126,7 +122,7 @@ const devProviderLayer = () =>
     databaseDevProvider(),
     connectionDevProvider(),
     branchDevProvider(),
-    ComputeAppDevProvider(),
+    ComputeDevProvider(),
     computeServiceDevProvider(),
     computeVersionDevProvider(),
     environmentVariableDevProvider(),
@@ -344,7 +340,7 @@ const liveProviderLayer = () =>
     DatabaseProvider(),
     ConnectionProvider(),
     BranchProvider(),
-    ComputeAppProvider(),
+    ComputeProvider(),
     ComputeServiceProvider(),
     ComputeVersionProvider(),
     EnvironmentVariableProvider(),

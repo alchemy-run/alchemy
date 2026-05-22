@@ -54,7 +54,7 @@ type ObservedComputeVersion = Omit<ApiComputeVersion, "createdAt"> & {
   createdAt?: string;
 };
 
-export interface ComputeAppCommandBuild {
+export interface ComputeCommandBuild {
   /**
    * Shell command that creates the deployable output directory.
    */
@@ -79,7 +79,7 @@ export interface ComputeAppCommandBuild {
   env?: Record<string, string | Redacted.Redacted<string> | undefined>;
 }
 
-export interface ComputeAppAutoBuild {
+export interface ComputeAutoBuild {
   /**
    * Auto-detect a Prisma Compute build strategy, or force one framework.
    */
@@ -96,9 +96,9 @@ export interface ComputeAppAutoBuild {
   env?: Record<string, string | Redacted.Redacted<string> | undefined>;
 }
 
-export type ComputeAppBuild = ComputeAppCommandBuild | ComputeAppAutoBuild;
+export type ComputeBuild = ComputeCommandBuild | ComputeAutoBuild;
 
-export interface ComputeAppDev {
+export interface ComputeDev {
   /**
    * Local command to run during `alchemy dev`.
    */
@@ -123,7 +123,7 @@ export interface ComputeAppDev {
   env?: Record<string, string | Redacted.Redacted<string> | undefined>;
 }
 
-export interface ComputeAppProps {
+export interface ComputeProps {
   /**
    * Project ID or `project.projectId` output that owns the compute service.
    */
@@ -166,7 +166,7 @@ export interface ComputeAppProps {
    * TanStack Start, or Bun. Set to `false` to upload `path` as a pre-built
    * artifact.
    */
-  build?: ComputeAppBuild | false | "auto";
+  build?: ComputeBuild | false | "auto";
   /**
    * Pre-created `tar.gz` artifact bytes. When supplied, Alchemy uploads it
    * directly. Mutually exclusive with artifactPath.
@@ -248,12 +248,12 @@ export interface ComputeAppProps {
   /**
    * Local development behavior for `alchemy dev`.
    */
-  dev?: ComputeAppDev;
+  dev?: ComputeDev;
 }
 
-export interface ComputeApp extends Resource<
-  "Prisma.ComputeApp",
-  ComputeAppProps,
+export interface Compute extends Resource<
+  "Prisma.Compute",
+  ComputeProps,
   {
     /**
      * Prisma compute service ID.
@@ -322,12 +322,12 @@ export interface ComputeApp extends Resource<
 > {}
 
 /**
- * A Worker-like Prisma Compute application resource.
+ * A Prisma Compute deployment resource.
  *
  * @section Deploying an App
  * @example Deploy a directory with an entrypoint
  * ```typescript
- * const app = yield* Prisma.ComputeApp("api", {
+ * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
  *   serviceName: "api",
  *   path: "./apps/api",
@@ -338,7 +338,7 @@ export interface ComputeApp extends Resource<
  *
  * @example Build before upload and replace old versions
  * ```typescript
- * const app = yield* Prisma.ComputeApp("api", {
+ * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
  *   serviceName: "api",
  *   path: "./apps/api",
@@ -357,7 +357,7 @@ export interface ComputeApp extends Resource<
  *
  * @example Auto-build a framework app
  * ```typescript
- * const app = yield* Prisma.ComputeApp("api", {
+ * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
  *   serviceName: "api",
  *   path: "./apps/web",
@@ -368,7 +368,7 @@ export interface ComputeApp extends Resource<
  *
  * @example Deploy a prebuilt tar.gz artifact
  * ```typescript
- * const app = yield* Prisma.ComputeApp("api", {
+ * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
  *   serviceName: "api",
  *   artifactPath: "./dist/app.tar.gz",
@@ -379,7 +379,7 @@ export interface ComputeApp extends Resource<
  * @section Local Development
  * @example Run locally during alchemy dev
  * ```typescript
- * const app = yield* Prisma.ComputeApp("api", {
+ * const app = yield* Prisma.Compute("api", {
  *   project: project.projectId,
  *   serviceName: "api",
  *   path: "./apps/api",
@@ -391,7 +391,7 @@ export interface ComputeApp extends Resource<
  * });
  * ```
  */
-export const ComputeApp = Resource<ComputeApp>("Prisma.ComputeApp");
+export const Compute = Resource<Compute>("Prisma.Compute");
 
 const devProcesses = new Map<string, ChildProcessHandle>();
 
@@ -434,7 +434,7 @@ const findService = (
 const createService = (
   client: PrismaManagementClient,
   projectId: string,
-  props: ComputeAppProps,
+  props: ComputeProps,
 ) => {
   const attach = branchAttachment(props);
   const input = {
@@ -460,7 +460,7 @@ const plainEnv = (
     ),
   ) as Record<string, string | null>;
 
-const branchAttachment = (props: ComputeAppProps) =>
+const branchAttachment = (props: ComputeProps) =>
   props.branchId !== undefined && !isPrismaDevId(props.branchId)
     ? {
         branchId: props.branchId,
@@ -475,7 +475,7 @@ const branchAttachment = (props: ComputeAppProps) =>
           branchGitName: "main",
         };
 
-const validateComputeAppProps = (props: ComputeAppProps) =>
+const validateComputeProps = (props: ComputeProps) =>
   Effect.gen(function* () {
     if ((props.skipPromote ?? false) && (props.destroyOldVersion ?? false)) {
       return yield* Effect.fail(
@@ -510,7 +510,7 @@ const branchNeedsSync = Effect.fn(function* (
   client: PrismaManagementClient,
   projectId: string,
   service: ApiComputeService,
-  props: ComputeAppProps,
+  props: ComputeProps,
 ) {
   if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
     return service.branchId !== props.branchId;
@@ -527,7 +527,7 @@ const branchNeedsSync = Effect.fn(function* (
 
 const newlyCreatedServiceNeedsBranchSync = (
   service: ApiComputeService,
-  props: ComputeAppProps,
+  props: ComputeProps,
 ) => {
   if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
     return service.branchId !== props.branchId;
@@ -559,7 +559,7 @@ const isPrismaEdgeServiceNotFound = (status: number, body: string) =>
 
 const waitForDeploymentUrl = Effect.fn(function* (
   url: string | undefined,
-  props: ComputeAppProps,
+  props: ComputeProps,
 ) {
   if (!url || props.verifyUrl === false) return;
   const httpOption = yield* Effect.serviceOption(HttpClient.HttpClient);
@@ -608,8 +608,8 @@ const waitForDeploymentUrl = Effect.fn(function* (
 });
 
 const isAutoBuild = (
-  build: ComputeAppProps["build"],
-): build is "auto" | ComputeAppAutoBuild =>
+  build: ComputeProps["build"],
+): build is "auto" | ComputeAutoBuild =>
   build === "auto" ||
   (typeof build === "object" &&
     build !== null &&
@@ -639,7 +639,7 @@ const readPackageMain = Effect.fn(function* (directory: string) {
   });
 });
 
-const resolveArtifact = Effect.fn(function* (props: ComputeAppProps) {
+const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
   const env = plainEnv(props.env);
   const envClass = props.envClass ?? "production";
   const defaultPort = props.port ?? 8080;
@@ -740,8 +740,8 @@ const resolveArtifact = Effect.fn(function* (props: ComputeAppProps) {
 
 const ensureService = Effect.fn(function* (
   client: PrismaManagementClient,
-  props: ComputeAppProps,
-  output: ComputeApp["Attributes"] | undefined,
+  props: ComputeProps,
+  output: Compute["Attributes"] | undefined,
 ) {
   const projectId = yield* resolveProjectId(props.project);
   const computeServiceId =
@@ -801,7 +801,7 @@ const findEnvironmentVariable = (
     .listEnvironmentVariables({ projectId, class: cls, key, limit: 2 })
     .pipe(Effect.map((variables: ApiEnvironmentVariable[]) => variables[0]));
 
-export const syncComputeAppEnvironment = Effect.fn(function* (
+export const syncComputeEnvironment = Effect.fn(function* (
   client: PrismaManagementClient,
   projectId: string,
   cls: "production" | "preview",
@@ -844,7 +844,7 @@ export const syncComputeAppEnvironment = Effect.fn(function* (
   return { synced, deleted };
 });
 
-const destroyComputeAppEnvironment = Effect.fn(function* (
+const destroyComputeEnvironment = Effect.fn(function* (
   client: PrismaManagementClient,
   projectId: string,
   cls: "production" | "preview",
@@ -870,7 +870,7 @@ const destroyComputeAppEnvironment = Effect.fn(function* (
   return { deleted };
 });
 
-const cleanupRemovedComputeAppEnvironment = Effect.fn(function* (
+const cleanupRemovedComputeEnvironment = Effect.fn(function* (
   client: PrismaManagementClient,
   projectId: string,
   oldClass: "production" | "preview",
@@ -903,7 +903,7 @@ const cleanupRemovedComputeAppEnvironment = Effect.fn(function* (
   return { deleted };
 });
 
-const startDev = Effect.fn(function* (id: string, props: ComputeAppProps) {
+const startDev = Effect.fn(function* (id: string, props: ComputeProps) {
   const path = yield* Path.Path;
   const dev = props.dev;
   const processKey = `dev:${id}`;
@@ -946,9 +946,9 @@ const startDev = Effect.fn(function* (id: string, props: ComputeAppProps) {
   return localUrl;
 });
 
-export const ComputeAppProvider = () =>
+export const ComputeProvider = () =>
   Provider.effect(
-    ComputeApp,
+    Compute,
     Effect.gen(function* () {
       const client = yield* PrismaClient;
       return {
@@ -1021,7 +1021,7 @@ export const ComputeAppProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, olds, output }) {
-          yield* validateComputeAppProps(news);
+          yield* validateComputeProps(news);
           const projectId = yield* resolveProjectId(news.project);
           const service = yield* ensureService(client, news, output).pipe(
             Effect.retry({
@@ -1033,7 +1033,7 @@ export const ComputeAppProvider = () =>
             ),
           );
           const previousVersionId = service.latestVersionId ?? null;
-          yield* cleanupRemovedComputeAppEnvironment(
+          yield* cleanupRemovedComputeEnvironment(
             client,
             projectId,
             olds?.envClass ?? "production",
@@ -1041,7 +1041,7 @@ export const ComputeAppProvider = () =>
             news.envClass ?? "production",
             news.env,
           );
-          yield* syncComputeAppEnvironment(
+          yield* syncComputeEnvironment(
             client,
             projectId,
             news.envClass ?? "production",
@@ -1198,7 +1198,7 @@ export const ComputeAppProvider = () =>
             }
             return;
           }
-          yield* destroyComputeAppEnvironment(
+          yield* destroyComputeEnvironment(
             client,
             output.projectId,
             olds.envClass ?? "production",
@@ -1214,9 +1214,9 @@ export const ComputeAppProvider = () =>
     }),
   );
 
-export const ComputeAppDevProvider = () =>
+export const ComputeDevProvider = () =>
   Provider.effect(
-    ComputeApp,
+    Compute,
     Effect.gen(function* () {
       const ctx = yield* AlchemyContext;
       return {
@@ -1231,7 +1231,7 @@ export const ComputeAppDevProvider = () =>
           const projectId = yield* resolveProjectId(news.project);
           if (!ctx.dev) {
             return yield* Effect.fail(
-              new Error("ComputeAppDevProvider requires Alchemy dev mode."),
+              new Error("ComputeDevProvider requires Alchemy dev mode."),
             );
           }
           const localUrl = yield* startDev(id, news);
