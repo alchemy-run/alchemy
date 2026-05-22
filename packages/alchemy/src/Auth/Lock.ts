@@ -1,4 +1,4 @@
-import { lock } from "@alchemy.run/node-utils/lockfile";
+import { lock } from "@alchemy.run/node-utils";
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
 import * as path from "pathe";
