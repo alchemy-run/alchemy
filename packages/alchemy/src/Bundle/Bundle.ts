@@ -11,6 +11,7 @@ import {
   type BundleAnalyzerPluginOptions,
 } from "./BundleAnalyzerPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
+import { rawPlugin } from "./RawPlugin.ts";
 
 /**
  * Extra options accepted by {@link build} / {@link watch} on top of the
@@ -298,6 +299,7 @@ function builtInPlugins(
         )
       : undefined,
     extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
+    rawPlugin(),
   ];
 }
 
