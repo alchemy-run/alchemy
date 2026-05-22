@@ -124,14 +124,21 @@ export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
                                         name: bindingName,
                                         id: binding.hyperdriveId,
                                       }
-                                    : isWorker(binding)
+                                    : binding.Type ===
+                                        "Cloudflare.VectorizeIndex"
                                       ? {
-                                          type: "service",
+                                          type: "vectorize",
                                           name: bindingName,
-                                          service: binding.workerName,
+                                          indexName: binding.indexName,
                                         }
-                                      : // TODO(sam): handle others
-                                        undefined;
+                                      : isWorker(binding)
+                                        ? {
+                                            type: "service",
+                                            name: bindingName,
+                                            service: binding.workerName,
+                                          }
+                                        : // TODO(sam): handle others
+                                          undefined;
 
       if (bindingMeta) {
         yield* resource.bind`${bindingName}`({

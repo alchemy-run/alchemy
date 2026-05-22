@@ -43,11 +43,13 @@ export type GetBindingType<T> =
                           ? ImagesBinding
                           : T extends Cloudflare.Hyperdrive
                             ? Hyperdrive
-                            : T extends Cloudflare.DurableObjectNamespaceLike
-                              ? DurableObjectNamespace<
-                                  Exclude<T["Shape"], undefined>
-                                >
-                              : T;
+                            : T extends Cloudflare.VectorizeIndex
+                              ? Vectorize
+                              : T extends Cloudflare.DurableObjectNamespaceLike
+                                ? DurableObjectNamespace<
+                                    Exclude<T["Shape"], undefined>
+                                  >
+                                : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.
