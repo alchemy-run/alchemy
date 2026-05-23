@@ -46,13 +46,7 @@ export const makeRequestEffect = <Req = never>(
         }),
     });
 
-    return yield* EffectHttp.toHandled(safeHandler, (request, response) =>
-      Effect.succeed(
-        HttpServerResponse.toWeb(EffectHttp.scopeTransferToStream(response), {
-          withoutBody: request.method === "HEAD",
-        }),
-      ),
-    ).pipe(
+    return yield* toHandledWebResponse(safeHandler).pipe(
       Effect.provide([
         Layer.succeed(HttpServerRequest.HttpServerRequest, request),
         Layer.succeed(Request, webRequest as any),
@@ -60,3 +54,25 @@ export const makeRequestEffect = <Req = never>(
     );
   }) as any;
 };
+
+const toHandledWebResponse = <Req>(
+  handler: Effect.Effect<HttpServerResponse.HttpServerResponse, never, Req>,
+): Effect.Effect<
+  Response,
+  never,
+  Exclude<Req | HttpServerRequest.HttpServerRequest, Scope>
+> =>
+  Effect.gen(function* () {
+    // `toHandled` exposes the final response through this callback, not its
+    // return value. Keep the assignment isolated here so callers get Response.
+    let webResponse: Response | undefined;
+    yield* EffectHttp.toHandled(handler, (request, response) => {
+      webResponse = HttpServerResponse.toWeb(
+        EffectHttp.scopeTransferToStream(response),
+        { withoutBody: request.method === "HEAD" },
+      );
+      return Effect.void;
+    });
+
+    return webResponse!;
+  });
