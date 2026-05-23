@@ -300,8 +300,6 @@
     "@distilled.cloud/core": "catalog:",
     "@distilled.cloud/neon": "catalog:",
     "@distilled.cloud/planetscale": "catalog:",
-    "@effect/vitest": "catalog:",
-    "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
     "@smithy/node-config-provider": "catalog:",
     "@smithy/shared-ini-file-loader": "catalog:",
@@ -311,15 +309,11 @@
     "capnweb": "^0.6.1",
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
-    "ink": "^6.3.1",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
     "magic-string": "^0.30.21",
-    "mysql2": "^3.15.3",
     "pathe": "^2.0.3",
-    "pg": "^8.13.0",
     "picomatch": "^4.0.4",
-    "react": "^19.2.0",
     "rolldown": "catalog:",
     "undici": "^7.16.0",
     "yaml": "catalog:"
@@ -330,6 +324,8 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@libsql/client": "catalog:",
     "@oxc-project/types": "^0.127.0",
     "@types/pg": "^8.11.0",
     "@types/aws-lambda": "catalog:",
@@ -340,6 +336,10 @@
     "@types/ws": "^8.18.1",
     "better-auth": "catalog:",
     "effect": "catalog:",
+    "ink": "^6.3.1",
+    "mysql2": "^3.15.3",
+    "pg": "^8.13.0",
+    "react": "^19.2.0",
     "react-devtools-core": "^7.0.1",
     "solid-js": "catalog:",
     "tsconfig-paths": "^4.2.0",
@@ -352,9 +352,13 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/sql-pg": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@libsql/client": "catalog:",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "mysql2": "^3.15.3",
+    "pg": "^8.13.0",
     "vite": "catalog:",
     "ws": "catalog:"
   },
@@ -368,10 +372,22 @@
     "@effect/sql-pg": {
       "optional": true
     },
+    "@effect/vitest": {
+      "optional": true
+    },
+    "@libsql/client": {
+      "optional": true
+    },
     "drizzle-kit": {
       "optional": true
     },
     "drizzle-orm": {
+      "optional": true
+    },
+    "mysql2": {
+      "optional": true
+    },
+    "pg": {
       "optional": true
     },
     "vite": {
