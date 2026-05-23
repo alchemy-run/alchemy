@@ -13,6 +13,7 @@ import {
 } from "@distilled.cloud/cloudflare-runtime";
 import {
   Ai,
+  Artifacts,
   Assets,
   Browser,
   D1,
@@ -442,7 +443,7 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "analytics_engine":
       return yield* unsupported();
     case "artifacts":
-      return yield* unsupported();
+      return Artifacts.binding(b.name, b.namespace);
     case "assets":
       return Assets.binding(b.name);
     case "browser":
