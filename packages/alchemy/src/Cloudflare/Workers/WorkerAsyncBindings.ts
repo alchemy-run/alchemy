@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { AlchemyContext } from "../../AlchemyContext.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
@@ -21,7 +20,6 @@ export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
   resource: Worker,
   props: InputProps<WorkerProps<WorkerBindingProps>>,
 ) {
-  const ctx = yield* AlchemyContext;
   if (props.bindings) {
     for (const bindingName in props.bindings) {
       // @ts-expect-error
@@ -140,10 +138,9 @@ export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
       if (bindingMeta) {
         yield* resource.bind`${bindingName}`({
           bindings: [bindingMeta],
-          hyperdrives:
-            ctx.dev && isHyperdrive(binding)
-              ? getHyperdriveDevOrigin(binding)
-              : undefined,
+          hyperdrives: isHyperdrive(binding)
+            ? getHyperdriveDevOrigin(binding)
+            : undefined,
         });
       } else {
         return yield* Effect.die(`Unknown binding type: ${bindingName}`);

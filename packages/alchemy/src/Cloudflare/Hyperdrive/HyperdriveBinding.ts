@@ -2,7 +2,6 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceLike } from "../../Resource.ts";
@@ -102,8 +101,6 @@ export class HyperdriveBindingPolicy extends Binding.Policy<
 
 export const HyperdriveBindingPolicyLive = HyperdriveBindingPolicy.layer.effect(
   Effect.gen(function* () {
-    const ctx = yield* AlchemyContext;
-
     return Effect.fn(function* (host: ResourceLike, hyperdrive: Hyperdrive) {
       if (!isWorker(host)) {
         return yield* Effect.die(
@@ -121,7 +118,7 @@ export const HyperdriveBindingPolicyLive = HyperdriveBindingPolicy.layer.effect(
             id: hyperdrive.hyperdriveId as unknown as string,
           },
         ],
-        hyperdrives: ctx.dev ? getHyperdriveDevOrigin(hyperdrive) : undefined,
+        hyperdrives: getHyperdriveDevOrigin(hyperdrive),
       });
     });
   }),

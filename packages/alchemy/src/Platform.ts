@@ -185,10 +185,7 @@ export const Platform = <
   type: R["Type"],
   hooks: {
     createRuntimeContext: (id: string) => BaseRuntimeContext;
-    onCreate?: (
-      resource: R,
-      props: any,
-    ) => Effect.Effect<void, never, StackServices>;
+    onCreate?: (resource: R, props: any) => Effect.Effect<void>;
   },
   methods?: { [key: string]: any },
 ): any => {
