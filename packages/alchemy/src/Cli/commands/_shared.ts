@@ -8,6 +8,7 @@ import * as S from "effect/Schema";
 import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
+import { pathToFileURL } from "node:url";
 
 import { AuthError } from "../../Auth/AuthProvider.ts";
 import type * as Stack from "../../Stack.ts";
@@ -245,19 +246,24 @@ export const instrumentCommand =
   ) =>
   <Args extends AttrsArgs, A, E, R>(
     handler: (args: Args) => Effect.Effect<A, E, R>,
+
+export const toImportSpecifier = (resolved: string): string =>
+  pathToFileURL(resolved).href;
   ): ((args: Args) => Effect.Effect<A, E, R>) =>
   (args) =>
     handler(args).pipe(
       Effect.withSpan(`cli.${command}`, {
-        attributes: attrs ? attrs(args) : {},
+  const resolvedUrl = toImportSpecifier(resolved);
       }),
       recordCli(command),
     );
 
 export const importStack = Effect.fn(function* (main: string) {
   const path = yield* Path.Path;
+  const resolved = path.resolve(process.cwd(), main);
+  const resolvedUrl = pathToFileURL(resolved).href;
   const module = yield* Effect.promise(
-    () => import(path.resolve(process.cwd(), main)),
+    () => import(resolvedUrl),
   );
   const stackEffect = module.default as ReturnType<
     ReturnType<typeof Stack.make>
