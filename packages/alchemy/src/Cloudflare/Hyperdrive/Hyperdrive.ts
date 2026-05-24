@@ -1,5 +1,6 @@
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -156,6 +157,10 @@ export type Hyperdrive = Resource<
 export const Hyperdrive = Resource<Hyperdrive>("Cloudflare.Hyperdrive")({
   bind: HyperdriveBinding.bind,
 });
+
+export const isHyperdrive = (value: unknown): value is Hyperdrive =>
+  Predicate.hasProperty(value, "Type") &&
+  value.Type === "Cloudflare.Hyperdrive";
 
 export const HyperdriveProvider = () =>
   Provider.effect(
