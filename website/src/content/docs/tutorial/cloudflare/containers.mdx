@@ -288,7 +288,25 @@ Effect.gen(function* () {
   const sandbox = yield* Cloudflare.Container.bind(Sandbox);
 
   return Effect.gen(function* () {
-+   const container = yield* Cloudflare.start(sandbox);
++   const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
+
+-   return {};
++   return {
++     exec: (command: string) => container.exec(command),
++   };
+  });
+}),
+```
+running for **this** DO instance, then hands you the typed shape
+you declared on the class. Add it to the **inner** init and wire
+the result up as an RPC method:
+
+```diff lang="typescript"
+Effect.gen(function* () {
+  const sandbox = yield* Cloudflare.Container.bind(Sandbox);
+
+  return Effect.gen(function* () {
+   const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
 
 -   return {};
 +   return {
@@ -442,7 +460,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
     const sandbox = yield* Cloudflare.Container.bind(Sandbox);
 
     return Effect.gen(function* () {
-      const container = yield* Cloudflare.start(sandbox);
+      const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
 
       return {
         exec: (command: string) => container.exec(command),

@@ -115,6 +115,7 @@
   "devDependencies": {
     "@alchemy.run/pr-package": "workspace:*",
     "@ark/attest": "^0.56.0",
+    "@cloudflare/puppeteer": "^1.1.0",
     "@distilled.cloud/cloudflare": "catalog:",
     "@effect/language-service": "^0.77.0",
     "@effect/platform-bun": "catalog:",

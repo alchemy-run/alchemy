@@ -327,6 +327,7 @@
   "devDependencies": {
     "@clack/prompts": "^0.11.0",
     "@cloudflare/workers-types": "catalog:",
+    "@cloudflare/puppeteer": "^1.1.0",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
