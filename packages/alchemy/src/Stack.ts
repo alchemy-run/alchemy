@@ -291,8 +291,8 @@ const alchemy = (overrides?: { dev?: boolean }) =>
       : AlchemyContextLive,
   );
 
-export const evalStack = <A, B, Err, Req>(
-  effect: StackEffect<CompiledStack<A>, Stage | AlchemyContext>,
+export const evalStack = <A, B, StackErr, Err, Req>(
+  effect: StackEffect<CompiledStack<A>, StackErr, Stage | AlchemyContext>,
   fn: (stack: CompiledStack<A>) => Effect.Effect<B, Err, Req>,
   options: {
     stage: string;
