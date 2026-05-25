@@ -7,28 +7,28 @@ sidebar:
 
 In [Part 3](/tutorial/part-3) you wrote integration tests against
 your deployed stack. But deploying to Cloudflare on every code change
-is slow. In this part you'll use `alchemy dev` to run everything
+is slow. In this part you'll use `bun alchemy dev` to run everything
 locally with hot reloading.
 
 ## Start dev mode
 
 ```sh
-alchemy dev
+bun alchemy dev
 ```
 
 That's it. Alchemy deploys your stack to the cloud and proxies
 requests to Workers running locally in workerd. It watches for file
 changes and hot reloads your Worker automatically.
 
-Your Worker is available at `http://localhost:1337` by default:
+Your Worker is available at `http://worker.localhost:1337` by default:
 
 ```sh
-curl http://localhost:1337/hello.txt
+curl http://worker.localhost:1337/hello.txt
 ```
 
 ## How it works
 
-`alchemy dev` does three things:
+`bun alchemy dev` does three things:
 
 1. **Deploys to the cloud** — resources like R2 Buckets are created
    on Cloudflare, while Workers run locally in workerd
@@ -58,27 +58,54 @@ export default Cloudflare.Worker(
 );
 ```
 
-## Run tests against dev
+## Run tests in dev mode
 
-Since your Worker runs on localhost in dev mode, you can point your
-integration tests at it for an even faster feedback loop:
+You don't need to run `bun alchemy dev` in a separate terminal to test
+against locally-emulated resources. The test harness has its own
+`dev` flag that flips every Worker over to workerd inside the test
+process — same wiring as `bun alchemy dev`, no extra terminal.
 
-```sh
-# Terminal 1: start dev mode
-alchemy dev
-
-# Terminal 2: run tests against local
-bun test test/integ.test.ts
+```diff lang="typescript"
+// test/integ.test.ts
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
++ dev: true,
+});
 ```
 
-The tests deploy the stack and run HTTP assertions against your
-local Worker.
+`beforeAll(deploy(Stack))` now boots the Workers locally; HTTP
+assertions hit `http://worker.localhost:1337` and roundtrip into your code
+with full stack traces.
+
+## Toggle dev mode from CI
+
+Hardcoding `dev: true` would force CI runs to local emulation too.
+Read it from the environment instead so the same test file runs
+against real cloud resources in CI and locally-emulated ones on your
+laptop.
+
+```diff lang="typescript"
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+- dev: true,
+});
+```
+
+Drop the explicit flag and the harness falls back to the
+`ALCHEMY_DEV` env var — set `ALCHEMY_DEV=1` in your shell to flip
+to local mode, leave it unset in CI.
+
+```sh
+ALCHEMY_DEV=1 bun test test/integ.test.ts
+```
 
 ## Recap
 
 You now have:
 
-- Local development with `alchemy dev`
+- Local development with `bun alchemy dev`
 - Hot reloading on file changes
 - Local emulation of Cloudflare resources
 

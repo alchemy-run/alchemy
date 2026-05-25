@@ -233,58 +233,69 @@ export const GroupProvider = () =>
             inlinePolicies,
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const groupName = yield* toName(id, news);
-          const created = yield* iam
-            .createGroup({
-              GroupName: groupName,
-              Path: news.path,
-            })
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const groupName = output?.groupName ?? (yield* toName(id, news));
+
+          // Observe — fetch the live group. `getGroup` returns
+          // `NoSuchEntityException` when the group has not been created or
+          // was deleted out-of-band, in which case we fall through to the
+          // ensure step below.
+          let observed = yield* iam
+            .getGroup({ GroupName: groupName })
             .pipe(
-              Effect.catchTag("EntityAlreadyExistsException", () =>
-                iam
-                  .getGroup({
-                    GroupName: groupName,
-                  })
-                  .pipe(Effect.map((response) => ({ Group: response.Group }))),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
               ),
             );
 
+          // Ensure — create the group when it is missing. A concurrent
+          // peer reconciler may win the race, so tolerate
+          // `EntityAlreadyExistsException` and reload.
+          if (!observed?.Group?.Arn) {
+            observed = yield* iam
+              .createGroup({
+                GroupName: groupName,
+                Path: news.path,
+              })
+              .pipe(
+                Effect.catchTag("EntityAlreadyExistsException", () =>
+                  iam.getGroup({ GroupName: groupName }),
+                ),
+                Effect.map((response) => ({
+                  Group: response.Group,
+                  Users: [],
+                  IsTruncated: false,
+                })),
+              );
+          }
+
+          // Sync — for each mutable aspect, diff observed against desired
+          // and apply only the delta. We trust the cloud as the source of
+          // truth instead of relying on `olds`.
+          const [observedManagedPolicies, observedInlinePolicies] =
+            yield* Effect.all([
+              readManagedPolicies(groupName),
+              readInlinePolicies(groupName),
+            ]);
+
           yield* syncManagedPolicies({
             groupName,
-            olds: [],
+            olds: observedManagedPolicies,
             news: news.managedPolicyArns ?? [],
           });
           yield* syncInlinePolicies({
             groupName,
-            olds: {},
+            olds: observedInlinePolicies,
             news: news.inlinePolicies ?? {},
           });
 
-          yield* session.note(created.Group?.Arn ?? groupName);
+          const groupArn = observed.Group?.Arn ?? groupName;
+          yield* session.note(groupArn);
           return {
-            groupArn: created.Group?.Arn ?? groupName,
+            groupArn,
             groupName,
-            groupId: created.Group?.GroupId,
-            path: created.Group?.Path ?? news.path ?? "/",
-            managedPolicyArns: news.managedPolicyArns ?? [],
-            inlinePolicies: news.inlinePolicies ?? {},
-          };
-        }),
-        update: Effect.fn(function* ({ news, olds, output, session }) {
-          yield* syncManagedPolicies({
-            groupName: output.groupName,
-            olds: olds.managedPolicyArns ?? [],
-            news: news.managedPolicyArns ?? [],
-          });
-          yield* syncInlinePolicies({
-            groupName: output.groupName,
-            olds: olds.inlinePolicies ?? {},
-            news: news.inlinePolicies ?? {},
-          });
-          yield* session.note(output.groupArn);
-          return {
-            ...output,
+            groupId: observed.Group?.GroupId,
+            path: observed.Group?.Path ?? news.path ?? "/",
             managedPolicyArns: news.managedPolicyArns ?? [],
             inlinePolicies: news.inlinePolicies ?? {},
           };

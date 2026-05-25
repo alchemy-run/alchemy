@@ -160,11 +160,17 @@ export const ScalingPolicyProvider = () =>
           });
           return policy ? toAttributes(policy) : undefined;
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const autoScalingGroupName = toAutoScalingGroupName(
-            news.autoScalingGroup,
-          );
-          const policyName = yield* toName(id, news);
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const autoScalingGroupName =
+            output?.autoScalingGroupName ??
+            toAutoScalingGroupName(news.autoScalingGroup);
+          const policyName = output?.policyName ?? (yield* toName(id, news));
+
+          // Ensure + Sync — `putScalingPolicy` is the single
+          // create-or-update API for a scaling policy. It's idempotent on
+          // matching params and overwrites policy type / target tracking
+          // config / estimated warmup on differences, so we issue it
+          // unconditionally.
           yield* autoscaling.putScalingPolicy({
             AutoScalingGroupName: autoScalingGroupName,
             PolicyName: policyName,
@@ -178,6 +184,10 @@ export const ScalingPolicyProvider = () =>
             },
             EstimatedInstanceWarmup: news.estimatedInstanceWarmup,
           } as any);
+
+          // Observe final state — re-read so the returned attributes
+          // reflect the live cloud state (including the generated
+          // policyArn and any associated alarm names).
           const policy = yield* describePolicy({
             autoScalingGroupName,
             policyName,
@@ -187,43 +197,12 @@ export const ScalingPolicyProvider = () =>
                 ? Effect.succeed(policy)
                 : Effect.fail(
                     new Error(
-                      `Scaling policy '${policyName}' was not readable after create`,
+                      `Scaling policy '${policyName}' was not readable after reconcile`,
                     ),
                   ),
             ),
           );
           yield* session.note(policyName);
-          return toAttributes(policy);
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          yield* autoscaling.putScalingPolicy({
-            AutoScalingGroupName: output.autoScalingGroupName,
-            PolicyName: output.policyName,
-            PolicyType: news.policyType ?? "TargetTrackingScaling",
-            TargetTrackingConfiguration: {
-              PredefinedMetricSpecification: {
-                PredefinedMetricType: news.predefinedMetricType,
-              },
-              TargetValue: news.targetValue,
-              DisableScaleIn: news.disableScaleIn,
-            },
-            EstimatedInstanceWarmup: news.estimatedInstanceWarmup,
-          } as any);
-          const policy = yield* describePolicy({
-            autoScalingGroupName: output.autoScalingGroupName,
-            policyName: output.policyName,
-          }).pipe(
-            Effect.flatMap((policy) =>
-              policy
-                ? Effect.succeed(policy)
-                : Effect.fail(
-                    new Error(
-                      `Scaling policy '${output.policyName}' was not readable after update`,
-                    ),
-                  ),
-            ),
-          );
-          yield* session.note(output.policyName);
           return toAttributes(policy);
         }),
         delete: Effect.fn(function* ({ output }) {

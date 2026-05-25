@@ -2,10 +2,12 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
+import { createInternalTags, hasAlchemyTags } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
@@ -213,6 +215,29 @@ export const QueueProvider = () =>
       };
       return Queue.Provider.of({
         stables: ["queueName", "queueUrl", "queueArn"],
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const queueName =
+            output?.queueName ?? (yield* createQueueName(id, olds ?? {}));
+          const url = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
+            Effect.map((r) => r.QueueUrl),
+            Effect.catchTag("QueueDoesNotExist", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          if (!url) return undefined;
+          const queueArn =
+            `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
+          const tagsResp = yield* sqs.listQueueTags({ QueueUrl: url }).pipe(
+            Effect.map((r) => r.Tags ?? {}),
+            Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+          );
+          const attrs = {
+            queueName,
+            queueUrl: url,
+            queueArn,
+          };
+          return (yield* hasAlchemyTags(id, tagsResp)) ? attrs : Unowned(attrs);
+        }),
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           if (!isResolved(news)) return undefined;
           const oldFifo = olds.fifo ?? false;
@@ -227,45 +252,149 @@ export const QueueProvider = () =>
           }
           // Return undefined to allow update function to be called for other attribute changes
         }),
-        create: Effect.fn(function* ({ id, news = {}, session, bindings }) {
-          const queueName = yield* createQueueName(id, news);
-          const response = yield* sqs
-            .createQueue({
-              QueueName: queueName,
-              Attributes: createAttributes(news, bindings),
+        reconcile: Effect.fn(function* ({
+          id,
+          news = {},
+          output,
+          session,
+          bindings,
+        }) {
+          const queueName =
+            output?.queueName ?? (yield* createQueueName(id, news));
+          const queueArn =
+            output?.queueArn ??
+            (`arn:aws:sqs:${region}:${accountId}:${queueName}` as const);
+          const desiredAttributes = createAttributes(news, bindings);
+          const internalTags = yield* createInternalTags(id);
+
+          // Observe — find the queue's URL or create it.
+          //
+          // We never trust a stale `output.queueUrl` blindly: if the queue was
+          // deleted out-of-band, downstream API calls fail with
+          // `QueueDoesNotExist` and we recreate. This keeps the reconciler
+          // convergent regardless of the starting cloud state.
+          let queueUrl = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
+            Effect.map((r) => r.QueueUrl!),
+            Effect.catchTag("QueueDoesNotExist", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+
+          if (queueUrl === undefined) {
+            // `createQueue` is idempotent for identical params; with different
+            // params it raises `QueueNameExists`. We pass the desired attrs so
+            // first-create lands fully configured, and tolerate the race where
+            // a peer reconciler created it concurrently.
+            queueUrl = yield* sqs
+              .createQueue({
+                QueueName: queueName,
+                Attributes: desiredAttributes,
+                tags: internalTags,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "QueueDeletedRecently",
+                  schedule: Schedule.fixed(1000).pipe(
+                    Schedule.tapOutput((i) =>
+                      session.note(
+                        `Queue was deleted recently, retrying... ${i + 1}s`,
+                      ),
+                    ),
+                  ),
+                }),
+                Effect.catchTag("QueueNameExists", () =>
+                  sqs.getQueueUrl({ QueueName: queueName }),
+                ),
+                Effect.map((r) => r.QueueUrl!),
+              );
+          }
+
+          // Sync attributes — diff observed cloud state against desired and
+          // apply only the delta. SQS returns all attribute values as strings,
+          // and `desiredAttributes` is already string-shaped, so equality
+          // comparison is direct.
+          // SQS is eventually consistent: a freshly-created queue can return
+          // `QueueDoesNotExist` from `getQueueAttributes` for a few seconds
+          // even after `createQueue` succeeded. Retry briefly so the
+          // reconciler converges instead of failing the first deploy.
+          const currentAttributes = yield* sqs
+            .getQueueAttributes({
+              QueueUrl: queueUrl,
+              AttributeNames: ["All"],
             })
             .pipe(
               Effect.retry({
-                while: (e) => e._tag === "QueueDeletedRecently",
+                while: (e) => e._tag === "QueueDoesNotExist",
                 schedule: Schedule.fixed(1000).pipe(
-                  Schedule.tapOutput((i) =>
-                    session.note(
-                      `Queue was deleted recently, retrying... ${i + 1}s`,
-                    ),
+                  Schedule.both(Schedule.recurs(30)),
+                ),
+              }),
+              Effect.map((r) => r.Attributes ?? {}),
+            );
+
+          const attributeDelta: Record<string, string> = {};
+          for (const [key, value] of Object.entries(desiredAttributes)) {
+            if (value === undefined) continue;
+            if (
+              currentAttributes[key as keyof typeof currentAttributes] !== value
+            ) {
+              attributeDelta[key] = value;
+            }
+          }
+          if (Object.keys(attributeDelta).length > 0) {
+            yield* sqs
+              .setQueueAttributes({
+                QueueUrl: queueUrl,
+                Attributes: attributeDelta,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "QueueDoesNotExist",
+                  schedule: Schedule.fixed(1000).pipe(
+                    Schedule.both(Schedule.recurs(30)),
                   ),
+                }),
+              );
+          }
+
+          // Sync alchemy-owned tags. The `tags` parameter on `createQueue`
+          // only applies on first create, so on adoption (or after a queue
+          // was created without our tags) we fix them up here.
+          const currentTags = yield* sqs
+            .listQueueTags({ QueueUrl: queueUrl })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "QueueDoesNotExist",
+                schedule: Schedule.fixed(1000).pipe(
+                  Schedule.both(Schedule.recurs(30)),
+                ),
+              }),
+              Effect.map((r) => r.Tags ?? {}),
+              Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+            );
+          const tagDelta: Record<string, string> = {};
+          for (const [key, value] of Object.entries(internalTags)) {
+            if (currentTags[key] !== value) {
+              tagDelta[key] = value;
+            }
+          }
+          if (Object.keys(tagDelta).length > 0) {
+            yield* sqs.tagQueue({ QueueUrl: queueUrl, Tags: tagDelta }).pipe(
+              Effect.retry({
+                while: (e) => e._tag === "QueueDoesNotExist",
+                schedule: Schedule.fixed(1000).pipe(
+                  Schedule.both(Schedule.recurs(30)),
                 ),
               }),
             );
-          const queueArn =
-            `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
-          const queueUrl = response.QueueUrl!;
+          }
+
           yield* session.note(queueUrl);
           return {
             queueName,
             queueUrl,
-            queueArn: queueArn,
+            queueArn,
           };
-        }),
-        update: Effect.fn(function* ({ news = {}, output, session, bindings }) {
-          const attributes = createAttributes(news, bindings);
-          if (Object.values(attributes).some((a) => a !== undefined)) {
-            yield* sqs.setQueueAttributes({
-              QueueUrl: output.queueUrl,
-              Attributes: attributes,
-            });
-          }
-          yield* session.note(output.queueUrl);
-          return output;
         }),
         delete: Effect.fn(function* (input) {
           yield* sqs

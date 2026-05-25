@@ -82,28 +82,49 @@ export const UsagePlanKeyProvider = () =>
             name: k.name,
           };
         }),
-        create: Effect.fn(function* ({ news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("UsagePlanKey props were not resolved");
           }
           const news = newsIn as Input.ResolveProps<UsagePlanKeyProps>;
-          const k = yield* ag.createUsagePlanKey({
-            usagePlanId: news.usagePlanId as string,
-            keyId: news.keyId as string,
-            keyType: news.keyType ?? "API_KEY",
-          });
-          yield* session.note(
-            `Linked key ${news.keyId} to usage plan ${news.usagePlanId}`,
-          );
+          const usagePlanId = (output?.usagePlanId ??
+            news.usagePlanId) as string;
+          const keyId = (output?.keyId ?? news.keyId) as string;
+
+          // Observe — fetch the live link. UsagePlanKey is a pure
+          // association (no patchable fields apart from the natural-key
+          // tuple, which is modeled as `replace` in `diff`), so once it
+          // exists there's nothing to sync.
+          let observed = yield* ag
+            .getUsagePlanKey({ usagePlanId, keyId })
+            .pipe(
+              Effect.catchTag("NotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+
+          // Ensure — create the link if missing.
+          if (!observed?.id) {
+            const created = yield* ag.createUsagePlanKey({
+              usagePlanId: news.usagePlanId as string,
+              keyId: news.keyId as string,
+              keyType: news.keyType ?? "API_KEY",
+            });
+            yield* session.note(
+              `Linked key ${news.keyId} to usage plan ${news.usagePlanId}`,
+            );
+            observed = yield* ag.getUsagePlanKey({
+              usagePlanId,
+              keyId: created.id ?? keyId,
+            });
+          }
+
           return {
-            usagePlanId: news.usagePlanId as string,
-            keyId: k.id!,
-            keyType: k.type ?? "API_KEY",
-            name: k.name,
+            usagePlanId,
+            keyId: observed.id!,
+            keyType: observed.type ?? "API_KEY",
+            name: observed.name,
           };
-        }),
-        update: Effect.fn(function* ({ output }) {
-          return output;
         }),
         delete: Effect.fn(function* ({ output, session }) {
           yield* ag

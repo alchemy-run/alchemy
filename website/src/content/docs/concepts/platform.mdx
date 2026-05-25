@@ -33,7 +33,7 @@ export default Cloudflare.Worker(
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
 
     return {
-      // Exec: per-request handler.
+      // Runtime: per-request handler.
       fetch: Effect.gen(function* () {
         const obj = yield* bucket.get("hello.txt");
         return obj
@@ -118,7 +118,7 @@ cases — but the surface is open.
 ```typescript
 export const MyPlatform = Platform<MyConfig, Handlers>(
   "MyPlatform",
-  // ...lifecycle hooks (create / update / delete) that build the
+  // ...lifecycle hooks (reconcile / delete) that build the
   //    infrastructure and upload the bundled handler.
 );
 ```

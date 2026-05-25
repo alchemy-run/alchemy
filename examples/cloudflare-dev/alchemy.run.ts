@@ -1,5 +1,5 @@
+import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Alchemy from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import type { Counter as CounterClass } from "./src/AsyncWorker.ts";
 import EffectWorker from "./src/EffectWorker.ts";
@@ -16,7 +16,7 @@ export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
 export const AsyncWorker = Cloudflare.Worker("AsyncWorker", {
   main: "./src/AsyncWorker.ts",
   bindings: {
-    Counter,
+    COUNTER: Counter,
   },
 });
 

@@ -188,81 +188,84 @@ export const DBInstanceProvider = () =>
           }
           return toAttrs({ instance, tags: toTagRecord(instance.TagList) });
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const identifier = yield* toIdentifier(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          yield* rds
-            .createDBInstance({
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const identifier =
+            output?.dbInstanceIdentifier ?? (yield* toIdentifier(id, news));
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
+
+          // Observe — fetch live instance state.
+          let observed = yield* readInstance(identifier);
+
+          // Ensure — create if missing. Tolerate
+          // `DBInstanceAlreadyExistsFault` as a race with a peer reconciler.
+          if (!observed?.DBInstanceArn) {
+            yield* rds
+              .createDBInstance({
+                DBInstanceIdentifier: identifier,
+                DBClusterIdentifier: news.dbClusterIdentifier,
+                DBInstanceClass: news.dbInstanceClass,
+                Engine: news.engine,
+                EngineVersion: news.engineVersion,
+                DBSubnetGroupName: news.dbSubnetGroupName,
+                DBParameterGroupName: news.dbParameterGroupName,
+                VpcSecurityGroupIds: news.vpcSecurityGroupIds,
+                PubliclyAccessible: news.publiclyAccessible,
+                PromotionTier: news.promotionTier,
+                AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
+                CopyTagsToSnapshot: news.copyTagsToSnapshot,
+                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              })
+              .pipe(
+                Effect.catchTag(
+                  "DBInstanceAlreadyExistsFault",
+                  () => Effect.void,
+                ),
+              );
+
+            observed = yield* waitForInstance(identifier);
+          } else {
+            // Sync mutable instance config — push desired shape via
+            // `modifyDBInstance`. Many fields land in
+            // `PendingModifiedValues`; `ApplyImmediately` shortens the wait.
+            yield* rds.modifyDBInstance({
               DBInstanceIdentifier: identifier,
-              DBClusterIdentifier: news.dbClusterIdentifier,
               DBInstanceClass: news.dbInstanceClass,
-              Engine: news.engine,
               EngineVersion: news.engineVersion,
-              DBSubnetGroupName: news.dbSubnetGroupName,
               DBParameterGroupName: news.dbParameterGroupName,
               VpcSecurityGroupIds: news.vpcSecurityGroupIds,
               PubliclyAccessible: news.publiclyAccessible,
               PromotionTier: news.promotionTier,
               AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
               CopyTagsToSnapshot: news.copyTagsToSnapshot,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            })
-            .pipe(
-              Effect.catchTag(
-                "DBInstanceAlreadyExistsFault",
-                () => Effect.void,
-              ),
-            );
+              ApplyImmediately: true,
+            });
+            observed = yield* waitForInstance(identifier);
+          }
 
-          const instance = yield* waitForInstance(identifier);
-          yield* session.note(instance.DBInstanceArn ?? identifier);
-          return toAttrs({ instance, tags });
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* rds.modifyDBInstance({
-            DBInstanceIdentifier: output.dbInstanceIdentifier,
-            DBInstanceClass: news.dbInstanceClass,
-            EngineVersion: news.engineVersion,
-            DBParameterGroupName: news.dbParameterGroupName,
-            VpcSecurityGroupIds: news.vpcSecurityGroupIds,
-            PubliclyAccessible: news.publiclyAccessible,
-            PromotionTier: news.promotionTier,
-            AutoMinorVersionUpgrade: news.autoMinorVersionUpgrade,
-            CopyTagsToSnapshot: news.copyTagsToSnapshot,
-            ApplyImmediately: true,
-          });
+          const dbInstanceArn = observed.DBInstanceArn ?? "";
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-          if (upsert.length > 0) {
+          // Sync tags — diff observed cloud tags against desired.
+          const observedTags = toTagRecord(observed.TagList);
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0 && dbInstanceArn) {
             yield* rds.addTagsToResource({
-              ResourceName: output.dbInstanceArn,
+              ResourceName: dbInstanceArn,
               Tags: upsert,
             });
           }
-          if (removed.length > 0) {
+          if (removed.length > 0 && dbInstanceArn) {
             yield* rds.removeTagsFromResource({
-              ResourceName: output.dbInstanceArn,
+              ResourceName: dbInstanceArn,
               TagKeys: removed,
             });
           }
 
-          const instance = yield* waitForInstance(output.dbInstanceIdentifier);
-          yield* session.note(output.dbInstanceArn);
-          return toAttrs({ instance, tags: newTags });
+          yield* session.note(dbInstanceArn || identifier);
+          return toAttrs({ instance: observed, tags: desiredTags });
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* rds

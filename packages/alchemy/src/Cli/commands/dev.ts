@@ -1,20 +1,13 @@
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { fileURLToPath } from "node:url";
+import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
+import * as RpcSpawner from "../../Local/RpcSpawner.ts";
 import { envFile, force, profile, script, stage } from "./_shared.ts";
 import { ExecStackOptions } from "./deploy.ts";
-
-// Source iteration uses unbundled exec.ts so --watch sees source-file changes;
-// published installs use the bundled exec.js so react/ink/pathe stay
-// devDependencies (matching the CLI bundle's intent). Detect which world we're
-// in by whether dev.ts (or the alchemy.js bundle that contains it) lives
-// inside a node_modules tree — same heuristic as bin/cli.js.
-const selfPath = fileURLToPath(import.meta.url);
-const isInstalled =
-  selfPath.includes("/node_modules/") || selfPath.includes("\\node_modules\\");
-const execEntry = isInstalled ? "alchemy/bin/exec.js" : "alchemy/bin/exec.ts";
 
 export const devCommand = Command.make(
   "dev",
@@ -25,31 +18,52 @@ export const devCommand = Command.make(
     stage,
     profile,
   },
-  Effect.fn(function* (args) {
-    const options = yield* Schema.encodeEffect(ExecStackOptions)({
-      ...args,
-      yes: true,
-      dev: true,
-    });
-    const bin = typeof globalThis.Bun !== "undefined" ? "bun" : "node";
-    const child = yield* ChildProcess.make(
-      bin,
-      [
-        "run",
-        "--watch",
-        "--no-clear-screen",
-        fileURLToPath(import.meta.resolve(execEntry)),
-      ],
-      {
+  Effect.fn(
+    function* (args) {
+      const options = yield* Schema.encodeEffect(ExecStackOptions)({
+        ...args,
+        yes: true,
+        dev: true,
+      });
+      const spawner = yield* RpcSpawner.RpcSpawner;
+      // We no longer force Bun in development because this prevents us from testing in Node.
+      const command =
+        typeof globalThis.Bun !== "undefined"
+          ? [
+              "bun",
+              "run",
+              ...process.execArgv,
+              "--watch",
+              "--no-clear-screen",
+              fileURLToPath(import.meta.resolve("alchemy/bin/exec.ts")),
+            ]
+          : [
+              "node",
+              ...process.execArgv,
+              "--experimental-transform-types",
+              "--watch",
+              "--watch-preserve-output",
+              fileURLToPath(import.meta.resolve("alchemy/bin/exec.js")),
+            ];
+      const child = yield* ChildProcess.make(command[0], command.slice(1), {
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",
         env: {
           ALCHEMY_EXEC_OPTIONS: JSON.stringify(options),
+          [SPAWNER_URL_ENV_KEY]: spawner.url,
         },
         extendEnv: true,
-      },
-    );
-    yield* child.exitCode;
-  }),
+        detached: false,
+      });
+      yield* child.exitCode;
+    },
+    (effect, args) =>
+      Effect.provide(
+        RpcSpawner.layerServer({
+          profile: args.profile,
+          envFile: Option.getOrUndefined(args.envFile),
+        }),
+      )(effect),
+  ),
 );

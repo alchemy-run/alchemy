@@ -556,90 +556,87 @@ export const StageProvider = () =>
           if (!s?.stageName) return undefined;
           return snapshotStage(s, output.restApiId, s.stageName);
         }),
-        create: Effect.fn(function* ({ id, news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("Stage props were not resolved");
           }
           const news = newsIn as Input.ResolveProps<StageProps>;
+          const restApiId = (output?.restApiId ?? news.restApiId) as string;
+          const stageName = output?.stageName ?? news.stageName;
           const internalTags = yield* createInternalTags(id);
-          const allTags = { ...news.tags, ...internalTags };
+          const desiredTags = { ...news.tags, ...internalTags };
 
-          yield* retryOnApiStatusUpdating(
-            ag.createStage({
-              restApiId: news.restApiId as string,
-              stageName: news.stageName,
-              deploymentId: news.deploymentId as string,
-              description: news.description,
-              cacheClusterEnabled: news.cacheClusterEnabled,
-              cacheClusterSize: news.cacheClusterSize,
-              variables: news.variables,
-              documentationVersion: news.documentationVersion,
-              canarySettings: news.canarySettings,
-              tracingEnabled: news.tracingEnabled,
-              tags: allTags,
-            }),
-          );
+          // Observe — fetch live stage state. `output` is at most a cache
+          // for the natural-key tuple (restApiId, stageName); the actual
+          // mutable settings come from the cloud read on every reconcile.
+          let observed = yield* ag
+            .getStage({ restApiId, stageName })
+            .pipe(
+              Effect.catchTag("NotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
 
-          const s0 = yield* ag.getStage({
-            restApiId: news.restApiId as string,
-            stageName: news.stageName,
-          });
-          const prev = snapshotStage(
-            s0,
-            news.restApiId as string,
-            news.stageName,
-          );
-          const patches = buildStagePatches(prev, news);
-          if (patches.length > 0) {
+          // Ensure — create the stage if missing. `createStage` only sets
+          // a subset of the configurable surface; the rest is applied via
+          // updateStage in the sync step below.
+          if (!observed?.stageName) {
             yield* retryOnApiStatusUpdating(
-              ag.updateStage({
+              ag.createStage({
                 restApiId: news.restApiId as string,
                 stageName: news.stageName,
-                patchOperations: patches,
+                deploymentId: news.deploymentId as string,
+                description: news.description,
+                cacheClusterEnabled: news.cacheClusterEnabled,
+                cacheClusterSize: news.cacheClusterSize,
+                variables: news.variables,
+                documentationVersion: news.documentationVersion,
+                canarySettings: news.canarySettings,
+                tracingEnabled: news.tracingEnabled,
+                tags: desiredTags,
               }),
             );
-          }
-
-          yield* session.note(`Created stage ${news.stageName}`);
-          const s = yield* ag.getStage({
-            restApiId: news.restApiId as string,
-            stageName: news.stageName,
-          });
-          return snapshotStage(s, news.restApiId as string, news.stageName);
-        }),
-        update: Effect.fn(function* ({ id, news: newsIn, output, session }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("Stage props were not resolved");
-          }
-          const news = newsIn as Input.ResolveProps<StageProps>;
-          const patches = buildStagePatches(output, news);
-          if (patches.length > 0) {
-            yield* retryOnApiStatusUpdating(
-              ag.updateStage({
-                restApiId: output.restApiId,
-                stageName: output.stageName,
-                patchOperations: patches,
-              }),
-            );
-          }
-
-          const internalTags = yield* createInternalTags(id);
-          const newTags = { ...news.tags, ...internalTags };
-          if (!deepEqual(output.tags, newTags)) {
-            const arn = stageArn(awsRegion, output.restApiId, output.stageName);
-            yield* syncTags({
-              resourceArn: arn,
-              oldTags: output.tags,
-              newTags,
+            yield* session.note(`Created stage ${news.stageName}`);
+            observed = yield* ag.getStage({
+              restApiId: news.restApiId as string,
+              stageName: news.stageName,
             });
           }
 
-          yield* session.note(`Updated stage ${output.stageName}`);
-          const s = yield* ag.getStage({
-            restApiId: output.restApiId,
-            stageName: output.stageName,
-          });
-          return snapshotStage(s, output.restApiId, output.stageName);
+          // Sync stage settings — diff observed cloud state against desired
+          // and emit only the delta as PATCH operations. `buildStagePatches`
+          // already handles every mutable aspect (deploymentId, description,
+          // cache, variables, methodSettings, accessLog, canary, tracing,
+          // webAcl).
+          const observedSnapshot = snapshotStage(
+            observed,
+            restApiId,
+            stageName,
+          );
+          const patches = buildStagePatches(observedSnapshot, news);
+          if (patches.length > 0) {
+            yield* retryOnApiStatusUpdating(
+              ag.updateStage({
+                restApiId,
+                stageName,
+                patchOperations: patches,
+              }),
+            );
+          }
+
+          // Sync tags — observed ↔ desired.
+          if (!deepEqual(observedSnapshot.tags, desiredTags)) {
+            const arn = stageArn(awsRegion, restApiId, stageName);
+            yield* syncTags({
+              resourceArn: arn,
+              oldTags: observedSnapshot.tags,
+              newTags: desiredTags,
+            });
+          }
+
+          yield* session.note(`Reconciled stage ${stageName}`);
+          const final = yield* ag.getStage({ restApiId, stageName });
+          return snapshotStage(final, restApiId, stageName);
         }),
         delete: Effect.fn(function* ({ output, session }) {
           yield* retryOnApiStatusUpdating(

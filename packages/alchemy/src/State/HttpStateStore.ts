@@ -7,7 +7,11 @@ import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import { StateApi } from "./HttpStateApi.ts";
 
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
-import { StateStoreError, type StateService } from "./State.ts";
+import {
+  StateStoreError,
+  type PersistedState,
+  type StateService,
+} from "./State.ts";
 import { encodeState, reviveStateRecursive } from "./StateEncoding.ts";
 
 /**
@@ -55,6 +59,11 @@ export const makeHttpStateStore = ({
 
     const service: StateService = {
       id,
+      getVersion: () =>
+        apiClient.version.getVersion().pipe(
+          Effect.map((v) => v.version),
+          mapStateStoreError,
+        ),
       listStacks: () =>
         state.listStacks().pipe(
           Effect.map((stacks) => [...stacks]),
@@ -90,7 +99,7 @@ export const makeHttpStateStore = ({
           ),
           mapStateStoreError,
         ),
-      set: <V extends ResourceState>(request: {
+      set: <V extends PersistedState>(request: {
         stack: string;
         stage: string;
         fqn: string;
@@ -129,6 +138,27 @@ export const makeHttpStateStore = ({
             query: request.stage === undefined ? {} : { stage: request.stage },
           })
           .pipe(Effect.asVoid, mapStateStoreError),
+      getOutput: (request) =>
+        state
+          .getStackOutput({
+            params: { stack: request.stack, stage: request.stage },
+          })
+          .pipe(
+            Effect.map((s) =>
+              s == null ? undefined : reviveStateRecursive(s),
+            ),
+            mapStateStoreError,
+          ),
+      setOutput: (request) =>
+        state
+          .setStackOutput({
+            params: { stack: request.stack, stage: request.stage },
+            payload: encodeState(request.value as any),
+          })
+          .pipe(
+            Effect.map(() => request.value),
+            mapStateStoreError,
+          ),
     };
     return service;
   });
@@ -159,21 +189,20 @@ const isTransient = (e: any): boolean => {
 const retryTransient = <A, Err, Req>(eff: Effect.Effect<A, Err, Req>) =>
   Effect.retry(eff, {
     while: isTransient,
-    // Exponential backoff capped at 2s, no attempt limit. The state
-    // store is on the deploy critical path; we'd rather block than
-    // surface a transient blip as a hard failure (which historically
-    // stranded `syncState` mid-flight, leaving the remote store
-    // partially populated).
+    // Exponential backoff capped at 2s, max 5 attempts. Beyond that
+    // the issue isn't transient and we'd rather surface a hard
+    // failure than block the deploy indefinitely.
     schedule: Schedule.exponential(100).pipe(
       Schedule.either(Schedule.spaced("2 seconds")),
+      Schedule.both(Schedule.recurs(5)),
     ),
   });
 
 /** Collapse any client failure into a {@link StateStoreError}. */
 const mapStateStoreError = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(
-    Effect.tapError(Effect.log),
     retryTransient,
+    Effect.tapError(Effect.log),
     Effect.catch((e: E) =>
       Effect.fail(
         new StateStoreError({

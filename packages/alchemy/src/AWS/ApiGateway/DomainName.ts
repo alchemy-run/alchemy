@@ -145,66 +145,62 @@ export const DomainNameProvider = () =>
             tags: tagRecord(d.tags),
           };
         }),
-        create: Effect.fn(function* ({ id, news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("DomainName props were not resolved");
           }
           const news = newsIn as DomainNameProps;
+          const domainName = output?.domainName ?? news.domainName;
           const internalTags = yield* createInternalTags(id);
-          const allTags = { ...news.tags, ...internalTags };
+          const desiredTags = { ...news.tags, ...internalTags };
 
-          yield* ag.createDomainName({
-            domainName: news.domainName,
-            certificateName: news.certificateName,
-            certificateBody: news.certificateBody,
-            certificatePrivateKey: news.certificatePrivateKey,
-            certificateChain: news.certificateChain,
-            certificateArn: news.certificateArn,
-            regionalCertificateName: news.regionalCertificateName,
-            regionalCertificateArn: news.regionalCertificateArn,
-            endpointConfiguration: news.endpointConfiguration,
-            tags: allTags,
-            securityPolicy: news.securityPolicy,
-            endpointAccessMode: news.endpointAccessMode,
-            mutualTlsAuthentication: news.mutualTlsAuthentication,
-            ownershipVerificationCertificateArn:
-              news.ownershipVerificationCertificateArn,
-            policy: news.policy,
-            routingMode: news.routingMode,
-          });
+          // Observe — fetch the live domain name. Domain names are
+          // user-supplied physical names so the lookup key is stable; we
+          // never trust `output.tags`/`output.securityPolicy` etc. for
+          // diffing, only re-read the cloud state.
+          let observed = yield* ag
+            .getDomainName({ domainName })
+            .pipe(
+              Effect.catchTag("NotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
 
-          yield* session.note(`Created domain name ${news.domainName}`);
-          const d = yield* ag.getDomainName({ domainName: news.domainName });
-          return {
-            domainName: d.domainName!,
-            regionalDomainName: d.regionalDomainName,
-            regionalHostedZoneId: d.regionalHostedZoneId,
-            distributionDomainName: d.distributionDomainName,
-            distributionHostedZoneId: d.distributionHostedZoneId,
-            domainNameArn: d.domainNameArn,
-            tags: tagRecord(d.tags),
-          };
-        }),
-        update: Effect.fn(function* ({
-          id,
-          news: newsIn,
-          olds,
-          output,
-          session,
-        }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("DomainName props were not resolved");
+          // Ensure — create the domain name if it's missing.
+          if (!observed?.domainName) {
+            yield* ag.createDomainName({
+              domainName: news.domainName,
+              certificateName: news.certificateName,
+              certificateBody: news.certificateBody,
+              certificatePrivateKey: news.certificatePrivateKey,
+              certificateChain: news.certificateChain,
+              certificateArn: news.certificateArn,
+              regionalCertificateName: news.regionalCertificateName,
+              regionalCertificateArn: news.regionalCertificateArn,
+              endpointConfiguration: news.endpointConfiguration,
+              tags: desiredTags,
+              securityPolicy: news.securityPolicy,
+              endpointAccessMode: news.endpointAccessMode,
+              mutualTlsAuthentication: news.mutualTlsAuthentication,
+              ownershipVerificationCertificateArn:
+                news.ownershipVerificationCertificateArn,
+              policy: news.policy,
+              routingMode: news.routingMode,
+            });
+            yield* session.note(`Created domain name ${news.domainName}`);
+            observed = yield* ag.getDomainName({ domainName });
           }
-          const news = newsIn as DomainNameProps;
+
+          // Sync mutable scalar fields — observed ↔ desired patch list.
           const patches: ag.PatchOperation[] = [];
-          if (news.securityPolicy !== olds.securityPolicy) {
+          if (news.securityPolicy !== observed.securityPolicy) {
             patches.push({
               op: news.securityPolicy === undefined ? "remove" : "replace",
               path: "/securityPolicy",
               value: news.securityPolicy,
             });
           }
-          if (news.regionalCertificateArn !== olds.regionalCertificateArn) {
+          if (news.regionalCertificateArn !== observed.regionalCertificateArn) {
             patches.push({
               op:
                 news.regionalCertificateArn === undefined
@@ -214,7 +210,7 @@ export const DomainNameProvider = () =>
               value: news.regionalCertificateArn,
             });
           }
-          if (news.certificateArn !== olds.certificateArn) {
+          if (news.certificateArn !== observed.certificateArn) {
             patches.push({
               op: news.certificateArn === undefined ? "remove" : "replace",
               path: "/certificateArn",
@@ -226,32 +222,33 @@ export const DomainNameProvider = () =>
             // propagates certificate, policy, or routing changes.
             yield* ag
               .updateDomainName({
-                domainName: output.domainName,
+                domainName,
                 patchOperations: patches,
               })
               .pipe(retryDomainNameMutation);
           }
 
-          const internalTags = yield* createInternalTags(id);
-          const newTags = { ...news.tags, ...internalTags };
-          if (!deepEqual(output.tags, newTags) && output.domainNameArn) {
+          // Sync tags — diff observed cloud tags against desired so adoption
+          // converges without fighting whatever was already there.
+          const observedTags = tagRecord(observed.tags);
+          if (!deepEqual(observedTags, desiredTags) && observed.domainNameArn) {
             yield* syncTags({
-              resourceArn: output.domainNameArn,
-              oldTags: output.tags,
-              newTags,
+              resourceArn: observed.domainNameArn,
+              oldTags: observedTags,
+              newTags: desiredTags,
             });
           }
 
-          yield* session.note(`Updated domain name ${output.domainName}`);
-          const d = yield* ag.getDomainName({ domainName: output.domainName });
+          yield* session.note(`Reconciled domain name ${domainName}`);
+          const final = yield* ag.getDomainName({ domainName });
           return {
-            domainName: d.domainName!,
-            regionalDomainName: d.regionalDomainName,
-            regionalHostedZoneId: d.regionalHostedZoneId,
-            distributionDomainName: d.distributionDomainName,
-            distributionHostedZoneId: d.distributionHostedZoneId,
-            domainNameArn: d.domainNameArn,
-            tags: tagRecord(d.tags),
+            domainName: final.domainName!,
+            regionalDomainName: final.regionalDomainName,
+            regionalHostedZoneId: final.regionalHostedZoneId,
+            distributionDomainName: final.distributionDomainName,
+            distributionHostedZoneId: final.distributionHostedZoneId,
+            domainNameArn: final.domainNameArn,
+            tags: tagRecord(final.tags),
           };
         }),
         delete: Effect.fn(function* ({ output, session }) {

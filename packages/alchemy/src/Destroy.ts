@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type * as Scope from "effect/Scope";
 import type { AlchemyContext } from "./AlchemyContext.ts";
 import * as Apply from "./Apply.ts";
 import * as Plan from "./Plan.ts";
@@ -9,9 +10,14 @@ import type { Stage } from "./Stage.ts";
 export const destroy = ({
   stack,
   stage,
+  dev,
+  scope,
 }: {
   stack: StackEffect<CompiledStack, Stage | AlchemyContext>;
   stage: string;
+  dev?: boolean;
+  /** See {@link evalStack} — when set, scoped resources outlive `destroy`. */
+  scope?: Scope.Scope;
 }) =>
   evalStack(
     stack,
@@ -22,7 +28,8 @@ export const destroy = ({
         // TODO(sam): probably better to have Plan.destroy and Plan.update
         resources: {},
         bindings: {},
+        actions: {},
         output: {},
       }).pipe(Effect.flatMap(Apply.apply)),
-    { stage },
+    { stage, dev, scope },
   );

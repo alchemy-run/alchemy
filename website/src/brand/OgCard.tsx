@@ -4,12 +4,21 @@
  * browser. The JSX is interpreted by satori, which supports a Flexbox
  * subset and inline `style` props (no CSS classes).
  *
- * The card mirrors the homepage hero: parchment background, Source Serif
- * for the headline, the yantra glyph in deep moss, JetBrains Mono eyebrow
- * label, and a hand-drawn "alchemy.run" caption in the bottom-right
- * corner. Title and description are rendered verbatim from the source
- * page's frontmatter — no splitting, truncation, or glyph workarounds.
- * The full unsubsetted variable TTFs loaded by the endpoint cover every
+ * Two visual variants:
+ *
+ *   - `doc` / `marketing` — parchment background, serif headline, the
+ *     yantra glyph + eyebrow up top, hand-drawn "alchemy.run" caption
+ *     bottom-right. Mirrors the homepage hero.
+ *
+ *   - `blog` — dark variant inspired by Bun's release-note cards. Title
+ *     anchored top-left, dense multi-line description filling the body,
+ *     publish date + yantra mark in the footer. Designed to look full
+ *     and editorial; relies on posts having a meaty `description`/
+ *     `excerpt` in frontmatter.
+ *
+ * Title and description are rendered verbatim from the source page's
+ * frontmatter — no splitting, truncation, or glyph workarounds. The
+ * full unsubsetted variable TTFs loaded by the endpoint cover every
  * Unicode codepoint we use.
  */
 
@@ -23,6 +32,17 @@ const COLORS = {
   accent: "#5c7a3e",
   accentDeep: "#3f5a2a",
   hairline: "rgba(42,38,32,0.14)",
+  // Blog (dark) palette.
+  darkBg: "#161310",
+  darkFg1: "#f5efe3",
+  darkFg2: "#bdb09a",
+  darkFg3: "#7d705c",
+  darkAccent: "#a8c47a",
+  // Dark-mode yantra — lifted moss stroke + terracotta bindu dot, mirroring
+  // the runtime tokens (--alc-accent / --alc-yantra-dot in the .dark block).
+  darkYantraStroke: "#7a9a5e",
+  darkYantraDot: "#c56e3c",
+  darkHairline: "rgba(245,239,227,0.12)",
 } as const;
 
 export type OgCardKind = "marketing" | "doc" | "blog";
@@ -53,27 +73,26 @@ export interface OgCardProps {
   /** Drives the eyebrow label (e.g. "guide", "concept", "blog"). */
   eyebrow?: string;
   kind?: OgCardKind;
+  /** ISO date string (YYYY-MM-DD). Rendered in the blog footer. */
+  date?: string;
 }
 
 const W = 1200;
 const H = 630;
 
-export function OgCard({
-  title,
-  description,
-  eyebrow,
-  kind = "doc",
-}: OgCardProps): any {
-  const eyebrowText = (eyebrow ?? defaultEyebrow(kind)).toUpperCase();
+export function OgCard(props: OgCardProps): any {
+  const kind = props.kind ?? "doc";
+  if (kind === "blog") return BlogCard(props);
+  return DocCard(props);
+}
 
-  // Embed the yantra as a data URL so satori inlines it as an <img>.
-  const yantra = yantraSvg({
-    size: 96,
-    stroke: COLORS.accentDeep,
-    dot: COLORS.accentDeep,
-    strokeWidth: 0.7,
-  });
-  const yantraDataUrl = `data:image/svg+xml;base64,${Buffer.from(yantra).toString("base64")}`;
+// ────────────────────────────────────────────────────────────────────────────
+// Doc / marketing variant — parchment hero.
+// ────────────────────────────────────────────────────────────────────────────
+
+function DocCard({ title, description, eyebrow, kind }: OgCardProps): any {
+  const eyebrowText = (eyebrow ?? defaultEyebrow(kind ?? "doc")).toUpperCase();
+  const yantraDataUrl = yantraImage(COLORS.accentDeep);
 
   return {
     type: "div",
@@ -96,11 +115,7 @@ export function OgCard({
           type: "div",
           key: "top",
           props: {
-            style: {
-              display: "flex",
-              alignItems: "center",
-              gap: 18,
-            },
+            style: { display: "flex", alignItems: "center", gap: 18 },
             children: [
               {
                 type: "img",
@@ -129,11 +144,7 @@ export function OgCard({
             ],
           },
         },
-        // Title — serif, large, rendered verbatim. Either a plain string
-        // (doc pages) or an array of styled parts (marketing pages, which
-        // mirror the homepage hero's explicit per-word accent markup).
-        // Source Serif 4 static TTFs carry arrows, em-dashes etc. so no
-        // splitting or glyph substitution is needed.
+        // Title.
         {
           type: "div",
           key: "title",
@@ -143,9 +154,6 @@ export function OgCard({
               flexWrap: "wrap",
               alignItems: "baseline",
               marginTop: 56,
-              // Display optical-size variant — chunkier serifs + more
-              // stroke contrast for headline scale. Matches the hero,
-              // which uses the variable font's display axis at ~72px.
               fontFamily: "Source Serif 4 Display",
               fontWeight: 600,
               fontSize: 110,
@@ -153,35 +161,9 @@ export function OgCard({
               letterSpacing: -2,
               color: COLORS.fg1,
             },
-            children: Array.isArray(title)
-              ? title.map((part, i) => ({
-                  type: "span",
-                  key: `tp${i}`,
-                  props: {
-                    style: {
-                      // Explicit fontFamily on the span (not just inherited)
-                      // — satori's font matcher is fussier about (family,
-                      // weight, style) tuples when style is overridden on a
-                      // child. Without this, the italic span often
-                      // resolves to faux italic (skewed upright) instead
-                      // of the true SemiboldIt cut.
-                      fontFamily:
-                        part.font === "tinos"
-                          ? "Tinos"
-                          : "Source Serif 4 Display",
-                      fontStyle: part.italic ? "italic" : "normal",
-                      color: part.accent ? COLORS.accentDeep : COLORS.fg1,
-                      // Tinos only ships at weight 400 in our pipeline.
-                      // Forcing 600 here would trigger faux-bold synthesis.
-                      fontWeight: part.font === "tinos" ? 400 : 600,
-                    },
-                    children: part.text,
-                  },
-                }))
-              : title,
+            children: renderTitle(title, COLORS.fg1, COLORS.accentDeep),
           },
         },
-        // Description.
         description
           ? {
               type: "div",
@@ -251,6 +233,204 @@ export function OgCard({
       ].filter(Boolean),
     },
   };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Blog variant — dark, dense, Bun-inspired release card.
+// ────────────────────────────────────────────────────────────────────────────
+
+function BlogCard({ title, description, date }: OgCardProps): any {
+  const yantraDataUrl = yantraImage(
+    COLORS.darkYantraStroke,
+    COLORS.darkYantraDot,
+  );
+
+  return {
+    type: "div",
+    key: null,
+    props: {
+      style: {
+        width: W,
+        height: H,
+        display: "flex",
+        flexDirection: "column",
+        backgroundColor: COLORS.darkBg,
+        padding: "72px 80px",
+        fontFamily: "Source Serif 4",
+        color: COLORS.darkFg1,
+      },
+      children: [
+        // Title — large, top-anchored. Plain string for blog posts.
+        {
+          type: "div",
+          key: "title",
+          props: {
+            style: {
+              display: "flex",
+              flexWrap: "wrap",
+              fontFamily: "Source Serif 4 Display",
+              fontWeight: 600,
+              fontSize: 84,
+              lineHeight: 1.05,
+              letterSpacing: -1.5,
+              color: COLORS.darkFg1,
+            },
+            children: renderTitle(title, COLORS.darkFg1, COLORS.darkAccent),
+          },
+        },
+        // Description — fills the body. Larger maxWidth than doc cards
+        // so multi-sentence excerpts wrap to 4–6 lines.
+        description
+          ? {
+              type: "div",
+              key: "desc",
+              props: {
+                style: {
+                  display: "flex",
+                  marginTop: 32,
+                  fontSize: 28,
+                  lineHeight: 1.5,
+                  color: COLORS.darkFg2,
+                  maxWidth: 1040,
+                },
+                children: description,
+              },
+            }
+          : null,
+        // Spacer pushes the footer to the bottom.
+        {
+          type: "div",
+          key: "spacer",
+          props: { style: { display: "flex", flexGrow: 1 } },
+        },
+        // Footer — date on the left, yantra mark on the right.
+        {
+          type: "div",
+          key: "footer",
+          props: {
+            style: {
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              borderTop: `1px solid ${COLORS.darkHairline}`,
+              paddingTop: 28,
+            },
+            children: [
+              {
+                type: "div",
+                key: "date",
+                props: {
+                  style: {
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                  },
+                  children: [
+                    {
+                      type: "div",
+                      key: "d",
+                      props: {
+                        style: {
+                          fontFamily: "Source Serif 4",
+                          fontSize: 24,
+                          color: COLORS.darkFg2,
+                        },
+                        children: formatDate(date),
+                      },
+                    },
+                    {
+                      type: "div",
+                      key: "wm",
+                      props: {
+                        style: {
+                          fontFamily: "JetBrains Mono",
+                          fontSize: 16,
+                          letterSpacing: 3,
+                          color: COLORS.darkFg3,
+                        },
+                        children: "ALCHEMY.RUN",
+                      },
+                    },
+                  ],
+                },
+              },
+              {
+                type: "img",
+                key: "y",
+                props: {
+                  src: yantraDataUrl,
+                  width: 72,
+                  height: 72,
+                  style: { display: "flex" },
+                },
+              },
+            ],
+          },
+        },
+      ].filter(Boolean),
+    },
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+function yantraImage(stroke: string, dot: string = stroke): string {
+  const svg = yantraSvg({
+    size: 96,
+    stroke,
+    dot,
+    strokeWidth: 0.7,
+  });
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+}
+
+function renderTitle(
+  title: string | TitlePart[],
+  fg: string,
+  accent: string,
+): any {
+  if (!Array.isArray(title)) return title;
+  return title.map((part, i) => ({
+    type: "span",
+    key: `tp${i}`,
+    props: {
+      style: {
+        fontFamily: part.font === "tinos" ? "Tinos" : "Source Serif 4 Display",
+        fontStyle: part.italic ? "italic" : "normal",
+        color: part.accent ? accent : fg,
+        fontWeight: part.font === "tinos" ? 400 : 600,
+      },
+      children: part.text,
+    },
+  }));
+}
+
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+function formatDate(iso: string | undefined): string {
+  if (!iso) return "";
+  // Parse YYYY-MM-DD without timezone surprises.
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  return `${MONTHS[month - 1]} ${day}, ${year}`;
 }
 
 function defaultEyebrow(kind: OgCardKind): string {

@@ -172,43 +172,95 @@ export const FunctionProvider = () =>
           }
           return toAttrs(current.FunctionSummary, current.ETag, name);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* createName(id, news);
-          const created = yield* cloudfront
-            .createFunction({
-              Name: name,
-              FunctionConfig: {
-                Comment: news.comment ?? "",
-                Runtime: news.runtime ?? "cloudfront-js-2.0",
-                KeyValueStoreAssociations: toKvAssociations(
-                  news.keyValueStoreArns,
-                ),
-              },
-              FunctionCode: new TextEncoder().encode(news.code),
-            })
-            .pipe(
-              Effect.catchTag("FunctionAlreadyExists", () =>
-                describe(name, "DEVELOPMENT").pipe(
-                  Effect.flatMap((existing) =>
-                    existing
-                      ? Effect.succeed(existing)
-                      : Effect.die(
-                          `CloudFront Function '${name}' already exists but could not be recovered`,
-                        ),
-                  ),
-                ),
-              ),
-              Effect.retry({
-                while: (error) =>
-                  error._tag === "InvalidArgument" &&
-                  isKeyValueStoreAssociationPending(
-                    error as { Message?: string },
-                  ),
-                schedule: cappedCloudFrontRetrySchedule,
-              }),
-            );
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const name = output?.functionName ?? (yield* createName(id, news));
 
-          const live = yield* publish(name, created.ETag);
+          // Observe — describe the function (LIVE stage preferred,
+          // DEVELOPMENT fallback). We don't trust `output` because the
+          // function may have been deleted out-of-band.
+          const observedDevelopment = yield* describe(name, "DEVELOPMENT");
+
+          // Ensure — create the function if it's missing. Tolerate
+          // `FunctionAlreadyExists` as a race with a peer reconciler. The
+          // newly created function lives in DEVELOPMENT; we publish it to
+          // LIVE below, in the same flow that handles already-existing
+          // functions.
+          const developmentEtag = observedDevelopment
+            ? observedDevelopment.ETag
+            : yield* Effect.gen(function* () {
+                const created = yield* cloudfront
+                  .createFunction({
+                    Name: name,
+                    FunctionConfig: {
+                      Comment: news.comment ?? "",
+                      Runtime: news.runtime ?? "cloudfront-js-2.0",
+                      KeyValueStoreAssociations: toKvAssociations(
+                        news.keyValueStoreArns,
+                      ),
+                    },
+                    FunctionCode: new TextEncoder().encode(news.code),
+                  })
+                  .pipe(
+                    Effect.catchTag("FunctionAlreadyExists", () =>
+                      describe(name, "DEVELOPMENT").pipe(
+                        Effect.flatMap((existing) =>
+                          existing
+                            ? Effect.succeed(existing)
+                            : Effect.die(
+                                `CloudFront Function '${name}' already exists but could not be recovered`,
+                              ),
+                        ),
+                      ),
+                    ),
+                    Effect.retry({
+                      while: (error) =>
+                        error._tag === "InvalidArgument" &&
+                        isKeyValueStoreAssociationPending(
+                          error as { Message?: string },
+                        ),
+                      schedule: cappedCloudFrontRetrySchedule,
+                    }),
+                  );
+                return created.ETag;
+              });
+
+          // Sync — push desired config/code to DEVELOPMENT when the
+          // function already existed. Skip when we just created it (the
+          // creation already used the desired config).
+          let etagToPublish = developmentEtag;
+          if (observedDevelopment) {
+            const updated = yield* cloudfront
+              .updateFunction({
+                Name: name,
+                IfMatch: observedDevelopment.ETag!,
+                FunctionConfig: {
+                  Comment: news.comment ?? "",
+                  Runtime:
+                    news.runtime ??
+                    observedDevelopment.FunctionSummary?.FunctionConfig
+                      .Runtime ??
+                    "cloudfront-js-2.0",
+                  KeyValueStoreAssociations: toKvAssociations(
+                    news.keyValueStoreArns,
+                  ),
+                },
+                FunctionCode: new TextEncoder().encode(news.code),
+              })
+              .pipe(
+                Effect.retry({
+                  while: (error) =>
+                    error._tag === "InvalidArgument" &&
+                    isKeyValueStoreAssociationPending(
+                      error as { Message?: string },
+                    ),
+                  schedule: cappedCloudFrontRetrySchedule,
+                }),
+              );
+            etagToPublish = updated.ETag;
+          }
+
+          // Publish DEVELOPMENT → LIVE so consumers see the desired code.
+          const live = yield* publish(name, etagToPublish);
           if (!live?.FunctionSummary) {
             return yield* Effect.die(
               "publishFunction returned no function summary",
@@ -217,44 +269,6 @@ export const FunctionProvider = () =>
 
           yield* session.note(name);
           return toAttrs(live.FunctionSummary, live.ETag, name);
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          yield* cloudfront
-            .updateFunction({
-              Name: output.functionName,
-              IfMatch: output.etag!,
-              FunctionConfig: {
-                Comment: news.comment ?? "",
-                Runtime: news.runtime ?? output.runtime,
-                KeyValueStoreAssociations: toKvAssociations(
-                  news.keyValueStoreArns,
-                ),
-              },
-              FunctionCode: new TextEncoder().encode(news.code),
-            })
-            .pipe(
-              Effect.retry({
-                while: (error) =>
-                  error._tag === "InvalidArgument" &&
-                  isKeyValueStoreAssociationPending(
-                    error as { Message?: string },
-                  ),
-                schedule: cappedCloudFrontRetrySchedule,
-              }),
-            );
-
-          const developmentEtag = yield* getDevelopmentEtag(
-            output.functionName,
-          );
-          const live = yield* publish(output.functionName, developmentEtag);
-          if (!live?.FunctionSummary) {
-            return yield* Effect.die(
-              "publishFunction returned no function summary",
-            );
-          }
-
-          yield* session.note(output.functionName);
-          return toAttrs(live.FunctionSummary, live.ETag, output.functionName);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* Effect.gen(function* () {

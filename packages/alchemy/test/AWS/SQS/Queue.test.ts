@@ -1,5 +1,7 @@
+import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Queue } from "@/AWS/SQS";
+import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import { expect } from "@effect/vitest";
@@ -159,9 +161,7 @@ test.provider(
       // yield* stack.destroy();
 
       const apiFunction = yield* stack.deploy(
-        QueueSinkFunction.asEffect().pipe(
-          Effect.provide(QueueSinkFunctionLive),
-        ),
+        QueueSinkFunction.pipe(Effect.provide(QueueSinkFunctionLive)),
       );
       const baseUrl = apiFunction.functionUrl!.replace(/\/+$/, "");
 
@@ -184,7 +184,7 @@ test.provider(
         Effect.retry({
           while: (error) => error === "not ready",
           schedule: Schedule.fixed("2 seconds").pipe(
-            Schedule.both(Schedule.recurs(9)),
+            Schedule.both(Schedule.recurs(75)),
           ),
         }),
         Effect.flatMap((result) => result.json),
@@ -202,6 +202,89 @@ test.provider(
       yield* assertQueueDeleted(queueUrl);
     }),
   { timeout: 180_000 },
+);
+
+// Engine-level adoption tests for SQS Queue.
+test.provider(
+  "owned queue (matching alchemy tags) is silently adopted without --adopt",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const queueName = `alchemy-test-sqs-adopt-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("AdoptableQueue", { queueName });
+        }),
+      );
+      expect(initial.queueName).toEqual(queueName);
+
+      // Wipe state — queue stays in SQS.
+      yield* Effect.gen(function* () {
+        const state = yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: "test",
+          fqn: "AdoptableQueue",
+        });
+      }).pipe(Effect.provide(stack.state));
+
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("AdoptableQueue", { queueName });
+        }),
+      );
+
+      expect(adopted.queueArn).toEqual(initial.queueArn);
+      expect(adopted.queueUrl).toEqual(initial.queueUrl);
+
+      yield* stack.destroy();
+      yield* assertQueueDeleted(initial.queueUrl);
+    }),
+);
+
+test.provider(
+  "foreign-tagged queue requires adopt(true) to take over",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const queueName = `alchemy-test-sqs-takeover-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`;
+
+      const original = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("Original", { queueName });
+        }),
+      );
+
+      yield* Effect.gen(function* () {
+        const state = yield* State;
+        yield* state.delete({
+          stack: stack.name,
+          stage: "test",
+          fqn: "Original",
+        });
+      }).pipe(Effect.provide(stack.state));
+
+      const takenOver = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* Queue("Different", { queueName });
+          }),
+        )
+        .pipe(adopt(true));
+
+      expect(takenOver.queueName).toEqual(queueName);
+      expect(takenOver.queueUrl).toEqual(original.queueUrl);
+
+      yield* stack.destroy();
+      yield* assertQueueDeleted(takenOver.queueUrl);
+    }),
 );
 
 class QueueStillExists extends Data.TaggedError("QueueStillExists") {}
@@ -227,7 +310,7 @@ const waitForFunctionReady = (url: string) =>
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
       schedule: Schedule.fixed("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(9)),
+        Schedule.both(Schedule.recurs(75)),
       ),
     }),
   );

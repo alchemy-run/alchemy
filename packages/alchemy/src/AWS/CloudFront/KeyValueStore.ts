@@ -118,50 +118,63 @@ export const KeyValueStoreProvider = () =>
           }
           return toAttrs(current.KeyValueStore, current.ETag, name);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* createName(id, news);
-          const created = yield* cloudfront
-            .createKeyValueStore({
-              Name: name,
-              Comment: news.comment,
-            })
-            .pipe(
-              Effect.catchTag("EntityAlreadyExists", () =>
-                getByName(name).pipe(
-                  Effect.flatMap((existing) =>
-                    existing
-                      ? Effect.succeed(existing)
-                      : Effect.die(
-                          `CloudFront KeyValueStore '${name}' already exists but could not be recovered`,
-                        ),
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const name =
+            output?.keyValueStoreName ?? (yield* createName(id, news));
+
+          // Observe — describe the store, falling back to a list lookup
+          // by name. Trust live state, not stale `olds`.
+          const observed = yield* cloudfront
+            .describeKeyValueStore({ Name: name })
+            .pipe(Effect.catchTag("EntityNotFound", () => getByName(name)));
+
+          // Ensure — create the store if it's missing. Tolerate
+          // `EntityAlreadyExists` (race with a peer reconciler).
+          if (!observed?.KeyValueStore) {
+            const created = yield* cloudfront
+              .createKeyValueStore({
+                Name: name,
+                Comment: news.comment,
+              })
+              .pipe(
+                Effect.catchTag("EntityAlreadyExists", () =>
+                  getByName(name).pipe(
+                    Effect.flatMap((existing) =>
+                      existing
+                        ? Effect.succeed(existing)
+                        : Effect.die(
+                            `CloudFront KeyValueStore '${name}' already exists but could not be recovered`,
+                          ),
+                    ),
                   ),
                 ),
-              ),
-            );
-          if (!created.KeyValueStore) {
-            return yield* Effect.die(
-              "createKeyValueStore returned no key value store",
-            );
+              );
+            if (!created.KeyValueStore) {
+              return yield* Effect.die(
+                "createKeyValueStore returned no key value store",
+              );
+            }
+            yield* session.note(created.KeyValueStore.Id);
+            return toAttrs(created.KeyValueStore, created.ETag, name);
           }
-          yield* session.note(created.KeyValueStore.Id);
-          return toAttrs(created.KeyValueStore, created.ETag, name);
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
+
+          // Sync — patch the observed comment via `updateKeyValueStore`
+          // using the freshly observed ETag.
           const updated = yield* cloudfront.updateKeyValueStore({
-            Name: output.keyValueStoreName,
+            Name: observed.KeyValueStore.Name,
             Comment: news.comment ?? "",
-            IfMatch: output.etag!,
+            IfMatch: observed.ETag!,
           });
           if (!updated.KeyValueStore) {
             return yield* Effect.die(
               "updateKeyValueStore returned no key value store",
             );
           }
-          yield* session.note(output.keyValueStoreId);
+          yield* session.note(updated.KeyValueStore.Id);
           return toAttrs(
             updated.KeyValueStore,
             updated.ETag,
-            output.keyValueStoreName,
+            observed.KeyValueStore.Name,
           );
         }),
         delete: Effect.fn(function* ({ output }) {

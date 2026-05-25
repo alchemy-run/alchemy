@@ -105,98 +105,94 @@ export const DBSubnetGroupProvider = () =>
             tags: output?.tags ?? {},
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const dbSubnetGroupName = yield* toName(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const dbSubnetGroupName =
+            output?.dbSubnetGroupName ?? (yield* toName(id, news));
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
 
-          const created = yield* rds
-            .createDBSubnetGroup({
+          // Observe — fetch live subnet-group state.
+          let observed = yield* readGroup(dbSubnetGroupName);
+
+          // Ensure — create if missing. Tolerate
+          // `DBSubnetGroupAlreadyExistsFault` as a race with a peer
+          // reconciler by re-reading.
+          if (!observed?.DBSubnetGroupName) {
+            yield* rds
+              .createDBSubnetGroup({
+                DBSubnetGroupName: dbSubnetGroupName,
+                DBSubnetGroupDescription:
+                  news.description ?? "Managed by Alchemy",
+                SubnetIds: news.subnetIds,
+                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              })
+              .pipe(
+                Effect.catchTag(
+                  "DBSubnetGroupAlreadyExistsFault",
+                  () => Effect.void,
+                ),
+              );
+            observed = yield* readGroup(dbSubnetGroupName);
+            if (!observed?.DBSubnetGroupName) {
+              return yield* Effect.fail(
+                new Error(
+                  `Failed to create DB subnet group '${dbSubnetGroupName}'`,
+                ),
+              );
+            }
+          } else {
+            // Sync description and subnet membership — `modifyDBSubnetGroup`
+            // accepts the full desired set and is idempotent for unchanged
+            // input.
+            yield* rds.modifyDBSubnetGroup({
               DBSubnetGroupName: dbSubnetGroupName,
               DBSubnetGroupDescription:
                 news.description ?? "Managed by Alchemy",
               SubnetIds: news.subnetIds,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            })
-            .pipe(
-              Effect.catchTag("DBSubnetGroupAlreadyExistsFault", () =>
-                rds.describeDBSubnetGroups({
-                  DBSubnetGroupName: dbSubnetGroupName,
-                }),
-              ),
-            );
-
-          const group =
-            "DBSubnetGroup" in created
-              ? created.DBSubnetGroup
-              : (created as rds.DBSubnetGroupMessage).DBSubnetGroups?.[0];
-          if (!group?.DBSubnetGroupName) {
-            return yield* Effect.fail(
-              new Error(
-                `Failed to create DB subnet group '${dbSubnetGroupName}'`,
-              ),
-            );
+            });
+            observed = yield* readGroup(dbSubnetGroupName);
+            if (!observed?.DBSubnetGroupName) {
+              return yield* Effect.fail(
+                new Error(
+                  `DB subnet group '${dbSubnetGroupName}' not found after update`,
+                ),
+              );
+            }
           }
 
-          yield* session.note(group.DBSubnetGroupArn ?? dbSubnetGroupName);
-          return {
-            dbSubnetGroupName: group.DBSubnetGroupName,
-            dbSubnetGroupArn: group.DBSubnetGroupArn,
-            vpcId: group.VpcId,
-            subnetIds: news.subnetIds,
-            status: group.SubnetGroupStatus,
-            supportedNetworkTypes: group.SupportedNetworkTypes,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* rds.modifyDBSubnetGroup({
-            DBSubnetGroupName: output.dbSubnetGroupName,
-            DBSubnetGroupDescription: news.description ?? "Managed by Alchemy",
-            SubnetIds: news.subnetIds,
-          });
+          const dbSubnetGroupArn = observed.DBSubnetGroupArn;
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-          if (upsert.length > 0 && output.dbSubnetGroupArn) {
+          // Sync tags — diff prior recorded tags against desired (describe
+          // does not surface tags inline).
+          const observedTags = output?.tags ?? {};
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0 && dbSubnetGroupArn) {
             yield* rds.addTagsToResource({
-              ResourceName: output.dbSubnetGroupArn,
+              ResourceName: dbSubnetGroupArn,
               Tags: upsert,
             });
           }
-          if (removed.length > 0 && output.dbSubnetGroupArn) {
+          if (removed.length > 0 && dbSubnetGroupArn) {
             yield* rds.removeTagsFromResource({
-              ResourceName: output.dbSubnetGroupArn,
+              ResourceName: dbSubnetGroupArn,
               TagKeys: removed,
             });
           }
 
-          const group = yield* readGroup(output.dbSubnetGroupName);
-          yield* session.note(
-            output.dbSubnetGroupArn ?? output.dbSubnetGroupName,
-          );
+          yield* session.note(dbSubnetGroupArn ?? dbSubnetGroupName);
           return {
-            dbSubnetGroupName: output.dbSubnetGroupName,
-            dbSubnetGroupArn:
-              group?.DBSubnetGroupArn ?? output.dbSubnetGroupArn,
-            vpcId: group?.VpcId ?? output.vpcId,
-            subnetIds: news.subnetIds,
-            status: group?.SubnetGroupStatus ?? output.status,
-            supportedNetworkTypes:
-              group?.SupportedNetworkTypes ?? output.supportedNetworkTypes,
-            tags: newTags,
+            dbSubnetGroupName: observed.DBSubnetGroupName,
+            dbSubnetGroupArn,
+            vpcId: observed.VpcId,
+            subnetIds: (observed.Subnets ?? []).flatMap((subnet) =>
+              subnet.SubnetIdentifier ? [subnet.SubnetIdentifier] : [],
+            ),
+            status: observed.SubnetGroupStatus,
+            supportedNetworkTypes: observed.SupportedNetworkTypes,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

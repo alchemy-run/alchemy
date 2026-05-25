@@ -168,80 +168,89 @@ export const DBProxyEndpointProvider = () =>
           }
           return toAttrs({ endpoint, tags: output?.tags ?? {} });
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const dbProxyEndpointName = yield* toName(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          yield* rds
-            .createDBProxyEndpoint({
-              DBProxyName: news.dbProxyName,
-              DBProxyEndpointName: dbProxyEndpointName,
-              VpcSubnetIds: news.vpcSubnetIds,
-              VpcSecurityGroupIds: news.vpcSecurityGroupIds,
-              TargetRole: news.targetRole,
-              EndpointNetworkType: news.endpointNetworkType,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            })
-            .pipe(
-              Effect.catchTag(
-                "DBProxyEndpointAlreadyExistsFault",
-                () => Effect.void,
-              ),
-            );
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const dbProxyEndpointName =
+            output?.dbProxyEndpointName ?? (yield* toName(id, news));
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
 
-          const endpoint = yield* waitForEndpoint({
-            dbProxyName: news.dbProxyName,
+          // Observe — fetch live endpoint state.
+          let observed = yield* readEndpoint({
+            dbProxyName: output?.dbProxyName ?? news.dbProxyName,
             dbProxyEndpointName,
           });
-          yield* session.note(
-            endpoint.DBProxyEndpointArn ?? dbProxyEndpointName,
-          );
-          return toAttrs({ endpoint, tags });
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* rds.modifyDBProxyEndpoint({
-            DBProxyEndpointName: output.dbProxyEndpointName,
-            VpcSecurityGroupIds: news.vpcSecurityGroupIds,
-            NewDBProxyEndpointName:
-              news.dbProxyEndpointName &&
-              news.dbProxyEndpointName !== output.dbProxyEndpointName
-                ? news.dbProxyEndpointName
-                : undefined,
-          });
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-          if (upsert.length > 0) {
+          // Ensure — create if missing. Tolerate
+          // `DBProxyEndpointAlreadyExistsFault` as a race with a peer
+          // reconciler.
+          if (!observed?.DBProxyEndpointArn) {
+            yield* rds
+              .createDBProxyEndpoint({
+                DBProxyName: news.dbProxyName,
+                DBProxyEndpointName: dbProxyEndpointName,
+                VpcSubnetIds: news.vpcSubnetIds,
+                VpcSecurityGroupIds: news.vpcSecurityGroupIds,
+                TargetRole: news.targetRole,
+                EndpointNetworkType: news.endpointNetworkType,
+                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              })
+              .pipe(
+                Effect.catchTag(
+                  "DBProxyEndpointAlreadyExistsFault",
+                  () => Effect.void,
+                ),
+              );
+
+            observed = yield* waitForEndpoint({
+              dbProxyName: news.dbProxyName,
+              dbProxyEndpointName,
+            });
+          } else {
+            // Sync mutable endpoint config — security groups + rename. The
+            // rename argument is a no-op when desired matches observed.
+            yield* rds.modifyDBProxyEndpoint({
+              DBProxyEndpointName: dbProxyEndpointName,
+              VpcSecurityGroupIds: news.vpcSecurityGroupIds,
+              NewDBProxyEndpointName:
+                news.dbProxyEndpointName &&
+                news.dbProxyEndpointName !== dbProxyEndpointName
+                  ? news.dbProxyEndpointName
+                  : undefined,
+            });
+            observed = yield* waitForEndpoint({
+              dbProxyName: observed.DBProxyName ?? news.dbProxyName,
+              dbProxyEndpointName:
+                news.dbProxyEndpointName &&
+                news.dbProxyEndpointName !== dbProxyEndpointName
+                  ? news.dbProxyEndpointName
+                  : dbProxyEndpointName,
+            });
+          }
+
+          const dbProxyEndpointArn = observed.DBProxyEndpointArn ?? "";
+
+          // Sync tags — diff prior recorded tags against desired (describe
+          // does not surface tags inline).
+          const observedTags = output?.tags ?? {};
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0 && dbProxyEndpointArn) {
             yield* rds.addTagsToResource({
-              ResourceName: output.dbProxyEndpointArn,
+              ResourceName: dbProxyEndpointArn,
               Tags: upsert,
             });
           }
-          if (removed.length > 0) {
+          if (removed.length > 0 && dbProxyEndpointArn) {
             yield* rds.removeTagsFromResource({
-              ResourceName: output.dbProxyEndpointArn,
+              ResourceName: dbProxyEndpointArn,
               TagKeys: removed,
             });
           }
 
-          const endpoint = yield* waitForEndpoint({
-            dbProxyName: output.dbProxyName ?? news.dbProxyName,
-            dbProxyEndpointName: output.dbProxyEndpointName,
-          });
-          yield* session.note(output.dbProxyEndpointArn);
-          return toAttrs({ endpoint, tags: newTags });
+          yield* session.note(dbProxyEndpointArn || dbProxyEndpointName);
+          return toAttrs({ endpoint: observed, tags: desiredTags });
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* rds

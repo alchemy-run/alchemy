@@ -1,18 +1,23 @@
 import * as SecretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
-import * as Output from "../../Output.ts";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import crypto from "node:crypto";
+import * as Output from "../../Output.ts";
 
 import * as Config from "effect/Config";
 import { adopt } from "../../AdoptPolicy.ts";
 import { AuthError } from "../../Auth/AuthProvider.ts";
-import { readCredentials, writeCredentials } from "../../Auth/Credentials.ts";
-import { ALCHEMY_PROFILE } from "../../Auth/Profile.ts";
+import {
+  CredentialsStore,
+  CredentialsStoreLive,
+} from "../../Auth/Credentials.ts";
+import { ALCHEMY_PROFILE, ProfileLive } from "../../Auth/Profile.ts";
 import * as Cloudflare from "../../Cloudflare/Providers.ts";
 import { deploy } from "../../Deploy.ts";
 import * as Alchemy from "../../Stack.ts";
@@ -40,6 +45,47 @@ import { AuthTokenSecretName, TokenValue } from "./Token.ts";
 
 /** Filename used for stored credentials under the profile directory. */
 const CREDENTIALS_FILE = "cloudflare-state-store";
+
+/**
+ * SHA-256 hex digest of the Cloudflare account ID. Used as a stable
+ * pseudonymous identifier on telemetry spans so the dashboard can
+ * count distinct state-store deployments without leaking the raw
+ * accountId. Mirrors the `alchemy.git.origin_hash` pattern in
+ * `Telemetry/Attributes.ts`.
+ */
+const hashAccountId = (accountId: string) =>
+  Effect.sync(() =>
+    crypto.createHash("sha256").update(accountId).digest("hex"),
+  );
+
+/**
+ * Best-effort Cloudflare-account-hash annotation on the current span.
+ * Resolves the accountId from {@link CloudflareEnvironment} and
+ * attaches `alchemy.cloudflare.account_hash` to whichever span is
+ * active. Silently no-ops if the environment isn't resolvable so
+ * State-store layer construction still succeeds in degraded paths.
+ *
+ * `noTrack` controls whether the hash is attached:
+ *   - `true`  — never annotate (caller-level opt-out).
+ *   - `false` — always annotate, regardless of env.
+ *   - `undefined` — fall back to the `NO_TRACK` env var; default off.
+ */
+const annotateAccountHash = (noTrack?: boolean) =>
+  Effect.gen(function* () {
+    if (noTrack === true) return;
+    if (noTrack === undefined) {
+      const fromEnv = yield* Config.boolean("NO_TRACK").pipe(
+        Config.withDefault(false),
+      );
+      if (fromEnv) return;
+    }
+    const env = yield* Effect.serviceOption(
+      CloudflareEnvironment.CloudflareEnvironment,
+    );
+    if (env._tag !== "Some") return;
+    const hash = yield* hashAccountId(env.value.accountId);
+    yield* Effect.annotateCurrentSpan("alchemy.cloudflare.account_hash", hash);
+  }).pipe(Effect.catch(() => Effect.void));
 
 export interface BootstrapOptions {
   /**
@@ -81,6 +127,13 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
     const profileName = yield* ALCHEMY_PROFILE;
     const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
     const force = options.force ?? false;
+    yield* Effect.annotateCurrentSpan({
+      "alchemy.state_store.script_name": scriptName,
+      "alchemy.state_store.profile": profileName,
+      "alchemy.state_store.force": force,
+      "alchemy.state_store.ci": isCI,
+    });
+    yield* annotateAccountHash();
 
     const localState = yield* makeLocalState();
     const hasLocalStack = yield* Effect.map(
@@ -112,7 +165,8 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       );
       const credentials = yield* loginWithCloudflare();
       if (!isCI) {
-        yield* writeCredentials<HttpStateStoreCredentials>(
+        const store = yield* CredentialsStore;
+        yield* store.write<HttpStateStoreCredentials>(
           profileName,
           CREDENTIALS_FILE,
           credentials,
@@ -139,27 +193,38 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
 
     yield* finishBootstrap({ scriptName, profileName, localState, isCI });
     yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
-  });
+  }).pipe(
+    Effect.withSpan("state_store.bootstrap", {
+      attributes: {
+        "alchemy.state_store.op": "bootstrap",
+        "alchemy.state_store.script_name":
+          options.workerName ?? STATE_STORE_SCRIPT_NAME,
+      },
+    }),
+  );
 
-export const state = (props?: {
-  /**
-   * The name of the script to use for the state store.
-   * @default "alchemy-state-store"
-   */
-  workerName?: string;
-}) =>
+export const state = () =>
   Layer.effect(
     State,
     Effect.gen(function* () {
       const isCI = yield* Config.boolean("CI").pipe(Config.withDefault(false));
       const alchemyContext = yield* AlchemyContext;
       const profileName = yield* ALCHEMY_PROFILE;
-      const credentials = yield* readCredentials<HttpStateStoreCredentials>(
+      const store = yield* CredentialsStore;
+      const credentials = yield* store.read<HttpStateStoreCredentials>(
         profileName,
         CREDENTIALS_FILE,
       );
 
-      const scriptName = props?.workerName ?? STATE_STORE_SCRIPT_NAME;
+      const scriptName = STATE_STORE_SCRIPT_NAME;
+      yield* Effect.annotateCurrentSpan({
+        "alchemy.state_store.script_name": scriptName,
+        "alchemy.state_store.profile": profileName,
+        "alchemy.state_store.ci": isCI,
+      });
+      yield* annotateAccountHash(
+        yield* Config.boolean("NO_TRACK").pipe(Config.withDefault(false)),
+      );
 
       // The bootstrap of the Cloudflare State Store is only considered
       // successful once two invariants hold:
@@ -233,7 +298,7 @@ export const state = (props?: {
         // it exists, so fetch the secret token
         const credentials = yield* loginWithCloudflare();
         if (!isCI) {
-          yield* writeCredentials<HttpStateStoreCredentials>(
+          yield* store.write<HttpStateStoreCredentials>(
             profileName,
             CREDENTIALS_FILE,
             credentials,
@@ -288,6 +353,8 @@ export const state = (props?: {
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
     Layer.provideMerge(CloudflareAuth),
     Layer.provideMerge(Access.AccessLive),
+    Layer.provideMerge(ProfileLive),
+    Layer.provideMerge(CredentialsStoreLive),
     Layer.orDie,
   );
 
@@ -326,6 +393,11 @@ const hoistBootstrapStack = Effect.fnUntraced(function* (
   const stack = "CloudflareStateStore";
   const stage = scriptName;
   const fqns = yield* source.list({ stack, stage });
+  yield* Effect.annotateCurrentSpan({
+    "alchemy.state_store.stack": stack,
+    "alchemy.state_store.stage": stage,
+    "alchemy.state_store.resources.count": fqns.length,
+  });
   yield* Effect.forEach(
     fqns,
     Effect.fnUntraced(function* (fqn) {
@@ -336,7 +408,7 @@ const hoistBootstrapStack = Effect.fnUntraced(function* (
     }),
     { concurrency: "unbounded" },
   );
-});
+}, Effect.withSpan("state_store.hoist_bootstrap_stack"));
 
 /**
  * Finish (or resume) the bootstrap of the Cloudflare State Store using
@@ -393,10 +465,20 @@ const finishBootstrap = ({
     });
 
     return httpState;
-  });
+  }).pipe(
+    Effect.withSpan("state_store.finish_bootstrap", {
+      attributes: {
+        "alchemy.state_store.op": "finish_bootstrap",
+        "alchemy.state_store.script_name": scriptName,
+        "alchemy.state_store.profile": profileName,
+        "alchemy.state_store.ci": isCI,
+      },
+    }),
+  );
 
 const deployStateStore = (scriptName: string, state?: StateService) =>
   Effect.gen(function* () {
+    yield* annotateAccountHash();
     const localState = state ?? (yield* makeLocalState());
     // deploy it with local state (which we will then hoist into the Cloudflare state store)
     const stateLayer = Layer.succeed(State, localState);
@@ -432,6 +514,16 @@ const deployStateStore = (scriptName: string, state?: StateService) =>
       // TODO(sam): we should not need to do this, but types do complain. fix deploy
       Effect.provide(stateLayer),
     );
+    // Cloudflare's worker upload is eventually consistent: the deploy
+    // call returns as soon as the script upload is accepted, but the
+    // edge can keep serving the previous version for several seconds
+    // afterwards. Block here until `/version` reports the version this
+    // CLI was built against — otherwise downstream steps (syncing
+    // local state into the deployed store, version probes during
+    // adoption) end up talking to the old worker and may either
+    // observe stale data or trip the staleness check and recurse into
+    // another redeploy.
+    yield* waitForStateStoreVersion(url);
     return { url, authToken, localState };
   }).pipe(
     Effect.withSpan("state_store.deploy", {
@@ -499,19 +591,21 @@ export const loginWithCloudflare = () =>
     if (!isCI) {
       // 4. Persist credentials. The profile entry is managed by
       //    `loadOrConfigure` when this is invoked through `configure`.
-      yield* writeCredentials<HttpStateStoreCredentials>(
-        profileName,
-        CREDENTIALS_FILE,
-        {
+      const credStore = yield* CredentialsStore;
+      yield* credStore
+        .write<HttpStateStoreCredentials>(profileName, CREDENTIALS_FILE, {
           url,
           authToken: authToken.trim(),
-        },
-      ).pipe(
-        Effect.mapError(
-          (e) =>
-            new AuthError({ message: "Failed to write credentials", cause: e }),
-        ),
-      );
+        })
+        .pipe(
+          Effect.mapError(
+            (e) =>
+              new AuthError({
+                message: "Failed to write credentials",
+                cause: e,
+              }),
+          ),
+        );
 
       yield* Clank.success(
         `HTTP state store credentials saved for '${profileName}'.`,
@@ -532,6 +626,12 @@ export const loginWithCloudflare = () =>
         }),
       ),
     ),
+    Effect.withSpan("state_store.login", {
+      attributes: {
+        "alchemy.state_store.op": "login",
+        "alchemy.state_store.script_name": STATE_STORE_SCRIPT_NAME,
+      },
+    }),
   );
 
 /**
@@ -554,9 +654,11 @@ const redeployIfStale = ({
   isCI: boolean;
 }) =>
   Effect.gen(function* () {
-    if (yield* checkStateStoreVersion(url)) return undefined;
+    const { matches, expected, observed } = yield* checkStateStoreVersion(url);
+    if (matches) return undefined;
     yield* Clank.info(
-      `Cloudflare State Store '${scriptName}' is out of date; redeploying...`,
+      `Cloudflare State Store '${scriptName}' is out of date ` +
+        `(expected v${expected}, observed v${observed ?? "unknown"}); redeploying...`,
     );
     return yield* finishBootstrap({
       scriptName,
@@ -564,7 +666,15 @@ const redeployIfStale = ({
       localState,
       isCI,
     });
-  });
+  }).pipe(
+    Effect.withSpan("state_store.redeploy_if_stale", {
+      attributes: {
+        "alchemy.state_store.op": "redeploy_if_stale",
+        "alchemy.state_store.script_name": scriptName,
+        "alchemy.state_store.url": url,
+      },
+    }),
+  );
 
 /**
  * Probe the deployed worker's `/version` endpoint and decide whether
@@ -581,14 +691,89 @@ const redeployIfStale = ({
  * since the caller's response in every case is the same: fall
  * through to the idempotent bootstrap flow.
  */
+/**
+ * Block until the worker at `url` reports the {@link STATE_STORE_VERSION}
+ * this CLI was built against, with bounded exponential retry. Used
+ * post-deploy to wait out Cloudflare's edge cache so any subsequent
+ * read or write goes to the new worker.
+ *
+ * Failures (transport errors, 404 from a pre-`/version` build, schema
+ * mismatch, version mismatch) all collapse to "not ready yet" and are
+ * retried; once the budget is exhausted we surface a hard failure
+ * since continuing would talk to the wrong worker.
+ */
+class StateStoreVersionNotReady extends Error {
+  readonly _tag = "StateStoreVersionNotReady";
+  constructor(
+    readonly expected: number,
+    readonly observed: number | undefined,
+  ) {
+    super(
+      `Cloudflare State Store version not ready (expected v${expected}, observed v${observed ?? "unknown"}).`,
+    );
+  }
+}
+
+const waitForStateStoreVersion = (url: string) =>
+  Effect.gen(function* () {
+    const { matches, expected, observed } = yield* checkStateStoreVersion(url);
+    if (!matches) {
+      return yield* Effect.fail(
+        new StateStoreVersionNotReady(expected, observed),
+      );
+    }
+  }).pipe(
+    Effect.retry({
+      while: (error) => error instanceof StateStoreVersionNotReady,
+      // Edge propagation is usually sub-second; poll fast and cap the
+      // overall wait at ~10s so we fail loudly if something is really
+      // wrong rather than silently hanging.
+      schedule: Schedule.spaced("200 millis").pipe(
+        Schedule.both(Schedule.recurs(50)),
+      ),
+    }),
+    Effect.withSpan("state_store.wait_for_version", {
+      attributes: {
+        "alchemy.state_store.op": "wait_for_version",
+        "alchemy.state_store.url": url,
+        "alchemy.state_store.expected_version": STATE_STORE_VERSION,
+      },
+    }),
+  );
+
 const checkStateStoreVersion = (url: string) =>
   Effect.gen(function* () {
     const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
-    const result = yield* client.version
-      .getVersion()
-      .pipe(Effect.catch(() => Effect.succeed(undefined)));
-    return result?.version === STATE_STORE_VERSION;
-  });
+    // The /version route may 404 transiently after a fresh deploy
+    // while Cloudflare propagates the new script to the edge, and may
+    // also surface transport-level blips on cold workers.dev hosts.
+    // Retry the probe itself for ~10s before giving up — only after
+    // exhausting that budget do we collapse to `undefined` and let
+    // the caller treat it as a version mismatch.
+    const result = yield* client.version.getVersion().pipe(
+      Effect.retry({
+        schedule: Schedule.spaced("250 millis").pipe(
+          Schedule.both(Schedule.recurs(40)),
+        ),
+      }),
+      Effect.catch(() => Effect.succeed(undefined)),
+    );
+    const matches = result?.version === STATE_STORE_VERSION;
+    yield* Effect.annotateCurrentSpan({
+      "alchemy.state_store.expected_version": STATE_STORE_VERSION,
+      "alchemy.state_store.observed_version": result?.version ?? -1,
+      "alchemy.state_store.version_match": matches,
+    });
+    return {
+      matches,
+      expected: STATE_STORE_VERSION,
+      observed: result?.version,
+    };
+  }).pipe(
+    Effect.withSpan("state_store.check_version", {
+      attributes: { "alchemy.state_store.op": "check_version" },
+    }),
+  );
 
 /**
  * Tiny ES-module worker that reads `env.SECRET.get()` and echoes it
@@ -665,4 +850,11 @@ const readSecretViaEdge = (
         ? cause
         : new EdgeSessionError({ message: "Failed to read secret", cause }),
     ),
+    Effect.withSpan("state_store.read_secret_via_edge", {
+      attributes: {
+        "alchemy.state_store.op": "read_secret_via_edge",
+        "alchemy.state_store.script_name": scriptName,
+        "alchemy.state_store.secret_name": secretName,
+      },
+    }),
   );

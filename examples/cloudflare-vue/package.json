@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev --port 3000",
+    "dev": "alchemy dev",
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "alchemy deploy",
@@ -45,5 +45,10 @@
     "@vue/server-renderer": "beta",
     "@vue/shared": "beta",
     "@vue/compat": "beta"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
+    "directory": "examples/cloudflare-vue"
   }
 }

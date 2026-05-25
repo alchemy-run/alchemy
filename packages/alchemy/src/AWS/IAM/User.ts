@@ -256,73 +256,62 @@ export const UserProvider = () =>
             tags,
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const userName = yield* toName(id, news);
-          const tags = {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const userName = output?.userName ?? (yield* toName(id, news));
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
-          const created = yield* iam
-            .createUser({
-              UserName: userName,
-              Path: news.path,
-              PermissionsBoundary: news.permissionsBoundary,
-              Tags: createTagsList(tags),
-            })
+
+          // Observe — read the live user (or absence).
+          const observedResponse = yield* iam
+            .getUser({ UserName: userName })
             .pipe(
-              Effect.catchTag("EntityAlreadyExistsException", () =>
-                iam
-                  .getUser({
-                    UserName: userName,
-                  })
-                  .pipe(
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          let observedUser = observedResponse?.User;
+
+          // Ensure — create the user when missing. On race, verify
+          // ownership tags before adopting.
+          if (!observedUser?.Arn) {
+            const created = yield* iam
+              .createUser({
+                UserName: userName,
+                Path: news.path,
+                PermissionsBoundary: news.permissionsBoundary,
+                Tags: createTagsList(desiredTags),
+              })
+              .pipe(
+                Effect.catchTag("EntityAlreadyExistsException", () =>
+                  iam.getUser({ UserName: userName }).pipe(
                     Effect.filterOrFail(
-                      (existing) => hasTags(tags, existing.User?.Tags),
+                      (existing) => hasTags(desiredTags, existing.User?.Tags),
                       () =>
                         new Error(
                           `User '${userName}' already exists and is not managed by alchemy`,
                         ),
                     ),
                   ),
-              ),
-            );
+                ),
+              );
+            observedUser = created.User;
+          }
 
-          yield* syncManagedPolicies({
-            userName,
-            olds: [],
-            news: news.managedPolicyArns ?? [],
-          });
-          yield* syncInlinePolicies({
-            userName,
-            olds: {},
-            news: news.inlinePolicies ?? {},
-          });
-
-          yield* session.note(created.User?.Arn ?? userName);
-          return {
-            userArn: created.User?.Arn ?? userName,
-            userName,
-            userId: created.User?.UserId,
-            path: created.User?.Path ?? news.path ?? "/",
-            permissionsBoundary:
-              created.User?.PermissionsBoundary?.PermissionsBoundaryArn ??
-              news.permissionsBoundary,
-            managedPolicyArns: news.managedPolicyArns ?? [],
-            inlinePolicies: news.inlinePolicies ?? {},
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          if (news.permissionsBoundary !== olds.permissionsBoundary) {
+          // Sync permissions boundary against observed.
+          const observedBoundary =
+            observedUser?.PermissionsBoundary?.PermissionsBoundaryArn;
+          if (news.permissionsBoundary !== observedBoundary) {
             if (news.permissionsBoundary) {
               yield* iam.putUserPermissionsBoundary({
-                UserName: output.userName,
+                UserName: userName,
                 PermissionsBoundary: news.permissionsBoundary,
               });
-            } else if (olds.permissionsBoundary) {
+            } else if (observedBoundary) {
               yield* iam
                 .deleteUserPermissionsBoundary({
-                  UserName: output.userName,
+                  UserName: userName,
                 })
                 .pipe(
                   Effect.catchTag("NoSuchEntityException", () => Effect.void),
@@ -330,55 +319,56 @@ export const UserProvider = () =>
             }
           }
 
+          // Sync managed and inline policies — observe live state and
+          // apply only the delta.
+          const [observedManagedPolicies, observedInlinePolicies] =
+            yield* Effect.all([
+              readManagedPolicies(userName),
+              readInlinePolicies(userName),
+            ]);
           yield* syncManagedPolicies({
-            userName: output.userName,
-            olds: olds.managedPolicyArns ?? [],
+            userName,
+            olds: observedManagedPolicies,
             news: news.managedPolicyArns ?? [],
           });
           yield* syncInlinePolicies({
-            userName: output.userName,
-            olds: olds.inlinePolicies ?? {},
+            userName,
+            olds: observedInlinePolicies,
             news: news.inlinePolicies ?? {},
           });
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags against the cloud's actual tags.
+          const observedTags = yield* readTags(userName);
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* iam.tagUser({
-              UserName: output.userName,
+              UserName: userName,
               Tags: upsert,
             });
           }
           if (removed.length > 0) {
             yield* iam.untagUser({
-              UserName: output.userName,
+              UserName: userName,
               TagKeys: removed,
             });
           }
 
-          const user = yield* iam.getUser({
-            UserName: output.userName,
-          });
+          // Re-read for fresh attributes after all mutations.
+          const user = yield* iam.getUser({ UserName: userName });
+          const userArn = user.User?.Arn ?? observedUser?.Arn ?? userName;
 
-          yield* session.note(output.userArn);
+          yield* session.note(userArn);
           return {
-            userArn: user.User?.Arn ?? output.userArn,
-            userName: user.User?.UserName ?? output.userName,
-            userId: user.User?.UserId ?? output.userId,
-            path: user.User?.Path ?? output.path,
+            userArn,
+            userName: user.User?.UserName ?? userName,
+            userId: user.User?.UserId ?? observedUser?.UserId,
+            path: user.User?.Path ?? observedUser?.Path ?? news.path ?? "/",
             permissionsBoundary:
               user.User?.PermissionsBoundary?.PermissionsBoundaryArn ??
               news.permissionsBoundary,
             managedPolicyArns: news.managedPolicyArns ?? [],
             inlinePolicies: news.inlinePolicies ?? {},
-            tags: newTags,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

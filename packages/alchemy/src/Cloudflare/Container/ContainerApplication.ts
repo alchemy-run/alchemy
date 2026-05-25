@@ -1,10 +1,9 @@
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
-import { AdoptPolicy } from "../../AdoptPolicy.ts";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
@@ -356,9 +355,6 @@ export const ContainerProvider = () =>
     Effect.gen(function* () {
       const stack = yield* Stack;
       const { accountId } = yield* CloudflareEnvironment;
-      const adoptPolicy = yield* Effect.serviceOption(AdoptPolicy).pipe(
-        Effect.map(Option.getOrElse(() => false)),
-      );
       const { dotAlchemy } = yield* AlchemyContext;
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -536,6 +532,7 @@ const HttpServer = NodeHttpServer;
 `
 }
 import { Stack } from "alchemy/Stack";
+import { makeEntrypointLayer } from "alchemy/Runtime";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -543,13 +540,10 @@ import * as Logger from "effect/Logger";
 import * as Context from "effect/Context";
 import { MinimumLogLevel } from "effect/References";
 
-import ${handler === "default" ? "entry" : `{ ${handler} as entry }`} from "${importPath}";
+import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
 
 const tag = Context.Service("${Self.key}")
-const layer =
-  typeof entry?.build === "function"
-    ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
+const layer = makeEntrypointLayer(tag, entrypoint);
 
 const platform = Layer.mergeAll(
   ${runtime === "bun" ? "BunServices.layer" : "NodeServices.layer"},
@@ -565,8 +559,8 @@ const stack = Layer.succeed(Stack, {
   resources: {}
 });
 
-const serverEffect = tag.asEffect().pipe(
-  Effect.flatMap(func => func.ExecutionContext.exports),
+const serverEffect = tag.pipe(
+  Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.flatMap(exports => exports.default),
   Effect.provide(
     layer.pipe(
@@ -781,9 +775,10 @@ await Effect.runPromise(serverEffect).catch((err) => {
           return String(error);
         };
 
-        const existingByName = adoptPolicy
-          ? yield* findApplicationByName(name)
-          : undefined;
+        // Engine has cleared us via `read` (foreign-named applications are
+        // surfaced as `Unowned`). Re-fetch the existing application to fold
+        // it into the upsert path.
+        const existingByName = yield* findApplicationByName(name);
 
         if (existingByName) {
           yield* Effect.logInfo(
@@ -945,15 +940,21 @@ await Effect.runPromise(serverEffect).catch((err) => {
         const dos = bindings.flatMap((b) =>
           b.data.durableObjects ? [b.data.durableObjects] : [],
         );
-        if (dos.length === 0) {
+        // A single DO namespace may appear in multiple bindings (e.g. when
+        // a Container is referenced by several resources). Dedupe by namespaceId.
+        const uniqueDos = dos.filter(
+          (d, i, arr) =>
+            arr.findIndex((other) => other.namespaceId === d.namespaceId) === i,
+        );
+        if (uniqueDos.length === 0) {
           return Effect.succeed(undefined);
         }
-        if (dos.length === 1) {
-          return Effect.succeed(dos[0]);
+        if (uniqueDos.length === 1) {
+          return Effect.succeed(uniqueDos[0]);
         }
         return Effect.die(
           new Error(
-            `A Container can only be bound to one Durable Object namespace. Found ${dos.length} namespaces in bindings: ${bindings.map((b) => b.data.durableObjects?.namespaceId).join(", ")}`,
+            `A Container can only be bound to one Durable Object namespace. Found ${uniqueDos.length} unique namespaces in bindings: ${uniqueDos.map((d) => d.namespaceId).join(", ")}`,
           ),
         );
       };
@@ -1035,7 +1036,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
             hash: { image: imageHash },
           };
         }),
-        create: Effect.fnUntraced(function* ({
+        reconcile: Effect.fnUntraced(function* ({
           id,
           news = {},
           bindings,
@@ -1044,7 +1045,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
         }) {
           const name = yield* createApplicationName(id, news.name);
           yield* Effect.logInfo(
-            `Cloudflare Container create: starting ${name}${adoptPolicy ? " with adopt" : ""}`,
+            `Cloudflare Container reconcile: starting ${name}`,
           );
           const durableObjects = yield* getDurableObjects(bindings);
           const { files, imageRef, imageHash } = yield* computeImageHash(
@@ -1053,22 +1054,53 @@ await Effect.runPromise(serverEffect).catch((err) => {
           );
           const configuration = desiredConfiguration(news, imageRef);
 
-          if (
-            output &&
-            !adoptPolicy &&
-            !deepEqual(output.durableObjects, durableObjects)
-          ) {
+          // Observe — re-fetch the cached application to confirm it still
+          // exists. Cloudflare reports a deleted container application as
+          // `ContainerApplicationNotFound`; we fall back to a name lookup
+          // so we can recover from out-of-band deletes or partial state
+          // persistence failures.
+          let existing: ContainerApplication["Attributes"] | undefined;
+          if (output?.applicationId) {
+            existing = yield* getContainerApplication({
+              accountId: output.accountId,
+              applicationId: output.applicationId,
+            }).pipe(
+              Effect.map((app) => ({
+                ...toAttributes(app),
+                hash: output.hash,
+              })),
+              Effect.catchTag("ContainerApplicationNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          }
+          if (!existing) {
+            const found = yield* findApplicationByName(name);
+            if (found) {
+              existing = {
+                ...toAttributes(found),
+                hash: output?.hash,
+              };
+            }
+          }
+
+          // Special case: precreate produced an application without the
+          // durable object attachment, but the real reconcile now has one
+          // (or vice versa). The DO attachment is immutable, so we delete
+          // and recreate. Adoption-by-namespace is preferred when an app
+          // already owns the namespace.
+          if (existing && !deepEqual(existing.durableObjects, durableObjects)) {
             if (durableObjects) {
-              const existing = yield* findApplicationByNamespace(
+              const owner = yield* findApplicationByNamespace(
                 durableObjects.namespaceId,
               );
               const recovery = resolveDurableObjectApplicationRecovery({
                 namespaceId: durableObjects.namespaceId,
                 expectedName: name,
-                existingName: existing?.name,
+                existingName: owner?.name,
               });
               if (recovery.canAdopt) {
-                if (!existing) {
+                if (!owner) {
                   return yield* Effect.fail(
                     new Error(
                       `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
@@ -1078,27 +1110,27 @@ await Effect.runPromise(serverEffect).catch((err) => {
                 return yield* upsertApplication({
                   id,
                   news,
-                  existing: toAttributes(existing),
+                  existing: toAttributes(owner),
                   session,
                 });
               }
             }
             yield* Effect.logInfo(
-              `Cloudflare Container create: recreating pre-created application ${name} with durable object binding`,
+              `Cloudflare Container reconcile: recreating ${name} to attach durable object binding`,
             );
             yield* session.note(
               `Recreating container application ${name} with durable object binding...`,
             );
             yield* deleteContainerApplication({
-              accountId: output.accountId,
-              applicationId: output.applicationId,
+              accountId: existing.accountId,
+              applicationId: existing.applicationId,
             }).pipe(
               Effect.catchTag(
                 "ContainerApplicationNotFound",
                 () => Effect.void,
               ),
             );
-            if (imageHash !== output.hash?.image) {
+            if (imageHash !== existing.hash?.image) {
               yield* buildAndPushImage(id, news, files, imageRef, session);
             }
             const result = yield* createApplication({
@@ -1115,17 +1147,25 @@ await Effect.runPromise(serverEffect).catch((err) => {
             };
           }
 
-          if (output) {
+          // Sync — application exists with correct DO attachment. Apply
+          // the desired configuration (image + scheduling + secrets, etc.)
+          // through the upsert path, which builds and pushes the image
+          // only when the hash changed and creates a rollout if the
+          // configuration drifted.
+          if (existing) {
             return yield* upsertApplication({
               id,
               news,
-              existing: output,
+              existing,
               session,
             });
           }
 
+          // Ensure — no application exists. Build and push the image,
+          // then create. `createApplication` itself tolerates concurrent
+          // creates by adopting an existing application with the same
+          // name or namespace.
           yield* buildAndPushImage(id, news, files, imageRef, session);
-
           const result = yield* createApplication({
             id,
             news,
@@ -1138,22 +1178,6 @@ await Effect.runPromise(serverEffect).catch((err) => {
             ...("applicationId" in result ? result : toAttributes(result)),
             hash: { image: imageHash },
           };
-        }),
-        update: Effect.fnUntraced(function* ({
-          id,
-          news = {},
-          output,
-          session,
-        }) {
-          yield* Effect.logInfo(
-            `Cloudflare Container update: starting ${output.applicationName}`,
-          );
-          return yield* upsertApplication({
-            id,
-            news,
-            existing: output,
-            session,
-          });
         }),
         delete: Effect.fnUntraced(function* ({ output }) {
           yield* Effect.logInfo(
@@ -1185,11 +1209,12 @@ await Effect.runPromise(serverEffect).catch((err) => {
               };
             });
 
+          let attrs: ContainerApplication["Attributes"] | undefined;
           if (output?.applicationId) {
             yield* Effect.logInfo(
               `Cloudflare Container read: checking ${output.applicationName}`,
             );
-            return yield* getContainerApplication({
+            attrs = yield* getContainerApplication({
               accountId: output.accountId,
               applicationId: output.applicationId,
             }).pipe(
@@ -1201,10 +1226,18 @@ await Effect.runPromise(serverEffect).catch((err) => {
                 readByName(output.applicationName),
               ),
             );
+            // If we matched by id from prior state, treat as owned.
+            return attrs;
           }
 
           const name = yield* createApplicationName(id, olds?.name);
-          return yield* readByName(name);
+          attrs = yield* readByName(name);
+          if (!attrs) return undefined;
+          // Cloudflare container applications carry no ownership signal that
+          // we can read back from the API, so a name match is not proof of
+          // ownership. Brand it `Unowned` so the engine surfaces
+          // `OwnedBySomeoneElse` unless the caller opted in via `--adopt`.
+          return Unowned(attrs);
         }),
         tail: ({ output }) =>
           telemetry.tailStream({

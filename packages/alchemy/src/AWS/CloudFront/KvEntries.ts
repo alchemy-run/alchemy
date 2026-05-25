@@ -200,34 +200,36 @@ export const KvEntriesProvider = () =>
             return output;
           }),
         ),
-        create: withKvsRegionFn(
-          Effect.fn(function* ({ news }) {
+        reconcile: withKvsRegionFn(
+          Effect.fn(function* ({ news, output }) {
             return yield* retryForKvsReadiness(
               Effect.gen(function* () {
                 const entries = resolveEntries(news.entries);
-                yield* upload(news.store, news.namespace, entries, undefined);
-                return {
-                  store: news.store,
-                  namespace: news.namespace,
+
+                // Observe — diff against the prior persisted entries so
+                // we only `Put` keys whose values actually changed. When
+                // the store identity changes (or there's no prior
+                // output), treat every key as new.
+                const priorEntries =
+                  output && output.store === news.store
+                    ? resolveEntries(output.entries)
+                    : undefined;
+
+                // Sync entries — push the changed keys.
+                yield* upload(
+                  news.store,
+                  news.namespace,
                   entries,
-                };
-              }),
-            );
-          }),
-        ),
-        update: withKvsRegionFn(
-          Effect.fn(function* ({ news, olds }) {
-            return yield* retryForKvsReadiness(
-              Effect.gen(function* () {
-                const entries = resolveEntries(news.entries);
-                const oldEntries =
-                  news.store !== olds.store
-                    ? undefined
-                    : resolveEntries(olds.entries);
-                yield* upload(news.store, news.namespace, entries, oldEntries);
+                  priorEntries,
+                );
+
+                // Sync stale keys — when `purge` is set, list every key
+                // under the namespace and delete anything not in the
+                // desired set. This converges adopted/drifted state.
                 if (news.purge) {
                   yield* purge(news.store, news.namespace, entries);
                 }
+
                 return {
                   store: news.store,
                   namespace: news.namespace,

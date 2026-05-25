@@ -1,37 +1,33 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
+import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
-import {
-  DurableObjectState,
-  fromDurableObjectState,
-} from "./DurableObjectState.ts";
+import { DurableObjectState } from "./DurableObjectState.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { type DurableWebSocket } from "./WebSocket.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 
 export interface DurableObjectExport {
   readonly kind: "durableObject";
-  readonly make: (
-    state: cf.DurableObjectState,
-    env: any,
-  ) => Effect.Effect<Record<string, unknown>>;
+  readonly constructor: Effect.Effect<
+    DurableObjectShape,
+    never,
+    DurableObjectState
+  >;
+  readonly services: Context.Context<never>;
 }
 
 export const isDurableObjectExport = (
   value: unknown,
 ): value is DurableObjectExport =>
-  typeof value === "object" &&
-  value !== null &&
-  "kind" in value &&
-  (value as any).kind === "durableObject";
+  typeof value === "object" && (value as any)?.kind === "durableObject";
 
 export type DurableObjectId = cf.DurableObjectId;
 export type DurableObjectJurisdiction = cf.DurableObjectJurisdiction;
@@ -46,10 +42,7 @@ const TypeId = "Cloudflare.DurableObjectNamespace";
 export const isDurableObjectNamespaceLike = (
   value: unknown,
 ): value is DurableObjectNamespaceLike =>
-  typeof value === "object" &&
-  value !== null &&
-  "kind" in value &&
-  value.kind === TypeId;
+  typeof value === "object" && (value as any)?.kind === TypeId;
 
 export interface DurableObjectNamespaceLike<Shape = any> {
   kind: TypeId;
@@ -574,11 +567,7 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
               const [namespace, impl] = args as any as [
                 name: string,
                 impl: Effect.Effect<
-                  Effect.Effect<
-                    DurableObjectNamespace<any>,
-                    never,
-                    DurableObjectState
-                  >
+                  Effect.Effect<DurableObjectShape, never, DurableObjectState>
                 >,
               ];
               const worker = yield* Worker;
@@ -600,58 +589,12 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
                 ],
               });
 
-              const services =
-                yield* Effect.context<Effect.Services<typeof impl>>();
-
-              yield* worker.export(namespace, {
-                kind: "durableObject",
-                make: (state: cf.DurableObjectState, env: any) => {
-                  const doState = fromDurableObjectState(state);
-                  return constructor.pipe(
-                    Effect.provideContext(services),
-                    Effect.provideService(DurableObjectState, doState),
-                    Effect.provideService(WorkerEnvironment, env),
-                    Effect.map((methods: any) => {
-                      const wrapped: Record<string, unknown> = {};
-                      for (const key of Object.getOwnPropertyNames(methods)) {
-                        const value = methods[key];
-                        if (Effect.isEffect(value)) {
-                          wrapped[key] = (
-                            value as Effect.Effect<any, any, any>
-                          ).pipe(
-                            Effect.provideService(DurableObjectState, doState),
-                          );
-                        } else if (typeof value === "function") {
-                          wrapped[key] = (...args: unknown[]) => {
-                            const result = (value as Function)(...args);
-                            if (Effect.isEffect(result)) {
-                              return (
-                                result as Effect.Effect<any, any, any>
-                              ).pipe(
-                                Effect.provideService(
-                                  DurableObjectState,
-                                  doState,
-                                ),
-                              );
-                            }
-                            return result;
-                          };
-                        } else {
-                          wrapped[key] = value;
-                        }
-                      }
-                      return wrapped;
-                    }),
-                  );
-                },
-              } satisfies DurableObjectExport);
-
-              const binding = yield* Effect.serviceOption(
+              const binding = yield* Effect.all([
                 WorkerEnvironment,
-              ).pipe(
-                Effect.map(Option.getOrUndefined),
-                Effect.flatMap((env) => {
-                  if (env === undefined) {
+                ALCHEMY_PHASE,
+              ]).pipe(
+                Effect.flatMap(([env, phase]) => {
+                  if (env === undefined || phase === "plan") {
                     // should be fine to return undefined here (it is only undefined at plantime)
                     return Effect.succeed(undefined);
                   }
@@ -699,9 +642,18 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
                 //   use((ns) => ns.jurisdiction(jurisdiction) as any),
               };
 
-              const constructor = yield* impl.pipe(
-                Effect.provideService(DurableObjectNamespaceScope, self as any),
-              );
+              yield* worker.export(namespace, {
+                kind: "durableObject",
+                // initialize the object's constructor (apply infra dependencies)
+                constructor: yield* impl.pipe(
+                  Effect.provideService(
+                    DurableObjectNamespaceScope,
+                    self as any,
+                  ),
+                ),
+                // grab the object's infra dependencies so we can apply them when calling the instance's methods
+                services: yield* Effect.context<Effect.Services<typeof impl>>(),
+              } satisfies DurableObjectExport);
 
               return self;
             }),

@@ -166,46 +166,18 @@ export const AnomalyDetectorProvider = () =>
         anomalyDetector: detector,
       };
     }),
-    create: Effect.fn(function* ({ news, session }) {
+    reconcile: Effect.fn(function* ({ news, session }) {
+      // Ensure — `putAnomalyDetector` is an upsert keyed by the detector's
+      // identity (Namespace+MetricName+Dimensions+Stat or MetricMath
+      // expression). Sending desired props every reconcile converges the
+      // cloud regardless of whether this is first-create or an update.
       yield* retryConcurrent(cloudwatch.putAnomalyDetector(news));
       const detectorId = detectorIdentity(news);
       yield* session.note(detectorId);
 
-      let attempt = 0;
-      const state = yield* Effect.suspend(() => {
-        attempt += 1;
-        return describeDetector(news, {
-          resourceId: "AnomalyDetector",
-          attempt,
-          logMisses: true,
-        }).pipe(
-          Effect.flatMap((state) =>
-            state
-              ? Effect.succeed(state)
-              : Effect.fail(
-                  new AnomalyDetectorNotVisible({
-                    message: "Anomaly detector not yet visible",
-                  }),
-                ),
-          ),
-        );
-      }).pipe(
-        Effect.retry({
-          while: (error) => error._tag === "AnomalyDetectorNotVisible",
-          schedule: detectorReadinessSchedule,
-        }),
-      );
-
-      return {
-        detectorId,
-        anomalyDetector: state,
-      };
-    }),
-    update: Effect.fn(function* ({ news, session }) {
-      yield* retryConcurrent(cloudwatch.putAnomalyDetector(news));
-      const detectorId = detectorIdentity(news);
-      yield* session.note(detectorId);
-
+      // Sync — describe the detector after the put. CloudWatch is
+      // eventually consistent for `DescribeAnomalyDetectors`, so we retry
+      // until the detector matching our identity is visible.
       let attempt = 0;
       const state = yield* Effect.suspend(() => {
         attempt += 1;

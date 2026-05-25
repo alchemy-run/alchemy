@@ -8,17 +8,17 @@ import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
 
-import { AdoptPolicy } from "../../AdoptPolicy";
-import { AlchemyContext } from "../../AlchemyContext";
-import { apply } from "../../Apply";
-import { ArtifactStore, createArtifactStore } from "../../Artifacts";
-import { AuthProviders } from "../../Auth/AuthProvider";
-import { withProfileOverride } from "../../Auth/Profile";
+import { AdoptPolicy } from "../../AdoptPolicy.ts";
+import { AlchemyContext } from "../../AlchemyContext.ts";
+import { apply } from "../../Apply.ts";
+import { ArtifactStore, createArtifactStore } from "../../Artifacts.ts";
+import { AuthProviders } from "../../Auth/AuthProvider.ts";
+import { withProfileOverride } from "../../Auth/Profile.ts";
 import * as CLI from "../../Cli/Cli.ts";
-import * as Plan from "../../Plan";
-import { Stage } from "../../Stage";
-import { loadConfigProvider } from "../../Util/ConfigProvider";
-import { fileLogger } from "../../Util/FileLogger";
+import * as Plan from "../../Plan.ts";
+import { Stage } from "../../Stage.ts";
+import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
+import { fileLogger } from "../../Util/FileLogger.ts";
 
 import {
   dryRun as dryRunFlag,
@@ -45,6 +45,7 @@ export const ExecStackOptions = Schema.Struct({
   adopt: Schema.optional(Schema.Boolean),
 });
 export type ExecStackOptions = typeof ExecStackOptions.Type;
+export type ExecStackOptionsEncoded = typeof ExecStackOptions.Encoded;
 
 const stackSpanAttrs = (args: ExecStackOptions) => ({
   "alchemy.stage": args.stage,
@@ -82,10 +83,11 @@ export const execStack = Effect.fn(function* ({
   const services = Layer.mergeAll(
     Layer.effect(
       AlchemyContext,
-      AlchemyContext.asEffect().pipe(
+      AlchemyContext.pipe(
         Effect.map((ctx) => ({
           ...ctx,
           dev,
+          adopt,
         })),
       ),
     ),
@@ -123,6 +125,7 @@ export const execStack = Effect.fn(function* ({
               // TODO(sam): probably better to have Plan.destroy and Plan.update
               resources: {},
               bindings: {},
+              actions: {},
               output: {},
             }
           : stack,

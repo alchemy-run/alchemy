@@ -107,33 +107,68 @@ export const TargetGroupProvider = () =>
             vpcId: targetGroup.VpcId!,
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, session }) {
           const name = yield* toName(id, news);
-          const tags = {
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
-          const created = yield* elbv2.createTargetGroup({
-            Name: name,
-            Port: news.port,
-            Protocol: news.protocol ?? "HTTP",
-            VpcId: news.vpcId,
-            TargetType: news.targetType ?? "ip",
+
+          // Observe — look up by deterministic name.
+          let described = yield* elbv2
+            .describeTargetGroups({
+              Names: [name],
+            })
+            .pipe(
+              Effect.catchTag("TargetGroupNotFoundException", () =>
+                Effect.succeed(undefined),
+              ),
+            );
+          let targetGroup = described?.TargetGroups?.[0];
+
+          // Ensure — create if missing. Stable axes (vpcId, port, protocol,
+          // targetType) are handled by diff so we don't deal with mismatch.
+          if (!targetGroup?.TargetGroupArn) {
+            const created = yield* elbv2.createTargetGroup({
+              Name: name,
+              Port: news.port,
+              Protocol: news.protocol ?? "HTTP",
+              VpcId: news.vpcId,
+              TargetType: news.targetType ?? "ip",
+              HealthCheckPath: news.healthCheckPath,
+              HealthCheckPort: news.healthCheckPort,
+              HealthCheckProtocol: news.healthCheckProtocol,
+              Matcher: news.matcher,
+              Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                Key,
+                Value,
+              })),
+            });
+            targetGroup = created.TargetGroups?.[0];
+            if (!targetGroup?.TargetGroupArn) {
+              return yield* Effect.die(
+                new Error("createTargetGroup returned no target group"),
+              );
+            }
+          }
+
+          const targetGroupArn = targetGroup.TargetGroupArn as TargetGroupArn;
+
+          // Sync health check — modifyTargetGroup fully replaces these
+          // mutable fields.
+          yield* elbv2.modifyTargetGroup({
+            TargetGroupArn: targetGroupArn,
             HealthCheckPath: news.healthCheckPath,
             HealthCheckPort: news.healthCheckPort,
             HealthCheckProtocol: news.healthCheckProtocol,
             Matcher: news.matcher,
-            Tags: Object.entries(tags).map(([Key, Value]) => ({ Key, Value })),
           });
-          const targetGroup = created.TargetGroups?.[0];
-          if (!targetGroup?.TargetGroupArn) {
-            return yield* Effect.die(
-              new Error("createTargetGroup returned no target group"),
-            );
-          }
+
+          // Sync attributes — observed ↔ desired. Always apply when desired
+          // attrs are non-empty.
           if (news.attributes && Object.keys(news.attributes).length > 0) {
             yield* elbv2.modifyTargetGroupAttributes({
-              TargetGroupArn: targetGroup.TargetGroupArn,
+              TargetGroupArn: targetGroupArn,
               Attributes: Object.entries(news.attributes).map(
                 ([Key, Value]) => ({
                   Key,
@@ -142,64 +177,42 @@ export const TargetGroupProvider = () =>
               ),
             });
           }
-          yield* session.note(targetGroup.TargetGroupArn);
-          return {
-            targetGroupArn: targetGroup.TargetGroupArn as TargetGroupArn,
-            targetGroupName: targetGroup.TargetGroupName!,
-            port: targetGroup.Port!,
-            protocol: targetGroup.Protocol!,
-            targetType: targetGroup.TargetType!,
-            vpcId: targetGroup.VpcId!,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* elbv2.modifyTargetGroup({
-            TargetGroupArn: output.targetGroupArn,
-            HealthCheckPath: news.healthCheckPath,
-            HealthCheckPort: news.healthCheckPort,
-            HealthCheckProtocol: news.healthCheckProtocol,
-            Matcher: news.matcher,
+
+          // Sync tags — diff observed cloud tags against desired.
+          const tagDescriptions = yield* elbv2.describeTags({
+            ResourceArns: [targetGroupArn],
           });
-          if (
-            JSON.stringify(news.attributes ?? {}) !==
-            JSON.stringify(olds.attributes ?? {})
-          ) {
-            yield* elbv2.modifyTargetGroupAttributes({
-              TargetGroupArn: output.targetGroupArn,
-              Attributes: Object.entries(news.attributes ?? {}).map(
-                ([Key, Value]) => ({
-                  Key,
-                  Value,
-                }),
-              ),
-            });
-          }
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          const observedTags = Object.fromEntries(
+            (tagDescriptions.TagDescriptions?.[0]?.Tags ?? [])
+              .filter(
+                (t): t is { Key: string; Value: string } =>
+                  typeof t.Key === "string" && typeof t.Value === "string",
+              )
+              .map((t) => [t.Key, t.Value]),
+          );
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* elbv2.addTags({
-              ResourceArns: [output.targetGroupArn],
+              ResourceArns: [targetGroupArn],
               Tags: upsert,
             });
           }
           if (removed.length > 0) {
             yield* elbv2.removeTags({
-              ResourceArns: [output.targetGroupArn],
+              ResourceArns: [targetGroupArn],
               TagKeys: removed,
             });
           }
-          yield* session.note(output.targetGroupArn);
+
+          yield* session.note(targetGroupArn);
           return {
-            ...output,
-            tags: newTags,
+            targetGroupArn,
+            targetGroupName: targetGroup.TargetGroupName!,
+            port: targetGroup.Port!,
+            protocol: targetGroup.Protocol!,
+            targetType: targetGroup.TargetType!,
+            vpcId: targetGroup.VpcId!,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

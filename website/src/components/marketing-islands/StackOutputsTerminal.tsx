@@ -19,7 +19,11 @@ const COMMAND = `alchemy deploy --stage ${STAGE}`;
 
 type RowStatus = "pending" | "creating" | "created";
 
-export default function StackOutputsTerminal() {
+export default function StackOutputsTerminal({
+  maxLines = 12,
+}: {
+  maxLines?: number;
+}) {
   const [cmd, setCmd] = useState("");
   const [caret, setCaret] = useState(false);
   const [rows, setRows] = useState<
@@ -95,7 +99,7 @@ export default function StackOutputsTerminal() {
       title={`alchemy · ${STAGE}`}
       badge="DEPLOY"
       badgeColor={accent}
-      bodyMinHeight={220}
+      maxLines={maxLines}
     >
       <Line>
         <span style={{ color: accent }}>$ </span>

@@ -2,6 +2,7 @@ import * as AWS from "@/AWS";
 import * as Core from "@/Test/Core";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -14,8 +15,13 @@ const testOptions = { providers: AWS.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "DynamoDBBindings");
 
+// Lambda function URL cold-start (DNS, IAM propagation, init) can take
+// well over 60s on a fresh deploy under parallel-suite load — observed
+// up to ~90s when S3 throttling delays the Lambda code upload too.
+// Budget ~150s of readiness polling so we don't fail the whole suite on
+// a slow init.
 const readinessPolicy = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(9)),
+  Schedule.both(Schedule.recurs(75)),
 );
 
 let baseUrl: string;
@@ -64,7 +70,7 @@ describe("DynamoDB Bindings", () => {
         Effect.retry({ schedule: readinessPolicy }),
       );
     }),
-    { timeout: 120_000 },
+    { timeout: 240_000 },
   );
 
   afterAll(sharedStack.destroy(), { timeout: 60_000 });
@@ -538,9 +544,25 @@ describe("DynamoDB Bindings", () => {
           ),
         );
 
-        const response = yield* HttpClient.get(
-          `${baseUrl}/query?pk=${encodeURIComponent("query-test#1")}`,
-        ).pipe(Effect.flatMap((r) => r.json));
+        // DynamoDB Query is eventually consistent by default, so a
+        // brand-new PutItem may not appear in the immediately-following
+        // Query. Poll briefly until both items are visible.
+        const response = yield* Effect.gen(function* () {
+          const r = yield* HttpClient.get(
+            `${baseUrl}/query?pk=${encodeURIComponent("query-test#1")}`,
+          ).pipe(Effect.flatMap((r) => r.json));
+          if ((r as any).count !== 2) {
+            return yield* Effect.fail(new QueryNotConsistent());
+          }
+          return r;
+        }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "QueryNotConsistent",
+            schedule: Schedule.fixed("500 millis").pipe(
+              Schedule.both(Schedule.recurs(20)),
+            ),
+          }),
+        );
 
         expect((response as any).count).toBe(2);
         expect((response as any).items.length).toBe(2);
@@ -622,3 +644,5 @@ describe("DynamoDB Bindings", () => {
     );
   });
 });
+
+class QueryNotConsistent extends Data.TaggedError("QueryNotConsistent") {}

@@ -149,51 +149,47 @@ export const NetworkAclProvider = () =>
           // Tags can be updated in-place
         }),
 
-        create: Effect.fn(function* ({ id, news, session }) {
-          yield* session.note("Creating Network ACL...");
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const desiredTags = yield* createTags(id, news.tags);
 
-          const result = yield* ec2.createNetworkAcl({
-            VpcId: news.vpcId as string,
-            TagSpecifications: [
-              {
-                ResourceType: "network-acl",
-                Tags: createTagsList(yield* createTags(id, news.tags)),
-              },
-            ],
-            DryRun: false,
-          });
-
-          const networkAclId = result.NetworkAcl!.NetworkAclId!;
-          yield* session.note(`Network ACL created: ${networkAclId}`);
-
-          const acl = yield* describeNetworkAcl(networkAclId);
-          return toAttrs(acl);
-        }),
-
-        update: Effect.fn(function* ({ id, news, output, session }) {
-          const networkAclId = output.networkAclId;
-
-          // Handle tag updates
-          const newTags = yield* createTags(id, news.tags);
-          const oldTags =
-            (yield* ec2
-              .describeTags({
-                Filters: [
-                  { Name: "resource-id", Values: [networkAclId] },
-                  { Name: "resource-type", Values: ["network-acl"] },
-                ],
-              })
+          // Observe — find the NACL via cached id, else fall through to create.
+          let acl: ec2.NetworkAcl | undefined;
+          if (output?.networkAclId) {
+            const lookup = yield* ec2
+              .describeNetworkAcls({ NetworkAclIds: [output.networkAclId] })
               .pipe(
-                Effect.map(
-                  (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
+                Effect.catchTag("InvalidNetworkAclID.NotFound", () =>
+                  Effect.succeed({ NetworkAcls: [] }),
                 ),
-              )) ?? {};
+              );
+            acl = lookup.NetworkAcls?.[0];
+          }
 
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Ensure — create the NACL when missing.
+          if (acl === undefined) {
+            yield* session.note("Creating Network ACL...");
+            const result = yield* ec2.createNetworkAcl({
+              VpcId: news.vpcId as string,
+              TagSpecifications: [
+                {
+                  ResourceType: "network-acl",
+                  Tags: createTagsList(desiredTags),
+                },
+              ],
+              DryRun: false,
+            });
+            const newAclId = result.NetworkAcl!.NetworkAclId!;
+            yield* session.note(`Network ACL created: ${newAclId}`);
+            acl = yield* describeNetworkAcl(newAclId);
+          }
 
+          const networkAclId = acl.NetworkAclId!;
+
+          // Sync tags — observed cloud tags vs desired.
+          const currentTags = Object.fromEntries(
+            (acl.Tags ?? []).map((t) => [t.Key!, t.Value!]),
+          ) as Record<string, string>;
+          const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {
             yield* ec2.deleteTags({
               Resources: [networkAclId],
@@ -207,11 +203,11 @@ export const NetworkAclProvider = () =>
               Tags: upsert,
               DryRun: false,
             });
-            yield* session.note("Updated tags");
           }
 
-          const acl = yield* describeNetworkAcl(networkAclId);
-          return toAttrs(acl);
+          // Re-read final state.
+          const final = yield* describeNetworkAcl(networkAclId);
+          return toAttrs(final);
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

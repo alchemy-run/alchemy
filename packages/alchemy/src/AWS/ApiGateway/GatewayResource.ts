@@ -159,51 +159,67 @@ export const ResourceProvider = () =>
             pathPart: r.pathPart!,
           };
         }),
-        create: Effect.fn(function* ({ news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("Resource props were not resolved");
           }
           const news = newsIn as Input.ResolveProps<ApiGatewayResourceProps>;
-          const created = yield* ag.createResource({
-            restApiId: news.restApiId as string,
-            parentId: news.parentId as string,
-            pathPart: news.pathPart,
-          });
-          if (!created.id) {
-            return yield* Effect.die("createResource missing id");
-          }
-          yield* session.note(
-            `Created API Gateway resource ${created.id} (${news.pathPart})`,
-          );
-          return {
-            resourceId: created.id,
-            restApiId: news.restApiId as string,
-            parentId: news.parentId as string,
-            pathPart: news.pathPart,
-          };
-        }),
-        update: Effect.fn(function* ({ news: newsIn, output, session }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("Resource props were not resolved");
-          }
-          const news = newsIn as Input.ResolveProps<ApiGatewayResourceProps>;
-          if (news.parentId !== output.parentId) {
-            return yield* Effect.die(
-              "Moving ApiGateway.Resource parentId requires replace",
+          const restApiId = (output?.restApiId ?? news.restApiId) as string;
+
+          // Observe — fetch the live resource if we have a cached id. We
+          // never trust `output.pathPart` for diffing; we re-read the
+          // pathPart from cloud state every reconcile.
+          let observed = output?.resourceId
+            ? yield* ag
+                .getResource({
+                  restApiId,
+                  resourceId: output.resourceId,
+                })
+                .pipe(
+                  Effect.catchTag("NotFoundException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                )
+            : undefined;
+
+          // Ensure — create the resource if missing.
+          if (!observed?.id) {
+            const created = yield* ag.createResource({
+              restApiId: news.restApiId as string,
+              parentId: news.parentId as string,
+              pathPart: news.pathPart,
+            });
+            if (!created.id) {
+              return yield* Effect.die("createResource missing id");
+            }
+            yield* session.note(
+              `Created API Gateway resource ${created.id} (${news.pathPart})`,
             );
+            observed = yield* ag.getResource({
+              restApiId: news.restApiId as string,
+              resourceId: created.id,
+            });
           }
-          yield* ag.updateResource({
-            restApiId: output.restApiId,
-            resourceId: output.resourceId,
-            patchOperations: [
-              { op: "replace", path: "/pathPart", value: news.pathPart },
-            ],
-          });
-          yield* session.note(`Updated resource ${output.resourceId}`);
+
+          const resourceId = observed.id!;
+
+          // Sync pathPart — observed ↔ desired. parentId moves are modeled
+          // as `replace` in `diff`, so we don't try to patch them here.
+          if (news.pathPart !== observed.pathPart) {
+            yield* ag.updateResource({
+              restApiId,
+              resourceId,
+              patchOperations: [
+                { op: "replace", path: "/pathPart", value: news.pathPart },
+              ],
+            });
+            yield* session.note(`Updated resource ${resourceId}`);
+          }
+
           return {
-            resourceId: output.resourceId,
-            restApiId: output.restApiId,
-            parentId: news.parentId,
+            resourceId,
+            restApiId,
+            parentId: observed.parentId!,
             pathPart: news.pathPart,
           };
         }),

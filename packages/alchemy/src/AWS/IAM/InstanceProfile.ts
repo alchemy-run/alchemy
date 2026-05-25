@@ -160,107 +160,103 @@ export const InstanceProfileProvider = () =>
             tags: toTagRecord(profile.Tags),
           };
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* toName(id, news);
-          const tags = {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const name = output?.instanceProfileName ?? (yield* toName(id, news));
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
-          yield* iam
-            .createInstanceProfile({
-              InstanceProfileName: name,
-              Path: news.path,
-              Tags: createTagsList(tags),
-            })
-            .pipe(
-              Effect.catchTag("EntityAlreadyExistsException", () =>
-                Effect.gen(function* () {
-                  const existing = yield* readInstanceProfile(name);
-                  if (!existing?.Arn) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Instance profile '${name}' already exists but could not be described`,
-                      ),
-                    );
-                  }
-                  if (!hasTags(tags, existing.Tags)) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Instance profile '${name}' already exists and is not managed by alchemy`,
-                      ),
-                    );
-                  }
-                }),
-              ),
-            );
 
-          yield* syncRole({
-            profileName: name,
-            currentRoleName: undefined,
-            nextRoleName: news.roleName as string | undefined,
-          });
+          // Observe — fetch the live instance profile (or absence).
+          let profile = yield* readInstanceProfile(name);
 
-          const profile = yield* readInstanceProfile(name);
-          if (!profile?.Arn || !profile.InstanceProfileName) {
-            return yield* Effect.fail(
-              new Error(
-                `Instance profile '${name}' was not readable after create`,
-              ),
-            );
+          // Ensure — create the profile when it is missing. Tolerate races
+          // and surface a clear error when an unrelated foreign profile
+          // already owns the name.
+          if (!profile?.Arn) {
+            yield* iam
+              .createInstanceProfile({
+                InstanceProfileName: name,
+                Path: news.path,
+                Tags: createTagsList(desiredTags),
+              })
+              .pipe(
+                Effect.catchTag("EntityAlreadyExistsException", () =>
+                  Effect.gen(function* () {
+                    const existing = yield* readInstanceProfile(name);
+                    if (!existing?.Arn) {
+                      return yield* Effect.fail(
+                        new Error(
+                          `Instance profile '${name}' already exists but could not be described`,
+                        ),
+                      );
+                    }
+                    if (!hasTags(desiredTags, existing.Tags)) {
+                      return yield* Effect.fail(
+                        new Error(
+                          `Instance profile '${name}' already exists and is not managed by alchemy`,
+                        ),
+                      );
+                    }
+                  }),
+                ),
+              );
+            profile = yield* readInstanceProfile(name);
+            if (!profile?.Arn || !profile.InstanceProfileName) {
+              return yield* Effect.fail(
+                new Error(
+                  `Instance profile '${name}' was not readable after create`,
+                ),
+              );
+            }
           }
 
-          yield* session.note(profile.Arn);
-          return {
-            instanceProfileArn: profile.Arn,
-            instanceProfileName: profile.InstanceProfileName,
-            instanceProfileId: profile.InstanceProfileId,
-            path: profile.Path,
-            roleName: profile.Roles?.[0]?.RoleName,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
+          // Sync role attachment — diff the observed role on the profile
+          // against the desired role and only swap when they differ.
+          const observedRoleName = profile.Roles?.[0]?.RoleName;
+          const desiredRoleName = news.roleName as string | undefined;
           yield* syncRole({
-            profileName: output.instanceProfileName,
-            currentRoleName: olds.roleName as string | undefined,
-            nextRoleName: news.roleName as string | undefined,
+            profileName: name,
+            currentRoleName: observedRoleName,
+            nextRoleName: desiredRoleName,
           });
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags — use the cloud's actual tags as the baseline so
+          // adoption / out-of-band tag changes converge correctly.
+          const observedTags = toTagRecord(profile.Tags);
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
             yield* iam.tagInstanceProfile({
-              InstanceProfileName: output.instanceProfileName,
+              InstanceProfileName: name,
               Tags: upsert,
             });
           }
           if (removed.length > 0) {
             yield* iam.untagInstanceProfile({
-              InstanceProfileName: output.instanceProfileName,
+              InstanceProfileName: name,
               TagKeys: removed,
             });
           }
 
-          const profile = yield* readInstanceProfile(
-            output.instanceProfileName,
-          );
-          yield* session.note(output.instanceProfileArn);
+          // Re-read for fresh attributes (the profile's `Roles` array
+          // changes after `syncRole`).
+          const fresh = yield* readInstanceProfile(name);
+          if (!fresh?.Arn || !fresh.InstanceProfileName) {
+            return yield* Effect.fail(
+              new Error(
+                `Instance profile '${name}' was not readable after sync`,
+              ),
+            );
+          }
+
+          yield* session.note(fresh.Arn);
           return {
-            instanceProfileArn: profile?.Arn ?? output.instanceProfileArn,
-            instanceProfileName:
-              profile?.InstanceProfileName ?? output.instanceProfileName,
-            instanceProfileId:
-              profile?.InstanceProfileId ?? output.instanceProfileId,
-            path: profile?.Path ?? output.path,
-            roleName: profile?.Roles?.[0]?.RoleName,
-            tags: newTags,
+            instanceProfileArn: fresh.Arn,
+            instanceProfileName: fresh.InstanceProfileName,
+            instanceProfileId: fresh.InstanceProfileId,
+            path: fresh.Path,
+            roleName: fresh.Roles?.[0]?.RoleName,
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* ({ output }) {

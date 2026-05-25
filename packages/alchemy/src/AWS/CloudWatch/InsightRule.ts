@@ -3,16 +3,17 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import {
   createName,
-  ensureOwnedByAlchemy,
   readResourceTags,
   retryConcurrent,
   updateResourceTags,
@@ -183,21 +184,21 @@ export const InsightRuleProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.ruleName ?? (yield* createRuleName(id, olds ?? {}));
-          return yield* readInsightRule(name);
+          const state = yield* readInsightRule(name);
+          if (!state) return undefined;
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* createRuleName(id, news);
+        reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
+          // Observe — pin the physical name from `output` if present;
+          // otherwise derive from desired props. Read whatever exists in
+          // CloudWatch so we have a baseline for tag-diffing on adoption.
+          const name = output?.ruleName ?? (yield* createRuleName(id, news));
           const existing = yield* readInsightRule(name);
 
-          if (existing) {
-            yield* ensureOwnedByAlchemy(
-              id,
-              name,
-              existing.tags,
-              "insight rule",
-            );
-          }
-
+          // Ensure — `putInsightRule` is an upsert; sending the full
+          // desired config every reconcile converges the cloud.
           yield* retryConcurrent(
             cloudwatch.putInsightRule({
               ...toPutInsightRuleInput(news),
@@ -205,10 +206,13 @@ export const InsightRuleProvider = () =>
             }),
           );
 
+          // Sync tags — diff against `olds.tags` when we have prior state,
+          // otherwise fall back to what we observed. Adoption flows take
+          // the latter path.
           const tags = yield* updateResourceTags({
             id,
             resourceArn: ruleArn(name),
-            olds: existing?.tags,
+            olds: olds?.tags ?? existing?.tags,
             news: news.tags,
           });
 
@@ -217,38 +221,7 @@ export const InsightRuleProvider = () =>
           const state = yield* readInsightRule(name);
           if (!state) {
             return yield* Effect.fail(
-              new Error(`failed to read created insight rule '${name}'`),
-            );
-          }
-
-          return {
-            ...state,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* retryConcurrent(
-            cloudwatch.putInsightRule({
-              ...toPutInsightRuleInput(news),
-              RuleName: output.ruleName,
-            }),
-          );
-
-          const tags = yield* updateResourceTags({
-            id,
-            resourceArn: output.ruleArn,
-            olds: olds.tags,
-            news: news.tags,
-          });
-
-          yield* session.note(output.ruleArn);
-
-          const state = yield* readInsightRule(output.ruleName);
-          if (!state) {
-            return yield* Effect.fail(
-              new Error(
-                `failed to read updated insight rule '${output.ruleName}'`,
-              ),
+              new Error(`failed to read reconciled insight rule '${name}'`),
             );
           }
 

@@ -310,158 +310,172 @@ export const VpcEndpointProvider = () =>
           // Other properties can be updated in-place
         }),
 
-        create: Effect.fn(function* ({ id, news, session }) {
-          yield* session.note(
-            `Creating VPC Endpoint for ${news.serviceName}...`,
-          );
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const desiredTags = yield* createTags(id, news.tags);
 
-          const result = yield* ec2.createVpcEndpoint({
-            VpcId: news.vpcId as string,
-            ServiceName: news.serviceName,
-            VpcEndpointType: news.vpcEndpointType ?? "Gateway",
-            RouteTableIds: news.routeTableIds as string[] | undefined,
-            SubnetIds: news.subnetIds as string[] | undefined,
-            SecurityGroupIds: news.securityGroupIds as string[] | undefined,
-            PrivateDnsEnabled: news.privateDnsEnabled,
-            PolicyDocument: news.policyDocument,
-            IpAddressType: news.ipAddressType,
-            DnsOptions: news.dnsOptions
-              ? {
-                  DnsRecordIpType: news.dnsOptions.dnsRecordIpType,
-                  PrivateDnsOnlyForInboundResolverEndpoint:
-                    news.dnsOptions.privateDnsOnlyForInboundResolverEndpoint,
-                }
-              : undefined,
-            TagSpecifications: [
-              {
-                ResourceType: "vpc-endpoint",
-                Tags: createTagsList(yield* createTags(id, news.tags)),
-              },
-            ],
-            DryRun: false,
-          });
-
-          const vpcEndpointId = result.VpcEndpoint!.VpcEndpointId!;
-          yield* session.note(`VPC Endpoint created: ${vpcEndpointId}`);
-
-          // Wait for endpoint to be available (for Interface endpoints)
-          if (
-            news.vpcEndpointType === "Interface" ||
-            news.vpcEndpointType === "GatewayLoadBalancer"
-          ) {
-            yield* waitForVpcEndpointAvailable(vpcEndpointId, session);
+          // Observe — find the VPC endpoint via cached id, else fall through
+          // to create.
+          let ep: ec2.VpcEndpoint | undefined;
+          if (output?.vpcEndpointId) {
+            const lookup = yield* ec2
+              .describeVpcEndpoints({
+                VpcEndpointIds: [output.vpcEndpointId],
+              })
+              .pipe(
+                Effect.catchTag("InvalidVpcEndpointId.NotFound", () =>
+                  Effect.succeed({ VpcEndpoints: [] }),
+                ),
+              );
+            ep = lookup.VpcEndpoints?.[0];
+            if (ep && (ep.State === "deleted" || ep.State === "deleting")) {
+              ep = undefined;
+            }
           }
 
-          const ep = yield* describeVpcEndpoint(vpcEndpointId);
-          return toAttrs(ep);
-        }),
+          // Ensure — create the endpoint when missing.
+          if (ep === undefined) {
+            yield* session.note(
+              `Creating VPC Endpoint for ${news.serviceName}...`,
+            );
+            const result = yield* ec2.createVpcEndpoint({
+              VpcId: news.vpcId as string,
+              ServiceName: news.serviceName,
+              VpcEndpointType: news.vpcEndpointType ?? "Gateway",
+              RouteTableIds: news.routeTableIds as string[] | undefined,
+              SubnetIds: news.subnetIds as string[] | undefined,
+              SecurityGroupIds: news.securityGroupIds as string[] | undefined,
+              PrivateDnsEnabled: news.privateDnsEnabled,
+              PolicyDocument: news.policyDocument,
+              IpAddressType: news.ipAddressType,
+              DnsOptions: news.dnsOptions
+                ? {
+                    DnsRecordIpType: news.dnsOptions.dnsRecordIpType,
+                    PrivateDnsOnlyForInboundResolverEndpoint:
+                      news.dnsOptions.privateDnsOnlyForInboundResolverEndpoint,
+                  }
+                : undefined,
+              TagSpecifications: [
+                {
+                  ResourceType: "vpc-endpoint",
+                  Tags: createTagsList(desiredTags),
+                },
+              ],
+              DryRun: false,
+            });
+            const newEpId = result.VpcEndpoint!.VpcEndpointId!;
+            yield* session.note(`VPC Endpoint created: ${newEpId}`);
+            if (
+              news.vpcEndpointType === "Interface" ||
+              news.vpcEndpointType === "GatewayLoadBalancer"
+            ) {
+              yield* waitForVpcEndpointAvailable(newEpId, session);
+            }
+            ep = yield* describeVpcEndpoint(newEpId);
+          }
 
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const vpcEndpointId = output.vpcEndpointId;
+          const vpcEndpointId = ep.VpcEndpointId!;
+          const observedType = ep.VpcEndpointType ?? news.vpcEndpointType;
 
-          // Modify endpoint if needed
+          // Sync mutable configuration — diff observed cloud state against
+          // desired, then issue a single modifyVpcEndpoint call carrying only
+          // the deltas.
           const modifications: Parameters<typeof ec2.modifyVpcEndpoint>[0] = {
             VpcEndpointId: vpcEndpointId,
             DryRun: false,
           };
-
           let hasModifications = false;
 
-          // Handle route table changes (for Gateway endpoints)
-          if (news.vpcEndpointType === "Gateway" || !news.vpcEndpointType) {
-            const oldRouteTableIds = new Set(olds.routeTableIds ?? []);
-            const newRouteTableIds = new Set(news.routeTableIds ?? []);
-
-            const addRouteTableIds = [...newRouteTableIds].filter(
-              (id) => !oldRouteTableIds.has(id),
+          if (observedType === "Gateway") {
+            const observedRtIds = new Set(ep.RouteTableIds ?? []);
+            const desiredRtIds = new Set(
+              (news.routeTableIds as string[] | undefined) ?? [],
             );
-            const removeRouteTableIds = [...oldRouteTableIds].filter(
-              (id) => !newRouteTableIds.has(id),
+            const addRouteTableIds = [...desiredRtIds].filter(
+              (rt) => !observedRtIds.has(rt),
             );
-
+            const removeRouteTableIds = [...observedRtIds].filter(
+              (rt) => !desiredRtIds.has(rt),
+            );
             if (addRouteTableIds.length > 0) {
-              modifications.AddRouteTableIds = addRouteTableIds as string[];
+              modifications.AddRouteTableIds = addRouteTableIds;
               hasModifications = true;
             }
             if (removeRouteTableIds.length > 0) {
-              modifications.RemoveRouteTableIds =
-                removeRouteTableIds as string[];
+              modifications.RemoveRouteTableIds = removeRouteTableIds;
               hasModifications = true;
             }
           }
 
-          // Handle subnet changes (for Interface endpoints)
           if (
-            news.vpcEndpointType === "Interface" ||
-            news.vpcEndpointType === "GatewayLoadBalancer"
+            observedType === "Interface" ||
+            observedType === "GatewayLoadBalancer"
           ) {
-            const oldSubnetIds = new Set(olds.subnetIds ?? []);
-            const newSubnetIds = new Set(news.subnetIds ?? []);
-
-            const addSubnetIds = [...newSubnetIds].filter(
-              (id) => !oldSubnetIds.has(id),
+            const observedSubnetIds = new Set(ep.SubnetIds ?? []);
+            const desiredSubnetIds = new Set(
+              (news.subnetIds as string[] | undefined) ?? [],
             );
-            const removeSubnetIds = [...oldSubnetIds].filter(
-              (id) => !newSubnetIds.has(id),
+            const addSubnetIds = [...desiredSubnetIds].filter(
+              (s) => !observedSubnetIds.has(s),
             );
-
+            const removeSubnetIds = [...observedSubnetIds].filter(
+              (s) => !desiredSubnetIds.has(s),
+            );
             if (addSubnetIds.length > 0) {
-              modifications.AddSubnetIds = addSubnetIds as string[];
+              modifications.AddSubnetIds = addSubnetIds;
               hasModifications = true;
             }
             if (removeSubnetIds.length > 0) {
-              modifications.RemoveSubnetIds = removeSubnetIds as string[];
+              modifications.RemoveSubnetIds = removeSubnetIds;
               hasModifications = true;
             }
 
-            // Handle security group changes
-            const oldSecurityGroupIds = new Set(olds.securityGroupIds ?? []);
-            const newSecurityGroupIds = new Set(news.securityGroupIds ?? []);
-
-            const addSecurityGroupIds = [...newSecurityGroupIds].filter(
-              (id) => !oldSecurityGroupIds.has(id),
+            const observedSgIds = new Set(
+              (ep.Groups ?? [])
+                .map((g) => g.GroupId)
+                .filter((g): g is string => Boolean(g)),
             );
-            const removeSecurityGroupIds = [...oldSecurityGroupIds].filter(
-              (id) => !newSecurityGroupIds.has(id),
+            const desiredSgIds = new Set(
+              (news.securityGroupIds as string[] | undefined) ?? [],
             );
-
+            const addSecurityGroupIds = [...desiredSgIds].filter(
+              (g) => !observedSgIds.has(g),
+            );
+            const removeSecurityGroupIds = [...observedSgIds].filter(
+              (g) => !desiredSgIds.has(g),
+            );
             if (addSecurityGroupIds.length > 0) {
-              modifications.AddSecurityGroupIds =
-                addSecurityGroupIds as string[];
+              modifications.AddSecurityGroupIds = addSecurityGroupIds;
               hasModifications = true;
             }
             if (removeSecurityGroupIds.length > 0) {
-              modifications.RemoveSecurityGroupIds =
-                removeSecurityGroupIds as string[];
+              modifications.RemoveSecurityGroupIds = removeSecurityGroupIds;
               hasModifications = true;
             }
 
-            // Handle private DNS change
-            if (news.privateDnsEnabled !== olds.privateDnsEnabled) {
+            if (ep.PrivateDnsEnabled !== news.privateDnsEnabled) {
               modifications.PrivateDnsEnabled = news.privateDnsEnabled;
               hasModifications = true;
             }
           }
 
-          // Handle policy document change
-          if (news.policyDocument !== olds.policyDocument) {
+          if ((ep.PolicyDocument ?? undefined) !== news.policyDocument) {
             modifications.PolicyDocument = news.policyDocument ?? "";
             modifications.ResetPolicy = !news.policyDocument;
             hasModifications = true;
           }
 
-          // Handle IP address type change
-          if (news.ipAddressType !== olds.ipAddressType) {
+          if (ep.IpAddressType !== news.ipAddressType) {
             modifications.IpAddressType = news.ipAddressType;
             hasModifications = true;
           }
 
-          // Handle DNS options change
+          const observedDnsRecordIpType = ep.DnsOptions?.DnsRecordIpType;
+          const observedPrivateDnsOnly =
+            ep.DnsOptions?.PrivateDnsOnlyForInboundResolverEndpoint;
           if (
-            news.dnsOptions?.dnsRecordIpType !==
-              olds.dnsOptions?.dnsRecordIpType ||
-            news.dnsOptions?.privateDnsOnlyForInboundResolverEndpoint !==
-              olds.dnsOptions?.privateDnsOnlyForInboundResolverEndpoint
+            observedDnsRecordIpType !== news.dnsOptions?.dnsRecordIpType ||
+            observedPrivateDnsOnly !==
+              news.dnsOptions?.privateDnsOnlyForInboundResolverEndpoint
           ) {
             modifications.DnsOptions = news.dnsOptions
               ? {
@@ -476,29 +490,19 @@ export const VpcEndpointProvider = () =>
           if (hasModifications) {
             yield* ec2.modifyVpcEndpoint(modifications);
             yield* session.note("Updated VPC Endpoint configuration");
+            if (
+              observedType === "Interface" ||
+              observedType === "GatewayLoadBalancer"
+            ) {
+              yield* waitForVpcEndpointAvailable(vpcEndpointId, session);
+            }
           }
 
-          // Handle tag updates
-          const newTags = yield* createTags(id, news.tags);
-          const oldTags =
-            (yield* ec2
-              .describeTags({
-                Filters: [
-                  { Name: "resource-id", Values: [vpcEndpointId] },
-                  { Name: "resource-type", Values: ["vpc-endpoint"] },
-                ],
-              })
-              .pipe(
-                Effect.map(
-                  (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
-                ),
-              )) ?? {};
-
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
+          // Sync tags — observed cloud tags vs desired.
+          const currentTags = Object.fromEntries(
+            (ep.Tags ?? []).map((t) => [t.Key!, t.Value!]),
+          ) as Record<string, string>;
+          const { removed, upsert } = diffTags(currentTags, desiredTags);
           if (removed.length > 0) {
             yield* ec2.deleteTags({
               Resources: [vpcEndpointId],
@@ -512,20 +516,11 @@ export const VpcEndpointProvider = () =>
               Tags: upsert,
               DryRun: false,
             });
-            yield* session.note("Updated tags");
           }
 
-          // Wait for endpoint to be available if we made modifications
-          if (
-            hasModifications &&
-            (news.vpcEndpointType === "Interface" ||
-              news.vpcEndpointType === "GatewayLoadBalancer")
-          ) {
-            yield* waitForVpcEndpointAvailable(vpcEndpointId, session);
-          }
-
-          const ep = yield* describeVpcEndpoint(vpcEndpointId);
-          return toAttrs(ep);
+          // Re-read final state.
+          const final = yield* describeVpcEndpoint(vpcEndpointId);
+          return toAttrs(final);
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

@@ -79,13 +79,31 @@ export const NotifierProvider = () =>
 
       return {
         stables: ["id"],
-        create: Effect.fn(function* ({ news }) {
-          const result = yield* create(news);
-          return { ...result, id: result.id ?? "" };
-        }),
-        update: Effect.fn(function* ({ news, output }) {
-          const result = yield* update({ ...news, id: output.id });
-          return { ...result, id: result.id ?? output.id };
+        reconcile: Effect.fn(function* ({ news, output }) {
+          // Observe — Axiom assigns the notifier id server-side, so the
+          // only handle to a previously-created notifier is the cached
+          // `output.id`. Probe for live state with that id; treat NotFound
+          // (deleted out-of-band) as "no observed state" so we converge
+          // by re-creating.
+          const observed = output?.id
+            ? yield* get({ id: output.id }).pipe(
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
+            : undefined;
+
+          // Ensure — POST mints a new notifier. The Axiom create response
+          // sometimes omits `id` on the body; default to "" to keep the
+          // attribute shape stable until the next read populates it.
+          if (observed === undefined) {
+            const result = yield* create(news);
+            return { ...result, id: result.id ?? "" };
+          }
+
+          // Sync — the notifier exists; PATCH against its id with the
+          // desired props. Preserve the cached id if the API response
+          // omits it.
+          const result = yield* update({ ...news, id: observed.id! });
+          return { ...result, id: result.id ?? observed.id! };
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* del({ id: output.id }).pipe(

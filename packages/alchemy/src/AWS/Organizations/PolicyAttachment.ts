@@ -59,36 +59,41 @@ export const PolicyAttachmentProvider = () =>
             targetId: output?.targetId ?? olds!.targetId,
           });
         }),
-        create: Effect.fn(function* ({ news, session }) {
-          yield* retryOrganizations(
-            organizations
-              .attachPolicy({
-                PolicyId: news.policyId,
-                TargetId: news.targetId,
-              })
-              .pipe(
-                Effect.catchTag(
-                  "DuplicatePolicyAttachmentException",
-                  () => Effect.void,
-                ),
-              ),
-          );
+        reconcile: Effect.fn(function* ({ news, session }) {
+          // Observe — list current attachments to see whether ours is present.
+          // The attachment is identity-only; both `policyId` and `targetId`
+          // are stable, so `diff` handles any change as a replacement.
+          let state = yield* readAttachment(news);
 
-          const state = yield* readAttachment(news);
+          // Ensure — attach if missing. `DuplicatePolicyAttachmentException`
+          // is treated as success (e.g. a peer reconciler attached
+          // concurrently, or our observation lost a race).
           if (!state) {
-            return yield* Effect.fail(
-              new Error(
-                `policy attachment '${news.policyId}' -> '${news.targetId}' not found after create`,
-              ),
+            yield* retryOrganizations(
+              organizations
+                .attachPolicy({
+                  PolicyId: news.policyId,
+                  TargetId: news.targetId,
+                })
+                .pipe(
+                  Effect.catchTag(
+                    "DuplicatePolicyAttachmentException",
+                    () => Effect.void,
+                  ),
+                ),
             );
+            state = yield* readAttachment(news);
+            if (!state) {
+              return yield* Effect.fail(
+                new Error(
+                  `policy attachment '${news.policyId}' -> '${news.targetId}' not found after create`,
+                ),
+              );
+            }
           }
 
           yield* session.note(`${state.policyId}:${state.targetId}`);
           return state;
-        }),
-        update: Effect.fn(function* ({ output, session }) {
-          yield* session.note(`${output.policyId}:${output.targetId}`);
-          return output;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* retryOrganizations(

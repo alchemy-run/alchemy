@@ -199,29 +199,31 @@ const bucketOut = Output.of(bucket);          // Output<R2BucketAttrs>
 const refOut    = Output.of(Ref({ id: "B" })); // for cross-stack refs
 ```
 
-Use `Output.of(Ref(...))` (or [`Output.ref`](#cross-stack-references))
+Use `Output.of(Ref(...))` (or [`Output.ref`](#ref))
 to read a resource's attributes from another stack — see below.
 
 ## `ref`
 
-`Output.ref` reads a deployed resource's attributes from a different
-stack or stage. The reference is resolved at evaluation time
-against the persisted state store.
+`Output.ref` produces an `Output` referencing a deployed
+resource's attributes in another stack or stage:
 
 ```typescript
-import * as Output from "alchemy/Output";
-
 const sharedBucket = Output.ref<typeof Bucket>("Bucket", {
   stack: "shared-infra",
   stage: "prod",
 });
 
-// later — typed access just like any Output
 sharedBucket.bucketName; // Output<string>
 ```
 
-If the target hasn't been deployed yet, evaluation fails with
-`InvalidReferenceError`.
+Resolved at plan time against the persisted state store, fails
+with `InvalidReferenceError` when the target is missing. In
+day-to-day code prefer `Resource.ref` — same primitive, more
+ergonomic surface.
+
+See [References](/concepts/references) for the full reference
+surface (`Output.ref`, `Resource.ref`, `Output.stackRef`,
+`Stack.stage`) and how each is resolved.
 
 ## How Outputs compose in props
 

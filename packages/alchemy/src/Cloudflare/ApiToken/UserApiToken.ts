@@ -115,37 +115,54 @@ export const UserApiTokenProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news }) {
+        reconcile: Effect.fn(function* ({ id, news, output }) {
           const name = yield* resolveName(id, news.name);
           const policies = resolvePolicies(news.policies);
-          const result = yield* createToken({
-            name,
-            policies,
-            condition: buildConditionPayload(news.condition),
-            expiresOn: news.expiresOn,
-            notBefore: news.notBefore,
-          });
-          if (!result.value) {
-            return yield* Effect.die(
-              `Cloudflare did not return a value for token "${name}".`,
-            );
+
+          // Observe — fetch current state if we know the token id;
+          // Cloudflare reports a deleted token as `TokenNotFound`, which
+          // we treat as "create from scratch".
+          const observed = output?.tokenId
+            ? yield* getToken({ tokenId: output.tokenId }).pipe(
+                Effect.map((token) => token),
+                Effect.catchTag("TokenNotFound", () =>
+                  Effect.succeed(undefined),
+                ),
+              )
+            : undefined;
+
+          // Ensure — create if missing. Cloudflare returns the plaintext
+          // token value exactly once on create, so we must persist it.
+          // No idempotency token is available; we accept a duplicate over
+          // losing the secret value.
+          if (observed === undefined) {
+            const result = yield* createToken({
+              name,
+              policies,
+              condition: buildConditionPayload(news.condition),
+              expiresOn: news.expiresOn,
+              notBefore: news.notBefore,
+            });
+            if (!result.value) {
+              return yield* Effect.die(
+                `Cloudflare did not return a value for token "${name}".`,
+              );
+            }
+            return buildAttributes(result, Redacted.make(result.value));
           }
-          return buildAttributes(result, Redacted.make(result.value));
-        }),
-        update: Effect.fn(function* ({ id, news, output }) {
-          const name = yield* resolveName(id, news.name);
-          const policies = resolvePolicies(news.policies);
+
+          // Sync — the update API replaces all mutable fields. Cloudflare
+          // does not return the plaintext value on update, so preserve
+          // the one captured at creation.
           const result = yield* updateToken({
-            tokenId: output.tokenId,
+            tokenId: output!.tokenId,
             name,
             policies,
             condition: buildConditionPayload(news.condition),
             expiresOn: news.expiresOn,
             notBefore: news.notBefore,
           });
-          // Cloudflare doesn't return the value on update; preserve the
-          // value captured at creation.
-          return buildAttributes(result, output.value);
+          return buildAttributes(result, output!.value);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* deleteToken({ tokenId: output.tokenId }).pipe(

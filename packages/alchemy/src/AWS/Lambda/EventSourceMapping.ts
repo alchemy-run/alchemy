@@ -292,68 +292,117 @@ export const EventSourceMappingProvider = () =>
             return { action: "replace" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const expectedInternalTags = yield* createEventSourceMappingTags(id);
-          const allTags = { ...expectedInternalTags, ...news.tags };
+          const desiredTags = { ...expectedInternalTags, ...news.tags };
 
           const functionName = news.functionName as string;
           const eventSourceArn = news.eventSourceArn as string;
 
-          const config = yield* lambda
-            .createEventSourceMapping(toCreateRequest(news, allTags))
-            .pipe(
-              Effect.catchTags({
-                ResourceConflictException: () =>
-                  lambda.listEventSourceMappings
-                    .pages({
-                      FunctionName: functionName,
-                    })
-                    .pipe(
-                      // TODO(sam): maybe process chunks to avoid linear scanning of Event Sources
-                      Stream.mapEffect(
-                        Effect.fn(function* (page) {
-                          const mapping = page.EventSourceMappings?.find(
-                            (m) => m.EventSourceArn === eventSourceArn,
-                          );
+          // Observe — find the existing mapping. UUIDs are server-assigned
+          // so we either trust `output.uuid` (fast path) or scan
+          // `listEventSourceMappings` and confirm ownership via tags
+          // (recovery from a state-persistence failure or adoption).
+          let config: lambda.EventSourceMappingConfiguration | undefined;
+          if (output?.uuid) {
+            config = yield* lambda
+              .getEventSourceMapping({ UUID: output.uuid })
+              .pipe(
+                Effect.catchTag("ResourceNotFoundException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+          }
+          if (!config?.UUID) {
+            config = yield* lambda.listEventSourceMappings
+              .pages({ FunctionName: functionName })
+              .pipe(
+                Stream.mapEffect(
+                  Effect.fn(function* (page) {
+                    const mapping = page.EventSourceMappings?.find(
+                      (m) => m.EventSourceArn === eventSourceArn,
+                    );
+                    if (mapping?.UUID) {
+                      const { Tags } = yield* lambda
+                        .listTags({
+                          Resource: `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID}`,
+                        })
+                        .pipe(retryTransient);
+                      if (hasTags(expectedInternalTags, Tags)) {
+                        return mapping;
+                      }
+                    }
+                  }),
+                ),
+                Stream.filter((item) => item !== undefined),
+                Stream.runHead,
+                Effect.map(Option.getOrUndefined),
+              );
+          }
 
-                          if (mapping?.UUID) {
-                            const { Tags } = yield* lambda
-                              .listTags({
-                                Resource: `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID}`,
-                              })
-                              .pipe(retryTransient);
-
-                            if (hasTags(expectedInternalTags, Tags)) {
-                              return mapping;
+          // Ensure — create if no live mapping exists. Tolerate
+          // `ResourceConflictException` (peer reconciler raced ahead) by
+          // re-scanning to find the mapping by tag ownership.
+          if (!config?.UUID) {
+            config = yield* lambda
+              .createEventSourceMapping(toCreateRequest(news, desiredTags))
+              .pipe(
+                Effect.catchTags({
+                  ResourceConflictException: () =>
+                    lambda.listEventSourceMappings
+                      .pages({ FunctionName: functionName })
+                      .pipe(
+                        Stream.mapEffect(
+                          Effect.fn(function* (page) {
+                            const mapping = page.EventSourceMappings?.find(
+                              (m) => m.EventSourceArn === eventSourceArn,
+                            );
+                            if (mapping?.UUID) {
+                              const { Tags } = yield* lambda
+                                .listTags({
+                                  Resource: `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${mapping.UUID}`,
+                                })
+                                .pipe(retryTransient);
+                              if (hasTags(expectedInternalTags, Tags)) {
+                                return mapping;
+                              }
                             }
-                          }
-                        }),
-                      ),
-                      Stream.filter((item) => item !== undefined),
-                      Stream.runHead,
-                      Effect.map(Option.getOrUndefined),
-                      Effect.flatMap((mapping) =>
-                        mapping
-                          ? Effect.succeed(mapping)
-                          : Effect.die(
-                              new Error(
-                                `EventSourceMapping(${id}) not found on function ${functionName}`,
+                          }),
+                        ),
+                        Stream.filter((item) => item !== undefined),
+                        Stream.runHead,
+                        Effect.map(Option.getOrUndefined),
+                        Effect.flatMap((mapping) =>
+                          mapping
+                            ? Effect.succeed(mapping)
+                            : Effect.die(
+                                new Error(
+                                  `EventSourceMapping(${id}) not found on function ${functionName}`,
+                                ),
                               ),
-                            ),
+                        ),
                       ),
-                    ),
-              }),
-              retryPermissionsPropagation,
-              retryTransient,
+                }),
+                retryPermissionsPropagation,
+                retryTransient,
+              );
+          }
+
+          if (!config?.UUID) {
+            return yield* Effect.die(
+              new Error(`EventSourceMapping(${id}) could not be reconciled`),
             );
+          }
 
-          yield* session.note(config.EventSourceMappingArn!);
+          const uuid = config.UUID;
+          const mappingArn = `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${uuid}`;
 
-          return configToAttrs(config);
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const config = yield* lambda
-            .updateEventSourceMapping(toUpdateRequest(output.uuid, news))
+          // Sync configuration — `updateEventSourceMapping` is a full PUT
+          // for mutable fields. We always send the full desired config so
+          // observed state converges. Retry `ResourceInUseException`
+          // (mapping is transitioning) and known IAM-propagation errors.
+          config = yield* lambda
+            .updateEventSourceMapping(toUpdateRequest(uuid, news))
             .pipe(
               Effect.retry({
                 while: (e: any) =>
@@ -367,12 +416,18 @@ export const EventSourceMappingProvider = () =>
               retryTransient,
             );
 
-          const internalTags = yield* createEventSourceMappingTags(id);
-          const oldTags = { ...internalTags, ...olds.tags };
-          const newTags = { ...internalTags, ...news.tags };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
-          const mappingArn = `arn:aws:lambda:${region}:${accountId}:event-source-mapping:${output.uuid}`;
+          // Sync tags — diff observed cloud tags against desired so
+          // adoption rewrites ownership tags correctly.
+          const observedTagsResp = yield* lambda
+            .listTags({ Resource: mappingArn })
+            .pipe(retryTransient);
+          const observedTags: Record<string, string> = Object.fromEntries(
+            Object.entries(observedTagsResp.Tags ?? {}).filter(
+              (entry): entry is [string, string] =>
+                typeof entry[1] === "string",
+            ),
+          );
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
 
           if (removed.length > 0) {
             yield* lambda
@@ -389,7 +444,7 @@ export const EventSourceMappingProvider = () =>
               .pipe(retryTransient);
           }
 
-          yield* session.note(`Updated event source mapping ${output.uuid}`);
+          yield* session.note(config.EventSourceMappingArn ?? uuid);
 
           return configToAttrs(config);
         }),

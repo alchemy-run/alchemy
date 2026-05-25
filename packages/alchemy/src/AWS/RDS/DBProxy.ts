@@ -177,78 +177,82 @@ export const DBProxyProvider = () =>
           }
           return toAttrs({ proxy, tags: output?.tags ?? {} });
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const name = yield* toName(id, news);
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          yield* rds
-            .createDBProxy({
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const name = output?.dbProxyName ?? (yield* toName(id, news));
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
+
+          // Observe — fetch live proxy state.
+          let observed = yield* readProxy(name);
+
+          // Ensure — create if missing. Tolerate
+          // `DBProxyAlreadyExistsFault` as a race with a peer reconciler.
+          if (!observed?.DBProxyArn) {
+            yield* rds
+              .createDBProxy({
+                DBProxyName: name,
+                EngineFamily: news.engineFamily,
+                Auth: news.auth,
+                RoleArn: news.roleArn,
+                VpcSubnetIds: news.vpcSubnetIds,
+                VpcSecurityGroupIds: news.vpcSecurityGroupIds,
+                RequireTLS: news.requireTLS,
+                IdleClientTimeout: news.idleClientTimeout,
+                DebugLogging: news.debugLogging,
+                EndpointNetworkType: news.endpointNetworkType,
+                TargetConnectionNetworkType: news.targetConnectionNetworkType,
+                Tags: Object.entries(desiredTags).map(([Key, Value]) => ({
+                  Key,
+                  Value,
+                })),
+              })
+              .pipe(
+                Effect.catchTag("DBProxyAlreadyExistsFault", () => Effect.void),
+              );
+
+            observed = yield* waitForProxy(name);
+          } else {
+            // Sync mutable proxy config — push desired shape via
+            // `modifyDBProxy`. Rename via `NewDBProxyName` is a no-op when
+            // the desired name already matches the observed name.
+            yield* rds.modifyDBProxy({
               DBProxyName: name,
-              EngineFamily: news.engineFamily,
               Auth: news.auth,
               RoleArn: news.roleArn,
-              VpcSubnetIds: news.vpcSubnetIds,
-              VpcSecurityGroupIds: news.vpcSecurityGroupIds,
+              SecurityGroups: news.vpcSecurityGroupIds,
               RequireTLS: news.requireTLS,
               IdleClientTimeout: news.idleClientTimeout,
               DebugLogging: news.debugLogging,
-              EndpointNetworkType: news.endpointNetworkType,
-              TargetConnectionNetworkType: news.targetConnectionNetworkType,
-              Tags: Object.entries(tags).map(([Key, Value]) => ({
-                Key,
-                Value,
-              })),
-            })
-            .pipe(
-              Effect.catchTag("DBProxyAlreadyExistsFault", () => Effect.void),
-            );
+              NewDBProxyName:
+                news.dbProxyName && news.dbProxyName !== name
+                  ? news.dbProxyName
+                  : undefined,
+            });
+            observed = yield* waitForProxy(news.dbProxyName ?? name);
+          }
 
-          const proxy = yield* waitForProxy(name);
-          yield* session.note(proxy.DBProxyArn ?? name);
-          return toAttrs({ proxy, tags });
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          yield* rds.modifyDBProxy({
-            DBProxyName: output.dbProxyName,
-            Auth: news.auth,
-            RoleArn: news.roleArn,
-            SecurityGroups: news.vpcSecurityGroupIds,
-            RequireTLS: news.requireTLS,
-            IdleClientTimeout: news.idleClientTimeout,
-            DebugLogging: news.debugLogging,
-            NewDBProxyName:
-              news.dbProxyName && news.dbProxyName !== output.dbProxyName
-                ? news.dbProxyName
-                : undefined,
-          });
+          const dbProxyArn = observed.DBProxyArn ?? "";
+          const finalName = observed.DBProxyName ?? name;
 
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
-          if (upsert.length > 0) {
+          // Sync tags — diff prior recorded tags against desired (describe
+          // does not surface tags inline).
+          const observedTags = output?.tags ?? {};
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
+          if (upsert.length > 0 && dbProxyArn) {
             yield* rds.addTagsToResource({
-              ResourceName: output.dbProxyArn,
+              ResourceName: dbProxyArn,
               Tags: upsert,
             });
           }
-          if (removed.length > 0) {
+          if (removed.length > 0 && dbProxyArn) {
             yield* rds.removeTagsFromResource({
-              ResourceName: output.dbProxyArn,
+              ResourceName: dbProxyArn,
               TagKeys: removed,
             });
           }
 
-          const proxy = yield* waitForProxy(output.dbProxyName);
-          yield* session.note(output.dbProxyArn);
-          return toAttrs({ proxy, tags: newTags });
+          yield* session.note(dbProxyArn || finalName);
+          return toAttrs({ proxy: observed, tags: desiredTags });
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* rds

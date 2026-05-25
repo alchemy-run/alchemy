@@ -2,13 +2,14 @@ import * as accountManagement from "@distilled.cloud/aws/account";
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { hasAlchemyTags } from "../../Tags.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
-  ensureOwnedByAlchemy,
   readResourceTags,
   retryOrganizations,
   updateResourceTags,
@@ -83,34 +84,37 @@ export const AccountProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        read: Effect.fn(function* ({ olds, output }) {
-          if (output?.accountId) {
-            return yield* readAccountById(output.accountId);
-          }
-
-          if (!olds) {
-            return undefined;
-          }
-
-          return yield* readAccountByNameOrEmail({
-            name: olds.name,
-            email: olds.email,
-          });
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const state = output?.accountId
+            ? yield* readAccountById(output.accountId)
+            : olds
+              ? yield* readAccountByNameOrEmail({
+                  name: olds.name,
+                  email: olds.email,
+                })
+              : undefined;
+          if (!state) return undefined;
+          return (yield* hasAlchemyTags(id, state.tags))
+            ? state
+            : Unowned(state);
         }),
-        create: Effect.fn(function* ({ id, news, session }) {
-          const existing = yield* readAccountByNameOrEmail({
-            name: news.name,
-            email: news.email,
-          });
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          // Observe — locate the account by ID if known, else by
+          // name/email. We always fetch fresh: state persistence may have
+          // failed after a prior `createAccount`, leaving an account on AWS
+          // we have no record of.
+          let state = output?.accountId
+            ? yield* readAccountById(output.accountId)
+            : yield* readAccountByNameOrEmail({
+                name: news.name,
+                email: news.email,
+              });
 
-          if (existing) {
-            yield* ensureOwnedByAlchemy(
-              id,
-              existing.accountId,
-              existing.tags,
-              "account",
-            );
-          } else {
+          // Ensure — create the account if it doesn't exist. Account
+          // creation is asynchronous: `createAccount` returns a
+          // `CreateAccountStatus` which we poll until the account ID is
+          // assigned (or the request fails).
+          if (!state) {
             const createResponse = yield* retryOrganizations(
               organizations.createAccount({
                 Email: news.email,
@@ -125,78 +129,63 @@ export const AccountProvider = () =>
               const status = yield* waitForCreateAccount(requestId);
               yield* session.note(status.AccountId ?? requestId);
             }
+
+            state = yield* readAccountByNameOrEmail({
+              name: news.name,
+              email: news.email,
+            });
+            if (!state) {
+              return yield* Effect.fail(
+                new Error(`account '${news.name}' not found after create`),
+              );
+            }
           }
 
-          let created = yield* readAccountByNameOrEmail({
-            name: news.name,
-            email: news.email,
-          });
-
-          if (!created) {
-            return yield* Effect.fail(
-              new Error(`account '${news.name}' not found after create`),
-            );
-          }
-
-          if (created.parentId !== news.parentId && created.parentId) {
-            yield* retryOrganizations(
-              organizations.moveAccount({
-                AccountId: created.accountId,
-                SourceParentId: created.parentId,
-                DestinationParentId: news.parentId,
-              }),
-            );
-            created = (yield* readAccountById(created.accountId)) ?? created;
-          }
-
-          const tags = yield* updateResourceTags({
-            id,
-            resourceId: created.accountId,
-            olds: created.tags,
-            news: news.tags,
-          });
-
-          yield* session.note(created.accountArn);
-          return {
-            ...created,
-            tags,
-          };
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          if (output.name !== news.name) {
+          // Sync name — observed ↔ desired. Account name lives on the
+          // account-management service, not Organizations. The diff has
+          // already short-circuited any email change as a replacement.
+          if (state.name !== news.name) {
             yield* retryAccountManagement(
               accountManagement.putAccountName({
-                AccountId: output.accountId,
+                AccountId: state.accountId,
                 AccountName: news.name,
               }),
             );
           }
 
-          if (output.parentId && output.parentId !== news.parentId) {
+          // Sync parent — move the account if its observed parent differs
+          // from desired. We only move when we know the source parent (the
+          // API requires it).
+          if (state.parentId && state.parentId !== news.parentId) {
             yield* retryOrganizations(
               organizations.moveAccount({
-                AccountId: output.accountId,
-                SourceParentId: output.parentId,
+                AccountId: state.accountId,
+                SourceParentId: state.parentId,
                 DestinationParentId: news.parentId,
               }),
             );
           }
 
+          // Sync tags — diff observed cloud tags against desired so
+          // adoption and drift converge. We baseline against `state.tags`
+          // (fetched fresh) instead of stale `olds`.
           const tags = yield* updateResourceTags({
             id,
-            resourceId: output.accountId,
-            olds: olds.tags,
+            resourceId: state.accountId,
+            olds: state.tags,
             news: news.tags,
           });
 
-          const updated = yield* readAccountById(output.accountId);
+          const updated = yield* readAccountById(state.accountId);
           if (!updated) {
             return yield* Effect.fail(
-              new Error(`account '${output.accountId}' not found after update`),
+              new Error(
+                `account '${state.accountId}' not found after reconcile`,
+              ),
             );
           }
 
-          yield* session.note(output.accountArn);
+          yield* session.note(updated.accountArn);
           return {
             ...updated,
             tags,

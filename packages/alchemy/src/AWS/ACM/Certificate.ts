@@ -338,16 +338,34 @@ export const CertificateProvider = () =>
           const tags = yield* listCertificateTags(certificate.CertificateArn);
           return toAttrs(olds!, certificate, tags);
         }),
-        create: Effect.fn(function* ({ id, instanceId, news, session }) {
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
+        reconcile: Effect.fn(function* ({
+          id,
+          instanceId,
+          news,
+          output,
+          session,
+        }) {
+          const internalTags = yield* createInternalTags(id);
+          const desiredTags = { ...internalTags, ...news.tags };
 
-          const existing = yield* findManagedCertificate(id, news);
-          const certificate =
-            existing ??
-            (yield* withAcmRegion(
+          // Observe — find the live certificate. Domain + SAN combo plus
+          // alchemy-owned tags identify a certificate uniquely; if we have
+          // a cached ARN, prefer that as the fast path. ACM certificates
+          // can't be renamed, and most fields trigger replace via diff,
+          // so the only real ensure path is "request if no managed
+          // certificate exists".
+          let certificate = output?.certificateArn
+            ? yield* describeCertificate(output.certificateArn)
+            : undefined;
+          if (!certificate?.CertificateArn) {
+            certificate = yield* findManagedCertificate(id, news);
+          }
+
+          // Ensure — request a new certificate if none exists. The
+          // `IdempotencyToken` (derived from `instanceId`) makes the
+          // request safe to retry.
+          if (!certificate?.CertificateArn) {
+            certificate = yield* withAcmRegion(
               acm
                 .requestCertificate({
                   DomainName: news.domainName,
@@ -364,7 +382,7 @@ export const CertificateProvider = () =>
                   IdempotencyToken: instanceId
                     .replaceAll(/[^a-zA-Z0-9]/g, "")
                     .slice(0, 32),
-                  Tags: createTagsList(tags),
+                  Tags: createTagsList(desiredTags),
                 })
                 .pipe(
                   Effect.flatMap((response) =>
@@ -379,7 +397,8 @@ export const CertificateProvider = () =>
                         ),
                   ),
                 ),
-            ));
+            );
+          }
 
           if (!certificate?.CertificateArn) {
             return yield* Effect.fail(
@@ -387,64 +406,48 @@ export const CertificateProvider = () =>
             );
           }
 
-          yield* session.note(certificate.CertificateArn);
+          const certificateArn = certificate.CertificateArn;
+          yield* session.note(certificateArn);
 
+          // Sync DNS validation. If the user wired a hostedZoneId, ensure
+          // validation records are upserted and the cert reaches `ISSUED`.
+          // For an already-issued cert this is mostly a fast-path: we only
+          // wait for validation records when the cert isn't already issued.
           const shouldAutoValidate =
             (news.validationMethod ?? defaultValidationMethod) === "DNS" &&
             news.hostedZoneId !== undefined;
 
-          const finalCertificate = shouldAutoValidate
-            ? yield* Effect.gen(function* () {
-                const withRecords = yield* waitForValidationRecords(
-                  certificate.CertificateArn!,
-                );
-                yield* upsertValidationRecords(news.hostedZoneId!, withRecords);
-                return yield* waitForIssued(certificate.CertificateArn!);
-              })
-            : certificate;
+          if (shouldAutoValidate && certificate.Status !== "ISSUED") {
+            const withRecords = yield* waitForValidationRecords(certificateArn);
+            yield* upsertValidationRecords(news.hostedZoneId!, withRecords);
+            certificate = yield* waitForIssued(certificateArn);
+          }
 
-          const listedTags = yield* listCertificateTags(
-            certificate.CertificateArn,
-          );
-          return toAttrs(news, finalCertificate, listedTags);
-        }),
-        update: Effect.fn(function* ({ id, olds, news, output, session }) {
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const newTags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const { removed, upsert } = diffTags(oldTags, newTags);
+          // Sync tags — diff observed cloud tags against desired so
+          // adoption rewrites ownership tags correctly.
+          const observedTags = yield* listCertificateTags(certificateArn);
+          const { removed, upsert } = diffTags(observedTags, desiredTags);
 
           if (upsert.length > 0) {
             yield* withAcmRegion(
               acm.addTagsToCertificate({
-                CertificateArn: output.certificateArn,
+                CertificateArn: certificateArn,
                 Tags: upsert,
               }),
             );
           }
-
           if (removed.length > 0) {
             yield* withAcmRegion(
               acm.removeTagsFromCertificate({
-                CertificateArn: output.certificateArn,
+                CertificateArn: certificateArn,
                 Tags: removed.map((Key) => ({ Key })),
               }),
             );
           }
 
-          const detail = yield* describeCertificate(output.certificateArn);
-          if (!detail?.CertificateArn) {
-            return output;
-          }
-
-          yield* session.note(output.certificateArn);
-          const tags = yield* listCertificateTags(output.certificateArn);
-          return toAttrs(news, detail, tags);
+          // Re-read so the returned attributes reflect any tag mutation.
+          const finalTags = yield* listCertificateTags(certificateArn);
+          return toAttrs(news, certificate, finalTags);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* withAcmRegion(

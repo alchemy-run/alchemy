@@ -81,49 +81,34 @@ export const GatewayResponseProvider = () =>
             statusCode: g.statusCode,
           };
         }),
-        create: Effect.fn(function* ({ news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("GatewayResponse props were not resolved");
           }
           const news = newsIn as Input.ResolveProps<GatewayResponseProps>;
+          const restApiId = (output?.restApiId ?? news.restApiId) as string;
+          const responseType = output?.responseType ?? news.responseType;
+
+          // Observe + Ensure + Sync as one atomic op.
+          // `putGatewayResponse` is an upsert: it creates the response if
+          // missing, replaces it if present. The reconciler is therefore a
+          // single put against the desired state regardless of whether
+          // `output` exists.
           yield* retryOnApiStatusUpdating(
             ag.putGatewayResponse({
-              restApiId: news.restApiId as string,
-              responseType: news.responseType,
+              restApiId,
+              responseType,
               statusCode: news.statusCode,
               responseParameters: news.responseParameters,
               responseTemplates: news.responseTemplates,
             }),
           );
           yield* session.note(
-            `Put gateway response ${news.responseType} on ${news.restApiId}`,
+            `Reconciled gateway response ${responseType} on ${restApiId}`,
           );
           return {
-            restApiId: news.restApiId as string,
-            responseType: news.responseType,
-            statusCode: news.statusCode,
-          };
-        }),
-        update: Effect.fn(function* ({ news: newsIn, output, session }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("GatewayResponse props were not resolved");
-          }
-          const news = newsIn as Input.ResolveProps<GatewayResponseProps>;
-          yield* retryOnApiStatusUpdating(
-            ag.putGatewayResponse({
-              restApiId: output.restApiId,
-              responseType: output.responseType,
-              statusCode: news.statusCode,
-              responseParameters: news.responseParameters,
-              responseTemplates: news.responseTemplates,
-            }),
-          );
-          yield* session.note(
-            `Updated gateway response ${output.responseType}`,
-          );
-          return {
-            restApiId: output.restApiId,
-            responseType: output.responseType,
+            restApiId,
+            responseType,
             statusCode: news.statusCode,
           };
         }),

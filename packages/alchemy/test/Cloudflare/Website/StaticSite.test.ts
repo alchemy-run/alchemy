@@ -23,7 +23,7 @@ const logLevel = Effect.provideService(
 );
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "staticsite-fixture");
-const workerEntry = pathe.resolve(import.meta.dirname, "../Workers/worker.ts");
+const workerEntry = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
 
 test.provider(
   "StaticSite: editing a source file republishes the assets in a single deploy",
@@ -142,7 +142,10 @@ test.provider(
 
       const site1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.StaticSite("RelocSite", staticSiteProps(cwdA));
+          return yield* Cloudflare.StaticSite(
+            "RelocSite",
+            staticSiteProps(cwdA),
+          );
         }),
       );
       expect(site1.hash?.assets).toBeDefined();
@@ -168,7 +171,10 @@ test.provider(
 
       const site2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Cloudflare.StaticSite("RelocSite", staticSiteProps(cwdB));
+          return yield* Cloudflare.StaticSite(
+            "RelocSite",
+            staticSiteProps(cwdB),
+          );
         }),
       );
 

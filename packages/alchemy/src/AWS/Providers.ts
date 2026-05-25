@@ -1,8 +1,22 @@
 import {
-  makeDefault as defaultRetryPolicy,
+  isRetryable,
+  isThrottlingError,
+  isTransientError,
+} from "@distilled.cloud/aws/Category";
+import {
+  capped,
+  jittered,
   Retry,
+  type Factory as RetryFactory,
 } from "@distilled.cloud/aws/Retry";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import * as Schedule from "effect/Schedule";
+import * as HttpClientError from "effect/unstable/http/HttpClientError";
+import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { Command, CommandProvider } from "../Build/Command.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
@@ -21,6 +35,7 @@ import * as ECS from "./ECS/index.ts";
 import * as EKS from "./EKS/index.ts";
 import * as ELBv2 from "./ELBv2/index.ts";
 import * as Endpoint from "./Endpoint.ts";
+import { Default as DefaultEnvironment } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
 import * as IAM from "./IAM/index.ts";
 import * as IdentityCenter from "./IdentityCenter/index.ts";
@@ -37,7 +52,6 @@ import * as Scheduler from "./Scheduler/index.ts";
 import * as SecretsManager from "./SecretsManager/index.ts";
 import * as SNS from "./SNS/index.ts";
 import * as SQS from "./SQS/index.ts";
-import { Default as DefaultEnvironment } from "./Environment.ts";
 import * as Website from "./Website/index.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()(
@@ -566,15 +580,55 @@ export const providers = () =>
     Layer.provideMerge(Endpoint.fromEnvironment),
     Layer.provideMerge(DefaultEnvironment),
     Layer.provideMerge(AwsAuth),
-    // Apply a blanket retry policy to every AWS SDK call issued by any
-    // resource provider. `makeDefault` is the same retry policy the SDK
-    // itself applies: retries throttling (`TooManyRequests`, etc.), 5xx
-    // responses, and errors tagged with Smithy's @retryable trait, with
-    // exponential backoff, jitter, `RetryAfter` header awareness, and a
-    // cap of 5 attempts. The cap is important: unbounded retries (like
-    // `transientOptions`) mask real rate-limit pressure as an indefinite
-    // hang. This benefits every user of the AWS providers, not just tests,
-    // by absorbing transient failures without hiding systemic issues.
-    Layer.provideMerge(Layer.succeed(Retry, defaultRetryPolicy)),
+    Layer.provideMerge(CredentialsStoreLive),
+    // Apply a blanket retry policy to every AWS SDK call. Like distilled's
+    // `makeDefault` it retries throttling, 5xx, and Smithy `@retryable`
+    // errors with exponential backoff + jitter + `RetryAfter` header
+    // awareness, but with a higher attempt cap (10 vs 5) so heavy
+    // parallel deploys ride out S3 `SlowDown` bursts that span more than
+    // a few seconds. Bounded so real rate-limit pressure still surfaces
+    // instead of masking as an indefinite hang.
+    Layer.provideMerge(Layer.succeed(Retry, awsRetryFactory)),
     Layer.orDie,
   );
+
+// TODO(sam): remove this once it's upstreamed to distilled
+const isHttpTransportError = (error: unknown): boolean => {
+  if (!HttpClientError.isHttpClientError(error)) return false;
+  const tag = error.reason._tag;
+  if (tag === "TransportError") return true;
+  if (
+    tag === "StatusCodeError" &&
+    "response" in error.reason &&
+    error.reason.response.status >= 500
+  ) {
+    return true;
+  }
+  return false;
+};
+
+const awsRetryFactory: RetryFactory = (lastError) => ({
+  while: (error) =>
+    isTransientError(error) ||
+    isThrottlingError(error) ||
+    isRetryable(error) ||
+    isHttpTransportError(error),
+  schedule: pipe(
+    Schedule.exponential(Duration.millis(200), 2),
+    Schedule.modifyDelay(
+      Effect.fnUntraced(function* (duration) {
+        const error = yield* Ref.get(lastError);
+        if (isThrottlingError(error)) {
+          // Throttling: floor at 500ms (matches distilled default).
+          if (Duration.toMillis(duration) < 500) {
+            return Duration.toMillis(Duration.millis(500));
+          }
+        }
+        return Duration.toMillis(duration);
+      }),
+    ),
+    capped(Duration.seconds(5)),
+    jittered,
+    Schedule.both(Schedule.recurs(10)),
+  ),
+});

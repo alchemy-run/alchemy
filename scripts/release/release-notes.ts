@@ -49,7 +49,4 @@ const { commits, config } = await generate({
 
 const md = renderMarkdown(commits, config);
 
-await writeFile(
-  changelogPath,
-  `## ${tag}\n\n${md}\n\n---\n\n${existing}`,
-);
+await writeFile(changelogPath, `## ${tag}\n\n${md}\n\n---\n\n${existing}`);

@@ -26,6 +26,7 @@ interface Page {
   slug: string;
   title: string;
   description: string;
+  draft: boolean;
 }
 
 interface Section {
@@ -182,6 +183,7 @@ async function loadPage(slug: string): Promise<Page> {
         slug,
         title,
         description,
+        draft: fm.draft === "true" || (fm.draft as unknown as boolean) === true,
       };
     } catch (err: any) {
       if (err?.code !== "ENOENT") throw err;
@@ -190,7 +192,10 @@ async function loadPage(slug: string): Promise<Page> {
   throw new Error(`Page not found: ${slug} (looked for .mdx and .md)`);
 }
 
-async function listSlugs(directory: string, exclude: string[] = []): Promise<string[]> {
+async function listSlugs(
+  directory: string,
+  exclude: string[] = [],
+): Promise<string[]> {
   const dir = path.join(docsDir, directory);
   const entries = await readdir(dir, { withFileTypes: true });
   const slugs: string[] = [];
@@ -220,7 +225,9 @@ async function main() {
       "slugs" in section.pages
         ? section.pages.slugs
         : await listSlugs(section.pages.directory, section.pages.exclude);
-    const pages = await Promise.all(slugs.map(loadPage));
+    const pages = (await Promise.all(slugs.map(loadPage))).filter(
+      (p) => !p.draft,
+    );
 
     parts.push(`## ${section.heading}`);
     if (section.intro) parts.push(section.intro);

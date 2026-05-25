@@ -58,37 +58,44 @@ export const RootPolicyTypeProvider = () =>
             policyType: output?.policyType ?? olds!.policyType,
           });
         }),
-        create: Effect.fn(function* ({ news, session }) {
-          yield* retryOrganizations(
-            organizations
-              .enablePolicyType({
-                RootId: news.rootId,
-                PolicyType: news.policyType,
-              })
-              .pipe(
-                Effect.catchTag(
-                  "PolicyTypeAlreadyEnabledException",
-                  () => Effect.void,
-                ),
-              ),
-          );
+        reconcile: Effect.fn(function* ({ news, session }) {
+          // Observe — read the root's policy-type list to see whether our
+          // type is already enabled. Both `rootId` and `policyType` are
+          // stable identifiers, so `diff` replaces on any change.
+          let state = yield* readRootPolicyType(news);
 
-          const state = yield* readRootPolicyType(news);
+          // Ensure — enable if missing. Tolerate
+          // `PolicyTypeAlreadyEnabledException` for idempotency. The list
+          // can lag behind the enable call, so we fall back to a
+          // `PENDING_ENABLE` synthetic state when read still returns nothing.
           if (!state) {
-            return {
-              rootId: news.rootId,
-              rootArn: undefined,
-              policyType: news.policyType,
-              status: "PENDING_ENABLE",
-            } satisfies RootPolicyType["Attributes"];
+            yield* retryOrganizations(
+              organizations
+                .enablePolicyType({
+                  RootId: news.rootId,
+                  PolicyType: news.policyType,
+                })
+                .pipe(
+                  Effect.catchTag(
+                    "PolicyTypeAlreadyEnabledException",
+                    () => Effect.void,
+                  ),
+                ),
+            );
+
+            state = yield* readRootPolicyType(news);
+            if (!state) {
+              return {
+                rootId: news.rootId,
+                rootArn: undefined,
+                policyType: news.policyType,
+                status: "PENDING_ENABLE",
+              } satisfies RootPolicyType["Attributes"];
+            }
           }
 
           yield* session.note(state.rootArn ?? state.rootId);
           return state;
-        }),
-        update: Effect.fn(function* ({ output, session }) {
-          yield* session.note(output.rootArn ?? output.rootId);
-          return output;
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* retryOrganizations(

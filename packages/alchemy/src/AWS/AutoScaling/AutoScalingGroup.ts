@@ -283,9 +283,10 @@ export const AutoScalingGroupProvider = () =>
           const group = yield* describeGroup(name);
           return group ? toAttributes(group) : undefined;
         }),
-        create: Effect.fn(function* ({ id, news, output, session }) {
-          const autoScalingGroupName = yield* toName(id, news);
-          const tags = {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const autoScalingGroupName =
+            output?.autoScalingGroupName ?? (yield* toName(id, news));
+          const desiredTags = {
             ...(yield* createInternalTags(id)),
             ...news.tags,
           };
@@ -293,125 +294,105 @@ export const AutoScalingGroupProvider = () =>
             (news.targetGroupArns ?? []) as string[],
           );
           const launchTemplate = toLaunchTemplateSpec(news.launchTemplate);
-          const existing =
-            output?.autoScalingGroupName === autoScalingGroupName
-              ? yield* describeGroup(autoScalingGroupName)
-              : yield* describeGroup(autoScalingGroupName);
+          const healthCheckType =
+            news.healthCheckType ??
+            (targetGroupArns.length > 0 ? "ELB" : "EC2");
 
+          // Observe — fetch live state. `describeAutoScalingGroups` returns
+          // an empty list when the ASG is missing; we never trust `output`
+          // alone since the ASG may have been deleted out of band.
+          let existing = yield* describeGroup(autoScalingGroupName);
+
+          // Ensure — create the ASG if missing. `createAutoScalingGroup`
+          // raises `AlreadyExistsFault` on a race; we fall through to the
+          // sync path on that case.
           if (!existing) {
-            yield* autoscaling.createAutoScalingGroup({
-              AutoScalingGroupName: autoScalingGroupName,
-              MinSize: news.minSize,
-              MaxSize: news.maxSize,
-              DesiredCapacity: news.desiredCapacity ?? news.minSize,
-              LaunchTemplate: launchTemplate,
-              VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
-              TargetGroupARNs: targetGroupArns,
-              HealthCheckType:
-                news.healthCheckType ??
-                (targetGroupArns.length > 0 ? "ELB" : "EC2"),
-              HealthCheckGracePeriod: news.healthCheckGracePeriod,
-              DefaultCooldown: news.defaultCooldown,
-              TerminationPolicies: news.terminationPolicies,
-              Tags: toTags(autoScalingGroupName, tags),
-            } as any);
-          } else {
-            yield* autoscaling.updateAutoScalingGroup({
-              AutoScalingGroupName: autoScalingGroupName,
-              MinSize: news.minSize,
-              MaxSize: news.maxSize,
-              DesiredCapacity: news.desiredCapacity ?? news.minSize,
-              LaunchTemplate: launchTemplate,
-              VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
-              HealthCheckType:
-                news.healthCheckType ??
-                (targetGroupArns.length > 0 ? "ELB" : "EC2"),
-              HealthCheckGracePeriod: news.healthCheckGracePeriod,
-              DefaultCooldown: news.defaultCooldown,
-              TerminationPolicies: news.terminationPolicies,
-            } as any);
-            yield* syncTargetGroups({
-              autoScalingGroupName,
-              oldTargetGroupArns: sortStrings(existing.TargetGroupARNs ?? []),
-              newTargetGroupArns: targetGroupArns,
-            });
-            yield* syncTags({
-              autoScalingGroupName,
-              oldTags: toAttributes(existing).tags,
-              newTags: tags,
-            });
+            yield* autoscaling
+              .createAutoScalingGroup({
+                AutoScalingGroupName: autoScalingGroupName,
+                MinSize: news.minSize,
+                MaxSize: news.maxSize,
+                DesiredCapacity: news.desiredCapacity ?? news.minSize,
+                LaunchTemplate: launchTemplate,
+                VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
+                TargetGroupARNs: targetGroupArns,
+                HealthCheckType: healthCheckType,
+                HealthCheckGracePeriod: news.healthCheckGracePeriod,
+                DefaultCooldown: news.defaultCooldown,
+                TerminationPolicies: news.terminationPolicies,
+                Tags: toTags(autoScalingGroupName, desiredTags),
+              } as any)
+              .pipe(
+                Effect.catch((error: any) =>
+                  error?._tag === "AlreadyExistsFault"
+                    ? Effect.void
+                    : Effect.fail(error),
+                ),
+              );
+
+            existing = yield* describeGroup(autoScalingGroupName).pipe(
+              Effect.filterOrFail(
+                Boolean,
+                () =>
+                  new Error(
+                    `Auto Scaling Group '${autoScalingGroupName}' was not readable after create`,
+                  ),
+              ),
+              Effect.retry({
+                while: () => true,
+                schedule: Schedule.recurs(8).pipe(
+                  Schedule.both(Schedule.exponential("250 millis")),
+                ),
+              }),
+            );
           }
 
-          const group = yield* describeGroup(autoScalingGroupName).pipe(
-            Effect.filterOrFail(
-              Boolean,
-              () =>
-                new Error(
-                  `Auto Scaling Group '${autoScalingGroupName}' was not readable after create`,
-                ),
-            ),
-            Effect.retry({
-              while: () => true,
-              schedule: Schedule.recurs(8).pipe(
-                Schedule.both(Schedule.exponential("250 millis")),
-              ),
-            }),
-          );
-
-          yield* session.note(autoScalingGroupName);
-          return toAttributes(group);
-        }),
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const tags = {
-            ...(yield* createInternalTags(id)),
-            ...news.tags,
-          };
-          const oldTags = {
-            ...(yield* createInternalTags(id)),
-            ...olds.tags,
-          };
-          const targetGroupArns = sortStrings(
-            (news.targetGroupArns ?? []) as string[],
-          );
-
+          // Sync core ASG configuration — `updateAutoScalingGroup`
+          // overwrites min/max/desired/template/subnets/health-check
+          // settings in one call, so we issue it unconditionally
+          // (idempotent for matching values).
           yield* autoscaling.updateAutoScalingGroup({
-            AutoScalingGroupName: output.autoScalingGroupName,
+            AutoScalingGroupName: autoScalingGroupName,
             MinSize: news.minSize,
             MaxSize: news.maxSize,
             DesiredCapacity: news.desiredCapacity ?? news.minSize,
-            LaunchTemplate: toLaunchTemplateSpec(news.launchTemplate),
+            LaunchTemplate: launchTemplate,
             VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
-            HealthCheckType:
-              news.healthCheckType ??
-              (targetGroupArns.length > 0 ? "ELB" : "EC2"),
+            HealthCheckType: healthCheckType,
             HealthCheckGracePeriod: news.healthCheckGracePeriod,
             DefaultCooldown: news.defaultCooldown,
             TerminationPolicies: news.terminationPolicies,
           } as any);
 
+          // Sync target groups — observed cloud attachments vs desired.
+          const observedAttrs = toAttributes(existing);
           yield* syncTargetGroups({
-            autoScalingGroupName: output.autoScalingGroupName,
-            oldTargetGroupArns: sortStrings(
-              (olds.targetGroupArns ?? []) as string[],
-            ),
+            autoScalingGroupName,
+            oldTargetGroupArns: sortStrings(existing.TargetGroupARNs ?? []),
             newTargetGroupArns: targetGroupArns,
           });
+
+          // Sync tags — observed cloud tags vs desired. Adoption brings
+          // tags through `existing.Tags`; we converge regardless of what
+          // was there before.
           yield* syncTags({
-            autoScalingGroupName: output.autoScalingGroupName,
-            oldTags,
-            newTags: tags,
+            autoScalingGroupName,
+            oldTags: observedAttrs.tags,
+            newTags: desiredTags,
           });
 
-          const group = yield* describeGroup(output.autoScalingGroupName).pipe(
+          // Re-read final state so attributes reflect post-sync cloud
+          // state.
+          const group = yield* describeGroup(autoScalingGroupName).pipe(
             Effect.filterOrFail(
               Boolean,
               () =>
                 new Error(
-                  `Auto Scaling Group '${output.autoScalingGroupName}' was not readable after update`,
+                  `Auto Scaling Group '${autoScalingGroupName}' was not readable after reconcile`,
                 ),
             ),
           );
-          yield* session.note(output.autoScalingGroupName);
+          yield* session.note(autoScalingGroupName);
           return toAttributes(group);
         }),
         delete: Effect.fn(function* ({ output }) {

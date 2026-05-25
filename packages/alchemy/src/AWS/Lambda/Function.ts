@@ -10,9 +10,11 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
+import { Unowned } from "../../AdoptPolicy.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
@@ -26,7 +28,12 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Self } from "../../Self.ts";
 import * as Serverless from "../../Serverless/index.ts";
 import { Stack } from "../../Stack.ts";
-import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  hasAlchemyTags,
+  hasTags,
+} from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";
@@ -351,7 +358,7 @@ export const Function: Platform<
   FunctionShape,
   Serverless.FunctionContext
 > = Platform(FunctionTypeId, {
-  createExecutionContext: (id: string): Serverless.FunctionContext => {
+  createRuntimeContext: (id: string): Serverless.FunctionContext => {
     const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
     const env: Record<string, any> = {};
 
@@ -362,27 +369,52 @@ export const Function: Platform<
       set: (id: string, output: Output.Output) =>
         Effect.sync(() => {
           const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+          // Preserve `Redacted`-ness across the Output → Lambda env var
+          // round-trip. `JSON.stringify(Redacted)` would emit the literal
+          // string `"<redacted>"` and lose the value, so secrets are
+          // serialized with a `{_tag: "Redacted", value: ...}` marker
+          // that the runtime `get` path detects and rebuilds.
+          env[key] = output.pipe(
+            Output.map((value) =>
+              Redacted.isRedacted(value)
+                ? JSON.stringify({
+                    _tag: "Redacted",
+                    value: Redacted.value(value),
+                  })
+                : JSON.stringify(value),
+            ),
+          );
           return key;
         }),
       get: <T>(key: string) =>
-        Config.string(key)
-          .asEffect()
-          .pipe(
-            Effect.flatMap((val) =>
-              Effect.try({
-                try: () => JSON.parse(val) as T,
-                catch: () => val, // assume it's just a string
+        Config.string(key).pipe(
+          Effect.flatMap((val) =>
+            Effect.try({
+              try: () => {
+                const value = JSON.parse(val);
+                if (
+                  value !== null &&
+                  typeof value === "object" &&
+                  (value as { _tag?: unknown })._tag === "Redacted" &&
+                  "value" in (value as object)
+                ) {
+                  return Redacted.make(
+                    (value as { value: unknown }).value,
+                  ) as unknown as T;
+                }
+                return value as T;
+              },
+              catch: () => val, // assume it's just a string
+            }),
+          ),
+          Effect.catch((cause) =>
+            Effect.die(
+              new Error(`Failed to get environment variable: ${key}`, {
+                cause,
               }),
             ),
-            Effect.catch((cause) =>
-              Effect.die(
-                new Error(`Failed to get environment variable: ${key}`, {
-                  cause,
-                }),
-              ),
-            ),
           ),
+        ),
       serve: (handler: HttpEffect) =>
         ctx.listen(makeFunctionHttpHandler(handler)),
       listen: ((
@@ -533,6 +565,9 @@ export const FunctionProvider = () =>
       }) {
         yield* Effect.logDebug(`creating role ${id}`);
         const tags = yield* createInternalTags(id);
+        // Engine has cleared us via `read` — foreign-tagged functions are
+        // surfaced as `Unowned` and require `--adopt`. On a race between
+        // read and create, treat `EntityAlreadyExistsException` as adoption.
         const role = yield* iam
           .createRole({
             RoleName: roleName,
@@ -552,19 +587,9 @@ export const FunctionProvider = () =>
           })
           .pipe(
             Effect.catchTag("EntityAlreadyExistsException", () =>
-              iam
-                .getRole({
-                  RoleName: roleName,
-                })
-                .pipe(
-                  Effect.filterOrFail(
-                    (role) => hasTags(tags, role.Role?.Tags),
-                    () =>
-                      new Error(
-                        `Role ${roleName} exists but has incorrect tags`,
-                      ),
-                  ),
-                ),
+              iam.getRole({
+                RoleName: roleName,
+              }),
             ),
           );
 
@@ -642,6 +667,7 @@ export const FunctionProvider = () =>
                 (importPath) => `
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import { Stack } from "alchemy/Stack";
+import { makeEntrypointLayer } from "alchemy/Runtime";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
@@ -653,13 +679,10 @@ import * as Region from "@distilled.cloud/aws/Region";
 import * as Context from "effect/Context";
 import { MinimumLogLevel } from "effect/References";
 
-import entry from "${importPath}";
+import entrypoint from ${JSON.stringify(importPath)};
 
 const tag = Context.Service("${Self.key}")
-const layer =
-  typeof entry?.build === "function"
-    ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
+const layer = makeEntrypointLayer(tag, entrypoint);
 
 const platform = Layer.mergeAll(
   nodeServicesLayer,
@@ -671,8 +694,8 @@ const platform = Layer.mergeAll(
 const stack = Layer.effect(
   Stack,
   Effect.all([
-    Config.string("ALCHEMY_STACK_NAME").asEffect(),
-    Config.string("ALCHEMY_STAGE").asEffect()
+    Config.string("ALCHEMY_STACK_NAME"),
+    Config.string("ALCHEMY_STAGE")
   ]).pipe(
     Effect.map(([name, stage]) => ({
       name,
@@ -683,8 +706,8 @@ const stack = Layer.effect(
   )
 );
 
-const handlerEffect = tag.asEffect().pipe(
-  Effect.flatMap(func => func.ExecutionContext.exports),
+const handlerEffect = tag.pipe(
+  Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.flatMap(exports => exports.handler),
   Effect.provide(
     layer.pipe(
@@ -1099,31 +1122,55 @@ export default await Effect.runPromise(handlerEffect)
             return { action: "update" };
           }
         }),
-        read: Effect.fnUntraced(function* ({ id, output }) {
-          if (output) {
-            yield* Effect.logDebug(`reading function ${id}`);
-            // example: refresh the function URL from the API
-            return {
-              ...output,
-              functionUrl: (yield* Lambda.getFunctionUrlConfig({
-                FunctionName: yield* createFunctionName(
-                  id,
-                  output.functionName,
-                ),
-              }).pipe(
-                Effect.map((f) => f.FunctionUrl),
-                Effect.retry({
-                  // TODO(sam): did we lose this error? Is it missing for a good
-                  while: (e: any) => e._tag === "ResourceConflictException",
-                  schedule: Schedule.exponential(100),
-                }),
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              )) as any,
-            };
+        read: Effect.fnUntraced(function* ({ id, olds, output }) {
+          const functionName =
+            output?.functionName ??
+            (yield* createFunctionName(id, olds?.functionName));
+          yield* Effect.logDebug(`reading function ${functionName}`);
+          const fn = yield* Lambda.getFunction({
+            FunctionName: functionName,
+          }).pipe(
+            Effect.map((r) => r.Configuration),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          if (!fn?.FunctionArn || !fn.FunctionName || !fn.Role) {
+            return undefined;
           }
-          return output;
+          const tagsResult = yield* Lambda.listTags({
+            Resource: fn.FunctionArn,
+          }).pipe(
+            Effect.map((r) => r.Tags ?? {}),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed({} as Record<string, string>),
+            ),
+          );
+          const functionUrl = yield* Lambda.getFunctionUrlConfig({
+            FunctionName: fn.FunctionName,
+          }).pipe(
+            Effect.map((f) => f.FunctionUrl),
+            Effect.retry({
+              while: (e: any) => e._tag === "ResourceConflictException",
+              schedule: Schedule.exponential(100),
+            }),
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+          // Reuse the persisted output where we have it (e.g. code hash) so
+          // diff doesn't see drift it can't reconstruct from the API.
+          const attrs = {
+            ...(output ?? {}),
+            functionArn: fn.FunctionArn,
+            functionName: fn.FunctionName,
+            functionUrl,
+            roleArn: fn.Role,
+            roleName: output?.roleName ?? fn.Role.split("/").pop()!,
+          } as any;
+          return (yield* hasAlchemyTags(id, tagsResult))
+            ? attrs
+            : Unowned(attrs);
         }),
 
         precreate: Effect.fnUntraced(function* ({ id, news, session }) {
@@ -1164,9 +1211,10 @@ export default await Effect.runPromise(handlerEffect)
             roleArn,
           };
         }),
-        create: Effect.fnUntraced(function* ({
+        reconcile: Effect.fnUntraced(function* ({
           id,
           news,
+          olds,
           bindings,
           output,
           session,
@@ -1207,71 +1255,18 @@ export default await Effect.runPromise(handlerEffect)
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,
             url: news.url,
+            oldUrl: olds?.url,
           });
 
           yield* session.note(summary({ code }));
 
           return {
+            ...(output ?? {}),
             functionArn,
             functionName,
             functionUrl: functionUrl as any,
             roleName,
             roleArn,
-            code: {
-              hash,
-            },
-          };
-        }),
-        update: Effect.fnUntraced(function* ({
-          id,
-          news,
-          olds,
-          bindings,
-          output,
-          session,
-        }) {
-          const { roleName, policyName, functionName, functionArn } =
-            yield* createNames(id, news.functionName);
-
-          const env = yield* attachBindings({
-            roleName,
-            policyName,
-            functionArn,
-            functionName,
-            bindings,
-          });
-
-          const { archive, code, hash } = yield* bundleCode(id, news);
-
-          yield* createOrUpdateFunction({
-            id,
-            news,
-            roleArn: output.roleArn,
-            archive,
-            hash,
-            env: {
-              ...env,
-              ...news.env,
-            },
-            functionName,
-            session,
-          });
-
-          const functionUrl = yield* createOrUpdateFunctionUrl({
-            functionName,
-            url: news.url,
-            oldUrl: olds.url,
-          });
-
-          yield* session.note(summary({ code }));
-
-          return {
-            ...output,
-            functionArn,
-            functionName,
-            functionUrl: functionUrl as any,
-            roleName,
-            roleArn: output.roleArn,
             code: {
               hash,
             },

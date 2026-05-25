@@ -249,7 +249,7 @@ export const DeploymentProvider = () =>
             description: d.description,
           };
         }),
-        create: Effect.fn(function* ({ news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("Deployment props were not resolved");
           }
@@ -258,41 +258,59 @@ export const DeploymentProvider = () =>
             news.description,
             news.triggers as Record<string, string> | undefined,
           );
-          const d = yield* retryOnApiStatusUpdating(
-            ag.createDeployment({
+          const restApiId = (output?.restApiId ?? news.restApiId) as string;
+
+          // Observe — fetch the live deployment if we have a cached id.
+          // A Deployment is immutable apart from `description`, so we never
+          // trust a stale `output.description` for diffing.
+          let observed = output?.deploymentId
+            ? yield* ag
+                .getDeployment({
+                  restApiId,
+                  deploymentId: output.deploymentId,
+                })
+                .pipe(
+                  Effect.catchTag("NotFoundException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                )
+            : undefined;
+
+          // Ensure — create a new deployment if there isn't one yet.
+          // `createDeployment` always produces a fresh deploymentId, so we
+          // only call it when missing; any change that should produce a new
+          // deployment is modeled as `replace` in `diff`.
+          if (!observed?.id) {
+            const created = yield* retryOnApiStatusUpdating(
+              ag.createDeployment({
+                restApiId: news.restApiId as string,
+                stageName: news.stageName,
+                stageDescription: news.stageDescription,
+                description,
+                cacheClusterEnabled: news.cacheClusterEnabled,
+                cacheClusterSize: news.cacheClusterSize,
+                variables: news.variables,
+                canarySettings: news.canarySettings,
+                tracingEnabled: news.tracingEnabled,
+              }),
+            );
+            if (!created.id)
+              return yield* Effect.die("createDeployment missing id");
+            yield* session.note(`Created deployment ${created.id}`);
+            observed = yield* ag.getDeployment({
               restApiId: news.restApiId as string,
-              stageName: news.stageName,
-              stageDescription: news.stageDescription,
-              description,
-              cacheClusterEnabled: news.cacheClusterEnabled,
-              cacheClusterSize: news.cacheClusterSize,
-              variables: news.variables,
-              canarySettings: news.canarySettings,
-              tracingEnabled: news.tracingEnabled,
-            }),
-          );
-          if (!d.id) return yield* Effect.die("createDeployment missing id");
-          yield* session.note(`Created deployment ${d.id}`);
-          return {
-            deploymentId: d.id,
-            restApiId: news.restApiId as string,
-            description: d.description,
-          };
-        }),
-        update: Effect.fn(function* ({ news: newsIn, output, session }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("Deployment props were not resolved");
+              deploymentId: created.id,
+            });
           }
-          const news = newsIn as Input.ResolveProps<DeploymentProps>;
-          const description = yield* embedTriggers(
-            news.description,
-            news.triggers as Record<string, string> | undefined,
-          );
-          if (description !== output.description) {
+
+          const deploymentId = observed.id!;
+
+          // Sync description — observed ↔ desired.
+          if (description !== observed.description) {
             yield* retryOnApiStatusUpdating(
               ag.updateDeployment({
-                restApiId: output.restApiId,
-                deploymentId: output.deploymentId,
+                restApiId,
+                deploymentId,
                 patchOperations: description
                   ? [
                       {
@@ -305,15 +323,16 @@ export const DeploymentProvider = () =>
               }),
             );
           }
-          yield* session.note(`Updated deployment ${output.deploymentId}`);
-          const d = yield* ag.getDeployment({
-            restApiId: output.restApiId,
-            deploymentId: output.deploymentId,
+
+          yield* session.note(`Reconciled deployment ${deploymentId}`);
+          const final = yield* ag.getDeployment({
+            restApiId,
+            deploymentId,
           });
           return {
-            deploymentId: output.deploymentId,
-            restApiId: output.restApiId,
-            description: d?.description,
+            deploymentId,
+            restApiId,
+            description: final?.description,
           };
         }),
         delete: Effect.fn(function* ({ output, session }) {

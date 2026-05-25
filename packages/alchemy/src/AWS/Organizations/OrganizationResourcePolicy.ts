@@ -62,38 +62,39 @@ export const OrganizationResourcePolicyProvider = () =>
         read: Effect.fn(function* () {
           return yield* readResourcePolicy();
         }),
-        create: Effect.fn(function* ({ news, session }) {
-          yield* retryOrganizations(
-            organizations.putResourcePolicy({
-              Content: JSON.stringify(news.document),
-            }),
-          );
+        reconcile: Effect.fn(function* ({ news, session }) {
+          const desiredContent = JSON.stringify(news.document);
 
-          const state = yield* readResourcePolicy();
+          // Observe — fetch the live resource policy (or absence).
+          let state = yield* readResourcePolicy();
+
+          // Sync — `putResourcePolicy` is a single upsert that handles both
+          // first-create and update. We diff observed content against
+          // desired so the call only fires when there's drift. Reading by
+          // ID isn't possible (resource is a singleton with a server-issued
+          // ID), so we compare the JSON-stringified document.
+          const observedContent = state
+            ? JSON.stringify(state.document)
+            : undefined;
+
+          if (observedContent !== desiredContent) {
+            yield* retryOrganizations(
+              organizations.putResourcePolicy({
+                Content: desiredContent,
+              }),
+            );
+            state = yield* readResourcePolicy();
+          }
+
           if (!state) {
             return yield* Effect.fail(
-              new Error("organization resource policy not found after create"),
+              new Error(
+                "organization resource policy not found after reconcile",
+              ),
             );
           }
 
           yield* session.note(state.resourcePolicyArn);
-          return state;
-        }),
-        update: Effect.fn(function* ({ news, output, session }) {
-          yield* retryOrganizations(
-            organizations.putResourcePolicy({
-              Content: JSON.stringify(news.document),
-            }),
-          );
-
-          const state = yield* readResourcePolicy();
-          if (!state) {
-            return yield* Effect.fail(
-              new Error("organization resource policy not found after update"),
-            );
-          }
-
-          yield* session.note(output.resourcePolicyArn);
           return state;
         }),
         delete: Effect.fn(function* () {

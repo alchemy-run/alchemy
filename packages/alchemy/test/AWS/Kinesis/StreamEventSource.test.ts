@@ -21,9 +21,7 @@ describe.sequential("AWS.Kinesis.StreamEventSource", () => {
         yield* stack.destroy();
 
         const streamFunction = yield* stack.deploy(
-          KinesisStreamFunction.asEffect().pipe(
-            Effect.provide(KinesisStreamFunctionLive),
-          ),
+          KinesisStreamFunction.pipe(Effect.provide(KinesisStreamFunctionLive)),
         );
 
         const functionUrl = streamFunction.functionUrl!;

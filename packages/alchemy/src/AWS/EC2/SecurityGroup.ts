@@ -315,131 +315,78 @@ export const SecurityGroupProvider = () =>
           // Other changes can be updated in-place
         }),
 
-        create: Effect.fn(function* ({ id, news, session }) {
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const groupName = yield* createGroupName(id, news.groupName);
+          const desiredTags = yield* createTags(id, news.tags);
 
-          yield* session.note(`Creating Security Group: ${groupName}`);
-
-          const result = yield* ec2.createSecurityGroup({
-            GroupName: groupName,
-            Description: news.description ?? "Managed by Alchemy",
-            VpcId: news.vpcId as string,
-            TagSpecifications: [
-              {
-                ResourceType: "security-group",
-                Tags: createTagsList(yield* createTags(id, news.tags)),
-              },
-            ],
-            DryRun: false,
-          });
-
-          const groupId = result.GroupId! as SecurityGroupId;
-          yield* session.note(`Security Group created: ${groupId}`);
-
-          // Revoke the default egress rule if we have custom egress rules
-          if (news.egress && news.egress.length > 0) {
-            yield* ec2
-              .revokeSecurityGroupEgress({
-                GroupId: groupId,
-                IpPermissions: [
-                  {
-                    IpProtocol: "-1",
-                    IpRanges: [{ CidrIp: "0.0.0.0/0" }],
-                  },
-                ],
-                DryRun: false,
-              })
+          // Observe — find the SG via cached id, else fall through to create.
+          let sg: ec2.SecurityGroup | undefined;
+          if (output?.groupId) {
+            const lookup = yield* ec2
+              .describeSecurityGroups({ GroupIds: [output.groupId] })
               .pipe(
-                Effect.catchTag(
-                  "InvalidPermission.NotFound",
-                  () => Effect.void,
+                Effect.catchTag("InvalidGroup.NotFound", () =>
+                  Effect.succeed({ SecurityGroups: [] }),
                 ),
               );
+            sg = lookup.SecurityGroups?.[0];
           }
 
-          // Add ingress rules
-          if (news.ingress && news.ingress.length > 0) {
-            yield* ec2.authorizeSecurityGroupIngress({
-              GroupId: groupId,
-              IpPermissions: news.ingress.map(toIpPermission),
+          // Ensure — create the SG when missing.
+          if (sg === undefined) {
+            yield* session.note(`Creating Security Group: ${groupName}`);
+            const result = yield* ec2.createSecurityGroup({
+              GroupName: groupName,
+              Description: news.description ?? "Managed by Alchemy",
+              VpcId: news.vpcId as string,
+              TagSpecifications: [
+                {
+                  ResourceType: "security-group",
+                  Tags: createTagsList(desiredTags),
+                },
+              ],
               DryRun: false,
             });
-            yield* session.note(`Added ${news.ingress.length} ingress rules`);
+            const newGroupId = result.GroupId! as SecurityGroupId;
+            yield* session.note(`Security Group created: ${newGroupId}`);
+            sg = yield* describeSecurityGroup(newGroupId);
           }
 
-          // Add egress rules
-          if (news.egress && news.egress.length > 0) {
-            yield* ec2.authorizeSecurityGroupEgress({
-              GroupId: groupId,
-              IpPermissions: news.egress.map(toIpPermission),
-              DryRun: false,
-            });
-            yield* session.note(`Added ${news.egress.length} egress rules`);
-          }
+          const groupId = sg.GroupId! as SecurityGroupId;
 
-          // Fetch the final state
-          const sg = yield* describeSecurityGroup(groupId);
-          const rulesResult = yield* describeSecurityGroupRules(groupId);
-          return toAttrs(sg, rulesResult.SecurityGroupRules ?? []);
-        }),
-
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const groupId = output.groupId;
-
-          // Handle description update (requires modifying the group)
-          if (news.description !== olds.description) {
-            yield* ec2.modifySecurityGroupRules({
-              GroupId: groupId,
-              // Description can't actually be changed after creation in EC2
-              // This is a no-op but we log it
-              SecurityGroupRules: [],
-            });
-          }
-
-          // Handle tag updates
-          const newTags = yield* createTags(id, news.tags);
-          const oldTags =
-            (yield* ec2
-              .describeTags({
-                Filters: [
-                  { Name: "resource-id", Values: [groupId] },
-                  { Name: "resource-type", Values: ["security-group"] },
-                ],
-              })
-              .pipe(
-                Effect.map(
-                  (r) =>
-                    Object.fromEntries(
-                      r.Tags?.map((t) => [t.Key!, t.Value!]) ?? [],
-                    ) as Record<string, string>,
-                ),
-              )) ?? {};
-
-          const { removed, upsert } = diffTags(oldTags, newTags);
-
-          if (removed.length > 0) {
+          // Sync tags — observed cloud tags vs desired.
+          const currentTags = Object.fromEntries(
+            (sg.Tags ?? []).map((t) => [t.Key!, t.Value!]),
+          ) as Record<string, string>;
+          const { removed: removedTags, upsert: upsertTags } = diffTags(
+            currentTags,
+            desiredTags,
+          );
+          if (removedTags.length > 0) {
             yield* ec2.deleteTags({
               Resources: [groupId],
-              Tags: removed.map((key) => ({ Key: key })),
+              Tags: removedTags.map((key) => ({ Key: key })),
               DryRun: false,
             });
           }
-          if (upsert.length > 0) {
+          if (upsertTags.length > 0) {
             yield* ec2.createTags({
               Resources: [groupId],
-              Tags: upsert,
+              Tags: upsertTags,
               DryRun: false,
             });
-            yield* session.note("Updated tags");
           }
 
-          // Handle rule updates - simple approach: revoke all, then add all
-          // Get current rules
+          // Sync ingress + egress rules — revoke whatever is observed and
+          // reapply the desired set. SG rule diffing on this SDK is non-
+          // trivial because each rule has many possible source shapes
+          // (cidr/group ref/prefix list), so the simplest convergent strategy
+          // is full-replace each reconcile. Default egress (-1, 0.0.0.0/0)
+          // is restored when no explicit egress is desired.
           const currentRulesResult = yield* describeSecurityGroupRules(groupId);
           const currentRules = currentRulesResult.SecurityGroupRules ?? [];
-
-          // Revoke existing ingress rules (except default)
           const currentIngress = currentRules.filter((r) => !r.IsEgress);
+          const currentEgress = currentRules.filter((r) => r.IsEgress);
           if (currentIngress.length > 0) {
             yield* ec2
               .revokeSecurityGroupIngress({
@@ -456,9 +403,6 @@ export const SecurityGroupProvider = () =>
                 ),
               );
           }
-
-          // Revoke existing egress rules
-          const currentEgress = currentRules.filter((r) => r.IsEgress);
           if (currentEgress.length > 0) {
             yield* ec2
               .revokeSecurityGroupEgress({
@@ -475,31 +419,22 @@ export const SecurityGroupProvider = () =>
                 ),
               );
           }
-
-          // Add new ingress rules
           if (news.ingress && news.ingress.length > 0) {
             yield* ec2.authorizeSecurityGroupIngress({
               GroupId: groupId,
               IpPermissions: news.ingress.map(toIpPermission),
               DryRun: false,
             });
-            yield* session.note(
-              `Updated ingress rules (${news.ingress.length} rules)`,
-            );
+            yield* session.note(`Applied ${news.ingress.length} ingress rules`);
           }
-
-          // Add new egress rules (or restore default)
           if (news.egress && news.egress.length > 0) {
             yield* ec2.authorizeSecurityGroupEgress({
               GroupId: groupId,
               IpPermissions: news.egress.map(toIpPermission),
               DryRun: false,
             });
-            yield* session.note(
-              `Updated egress rules (${news.egress.length} rules)`,
-            );
+            yield* session.note(`Applied ${news.egress.length} egress rules`);
           } else {
-            // Restore default egress rule
             yield* ec2.authorizeSecurityGroupEgress({
               GroupId: groupId,
               IpPermissions: [
@@ -512,10 +447,10 @@ export const SecurityGroupProvider = () =>
             });
           }
 
-          // Fetch the final state
-          const sg = yield* describeSecurityGroup(groupId);
-          const rulesResult = yield* describeSecurityGroupRules(groupId);
-          return toAttrs(sg, rulesResult.SecurityGroupRules ?? []);
+          // Re-read final state.
+          const finalSg = yield* describeSecurityGroup(groupId);
+          const finalRules = yield* describeSecurityGroupRules(groupId);
+          return toAttrs(finalSg, finalRules.SecurityGroupRules ?? []);
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

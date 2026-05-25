@@ -1,8 +1,11 @@
+import { AdoptPolicy, Unowned } from "@/AdoptPolicy";
 import * as Construct from "@/Construct";
 import type { Input, InputProps } from "@/Input";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
 import { UnsatisfiedResourceCycle } from "@/Plan";
+import { Secret } from "@/Secret";
+import { Variable } from "@/Variable";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import {
@@ -29,6 +32,7 @@ import {
   Queue,
   TestLayers,
   TestResource,
+  TestResourceHooks,
   type TestResourceProps,
 } from "./test.resources";
 
@@ -2400,6 +2404,443 @@ describe("Redacted props/outputs are preserved through plan", () => {
       const bProps = bNode.props as TestResourceProps;
       expect(Redacted.isRedacted(bProps.redacted)).toBe(true);
       expect(Redacted.value(bProps.redacted!)).toBe("hunter2");
+    }),
+  );
+});
+
+describe("NamedExpr (Alchemy.Secret / Alchemy.Variable) resolution", () => {
+  test(
+    "Alchemy.Variable literal flows into a downstream prop as the unwrapped value",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: Variable("STRING_VAR", "hello") as any,
+        });
+      }).pipe(makePlan);
+
+      const node: any = plan.resources.A!;
+      expect(node.action).toBe("create");
+      expect((node.props as TestResourceProps).string).toBe("hello");
+    }),
+  );
+
+  test(
+    "Alchemy.Secret literal flows into a downstream prop as a Redacted",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: "x",
+          redacted: Secret("API_KEY", "hunter2") as any,
+        });
+      }).pipe(makePlan);
+
+      const node: any = plan.resources.A!;
+      expect(node.action).toBe("create");
+      const props = node.props as TestResourceProps;
+      expect(Redacted.isRedacted(props.redacted)).toBe(true);
+      expect(Redacted.value(props.redacted!)).toBe("hunter2");
+    }),
+  );
+
+  test(
+    "Alchemy.Secret pre-redacted input flows through unchanged",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: "x",
+          redacted: Secret("API_KEY", Redacted.make("already-redacted")) as any,
+        });
+      }).pipe(makePlan);
+
+      const node: any = plan.resources.A!;
+      const props = node.props as TestResourceProps;
+      expect(Redacted.isRedacted(props.redacted)).toBe(true);
+      expect(Redacted.value(props.redacted!)).toBe("already-redacted");
+    }),
+  );
+
+  test(
+    "no-op when prior state already has the same Alchemy.Secret value",
+    Effect.gen(function* () {
+      yield* seed({
+        A: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "A",
+          fqn: "A",
+          namespace: undefined,
+          resourceType: "Test.TestResource",
+          status: "created",
+          props: {
+            string: "x",
+            redacted: Redacted.make("hunter2"),
+          },
+          attr: {
+            string: "x",
+            stringArray: [],
+            stableString: "A",
+            stableArray: ["A"],
+            replaceString: undefined,
+            redacted: Redacted.make("hunter2"),
+            redactedArray: undefined,
+          },
+          downstream: [],
+          bindings: [],
+        },
+      });
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: "x",
+          redacted: Secret("API_KEY", "hunter2") as any,
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.A!.action).toBe("noop");
+    }),
+  );
+});
+
+describe("engine-level adoption", () => {
+  // Build a plan, optionally with an explicit AdoptPolicy and a read hook
+  // that simulates a pre-existing cloud resource.
+  const ownedAttrs: TestResource["Attributes"] = {
+    string: "hello",
+    stringArray: [],
+    stableString: "Adopted",
+    stableArray: ["Adopted"],
+    replaceString: undefined,
+    redacted: undefined,
+    redactedArray: undefined,
+  };
+
+  const makeAdoptPlan = <A>(
+    effect: Effect.Effect<A, any, any>,
+    opts: {
+      adopt?: boolean;
+      readHook?: (
+        id: string,
+      ) => Effect.Effect<TestResource["Attributes"] | undefined, any>;
+    },
+  ): Effect.Effect<Plan.Plan<A>, any, State> =>
+    Effect.gen(function* () {
+      const { name, stage } = yield* resolveStackId;
+      const hooksLayer = opts.readHook
+        ? Layer.succeed(TestResourceHooks, { read: opts.readHook })
+        : Layer.empty;
+      const adoptLayer =
+        opts.adopt === undefined
+          ? Layer.empty
+          : Layer.succeed(AdoptPolicy, opts.adopt);
+      return yield* (effect as Effect.Effect<A, any, any>).pipe(
+        Stack.make({
+          name,
+          providers: Layer.empty,
+          state: inMemoryState(),
+        } as any) as any,
+        Effect.provideService(Stage, stage),
+        Effect.flatMap((stackSpec: any) => Plan.make(stackSpec)),
+        Effect.provide(TestLayers()),
+        Effect.provide(hooksLayer),
+        Effect.provide(adoptLayer),
+      ) as Effect.Effect<Plan.Plan<A>, any, State>;
+    }) as Effect.Effect<Plan.Plan<A>, any, State>;
+
+  test(
+    "owned read result is silently adopted (no AdoptPolicy needed) and forced to update",
+    Effect.gen(function* () {
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("Adopted", { string: "hello" });
+        }),
+        { readHook: () => Effect.succeed(ownedAttrs) },
+      );
+
+      // Cold-start adoption forces an update so the provider can re-sync
+      // tags / config against `news` — even when read returns plain
+      // (owned) attrs, the cloud resource may carry drift the engine
+      // can't detect from `props` alone.
+      expect(plan.resources.Adopted!.action).toBe("update");
+
+      const state = yield* State;
+      const persisted = yield* state.get({
+        stack: TEST_STACK,
+        stage: TEST_STAGE,
+        fqn: "Adopted",
+      });
+      expect(persisted?.status).toBe("created");
+      expect((persisted as any)?.attr).toMatchObject({ string: "hello" });
+    }),
+  );
+
+  test(
+    "Unowned read result + adopt enabled -> takeover forces an update",
+    Effect.gen(function* () {
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("Adopted", { string: "hello" });
+        }),
+        {
+          adopt: true,
+          readHook: () => Effect.succeed(Unowned(ownedAttrs)),
+        },
+      );
+
+      // Takeover of an Unowned resource forces `update` so the provider's
+      // update path can rewrite ownership tags / config to match this
+      // logical id (a plain noop would leave the resource looking
+      // foreign-owned to subsequent deploys).
+      expect(plan.resources.Adopted!.action).toBe("update");
+
+      const state = yield* State;
+      const persisted = yield* state.get({
+        stack: TEST_STACK,
+        stage: TEST_STAGE,
+        fqn: "Adopted",
+      });
+      expect(persisted?.status).toBe("created");
+
+      // The Unowned brand must be fully scrubbed from anything that
+      // reaches the state store — both via the public `Unowned.is`
+      // check *and* via direct symbol inspection (in case someone
+      // accidentally uses `Symbol.for` rather than `Unowned.is`).
+      const persistedAttr = (persisted as any)?.attr as object;
+      expect(Unowned.is(persistedAttr)).toBe(false);
+      expect(Object.getOwnPropertySymbols(persistedAttr).length).toBe(0);
+      expect(JSON.stringify(persistedAttr)).not.toContain("Unowned");
+    }),
+  );
+
+  test(
+    "Unowned read result + adopt disabled -> OwnedBySomeoneElse",
+    Effect.gen(function* () {
+      const exit = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("Foreign", { string: "hello" });
+        }),
+        {
+          adopt: false,
+          readHook: () => Effect.succeed(Unowned(ownedAttrs)),
+        },
+      ).pipe(Effect.exit);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reason = exit.cause.reasons.find(Cause.isFailReason);
+        expect((reason?.error as any)?._tag).toBe("OwnedBySomeoneElse");
+        expect((reason?.error as any)?.resourceType).toBe("Test.TestResource");
+      }
+    }),
+  );
+
+  test(
+    "read returns undefined -> ordinary create",
+    Effect.gen(function* () {
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("Fresh", { string: "hello" });
+        }),
+        { readHook: () => Effect.succeed(undefined) },
+      );
+
+      expect(plan.resources.Fresh!.action).toBe("create");
+      expect(plan.resources.Fresh!.state).toBeUndefined();
+    }),
+  );
+
+  test(
+    "providers without a `read` method skip the adoption probe entirely",
+    Effect.gen(function* () {
+      // Bucket has no `read` implementation. The engine should fall back
+      // to a normal `create` action without any side effects.
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* Bucket("FreshBucket", { name: "fresh" });
+        }),
+        { adopt: true },
+      );
+
+      expect(plan.resources.FreshBucket!.action).toBe("create");
+    }),
+  );
+});
+
+describe("RefExpr resolution", () => {
+  const seedAt = (
+    stack: string,
+    stage: string,
+    resources: Record<string, ResourceState>,
+  ) =>
+    Effect.gen(function* () {
+      const state = yield* State;
+      for (const [fqn, value] of Object.entries(resources)) {
+        yield* state.set({ stack, stage, fqn, value });
+      }
+    });
+
+  const sharedAttr = {
+    string: "shared-string",
+    stringArray: ["shared"],
+    stableString: "shared-stable",
+    stableArray: ["shared-stable"],
+    replaceString: undefined,
+    redacted: undefined,
+    redactedArray: undefined,
+  };
+
+  const sharedResourceState = {
+    instanceId,
+    providerVersion: 0,
+    logicalId: "Shared",
+    fqn: "Shared",
+    namespace: undefined,
+    resourceType: "Test.TestResource",
+    status: "created" as ResourceStatus,
+    props: { string: "shared-string" },
+    attr: sharedAttr,
+    bindings: [],
+    downstream: [],
+  } as ResourceState;
+
+  test(
+    "resolves a cross-stage Ref to the seeded resource's attributes",
+    Effect.gen(function* () {
+      yield* seedAt(TEST_STACK, "other", { Shared: sharedResourceState });
+      const plan = yield* Effect.gen(function* () {
+        const shared = yield* TestResource.ref("Shared", { stage: "other" });
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "shared-string",
+      });
+    }),
+  );
+
+  test(
+    "resolves a cross-stack Ref using the explicit stack option",
+    Effect.gen(function* () {
+      yield* seedAt("other-stack", TEST_STAGE, {
+        Shared: sharedResourceState,
+      });
+      const plan = yield* Effect.gen(function* () {
+        const shared = yield* TestResource.ref("Shared", {
+          stack: "other-stack",
+        });
+        yield* TestResource("Consumer", {
+          string: shared.string,
+        });
+      }).pipe(makePlan);
+
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "shared-string",
+      });
+    }),
+  );
+
+  test(
+    "Ref to a resource in the current stack/stage is resolved",
+    Effect.gen(function* () {
+      yield* seed({ Shared: sharedResourceState });
+      const plan = yield* Effect.gen(function* () {
+        const shared = yield* TestResource.ref("Shared");
+        yield* TestResource("Consumer", { string: shared.string });
+      }).pipe(makePlan);
+
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "shared-string",
+      });
+    }),
+  );
+
+  test(
+    "missing Ref target dies with InvalidReferenceError",
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const shared = yield* TestResource.ref("Ghost", { stage: "other" });
+          yield* TestResource("Consumer", { string: shared.string });
+        }).pipe(makePlan),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as Output.InvalidReferenceError;
+        expect(err._tag).toBe("InvalidReferenceError");
+        expect(err.resourceId).toBe("Ghost");
+        expect(err.stage).toBe("other");
+      }
+    }),
+  );
+});
+
+describe("StackRefExpr resolution", () => {
+  const setStackOutput = (stack: string, stage: string, value: unknown) =>
+    Effect.gen(function* () {
+      const state = yield* State;
+      yield* state.setOutput({ stack, stage, value });
+    });
+
+  test(
+    "resolves an Output.stackRef to the persisted stack output",
+    Effect.gen(function* () {
+      yield* setStackOutput("Backend", TEST_STAGE, {
+        url: "https://api.example.com",
+      });
+      const plan = yield* Effect.gen(function* () {
+        const backend = yield* Output.stackRef<{ url: string }>("Backend");
+        yield* TestResource("Consumer", {
+          string: (backend as any).url,
+        });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "https://api.example.com",
+      });
+    }),
+  );
+
+  test(
+    "resolves an explicit stage on the stackRef",
+    Effect.gen(function* () {
+      yield* setStackOutput("Backend", "prod", {
+        url: "https://prod.example.com",
+      });
+      const plan = yield* Effect.gen(function* () {
+        const backend = yield* Output.stackRef<{ url: string }>("Backend", {
+          stage: "prod",
+        });
+        yield* TestResource("Consumer", {
+          string: (backend as any).url,
+        });
+      }).pipe(makePlan);
+
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({
+        string: "https://prod.example.com",
+      });
+    }),
+  );
+
+  test(
+    "missing stack output dies with InvalidReferenceError",
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const backend = yield* Output.stackRef<{ url: string }>("Backend", {
+            stage: "ghost",
+          });
+          yield* TestResource("Consumer", {
+            string: (backend as any).url,
+          });
+        }).pipe(makePlan),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as Output.InvalidReferenceError;
+        expect(err._tag).toBe("InvalidReferenceError");
+        expect(err.stack).toBe("Backend");
+        expect(err.stage).toBe("ghost");
+      }
     }),
   );
 });

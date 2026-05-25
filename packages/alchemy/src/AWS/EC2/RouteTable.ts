@@ -9,7 +9,7 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { createInternalTags, createTagsList } from "../../Tags.ts";
+import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
@@ -191,47 +191,78 @@ export const RouteTableProvider = () =>
           // Tags can be updated in-place
         }),
 
-        create: Effect.fn(function* ({ id, news, session }) {
-          // 1. Prepare tags
+        reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const alchemyTags = yield* createInternalTags(id);
-          const userTags = news.tags ?? {};
-          const allTags = { ...alchemyTags, ...userTags };
+          const desiredTags = { ...alchemyTags, ...(news.tags ?? {}) };
 
-          // 2. Call CreateRouteTable
-          const createResult = yield* ec2
-            .createRouteTable({
-              VpcId: news.vpcId,
-              TagSpecifications: [
-                {
-                  ResourceType: "route-table",
-                  Tags: createTagsList(allTags),
-                },
-              ],
-              DryRun: false,
-            })
-            .pipe(
-              Effect.retry({
-                // Retry if VPC is not yet available
-                while: (e) => e._tag === "InvalidVpcID.NotFound",
-                schedule: Schedule.exponential(100),
-              }),
-            );
+          // Observe — find the route table via cached id, else fall through
+          // to create.
+          let routeTable: ec2.RouteTable | undefined;
+          if (output?.routeTableId) {
+            const lookup = yield* ec2
+              .describeRouteTables({ RouteTableIds: [output.routeTableId] })
+              .pipe(
+                Effect.catchTag("InvalidRouteTableID.NotFound", () =>
+                  Effect.succeed({ RouteTables: [] }),
+                ),
+              );
+            routeTable = lookup.RouteTables?.[0];
+          }
 
-          const routeTableId = createResult.RouteTable!
-            .RouteTableId! as RouteTableId;
-          yield* session.note(`Route table created: ${routeTableId}`);
+          // Ensure — create the route table when missing.
+          if (routeTable === undefined) {
+            const createResult = yield* ec2
+              .createRouteTable({
+                VpcId: news.vpcId,
+                TagSpecifications: [
+                  {
+                    ResourceType: "route-table",
+                    Tags: createTagsList(desiredTags),
+                  },
+                ],
+                DryRun: false,
+              })
+              .pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "InvalidVpcID.NotFound",
+                  schedule: Schedule.exponential(100),
+                }),
+              );
+            const newId = createResult.RouteTable!
+              .RouteTableId! as RouteTableId;
+            yield* session.note(`Route table created: ${newId}`);
+            routeTable = yield* describeRouteTable(newId, session);
+          }
 
-          // 3. Describe to get full details
-          const routeTable = yield* describeRouteTable(routeTableId, session);
+          const routeTableId = routeTable.RouteTableId! as RouteTableId;
 
-          // 4. Return attributes
+          // Sync tags — observed cloud tags vs desired.
+          const currentTags = Object.fromEntries(
+            (routeTable.Tags ?? []).map((t) => [t.Key!, t.Value!]),
+          ) as Record<string, string>;
+          const { removed, upsert } = diffTags(currentTags, desiredTags);
+          if (removed.length > 0) {
+            yield* ec2.deleteTags({
+              Resources: [routeTableId],
+              Tags: removed.map((key) => ({ Key: key })),
+            });
+          }
+          if (upsert.length > 0) {
+            yield* ec2.createTags({
+              Resources: [routeTableId],
+              Tags: upsert,
+            });
+          }
+
+          // Re-read final state.
+          const final = yield* describeRouteTable(routeTableId, session);
           return {
             routeTableId,
             routeTableArn:
               `arn:aws:ec2:${region}:${accountId}:route-table/${routeTableId}` as `arn:aws:ec2:${RegionID}:${AccountID}:route-table/${string}`,
             vpcId: news.vpcId as VpcId,
-            ownerId: routeTable.OwnerId,
-            associations: routeTable.Associations?.map((assoc) => ({
+            ownerId: final.OwnerId,
+            associations: final.Associations?.map((assoc) => ({
               main: assoc.Main ?? false,
               routeTableAssociationId: assoc.RouteTableAssociationId,
               routeTableId: assoc.RouteTableId,
@@ -244,7 +275,7 @@ export const RouteTableProvider = () =>
                   }
                 : undefined,
             })),
-            routes: routeTable.Routes?.map((route) => ({
+            routes: final.Routes?.map((route) => ({
               destinationCidrBlock: route.DestinationCidrBlock,
               destinationIpv6CidrBlock: route.DestinationIpv6CidrBlock,
               destinationPrefixListId: route.DestinationPrefixListId,
@@ -262,83 +293,7 @@ export const RouteTableProvider = () =>
               vpcPeeringConnectionId: route.VpcPeeringConnectionId,
               coreNetworkArn: route.CoreNetworkArn,
             })),
-            propagatingVgws: routeTable.PropagatingVgws?.map((vgw) => ({
-              gatewayId: vgw.GatewayId!,
-            })),
-          };
-        }),
-
-        update: Effect.fn(function* ({ id, news, olds, output, session }) {
-          const routeTableId = output.routeTableId;
-
-          // Handle tag updates
-          if (
-            JSON.stringify(news.tags ?? {}) !== JSON.stringify(olds.tags ?? {})
-          ) {
-            const alchemyTags = yield* createInternalTags(id);
-            const userTags = news.tags ?? {};
-            const allTags = { ...alchemyTags, ...userTags };
-
-            // Delete old tags that are no longer present
-            const oldTagKeys = Object.keys(olds.tags ?? {});
-            const newTagKeys = Object.keys(news.tags ?? {});
-            const tagsToDelete = oldTagKeys.filter(
-              (key) => !newTagKeys.includes(key),
-            );
-
-            if (tagsToDelete.length > 0) {
-              yield* ec2.deleteTags({
-                Resources: [routeTableId],
-                Tags: tagsToDelete.map((key) => ({ Key: key })),
-              });
-            }
-
-            // Create/update tags
-            yield* ec2.createTags({
-              Resources: [routeTableId],
-              Tags: createTagsList(allTags),
-            });
-
-            yield* session.note("Updated tags");
-          }
-
-          // Re-describe to get current state
-          const routeTable = yield* describeRouteTable(routeTableId, session);
-
-          return {
-            ...output,
-            associations: routeTable.Associations?.map((assoc) => ({
-              main: assoc.Main ?? false,
-              routeTableAssociationId: assoc.RouteTableAssociationId,
-              routeTableId: assoc.RouteTableId,
-              subnetId: assoc.SubnetId,
-              gatewayId: assoc.GatewayId,
-              associationState: assoc.AssociationState
-                ? {
-                    state: assoc.AssociationState.State!,
-                    statusMessage: assoc.AssociationState.StatusMessage,
-                  }
-                : undefined,
-            })),
-            routes: routeTable.Routes?.map((route) => ({
-              destinationCidrBlock: route.DestinationCidrBlock,
-              destinationIpv6CidrBlock: route.DestinationIpv6CidrBlock,
-              destinationPrefixListId: route.DestinationPrefixListId,
-              egressOnlyInternetGatewayId: route.EgressOnlyInternetGatewayId,
-              gatewayId: route.GatewayId,
-              instanceId: route.InstanceId,
-              instanceOwnerId: route.InstanceOwnerId,
-              natGatewayId: route.NatGatewayId,
-              transitGatewayId: route.TransitGatewayId,
-              localGatewayId: route.LocalGatewayId,
-              carrierGatewayId: route.CarrierGatewayId,
-              networkInterfaceId: route.NetworkInterfaceId,
-              origin: route.Origin!,
-              state: route.State!,
-              vpcPeeringConnectionId: route.VpcPeeringConnectionId,
-              coreNetworkArn: route.CoreNetworkArn,
-            })),
-            propagatingVgws: routeTable.PropagatingVgws?.map((vgw) => ({
+            propagatingVgws: final.PropagatingVgws?.map((vgw) => ({
               gatewayId: vgw.GatewayId!,
             })),
           };

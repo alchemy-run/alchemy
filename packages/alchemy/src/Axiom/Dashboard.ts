@@ -161,15 +161,27 @@ export const DashboardProvider = () =>
 
       return {
         stables: ["uid", "id", "createdAt", "createdBy"],
-        create: Effect.fn(function* ({ news }) {
-          return toAttrsFromCreate(yield* create(news));
-        }),
-        update: Effect.fn(function* ({ news, output }) {
-          // `overwrite: true` short-circuits Axiom's optimistic-concurrency
-          // check (otherwise the API requires the caller to echo back the
-          // server-side `version`, which the resource state doesn't track).
+        reconcile: Effect.fn(function* ({ news, output }) {
+          // Observe — `uid` is server-assigned at create time. We probe
+          // Axiom for the dashboard via the cached uid; treat NotFound
+          // (deleted out-of-band) as "no observed state" so we converge
+          // by re-creating.
+          const observed = output?.uid
+            ? yield* get({ uid: output.uid }).pipe(
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
+            : undefined;
+
+          // Ensure — POST mints a new dashboard with a fresh uid.
+          if (observed === undefined) {
+            return toAttrsFromCreate(yield* create(news));
+          }
+
+          // Sync — `overwrite: true` short-circuits Axiom's optimistic-
+          // concurrency check (otherwise the API requires the caller to
+          // echo back the server-side `version`, which we don't track).
           return toAttrsFromCreate(
-            yield* update({ ...news, uid: output.uid, overwrite: true }),
+            yield* update({ ...news, uid: observed.uid, overwrite: true }),
           );
         }),
         delete: Effect.fn(function* ({ output }) {

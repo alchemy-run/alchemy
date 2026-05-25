@@ -119,44 +119,55 @@ export const VpcLinkProvider = () =>
           if (!v?.id) return undefined;
           return snapshotFromVpcLink(v, tagRecord(v.tags));
         }),
-        create: Effect.fn(function* ({ id, news: newsIn, session }) {
+        reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("VpcLink props were not resolved");
           }
           const news = newsIn as VpcLinkProps;
           const name = yield* generatedName(id, news);
           const internalTags = yield* createInternalTags(id);
-          const allTags = { ...news.tags, ...internalTags };
+          const desiredTags = { ...news.tags, ...internalTags };
 
-          const created = yield* ag.createVpcLink({
-            name,
-            description: news.description,
-            targetArns: news.targetArns,
-            tags: allTags,
-          });
-          if (!created.id) {
-            return yield* Effect.die("createVpcLink missing id");
-          }
-          yield* session.note(`Created VPC link ${created.id}`);
+          // Observe — fetch the live VPC link if we have a cached id.
+          // We never trust `output.description`/etc. for diffing; the
+          // observed cloud state drives every sync below.
+          let observed = output?.vpcLinkId
+            ? yield* ag
+                .getVpcLink({ vpcLinkId: output.vpcLinkId })
+                .pipe(
+                  Effect.catchTag("NotFoundException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                )
+            : undefined;
 
-          const v = yield* ag.getVpcLink({ vpcLinkId: created.id });
-          if (!v.id) return yield* Effect.die("getVpcLink missing id");
-          return snapshotFromVpcLink(v, tagRecord(v.tags));
-        }),
-        update: Effect.fn(function* ({ id, news: newsIn, output, session }) {
-          if (!isResolved(newsIn)) {
-            return yield* Effect.die("VpcLink props were not resolved");
+          // Ensure — create the VPC link if missing.
+          if (!observed?.id) {
+            const created = yield* ag.createVpcLink({
+              name,
+              description: news.description,
+              targetArns: news.targetArns,
+              tags: desiredTags,
+            });
+            if (!created.id) {
+              return yield* Effect.die("createVpcLink missing id");
+            }
+            yield* session.note(`Created VPC link ${created.id}`);
+            observed = yield* ag.getVpcLink({ vpcLinkId: created.id });
           }
-          const news = newsIn as VpcLinkProps;
+
+          const vpcLinkId = observed.id!;
+
+          // Sync mutable scalar fields — observed ↔ desired patch list.
           const patches: ag.PatchOperation[] = [];
-          if (news.description !== output.description) {
+          if (news.description !== observed.description) {
             patches.push({
               op: "replace",
               path: "/description",
               value: news.description ?? "",
             });
           }
-          if (news.name !== undefined && news.name !== output.name) {
+          if (news.name !== undefined && news.name !== observed.name) {
             patches.push({
               op: "replace",
               path: "/name",
@@ -165,24 +176,25 @@ export const VpcLinkProvider = () =>
           }
           if (patches.length > 0) {
             yield* ag.updateVpcLink({
-              vpcLinkId: output.vpcLinkId,
+              vpcLinkId,
               patchOperations: patches,
             });
           }
 
-          const internalTags = yield* createInternalTags(id);
-          const newTags = { ...news.tags, ...internalTags };
-          if (!deepEqual(output.tags, newTags)) {
+          // Sync tags — observed ↔ desired so adoption converges without
+          // fighting the existing tag set.
+          const observedTags = tagRecord(observed.tags);
+          if (!deepEqual(observedTags, desiredTags)) {
             yield* syncTags({
-              resourceArn: vpcLinkArn(awsRegion, output.vpcLinkId),
-              oldTags: output.tags,
-              newTags,
+              resourceArn: vpcLinkArn(awsRegion, vpcLinkId),
+              oldTags: observedTags,
+              newTags: desiredTags,
             });
           }
 
-          yield* session.note(`Updated VPC link ${output.vpcLinkId}`);
-          const v = yield* ag.getVpcLink({ vpcLinkId: output.vpcLinkId });
-          return snapshotFromVpcLink(v, tagRecord(v.tags));
+          yield* session.note(`Reconciled VPC link ${vpcLinkId}`);
+          const final = yield* ag.getVpcLink({ vpcLinkId });
+          return snapshotFromVpcLink(final, tagRecord(final.tags));
         }),
         delete: Effect.fn(function* ({ output, session }) {
           yield* ag.deleteVpcLink({ vpcLinkId: output.vpcLinkId }).pipe(

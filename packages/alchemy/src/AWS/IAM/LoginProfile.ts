@@ -87,48 +87,57 @@ export const LoginProfileProvider = () =>
         passwordResetRequired: response.LoginProfile.PasswordResetRequired,
       };
     }),
-    create: Effect.fn(function* ({ news, session }) {
-      const response = yield* iam
-        .createLoginProfile({
+    reconcile: Effect.fn(function* ({ news, session }) {
+      // Observe — read the live login profile (or absence) for the user.
+      const observed = yield* iam
+        .getLoginProfile({ UserName: news.userName })
+        .pipe(
+          Effect.catchTag("NoSuchEntityException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+
+      // Ensure / Sync — the password is write-only, so we always send the
+      // desired value. Use `createLoginProfile` when the profile is
+      // missing and `updateLoginProfile` otherwise. A race that turns the
+      // create into `EntityAlreadyExistsException` is recovered by
+      // calling update.
+      let response = observed;
+      if (!observed?.LoginProfile) {
+        response = yield* iam
+          .createLoginProfile({
+            UserName: news.userName,
+            Password: unwrapRedactedString(news.password),
+            PasswordResetRequired: news.passwordResetRequired,
+          })
+          .pipe(
+            Effect.catchTag("EntityAlreadyExistsException", () =>
+              Effect.gen(function* () {
+                yield* iam.updateLoginProfile({
+                  UserName: news.userName,
+                  Password: unwrapRedactedString(news.password),
+                  PasswordResetRequired: news.passwordResetRequired,
+                });
+                return yield* iam.getLoginProfile({
+                  UserName: news.userName,
+                });
+              }),
+            ),
+          );
+      } else {
+        yield* iam.updateLoginProfile({
           UserName: news.userName,
           Password: unwrapRedactedString(news.password),
           PasswordResetRequired: news.passwordResetRequired,
-        })
-        .pipe(
-          Effect.catchTag("EntityAlreadyExistsException", () =>
-            Effect.gen(function* () {
-              yield* iam.updateLoginProfile({
-                UserName: news.userName,
-                Password: unwrapRedactedString(news.password),
-                PasswordResetRequired: news.passwordResetRequired,
-              });
-              return yield* iam.getLoginProfile({
-                UserName: news.userName,
-              });
-            }),
-          ),
-        );
+        });
+        response = yield* iam.getLoginProfile({ UserName: news.userName });
+      }
+
       yield* session.note(news.userName);
       return {
-        userName: response.LoginProfile.UserName,
-        createDate: response.LoginProfile.CreateDate,
-        passwordResetRequired: response.LoginProfile.PasswordResetRequired,
-      };
-    }),
-    update: Effect.fn(function* ({ news, output, session }) {
-      yield* iam.updateLoginProfile({
-        UserName: output.userName,
-        Password: unwrapRedactedString(news.password),
-        PasswordResetRequired: news.passwordResetRequired,
-      });
-      const response = yield* iam.getLoginProfile({
-        UserName: output.userName,
-      });
-      yield* session.note(output.userName);
-      return {
-        userName: response.LoginProfile.UserName,
-        createDate: response.LoginProfile.CreateDate,
-        passwordResetRequired: response.LoginProfile.PasswordResetRequired,
+        userName: response!.LoginProfile.UserName,
+        createDate: response!.LoginProfile.CreateDate,
+        passwordResetRequired: response!.LoginProfile.PasswordResetRequired,
       };
     }),
     delete: Effect.fn(function* ({ output }) {

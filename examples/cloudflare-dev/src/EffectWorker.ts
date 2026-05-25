@@ -1,20 +1,38 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 export const KV = Cloudflare.KVNamespace("KV");
 
+interface AddInstance {
+  exports: {
+    add(a: number, b: number): number;
+  };
+}
+
 export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
   "EffectWorker",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
   },
   Effect.gen(function* () {
     const kv = yield* Cloudflare.KVNamespace.bind(KV);
     return {
       fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        if (new URL(request.url, "http://internal").pathname === "/wasm") {
+          const instance = yield* Effect.promise(async () => {
+            // This is dynamically imported so that the WASM import doesn't occur at deploy-time, which works in Bun but fails in Node.
+            const wasm = await import("./modules/wasm-example.wasm");
+            return (await WebAssembly.instantiate(wasm.default)) as AddInstance;
+          });
+          return yield* HttpServerResponse.json({
+            result: instance.exports.add(3, 4),
+          });
+        }
         const value = yield* kv.list().pipe(Effect.orDie);
-        return HttpServerResponse.jsonUnsafe(value);
+        return yield* HttpServerResponse.json(value);
       }),
     };
   }).pipe(Effect.provide(Cloudflare.KVNamespaceBindingLive)),

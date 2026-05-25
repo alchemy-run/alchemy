@@ -30,6 +30,8 @@ interface Entry {
   description?: string;
   kind: OgCardKind;
   eyebrow?: string;
+  /** ISO date string — rendered in the footer for blog cards. */
+  date?: string;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -199,15 +201,26 @@ export const getStaticPaths: GetStaticPaths = async () => {
   const docPaths = docs.map((entry: any) => {
     const slug = (entry as { slug?: string; id?: string }).slug ?? entry.id;
     const meta = classifyDoc(slug);
-    const data = entry.data as { title?: string; description?: string };
+    const data = entry.data as {
+      title?: string;
+      description?: string;
+      excerpt?: string;
+      date?: string | Date;
+    };
     return {
       params: { slug },
       props: {
         slug,
         title: data.title ?? slug,
-        description: data.description,
+        // Blog frontmatter uses `excerpt` (starlight-blog schema). Fall
+        // back to it so the OG card has body copy to fill the layout.
+        description: data.description ?? data.excerpt,
         kind: meta.kind,
         eyebrow: meta.eyebrow,
+        date:
+          data.date instanceof Date
+            ? data.date.toISOString().slice(0, 10)
+            : data.date,
       } satisfies Entry,
     };
   });
@@ -229,10 +242,10 @@ export const getStaticPaths: GetStaticPaths = async () => {
 };
 
 export const GET: APIRoute = async ({ props }) => {
-  const { title, description, kind, eyebrow } = props as Entry;
+  const { title, description, kind, eyebrow, date } = props as Entry;
   const fonts = await fontsPromise;
 
-  const element = OgCard({ title, description, eyebrow, kind });
+  const element = OgCard({ title, description, eyebrow, kind, date });
 
   const svg = await satori(element, {
     width: 1200,

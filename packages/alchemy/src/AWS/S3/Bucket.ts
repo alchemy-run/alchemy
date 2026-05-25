@@ -339,6 +339,22 @@ export const BucketProvider = () =>
         };
       });
 
+      const fetchBucketTags = (
+        bucketName: string,
+      ): Effect.Effect<Record<string, string>, never, any> =>
+        s3.getBucketTagging({ Bucket: bucketName }).pipe(
+          Effect.map(
+            (r) =>
+              Object.fromEntries(
+                (r.TagSet ?? []).map((t) => [t.Key!, t.Value!]),
+              ) as Record<string, string>,
+          ),
+          Effect.catchTag("NoSuchTagSet", () =>
+            Effect.succeed({} as Record<string, string>),
+          ),
+          Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+        );
+
       const syncBucketTags = Effect.fnUntraced(function* ({
         bucketName,
         oldTags,
@@ -352,7 +368,10 @@ export const BucketProvider = () =>
         session: ScopedPlanStatusSession;
         operation: "create" | "update";
       }) {
-        const previousTags = oldTags ?? {};
+        // Compare against the cloud's actual tags so drift surfaces
+        // correctly even after a cold-start adoption (where olds.tags
+        // equals news.tags and would otherwise look like a no-op).
+        const previousTags = oldTags ?? (yield* fetchBucketTags(bucketName));
         const desiredTags = newTags ?? {};
         const { removed, upsert } = diffTags(previousTags, desiredTags);
         const canSkip = oldTags !== undefined;
@@ -458,6 +477,31 @@ export const BucketProvider = () =>
 
       return {
         stables: ["bucketName", "bucketArn", "region", "accountId"],
+        // S3 bucket names are globally unique. `headBucket` succeeds only when
+        // the bucket exists in our account, so a successful response is itself
+        // proof of account-level ownership — there is no separate ownership
+        // signal to surface as `Unowned`.
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const bucketName =
+            output?.bucketName ?? (yield* createBucketName(id, olds ?? {}));
+          const region = yield* Region;
+          const { accountId } = yield* AWSEnvironment;
+          const exists = yield* s3.headBucket({ Bucket: bucketName }).pipe(
+            Effect.map(() => true),
+            Effect.catchTag("NotFound", () => Effect.succeed(false)),
+            Effect.catch(() => Effect.succeed(false)),
+          );
+          if (!exists) return undefined;
+          return {
+            bucketName,
+            bucketArn: `arn:aws:s3:::${bucketName}` as const,
+            bucketDomainName: `${bucketName}.s3.amazonaws.com` as const,
+            bucketRegionalDomainName:
+              `${bucketName}.s3.${region}.amazonaws.com` as const,
+            region,
+            accountId,
+          };
+        }),
         diff: Effect.fn(function* ({ id, news = {}, olds = {} }) {
           if (!isResolved(news)) return undefined;
           const oldBucketName = yield* createBucketName(id, olds);
@@ -483,61 +527,54 @@ export const BucketProvider = () =>
           }
         }),
         precreate: (props) => ensureBucketExists(props),
-        create: Effect.fn(function* ({ id, news = {}, session, bindings }) {
-          const output = yield* ensureBucketExists({ id, news });
-
-          yield* syncBucketTags({
-            bucketName: output.bucketName,
-            newTags: news.tags,
-            session,
-            operation: "create",
-          });
-
-          yield* syncBucketPolicy({
-            bucketName: output.bucketName,
-            bindings,
-            session,
-            operation: "create",
-          });
-
-          yield* session.note(`Ensured bucket: ${output.bucketName}`);
-
-          return output;
-        }),
-        update: Effect.fn(function* ({
+        reconcile: Effect.fn(function* ({
+          id,
           news = {},
-          olds = {},
           output,
           session,
           bindings,
         }) {
+          const operation = output === undefined ? "create" : "update";
+          const resolved = output ?? (yield* ensureBucketExists({ id, news }));
+
           yield* syncBucketTags({
-            bucketName: output.bucketName,
-            oldTags: olds.tags,
+            bucketName: resolved.bucketName,
+            // Omit `oldTags` so syncBucketTags fetches the cloud's actual
+            // current tags. This makes drift detection correct even after
+            // a cold-start adoption where olds.tags would equal news.tags.
             newTags: news.tags,
             session,
-            operation: "update",
+            operation,
           });
 
           yield* syncBucketPolicy({
-            bucketName: output.bucketName,
+            bucketName: resolved.bucketName,
             bindings,
             session,
-            operation: "update",
+            operation,
           });
 
-          return output;
+          if (operation === "create") {
+            yield* session.note(`Ensured bucket: ${resolved.bucketName}`);
+          }
+
+          return resolved;
         }),
         delete: Effect.fn(function* ({ olds = {}, output, session }) {
           yield* Effect.logInfo(
             `S3 Bucket delete: bucket=${output.bucketName} forceDestroy=${olds.forceDestroy ?? false}`,
           );
-          // If forceDestroy is enabled, delete all objects first
+          // If forceDestroy is enabled, delete all objects first. The bucket
+          // may already be gone (deleted out-of-band, or a previous destroy
+          // partially succeeded) — treat NoSuchBucket as a no-op so the
+          // overall delete still converges.
           if (olds.forceDestroy) {
             yield* session.note(
               `Force destroying bucket: ${output.bucketName} - deleting all objects...`,
             );
-            yield* deleteAllObjects(output.bucketName);
+            yield* deleteAllObjects(output.bucketName).pipe(
+              Effect.catchTag("NoSuchBucket", () => Effect.void),
+            );
           }
 
           yield* s3

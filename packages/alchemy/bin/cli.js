@@ -19,11 +19,16 @@
 // exports point at .ts source), but consumers install into `node_modules/`,
 // so the path check sends them to the bundled `alchemy.js` regardless.
 //
-// foreground-child forwards stdio + signals and exits with the child's code,
-// so the launcher is transparent to the invoking shell / npm script.
+// We use @alchemy.run/node-utils' foreground-child so we can pipe the
+// child's stderr through a filter — upstream hardcodes stdio = [0, 1, 2],
+// so the only way to drop bun's hard-coded watcher warning ("warn: File
+// <path> is not in the project directory and will not be watched", which is
+// noise in our monorepo and has no bun flag to silence) is to own the spawn
+// call. Everything else — signal proxying, watchdog, IPC bridging, exit-code
+// forwarding — matches upstream.
 import { fileURLToPath } from "node:url";
 import path from "pathe";
-import { foregroundChild } from "foreground-child";
+import { foregroundChild } from "@alchemy.run/node-utils";
 
 const execpath = (process.env.npm_execpath ?? "").toLowerCase();
 const userAgent = (process.env.npm_config_user_agent ?? "").toLowerCase();
@@ -38,17 +43,17 @@ const binDir = path.dirname(fileURLToPath(import.meta.url));
 const jsEntry = path.join(binDir, "alchemy.js");
 const tsEntry = path.join(binDir, "alchemy.ts");
 
-// Treat any install-tree path as published; only a raw checkout uses .ts.
-const useTs = !(
+// Treat any install-tree path as published.
+const isDev = !(
   binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\")
 );
 
-// .ts only runs under bun. Force bun in dev even if node was the invoker.
-const runtime = useTs || invokedByBun ? "bun" : "node";
+// We no longer force bun in dev when node is the invoker because this prevents us from testing in node.
+const runtime = invokedByBun ? "bun" : "node";
 
 const args = [];
 
-if (runtime === "bun" && useTs) {
+if (runtime === "bun" && isDev) {
   // Pin bun's tsconfig to alchemy's, not whatever happens to be in the
   // invoking workspace's cwd. Bun's default is `$cwd/tsconfig.json`, which
   // means invoking `alchemy` from e.g. `examples/cloudflare-solidstart`
@@ -58,9 +63,13 @@ if (runtime === "bun" && useTs) {
   args.push(`--tsconfig-override=${path.join(binDir, "..", "tsconfig.json")}`);
 }
 
-args.push(useTs ? tsEntry : jsEntry, ...process.argv.slice(2));
+// .ts only runs under bun.
+args.push(runtime === "bun" ? tsEntry : jsEntry, ...process.argv.slice(2));
 
 process.on("uncaughtException", (error) => {
+  // STATUS_CONTROL_C_EXIT on Windows — the watchdog inherits Ctrl-C from the
+  // console and exits with this code instead of a SIGINT signal.
+  const WIN_CTRL_C = 3221225786;
   if (
     error.message.includes(
       "foreground-child watchdog process died unexpectedly!",
@@ -70,7 +79,7 @@ process.on("uncaughtException", (error) => {
     "watchedProcess" in error.cause &&
     error.cause.watchedProcess !== null &&
     "cmd" in error.cause.watchedProcess &&
-    error.cause.signal === "SIGINT"
+    (error.cause.signal === "SIGINT" || error.cause.code === WIN_CTRL_C)
   ) {
     console.log("Interrupted.");
     process.exit(0);
@@ -78,4 +87,9 @@ process.on("uncaughtException", (error) => {
   console.error(error);
 });
 
-foregroundChild(runtime, args);
+// Substring match (not regex) — bun may wrap the line in ANSI color codes
+// when stderr is piped to a TTY-aware parent, so anchored regex is fragile.
+foregroundChild(runtime, args, {
+  stderrFilter: (line) =>
+    !line.includes("is not in the project directory and will not be watched"),
+});

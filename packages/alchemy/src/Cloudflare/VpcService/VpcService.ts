@@ -163,49 +163,75 @@ export const VpcServiceProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        create: Effect.fn(function* ({ id, news }) {
+        reconcile: Effect.fn(function* ({ id, news, output }) {
           const name = yield* createServiceName(id, news.name);
-          const result = yield* createService({
-            accountId,
-            name,
-            type: news.serviceType ?? "http",
-            httpPort: news.httpPort,
-            httpsPort: news.httpsPort,
-            host: news.host,
-          }).pipe(
-            Effect.catch((err: unknown) =>
-              Effect.gen(function* () {
-                if (!news.adopt) return yield* Effect.fail(err as never);
-                const existing = yield* findServiceByName(name);
-                if (!existing || !existing.serviceId) {
-                  return yield* Effect.fail(err as never);
-                }
-                return yield* updateService({
-                  accountId,
-                  serviceId: existing.serviceId,
-                  name,
-                  type: news.serviceType ?? "http",
-                  httpPort: news.httpPort,
-                  httpsPort: news.httpsPort,
-                  host: news.host,
-                });
-              }),
-            ),
-          );
-          return formatVpcService(result, accountId);
-        }),
-        update: Effect.fn(function* ({ id, news, output }) {
-          const name = yield* createServiceName(id, news.name);
+          const acct = output?.accountId ?? accountId;
+
+          // Observe — re-fetch the cached service; fall back to a name
+          // scan so we recover from out-of-band deletes or partial state
+          // persistence failures.
+          let observed: connectivity.GetDirectoryServiceResponse | undefined;
+          if (output?.serviceId) {
+            observed = yield* getService({
+              accountId: acct,
+              serviceId: output.serviceId,
+            }).pipe(Effect.catch(() => Effect.succeed(undefined)));
+          }
+          if (!observed) {
+            const match = yield* findServiceByName(name);
+            observed = match as
+              | connectivity.GetDirectoryServiceResponse
+              | undefined;
+          }
+
+          // Ensure — create if missing. Cloudflare rejects a duplicate
+          // name with a generic error; tolerate by adopting the existing
+          // service (when the caller opted in) and re-applying the
+          // desired configuration.
+          if (!observed || !observed.serviceId) {
+            const result = yield* createService({
+              accountId: acct,
+              name,
+              type: news.serviceType ?? "http",
+              httpPort: news.httpPort,
+              httpsPort: news.httpsPort,
+              host: news.host,
+            }).pipe(
+              Effect.catch((err: unknown) =>
+                Effect.gen(function* () {
+                  if (!news.adopt) return yield* Effect.fail(err as never);
+                  const existing = yield* findServiceByName(name);
+                  if (!existing || !existing.serviceId) {
+                    return yield* Effect.fail(err as never);
+                  }
+                  return yield* updateService({
+                    accountId: acct,
+                    serviceId: existing.serviceId,
+                    name,
+                    type: news.serviceType ?? "http",
+                    httpPort: news.httpPort,
+                    httpsPort: news.httpsPort,
+                    host: news.host,
+                  });
+                }),
+              ),
+            );
+            return formatVpcService(result, acct);
+          }
+
+          // Sync — the Cloudflare update API replaces all mutable fields
+          // (name, ports, host) atomically, so always issue it so
+          // adoption and routine updates converge.
           const result = yield* updateService({
-            accountId: output.accountId,
-            serviceId: output.serviceId,
+            accountId: acct,
+            serviceId: observed.serviceId,
             name,
-            type: news.serviceType ?? output.serviceType ?? "http",
+            type: news.serviceType ?? observed.type ?? "http",
             httpPort: news.httpPort,
             httpsPort: news.httpsPort,
             host: news.host,
           });
-          return formatVpcService(result, output.accountId);
+          return formatVpcService(result, acct);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* deleteService({
