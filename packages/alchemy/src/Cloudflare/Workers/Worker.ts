@@ -1965,15 +1965,26 @@ export const LiveWorkerProvider = () =>
               listDomains({
                 accountId,
                 service: workerName,
-              }).pipe(
-                Effect.map(
-                  (r) =>
-                    r.result.sort((a, b) =>
-                      (a.hostname ?? "").localeCompare(b.hostname ?? ""),
-                    ) ?? [],
-                ),
-              ),
+              }).pipe(Effect.map((r) => r.result ?? [])),
             ]);
+            // Preserve the order the user provided in `olds.domain`. The
+            // Cloudflare API returns domains in non-deterministic order,
+            // which would cause downstream `worker.domains[0]` reads to
+            // flip between deploys. Drift (domains we don't know about)
+            // is appended after the user-ordered ones.
+            const userOrder = normalizeDomains(olds?.domain);
+            const byHostname = new Map(
+              domainsList.flatMap((d) => (d.hostname ? [[d.hostname, d]] : [])),
+            );
+            const orderedDomains = [
+              ...userOrder.flatMap((h) => {
+                const d = byHostname.get(h);
+                return d ? [d] : [];
+              }),
+              ...domainsList.filter(
+                (d) => !d.hostname || !userOrder.includes(d.hostname),
+              ),
+            ];
             const crons = yield* getWorkerCrons(workerName);
             yield* Effect.logInfo(
               `Cloudflare Worker read: found ${workerName}`,
@@ -1990,7 +2001,7 @@ export const LiveWorkerProvider = () =>
               durableObjectNamespaces: getDurableObjectNamespaces(
                 settings.bindings,
               ),
-              domains: domainsList.flatMap((d) =>
+              domains: orderedDomains.flatMap((d) =>
                 d.id && d.hostname && d.zoneId
                   ? [{ id: d.id, hostname: d.hostname, zoneId: d.zoneId }]
                   : [],
