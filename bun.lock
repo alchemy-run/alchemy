@@ -506,8 +506,10 @@
       "version": "2.0.0-beta.44",
       "dependencies": {
         "alchemy": "workspace:*",
-        "better-auth": "catalog:",
         "effect": "catalog:",
+      },
+      "peerDependencies": {
+        "better-auth": "catalog:",
       },
     },
     "packages/pr-package": {

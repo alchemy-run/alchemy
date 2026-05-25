@@ -24,8 +24,10 @@
   },
   "dependencies": {
     "alchemy": "workspace:*",
-    "better-auth": "catalog:",
     "effect": "catalog:"
+  },
+  "peerDependencies": {
+    "better-auth": "catalog:"
   },
   "publishConfig": {
     "access": "public"
