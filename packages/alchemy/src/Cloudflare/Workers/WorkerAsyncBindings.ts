@@ -7,6 +7,8 @@ import { isYieldableEffectLike } from "../../Util/effect.ts";
 import { isAnalyticsEngineDataset } from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
 import { isArtifacts } from "../Artifacts/Artifacts.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
+import { isHyperdrive } from "../Hyperdrive/Hyperdrive.ts";
+import { getHyperdriveDevOrigin } from "../Hyperdrive/HyperdriveBinding.ts";
 import { isImages } from "../Images/Images.ts";
 import { isAssets } from "./Assets.ts";
 import { isDurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
@@ -118,7 +120,7 @@ export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
                                       type: "ai",
                                       name: bindingName,
                                     }
-                                  : binding.Type === "Cloudflare.Hyperdrive"
+                                  : isHyperdrive(binding)
                                     ? {
                                         type: "hyperdrive",
                                         name: bindingName,
@@ -136,6 +138,9 @@ export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
       if (bindingMeta) {
         yield* resource.bind`${bindingName}`({
           bindings: [bindingMeta],
+          hyperdrives: isHyperdrive(binding)
+            ? getHyperdriveDevOrigin(binding)
+            : undefined,
         });
       } else {
         return yield* Effect.die(`Unknown binding type: ${bindingName}`);
