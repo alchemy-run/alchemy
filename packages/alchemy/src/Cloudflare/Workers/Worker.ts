@@ -1973,14 +1973,10 @@ export const LiveWorkerProvider = () =>
             // flip between deploys. Drift (domains we don't know about)
             // is appended after the user-ordered ones.
             const userOrder = normalizeDomains(olds?.domain);
-            const byHostname = new Map(
-              domainsList.flatMap((d) => (d.hostname ? [[d.hostname, d]] : [])),
-            );
             const orderedDomains = [
-              ...userOrder.flatMap((h) => {
-                const d = byHostname.get(h);
-                return d ? [d] : [];
-              }),
+              ...userOrder.flatMap(
+                (h) => domainsList.find((d) => d.hostname === h) ?? [],
+              ),
               ...domainsList.filter(
                 (d) => !d.hostname || !userOrder.includes(d.hostname),
               ),
