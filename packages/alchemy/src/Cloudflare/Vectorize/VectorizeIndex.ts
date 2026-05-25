@@ -15,7 +15,9 @@ export type VectorizePreset =
   | "@cf/baai/bge-base-en-v1.5"
   | "@cf/baai/bge-large-en-v1.5"
   | "openai/text-embedding-ada-002"
-  | "cohere/embed-multilingual-v2.0";
+  | "cohere/embed-multilingual-v2.0"
+  // Keep the union open so new Cloudflare presets aren't blocked by stale types.
+  | (string & {});
 
 const DEFAULT_METRIC: DistanceMetric = "cosine";
 
@@ -144,7 +146,13 @@ export const VectorizeIndexProvider = () =>
         news: VectorizeIndexProps,
       ): vectorize.CreateIndexRequest["config"] =>
         news.preset !== undefined
-          ? { preset: news.preset }
+          ? // `VectorizePreset` is intentionally open (`| (string & {})`) so
+            // new Cloudflare presets aren't blocked by stale types. The
+            // distilled type is the strict-at-release-time union; cast
+            // through for the API call.
+            ({
+              preset: news.preset as never,
+            } as vectorize.CreateIndexRequest["config"])
           : {
               dimensions: news.dimensions!,
               metric: news.metric ?? DEFAULT_METRIC,
