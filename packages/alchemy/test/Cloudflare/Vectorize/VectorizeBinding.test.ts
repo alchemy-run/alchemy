@@ -95,6 +95,30 @@ test.provider(
       expect(getRes.status).toBe(200);
       expect(yield* getRes.json).toEqual({ ids: ["a", "b"] });
 
+      // Metadata-filtered query: only the vector tagged `kind: "second"`
+      // should come back. The metadata index lives on the parent and was
+      // created at deploy time before the upsert, so the filter is valid;
+      // poll until Cloudflare indexes the upserted vectors with it.
+      const filteredBody = yield* HttpClient.get(
+        `${baseUrl}/query-filtered`,
+      ).pipe(
+        Effect.flatMap((res) => res.json),
+        Effect.map(
+          (body) => body as { count: number; ids: string[]; kinds: string[] },
+        ),
+        Effect.filterOrFail(
+          (body) => body.count === 1 && body.ids[0] === "b",
+          () => new WorkerNotReady({ status: 200, body: "filter not ready" }),
+        ),
+        Effect.retry({
+          schedule: Schedule.spaced("3 seconds").pipe(
+            Schedule.both(Schedule.recurs(20)),
+          ),
+        }),
+      );
+      expect(filteredBody.ids).toEqual(["b"]);
+      expect(filteredBody.kinds).toEqual(["second"]);
+
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 240_000 },

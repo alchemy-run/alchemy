@@ -5,13 +5,15 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * Vectorize index created at deploy time and bound to the worker via
- * `Cloudflare.VectorizeConnection.bind(...)`. The handlers exercise the
- * Effect-native Vectorize client surface:
+ * `Cloudflare.VectorizeConnection.bind(...)`. A metadata index on the
+ * `kind` property is also provisioned so that filtered queries can use
+ * it. The handlers exercise the Effect-native Vectorize client surface:
  *
- *   POST /upsert     — `index.upsert([...])`
- *   GET  /describe   — `index.describe()`
- *   GET  /query      — `index.query(vector, { topK })`
- *   GET  /get        — `index.getByIds([...])`
+ *   POST /upsert         — `index.upsert([...])`
+ *   GET  /describe       — `index.describe()`
+ *   GET  /query          — `index.query(vector, { topK })`
+ *   GET  /query-filtered — `index.query(vector, { filter: { kind: ... } })`
+ *   GET  /get            — `index.getByIds([...])`
  */
 export const TestIndex = Cloudflare.VectorizeIndex("VectorizeWorkerIndex", {
   dimensions: 3,
@@ -27,6 +29,14 @@ export default class VectorizeWorker extends Cloudflare.Worker<VectorizeWorker>(
   },
   Effect.gen(function* () {
     const index = yield* TestIndex;
+    // Metadata indexes must exist before vectors are inserted for them to
+    // be queryable — declaring it here puts it in the stack so the deploy
+    // creates it before the test hits /upsert.
+    yield* Cloudflare.VectorizeMetadataIndex("VectorizeWorkerKindMetaIndex", {
+      indexName: index.indexName,
+      propertyName: "kind",
+      indexType: "string",
+    });
     const vec = yield* Cloudflare.VectorizeConnection.bind(index);
 
     return {
@@ -61,6 +71,21 @@ export default class VectorizeWorker extends Cloudflare.Worker<VectorizeWorker>(
           return yield* HttpServerResponse.json({
             count: matches.count,
             ids: matches.matches.map((m) => m.id),
+          });
+        }
+
+        if (request.method === "GET" && url.pathname === "/query-filtered") {
+          const matches = yield* vec.query([0.1, 0.2, 0.3], {
+            topK: 3,
+            returnMetadata: "all",
+            filter: { kind: { $eq: "second" } },
+          });
+          return yield* HttpServerResponse.json({
+            count: matches.count,
+            ids: matches.matches.map((m) => m.id),
+            kinds: matches.matches.map(
+              (m) => (m.metadata as { kind?: string } | undefined)?.kind,
+            ),
           });
         }
 
