@@ -22,7 +22,6 @@ import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
-import { SidecarLive } from "../Local/Sidecar.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -34,7 +33,10 @@ import {
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObjectNamespace.ts";
-import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
+import {
+  LocalWorkerProvider,
+  localRuntimeServices,
+} from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
 import * as Vite from "./Vite.ts";
 import {
@@ -136,9 +138,13 @@ export const ExportedHandlerMethods = [
   "queue",
 ] as const satisfies (keyof cf.ExportedHandler)[];
 
-export type WorkerServices = Worker | Request | WorkerExecutionContext;
+export type WorkerServices =
+  | Worker
+  | Request
+  | WorkerExecutionContext
+  | WorkerEnvironment;
 
-export type WorkerShape = Main<WorkerServices | WorkerEnvironment>;
+export type WorkerShape = Main<WorkerServices>;
 
 export type WorkerEnv = Record<
   string,
@@ -239,24 +245,11 @@ export interface WorkerProps<
    * already exist in the account.
    */
   domain?: string | string[];
-  build?: {
-    /**
-     * Whether to generate a metafile for the worker bundle.
-     * @default false
-     */
-    metafile?: boolean;
-    /**
-     * Configures the {@link Bundle.purePlugin} which annotates top-level
-     * call/new expressions in matching packages with `/*#__PURE__*\/`
-     * so rolldown can tree-shake them.
-     *
-     * - `undefined` (default): plugin is enabled with default packages
-     *   (`effect`, `@effect/*`).
-     * - `PurePluginOptions`: plugin is enabled with the provided options.
-     * - `false`: plugin is disabled.
-     */
-    pure?: Bundle.BundleExtraOptions["pure"];
-  };
+  /**
+   * Extra bundler options applied on top of the standard rolldown input/output
+   * options used to build this Worker. See {@link Bundle.BundleExtraOptions}.
+   */
+  build?: Bundle.BundleExtraOptions;
 }
 
 export type Worker<Bindings extends WorkerBindings = any> = Resource<
@@ -658,7 +651,7 @@ export const Worker: Platform<
   >(
     id: string,
     props:
-      | WorkerProps<Bindings, Env, Assets>
+      | InputProps<WorkerProps<Bindings, Env, Assets>>
       | Effect.Effect<
           InputProps<WorkerProps<Bindings, Env, Assets>>,
           never,
@@ -720,7 +713,7 @@ const selectLayer = <
 export const WorkerProvider = () =>
   selectLayer({
     live: LiveWorkerProvider,
-    dev: () => Layer.provide(LocalWorkerProvider(), SidecarLive),
+    dev: () => Layer.provide(LocalWorkerProvider(), localRuntimeServices()),
   });
 
 export const LiveWorkerProvider = () =>
@@ -1117,7 +1110,7 @@ export const LiveWorkerProvider = () =>
                   exports: (props.exports ?? {}) as any,
                 },
             stack: { name: stack.name, stage: stack.stage },
-            userOptions: props.build,
+            extraOptions: props.build,
           })
           .pipe(Artifacts.cached("build"));
 

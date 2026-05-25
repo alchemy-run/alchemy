@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { AnalyticsEngineDataset as AnalyticsEngineDatasetLike } from "./AnalyticsEngineDataset.ts";
 
@@ -24,10 +25,10 @@ export class AnalyticsEngineDatasetError extends Data.TaggedError(
 }> {}
 
 export interface AnalyticsEngineDatasetClient {
-  raw: Effect.Effect<RuntimeAnalyticsEngineDataset, never, WorkerEnvironment>;
+  raw: Effect.Effect<RuntimeAnalyticsEngineDataset, never, RuntimeContext>;
   writeDataPoint(
     dataPoint: AnalyticsEngineDataPoint,
-  ): Effect.Effect<void, AnalyticsEngineDatasetError, WorkerEnvironment>;
+  ): Effect.Effect<void, AnalyticsEngineDatasetError, RuntimeContext>;
 }
 
 export class AnalyticsEngineDatasetBinding extends Binding.Service<
@@ -41,17 +42,14 @@ export const AnalyticsEngineDatasetBindingLive = Layer.effect(
   AnalyticsEngineDatasetBinding,
   Effect.gen(function* () {
     const bind = yield* AnalyticsEngineDatasetBindingPolicy;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fnUntraced(function* (dataset: AnalyticsEngineDatasetLike) {
       yield* bind(dataset);
 
-      const raw = WorkerEnvironment.pipe(
-        Effect.map(
-          (env) =>
-            (env as Record<string, RuntimeAnalyticsEngineDataset>)[
-              dataset.name
-            ]!,
-        ),
+      const raw = Effect.sync(
+        () =>
+          (env as Record<string, RuntimeAnalyticsEngineDataset>)[dataset.name]!,
       );
 
       return {

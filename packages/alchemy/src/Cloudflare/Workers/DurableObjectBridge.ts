@@ -81,7 +81,6 @@ export const makeDurableObjectBridge =
 
         return new Proxy(this, {
           get: (target, prop) => {
-            console.log(target, prop, prop in target);
             const bind = (f: any) =>
               typeof f === "function" ? f.bind(target) : f;
             if (typeof prop !== "string") return bind((target as any)[prop]);

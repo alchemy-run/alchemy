@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { type Images as ImagesLike } from "./Images.ts";
 
@@ -55,7 +56,7 @@ export interface ImageTransformerClient {
  */
 export interface ImagesClient {
   /** Effect resolving to the raw Cloudflare runtime binding. */
-  raw: Effect.Effect<cf.ImagesBinding, never, WorkerEnvironment>;
+  raw: Effect.Effect<cf.ImagesBinding, never, RuntimeContext>;
   /**
    * Read image format and dimensions from a stream of bytes.
    * Fails with {@link ImagesError} (code 9412) if the input is not
@@ -64,7 +65,7 @@ export interface ImagesClient {
   info<E = never, R = never>(
     stream: Stream.Stream<Uint8Array, E, R>,
     options?: cf.ImageInputOptions,
-  ): Effect.Effect<cf.ImageInfoResponse, ImagesError, WorkerEnvironment | R>;
+  ): Effect.Effect<cf.ImageInfoResponse, ImagesError, RuntimeContext | R>;
   /**
    * Begin a transformation pipeline. Subsequent `.transform()` /
    * `.draw()` calls are pure; `.output(opts)` runs the pipeline.
@@ -72,7 +73,7 @@ export interface ImagesClient {
   input<E = never, R = never>(
     stream: Stream.Stream<Uint8Array, E, R>,
     options?: cf.ImageInputOptions,
-  ): Effect.Effect<ImageTransformerClient, never, WorkerEnvironment | R>;
+  ): Effect.Effect<ImageTransformerClient, never, RuntimeContext | R>;
 }
 
 export class ImagesBinding extends Binding.Service<
@@ -84,14 +85,13 @@ export const ImagesBindingLive = Layer.effect(
   ImagesBinding,
   Effect.gen(function* () {
     const Policy = yield* ImagesBindingPolicy;
+    const env = yield* WorkerEnvironment;
 
     return Effect.fn(function* (images: ImagesLike) {
       yield* Policy(images);
-      const env = WorkerEnvironment;
-      const raw = env.pipe(
-        Effect.map(
-          (env) => (env as Record<string, cf.ImagesBinding>)[images.name]!,
-        ),
+      const raw = Effect.sync(
+        // this must be lazy because the WorkerEnvironment is not available yet
+        () => (env as Record<string, cf.ImagesBinding>)[images.name]!,
       );
 
       return {

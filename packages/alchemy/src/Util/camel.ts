@@ -1,3 +1,5 @@
+import { isPlainObject } from "./data.ts";
+
 export const camelCaseKey = (key: string) =>
   key
     .replace(/^_+/, "")
@@ -7,11 +9,7 @@ export const toCamelCase = <T>(value: unknown): T => {
   if (Array.isArray(value)) {
     return value.map((item) => toCamelCase(item)) as T;
   }
-  if (
-    value &&
-    typeof value === "object" &&
-    Object.getPrototypeOf(value) === Object.prototype
-  ) {
+  if (isPlainObject(value)) {
     return Object.fromEntries(
       Object.entries(value).map(([key, nested]) => [
         camelCaseKey(key),

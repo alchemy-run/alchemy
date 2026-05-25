@@ -17,6 +17,7 @@ import * as AnalyticsEngine from "./AnalyticsEngine/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Artifacts from "./Artifacts/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
+import * as BrowserRendering from "./BrowserRendering/index.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Containers from "./Container/index.ts";
 import * as Credentials from "./Credentials.ts";
@@ -33,6 +34,7 @@ import * as Vectorize from "./Vectorize/index.ts";
 import * as VpcService from "./VpcService/index.ts";
 import * as Workers from "./Workers/index.ts";
 import * as Workflows from "./Workers/Workflow.ts";
+import * as Zaraz from "./Zaraz/index.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
@@ -55,6 +57,7 @@ export const providers = () =>
       AiGateway.AiGatewayBindingPolicy,
       AnalyticsEngine.AnalyticsEngineDatasetBindingPolicy,
       Artifacts.ArtifactsBindingPolicy,
+      BrowserRendering.BrowserRenderingBindingPolicy,
       Command,
       Containers.Container,
       D1.D1ConnectionPolicy,
@@ -87,6 +90,7 @@ export const providers = () =>
       Workers.FetchPolicy,
       Workers.Worker,
       Workflows.WorkflowResource,
+      Zaraz.ZarazConfig,
     ]),
   ).pipe(
     Layer.provide(
@@ -97,6 +101,7 @@ export const providers = () =>
         AiGateway.AiGatewayBindingPolicyLive,
         AnalyticsEngine.AnalyticsEngineDatasetBindingPolicyLive,
         Artifacts.ArtifactsBindingPolicyLive,
+        BrowserRendering.BrowserRenderingBindingPolicyLive,
         Containers.ContainerProvider(),
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
@@ -127,6 +132,7 @@ export const providers = () =>
         Workers.FetchPolicyLive,
         Workers.WorkerProvider(),
         Workflows.WorkflowProvider(),
+        Zaraz.ZarazConfigProvider(),
       ),
     ),
     Layer.provideMerge(

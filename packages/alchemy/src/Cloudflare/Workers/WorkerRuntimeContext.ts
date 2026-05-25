@@ -1,5 +1,6 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { HttpEffect } from "../../Http.ts";
@@ -112,6 +113,7 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
       Effect.sync(() => {
         exports[name] = value;
       }),
+    planServices: Layer.succeed(WorkerEnvironment, {}),
     exports: Effect.gen(function* () {
       const handlers = yield* Effect.all(listeners, {
         concurrency: "unbounded",

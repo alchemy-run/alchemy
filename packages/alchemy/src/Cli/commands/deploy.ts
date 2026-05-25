@@ -125,6 +125,7 @@ export const execStack = Effect.fn(function* ({
               // TODO(sam): probably better to have Plan.destroy and Plan.update
               resources: {},
               bindings: {},
+              actions: {},
               output: {},
             }
           : stack,
