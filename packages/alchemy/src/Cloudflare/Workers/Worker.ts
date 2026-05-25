@@ -1965,7 +1965,14 @@ export const LiveWorkerProvider = () =>
               listDomains({
                 accountId,
                 service: workerName,
-              }).pipe(Effect.map((r) => r.result ?? [])),
+              }).pipe(
+                Effect.map(
+                  (r) =>
+                    r.result.sort((a, b) =>
+                      (a.hostname ?? "").localeCompare(b.hostname ?? ""),
+                    ) ?? [],
+                ),
+              ),
             ]);
             const crons = yield* getWorkerCrons(workerName);
             yield* Effect.logInfo(
