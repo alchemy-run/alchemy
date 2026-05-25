@@ -594,7 +594,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * const sandbox = yield* Cloudflare.Container.bind(Sandbox);
  *
  * return Effect.gen(function* () {
- *   const container = yield* Cloudflare.start(sandbox);
+ *   const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
  *
  *   return {
  *     exec: (cmd: string) => container.exec(cmd),

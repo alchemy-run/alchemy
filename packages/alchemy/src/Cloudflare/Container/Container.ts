@@ -176,7 +176,7 @@ export type Container = {
  *
  *     return Effect.gen(function* () {
  *       // INNER (per-instance): start the container and expose RPC.
- *       const container = yield* Cloudflare.start(sandbox);
+ *       const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
  *
  *       return {
  *         exec: (cmd: string) => container.exec(cmd),
@@ -200,7 +200,7 @@ export type Container = {
  *
  * // per-instance (inner Effect)
  * return Effect.gen(function* () {
- *   const container = yield* Cloudflare.start(sandbox);
+ *   const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
  *
  *   return {
  *     exec: (cmd: string) => container.exec(cmd),
@@ -215,7 +215,7 @@ export type Container = {
  *
  * @example Fetching from a container port
  * ```typescript
- * const container = yield* Cloudflare.start(sandbox);
+ * const container = yield* Cloudflare.start(sandbox, { enableInternet: true });
  * const { fetch } = yield* container.getTcpPort(3000);
  *
  * const response = yield* fetch(
