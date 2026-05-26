@@ -25,6 +25,8 @@ const publicExports = [
   "ConnectionBindingPolicyLive",
   "ConnectionProvider",
   "connectionBindingEnvKeys",
+  "connectionEnv",
+  "connectionUrl",
   "Branch",
   "BranchProvider",
   "ComputeService",

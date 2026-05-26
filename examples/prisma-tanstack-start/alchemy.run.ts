@@ -75,11 +75,9 @@ export default Alchemy.Stack(
     });
 
     // Prisma Next's Postgres runtime uses the `pg` driver, so it wants a
-    // direct postgres:// URL. The Prisma.Connection resource can also expose a
-    // pooled prisma+postgres:// URL, but that is for Prisma Postgres clients
-    // that understand the Data Proxy protocol, not this runtime.
-    const databaseUrl =
-      connection.directConnectionString ?? connection.connectionString;
+    // direct postgres:// URL. `connectionEnv` resolves the Alchemy Outputs with
+    // the same direct-then-legacy fallback for DATABASE_URL and DIRECT_URL.
+    const databaseEnv = Prisma.connectionEnv(connection);
 
     // Compute builds the TanStack Start app, uploads the `.output` artifact
     // to Prisma Compute, and promotes a version. The env block is the runtime
@@ -98,19 +96,16 @@ export default Alchemy.Stack(
         outdir: ".output",
         entrypoint: "server/index.mjs",
         env: {
-          DATABASE_URL: databaseUrl,
-          DIRECT_URL: databaseUrl,
+          DATABASE_URL: databaseEnv.DATABASE_URL,
+          DIRECT_URL: databaseEnv.DIRECT_URL,
         },
       },
       port: 3000,
       env: {
-        DATABASE_URL: databaseUrl,
-        DIRECT_URL: databaseUrl,
+        ...databaseEnv,
         TANSTACK_MESSAGE: message,
         PRISMA_PROJECT_ID: project.projectId,
         PRISMA_BRANCH_ID: branch.branchId,
-        PRISMA_DATABASE_ID: postgres.databaseId,
-        PRISMA_CONNECTION_ID: connection.connectionId,
       },
       dev: {
         command: "bun run dev:start",

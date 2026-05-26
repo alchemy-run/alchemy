@@ -60,9 +60,11 @@ bun run db:setup  # all of the above, in order
 The Vite dev server also auto-emits the contract on edits. The explicit scripts
 remain the source of truth for deploys and CI so builds are reproducible.
 
-The runtime uses `pg`, so the example passes the direct `postgres://` connection
-string as `DATABASE_URL`. The pooled `prisma+postgres://` URL is intentionally
-not used by `@prisma-next/postgres/runtime`.
+The runtime uses `pg`, so the example uses `Prisma.connectionEnv(connection)` to
+pass a direct `postgres://` connection string as `DATABASE_URL`/`DIRECT_URL`.
+The pooled `prisma+postgres://` URL is exported separately as
+`POOLED_DATABASE_URL` but is intentionally not used by
+`@prisma-next/postgres/runtime`.
 
 ## Deploy
 

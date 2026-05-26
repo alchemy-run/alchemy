@@ -14,6 +14,8 @@ import {
   Connection as PrismaConnection,
   ConnectionProvider,
   connectionBindingEnvKeys,
+  connectionEnv,
+  connectionUrl,
 } from "@/Prisma/Connection";
 import {
   Database as PrismaDatabase,
@@ -45,6 +47,15 @@ type Call = [operation: string, input?: unknown];
 
 const createdAt = "2026-01-01T00:00:00Z";
 const updatedAt = "2026-01-01T00:00:01Z";
+
+const redactedValue = (
+  value: string | Redacted.Redacted<string> | undefined,
+) => {
+  if (!Redacted.isRedacted(value)) {
+    throw new Error("Expected a redacted value");
+  }
+  return Redacted.value(value);
+};
 
 const resourceRef = (kind: string, id: string, name = id) => ({
   id,
@@ -316,6 +327,53 @@ describe("Prisma resource providers", () => {
   });
 
   it.effect(
+    "builds conventional env vars with Output-safe URL fallbacks",
+    () => {
+      const connection = {
+        Type: "Prisma.Connection",
+        LogicalId: "Connection",
+        FQN: "Connection",
+        connectionId: Output.asOutput("connection-1"),
+        databaseId: Output.asOutput("database-1"),
+        connectionString: Output.asOutput(Redacted.make("postgres://legacy")),
+        directConnectionString: Output.asOutput(undefined),
+        pooledConnectionString: Output.asOutput(
+          Redacted.make("prisma+postgres://pooled"),
+        ),
+        accelerateConnectionString: Output.asOutput(undefined),
+        host: Output.asOutput(undefined),
+        user: Output.asOutput(undefined),
+        password: Output.asOutput(undefined),
+      } as PrismaConnection;
+
+      return Effect.gen(function* () {
+        const url = yield* Output.evaluate(connectionUrl(connection), {});
+        const env = connectionEnv(connection);
+        const databaseUrl = yield* Output.evaluate(env.DATABASE_URL, {});
+        const directUrl = yield* Output.evaluate(env.DIRECT_URL, {});
+        const pooledDatabaseUrl = yield* Output.evaluate(
+          env.POOLED_DATABASE_URL,
+          {},
+        );
+        const connectionId = yield* Output.evaluate(
+          env.PRISMA_CONNECTION_ID,
+          {},
+        );
+        const databaseId = yield* Output.evaluate(env.PRISMA_DATABASE_ID, {});
+
+        expect(redactedValue(url)).toBe("postgres://legacy");
+        expect(redactedValue(databaseUrl)).toBe("postgres://legacy");
+        expect(redactedValue(directUrl)).toBe("postgres://legacy");
+        expect(redactedValue(pooledDatabaseUrl)).toBe(
+          "prisma+postgres://pooled",
+        );
+        expect(connectionId).toBe("connection-1");
+        expect(databaseId).toBe("database-1");
+      });
+    },
+  );
+
+  it.effect(
     "ConnectionBindingLive resolves bound connection outputs at runtime",
     () => {
       const stored: Record<string, Output.Output> = {};
@@ -384,8 +442,11 @@ describe("Prisma resource providers", () => {
         );
         expect(encodedEnv[keys.user]).toEqual(expect.any(String));
         expect(yield* db.connectionId).toBe("connection-1");
+        expect(yield* db.databaseUrl).toBe("postgres://direct");
+        expect(yield* db.directUrl).toBe("postgres://direct");
         expect(yield* db.connectionString).toBeUndefined();
         expect(yield* db.directConnectionString).toBe("postgres://direct");
+        expect(yield* db.pooledDatabaseUrl).toBe(escapedPooledConnectionString);
         expect(yield* db.pooledConnectionString).toBe(
           escapedPooledConnectionString,
         );

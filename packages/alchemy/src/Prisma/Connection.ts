@@ -104,6 +104,24 @@ export interface Connection extends Resource<
 
 export interface ConnectionBindingClient {
   /**
+   * Conventional application database URL.
+   *
+   * Resolves to the direct Postgres connection string, falling back to the
+   * legacy connection string when direct credentials are unavailable.
+   */
+  databaseUrl: Effect.Effect<string | undefined, never, RuntimeContext>;
+  /**
+   * Conventional direct database URL.
+   *
+   * Resolves to the direct Postgres connection string, falling back to the
+   * legacy connection string when direct credentials are unavailable.
+   */
+  directUrl: Effect.Effect<string | undefined, never, RuntimeContext>;
+  /**
+   * Conventional pooled database URL.
+   */
+  pooledDatabaseUrl: Effect.Effect<string | undefined, never, RuntimeContext>;
+  /**
    * Prisma connection/API key ID.
    */
   connectionId: Effect.Effect<string, never, RuntimeContext>;
@@ -170,6 +188,48 @@ export class ConnectionBinding extends Binding.Service<
   (connection: Connection) => Effect.Effect<ConnectionBindingClient>
 >()("Prisma.Connection") {}
 
+export type ConnectionUrlKind = "legacy" | "direct" | "pooled" | "accelerate";
+export type ConnectionUrlPreference =
+  | ConnectionUrlKind
+  | readonly ConnectionUrlKind[];
+
+export type ConnectionEnvValue = Output.Output<
+  string | Redacted.Redacted<string> | undefined
+>;
+
+export interface ConnectionEnvOptions {
+  /**
+   * Env var name for the app-facing database URL. Set to `false` to omit.
+   *
+   * @default "DATABASE_URL"
+   */
+  databaseUrl?: string | false;
+  /**
+   * Env var name for the direct database URL. Set to `false` to omit.
+   *
+   * @default "DIRECT_URL"
+   */
+  directUrl?: string | false;
+  /**
+   * Env var name for the pooled database URL. Set to `false` to omit.
+   *
+   * @default "POOLED_DATABASE_URL"
+   */
+  pooledDatabaseUrl?: string | false;
+  /**
+   * Env var name for the Prisma connection/API key ID. Set to `false` to omit.
+   *
+   * @default "PRISMA_CONNECTION_ID"
+   */
+  connectionId?: string | false;
+  /**
+   * Env var name for the Prisma database ID. Set to `false` to omit.
+   *
+   * @default "PRISMA_DATABASE_ID"
+   */
+  databaseId?: string | false;
+}
+
 /**
  * A Prisma database connection/API key.
  *
@@ -189,7 +249,18 @@ export class ConnectionBinding extends Binding.Service<
  *   database,
  *   name: "api",
  * });
+ * const env = Prisma.connectionEnv(connection);
  *
+ * const app = yield* Prisma.Compute("api", {
+ *   project,
+ *   serviceName: "api",
+ *   main: import.meta.filename,
+ *   env,
+ * });
+ * ```
+ *
+ * @example Use a connection inside an Effect-native app
+ * ```typescript
  * export default Prisma.Compute(
  *   "api",
  *   { project, serviceName: "api", main: import.meta.filename },
@@ -197,7 +268,7 @@ export class ConnectionBinding extends Binding.Service<
  *     const db = yield* Prisma.Connection.bind(connection);
  *     return {
  *       fetch: Effect.gen(function* () {
- *         const databaseUrl = yield* db.directConnectionString;
+ *         const databaseUrl = yield* db.databaseUrl;
  *         return yield* HttpServerResponse.text(databaseUrl ?? "");
  *       }),
  *     };
@@ -211,6 +282,102 @@ export const Connection = Resource<Connection>("Prisma.Connection")({
 
 const envName = (value: string) =>
   value.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
+
+const asPreferenceList = (
+  preference: ConnectionUrlPreference,
+): readonly ConnectionUrlKind[] =>
+  typeof preference === "string" ? [preference] : preference;
+
+const selectedConnectionUrl = (
+  values: Record<ConnectionUrlKind, Redacted.Redacted<string> | undefined>,
+  preference: readonly ConnectionUrlKind[],
+) => {
+  for (const kind of preference) {
+    const value = values[kind];
+    if (value !== undefined) return value;
+  }
+  return undefined;
+};
+
+/**
+ * Resolve a connection URL from a Prisma Connection using Output-safe
+ * fallback logic.
+ *
+ * JavaScript operators like `??` run before Alchemy Outputs resolve, so use
+ * this helper when you want a fallback chain such as direct-then-legacy.
+ *
+ * @default ["direct", "legacy"]
+ */
+export const connectionUrl = (
+  connection: Connection,
+  preference: ConnectionUrlPreference = ["direct", "legacy"],
+): Output.Output<Redacted.Redacted<string> | undefined> => {
+  const preferred = asPreferenceList(preference);
+  return Output.all(
+    connection.connectionString,
+    connection.directConnectionString,
+    connection.pooledConnectionString,
+    connection.accelerateConnectionString,
+  ).pipe(
+    Output.map(([legacy, direct, pooled, accelerate]) =>
+      selectedConnectionUrl(
+        {
+          legacy,
+          direct,
+          pooled,
+          accelerate,
+        },
+        preferred,
+      ),
+    ),
+  );
+};
+
+const envKey = (name: string | false | undefined, defaultName: string) =>
+  name === false ? undefined : (name ?? defaultName);
+
+const setEnvValue = (
+  env: Record<string, ConnectionEnvValue>,
+  key: string | undefined,
+  value: ConnectionEnvValue,
+) => {
+  if (key !== undefined) {
+    env[key] = value;
+  }
+};
+
+/**
+ * Build conventional environment variables for a Prisma Connection.
+ *
+ * The returned values are Alchemy Outputs, so they can be passed directly to
+ * `Prisma.Compute({ env })` or build command env. `DATABASE_URL` and
+ * `DIRECT_URL` use the direct connection string with a legacy fallback.
+ */
+export const connectionEnv = (
+  connection: Connection,
+  options: ConnectionEnvOptions = {},
+): Record<string, ConnectionEnvValue> => {
+  const env: Record<string, ConnectionEnvValue> = {};
+  const appUrl = connectionUrl(connection);
+  setEnvValue(env, envKey(options.databaseUrl, "DATABASE_URL"), appUrl);
+  setEnvValue(env, envKey(options.directUrl, "DIRECT_URL"), appUrl);
+  setEnvValue(
+    env,
+    envKey(options.pooledDatabaseUrl, "POOLED_DATABASE_URL"),
+    connectionUrl(connection, "pooled"),
+  );
+  setEnvValue(
+    env,
+    envKey(options.connectionId, "PRISMA_CONNECTION_ID"),
+    connection.connectionId,
+  );
+  setEnvValue(
+    env,
+    envKey(options.databaseId, "PRISMA_DATABASE_ID"),
+    connection.databaseId,
+  );
+  return env;
+};
 
 export const connectionBindingEnvKeys = (
   connection: Pick<Connection, "FQN" | "LogicalId">,
@@ -352,21 +519,31 @@ export const ConnectionBindingLive = Layer.effect(
       yield* policy(connection);
       const keys = connectionBindingEnvKeys(connection);
       const env = encodedConnectionBindingEnv(connection);
+      const connectionString = runtimeOutput(
+        keys.connectionString,
+        env.connectionString,
+      ).pipe(Effect.map(optionalString));
+      const directConnectionString = runtimeOutput(
+        keys.directConnectionString,
+        env.directConnectionString,
+      ).pipe(Effect.map(optionalString));
+      const pooledConnectionString = runtimeOutput(
+        keys.pooledConnectionString,
+        env.pooledConnectionString,
+      ).pipe(Effect.map(optionalString));
+      const databaseUrl = Effect.all([
+        directConnectionString,
+        connectionString,
+      ]).pipe(Effect.map(([direct, legacy]) => direct ?? legacy));
       return {
+        databaseUrl,
+        directUrl: databaseUrl,
+        pooledDatabaseUrl: pooledConnectionString,
         connectionId: runtimeOutput(keys.connectionId, env.connectionId),
         databaseId: runtimeOutput(keys.databaseId, env.databaseId),
-        connectionString: runtimeOutput(
-          keys.connectionString,
-          env.connectionString,
-        ).pipe(Effect.map(optionalString)),
-        directConnectionString: runtimeOutput(
-          keys.directConnectionString,
-          env.directConnectionString,
-        ).pipe(Effect.map(optionalString)),
-        pooledConnectionString: runtimeOutput(
-          keys.pooledConnectionString,
-          env.pooledConnectionString,
-        ).pipe(Effect.map(optionalString)),
+        connectionString,
+        directConnectionString,
+        pooledConnectionString,
         accelerateConnectionString: runtimeOutput(
           keys.accelerateConnectionString,
           env.accelerateConnectionString,
