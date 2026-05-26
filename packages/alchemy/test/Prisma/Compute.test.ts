@@ -999,6 +999,116 @@ describe("Prisma Compute", () => {
     },
   );
 
+  it.effect("bundles effect-native Compute apps from a named export", () => {
+    let uploaded: Uint8Array | undefined;
+    const client = {
+      listProjectComputeServices: () => Effect.succeed([]),
+      createProjectComputeService: (projectId: string) =>
+        Effect.succeed({
+          id: "service-1",
+          type: "compute-service" as const,
+          url: "https://api.prisma.test/v1/compute-services/service-1",
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId,
+          branchId: null,
+          latestVersionId: null,
+          serviceEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        }),
+      listEnvironmentVariables: () => Effect.succeed([]),
+      createServiceComputeVersion: () =>
+        Effect.succeed({
+          id: "version-1",
+          type: "compute-version" as const,
+          url: "https://api.prisma.test/v1/versions/version-1",
+          foundryVersionId: "foundry-1",
+          uploadUrl: "https://upload.prisma.test/effect.tar.gz",
+        }),
+      getComputeServiceVersion: (id: string) =>
+        Effect.succeed({
+          id,
+          type: "compute-version" as const,
+          url: "https://api.prisma.test/v1/versions/version-1",
+          foundryVersionId: "foundry-1",
+          status: "new",
+          previewDomain: "version-1.preview.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        }),
+    } as unknown as PrismaManagementClient;
+    const http = HttpClient.make((request) =>
+      Effect.sync(() => {
+        const body = request.body as HttpBody.HttpBody;
+        uploaded = body._tag === "Uint8Array" ? body.body : undefined;
+        return HttpClientResponse.fromWeb(request, new Response(null));
+      }),
+    );
+
+    return Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-compute-named-effect-",
+      });
+      const main = path.join(root, "app.ts");
+      yield* fs.writeFileString(
+        main,
+        [
+          'import * as Prisma from "alchemy/Prisma";',
+          'import * as Effect from "effect/Effect";',
+          'import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";',
+          "",
+          "export const Api = Prisma.Compute(",
+          '  "App",',
+          "  {",
+          '    project: "project-1",',
+          '    serviceName: "api",',
+          "    main: import.meta.filename,",
+          '    handler: "Api",',
+          "  },",
+          "  Effect.gen(function* () {",
+          "    return {",
+          '      fetch: HttpServerResponse.text("named-handler-ok"),',
+          "    };",
+          "  }),",
+          ");",
+          "",
+        ].join("\n"),
+      );
+
+      const provider = yield* Compute.Provider;
+      const output = yield* provider.reconcile({
+        id: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: {
+          project: "project-1",
+          serviceName: "api",
+          branchGitName: null,
+          main,
+          handler: "Api",
+          start: false,
+          skipPromote: true,
+        },
+        olds: undefined,
+        output: undefined,
+        session: undefined as never,
+        bindings: [],
+      });
+
+      expect(output.computeVersionId).toBe("version-1");
+      const tarText = new TextDecoder().decode(
+        yield* Effect.sync(() => gunzipSync(uploaded!)),
+      );
+      expect(tarText).toContain("compute.manifest.json");
+      expect(tarText).toContain("named-handler-ok");
+    }).pipe(
+      Effect.provide(ComputeProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
+      Effect.provide(PlatformServices),
+    );
+  });
+
   it.effect("syncs env vars through the environment variable API", () => {
     const calls: Array<[string, unknown]> = [];
     const projectToken = {
