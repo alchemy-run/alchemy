@@ -7,6 +7,7 @@ import { Region } from "@distilled.cloud/aws/Region";
 import type * as lambda from "aws-lambda";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -94,7 +95,48 @@ export interface FunctionProps extends PlatformProps {
     subnetIds: string[];
     securityGroupIds: string[];
   };
+  /**
+   * Maximum execution time before the function is forcibly terminated.
+   *
+   * Accepts any {@link Duration.Input} — a `Duration`, a number of
+   * milliseconds, a string like `"30 seconds"`, or a `[seconds, nanos]` tuple.
+   * Rounded up to whole seconds.
+   *
+   * @default 3 seconds (AWS Lambda default)
+   */
+  timeout?: Duration.Input;
 }
+
+/**
+ * Normalize a {@link FunctionProps.timeout} value to whole seconds.
+ *
+ * Why: `Duration` objects don't survive JSON state round-trips
+ * (`{_id:"Duration",_tag:"Millis",millis:N}` is rejected by `Duration.decode`),
+ * so we accept that re-hydrated shape directly alongside any
+ * `Duration.DurationInput`.
+ */
+export const toTimeoutSeconds = (
+  timeout: FunctionProps["timeout"],
+): number | undefined => {
+  if (timeout === undefined) return undefined;
+  if (
+    typeof timeout === "object" &&
+    timeout !== null &&
+    !Array.isArray(timeout) &&
+    (timeout as { _id?: unknown })._id === "Duration"
+  ) {
+    const t = timeout as
+      | { _tag: "Millis"; millis: number }
+      | { _tag: "Nanos"; nanos: string | number | bigint }
+      | { _tag: "Infinity" };
+    if (t._tag === "Millis") return Math.max(1, Math.ceil(t.millis / 1000));
+    if (t._tag === "Nanos") {
+      return Math.max(1, Math.ceil(Number(t.nanos) / 1_000_000_000));
+    }
+    return undefined;
+  }
+  return Math.max(1, Math.ceil(Duration.toSeconds(timeout)));
+};
 
 export interface Function extends Resource<
   FunctionTypeId,
@@ -872,6 +914,7 @@ export default await Effect.runPromise(handlerEffect)
               }
             : undefined,
           Tags: tags,
+          Timeout: toTimeoutSeconds(news.timeout),
           VpcConfig: news.vpc
             ? {
                 SubnetIds: news.vpc.subnetIds,
@@ -1119,6 +1162,11 @@ export default await Effect.runPromise(handlerEffect)
             })).hash
           ) {
             // code changed
+            return { action: "update" };
+          }
+          if (
+            toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)
+          ) {
             return { action: "update" };
           }
         }),
