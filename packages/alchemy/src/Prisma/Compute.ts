@@ -39,10 +39,6 @@ import {
 } from "./ComputeBuild.ts";
 import { createComputeArchive, normalizeEntrypoint } from "./ComputeArchive.ts";
 import {
-  validateEnvironmentVariableKey,
-  validateEnvironmentVariableWrite,
-} from "./EnvironmentVariableValidation.ts";
-import {
   destroyComputeService,
   destroyComputeVersion,
   isConflict,
@@ -719,14 +715,57 @@ const branchAttachment = (props: ComputeProps) =>
           branchGitName: "main",
         };
 
+const ENV_KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
+const ENV_VALUE_MAX_BYTES = 8 * 1024;
+
+const computeEnvValue = (value: string | Redacted.Redacted<string>) =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value;
+
+const validateComputeEnvironmentKey = (key: string) =>
+  Effect.gen(function* () {
+    if (key.length < 1 || key.length > 256 || !ENV_KEY_PATTERN.test(key)) {
+      return yield* Effect.fail(
+        new Error(
+          `Prisma environment variable key '${key}' must match POSIX env-var key shape: [A-Z_][A-Z0-9_]* and be at most 256 characters.`,
+        ),
+      );
+    }
+  });
+
+const validateComputeEnvironmentWrite = (
+  key: string,
+  value: string | Redacted.Redacted<string>,
+) =>
+  Effect.gen(function* () {
+    yield* validateComputeEnvironmentKey(key);
+    const raw = computeEnvValue(value);
+    if (raw.length === 0) {
+      return yield* Effect.fail(
+        new Error(
+          `Prisma environment variable '${key}' value must be non-empty.`,
+        ),
+      );
+    }
+    const byteLength = yield* Effect.sync(
+      () => new TextEncoder().encode(raw).byteLength,
+    );
+    if (byteLength > ENV_VALUE_MAX_BYTES) {
+      return yield* Effect.fail(
+        new Error(
+          `Prisma environment variable '${key}' value exceeds ${ENV_VALUE_MAX_BYTES} bytes.`,
+        ),
+      );
+    }
+  });
+
 const validateComputeProps = (props: ComputeProps) =>
   Effect.gen(function* () {
     for (const [key, value] of Object.entries(props.env ?? {})) {
       if (value === undefined) continue;
       if (value === null) {
-        yield* validateEnvironmentVariableKey(key);
+        yield* validateComputeEnvironmentKey(key);
       } else {
-        yield* validateEnvironmentVariableWrite(key, value);
+        yield* validateComputeEnvironmentWrite(key, value);
       }
     }
     if ((props.skipPromote ?? false) && (props.destroyOldVersion ?? false)) {
@@ -1292,9 +1331,9 @@ export const syncComputeEnvironment = Effect.fn(function* (
   const deleted: string[] = [];
   for (const [key, value] of Object.entries(plainEnv(env))) {
     if (value === null) {
-      yield* validateEnvironmentVariableKey(key);
+      yield* validateComputeEnvironmentKey(key);
     } else {
-      yield* validateEnvironmentVariableWrite(key, value);
+      yield* validateComputeEnvironmentWrite(key, value);
     }
     const variable = yield* findEnvironmentVariable(
       client,
