@@ -196,6 +196,11 @@
       "worker": "./src/Prisma/index.ts",
       "import": "./lib/Prisma/index.js"
     },
+    "./Prisma/ComputeApp": null,
+    "./Prisma/ComputeVersionObserve": null,
+    "./Prisma/EnvironmentVariableValidation": null,
+    "./Prisma/PrismaDevDatabase": null,
+    "./Prisma/Refs": null,
     "./Prisma/*": {
       "types": "./lib/Prisma/*.d.ts",
       "bun": "./src/Prisma/*.ts",
