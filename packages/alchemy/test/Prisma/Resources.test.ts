@@ -2164,6 +2164,34 @@ describe("Prisma resource providers", () => {
     }).pipe(Effect.provide(providerLayer(client)));
   });
 
+  it.effect("skips default Prisma database delete without a session", () => {
+    const calls: Call[] = [];
+    const client = {
+      deleteDatabase: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteDatabase", id]);
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const databaseProvider = yield* PrismaDatabase.Provider;
+      yield* databaseProvider.delete({
+        id: "Postgres",
+        instanceId: "00000000000000000000000000000000",
+        olds: {} as never,
+        output: {
+          databaseId: "database-1",
+          projectId: "project-1",
+          isDefault: true,
+        },
+        session: undefined,
+        bindings: [],
+      } as never);
+
+      expect(calls).toEqual([]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
   it.effect("skips direct delete for a default Prisma branch", () => {
     const calls: Call[] = [];
     const client = {
@@ -2201,6 +2229,34 @@ describe("Prisma resource providers", () => {
           "Skipping direct delete for default Prisma branch; Prisma removes it when the owning project is deleted.",
         ],
       ]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
+  it.effect("skips default Prisma branch delete without a session", () => {
+    const calls: Call[] = [];
+    const client = {
+      deleteBranch: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteBranch", id]);
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const branchProvider = yield* PrismaBranch.Provider;
+      yield* branchProvider.delete({
+        id: "MainBranch",
+        instanceId: "00000000000000000000000000000000",
+        olds: {} as never,
+        output: {
+          branchId: "branch-1",
+          projectId: "project-1",
+          isDefault: true,
+        },
+        session: undefined,
+        bindings: [],
+      } as never);
+
+      expect(calls).toEqual([]);
     }).pipe(Effect.provide(providerLayer(client)));
   });
 

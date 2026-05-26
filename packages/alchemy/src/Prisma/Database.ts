@@ -456,9 +456,11 @@ export const DatabaseProvider = () =>
           if (output.isDefault) {
             // Prisma treats the default database as project-owned state, not
             // an independently deletable resource.
-            yield* session.note(
-              "Skipping direct delete for default Prisma database; Prisma removes it when the owning project is deleted.",
-            );
+            if (session !== undefined) {
+              yield* session.note(
+                "Skipping direct delete for default Prisma database; Prisma removes it when the owning project is deleted.",
+              );
+            }
             return;
           }
           yield* client
