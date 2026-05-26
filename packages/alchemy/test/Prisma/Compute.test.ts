@@ -3680,6 +3680,133 @@ describe("Prisma Compute", () => {
     );
   });
 
+  it.effect("skips system-managed Compute env vars on provider destroy", () => {
+    const calls: Array<[string, unknown]> = [];
+    const byKey = new Map([
+      [
+        "TOKEN",
+        {
+          id: "env-token",
+          type: "environment-variable" as const,
+          url: "https://api.prisma.test/v1/environment-variables/env-token",
+          projectId: "project-1",
+          branchId: null,
+          class: "production" as const,
+          key: "TOKEN",
+          valueKid: "kid-token",
+          isManagedBySystem: false,
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-01T00:00:00Z",
+        },
+      ],
+      [
+        "PRISMA_INTERNAL_URL",
+        {
+          id: "env-system",
+          type: "environment-variable" as const,
+          url: "https://api.prisma.test/v1/environment-variables/env-system",
+          projectId: "project-1",
+          branchId: null,
+          class: "production" as const,
+          key: "PRISMA_INTERNAL_URL",
+          valueKid: "kid-system",
+          isManagedBySystem: true,
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-01T00:00:00Z",
+        },
+      ],
+    ]);
+    const client = {
+      listEnvironmentVariables: (query: { key: string }) => {
+        calls.push(["listEnvironmentVariables", query]);
+        return Effect.succeed(
+          byKey.get(query.key) ? [byKey.get(query.key)] : [],
+        );
+      },
+      deleteEnvironmentVariable: (id: string) => {
+        calls.push(["deleteEnvironmentVariable", id]);
+        return Effect.void;
+      },
+      listServiceComputeVersions: (
+        computeServiceId: string,
+        query: unknown,
+      ) => {
+        calls.push(["listServiceComputeVersions", { computeServiceId, query }]);
+        return Effect.succeed([]);
+      },
+      deleteComputeService: (id: string) => {
+        calls.push(["deleteComputeService", id]);
+        return Effect.void;
+      },
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      yield* provider.delete({
+        id: "App",
+        instanceId: "00000000000000000000000000000000",
+        olds: {
+          project: "project-1",
+          serviceName: "api",
+          env: {
+            TOKEN: Redacted.make("secret"),
+            PRISMA_INTERNAL_URL: Redacted.make("prisma-owned"),
+          },
+        },
+        output: {
+          computeServiceId: "service-1",
+          computeVersionId: "version-1",
+          projectId: "project-1",
+          serviceName: "api",
+          regionId: "us-east-1",
+          versionEndpointDomain: "version-1.preview.prisma.build",
+          versionUrl: "https://version-1.preview.prisma.build",
+          serviceEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: true,
+          previousVersionId: undefined,
+          previousVersionAction: undefined,
+          artifactHash: "hash-1",
+          local: false,
+        },
+        session: undefined as never,
+        bindings: [],
+      });
+
+      expect(calls).toEqual([
+        [
+          "listEnvironmentVariables",
+          {
+            projectId: "project-1",
+            class: "production",
+            key: "TOKEN",
+            limit: 2,
+          },
+        ],
+        ["deleteEnvironmentVariable", "env-token"],
+        [
+          "listEnvironmentVariables",
+          {
+            projectId: "project-1",
+            class: "production",
+            key: "PRISMA_INTERNAL_URL",
+            limit: 2,
+          },
+        ],
+        [
+          "listServiceComputeVersions",
+          { computeServiceId: "service-1", query: { limit: 100 } },
+        ],
+        ["deleteComputeService", "service-1"],
+      ]);
+    }).pipe(
+      Effect.provide(ComputeProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
+
   it.effect("deletes Compute env vars when old props are missing", () => {
     const calls: Array<[string, unknown]> = [];
     const client = {
