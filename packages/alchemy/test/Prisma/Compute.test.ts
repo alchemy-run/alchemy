@@ -958,47 +958,53 @@ describe("Prisma Compute", () => {
 
   it.effect("syncs env vars through the environment variable API", () => {
     const calls: Array<[string, unknown]> = [];
+    const projectToken = {
+      id: "env-token",
+      type: "environment-variable" as const,
+      url: "https://api.prisma.test/v1/environment-variables/env-token",
+      projectId: "project-1",
+      branchId: null,
+      class: "production" as const,
+      key: "TOKEN",
+      valueKid: "kid-1",
+      isManagedBySystem: false,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+    const projectRemove = {
+      id: "env-remove",
+      type: "environment-variable" as const,
+      url: "https://api.prisma.test/v1/environment-variables/env-remove",
+      projectId: "project-1",
+      branchId: null,
+      class: "production" as const,
+      key: "REMOVE_ME",
+      valueKid: "kid-1",
+      isManagedBySystem: false,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
     const byKey = new Map([
       [
         "TOKEN",
-        {
-          id: "env-token",
-          type: "environment-variable" as const,
-          url: "https://api.prisma.test/v1/environment-variables/env-token",
-          projectId: "project-1",
-          branchId: null,
-          class: "production" as const,
-          key: "TOKEN",
-          valueKid: "kid-1",
-          isManagedBySystem: false,
-          createdAt: "2026-01-01T00:00:00Z",
-          updatedAt: "2026-01-01T00:00:00Z",
-        },
+        [
+          { ...projectToken, id: "env-token-branch", branchId: "branch-1" },
+          projectToken,
+        ],
       ],
       [
         "REMOVE_ME",
-        {
-          id: "env-remove",
-          type: "environment-variable" as const,
-          url: "https://api.prisma.test/v1/environment-variables/env-remove",
-          projectId: "project-1",
-          branchId: null,
-          class: "production" as const,
-          key: "REMOVE_ME",
-          valueKid: "kid-1",
-          isManagedBySystem: false,
-          createdAt: "2026-01-01T00:00:00Z",
-          updatedAt: "2026-01-01T00:00:00Z",
-        },
+        [
+          { ...projectRemove, id: "env-remove-branch", branchId: "branch-1" },
+          projectRemove,
+        ],
       ],
     ]);
 
     const client = {
       listEnvironmentVariables: (query: { key: string }) => {
         calls.push(["list", query]);
-        return Effect.succeed(
-          byKey.get(query.key) ? [byKey.get(query.key)] : [],
-        );
+        return Effect.succeed(byKey.get(query.key) ?? []);
       },
       createEnvironmentVariable: (input: unknown) => {
         calls.push(["create", input]);
@@ -1018,7 +1024,7 @@ describe("Prisma Compute", () => {
       },
       updateEnvironmentVariable: (id: string, input: unknown) => {
         calls.push(["update", { id, input }]);
-        return Effect.succeed(byKey.get("TOKEN"));
+        return Effect.succeed(projectToken);
       },
       deleteEnvironmentVariable: (id: string) => {
         calls.push(["delete", id]);

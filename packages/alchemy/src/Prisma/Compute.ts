@@ -1231,7 +1231,11 @@ const findEnvironmentVariable = (
 ) =>
   client
     .listEnvironmentVariables({ projectId, class: cls, key, limit: 2 })
-    .pipe(Effect.map((variables: ApiEnvironmentVariable[]) => variables[0]));
+    .pipe(
+      Effect.map((variables: ApiEnvironmentVariable[]) =>
+        variables.find((variable) => variable.branchId === null),
+      ),
+    );
 
 export const syncComputeEnvironment = Effect.fn(function* (
   client: PrismaManagementClient,

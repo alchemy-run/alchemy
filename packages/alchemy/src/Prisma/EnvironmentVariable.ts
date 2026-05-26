@@ -118,7 +118,11 @@ const findVariable = (
 ) =>
   client
     .listEnvironmentVariables({ projectId, class: cls, key, limit: 2 })
-    .pipe(Effect.map((variables) => variables[0]));
+    .pipe(
+      Effect.map((variables) =>
+        variables.find((variable) => variable.branchId === null),
+      ),
+    );
 
 const attrsFrom = (
   variable: ApiEnvironmentVariable,

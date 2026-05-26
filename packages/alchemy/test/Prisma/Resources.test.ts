@@ -1536,6 +1536,87 @@ describe("Prisma resource providers", () => {
     },
   );
 
+  it.effect(
+    "ignores branch env overrides when reconciling project env vars",
+    () => {
+      const calls: Call[] = [];
+      const branchVariable = {
+        id: "env-branch",
+        type: "environment-variable" as const,
+        url: "https://api.prisma.test/v1/environment-variables/env-branch",
+        projectId: "project-1",
+        branchId: "branch-1",
+        class: "production" as const,
+        key: "TOKEN",
+        valueKid: "kid-branch",
+        isManagedBySystem: false,
+        createdAt,
+        updatedAt,
+      };
+      const projectVariable = {
+        id: "env-project",
+        type: "environment-variable" as const,
+        url: "https://api.prisma.test/v1/environment-variables/env-project",
+        projectId: "project-1",
+        branchId: null,
+        class: "production" as const,
+        key: "TOKEN",
+        valueKid: "kid-old",
+        isManagedBySystem: false,
+        createdAt,
+        updatedAt,
+      };
+      const client = {
+        listEnvironmentVariables: (query: unknown) =>
+          Effect.sync(() => {
+            calls.push(["listEnvironmentVariables", query]);
+            return [branchVariable, projectVariable];
+          }),
+        updateEnvironmentVariable: (id: string, input: unknown) =>
+          Effect.sync(() => {
+            calls.push(["updateEnvironmentVariable", { id, input }]);
+            return {
+              ...projectVariable,
+              id,
+              valueKid: "kid-new",
+              updatedAt: "2026-01-01T00:00:02Z",
+            };
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const envProvider = yield* PrismaEnvironmentVariable.Provider;
+        const env = yield* envProvider.reconcile(
+          reconcileInput("EnvironmentVariable", {
+            project: "project-1",
+            class: "production" as const,
+            key: "TOKEN",
+            value: Redacted.make("secret"),
+          }),
+        );
+
+        expect(env.environmentVariableId).toBe("env-project");
+        expect(env.branchId).toBeNull();
+        expect(redactedValue(env.value)).toBe("secret");
+        expect(calls).toEqual([
+          [
+            "listEnvironmentVariables",
+            {
+              projectId: "project-1",
+              class: "production",
+              key: "TOKEN",
+              limit: 2,
+            },
+          ],
+          [
+            "updateEnvironmentVariable",
+            { id: "env-project", input: { value: "secret" } },
+          ],
+        ]);
+      }).pipe(Effect.provide(providerLayer(client)));
+    },
+  );
+
   it.effect("updates mutable Prisma resources from observed state", () => {
     const calls: Call[] = [];
     const client = {
