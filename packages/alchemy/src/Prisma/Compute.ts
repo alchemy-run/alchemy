@@ -1489,6 +1489,7 @@ export const ComputeProvider = () =>
           };
           yield* validateComputeProps(effectiveNews);
           const projectId = yield* resolveProjectId(effectiveNews.project);
+          const artifact = yield* resolveArtifact(effectiveNews);
           const service = yield* ensureService(
             client,
             effectiveNews,
@@ -1520,7 +1521,6 @@ export const ComputeProvider = () =>
             effectiveNews.envClass ?? "production",
             effectiveNews.env,
           );
-          const artifact = yield* resolveArtifact(effectiveNews);
 
           let version: ObservedComputeVersion | undefined =
             output?.computeVersionId && output.artifactHash === artifact.hash

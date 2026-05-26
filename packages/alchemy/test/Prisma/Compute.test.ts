@@ -433,6 +433,66 @@ describe("Prisma Compute", () => {
     },
   );
 
+  it.effect(
+    "does not mutate remote Compute state when artifact resolution fails",
+    () => {
+      const calls: Array<[string, unknown?]> = [];
+      const client = {
+        listProjectComputeServices: (projectId: string, query: unknown) => {
+          calls.push(["listProjectComputeServices", { projectId, query }]);
+          return Effect.succeed([]);
+        },
+        createProjectComputeService: (projectId: string, input: unknown) => {
+          calls.push(["createProjectComputeService", { projectId, input }]);
+          return Effect.die("should not create service");
+        },
+        listEnvironmentVariables: (query: unknown) => {
+          calls.push(["listEnvironmentVariables", query]);
+          return Effect.succeed([]);
+        },
+        createEnvironmentVariable: (input: unknown) => {
+          calls.push(["createEnvironmentVariable", input]);
+          return Effect.die("should not create env");
+        },
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const missingArtifact = path.resolve(
+          "tmp",
+          "alchemy-prisma-missing-artifact.tar.gz",
+        );
+
+        const provider = yield* Compute.Provider;
+        const error = yield* provider
+          .reconcile({
+            id: "App",
+            instanceId: "00000000000000000000000000000000",
+            news: {
+              project: "project-1",
+              serviceName: "api",
+              artifactPath: missingArtifact,
+              env: {
+                TOKEN: "secret",
+              },
+            },
+            olds: undefined,
+            output: undefined,
+            session: undefined as never,
+            bindings: [],
+          })
+          .pipe(Effect.flip);
+
+        expect(error).toBeDefined();
+        expect(calls).toEqual([]);
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
   it.effect("fails when Prisma omits an upload URL for app artifacts", () => {
     const calls: Array<[string, unknown?]> = [];
     const client = {
