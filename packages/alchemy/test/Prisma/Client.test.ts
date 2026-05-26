@@ -15,6 +15,7 @@ import * as Redacted from "effect/Redacted";
 import { TestClock } from "effect/testing";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 
 interface Captured {
@@ -732,6 +733,60 @@ describe("PrismaClient", () => {
         "/v1/compute-services/versions/version-1",
         "/v1/compute-services/versions/version-1",
       ]);
+    }).pipe(Effect.provide(TestClock.layer()));
+  });
+
+  it.effect("retries transient transport failures", () => {
+    let attempts = 0;
+    const http = HttpClient.make((request) =>
+      Effect.sync(() => {
+        attempts += 1;
+        return attempts < 3
+          ? new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({
+                request,
+                cause: new Error("connection reset"),
+                description: "test transport failure",
+              }),
+            })
+          : undefined;
+      }).pipe(
+        Effect.flatMap((error) =>
+          error
+            ? Effect.fail(error)
+            : Effect.succeed(
+                HttpClientResponse.fromWeb(
+                  request,
+                  page([{ id: "project-1" }]),
+                ),
+              ),
+        ),
+      ),
+    );
+    const layer = PrismaClientLive.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          Layer.succeed(HttpClient.HttpClient, http),
+          Layer.succeed(PrismaEnvironment, {
+            type: "serviceToken" as const,
+            serviceToken: Redacted.make("test-token"),
+            source: { type: "env" as const },
+            baseUrl: "https://api.prisma.test",
+          }),
+        ),
+      ),
+    );
+
+    return Effect.gen(function* () {
+      const fiber = yield* withClient((client) => client.listProjects()).pipe(
+        Effect.provide(layer),
+        Effect.forkChild({ startImmediately: true }),
+      );
+      yield* TestClock.adjust("1 second");
+      const projects = yield* Fiber.join(fiber);
+
+      expect(attempts).toBe(3);
+      expect(projects.map((project) => project.id)).toEqual(["project-1"]);
     }).pipe(Effect.provide(TestClock.layer()));
   });
 

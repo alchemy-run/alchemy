@@ -492,7 +492,10 @@ const retryTransient = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.retry({
       while: (e) =>
         e instanceof PrismaApiError &&
-        (e.status === 408 || e.status === 429 || e.status >= 500),
+        (e.status === 0 ||
+          e.status === 408 ||
+          e.status === 429 ||
+          e.status >= 500),
       schedule: Schedule.exponential("100 millis").pipe(
         Schedule.both(Schedule.recurs(4)),
       ),
