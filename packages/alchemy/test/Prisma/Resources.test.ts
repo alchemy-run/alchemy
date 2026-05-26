@@ -348,6 +348,8 @@ describe("Prisma resource providers", () => {
                 })
             : Effect.void,
       };
+      const escapedPooledConnectionString =
+        "__ALCHEMY_PRISMA_CONNECTION_VALUE__:prisma://pooled";
       const connection = {
         Type: "Prisma.Connection",
         LogicalId: "Connection",
@@ -359,7 +361,7 @@ describe("Prisma resource providers", () => {
           Redacted.make("postgres://direct"),
         ),
         pooledConnectionString: Output.asOutput(
-          Redacted.make("prisma://pooled"),
+          Redacted.make(escapedPooledConnectionString),
         ),
         accelerateConnectionString: Output.asOutput(undefined),
         host: Output.asOutput("db.example.test"),
@@ -384,7 +386,9 @@ describe("Prisma resource providers", () => {
         expect(yield* db.connectionId).toBe("connection-1");
         expect(yield* db.connectionString).toBeUndefined();
         expect(yield* db.directConnectionString).toBe("postgres://direct");
-        expect(yield* db.pooledConnectionString).toBe("prisma://pooled");
+        expect(yield* db.pooledConnectionString).toBe(
+          escapedPooledConnectionString,
+        );
         expect(yield* db.accelerateConnectionString).toBeUndefined();
         expect(yield* db.user).toBeNull();
         expect(yield* db.password).toBe("password");

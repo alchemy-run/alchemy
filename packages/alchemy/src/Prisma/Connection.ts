@@ -235,21 +235,37 @@ export const connectionBindingEnvKeys = (
 
 // Compute env sync omits undefined and treats null as deletion. Connection
 // bindings need both values to round-trip into the typed runtime client.
-const UNDEFINED_CONNECTION_VALUE = "__ALCHEMY_PRISMA_CONNECTION_UNDEFINED__";
-const NULL_CONNECTION_VALUE = "__ALCHEMY_PRISMA_CONNECTION_NULL__";
+const ENCODED_CONNECTION_PREFIX = "__ALCHEMY_PRISMA_CONNECTION_VALUE__:";
+
+type EncodedConnectionValue =
+  | { readonly kind: "undefined" }
+  | { readonly kind: "null" }
+  | { readonly kind: "value"; readonly value: string };
+
+const encodeConnectionValue = (value: EncodedConnectionValue) =>
+  `${ENCODED_CONNECTION_PREFIX}${JSON.stringify(value)}`;
+
+const escapePrefixedValue = <A extends string | Redacted.Redacted<string>>(
+  value: A,
+): A | string | Redacted.Redacted<string> => {
+  const raw = typeof value === "string" ? value : String(Redacted.value(value));
+  if (!raw.startsWith(ENCODED_CONNECTION_PREFIX)) return value;
+  const encoded = encodeConnectionValue({ kind: "value", value: raw });
+  return Redacted.isRedacted(value) ? Redacted.make(encoded) : encoded;
+};
 
 const encodeOptionalValue = <A extends string | Redacted.Redacted<string>>(
   output: Output.Output<A | null | undefined>,
-): Output.Output<A | string> =>
+): Output.Output<A | string | Redacted.Redacted<string>> =>
   output.pipe(
     Output.map((value) =>
       value === undefined
-        ? UNDEFINED_CONNECTION_VALUE
+        ? encodeConnectionValue({ kind: "undefined" })
         : value === null
-          ? NULL_CONNECTION_VALUE
-          : value,
+          ? encodeConnectionValue({ kind: "null" })
+          : escapePrefixedValue(value),
     ),
-  ) as Output.Output<A | string>;
+  ) as Output.Output<A | string | Redacted.Redacted<string>>;
 
 const encodedConnectionBindingEnv = (connection: Connection) => ({
   connectionId: connection.connectionId,
@@ -296,17 +312,36 @@ const runtimeOutput = <A>(
 ): Effect.Effect<A, never, RuntimeContext> =>
   output.bind(key).pipe(Effect.flatMap((effect) => effect));
 
+const decodeConnectionValue = (
+  value: Redacted.Redacted<string> | string,
+): string | null | undefined => {
+  const raw = redactedToString(value);
+  if (raw === undefined || !raw.startsWith(ENCODED_CONNECTION_PREFIX)) {
+    return raw;
+  }
+  try {
+    const parsed = JSON.parse(raw.slice(ENCODED_CONNECTION_PREFIX.length));
+    if (typeof parsed !== "object" || parsed === null || !("kind" in parsed)) {
+      return raw;
+    }
+    if (parsed.kind === "undefined") return undefined;
+    if (parsed.kind === "null") return null;
+    if (parsed.kind === "value" && typeof parsed.value === "string") {
+      return parsed.value;
+    }
+    return raw;
+  } catch {
+    return raw;
+  }
+};
+
 const optionalString = (
   value: Redacted.Redacted<string> | string,
-): string | undefined =>
-  value === UNDEFINED_CONNECTION_VALUE ? undefined : redactedToString(value);
+): string | undefined => decodeConnectionValue(value) ?? undefined;
 
-const nullableString = (value: string): string | null | undefined =>
-  value === UNDEFINED_CONNECTION_VALUE
-    ? undefined
-    : value === NULL_CONNECTION_VALUE
-      ? null
-      : value;
+const nullableString = (
+  value: Redacted.Redacted<string> | string,
+): string | null | undefined => decodeConnectionValue(value);
 
 export const ConnectionBindingLive = Layer.effect(
   ConnectionBinding,
