@@ -1242,6 +1242,48 @@ describe("Prisma resource providers", () => {
   });
 
   it.effect(
+    "does not delete cloud projects for dev placeholder project IDs",
+    () => {
+      const calls: Call[] = [];
+      const client = {
+        listProjects: () =>
+          Effect.sync(() => {
+            calls.push(["listProjects"]);
+            return [
+              {
+                id: "project-cloud",
+                type: "project",
+                url: "https://api.prisma.test/v1/projects/project-cloud",
+                name: "local-project",
+                createdAt,
+                defaultRegion: "us-east-1",
+                workspace: resourceRef("workspaces", "workspace-1", "team"),
+                database: null,
+              },
+            ];
+          }),
+        deleteProject: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["deleteProject", id]);
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const projectProvider = yield* PrismaProject.Provider;
+
+        yield* projectProvider.delete!(
+          deleteInput("Project", {
+            projectId: "dev:project:Project",
+            projectName: "local-project",
+          }),
+        );
+
+        expect(calls).toEqual([]);
+      }).pipe(Effect.provide(providerLayer(client)));
+    },
+  );
+
+  it.effect(
     "reconciles each greenfield Prisma resource through the client",
     () => {
       const { client, calls } = makeClient();

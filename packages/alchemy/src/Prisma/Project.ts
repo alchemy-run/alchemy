@@ -336,13 +336,8 @@ export const ProjectProvider = () =>
           });
         }),
         delete: Effect.fn(function* ({ output }) {
-          const projectId = isPrismaDevId(output.projectId)
-            ? yield* findProjectByName(client, output.projectName).pipe(
-                Effect.map((project) => project?.id),
-              )
-            : output.projectId;
-          if (!projectId) return;
-          yield* destroyComputeProject(client, projectId);
+          if (isPrismaDevId(output.projectId)) return;
+          yield* destroyComputeProject(client, output.projectId);
         }),
       };
     }),
