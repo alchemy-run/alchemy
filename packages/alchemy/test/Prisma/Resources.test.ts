@@ -2168,7 +2168,23 @@ describe("Prisma resource providers", () => {
       listProjectDatabases: (projectId: string, query: unknown) =>
         Effect.sync(() => {
           calls.push(["listProjectDatabases", { projectId, query }]);
-          return [];
+          return [
+            {
+              id: "database-reporting",
+              type: "database" as const,
+              url: "https://api.prisma.test/v1/databases/database-reporting",
+              name: "reporting",
+              status: "ready" as const,
+              createdAt,
+              isDefault: false,
+              defaultConnectionId: null,
+              connections: [],
+              project: resourceRef("projects", "project-1", "app"),
+              region: { id: "us-east-1", name: "US East" },
+              source: { type: "empty" },
+              branchId: null,
+            },
+          ];
         }),
       createProjectDatabase: (projectId: string, input: unknown) =>
         Effect.sync(() => {

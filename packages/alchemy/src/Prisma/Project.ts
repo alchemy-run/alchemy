@@ -141,10 +141,10 @@ const findProjectByName = (client: PrismaManagementClient, name: string) =>
       ),
     );
 
-const firstDatabase = (client: PrismaManagementClient, projectId: string) =>
+const defaultDatabase = (client: PrismaManagementClient, projectId: string) =>
   client
     .listProjectDatabases(projectId, { limit: 100 })
-    .pipe(Effect.map((databases) => databases[0]));
+    .pipe(Effect.map((databases) => databases.find((db) => db.isDefault)));
 
 const attrsFrom = (
   project: ApiProject,
@@ -213,7 +213,7 @@ export const ProjectProvider = () =>
                 yield* createName(id, olds.name),
               );
           if (!project) return undefined;
-          const database = yield* firstDatabase(client, project.id).pipe(
+          const database = yield* defaultDatabase(client, project.id).pipe(
             Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
           );
           return attrsFrom(project, database, {
@@ -291,7 +291,7 @@ export const ProjectProvider = () =>
 
           let database = createdDatabase;
           if (news.createDatabase !== false && !database) {
-            database = yield* firstDatabase(client, project.id).pipe(
+            database = yield* defaultDatabase(client, project.id).pipe(
               Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
             );
             if (!database) {
@@ -302,7 +302,7 @@ export const ProjectProvider = () =>
                 })
                 .pipe(
                   Effect.catchIf(isConflict, () =>
-                    firstDatabase(client, project.id).pipe(
+                    defaultDatabase(client, project.id).pipe(
                       Effect.flatMap((database) =>
                         database
                           ? Effect.succeed(database)
