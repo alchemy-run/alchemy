@@ -128,24 +128,28 @@ describe("Prisma Compute", () => {
 
     return Effect.gen(function* () {
       const provider = yield* Compute.Provider;
-      const error = yield* provider
-        .reconcile({
-          id: "App",
-          instanceId: "00000000000000000000000000000000",
-          news: {
-            project: "project-1",
-            serviceName: "api",
-            branchGitName: null,
-          },
-          olds: undefined,
-          output: undefined,
-          session: undefined as never,
-          bindings: [],
-        })
-        .pipe(Effect.flip);
+      for (const branchProps of [{ branchId: null }, { branchGitName: null }]) {
+        const error = yield* provider
+          .reconcile({
+            id: "App",
+            instanceId: "00000000000000000000000000000000",
+            news: {
+              project: "project-1",
+              serviceName: "api",
+              ...branchProps,
+            },
+            olds: undefined,
+            output: undefined,
+            session: undefined as never,
+            bindings: [],
+          })
+          .pipe(Effect.flip);
 
-      expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toContain("requires an attached branch");
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain(
+          "requires an attached branch",
+        );
+      }
     }).pipe(
       Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
@@ -676,7 +680,7 @@ describe("Prisma Compute", () => {
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
-            branchId: null,
+            branchId: "branch-main",
             latestVersionId: "version-live",
             serviceEndpointDomain: "api.prisma.build",
             createdAt: "2026-01-01T00:00:00Z",
@@ -1059,7 +1063,7 @@ describe("Prisma Compute", () => {
       const baseProps = {
         project: "project-1",
         serviceName: "api",
-        branchId: null,
+        branchId: "branch-main",
         skipCodeUpload: true,
         start: false,
         skipPromote: true,
@@ -1517,7 +1521,7 @@ describe("Prisma Compute", () => {
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
-          branchId: null,
+          branchId: "branch-main",
           latestVersionId: "version-old",
           serviceEndpointDomain: "api.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
@@ -1572,7 +1576,7 @@ describe("Prisma Compute", () => {
           project: "project-1",
           serviceName: "api",
           artifactPath,
-          branchId: null,
+          branchId: "branch-main",
           start: false,
           skipPromote: true,
         },
@@ -1930,7 +1934,7 @@ describe("Prisma Compute", () => {
           type: "environment-variable" as const,
           url: "https://api.prisma.test/v1/environment-variables/env-created",
           projectId: "project-1",
-          branchId: null,
+          branchId: "branch-main",
           class: "production" as const,
           key: "API_URL",
           valueKid: "kid-2",
@@ -2076,7 +2080,7 @@ describe("Prisma Compute", () => {
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
-            branchId: null,
+            branchId: "branch-main",
             latestVersionId: "version-old",
             serviceEndpointDomain: "api.prisma.build",
             createdAt: "2026-01-01T00:00:00Z",
@@ -2129,7 +2133,7 @@ describe("Prisma Compute", () => {
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
-          branchId: null,
+          branchId: "branch-main",
           latestVersionId: "version-old",
           serviceEndpointDomain: "api.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
@@ -2146,7 +2150,7 @@ describe("Prisma Compute", () => {
           type: "environment-variable" as const,
           url: "https://api.prisma.test/v1/environment-variables/env-created",
           projectId: "project-1",
-          branchId: null,
+          branchId: "branch-main",
           class: "production" as const,
           key: "DATABASE_URL",
           valueKid: "kid-created",
@@ -2193,7 +2197,7 @@ describe("Prisma Compute", () => {
         news: {
           project: "project-1",
           serviceName: "api",
-          branchId: null,
+          branchId: "branch-main",
           skipCodeUpload: true,
           start: false,
           skipPromote: true,
@@ -2273,7 +2277,7 @@ describe("Prisma Compute", () => {
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
-            branchId: null,
+            branchId: "branch-main",
             latestVersionId: "version-old",
             serviceEndpointDomain: "api.prisma.build",
             createdAt: "2026-01-01T00:00:00Z",
@@ -2353,7 +2357,7 @@ describe("Prisma Compute", () => {
           news: {
             project: "project-1",
             serviceName: "api",
-            branchId: null,
+            branchId: "branch-main",
             skipCodeUpload: true,
             start: false,
             skipPromote: true,
@@ -2474,7 +2478,7 @@ describe("Prisma Compute", () => {
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
-          branchId: null,
+          branchId: "branch-main",
           latestVersionId: "version-old",
           serviceEndpointDomain: "api.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
@@ -2544,7 +2548,7 @@ describe("Prisma Compute", () => {
         news: {
           project: "project-1",
           serviceName: "api",
-          branchId: null,
+          branchId: "branch-main",
           skipCodeUpload: true,
           start: false,
           skipPromote: true,

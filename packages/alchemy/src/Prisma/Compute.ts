@@ -798,7 +798,7 @@ const validateComputeProps = (props: ComputeProps) =>
         new Error("branchId and branchGitName are mutually exclusive."),
       );
     }
-    if (props.branchGitName === null) {
+    if (props.branchId === null || props.branchGitName === null) {
       return yield* Effect.fail(
         new Error(
           "Prisma.Compute requires an attached branch because Compute version creation resolves environment variables from the service branch. Omit branchGitName to use main, or set branchId/branchGitName.",
