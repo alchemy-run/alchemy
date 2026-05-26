@@ -94,6 +94,13 @@ describe("Prisma source conventions", () => {
         import.meta.dirname,
         "../../../../website/src/content/docs/providers/Prisma",
       );
+      const docsFiles = (yield* fs.readDirectory(docsRoot))
+        .filter((file) => file.endsWith(".md"))
+        .sort();
+
+      expect(docsFiles).toEqual(
+        documentedResources.map((resource) => `${resource}.md`).sort(),
+      );
 
       for (const resource of documentedResources) {
         const source = yield* fs.readFileString(
