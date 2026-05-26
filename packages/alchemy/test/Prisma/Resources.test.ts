@@ -9,6 +9,8 @@ import {
   ComputeVersionProvider,
 } from "@/Prisma/ComputeVersion";
 import {
+  ConnectionBindingLive,
+  ConnectionBindingPolicyLive,
   Connection as PrismaConnection,
   ConnectionProvider,
   connectionBindingEnvKeys,
@@ -26,10 +28,14 @@ import {
   SourceRepository as PrismaSourceRepository,
   SourceRepositoryProvider,
 } from "@/Prisma/SourceRepository";
+import * as Output from "@/Output";
 import type { PrismaManagementClient } from "@/Prisma/Client";
+import { RuntimeContext } from "@/RuntimeContext";
+import { Self } from "@/Self";
 import { Stack } from "@/Stack";
 import { Stage } from "@/Stage";
 import { describe, expect, it } from "@effect/vitest";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -308,6 +314,77 @@ describe("Prisma resource providers", () => {
       }).directConnectionString,
     ).toBe("PRISMA_API_CONNECTION_DIRECT_CONNECTION_STRING");
   });
+
+  it.effect(
+    "ConnectionBindingLive resolves bound connection outputs at runtime",
+    () => {
+      const stored: Record<string, Output.Output> = {};
+      const runtime = {
+        Type: "Prisma.Compute",
+        id: "App",
+        env: stored,
+        set: (id: string, output: Output.Output) =>
+          Effect.sync(() => {
+            const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
+            stored[key] = output;
+            return key;
+          }),
+        get: <T>(key: string): Effect.Effect<T> => {
+          const output = stored[key];
+          if (!output) return Effect.die(`missing runtime binding ${key}`);
+          return Output.evaluate(output, {}) as Effect.Effect<T>;
+        },
+      };
+      const host = {
+        Type: "Prisma.Compute",
+        LogicalId: "App",
+        FQN: "App",
+        bind: (...args: unknown[]) =>
+          args[0] instanceof Array ? () => Effect.void : Effect.void,
+      };
+      const connection = {
+        Type: "Prisma.Connection",
+        LogicalId: "Connection",
+        FQN: "Api/Connection",
+        connectionId: Output.asOutput("connection-1"),
+        databaseId: Output.asOutput("database-1"),
+        connectionString: Output.asOutput(undefined),
+        directConnectionString: Output.asOutput(
+          Redacted.make("postgres://direct"),
+        ),
+        pooledConnectionString: Output.asOutput(
+          Redacted.make("prisma://pooled"),
+        ),
+        accelerateConnectionString: Output.asOutput(undefined),
+        host: Output.asOutput("db.example.test"),
+        user: Output.asOutput("user"),
+        password: Output.asOutput(Redacted.make("password")),
+      } as PrismaConnection;
+
+      return Effect.gen(function* () {
+        const db = yield* PrismaConnection.bind(connection);
+
+        expect(yield* db.connectionId).toBe("connection-1");
+        expect(yield* db.directConnectionString).toBe("postgres://direct");
+        expect(yield* db.pooledConnectionString).toBe("prisma://pooled");
+        expect(yield* db.password).toBe("password");
+        expect(Object.keys(stored)).toEqual(
+          expect.arrayContaining(["connection_1", "_redacted_"]),
+        );
+      }).pipe(
+        Effect.provide(ConnectionBindingLive),
+        Effect.provide(ConnectionBindingPolicyLive),
+        Effect.provide(Layer.succeed(RuntimeContext, runtime)),
+        Effect.provide(Layer.succeed(Self, host)),
+        Effect.provide(
+          Layer.succeed(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
+          ),
+        ),
+      );
+    },
+  );
 
   it.effect("rejects conflicting ComputeService branch inputs", () => {
     const { client } = makeClient();

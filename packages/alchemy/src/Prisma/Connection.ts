@@ -194,9 +194,11 @@ export class ConnectionBinding extends Binding.Service<
  *   { project, serviceName: "api", main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const db = yield* Prisma.Connection.bind(connection);
- *     const databaseUrl = yield* db.directConnectionString;
  *     return {
- *       fetch: HttpServerResponse.text(databaseUrl ?? ""),
+ *       fetch: Effect.gen(function* () {
+ *         const databaseUrl = yield* db.directConnectionString;
+ *         return yield* HttpServerResponse.text(databaseUrl ?? "");
+ *       }),
  *     };
  *   }).pipe(Effect.provide(Prisma.ConnectionBindingLive)),
  * );
