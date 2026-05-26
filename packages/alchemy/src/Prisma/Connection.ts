@@ -233,23 +233,60 @@ export const connectionBindingEnvKeys = (
   };
 };
 
+// Compute env sync omits undefined and treats null as deletion. Connection
+// bindings need both values to round-trip into the typed runtime client.
+const UNDEFINED_CONNECTION_VALUE = "__ALCHEMY_PRISMA_CONNECTION_UNDEFINED__";
+const NULL_CONNECTION_VALUE = "__ALCHEMY_PRISMA_CONNECTION_NULL__";
+
+const encodeOptionalValue = <A extends string | Redacted.Redacted<string>>(
+  output: Output.Output<A | null | undefined>,
+): Output.Output<A | string> =>
+  output.pipe(
+    Output.map((value) =>
+      value === undefined
+        ? UNDEFINED_CONNECTION_VALUE
+        : value === null
+          ? NULL_CONNECTION_VALUE
+          : value,
+    ),
+  ) as Output.Output<A | string>;
+
+const encodedConnectionBindingEnv = (connection: Connection) => ({
+  connectionId: connection.connectionId,
+  databaseId: connection.databaseId,
+  connectionString: encodeOptionalValue(connection.connectionString),
+  directConnectionString: encodeOptionalValue(
+    connection.directConnectionString,
+  ),
+  pooledConnectionString: encodeOptionalValue(
+    connection.pooledConnectionString,
+  ),
+  accelerateConnectionString: encodeOptionalValue(
+    connection.accelerateConnectionString,
+  ),
+  host: encodeOptionalValue(connection.host),
+  user: encodeOptionalValue(connection.user),
+  password: encodeOptionalValue(connection.password),
+});
+
 const connectionBindingEnv = (connection: Connection) => {
   const keys = connectionBindingEnvKeys(connection);
+  const env = encodedConnectionBindingEnv(connection);
   return {
-    [keys.connectionId]: connection.connectionId,
-    [keys.databaseId]: connection.databaseId,
-    [keys.connectionString]: connection.connectionString,
-    [keys.directConnectionString]: connection.directConnectionString,
-    [keys.pooledConnectionString]: connection.pooledConnectionString,
-    [keys.accelerateConnectionString]: connection.accelerateConnectionString,
-    [keys.host]: connection.host,
-    [keys.user]: connection.user,
-    [keys.password]: connection.password,
+    [keys.connectionId]: env.connectionId,
+    [keys.databaseId]: env.databaseId,
+    [keys.connectionString]: env.connectionString,
+    [keys.directConnectionString]: env.directConnectionString,
+    [keys.pooledConnectionString]: env.pooledConnectionString,
+    [keys.accelerateConnectionString]: env.accelerateConnectionString,
+    [keys.host]: env.host,
+    [keys.user]: env.user,
+    [keys.password]: env.password,
   };
 };
 
 const redactedToString = (
-  value: Redacted.Redacted<string> | undefined,
+  value: Redacted.Redacted<string> | string | undefined,
 ): string | undefined =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
@@ -259,6 +296,18 @@ const runtimeOutput = <A>(
 ): Effect.Effect<A, never, RuntimeContext> =>
   output.bind(key).pipe(Effect.flatMap((effect) => effect));
 
+const optionalString = (
+  value: Redacted.Redacted<string> | string,
+): string | undefined =>
+  value === UNDEFINED_CONNECTION_VALUE ? undefined : redactedToString(value);
+
+const nullableString = (value: string): string | null | undefined =>
+  value === UNDEFINED_CONNECTION_VALUE
+    ? undefined
+    : value === NULL_CONNECTION_VALUE
+      ? null
+      : value;
+
 export const ConnectionBindingLive = Layer.effect(
   ConnectionBinding,
   Effect.gen(function* () {
@@ -267,29 +316,34 @@ export const ConnectionBindingLive = Layer.effect(
     return Effect.fn(function* (connection: Connection) {
       yield* policy(connection);
       const keys = connectionBindingEnvKeys(connection);
+      const env = encodedConnectionBindingEnv(connection);
       return {
-        connectionId: runtimeOutput(keys.connectionId, connection.connectionId),
-        databaseId: runtimeOutput(keys.databaseId, connection.databaseId),
+        connectionId: runtimeOutput(keys.connectionId, env.connectionId),
+        databaseId: runtimeOutput(keys.databaseId, env.databaseId),
         connectionString: runtimeOutput(
           keys.connectionString,
-          connection.connectionString,
-        ).pipe(Effect.map(redactedToString)),
+          env.connectionString,
+        ).pipe(Effect.map(optionalString)),
         directConnectionString: runtimeOutput(
           keys.directConnectionString,
-          connection.directConnectionString,
-        ).pipe(Effect.map(redactedToString)),
+          env.directConnectionString,
+        ).pipe(Effect.map(optionalString)),
         pooledConnectionString: runtimeOutput(
           keys.pooledConnectionString,
-          connection.pooledConnectionString,
-        ).pipe(Effect.map(redactedToString)),
+          env.pooledConnectionString,
+        ).pipe(Effect.map(optionalString)),
         accelerateConnectionString: runtimeOutput(
           keys.accelerateConnectionString,
-          connection.accelerateConnectionString,
-        ).pipe(Effect.map(redactedToString)),
-        host: runtimeOutput(keys.host, connection.host),
-        user: runtimeOutput(keys.user, connection.user),
-        password: runtimeOutput(keys.password, connection.password).pipe(
-          Effect.map(redactedToString),
+          env.accelerateConnectionString,
+        ).pipe(Effect.map(optionalString)),
+        host: runtimeOutput(keys.host, env.host).pipe(
+          Effect.map(nullableString),
+        ),
+        user: runtimeOutput(keys.user, env.user).pipe(
+          Effect.map(nullableString),
+        ),
+        password: runtimeOutput(keys.password, env.password).pipe(
+          Effect.map(optionalString),
         ),
       } satisfies ConnectionBindingClient;
     });

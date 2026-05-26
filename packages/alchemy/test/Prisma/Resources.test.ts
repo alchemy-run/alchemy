@@ -319,6 +319,7 @@ describe("Prisma resource providers", () => {
     "ConnectionBindingLive resolves bound connection outputs at runtime",
     () => {
       const stored: Record<string, Output.Output> = {};
+      let capturedBindingEnv: Record<string, Output.Output> | undefined;
       const runtime = {
         Type: "Prisma.Compute",
         id: "App",
@@ -340,7 +341,12 @@ describe("Prisma resource providers", () => {
         LogicalId: "App",
         FQN: "App",
         bind: (...args: unknown[]) =>
-          args[0] instanceof Array ? () => Effect.void : Effect.void,
+          args[0] instanceof Array
+            ? (binding: { env?: Record<string, Output.Output> }) =>
+                Effect.sync(() => {
+                  capturedBindingEnv = binding.env;
+                })
+            : Effect.void,
       };
       const connection = {
         Type: "Prisma.Connection",
@@ -357,23 +363,39 @@ describe("Prisma resource providers", () => {
         ),
         accelerateConnectionString: Output.asOutput(undefined),
         host: Output.asOutput("db.example.test"),
-        user: Output.asOutput("user"),
+        user: Output.asOutput(null),
         password: Output.asOutput(Redacted.make("password")),
       } as PrismaConnection;
 
       return Effect.gen(function* () {
         const db = yield* PrismaConnection.bind(connection);
+        const keys = connectionBindingEnvKeys(connection);
+        const encodedEnv = yield* Output.evaluate(
+          capturedBindingEnv ?? {},
+          {},
+        ) as Effect.Effect<Record<string, unknown>>;
 
         expect(Object.keys(stored)).toEqual([]);
+        expect(encodedEnv[keys.connectionString]).toEqual(expect.any(String));
+        expect(encodedEnv[keys.accelerateConnectionString]).toEqual(
+          expect.any(String),
+        );
+        expect(encodedEnv[keys.user]).toEqual(expect.any(String));
         expect(yield* db.connectionId).toBe("connection-1");
+        expect(yield* db.connectionString).toBeUndefined();
         expect(yield* db.directConnectionString).toBe("postgres://direct");
         expect(yield* db.pooledConnectionString).toBe("prisma://pooled");
+        expect(yield* db.accelerateConnectionString).toBeUndefined();
+        expect(yield* db.user).toBeNull();
         expect(yield* db.password).toBe("password");
         expect(Object.keys(stored)).toEqual(
           expect.arrayContaining([
             "PRISMA_API_CONNECTION_CONNECTION_ID",
+            "PRISMA_API_CONNECTION_CONNECTION_STRING",
             "PRISMA_API_CONNECTION_DIRECT_CONNECTION_STRING",
             "PRISMA_API_CONNECTION_POOLED_CONNECTION_STRING",
+            "PRISMA_API_CONNECTION_ACCELERATE_CONNECTION_STRING",
+            "PRISMA_API_CONNECTION_USER",
             "PRISMA_API_CONNECTION_PASSWORD",
           ]),
         );
