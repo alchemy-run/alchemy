@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
+import { deepEqual, isResolved } from "../Diff.ts";
 import * as Redacted from "effect/Redacted";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
@@ -206,8 +206,7 @@ export const ProjectProvider = () =>
             output?.projectName ?? (yield* createName(id, olds.name));
           if (
             nextName !== oldName ||
-            JSON.stringify(resolvedUpdateProps.settings ?? {}) !==
-              JSON.stringify(olds.settings ?? {})
+            !deepEqual(resolvedUpdateProps.settings ?? {}, olds.settings ?? {})
           ) {
             return { action: "update" } as const;
           }
@@ -294,9 +293,10 @@ export const ProjectProvider = () =>
             secrets = result.secrets;
           }
 
-          const settingsChanged =
-            JSON.stringify(news.settings ?? {}) !==
-            JSON.stringify(olds?.settings ?? {});
+          const settingsChanged = !deepEqual(
+            news.settings ?? {},
+            olds?.settings ?? {},
+          );
           if (project.name !== name || settingsChanged) {
             project = yield* client.updateProject(project.id, {
               name,

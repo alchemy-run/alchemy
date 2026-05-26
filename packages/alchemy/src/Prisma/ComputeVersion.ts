@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import { isResolved } from "../Diff.ts";
+import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
@@ -292,8 +292,10 @@ export const ComputeVersionProvider = () =>
           );
           if (
             computeServiceChanged ||
-            JSON.stringify(resolvedVersionContent.portMapping ?? {}) !==
-              JSON.stringify(olds.portMapping ?? {}) ||
+            !deepEqual(
+              resolvedVersionContent.portMapping ?? {},
+              olds.portMapping ?? {},
+            ) ||
             (resolvedVersionContent.skipCodeUpload ?? false) !==
               (olds.skipCodeUpload ?? false) ||
             (resolvedVersionContent.artifact === undefined) !==

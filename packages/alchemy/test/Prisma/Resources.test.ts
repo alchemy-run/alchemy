@@ -695,6 +695,24 @@ describe("Prisma resource providers", () => {
             ),
           ),
         ).toEqual({ action: "replace" });
+        expect(
+          yield* projectProvider.diff!(
+            diffInput(
+              {
+                name: "app",
+                region: "us-east-1",
+                createDatabase: false,
+                settings: { preview: true, tier: "dev" },
+              },
+              {
+                name: "app",
+                region: "us-east-1",
+                createDatabase: false,
+                settings: { tier: "dev", preview: true },
+              },
+            ),
+          ),
+        ).toBeUndefined();
 
         expect(
           yield* databaseProvider.diff!(
