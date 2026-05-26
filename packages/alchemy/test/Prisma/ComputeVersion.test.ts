@@ -243,17 +243,8 @@ describe("Prisma ComputeVersion", () => {
     () => {
       const calls: Array<[string, unknown?]> = [];
       const client = {
-        listServiceComputeVersions: (
-          computeServiceId: string,
-          query: unknown,
-        ) =>
-          Effect.sync(() => {
-            calls.push([
-              "listServiceComputeVersions",
-              { computeServiceId, query },
-            ]);
-            return [];
-          }),
+        listServiceComputeVersions: () =>
+          Effect.die("saved compute version read should not list versions"),
         getComputeServiceVersion: (id: string) =>
           Effect.gen(function* () {
             calls.push(["getComputeServiceVersion", id]);
@@ -305,10 +296,6 @@ describe("Prisma ComputeVersion", () => {
         expect(output?.computeVersionId).toBe("version-1");
         expect(output?.status).toBe("stopped");
         expect(calls).toEqual([
-          [
-            "listServiceComputeVersions",
-            { computeServiceId: "service-1", query: { limit: 100 } },
-          ],
           ["getComputeServiceVersion", "version-1"],
           ["getComputeVersion", "version-1"],
         ]);
@@ -326,17 +313,8 @@ describe("Prisma ComputeVersion", () => {
     () => {
       const calls: Array<[string, unknown?]> = [];
       const client = {
-        listServiceComputeVersions: (
-          computeServiceId: string,
-          query: unknown,
-        ) =>
-          Effect.sync(() => {
-            calls.push([
-              "listServiceComputeVersions",
-              { computeServiceId, query },
-            ]);
-            return [];
-          }),
+        listServiceComputeVersions: () =>
+          Effect.die("saved compute version read should not list versions"),
         getComputeServiceVersion: (id: string) =>
           Effect.sync(() => {
             calls.push(["getComputeServiceVersion", id]);
@@ -375,12 +353,103 @@ describe("Prisma ComputeVersion", () => {
 
         expect(output?.computeServiceId).toBe("service-from-output");
         expect(output?.status).toBe("running");
+        expect(calls).toEqual([["getComputeServiceVersion", "version-1"]]);
+      }).pipe(
+        Effect.provide(ComputeVersionProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
+  it.effect(
+    "falls back to the foundry version ID when the saved version is gone",
+    () => {
+      const calls: Array<[string, unknown?]> = [];
+      const notFound = (path: string) =>
+        new PrismaApiError({
+          method: "GET",
+          path,
+          status: 404,
+          message: "not found",
+        });
+      const client = {
+        listServiceComputeVersions: (
+          computeServiceId: string,
+          query: unknown,
+        ) =>
+          Effect.sync(() => {
+            calls.push([
+              "listServiceComputeVersions",
+              { computeServiceId, query },
+            ]);
+            return [
+              {
+                id: "version-new",
+                type: "compute-version" as const,
+                url: "https://api.prisma.test/v1/versions/version-new",
+                foundryVersionId: "foundry-1",
+                createdAt: "2026-01-01T00:00:00Z",
+              },
+            ];
+          }),
+        getComputeServiceVersion: (id: string) =>
+          Effect.gen(function* () {
+            calls.push(["getComputeServiceVersion", id]);
+            if (id === "version-old") {
+              return yield* Effect.fail(
+                notFound(`/v1/compute-services/versions/${id}`),
+              );
+            }
+            return {
+              id,
+              type: "compute-version" as const,
+              url: `https://api.prisma.test/v1/versions/${id}`,
+              foundryVersionId: "foundry-1",
+              status: "running",
+              previewDomain: "version-new.preview.prisma.build",
+              createdAt: "2026-01-01T00:00:00Z",
+            };
+          }),
+        getComputeVersion: (id: string) =>
+          Effect.gen(function* () {
+            calls.push(["getComputeVersion", id]);
+            return yield* Effect.fail(notFound(`/v1/versions/${id}`));
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaComputeVersion.Provider;
+        const output = yield* provider.read!({
+          id: "Version",
+          instanceId: "00000000000000000000000000000000",
+          olds: {
+            computeService: "service-from-olds",
+          },
+          output: {
+            computeVersionId: "version-old",
+            computeServiceId: "service-from-output",
+            foundryVersionId: "foundry-1",
+            status: "stopped",
+            previewDomain: undefined,
+            uploadUrl: undefined,
+            artifactHash: undefined,
+            serviceEndpointDomain: undefined,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        });
+
+        expect(output?.computeVersionId).toBe("version-new");
+        expect(output?.computeServiceId).toBe("service-from-output");
         expect(calls).toEqual([
+          ["getComputeServiceVersion", "version-old"],
+          ["getComputeVersion", "version-old"],
           [
             "listServiceComputeVersions",
             { computeServiceId: "service-from-output", query: { limit: 100 } },
           ],
-          ["getComputeServiceVersion", "version-1"],
+          ["getComputeServiceVersion", "version-new"],
         ]);
       }).pipe(
         Effect.provide(ComputeVersionProvider()),

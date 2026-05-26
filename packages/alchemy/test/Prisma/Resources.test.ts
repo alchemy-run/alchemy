@@ -1620,7 +1620,6 @@ describe("Prisma resource providers", () => {
         "listDatabaseConnections",
         "listBranches",
         "listProjectComputeServices",
-        "listServiceComputeVersions",
         "getComputeVersion",
         "listEnvironmentVariables",
         "listSourceRepositories",

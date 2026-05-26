@@ -326,25 +326,26 @@ export const ComputeVersionProvider = () =>
             output?.computeServiceId && !isPrismaDevId(output.computeServiceId)
               ? output.computeServiceId
               : yield* resolveComputeServiceId(olds.computeService);
-          const listed = yield* findVersion(
-            client,
-            computeServiceId,
-            output?.foundryVersionId,
-          );
-          const version = output?.computeVersionId
+          const savedVersion = output?.computeVersionId
             ? yield* observeComputeVersion(
                 client,
                 output.computeVersionId,
               ).pipe(
-                Effect.catchIf(isNotFound, () =>
-                  listed
-                    ? observeComputeVersion(client, listed.id)
-                    : Effect.succeed(undefined),
-                ),
+                Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
               )
-            : listed
+            : undefined;
+          const listed = savedVersion
+            ? undefined
+            : yield* findVersion(
+                client,
+                computeServiceId,
+                output?.foundryVersionId,
+              );
+          const version =
+            savedVersion ??
+            (listed
               ? yield* observeComputeVersion(client, listed.id)
-              : undefined;
+              : undefined);
           return version
             ? attrsFrom(version, computeServiceId, output)
             : undefined;
