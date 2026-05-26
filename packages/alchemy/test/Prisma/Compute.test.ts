@@ -2597,6 +2597,111 @@ describe("Prisma Compute", () => {
     );
   });
 
+  it.effect(
+    "deletes persisted env keys even when old props contain null tombstones",
+    () => {
+      const calls: Array<[string, unknown?]> = [];
+      const staleVariable = {
+        id: "env-stale-flag",
+        type: "environment-variable" as const,
+        url: "https://api.prisma.test/v1/environment-variables/env-stale-flag",
+        projectId: "project-1",
+        branchId: null,
+        class: "production" as const,
+        key: "STALE_FLAG",
+        valueKid: "kid-stale",
+        isManagedBySystem: false,
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+      };
+      const client = {
+        listEnvironmentVariables: (query: { key: string }) => {
+          calls.push(["listEnvironmentVariables", query]);
+          return Effect.succeed(
+            query.key === "STALE_FLAG" ? [staleVariable] : [],
+          );
+        },
+        deleteEnvironmentVariable: (id: string) => {
+          calls.push(["deleteEnvironmentVariable", id]);
+          return Effect.void;
+        },
+        listServiceComputeVersions: (
+          computeServiceId: string,
+          query: unknown,
+        ) => {
+          calls.push([
+            "listServiceComputeVersions",
+            { computeServiceId, query },
+          ]);
+          return Effect.succeed([]);
+        },
+        deleteComputeService: (id: string) => {
+          calls.push(["deleteComputeService", id]);
+          return Effect.void;
+        },
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        yield* provider.delete({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          olds: {
+            project: "project-1",
+            serviceName: "api",
+            env: {
+              STALE_FLAG: null,
+            },
+          },
+          output: {
+            computeServiceId: "service-1",
+            computeVersionId: undefined,
+            projectId: "project-1",
+            serviceName: "api",
+            regionId: "us-east-1",
+            versionEndpointDomain: undefined,
+            versionUrl: undefined,
+            serviceEndpointDomain: "api.prisma.build",
+            url: "https://api.prisma.build",
+            promoted: false,
+            previousVersionId: undefined,
+            previousVersionAction: undefined,
+            environmentKeys: ["STALE_FLAG"],
+            environmentClass: "production",
+            artifactHash: undefined,
+            local: false,
+          },
+          session: undefined as never,
+          bindings: [],
+        });
+
+        expect(calls).toEqual([
+          [
+            "listEnvironmentVariables",
+            {
+              projectId: "project-1",
+              class: "production",
+              key: "STALE_FLAG",
+              limit: 2,
+            },
+          ],
+          ["deleteEnvironmentVariable", "env-stale-flag"],
+          [
+            "listServiceComputeVersions",
+            {
+              computeServiceId: "service-1",
+              query: { limit: 100 },
+            },
+          ],
+          ["deleteComputeService", "service-1"],
+        ]);
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+      );
+    },
+  );
+
   it.effect("does not expose redacted env values in Compute outputs", () => {
     const calls: Array<[string, unknown]> = [];
     const client = {

@@ -710,6 +710,16 @@ const envKeysRecord = (
 ): Record<string, string> =>
   Object.fromEntries((keys ?? []).map((key) => [key, ""]));
 
+const previousManagedEnv = (
+  keys: readonly string[] | undefined,
+  env:
+    | Record<string, string | Redacted.Redacted<string> | null | undefined>
+    | undefined,
+): Record<string, string | Redacted.Redacted<string> | null | undefined> => ({
+  ...env,
+  ...envKeysRecord(keys),
+});
+
 const branchAttachment = (props: ComputeProps) =>
   props.branchId !== undefined && !isPrismaDevId(props.branchId)
     ? {
@@ -1714,10 +1724,7 @@ export const ComputeProvider = () =>
             client,
             projectId,
             previousEnvironmentClass,
-            {
-              ...envKeysRecord(output?.environmentKeys),
-              ...olds?.env,
-            },
+            previousManagedEnv(output?.environmentKeys, olds?.env),
             environmentClass,
             effectiveNews.env,
           );
@@ -1923,10 +1930,7 @@ export const ComputeProvider = () =>
             client,
             output.projectId,
             olds?.envClass ?? output.environmentClass ?? "production",
-            {
-              ...envKeysRecord(output.environmentKeys),
-              ...olds?.env,
-            },
+            previousManagedEnv(output.environmentKeys, olds?.env),
           );
           yield* destroyComputeService(client, output.computeServiceId);
         }),
