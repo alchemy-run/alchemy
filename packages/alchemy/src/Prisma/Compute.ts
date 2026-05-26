@@ -1385,7 +1385,7 @@ const findEnvironmentVariable = (
   key: string,
 ) =>
   client
-    .listEnvironmentVariables({ projectId, class: cls, key, limit: 2 })
+    .listEnvironmentVariables({ projectId, class: cls, key, limit: 100 })
     .pipe(
       Effect.map((variables: ApiEnvironmentVariable[]) =>
         variables.find((variable) => variable.branchId === null),

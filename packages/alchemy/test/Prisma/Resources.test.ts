@@ -1985,7 +1985,7 @@ describe("Prisma resource providers", () => {
               projectId: "project-1",
               class: "production",
               key: "TOKEN",
-              limit: 2,
+              limit: 100,
             },
           ],
           [
@@ -2191,7 +2191,11 @@ describe("Prisma resource providers", () => {
         listEnvironmentVariables: (query: unknown) =>
           Effect.sync(() => {
             calls.push(["listEnvironmentVariables", query]);
-            return [branchVariable, projectVariable];
+            return [
+              branchVariable,
+              { ...branchVariable, id: "env-branch-2", branchId: "branch-2" },
+              projectVariable,
+            ];
           }),
         updateEnvironmentVariable: (id: string, input: unknown) =>
           Effect.sync(() => {
@@ -2226,7 +2230,7 @@ describe("Prisma resource providers", () => {
               projectId: "project-1",
               class: "production",
               key: "TOKEN",
-              limit: 2,
+              limit: 100,
             },
           ],
           [
@@ -2290,7 +2294,7 @@ describe("Prisma resource providers", () => {
             projectId: "project-1",
             class: "production",
             key: "PRISMA_INTERNAL_URL",
-            limit: 2,
+            limit: 100,
           },
         ],
       ]);
