@@ -156,6 +156,41 @@ describe("Prisma Compute", () => {
     );
   });
 
+  it.effect(
+    "rejects effect-native Compute with an invalid handler name",
+    () => {
+      const client = {} as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const error = yield* provider
+          .reconcile({
+            id: "App",
+            instanceId: "00000000000000000000000000000000",
+            news: {
+              project: "project-1",
+              serviceName: "api",
+              main: "app.ts",
+              handler: "Api;console.log('nope')",
+            },
+            olds: undefined,
+            output: undefined,
+            session: undefined as never,
+            bindings: [],
+          })
+          .pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain(
+          "handler must be `default` or a valid JavaScript export identifier",
+        );
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+      );
+    },
+  );
+
   it.effect("dev provider applies the same Compute prop validation", () =>
     Effect.gen(function* () {
       const provider = yield* Compute.Provider;

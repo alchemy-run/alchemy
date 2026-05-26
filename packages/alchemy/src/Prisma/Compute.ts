@@ -717,6 +717,7 @@ const branchAttachment = (props: ComputeProps) =>
 
 const ENV_KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 const ENV_VALUE_MAX_BYTES = 8 * 1024;
+const EXPORT_IDENTIFIER_PATTERN = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 
 const computeEnvValue = (value: string | Redacted.Redacted<string>) =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
@@ -796,6 +797,14 @@ const validateComputeProps = (props: ComputeProps) =>
       );
     }
     if (hasEffectNativeComputeInput(props)) {
+      const handler = props.handler ?? "default";
+      if (handler !== "default" && !EXPORT_IDENTIFIER_PATTERN.test(handler)) {
+        return yield* Effect.fail(
+          new Error(
+            "Effect-native Prisma Compute handler must be `default` or a valid JavaScript export identifier.",
+          ),
+        );
+      }
       if (props.main === undefined) {
         return yield* Effect.fail(
           new Error(
