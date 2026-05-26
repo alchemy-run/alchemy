@@ -154,6 +154,78 @@ describe("Prisma Compute", () => {
     );
   });
 
+  it.effect("reads the live latest version when adopting Compute", () => {
+    const calls: Array<[string, unknown]> = [];
+    const client = {
+      listProjectComputeServices: (projectId: string, query: unknown) => {
+        calls.push(["listProjectComputeServices", { projectId, query }]);
+        return Effect.succeed([
+          {
+            id: "service-1",
+            type: "compute-service" as const,
+            url: "https://api.prisma.test/v1/compute-services/service-1",
+            name: "api",
+            region: { id: "us-east-1", name: "US East" },
+            projectId,
+            branchId: "branch-main",
+            latestVersionId: "version-live",
+            serviceEndpointDomain: "api.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        ]);
+      },
+      getComputeServiceVersion: (id: string) => {
+        calls.push(["getComputeServiceVersion", id]);
+        return Effect.succeed({
+          id,
+          type: "compute-version" as const,
+          url: `https://api.prisma.test/v1/versions/${id}`,
+          foundryVersionId: "foundry-live",
+          status: "running",
+          previewDomain: "version-live.preview.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const output = yield* provider.read!({
+        id: "App",
+        instanceId: "00000000000000000000000000000000",
+        olds: {
+          project: "project-1",
+          serviceName: "api",
+        },
+        output: undefined,
+      });
+
+      expect(output?.computeServiceId).toBe("service-1");
+      expect(output?.computeVersionId).toBe("version-live");
+      expect(output?.versionEndpointDomain).toBe(
+        "version-live.preview.prisma.build",
+      );
+      expect(output?.versionUrl).toBe(
+        "https://version-live.preview.prisma.build",
+      );
+      expect(output?.serviceEndpointDomain).toBe("api.prisma.build");
+      expect(output?.url).toBe("https://api.prisma.build");
+      expect(output?.promoted).toBe(true);
+      expect(calls).toEqual([
+        [
+          "listProjectComputeServices",
+          { projectId: "project-1", query: { limit: 100 } },
+        ],
+        ["getComputeServiceVersion", "version-live"],
+      ]);
+    }).pipe(
+      Effect.provide(ComputeProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
+
   it.effect(
     "syncs a newly created service branch before creating a version",
     () => {

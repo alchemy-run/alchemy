@@ -1438,30 +1438,38 @@ export const ComputeProvider = () =>
                   : undefined;
               });
           if (!service) return undefined;
-          const version = output?.computeVersionId
-            ? yield* client
-                .getComputeServiceVersion(output.computeVersionId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
+          const readVersion = (id: string) =>
+            client
+              .getComputeServiceVersion(id)
+              .pipe(
+                Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+              );
+          const outputVersion = output?.computeVersionId
+            ? yield* readVersion(output.computeVersionId)
             : undefined;
+          const latestVersion =
+            !outputVersion && service.latestVersionId
+              ? yield* readVersion(service.latestVersionId)
+              : undefined;
+          const version = outputVersion ?? latestVersion;
           return {
             computeServiceId: service.id,
-            computeVersionId: version?.id ?? output?.computeVersionId,
+            computeVersionId: version?.id,
             projectId: service.projectId ?? output?.projectId,
             serviceName: service.name,
             regionId: service.region.id,
-            versionEndpointDomain:
-              version?.previewDomain ?? output?.versionEndpointDomain,
-            versionUrl: toDeploymentUrl(
-              version?.previewDomain ?? output?.versionEndpointDomain,
-            ),
+            versionEndpointDomain: version?.previewDomain ?? undefined,
+            versionUrl: toDeploymentUrl(version?.previewDomain ?? undefined),
             serviceEndpointDomain:
               service.serviceEndpointDomain ?? output?.serviceEndpointDomain,
             url:
               toDeploymentUrl(service.serviceEndpointDomain) ??
-              output?.versionUrl,
-            promoted: output?.promoted ?? false,
+              toDeploymentUrl(version?.previewDomain ?? undefined),
+            promoted:
+              service.latestVersionId !== null &&
+              version?.id === service.latestVersionId
+                ? true
+                : (output?.promoted ?? false),
             previousVersionId: output?.previousVersionId,
             previousVersionAction: output?.previousVersionAction,
             environmentKeys: output?.environmentKeys,
