@@ -256,7 +256,7 @@ export const ComputeServiceProvider = () =>
           let createdService = false;
           const attach = branchAttachment(news);
           if (!service) {
-            const result = (yield* client
+            const result = yield* client
               .createProjectComputeService(projectId, {
                 displayName: news.displayName,
                 regionId: news.regionId ?? "us-east-1",
@@ -281,7 +281,7 @@ export const ComputeServiceProvider = () =>
                     ),
                   ),
                 ),
-              )) as { service: ApiComputeService; created: boolean };
+              );
             service = result.service;
             createdService = result.created;
           }
