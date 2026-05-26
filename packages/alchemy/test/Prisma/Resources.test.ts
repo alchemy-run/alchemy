@@ -870,6 +870,24 @@ describe("Prisma resource providers", () => {
             ),
           ),
         ).toEqual({ action: "replace" });
+        expect(
+          yield* databaseProvider.diff!(
+            diffInput(
+              {
+                project: "project-1",
+                name: "main",
+                region: "us-east-1",
+                branchId: "branch-1",
+              },
+              {
+                project: "project-1",
+                name: "main",
+                region: "us-west-2",
+                branchId: Output.asOutput("branch-1"),
+              },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
 
         expect(
           yield* connectionProvider.diff!(
@@ -965,6 +983,24 @@ describe("Prisma resource providers", () => {
                 project: Output.asOutput("project-1"),
                 displayName: "api",
                 regionId: "us-west-2",
+              },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
+        expect(
+          yield* serviceProvider.diff!(
+            diffInput(
+              {
+                project: "project-1",
+                displayName: "api",
+                regionId: "us-east-1",
+                branchId: "branch-1",
+              },
+              {
+                project: "project-1",
+                displayName: "api",
+                regionId: "us-west-2",
+                branchId: Output.asOutput("branch-1"),
               },
             ),
           ),

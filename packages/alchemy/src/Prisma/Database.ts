@@ -311,24 +311,6 @@ export const DatabaseProvider = () =>
         stables: ["databaseId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
-          const diffProps = {
-            region: news.region,
-            isDefault: news.isDefault,
-            source: news.source,
-            name: news.name,
-            branchId: news.branchId,
-            branchGitName: news.branchGitName,
-          };
-          if (!isResolved(diffProps)) return undefined;
-          const resolvedDiffProps = diffProps as Pick<
-            DatabaseProps,
-            | "region"
-            | "isDefault"
-            | "source"
-            | "name"
-            | "branchId"
-            | "branchGitName"
-          >;
           if (isPrismaDevId(output?.databaseId)) {
             return { action: "update" } as const;
           }
@@ -338,18 +320,29 @@ export const DatabaseProvider = () =>
             : undefined;
           if (
             concreteIdsChanged(oldProjectId, newProjectId) ||
-            (resolvedDiffProps.region ?? "us-east-1") !==
-              (olds.region ?? output?.region ?? "us-east-1") ||
-            (resolvedDiffProps.isDefault ?? false) !==
-              (olds.isDefault ?? false) ||
-            !deepEqual(resolvedDiffProps.source, olds.source)
+            (isResolved(news.region) &&
+              (news.region ?? "us-east-1") !==
+                (olds.region ?? output?.region ?? "us-east-1")) ||
+            (isResolved(news.isDefault) &&
+              (news.isDefault ?? false) !== (olds.isDefault ?? false)) ||
+            (isResolved(news.source) && !deepEqual(news.source, olds.source))
           ) {
             return { action: "replace" } as const;
           }
+          const updateProps = {
+            name: news.name,
+            branchId: news.branchId,
+            branchGitName: news.branchGitName,
+          };
+          if (!isResolved(updateProps)) return undefined;
+          const resolvedUpdateProps = updateProps as Pick<
+            DatabaseProps,
+            "name" | "branchId" | "branchGitName"
+          >;
           if (
-            resolvedDiffProps.name !== olds.name ||
-            resolvedDiffProps.branchId !== olds.branchId ||
-            resolvedDiffProps.branchGitName !== olds.branchGitName
+            resolvedUpdateProps.name !== olds.name ||
+            resolvedUpdateProps.branchId !== olds.branchId ||
+            resolvedUpdateProps.branchGitName !== olds.branchGitName
           ) {
             return { action: "update" } as const;
           }

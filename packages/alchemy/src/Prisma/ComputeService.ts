@@ -201,17 +201,6 @@ export const ComputeServiceProvider = () =>
         stables: ["computeServiceId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
-          const diffProps = {
-            displayName: news.displayName,
-            regionId: news.regionId,
-            branchId: news.branchId,
-            branchGitName: news.branchGitName,
-          };
-          if (!isResolved(diffProps)) return undefined;
-          const resolvedDiffProps = diffProps as Pick<
-            ComputeServiceProps,
-            "displayName" | "regionId" | "branchId" | "branchGitName"
-          >;
           if (isPrismaDevId(output?.computeServiceId)) {
             return { action: "update" } as const;
           }
@@ -221,15 +210,25 @@ export const ComputeServiceProvider = () =>
             : undefined;
           if (
             concreteIdsChanged(oldProjectId, newProjectId) ||
-            (resolvedDiffProps.regionId ?? "us-east-1") !==
-              (olds.regionId ?? "us-east-1")
+            (isResolved(news.regionId) &&
+              (news.regionId ?? "us-east-1") !== (olds.regionId ?? "us-east-1"))
           ) {
             return { action: "replace" } as const;
           }
+          const updateProps = {
+            displayName: news.displayName,
+            branchId: news.branchId,
+            branchGitName: news.branchGitName,
+          };
+          if (!isResolved(updateProps)) return undefined;
+          const resolvedUpdateProps = updateProps as Pick<
+            ComputeServiceProps,
+            "displayName" | "branchId" | "branchGitName"
+          >;
           if (
-            resolvedDiffProps.displayName !== olds.displayName ||
-            resolvedDiffProps.branchId !== olds.branchId ||
-            resolvedDiffProps.branchGitName !== olds.branchGitName
+            resolvedUpdateProps.displayName !== olds.displayName ||
+            resolvedUpdateProps.branchId !== olds.branchId ||
+            resolvedUpdateProps.branchGitName !== olds.branchGitName
           ) {
             return { action: "update" } as const;
           }
