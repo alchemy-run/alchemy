@@ -1662,7 +1662,7 @@ export const ComputeProvider = () =>
             local: false,
           };
         }),
-        delete: Effect.fn(function* ({ olds, output, bindings }) {
+        delete: Effect.fn(function* ({ olds, output }) {
           if (output.local || isPrismaDevId(output.computeServiceId)) {
             const existing = devProcesses.get(output.computeServiceId);
             if (existing) {
@@ -1674,10 +1674,10 @@ export const ComputeProvider = () =>
           yield* destroyComputeEnvironment(
             client,
             output.projectId,
-            olds.envClass ?? "production",
+            olds?.envClass ?? "production",
             {
               ...envKeysRecord(output.environmentKeys),
-              ...olds.env,
+              ...olds?.env,
             },
           );
           yield* destroyComputeService(client, output.computeServiceId);
