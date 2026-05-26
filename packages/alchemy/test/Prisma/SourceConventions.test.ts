@@ -16,6 +16,18 @@ const forbiddenPatterns = [
     pattern: /\b(?:async|await)\b/,
   },
   {
+    name: "Effect.promise",
+    pattern: /\bEffect\.promise\b/,
+  },
+  {
+    name: "raw Promise constructor",
+    pattern: /\bnew\s+Promise\b/,
+  },
+  {
+    name: "raw fetch",
+    pattern: /\bfetch\s*\(/,
+  },
+  {
     name: "Effect.orDie",
     pattern: /\bEffect\.orDie\b/,
   },
