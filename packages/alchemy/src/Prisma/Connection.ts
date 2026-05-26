@@ -1,8 +1,11 @@
 import * as Effect from "effect/Effect";
 import { isResolved } from "../Diff.ts";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as Binding from "../Binding.ts";
 import * as Provider from "../Provider.ts";
-import { Resource } from "../Resource.ts";
+import { Resource, type ResourceLike } from "../Resource.ts";
+import { RuntimeContext } from "../RuntimeContext.ts";
 import {
   PrismaClient,
   extractConnectionSecrets,
@@ -22,6 +25,7 @@ import type {
   DatabaseConnectionWithSecrets,
   PrismaSecretConnection,
 } from "./Types.ts";
+import { isCompute } from "./Compute.ts";
 
 export interface ConnectionProps {
   /**
@@ -97,6 +101,74 @@ export interface Connection extends Resource<
   Providers
 > {}
 
+export interface ConnectionBindingClient {
+  /**
+   * Prisma connection/API key ID.
+   */
+  connectionId: Effect.Effect<string, never, RuntimeContext>;
+  /**
+   * Database ID this connection belongs to.
+   */
+  databaseId: Effect.Effect<string, never, RuntimeContext>;
+  /**
+   * Legacy connection string, when available.
+   */
+  connectionString: Effect.Effect<string | undefined, never, RuntimeContext>;
+  /**
+   * Direct Postgres connection string, when available.
+   */
+  directConnectionString: Effect.Effect<
+    string | undefined,
+    never,
+    RuntimeContext
+  >;
+  /**
+   * Pooled Prisma Postgres connection string, when available.
+   */
+  pooledConnectionString: Effect.Effect<
+    string | undefined,
+    never,
+    RuntimeContext
+  >;
+  /**
+   * Accelerate connection string, when available.
+   */
+  accelerateConnectionString: Effect.Effect<
+    string | undefined,
+    never,
+    RuntimeContext
+  >;
+  /**
+   * Direct database host, when available.
+   */
+  host: Effect.Effect<string | null | undefined, never, RuntimeContext>;
+  /**
+   * Direct database user, when available.
+   */
+  user: Effect.Effect<string | null | undefined, never, RuntimeContext>;
+  /**
+   * Direct database password, when available.
+   */
+  password: Effect.Effect<string | undefined, never, RuntimeContext>;
+}
+
+export interface ConnectionBindingEnvKeys {
+  connectionId: string;
+  databaseId: string;
+  connectionString: string;
+  directConnectionString: string;
+  pooledConnectionString: string;
+  accelerateConnectionString: string;
+  host: string;
+  user: string;
+  password: string;
+}
+
+export class ConnectionBinding extends Binding.Service<
+  ConnectionBinding,
+  (connection: Connection) => Effect.Effect<ConnectionBindingClient>
+>()("Prisma.Connection") {}
+
 /**
  * A Prisma database connection/API key.
  *
@@ -109,7 +181,104 @@ export interface Connection extends Resource<
  * });
  * ```
  */
-export const Connection = Resource<Connection>("Prisma.Connection");
+export const Connection = Resource<Connection>("Prisma.Connection")({
+  bind: ConnectionBinding.bind,
+});
+
+const envName = (value: string) =>
+  value.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
+
+export const connectionBindingEnvKeys = (
+  connection: Pick<Connection, "LogicalId">,
+): ConnectionBindingEnvKeys => {
+  const prefix = `PRISMA_${envName(connection.LogicalId)}`;
+  return {
+    connectionId: `${prefix}_CONNECTION_ID`,
+    databaseId: `${prefix}_DATABASE_ID`,
+    connectionString: `${prefix}_CONNECTION_STRING`,
+    directConnectionString: `${prefix}_DIRECT_CONNECTION_STRING`,
+    pooledConnectionString: `${prefix}_POOLED_CONNECTION_STRING`,
+    accelerateConnectionString: `${prefix}_ACCELERATE_CONNECTION_STRING`,
+    host: `${prefix}_HOST`,
+    user: `${prefix}_USER`,
+    password: `${prefix}_PASSWORD`,
+  };
+};
+
+const connectionBindingEnv = (connection: Connection) => {
+  const keys = connectionBindingEnvKeys(connection);
+  return {
+    [keys.connectionId]: connection.connectionId,
+    [keys.databaseId]: connection.databaseId,
+    [keys.connectionString]: connection.connectionString,
+    [keys.directConnectionString]: connection.directConnectionString,
+    [keys.pooledConnectionString]: connection.pooledConnectionString,
+    [keys.accelerateConnectionString]: connection.accelerateConnectionString,
+    [keys.host]: connection.host,
+    [keys.user]: connection.user,
+    [keys.password]: connection.password,
+  };
+};
+
+const redactedToString = (
+  value: Redacted.Redacted<string> | undefined,
+): string | undefined =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value;
+
+export const ConnectionBindingLive = Layer.effect(
+  ConnectionBinding,
+  Effect.gen(function* () {
+    const policy = yield* ConnectionBindingPolicy;
+
+    return Effect.fn(function* (connection: Connection) {
+      yield* policy(connection);
+      return {
+        connectionId: yield* connection.connectionId,
+        databaseId: yield* connection.databaseId,
+        connectionString: (yield* connection.connectionString).pipe(
+          Effect.map(redactedToString),
+        ),
+        directConnectionString: (yield* connection.directConnectionString).pipe(
+          Effect.map(redactedToString),
+        ),
+        pooledConnectionString: (yield* connection.pooledConnectionString).pipe(
+          Effect.map(redactedToString),
+        ),
+        accelerateConnectionString:
+          (yield* connection.accelerateConnectionString).pipe(
+            Effect.map(redactedToString),
+          ),
+        host: yield* connection.host,
+        user: yield* connection.user,
+        password: (yield* connection.password).pipe(
+          Effect.map(redactedToString),
+        ),
+      } satisfies ConnectionBindingClient;
+    });
+  }),
+);
+
+export class ConnectionBindingPolicy extends Binding.Policy<
+  ConnectionBindingPolicy,
+  (connection: Connection) => Effect.Effect<void>
+>()("Prisma.Connection") {}
+
+export const ConnectionBindingPolicyLive =
+  ConnectionBindingPolicy.layer.succeed(
+    Effect.fnUntraced(function* (host: ResourceLike, connection: Connection) {
+      if (!isCompute(host)) {
+        return yield* Effect.die(
+          new Error(
+            `Prisma.Connection.bind does not support runtime '${host.Type}'`,
+          ),
+        );
+      }
+
+      yield* host.bind`${connection}`({
+        env: connectionBindingEnv(connection),
+      });
+    }),
+  );
 
 const findConnection = (
   client: PrismaManagementClient,

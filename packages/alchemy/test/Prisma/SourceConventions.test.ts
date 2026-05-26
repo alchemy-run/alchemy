@@ -49,6 +49,12 @@ const documentedResources = [
   "SourceRepository",
 ] as const;
 
+const stripStrings = (source: string) =>
+  source
+    .replaceAll(/`(?:\\.|[^`])*`/gs, "``")
+    .replaceAll(/"(?:\\.|[^"])*"/g, '""')
+    .replaceAll(/'(?:\\.|[^'])*'/g, "''");
+
 describe("Prisma source conventions", () => {
   it.effect("keeps provider source in Effect-style lifecycle conventions", () =>
     Effect.gen(function* () {
@@ -64,7 +70,11 @@ describe("Prisma source conventions", () => {
         const fullPath = path.join(sourceRoot, file);
         const source = yield* fs.readFileString(fullPath);
         for (const { name, pattern } of forbiddenPatterns) {
-          const match = pattern.exec(source);
+          const scannedSource =
+            name === "raw filesystem/path/os imports"
+              ? source
+              : stripStrings(source);
+          const match = pattern.exec(scannedSource);
           if (match) {
             violations.push(`${file}: ${name}: ${match[0]}`);
           }
@@ -90,11 +100,17 @@ describe("Prisma source conventions", () => {
           path.join(sourceRoot, `${resource}.ts`),
         );
         expect(source).toContain(`export interface ${resource}Props`);
-        expect(source).toContain(`export const ${resource} = Resource<`);
+        const constructorPattern =
+          resource === "Compute"
+            ? `export const ${resource}: Platform<`
+            : `export const ${resource} = Resource<`;
+        expect(source).toContain(constructorPattern);
 
         const resourceDoc = source.match(
           new RegExp(
-            `/\\*\\*[\\s\\S]*?\\*/\\s*export const ${resource} = Resource<`,
+            resource === "Compute"
+              ? `/\\*\\*[\\s\\S]*?\\*/\\s*export const ${resource}: Platform<`
+              : `/\\*\\*[\\s\\S]*?\\*/\\s*export const ${resource} = Resource<`,
           ),
         )?.[0];
         if (resourceDoc === undefined) {

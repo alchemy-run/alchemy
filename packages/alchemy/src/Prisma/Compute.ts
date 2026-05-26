@@ -10,11 +10,21 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner";
+import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../AlchemyContext.ts";
+import * as Bundle from "../Bundle/Bundle.ts";
+import { findCwdForBundle } from "../Bundle/TempRoot.ts";
 import { runBuildCommand } from "../Build/Command.ts";
 import { isResolved } from "../Diff.ts";
+import { HttpServer, type HttpEffect } from "../Http.ts";
+import type { InputProps } from "../Input.ts";
+import * as Output from "../Output.ts";
+import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
-import { Resource } from "../Resource.ts";
+import { Resource, type ResourceBinding } from "../Resource.ts";
+import type * as Server from "../Server/index.ts";
+import { Self } from "../Self.ts";
+import { Stack } from "../Stack.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import {
   PrismaApiError,
@@ -98,6 +108,21 @@ export interface ComputeAutoBuild {
 
 export type ComputeBuild = ComputeCommandBuild | ComputeAutoBuild;
 
+export interface ComputeBundleOptions {
+  /**
+   * Rolldown input options for effect-native Compute bundles.
+   */
+  input?: Partial<rolldown.InputOptions>;
+  /**
+   * Rolldown output options for effect-native Compute bundles.
+   */
+  output?: Partial<rolldown.OutputOptions>;
+  /**
+   * Additional Alchemy bundle options for effect-native Compute bundles.
+   */
+  extra?: Bundle.BundleExtraOptions;
+}
+
 export interface ComputeDev {
   /**
    * Local command to run during `alchemy dev`.
@@ -123,7 +148,7 @@ export interface ComputeDev {
   env?: Record<string, string | Redacted.Redacted<string> | undefined>;
 }
 
-export interface ComputeProps {
+export interface ComputeProps extends PlatformProps {
   /**
    * Project ID or `project.projectId` output that owns the compute service.
    */
@@ -160,6 +185,23 @@ export interface ComputeProps {
    * If omitted, Alchemy reads `package.json#main`.
    */
   entrypoint?: string;
+  /**
+   * Entry module for an effect-native Compute app.
+   *
+   * This is required when you pass an inline Effect implementation to
+   * `Prisma.Compute`, and ignored for external path/artifact deployments.
+   */
+  main?: string;
+  /**
+   * Exported symbol inside `main` for effect-native Compute apps.
+   *
+   * @default "default"
+   */
+  handler?: string;
+  /**
+   * Bundler options for effect-native Compute apps.
+   */
+  bundle?: ComputeBundleOptions;
   /**
    * Build command and output directory. Set to `"auto"` or `{ type: "auto" }`
    * to use Prisma Compute-style framework detection for Next.js, Nuxt, Astro,
@@ -317,9 +359,33 @@ export interface Compute extends Resource<
      */
     local: boolean;
   },
-  never,
+  {
+    env?: Record<string, string | Redacted.Redacted<string> | null | undefined>;
+  },
   Providers
 > {}
+
+export type ComputeServices = never;
+
+export type ComputeShape = Main<ComputeServices>;
+
+export interface ComputeRuntimeContext extends Server.ProcessContext {
+  readonly Type: "Prisma.Compute";
+}
+
+export const isCompute = (value: unknown): value is Compute =>
+  typeof value === "object" &&
+  value !== null &&
+  "Type" in value &&
+  value.Type === "Prisma.Compute";
+
+const isEffectNativeCompute = (props: ComputeProps) =>
+  props.isExternal !== true &&
+  props.main !== undefined &&
+  props.artifact === undefined &&
+  props.artifactPath === undefined &&
+  props.build === undefined &&
+  props.skipCodeUpload !== true;
 
 /**
  * A Prisma Compute deployment resource.
@@ -334,6 +400,24 @@ export interface Compute extends Resource<
  *   entrypoint: "server.ts",
  *   port: 3000,
  * });
+ * ```
+ *
+ * @example Deploy an Effect-native HTTP app
+ * ```typescript
+ * export default Prisma.Compute(
+ *   "api",
+ *   {
+ *     project,
+ *     serviceName: "api",
+ *     main: import.meta.filename,
+ *     port: 8080,
+ *   },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: HttpServerResponse.text("ok"),
+ *     };
+ *   }),
+ * );
  * ```
  *
  * @example Build before upload and replace old versions
@@ -391,7 +475,104 @@ export interface Compute extends Resource<
  * });
  * ```
  */
-export const Compute = Resource<Compute>("Prisma.Compute");
+export const Compute: Platform<
+  Compute,
+  ComputeServices,
+  ComputeShape,
+  ComputeRuntimeContext
+> & {
+  <PropsReq = never>(
+    id: string,
+    props:
+      | InputProps<ComputeProps>
+      | Effect.Effect<InputProps<ComputeProps>, never, PropsReq>,
+  ): Effect.Effect<Compute, never, Providers | PropsReq>;
+} = Platform("Prisma.Compute", {
+  createRuntimeContext: (id): ComputeRuntimeContext => {
+    const runners: Effect.Effect<void, never, unknown>[] = [];
+    const env: Record<string, unknown> = {};
+
+    const serve = <Req = never>(handler: HttpEffect<Req>) =>
+      Effect.sync(() => {
+        runners.push(
+          Effect.gen(function* () {
+            const httpServer = yield* Effect.serviceOption(HttpServer).pipe(
+              Effect.map(Option.getOrUndefined),
+            );
+            if (httpServer) {
+              yield* httpServer.serve(handler);
+              yield* Effect.never;
+            }
+          }).pipe(Effect.catch((error: unknown) => Effect.die(error))),
+        );
+      });
+
+    return {
+      Type: "Prisma.Compute",
+      id,
+      env,
+      set: (bindingId: string, output: Output.Output) =>
+        Effect.sync(() => {
+          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          env[key] = output.pipe(
+            Output.map((value) =>
+              Redacted.isRedacted(value)
+                ? Redacted.make(
+                    JSON.stringify({
+                      _tag: "Redacted",
+                      value: Redacted.value(value),
+                    }),
+                  )
+                : JSON.stringify(value),
+            ),
+          );
+          return key;
+        }),
+      get: <T>(key: string) =>
+        Effect.sync(() => process.env[key]).pipe(
+          Effect.flatMap((value) =>
+            value === undefined
+              ? Effect.die(`Environment variable '${key}' not found`)
+              : Effect.succeed(value),
+          ),
+          Effect.map((value) => {
+            try {
+              const parsed = JSON.parse(value);
+              if (
+                parsed !== null &&
+                typeof parsed === "object" &&
+                (parsed as { _tag?: unknown })._tag === "Redacted" &&
+                "value" in (parsed as object)
+              ) {
+                return Redacted.make((parsed as { value: unknown }).value);
+              }
+              return parsed;
+            } catch {
+              return value;
+            }
+          }),
+        ) as Effect.Effect<T>,
+      run: ((effect: Effect.Effect<void, never, unknown>) =>
+        Effect.sync(() => {
+          runners.push(effect);
+        })) as unknown as Server.ProcessContext["run"],
+      serve,
+      exports: Effect.sync(() => ({
+        default: Effect.all(
+          runners.map((effect) =>
+            Effect.forever(
+              effect.pipe(
+                Effect.tapError((error) => Effect.logError(error)),
+                Effect.ignore,
+              ),
+            ),
+          ),
+          { concurrency: "unbounded" },
+        ),
+      })),
+    };
+  },
+});
 
 const devProcesses = new Map<string, ChildProcessHandle>();
 
@@ -515,7 +696,8 @@ const branchNeedsSync = Effect.fn(function* (
   if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
     return service.branchId !== props.branchId;
   }
-  const gitName = props.branchGitName ?? "main";
+  const gitName =
+    props.branchGitName === null ? null : (props.branchGitName ?? "main");
   if (gitName === null) {
     return service.branchId !== null;
   }
@@ -532,7 +714,7 @@ const newlyCreatedServiceNeedsBranchSync = (
   if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
     return service.branchId !== props.branchId;
   }
-  if ((props.branchGitName ?? "main") === null) {
+  if (props.branchGitName === null) {
     return service.branchId !== null;
   }
   return service.branchId === null;
@@ -639,10 +821,192 @@ const readPackageMain = Effect.fn(function* (directory: string) {
   });
 });
 
+const writeBundleDirectory = Effect.fn(function* (bundle: Bundle.BundleOutput) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const directory = yield* fs.makeTempDirectory({
+    prefix: "alchemy-prisma-compute-",
+  });
+
+  for (const file of bundle.files) {
+    const target = path.join(directory, file.path);
+    yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+    if (typeof file.content === "string") {
+      yield* fs.writeFileString(target, file.content);
+    } else {
+      yield* fs.writeFile(target, file.content);
+    }
+  }
+
+  return {
+    directory,
+    entrypoint: bundle.files[0].path,
+    cleanup: fs
+      .remove(directory, { recursive: true })
+      .pipe(Effect.catch(() => Effect.void)),
+  };
+});
+
+const bundleEffectCompute = Effect.fn(function* (props: ComputeProps) {
+  if (!props.main) {
+    return yield* Effect.fail(
+      new Error(
+        "Effect-native Prisma Compute apps require `main`. Set `main: import.meta.filename`.",
+      ),
+    );
+  }
+
+  const fs = yield* FileSystem.FileSystem;
+  const stack = yield* Effect.serviceOption(Stack).pipe(
+    Effect.map(
+      Option.getOrElse(() => ({
+        name: "alchemy",
+        stage: "dev",
+        bindings: {},
+        resources: {},
+      })),
+    ),
+  );
+  const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
+  const realMain = yield* fs.realPath(props.main);
+  const cwd = yield* findCwdForBundle(realMain);
+  const handler = props.handler ?? "default";
+  const defaultPort = props.port ?? 8080;
+
+  const importEntrypoint =
+    handler === "default"
+      ? "import entrypoint"
+      : `import { ${handler} as entrypoint }`;
+
+  const bundle = yield* Bundle.build(
+    {
+      ...props.bundle?.input,
+      input: realMain,
+      cwd,
+      platform: "node",
+      plugins: [
+        props.bundle?.input?.plugins,
+        virtualEntryPlugin(
+          (importPath) => `
+import { BunServices } from "@effect/platform-bun";
+import { BunHttpServer } from "alchemy/Http";
+import { Stack } from "alchemy/Stack";
+import { makeEntrypointLayer } from "alchemy/Runtime";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import { MinimumLogLevel } from "effect/References";
+
+${importEntrypoint} from ${JSON.stringify(importPath)};
+
+process.env.PORT ??= ${JSON.stringify(String(defaultPort))};
+
+const tag = Context.Service("${Self.key}");
+const layer = makeEntrypointLayer(tag, entrypoint);
+
+const platform = Layer.mergeAll(
+  BunServices.layer,
+  FetchHttpClient.layer,
+  Logger.layer([Logger.consolePretty()]),
+);
+
+const stack = Layer.succeed(Stack, {
+  name: ${JSON.stringify(stack.name)},
+  stage: ${JSON.stringify(stack.stage)},
+  bindings: {},
+  resources: {},
+});
+
+const program = tag.pipe(
+  Effect.flatMap((app) => app.RuntimeContext.exports),
+  Effect.flatMap((exports) => exports.default),
+  Effect.provide(
+    layer.pipe(
+      Layer.provideMerge(stack),
+      Layer.provideMerge(BunHttpServer()),
+      Layer.provideMerge(platform),
+      Layer.provideMerge(
+        Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
+      ),
+      Layer.provideMerge(
+        Layer.succeed(
+          MinimumLogLevel,
+          process.env.DEBUG ? "Debug" : "Info",
+        ),
+      ),
+    ),
+  ),
+  Effect.scoped,
+);
+
+console.log("Prisma Compute bootstrap starting...");
+await Effect.runPromise(program).catch((error) => {
+  console.error("Prisma Compute bootstrap failed:", error);
+  process.exit(1);
+});
+`,
+        ),
+      ],
+      checks: {
+        unresolvedImport: false,
+        ineffectiveDynamicImport: false,
+      },
+    },
+    {
+      ...props.bundle?.output,
+      format: "esm",
+      sourcemap: props.bundle?.output?.sourcemap ?? "hidden",
+      minify: props.bundle?.output?.minify ?? true,
+      entryFileNames: "index.js",
+    },
+    props.bundle?.extra,
+  );
+
+  const artifact = yield* writeBundleDirectory(bundle);
+  const bytes = yield* createComputeArchive({
+    directory: artifact.directory,
+    entrypoint: artifact.entrypoint,
+  }).pipe(Effect.ensuring(artifact.cleanup));
+
+  return {
+    bytes,
+    bundleHash: bundle.hash,
+  };
+});
+
 const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
   const env = plainEnv(props.env);
   const envClass = props.envClass ?? "production";
   const defaultPort = props.port ?? 8080;
+  if (isEffectNativeCompute(props)) {
+    if (props.artifact !== undefined || props.artifactPath !== undefined) {
+      return yield* Effect.fail(
+        new Error(
+          "Effect-native Prisma Compute apps cannot use artifact or artifactPath.",
+        ),
+      );
+    }
+    if (props.skipCodeUpload) {
+      return yield* Effect.fail(
+        new Error("Effect-native Prisma Compute apps cannot skip code upload."),
+      );
+    }
+    const artifact = yield* bundleEffectCompute(props);
+    return {
+      bytes: artifact.bytes,
+      hash: yield* sha256Object({
+        bundle: artifact.bundleHash,
+        env,
+        envClass,
+        port: defaultPort,
+      }),
+      port: defaultPort,
+    };
+  }
+
   if (props.skipCodeUpload) {
     return {
       bytes: undefined,
@@ -946,6 +1310,59 @@ const startDev = Effect.fn(function* (id: string, props: ComputeProps) {
   return localUrl;
 });
 
+const activeBindingEnv = (
+  bindings: ResourceBinding<Compute["Binding"]>[],
+): Record<string, string | Redacted.Redacted<string> | null | undefined> =>
+  bindings
+    .filter(
+      (binding: ResourceBinding<Compute["Binding"]> & { action?: string }) =>
+        binding.action !== "delete",
+    )
+    .map((binding) => binding.data?.env)
+    .reduce<
+      Record<string, string | Redacted.Redacted<string> | null | undefined>
+    >(
+      (acc, env) => (env ? { ...acc, ...env } : acc),
+      {} as Record<
+        string,
+        string | Redacted.Redacted<string> | null | undefined
+      >,
+    );
+
+const deletedBindingEnv = (
+  bindings: ResourceBinding<Compute["Binding"]>[],
+): Record<string, string | Redacted.Redacted<string> | null | undefined> =>
+  bindings
+    .filter(
+      (binding: ResourceBinding<Compute["Binding"]> & { action?: string }) =>
+        binding.action === "delete",
+    )
+    .map((binding) => binding.data?.env)
+    .reduce<
+      Record<string, string | Redacted.Redacted<string> | null | undefined>
+    >(
+      (acc, env) => (env ? { ...acc, ...env } : acc),
+      {} as Record<
+        string,
+        string | Redacted.Redacted<string> | null | undefined
+      >,
+    );
+
+const allBindingEnv = (
+  bindings: ResourceBinding<Compute["Binding"]>[],
+): Record<string, string | Redacted.Redacted<string> | null | undefined> =>
+  bindings
+    .map((binding) => binding.data?.env)
+    .reduce<
+      Record<string, string | Redacted.Redacted<string> | null | undefined>
+    >(
+      (acc, env) => (env ? { ...acc, ...env } : acc),
+      {} as Record<
+        string,
+        string | Redacted.Redacted<string> | null | undefined
+      >,
+    );
+
 export const ComputeProvider = () =>
   Provider.effect(
     Compute,
@@ -1020,10 +1437,23 @@ export const ComputeProvider = () =>
             local: false,
           };
         }),
-        reconcile: Effect.fn(function* ({ id, news, olds, output }) {
-          yield* validateComputeProps(news);
-          const projectId = yield* resolveProjectId(news.project);
-          const service = yield* ensureService(client, news, output).pipe(
+        reconcile: Effect.fn(function* ({ id, news, olds, output, bindings }) {
+          const bindingEnv = activeBindingEnv(bindings);
+          const removedBindingEnv = deletedBindingEnv(bindings);
+          const effectiveNews = {
+            ...news,
+            env: {
+              ...bindingEnv,
+              ...news.env,
+            },
+          };
+          yield* validateComputeProps(effectiveNews);
+          const projectId = yield* resolveProjectId(effectiveNews.project);
+          const service = yield* ensureService(
+            client,
+            effectiveNews,
+            output,
+          ).pipe(
             Effect.retry({
               while: isProjectScopedNotFound,
               schedule: projectConsistencySchedule,
@@ -1037,17 +1467,20 @@ export const ComputeProvider = () =>
             client,
             projectId,
             olds?.envClass ?? "production",
-            olds?.env,
-            news.envClass ?? "production",
-            news.env,
+            {
+              ...removedBindingEnv,
+              ...olds?.env,
+            },
+            effectiveNews.envClass ?? "production",
+            effectiveNews.env,
           );
           yield* syncComputeEnvironment(
             client,
             projectId,
-            news.envClass ?? "production",
-            news.env,
+            effectiveNews.envClass ?? "production",
+            effectiveNews.env,
           );
-          const artifact = yield* resolveArtifact(news);
+          const artifact = yield* resolveArtifact(effectiveNews);
 
           let version: ObservedComputeVersion | undefined =
             output?.computeVersionId && output.artifactHash === artifact.hash
@@ -1064,7 +1497,7 @@ export const ComputeProvider = () =>
               service.id,
               {
                 portMapping: { http: artifact.port },
-                skipCodeUpload: news.skipCodeUpload,
+                skipCodeUpload: effectiveNews.skipCodeUpload,
               },
             );
             if (artifact.bytes !== undefined && !created.uploadUrl) {
@@ -1097,7 +1530,7 @@ export const ComputeProvider = () =>
             );
           }
 
-          if (news.start ?? true) {
+          if (effectiveNews.start ?? true) {
             if (
               version.status !== "running" &&
               version.status !== "provisioning"
@@ -1113,11 +1546,11 @@ export const ComputeProvider = () =>
               client,
               version.id,
               "running",
-              news,
+              effectiveNews,
             );
             yield* waitForDeploymentUrl(
               toDeploymentUrl(version.previewDomain),
-              news,
+              effectiveNews,
             );
           }
 
@@ -1127,13 +1560,17 @@ export const ComputeProvider = () =>
             | "destroyed"
             | "still-active"
             | null = previousVersionId ? "still-active" : null;
-          if (!(news.skipPromote ?? false)) {
+          if (!(effectiveNews.skipPromote ?? false)) {
             const promoted = yield* client
               .promoteComputeService(service.id, version.id)
               .pipe(
                 Effect.catch((error) =>
                   createdVersionId === version.id
-                    ? destroyComputeVersion(client, version.id, news).pipe(
+                    ? destroyComputeVersion(
+                        client,
+                        version.id,
+                        effectiveNews,
+                      ).pipe(
                         Effect.catch(() => Effect.void),
                         Effect.andThen(() => Effect.fail(error)),
                       )
@@ -1152,13 +1589,17 @@ export const ComputeProvider = () =>
                 client,
                 previousVersionId,
                 "stopped",
-                news,
+                effectiveNews,
               ).pipe(
                 Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
               );
               previousVersionAction = "stopped";
-              if (news.destroyOldVersion ?? false) {
-                yield* destroyComputeVersion(client, previousVersionId, news);
+              if (effectiveNews.destroyOldVersion ?? false) {
+                yield* destroyComputeVersion(
+                  client,
+                  previousVersionId,
+                  effectiveNews,
+                );
                 previousVersionAction = "destroyed";
               }
             }
@@ -1168,8 +1609,8 @@ export const ComputeProvider = () =>
           const serviceUrl =
             toDeploymentUrl(serviceEndpointDomain) ??
             toDeploymentUrl(version.previewDomain);
-          if (!(news.skipPromote ?? false)) {
-            yield* waitForDeploymentUrl(serviceUrl, news);
+          if (!(effectiveNews.skipPromote ?? false)) {
+            yield* waitForDeploymentUrl(serviceUrl, effectiveNews);
           }
 
           return {
@@ -1182,14 +1623,14 @@ export const ComputeProvider = () =>
             versionUrl,
             serviceEndpointDomain,
             url: serviceUrl,
-            promoted: !(news.skipPromote ?? false),
+            promoted: !(effectiveNews.skipPromote ?? false),
             previousVersionId,
             previousVersionAction,
             artifactHash: artifact.hash,
             local: false,
           };
         }),
-        delete: Effect.fn(function* ({ olds, output }) {
+        delete: Effect.fn(function* ({ olds, output, bindings }) {
           if (output.local || isPrismaDevId(output.computeServiceId)) {
             const existing = devProcesses.get(output.computeServiceId);
             if (existing) {
@@ -1202,7 +1643,10 @@ export const ComputeProvider = () =>
             client,
             output.projectId,
             olds.envClass ?? "production",
-            olds.env,
+            {
+              ...allBindingEnv(bindings),
+              ...olds.env,
+            },
           );
           yield* destroyComputeService(client, output.computeServiceId);
         }),
@@ -1227,20 +1671,28 @@ export const ComputeDevProvider = () =>
         read: Effect.fn(function* ({ output }) {
           return output?.local ? output : undefined;
         }),
-        reconcile: Effect.fn(function* ({ id, news, output }) {
-          const projectId = yield* resolveProjectId(news.project);
+        reconcile: Effect.fn(function* ({ id, news, output, bindings }) {
+          const bindingEnv = activeBindingEnv(bindings);
+          const effectiveNews = {
+            ...news,
+            env: {
+              ...bindingEnv,
+              ...news.env,
+            },
+          };
+          const projectId = yield* resolveProjectId(effectiveNews.project);
           if (!ctx.dev) {
             return yield* Effect.fail(
               new Error("ComputeDevProvider requires Alchemy dev mode."),
             );
           }
-          const localUrl = yield* startDev(id, news);
+          const localUrl = yield* startDev(id, effectiveNews);
           return {
             computeServiceId: output?.computeServiceId ?? `dev:${id}`,
             computeVersionId: undefined,
             projectId,
-            serviceName: news.serviceName,
-            regionId: news.regionId ?? "us-east-1",
+            serviceName: effectiveNews.serviceName,
+            regionId: effectiveNews.regionId ?? "us-east-1",
             versionEndpointDomain: localUrl,
             versionUrl: localUrl,
             serviceEndpointDomain: localUrl,

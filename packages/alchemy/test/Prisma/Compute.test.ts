@@ -396,6 +396,156 @@ describe("Prisma Compute", () => {
     );
   });
 
+  it.effect(
+    "bundles effect-native Compute apps into an upload artifact",
+    () => {
+      const calls: Array<[string, unknown]> = [];
+      let uploaded:
+        | { url: string; contentType: string | undefined; bytes: Uint8Array }
+        | undefined;
+      const client = {
+        listProjectComputeServices: (projectId: string, query: unknown) => {
+          calls.push(["listProjectComputeServices", { projectId, query }]);
+          return Effect.succeed([]);
+        },
+        createProjectComputeService: (projectId: string, input: unknown) => {
+          calls.push(["createProjectComputeService", { projectId, input }]);
+          return Effect.succeed({
+            id: "service-1",
+            type: "compute-service" as const,
+            url: "https://api.prisma.test/v1/compute-services/service-1",
+            name: "api",
+            region: { id: "us-east-1", name: "US East" },
+            projectId,
+            branchId: null,
+            latestVersionId: null,
+            serviceEndpointDomain: "api.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+        listEnvironmentVariables: () => Effect.succeed([]),
+        createServiceComputeVersion: (
+          computeServiceId: string,
+          input: unknown,
+        ) => {
+          calls.push([
+            "createServiceComputeVersion",
+            { computeServiceId, input },
+          ]);
+          return Effect.succeed({
+            id: "version-1",
+            type: "compute-version" as const,
+            url: "https://api.prisma.test/v1/versions/version-1",
+            foundryVersionId: "foundry-1",
+            uploadUrl: "https://upload.prisma.test/effect.tar.gz",
+          });
+        },
+        getComputeServiceVersion: (id: string) => {
+          calls.push(["getComputeServiceVersion", id]);
+          return Effect.succeed({
+            id,
+            type: "compute-version" as const,
+            url: "https://api.prisma.test/v1/versions/version-1",
+            foundryVersionId: "foundry-1",
+            status: "new",
+            previewDomain: "version-1.preview.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+      } as unknown as PrismaManagementClient;
+      const http = HttpClient.make((request) =>
+        Effect.sync(() => {
+          const body = request.body as HttpBody.HttpBody;
+          uploaded = {
+            url: request.url,
+            contentType:
+              body._tag === "Uint8Array" ? body.contentType : undefined,
+            bytes: body._tag === "Uint8Array" ? body.body : new Uint8Array(),
+          };
+          return HttpClientResponse.fromWeb(request, new Response(null));
+        }),
+      );
+
+      return Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-prisma-compute-effect-",
+        });
+        const main = path.join(root, "app.ts");
+        yield* fs.writeFileString(
+          main,
+          [
+            'import * as Prisma from "alchemy/Prisma";',
+            'import * as Effect from "effect/Effect";',
+            'import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";',
+            "",
+            "export default Prisma.Compute(",
+            '  "App",',
+            "  {",
+            '    project: "project-1",',
+            '    serviceName: "api",',
+            "    main: import.meta.filename,",
+            "    port: 4555,",
+            "  },",
+            "  Effect.gen(function* () {",
+            "    return {",
+            '      fetch: HttpServerResponse.text("effect-native-ok"),',
+            "    };",
+            "  }),",
+            ");",
+            "",
+          ].join("\n"),
+        );
+
+        const provider = yield* Compute.Provider;
+        const output = yield* provider.reconcile({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            serviceName: "api",
+            branchGitName: null,
+            main,
+            port: 4555,
+            start: false,
+            skipPromote: true,
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        });
+
+        expect(output.computeVersionId).toBe("version-1");
+        expect(uploaded?.url).toBe("https://upload.prisma.test/effect.tar.gz");
+        expect(uploaded?.contentType).toBe("application/gzip");
+        const tarText = new TextDecoder().decode(
+          yield* Effect.sync(() => gunzipSync(uploaded!.bytes)),
+        );
+        expect(tarText).toContain("compute.manifest.json");
+        expect(tarText).toContain("bundle/index.js");
+        expect(tarText).toContain("Prisma Compute bootstrap starting");
+        expect(tarText).toContain("effect-native-ok");
+        expect(calls).toContainEqual([
+          "createServiceComputeVersion",
+          {
+            computeServiceId: "service-1",
+            input: {
+              portMapping: { http: 4555 },
+              skipCodeUpload: undefined,
+            },
+          },
+        ]);
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
   it.effect("syncs env vars through the environment variable API", () => {
     const calls: Array<[string, unknown]> = [];
     const byKey = new Map([
@@ -524,6 +674,145 @@ describe("Prisma Compute", () => {
         ["delete", "env-remove"],
       ]);
     });
+  });
+
+  it.effect("merges binding env into Compute deployment env", () => {
+    const calls: Array<[string, unknown]> = [];
+    const client = {
+      getComputeService: (id: string) => {
+        calls.push(["getComputeService", id]);
+        return Effect.succeed({
+          id,
+          type: "compute-service" as const,
+          url: "https://api.prisma.test/v1/compute-services/service-1",
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId: "project-1",
+          branchId: null,
+          latestVersionId: null,
+          serviceEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      listEnvironmentVariables: (query: unknown) => {
+        calls.push(["listEnvironmentVariables", query]);
+        return Effect.succeed([]);
+      },
+      createEnvironmentVariable: (input: unknown) => {
+        calls.push(["createEnvironmentVariable", input]);
+        return Effect.succeed({
+          id: "env-created",
+          type: "environment-variable" as const,
+          url: "https://api.prisma.test/v1/environment-variables/env-created",
+          projectId: "project-1",
+          branchId: null,
+          class: "production" as const,
+          key: "DATABASE_URL",
+          valueKid: "kid-created",
+          isManagedBySystem: false,
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      createServiceComputeVersion: (
+        computeServiceId: string,
+        input: unknown,
+      ) => {
+        calls.push([
+          "createServiceComputeVersion",
+          { computeServiceId, input },
+        ]);
+        return Effect.succeed({
+          id: "version-1",
+          type: "compute-version" as const,
+          url: "https://api.prisma.test/v1/versions/version-1",
+          foundryVersionId: "foundry-1",
+          uploadUrl: null,
+        });
+      },
+      getComputeServiceVersion: (id: string) => {
+        calls.push(["getComputeServiceVersion", id]);
+        return Effect.succeed({
+          id,
+          type: "compute-version" as const,
+          url: "https://api.prisma.test/v1/versions/version-1",
+          foundryVersionId: "foundry-1",
+          status: "new",
+          previewDomain: "version-1.preview.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const output = yield* provider.reconcile({
+        id: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: {
+          project: "project-1",
+          serviceName: "api",
+          branchId: null,
+          skipCodeUpload: true,
+          start: false,
+          skipPromote: true,
+        },
+        olds: undefined,
+        output: {
+          computeServiceId: "service-1",
+          computeVersionId: undefined,
+          projectId: "project-1",
+          serviceName: "api",
+          regionId: "us-east-1",
+          versionEndpointDomain: undefined,
+          versionUrl: undefined,
+          serviceEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: false,
+          previousVersionId: undefined,
+          previousVersionAction: undefined,
+          artifactHash: undefined,
+          local: false,
+        },
+        session: undefined as never,
+        bindings: [
+          {
+            sid: "Connection",
+            data: {
+              env: {
+                DATABASE_URL: Redacted.make("postgres://bound"),
+                SHARED_FLAG: "from-binding",
+              },
+            },
+          },
+        ],
+      });
+
+      expect(output.computeVersionId).toBe("version-1");
+      expect(calls).toContainEqual([
+        "createEnvironmentVariable",
+        {
+          projectId: "project-1",
+          class: "production",
+          key: "DATABASE_URL",
+          value: "postgres://bound",
+        },
+      ]);
+      expect(calls).toContainEqual([
+        "createEnvironmentVariable",
+        {
+          projectId: "project-1",
+          class: "production",
+          key: "SHARED_FLAG",
+          value: "from-binding",
+        },
+      ]);
+    }).pipe(
+      Effect.provide(ComputeProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
   });
 
   it.effect("does not expose redacted env values in Compute outputs", () => {
