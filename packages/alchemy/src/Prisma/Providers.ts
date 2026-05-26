@@ -143,6 +143,7 @@ const isRecord = (value: unknown): value is DevRecord =>
 
 const devProvider = <R extends ResourceLike>(
   resource: ResourceClass<R>,
+  stables: Extract<keyof R["Attributes"], string>[],
   attrs: (input: {
     id: string;
     news: DevRecord;
@@ -150,7 +151,7 @@ const devProvider = <R extends ResourceLike>(
   }) => DevRecord,
 ) =>
   Provider.succeed(resource, {
-    stables: [],
+    stables,
     diff: Effect.fn(function* () {
       return { action: "update" } as const;
     }),
@@ -194,7 +195,7 @@ const attrOrRedactedString = (value: unknown, key: string) => {
 };
 
 const projectDevProvider = () =>
-  devProvider(Project, ({ id, news }) => ({
+  devProvider(Project, ["projectId"], ({ id, news }) => ({
     projectId: devId("project", id),
     projectName: news.name ?? id,
     workspaceId: devId("workspace", "local"),
@@ -251,7 +252,7 @@ const databaseDevProvider = () =>
   });
 
 const connectionDevProvider = () =>
-  devProvider(Connection, ({ id, news }) => ({
+  devProvider(Connection, ["connectionId"], ({ id, news }) => ({
     connectionId: devId("connection", id),
     connectionName: news.name,
     databaseId: attrOrString(news.database, "databaseId"),
@@ -276,7 +277,7 @@ const connectionDevProvider = () =>
   }));
 
 const branchDevProvider = () =>
-  devProvider(Branch, ({ id, news }) => ({
+  devProvider(Branch, ["branchId"], ({ id, news }) => ({
     branchId: devId("branch", id),
     gitName: news.gitName,
     projectId: attrOrString(news.project, "projectId"),
@@ -286,7 +287,7 @@ const branchDevProvider = () =>
   }));
 
 const computeServiceDevProvider = () =>
-  devProvider(ComputeService, ({ id, news }) => ({
+  devProvider(ComputeService, ["computeServiceId"], ({ id, news }) => ({
     computeServiceId: devId("compute-service", id),
     name: news.displayName,
     projectId: attrOrString(news.project, "projectId"),
@@ -298,7 +299,7 @@ const computeServiceDevProvider = () =>
   }));
 
 const computeVersionDevProvider = () =>
-  devProvider(ComputeVersion, ({ id, news }) => ({
+  devProvider(ComputeVersion, ["computeVersionId"], ({ id, news }) => ({
     computeVersionId: devId("compute-version", id),
     computeServiceId: attrOrString(news.computeService, "computeServiceId"),
     foundryVersionId: devId("foundry-version", id),
@@ -311,23 +312,27 @@ const computeVersionDevProvider = () =>
   }));
 
 const environmentVariableDevProvider = () =>
-  devProvider(EnvironmentVariable, ({ id, news }) => ({
-    environmentVariableId: devId("environment-variable", id),
-    projectId: attrOrString(news.project, "projectId"),
-    branchId: null,
-    class: news.class,
-    key: news.key,
-    value: Redacted.isRedacted(news.value)
-      ? news.value
-      : Redacted.make(news.value),
-    valueKid: devId("value-kid", id),
-    isManagedBySystem: false,
-    createdAt: DEV_TIMESTAMP,
-    updatedAt: DEV_TIMESTAMP,
-  }));
+  devProvider(
+    EnvironmentVariable,
+    ["environmentVariableId"],
+    ({ id, news }) => ({
+      environmentVariableId: devId("environment-variable", id),
+      projectId: attrOrString(news.project, "projectId"),
+      branchId: null,
+      class: news.class,
+      key: news.key,
+      value: Redacted.isRedacted(news.value)
+        ? news.value
+        : Redacted.make(news.value),
+      valueKid: devId("value-kid", id),
+      isManagedBySystem: false,
+      createdAt: DEV_TIMESTAMP,
+      updatedAt: DEV_TIMESTAMP,
+    }),
+  );
 
 const sourceRepositoryDevProvider = () =>
-  devProvider(SourceRepository, ({ id, news }) => ({
+  devProvider(SourceRepository, ["sourceRepositoryId"], ({ id, news }) => ({
     sourceRepositoryId: devId("source-repository", id),
     projectId: attrOrString(news.project, "projectId"),
     repoId: news.providerRepositoryId,

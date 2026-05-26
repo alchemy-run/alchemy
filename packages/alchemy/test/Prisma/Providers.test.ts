@@ -45,6 +45,17 @@ describe("Prisma providers", () => {
         Prisma.EnvironmentVariable.Type,
         Prisma.SourceRepository.Type,
       ];
+      const expectedStables = new Map([
+        [Prisma.Project.Type, ["projectId"]],
+        [Prisma.Database.Type, ["databaseId"]],
+        [Prisma.Connection.Type, ["connectionId"]],
+        [Prisma.Branch.Type, ["branchId"]],
+        [Prisma.Compute.Type, ["computeServiceId"]],
+        [Prisma.ComputeService.Type, ["computeServiceId"]],
+        [Prisma.ComputeVersion.Type, ["computeVersionId"]],
+        [Prisma.EnvironmentVariable.Type, ["environmentVariableId"]],
+        [Prisma.SourceRepository.Type, ["sourceRepositoryId"]],
+      ]);
 
       const providers = yield* Effect.all(
         resourceTypes.map((type) => Provider.findProviderByType(type as any)),
@@ -58,6 +69,11 @@ describe("Prisma providers", () => {
       for (const provider of providers) {
         expect(typeof provider.reconcile).toBe("function");
         expect(typeof provider.delete).toBe("function");
+      }
+      for (let i = 0; i < resourceTypes.length; i += 1) {
+        expect(providers[i]?.stables).toEqual(
+          expectedStables.get(resourceTypes[i]),
+        );
       }
       expect(typeof bindingPolicy).toBe("function");
     }).pipe(providePrismaDev),
