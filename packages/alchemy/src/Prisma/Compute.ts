@@ -1591,6 +1591,13 @@ export const ComputeProvider = () =>
               ? yield* readVersion(service.latestVersionId)
               : undefined;
           const version = outputVersion ?? latestVersion;
+          const versionUrl = toDeploymentUrl(
+            version?.previewDomain ?? undefined,
+          );
+          const serviceUrl = toDeploymentUrl(service.serviceEndpointDomain);
+          const promoted =
+            service.latestVersionId !== null &&
+            version?.id === service.latestVersionId;
           return {
             computeServiceId: service.id,
             computeVersionId: version?.id,
@@ -1598,15 +1605,11 @@ export const ComputeProvider = () =>
             serviceName: service.name,
             regionId: service.region.id,
             versionEndpointDomain: version?.previewDomain ?? undefined,
-            versionUrl: toDeploymentUrl(version?.previewDomain ?? undefined),
+            versionUrl,
             serviceEndpointDomain:
               service.serviceEndpointDomain ?? output?.serviceEndpointDomain,
-            url:
-              toDeploymentUrl(service.serviceEndpointDomain) ??
-              toDeploymentUrl(version?.previewDomain ?? undefined),
-            promoted:
-              service.latestVersionId !== null &&
-              version?.id === service.latestVersionId,
+            url: promoted ? (serviceUrl ?? versionUrl) : versionUrl,
+            promoted,
             previousVersionId: output?.previousVersionId,
             previousVersionAction: output?.previousVersionAction,
             environmentKeys: output?.environmentKeys,
@@ -1797,7 +1800,8 @@ export const ComputeProvider = () =>
           const serviceUrl =
             toDeploymentUrl(serviceEndpointDomain) ??
             toDeploymentUrl(version.previewDomain);
-          if (!(effectiveNews.skipPromote ?? false)) {
+          const promoted = !(effectiveNews.skipPromote ?? false);
+          if (promoted) {
             yield* waitForDeploymentUrl(serviceUrl, effectiveNews);
           }
 
@@ -1810,8 +1814,8 @@ export const ComputeProvider = () =>
             versionEndpointDomain: version.previewDomain ?? undefined,
             versionUrl,
             serviceEndpointDomain,
-            url: serviceUrl,
-            promoted: !(effectiveNews.skipPromote ?? false),
+            url: promoted ? serviceUrl : versionUrl,
+            promoted,
             previousVersionId,
             previousVersionAction,
             environmentKeys: managedEnvKeys(effectiveNews.env),
