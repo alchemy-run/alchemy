@@ -84,6 +84,7 @@ export interface DestroyComputeProjectResult {
 
 const DEFAULT_TIMEOUT_SECONDS = 120;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
+const DELETE_CONFLICT_RETRY_ATTEMPTS = 3;
 
 const getComputeVersion = (client: PrismaManagementClient, versionId: string) =>
   client
@@ -290,38 +291,56 @@ export const destroyComputeService: (
       keepService?: boolean;
     } = {},
   ) {
-    const deleteService = Effect.fn(function* () {
-      if (options.keepService) return false;
-      yield* client
-        .deleteComputeService(computeServiceId)
-        .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+    const deletedVersionIds = new Set<string>();
+
+    const cleanupVersions = Effect.fn(function* () {
+      const versions = yield* client
+        .listServiceComputeVersions(computeServiceId, {
+          limit: 100,
+        })
+        .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+      if (!versions) return false;
+      for (const version of versions) {
+        const result = yield* destroyComputeVersion(
+          client,
+          version.id,
+          options,
+        );
+        if (result.deleted) deletedVersionIds.add(version.id);
+      }
       return true;
     });
 
-    const versions = yield* client
-      .listServiceComputeVersions(computeServiceId, {
-        limit: 100,
-      })
-      .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
-    if (!versions) {
-      const serviceDeleted = yield* deleteService();
-      return {
-        computeServiceId,
-        deletedVersionIds: [],
-        serviceDeleted,
-      } satisfies DestroyComputeServiceResult;
-    }
-    const deletedVersionIds: string[] = [];
-    for (const version of versions) {
-      const result = yield* destroyComputeVersion(client, version.id, options);
-      if (result.deleted) deletedVersionIds.push(version.id);
-    }
+    yield* cleanupVersions();
 
-    const serviceDeleted = yield* deleteService();
+    let serviceDeleted = false;
+    if (!options.keepService) {
+      for (
+        let attempt = 0;
+        attempt < DELETE_CONFLICT_RETRY_ATTEMPTS;
+        attempt++
+      ) {
+        const deleted = yield* client
+          .deleteComputeService(computeServiceId)
+          .pipe(
+            Effect.as(true),
+            Effect.catchIf(isNotFound, () => Effect.succeed(true)),
+            Effect.catchIf(isConflict, (error) =>
+              attempt + 1 < DELETE_CONFLICT_RETRY_ATTEMPTS
+                ? cleanupVersions().pipe(Effect.as(false))
+                : Effect.fail(error),
+            ),
+          );
+        if (deleted) {
+          serviceDeleted = true;
+          break;
+        }
+      }
+    }
 
     return {
       computeServiceId,
-      deletedVersionIds,
+      deletedVersionIds: Array.from(deletedVersionIds),
       serviceDeleted,
     } satisfies DestroyComputeServiceResult;
   },
@@ -345,43 +364,59 @@ export const destroyComputeProject: (
       keepProject?: boolean;
     } = {},
   ) {
-    const deleteProject = Effect.fn(function* () {
-      if (options.keepProject) return false;
-      yield* client
-        .deleteProject(projectId)
-        .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+    const deletedServiceIds = new Set<string>();
+    const deletedVersionIds = new Set<string>();
+
+    const cleanupServices = Effect.fn(function* () {
+      const services = yield* client
+        .listProjectComputeServices(projectId, {
+          limit: 100,
+        })
+        .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+      if (!services) return false;
+      for (const service of services) {
+        const result = yield* destroyComputeService(
+          client,
+          service.id,
+          options,
+        );
+        for (const versionId of result.deletedVersionIds) {
+          deletedVersionIds.add(versionId);
+        }
+        if (result.serviceDeleted) deletedServiceIds.add(service.id);
+      }
       return true;
     });
 
-    const services = yield* client
-      .listProjectComputeServices(projectId, {
-        limit: 100,
-      })
-      .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
-    if (!services) {
-      const projectDeleted = yield* deleteProject();
-      return {
-        projectId,
-        deletedServiceIds: [],
-        deletedVersionIds: [],
-        projectDeleted,
-      } satisfies DestroyComputeProjectResult;
-    }
+    yield* cleanupServices();
 
-    const deletedServiceIds: string[] = [];
-    const deletedVersionIds: string[] = [];
-    for (const service of services) {
-      const result = yield* destroyComputeService(client, service.id, options);
-      deletedVersionIds.push(...result.deletedVersionIds);
-      if (result.serviceDeleted) deletedServiceIds.push(service.id);
+    let projectDeleted = false;
+    if (!options.keepProject) {
+      for (
+        let attempt = 0;
+        attempt < DELETE_CONFLICT_RETRY_ATTEMPTS;
+        attempt++
+      ) {
+        const deleted = yield* client.deleteProject(projectId).pipe(
+          Effect.as(true),
+          Effect.catchIf(isNotFound, () => Effect.succeed(true)),
+          Effect.catchIf(isConflict, (error) =>
+            attempt + 1 < DELETE_CONFLICT_RETRY_ATTEMPTS
+              ? cleanupServices().pipe(Effect.as(false))
+              : Effect.fail(error),
+          ),
+        );
+        if (deleted) {
+          projectDeleted = true;
+          break;
+        }
+      }
     }
-
-    const projectDeleted = yield* deleteProject();
 
     return {
       projectId,
-      deletedServiceIds,
-      deletedVersionIds,
+      deletedServiceIds: Array.from(deletedServiceIds),
+      deletedVersionIds: Array.from(deletedVersionIds),
       projectDeleted,
     } satisfies DestroyComputeProjectResult;
   },

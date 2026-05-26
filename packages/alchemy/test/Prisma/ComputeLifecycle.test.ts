@@ -607,6 +607,84 @@ describe("Prisma Compute lifecycle helpers", () => {
       }),
   );
 
+  it.effect(
+    "re-observes versions when compute service delete reports active versions",
+    () =>
+      Effect.gen(function* () {
+        const calls: string[] = [];
+        let deleteAttempts = 0;
+        const client = {
+          listServiceComputeVersions: (serviceId: string) =>
+            Effect.sync(() => {
+              calls.push(`list:${serviceId}`);
+              return deleteAttempts === 0
+                ? []
+                : [
+                    {
+                      id: "late-version",
+                      type: "compute-version" as const,
+                      url: "https://api.test/late-version",
+                      foundryVersionId: "foundry-late-version",
+                      createdAt: "2026-01-01T00:00:00Z",
+                    },
+                  ];
+            }),
+          getComputeServiceVersion: (versionId: string) =>
+            Effect.sync(() => {
+              calls.push(`get:${versionId}`);
+              return {
+                id: versionId,
+                type: "compute-version" as const,
+                url: `https://api.test/${versionId}`,
+                foundryVersionId: `foundry-${versionId}`,
+                status: "stopped",
+                previewDomain: `${versionId}.example.test`,
+                createdAt: "2026-01-01T00:00:00Z",
+              };
+            }),
+          deleteComputeServiceVersion: (versionId: string) =>
+            Effect.sync(() => {
+              calls.push(`delete:${versionId}`);
+            }),
+          deleteComputeVersion: (versionId: string) =>
+            Effect.sync(() => {
+              calls.push(`delete-global:${versionId}`);
+            }),
+          deleteComputeService: (serviceId: string) =>
+            Effect.gen(function* () {
+              calls.push(`delete-service:${serviceId}`);
+              deleteAttempts += 1;
+              if (deleteAttempts === 1) {
+                return yield* Effect.fail(
+                  new PrismaApiError({
+                    method: "DELETE",
+                    path: `/v1/compute-services/${serviceId}`,
+                    status: 409,
+                    message: "active compute versions exist",
+                  }),
+                );
+              }
+            }),
+        } as unknown as PrismaManagementClient;
+
+        const result = yield* destroyComputeService(client, "service-1");
+
+        expect(result).toEqual({
+          computeServiceId: "service-1",
+          deletedVersionIds: ["late-version"],
+          serviceDeleted: true,
+        });
+        expect(calls).toEqual([
+          "list:service-1",
+          "delete-service:service-1",
+          "list:service-1",
+          "get:late-version",
+          "delete:late-version",
+          "delete-service:service-1",
+        ]);
+      }),
+  );
+
   it.effect("destroys every compute service before deleting the project", () =>
     Effect.gen(function* () {
       const calls: string[] = [];
@@ -712,6 +790,108 @@ describe("Prisma Compute lifecycle helpers", () => {
         "delete-project:project-1",
       ]);
     }),
+  );
+
+  it.effect(
+    "re-observes compute services when project delete reports active versions",
+    () =>
+      Effect.gen(function* () {
+        const calls: string[] = [];
+        let deleteProjectAttempts = 0;
+        const client = {
+          listProjectComputeServices: (projectId: string) =>
+            Effect.sync(() => {
+              calls.push(`list-services:${projectId}`);
+              return deleteProjectAttempts === 0
+                ? []
+                : [
+                    {
+                      id: "late-service",
+                      type: "compute-service" as const,
+                      url: "https://api.test/late-service",
+                      name: "late-service",
+                      displayName: "late-service",
+                      region: { id: "us-east-1", displayName: "us-east-1" },
+                      projectId,
+                      latestVersionId: null,
+                      createdAt: "2026-01-01T00:00:00Z",
+                    },
+                  ];
+            }),
+          listServiceComputeVersions: (serviceId: string) =>
+            Effect.sync(() => {
+              calls.push(`list-versions:${serviceId}`);
+              return [
+                {
+                  id: "late-version",
+                  type: "compute-version" as const,
+                  url: "https://api.test/late-version",
+                  foundryVersionId: "foundry-late-version",
+                  createdAt: "2026-01-01T00:00:00Z",
+                },
+              ];
+            }),
+          getComputeServiceVersion: (versionId: string) =>
+            Effect.sync(() => {
+              calls.push(`get:${versionId}`);
+              return {
+                id: versionId,
+                type: "compute-version" as const,
+                url: `https://api.test/${versionId}`,
+                foundryVersionId: `foundry-${versionId}`,
+                status: "stopped",
+                previewDomain: `${versionId}.example.test`,
+                createdAt: "2026-01-01T00:00:00Z",
+              };
+            }),
+          deleteComputeServiceVersion: (versionId: string) =>
+            Effect.sync(() => {
+              calls.push(`delete-version:${versionId}`);
+            }),
+          deleteComputeVersion: (versionId: string) =>
+            Effect.sync(() => {
+              calls.push(`delete-version-global:${versionId}`);
+            }),
+          deleteComputeService: (serviceId: string) =>
+            Effect.sync(() => {
+              calls.push(`delete-service:${serviceId}`);
+            }),
+          deleteProject: (projectId: string) =>
+            Effect.gen(function* () {
+              calls.push(`delete-project:${projectId}`);
+              deleteProjectAttempts += 1;
+              if (deleteProjectAttempts === 1) {
+                return yield* Effect.fail(
+                  new PrismaApiError({
+                    method: "DELETE",
+                    path: `/v1/projects/${projectId}`,
+                    status: 409,
+                    message: "active compute versions exist",
+                  }),
+                );
+              }
+            }),
+        } as unknown as PrismaManagementClient;
+
+        const result = yield* destroyComputeProject(client, "project-1");
+
+        expect(result).toEqual({
+          projectId: "project-1",
+          deletedServiceIds: ["late-service"],
+          deletedVersionIds: ["late-version"],
+          projectDeleted: true,
+        });
+        expect(calls).toEqual([
+          "list-services:project-1",
+          "delete-project:project-1",
+          "list-services:project-1",
+          "list-versions:late-service",
+          "get:late-version",
+          "delete-version:late-version",
+          "delete-service:late-service",
+          "delete-project:project-1",
+        ]);
+      }),
   );
 
   it.effect("treats an already-deleted compute project as gone", () =>
