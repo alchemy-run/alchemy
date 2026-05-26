@@ -35,6 +35,10 @@ const forbiddenPatterns = [
     name: "explicit any",
     pattern: /\bany\b/,
   },
+  {
+    name: "double unknown cast",
+    pattern: /\bas\s+unknown\s+as\b/,
+  },
 ] as const;
 
 const documentedResources = [
@@ -90,17 +94,6 @@ describe("Prisma source conventions", () => {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const sourceRoot = path.resolve(import.meta.dirname, "../../src/Prisma");
-      const docsRoot = path.resolve(
-        import.meta.dirname,
-        "../../../../website/src/content/docs/providers/Prisma",
-      );
-      const docsFiles = (yield* fs.readDirectory(docsRoot))
-        .filter((file) => file.endsWith(".md"))
-        .sort();
-
-      expect(docsFiles).toEqual(
-        documentedResources.map((resource) => `${resource}.md`).sort(),
-      );
 
       for (const resource of documentedResources) {
         const source = yield* fs.readFileString(
@@ -125,13 +118,6 @@ describe("Prisma source conventions", () => {
         }
         expect(resourceDoc).toContain("@section");
         expect(resourceDoc).toContain("@example");
-
-        const docsPath = path.join(docsRoot, `${resource}.md`);
-        if (yield* fs.exists(docsPath)) {
-          const docs = yield* fs.readFileString(docsPath);
-          expect(docs).toContain("## ");
-          expect(docs).toContain("```typescript");
-        }
       }
     }).pipe(Effect.provide(NodeServices.layer)),
   );

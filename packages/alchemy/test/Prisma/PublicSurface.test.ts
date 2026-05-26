@@ -200,6 +200,11 @@ describe("Prisma public surface", () => {
   });
 
   it("supports deep Prisma package path imports", async () => {
+    for (const moduleName of publicPrismaDeepImports) {
+      const module = await importPackagePath(`alchemy/Prisma/${moduleName}`);
+      expect(Object.keys(module as object).length).toBeGreaterThan(0);
+    }
+
     const [compute, operations, client, archive, types, postgres] =
       await Promise.all([
         import("alchemy/Prisma/Compute"),

@@ -66,6 +66,13 @@ const redactedValue = (
   return Redacted.value(value);
 };
 
+const expectJsonNotToContain = (value: unknown, ...secrets: string[]) => {
+  const json = JSON.stringify(value);
+  for (const secret of secrets) {
+    expect(json).not.toContain(secret);
+  }
+};
+
 const resourceRef = (kind: string, id: string, name = id) => ({
   id,
   url: `https://api.prisma.test/v1/${kind}/${id}`,
@@ -1893,11 +1900,18 @@ describe("Prisma resource providers", () => {
           "postgres://direct",
         );
         expect(connection.connectionId).toBe("connection-2");
+        expectJsonNotToContain(
+          database,
+          "postgres://direct",
+          "postgres://pooled",
+        );
+        expectJsonNotToContain(connection, "postgres://api-direct");
         expect(branch.branchId).toBe("branch-1");
         expect(service.computeServiceId).toBe("service-1");
         expect(version.computeVersionId).toBe("version-1");
         expect(env.environmentVariableId).toBe("env-1");
         expect(Redacted.value(env.value)).toBe("secret");
+        expectJsonNotToContain(env, "secret");
         expect(repo.sourceRepositoryId).toBe("repo-1");
 
         expect(calls).toEqual([
@@ -2852,11 +2866,17 @@ describe("Prisma resource providers", () => {
       );
       expect(connection.user).toBe("app");
       expect(Redacted.value(connection.password!)).toBe("new-password");
+      expectJsonNotToContain(
+        connection,
+        "postgres://new-direct",
+        "new-password",
+      );
       expect(branch.isDefault).toBe(true);
       expect(service.name).toBe("web");
       expect(service.branchId).toBe("branch-1");
       expect(env.valueKid).toBe("kid-new");
       expect(Redacted.value(env.value)).toBe("new-secret");
+      expectJsonNotToContain(env, "new-secret");
       expect(calls).toEqual([
         ["getDatabase", "database-1"],
         [
@@ -3145,6 +3165,7 @@ describe("Prisma resource providers", () => {
       expect(Redacted.value(project.directConnectionString!)).toBe(
         "postgres://direct",
       );
+      expectJsonNotToContain(project, "postgres://direct");
       expect(calls).toEqual([
         ["listProjects"],
         [

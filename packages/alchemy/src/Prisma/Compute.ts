@@ -541,6 +541,10 @@ export const Compute: Platform<
   createRuntimeContext: (id): ComputeRuntimeContext => {
     const runners: Effect.Effect<void, never, unknown>[] = [];
     const env: Record<string, unknown> = {};
+    const run: Server.ProcessContext["run"] = (effect) =>
+      Effect.sync(() => {
+        runners.push(effect);
+      });
 
     const serve = <Req = never>(handler: HttpEffect<Req>) =>
       Effect.sync(() => {
@@ -604,10 +608,7 @@ export const Compute: Platform<
             ),
           ),
         ) as Effect.Effect<T>,
-      run: ((effect: Effect.Effect<void, never, unknown>) =>
-        Effect.sync(() => {
-          runners.push(effect);
-        })) as unknown as Server.ProcessContext["run"],
+      run,
       serve,
       exports: Effect.sync(() => ({
         default: Effect.all(
