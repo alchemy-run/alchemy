@@ -1033,6 +1033,22 @@ describe("Prisma resource providers", () => {
             ),
           ),
         ).toEqual({ action: "replace" });
+        expect(
+          yield* versionProvider.diff!(
+            diffInput(
+              {
+                computeService: "service-1",
+                portMapping: { http: 3000 },
+                start: false,
+              },
+              {
+                computeService: "service-1",
+                portMapping: { http: 8080 },
+                start: Output.asOutput(false),
+              },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
 
         expect(
           yield* envProvider.diff!(

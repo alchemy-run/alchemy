@@ -250,27 +250,21 @@ export const ComputeVersionProvider = () =>
         stables: ["computeVersionId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
-          const versionContent = {
+          const replacementContent = {
             portMapping: news.portMapping,
             skipCodeUpload: news.skipCodeUpload,
             artifact: news.artifact,
             artifactPath: news.artifactPath,
             artifactContentType: news.artifactContentType,
-            start: news.start,
-            promote: news.promote,
           };
-          if (!isResolved(versionContent)) {
-            return undefined;
-          }
-          const resolvedVersionContent = versionContent as Pick<
+          if (!isResolved(replacementContent)) return undefined;
+          const resolvedReplacementContent = replacementContent as Pick<
             ComputeVersionProps,
             | "portMapping"
             | "skipCodeUpload"
             | "artifact"
             | "artifactPath"
             | "artifactContentType"
-            | "start"
-            | "promote"
           >;
           if (isPrismaDevId(output?.computeVersionId)) {
             return { action: "update" } as const;
@@ -284,7 +278,7 @@ export const ComputeVersionProvider = () =>
           const oldArtifactHash = output?.artifactHash;
           const newArtifactHash = yield* artifactHashOf({
             computeService: olds.computeService,
-            ...resolvedVersionContent,
+            ...resolvedReplacementContent,
           });
           const computeServiceChanged = concreteIdsChanged(
             oldComputeServiceId,
@@ -293,25 +287,33 @@ export const ComputeVersionProvider = () =>
           if (
             computeServiceChanged ||
             !deepEqual(
-              resolvedVersionContent.portMapping ?? {},
+              resolvedReplacementContent.portMapping ?? {},
               olds.portMapping ?? {},
             ) ||
-            (resolvedVersionContent.skipCodeUpload ?? false) !==
+            (resolvedReplacementContent.skipCodeUpload ?? false) !==
               (olds.skipCodeUpload ?? false) ||
-            (resolvedVersionContent.artifact === undefined) !==
+            (resolvedReplacementContent.artifact === undefined) !==
               (olds.artifact === undefined) ||
-            resolvedVersionContent.artifactPath !== olds.artifactPath ||
-            resolvedVersionContent.artifactContentType !==
+            resolvedReplacementContent.artifactPath !== olds.artifactPath ||
+            resolvedReplacementContent.artifactContentType !==
               olds.artifactContentType ||
             (newArtifactHash !== undefined &&
               newArtifactHash !== oldArtifactHash)
           ) {
             return { action: "replace" } as const;
           }
+          const updateProps = {
+            start: news.start,
+            promote: news.promote,
+          };
+          if (!isResolved(updateProps)) return undefined;
+          const resolvedUpdateProps = updateProps as Pick<
+            ComputeVersionProps,
+            "start" | "promote"
+          >;
           if (
-            (resolvedVersionContent.start ?? false) !== (olds.start ?? false) ||
-            (resolvedVersionContent.promote ?? false) !==
-              (olds.promote ?? false)
+            (resolvedUpdateProps.start ?? false) !== (olds.start ?? false) ||
+            (resolvedUpdateProps.promote ?? false) !== (olds.promote ?? false)
           ) {
             return { action: "update" } as const;
           }
