@@ -789,6 +789,7 @@ describe("Prisma Compute", () => {
       });
 
       expect(output.computeVersionId).toBe("version-1");
+      expect(output.environmentKeys).toEqual(["DATABASE_URL", "SHARED_FLAG"]);
       expect(calls).toContainEqual([
         "createEnvironmentVariable",
         {
@@ -806,6 +807,155 @@ describe("Prisma Compute", () => {
           key: "SHARED_FLAG",
           value: "from-binding",
         },
+      ]);
+    }).pipe(
+      Effect.provide(ComputeProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
+
+  it.effect("removes env vars from previously managed bindings", () => {
+    const calls: Array<[string, unknown]> = [];
+    const byKey = new Map([
+      [
+        "OLD_BOUND_FLAG",
+        {
+          id: "env-old-bound-flag",
+          type: "environment-variable" as const,
+          url: "https://api.prisma.test/v1/environment-variables/env-old-bound-flag",
+          projectId: "project-1",
+          branchId: null,
+          class: "production" as const,
+          key: "OLD_BOUND_FLAG",
+          valueKid: "kid-old",
+          isManagedBySystem: false,
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-01T00:00:00Z",
+        },
+      ],
+    ]);
+    const client = {
+      getComputeService: (id: string) => {
+        calls.push(["getComputeService", id]);
+        return Effect.succeed({
+          id,
+          type: "compute-service" as const,
+          url: "https://api.prisma.test/v1/compute-services/service-1",
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId: "project-1",
+          branchId: null,
+          latestVersionId: null,
+          serviceEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      listEnvironmentVariables: (query: { key: string }) => {
+        calls.push(["listEnvironmentVariables", query]);
+        return Effect.succeed(
+          byKey.get(query.key) ? [byKey.get(query.key)] : [],
+        );
+      },
+      createEnvironmentVariable: (input: unknown) => {
+        calls.push(["createEnvironmentVariable", input]);
+        return Effect.succeed({
+          id: "env-created",
+          type: "environment-variable" as const,
+          url: "https://api.prisma.test/v1/environment-variables/env-created",
+          projectId: "project-1",
+          branchId: null,
+          class: "production" as const,
+          key: "DATABASE_URL",
+          valueKid: "kid-created",
+          isManagedBySystem: false,
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      deleteEnvironmentVariable: (id: string) => {
+        calls.push(["deleteEnvironmentVariable", id]);
+        return Effect.void;
+      },
+      createServiceComputeVersion: (
+        computeServiceId: string,
+        input: unknown,
+      ) => {
+        calls.push([
+          "createServiceComputeVersion",
+          { computeServiceId, input },
+        ]);
+        return Effect.succeed({
+          id: "version-1",
+          type: "compute-version" as const,
+          url: "https://api.prisma.test/v1/versions/version-1",
+          foundryVersionId: "foundry-1",
+          uploadUrl: null,
+        });
+      },
+      getComputeServiceVersion: (id: string) => {
+        calls.push(["getComputeServiceVersion", id]);
+        return Effect.succeed({
+          id,
+          type: "compute-version" as const,
+          url: "https://api.prisma.test/v1/versions/version-1",
+          foundryVersionId: "foundry-1",
+          status: "new",
+          previewDomain: "version-1.preview.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const output = yield* provider.reconcile({
+        id: "App",
+        instanceId: "00000000000000000000000000000000",
+        news: {
+          project: "project-1",
+          serviceName: "api",
+          branchId: null,
+          skipCodeUpload: true,
+          start: false,
+          skipPromote: true,
+        },
+        olds: undefined,
+        output: {
+          computeServiceId: "service-1",
+          computeVersionId: undefined,
+          projectId: "project-1",
+          serviceName: "api",
+          regionId: "us-east-1",
+          versionEndpointDomain: undefined,
+          versionUrl: undefined,
+          serviceEndpointDomain: "api.prisma.build",
+          url: "https://api.prisma.build",
+          promoted: false,
+          previousVersionId: undefined,
+          previousVersionAction: undefined,
+          environmentKeys: ["DATABASE_URL", "OLD_BOUND_FLAG"],
+          artifactHash: undefined,
+          local: false,
+        },
+        session: undefined as never,
+        bindings: [
+          {
+            sid: "Connection",
+            data: {
+              env: {
+                DATABASE_URL: Redacted.make("postgres://still-bound"),
+              },
+            },
+          },
+        ],
+      });
+
+      expect(output.environmentKeys).toEqual(["DATABASE_URL"]);
+      expect(calls).toContainEqual([
+        "deleteEnvironmentVariable",
+        "env-old-bound-flag",
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),

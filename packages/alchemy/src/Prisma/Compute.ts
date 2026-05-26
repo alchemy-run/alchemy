@@ -351,6 +351,12 @@ export interface Compute extends Resource<
       | null
       | undefined;
     /**
+     * Environment variable keys managed by this Compute resource.
+     *
+     * This includes explicit `env` props and env vars added by bindings.
+     */
+    environmentKeys?: string[];
+    /**
      * Hash of the uploaded artifact or reused artifact inputs.
      */
     artifactHash: string | undefined;
@@ -640,6 +646,21 @@ const plainEnv = (
         : [[key, Redacted.isRedacted(value) ? Redacted.value(value) : value]],
     ),
   ) as Record<string, string | null>;
+
+const managedEnvKeys = (
+  env: Record<
+    string,
+    string | Redacted.Redacted<string> | null | undefined
+  > = {},
+) =>
+  Object.entries(plainEnv(env))
+    .flatMap(([key, value]) => (value === null ? [] : [key]))
+    .sort();
+
+const envKeysRecord = (
+  keys: readonly string[] | undefined,
+): Record<string, string> =>
+  Object.fromEntries((keys ?? []).map((key) => [key, ""]));
 
 const branchAttachment = (props: ComputeProps) =>
   props.branchId !== undefined && !isPrismaDevId(props.branchId)
@@ -1329,40 +1350,6 @@ const activeBindingEnv = (
       >,
     );
 
-const deletedBindingEnv = (
-  bindings: ResourceBinding<Compute["Binding"]>[],
-): Record<string, string | Redacted.Redacted<string> | null | undefined> =>
-  bindings
-    .filter(
-      (binding: ResourceBinding<Compute["Binding"]> & { action?: string }) =>
-        binding.action === "delete",
-    )
-    .map((binding) => binding.data?.env)
-    .reduce<
-      Record<string, string | Redacted.Redacted<string> | null | undefined>
-    >(
-      (acc, env) => (env ? { ...acc, ...env } : acc),
-      {} as Record<
-        string,
-        string | Redacted.Redacted<string> | null | undefined
-      >,
-    );
-
-const allBindingEnv = (
-  bindings: ResourceBinding<Compute["Binding"]>[],
-): Record<string, string | Redacted.Redacted<string> | null | undefined> =>
-  bindings
-    .map((binding) => binding.data?.env)
-    .reduce<
-      Record<string, string | Redacted.Redacted<string> | null | undefined>
-    >(
-      (acc, env) => (env ? { ...acc, ...env } : acc),
-      {} as Record<
-        string,
-        string | Redacted.Redacted<string> | null | undefined
-      >,
-    );
-
 export const ComputeProvider = () =>
   Provider.effect(
     Compute,
@@ -1433,13 +1420,13 @@ export const ComputeProvider = () =>
             promoted: output?.promoted ?? false,
             previousVersionId: output?.previousVersionId,
             previousVersionAction: output?.previousVersionAction,
+            environmentKeys: output?.environmentKeys,
             artifactHash: output?.artifactHash,
             local: false,
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, olds, output, bindings }) {
           const bindingEnv = activeBindingEnv(bindings);
-          const removedBindingEnv = deletedBindingEnv(bindings);
           const effectiveNews = {
             ...news,
             env: {
@@ -1468,7 +1455,7 @@ export const ComputeProvider = () =>
             projectId,
             olds?.envClass ?? "production",
             {
-              ...removedBindingEnv,
+              ...envKeysRecord(output?.environmentKeys),
               ...olds?.env,
             },
             effectiveNews.envClass ?? "production",
@@ -1626,6 +1613,7 @@ export const ComputeProvider = () =>
             promoted: !(effectiveNews.skipPromote ?? false),
             previousVersionId,
             previousVersionAction,
+            environmentKeys: managedEnvKeys(effectiveNews.env),
             artifactHash: artifact.hash,
             local: false,
           };
@@ -1644,7 +1632,7 @@ export const ComputeProvider = () =>
             output.projectId,
             olds.envClass ?? "production",
             {
-              ...allBindingEnv(bindings),
+              ...envKeysRecord(output.environmentKeys),
               ...olds.env,
             },
           );
@@ -1700,6 +1688,7 @@ export const ComputeDevProvider = () =>
             promoted: false,
             previousVersionId: undefined,
             previousVersionAction: undefined,
+            environmentKeys: managedEnvKeys(effectiveNews.env),
             artifactHash: undefined,
             local: true,
           };
