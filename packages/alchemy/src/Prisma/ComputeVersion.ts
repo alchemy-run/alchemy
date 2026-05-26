@@ -3,6 +3,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../Diff.ts";
+import type { Input } from "../Input.ts";
+import * as Output from "../Output.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
@@ -31,6 +33,18 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 type ObservedComputeVersion = Omit<ApiComputeVersion, "createdAt"> & {
   createdAt?: string;
 };
+
+type ComputeVersionInputObject = {
+  [Key in keyof ComputeVersionProps]: Input<ComputeVersionProps[Key]>;
+};
+
+const isInputObject = (
+  value: Input<ComputeVersionProps>,
+): value is ComputeVersionInputObject =>
+  typeof value === "object" &&
+  value !== null &&
+  !Output.isOutput(value) &&
+  !Effect.isEffect(value);
 
 export interface ComputeVersionProps {
   /**
@@ -247,40 +261,67 @@ export const ComputeVersionProvider = () =>
       return {
         stables: ["computeVersionId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!isResolved(news)) return undefined;
+          if (!isInputObject(news)) return undefined;
+          const versionContent = {
+            portMapping: news.portMapping,
+            skipCodeUpload: news.skipCodeUpload,
+            artifact: news.artifact,
+            artifactPath: news.artifactPath,
+            artifactContentType: news.artifactContentType,
+            start: news.start,
+            promote: news.promote,
+          };
+          if (!isResolved(versionContent)) {
+            return undefined;
+          }
+          const resolvedVersionContent = versionContent as Pick<
+            ComputeVersionProps,
+            | "portMapping"
+            | "skipCodeUpload"
+            | "artifact"
+            | "artifactPath"
+            | "artifactContentType"
+            | "start"
+            | "promote"
+          >;
           if (isPrismaDevId(output?.computeVersionId)) {
             return { action: "update" } as const;
           }
           const oldComputeServiceId = unresolvedComputeServiceIdOf(
             olds.computeService,
           );
-          const newComputeServiceId = unresolvedComputeServiceIdOf(
-            news.computeService,
-          );
-          if (
-            oldComputeServiceId === undefined ||
-            newComputeServiceId === undefined
-          ) {
-            return undefined;
-          }
+          const newComputeServiceId = isResolved(news.computeService)
+            ? unresolvedComputeServiceIdOf(news.computeService)
+            : undefined;
           const oldArtifactHash = output?.artifactHash;
-          const newArtifactHash = yield* artifactHashOf(news);
+          const newArtifactHash = yield* artifactHashOf({
+            computeService: olds.computeService,
+            ...resolvedVersionContent,
+          });
+          const computeServiceChanged =
+            oldComputeServiceId !== undefined &&
+            newComputeServiceId !== undefined &&
+            newComputeServiceId !== oldComputeServiceId;
           if (
-            newComputeServiceId !== oldComputeServiceId ||
-            JSON.stringify(news.portMapping ?? {}) !==
+            computeServiceChanged ||
+            JSON.stringify(resolvedVersionContent.portMapping ?? {}) !==
               JSON.stringify(olds.portMapping ?? {}) ||
-            (news.skipCodeUpload ?? false) !== (olds.skipCodeUpload ?? false) ||
-            (news.artifact === undefined) !== (olds.artifact === undefined) ||
-            news.artifactPath !== olds.artifactPath ||
-            news.artifactContentType !== olds.artifactContentType ||
+            (resolvedVersionContent.skipCodeUpload ?? false) !==
+              (olds.skipCodeUpload ?? false) ||
+            (resolvedVersionContent.artifact === undefined) !==
+              (olds.artifact === undefined) ||
+            resolvedVersionContent.artifactPath !== olds.artifactPath ||
+            resolvedVersionContent.artifactContentType !==
+              olds.artifactContentType ||
             (newArtifactHash !== undefined &&
               newArtifactHash !== oldArtifactHash)
           ) {
             return { action: "replace" } as const;
           }
           if (
-            (news.start ?? false) !== (olds.start ?? false) ||
-            (news.promote ?? false) !== (olds.promote ?? false)
+            (resolvedVersionContent.start ?? false) !== (olds.start ?? false) ||
+            (resolvedVersionContent.promote ?? false) !==
+              (olds.promote ?? false)
           ) {
             return { action: "update" } as const;
           }

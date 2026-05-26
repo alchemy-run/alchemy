@@ -2,6 +2,7 @@ import {
   ComputeVersion as PrismaComputeVersion,
   ComputeVersionProvider,
 } from "@/Prisma/ComputeVersion";
+import * as Output from "@/Output";
 import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { sha256, sha256Object } from "@/Util/sha256";
@@ -280,6 +281,57 @@ describe("Prisma ComputeVersion", () => {
       Effect.provide(PlatformServices),
     );
   });
+
+  it.effect(
+    "replaces changed artifacts even when computeService is unresolved",
+    () => {
+      const client = {} as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-prisma-version-unresolved-diff-",
+        });
+        const artifactPath = path.join(root, "version.tar.gz");
+        yield* fs.writeFileString(artifactPath, "new-version");
+
+        const provider = yield* PrismaComputeVersion.Provider;
+        const diff = yield* provider.diff!({
+          id: "Version",
+          instanceId: "00000000000000000000000000000000",
+          olds: {
+            computeService: "service-1",
+            artifactPath,
+          },
+          news: {
+            computeService: Output.asOutput("service-1"),
+            artifactPath,
+          },
+          oldBindings: [],
+          newBindings: [],
+          output: {
+            computeVersionId: "version-1",
+            computeServiceId: "service-1",
+            foundryVersionId: "foundry-1",
+            status: "new",
+            previewDomain: null,
+            uploadUrl: "https://upload.prisma.test/version.tar.gz",
+            artifactHash: "old-hash",
+            serviceEndpointDomain: undefined,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        } as never);
+
+        expect(diff).toEqual({ action: "replace" });
+      }).pipe(
+        Effect.provide(ComputeVersionProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
 
   it.effect("does not replace when artifact bytes are unchanged", () => {
     const client = {} as PrismaManagementClient;
