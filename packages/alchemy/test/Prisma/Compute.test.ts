@@ -10,6 +10,7 @@ import {
   PrismaClient,
   type PrismaManagementClient,
 } from "@/Prisma/Client";
+import type { ResourceBinding } from "@/Resource";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -1529,6 +1530,188 @@ describe("Prisma Compute", () => {
       Effect.provide(PlatformServices),
     );
   });
+
+  it.effect(
+    "lets explicit Compute env override bindings and ignores deleted bindings",
+    () => {
+      const calls: Array<[string, unknown]> = [];
+      const client = {
+        getComputeService: (id: string) => {
+          calls.push(["getComputeService", id]);
+          return Effect.succeed({
+            id,
+            type: "compute-service" as const,
+            url: "https://api.prisma.test/v1/compute-services/service-1",
+            name: "api",
+            region: { id: "us-east-1", name: "US East" },
+            projectId: "project-1",
+            branchId: null,
+            latestVersionId: null,
+            serviceEndpointDomain: "api.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+        listEnvironmentVariables: (query: unknown) => {
+          calls.push(["listEnvironmentVariables", query]);
+          return Effect.succeed([]);
+        },
+        createEnvironmentVariable: (input: {
+          key: string;
+          projectId: string;
+          class: "production" | "preview";
+        }) => {
+          calls.push(["createEnvironmentVariable", input]);
+          return Effect.succeed({
+            id: `env-${input.key.toLowerCase()}`,
+            type: "environment-variable" as const,
+            url: `https://api.prisma.test/v1/environment-variables/env-${input.key.toLowerCase()}`,
+            projectId: input.projectId,
+            branchId: null,
+            class: input.class,
+            key: input.key,
+            valueKid: `kid-${input.key.toLowerCase()}`,
+            isManagedBySystem: false,
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z",
+          });
+        },
+        createServiceComputeVersion: (
+          computeServiceId: string,
+          input: unknown,
+        ) => {
+          calls.push([
+            "createServiceComputeVersion",
+            { computeServiceId, input },
+          ]);
+          return Effect.succeed({
+            id: "version-1",
+            type: "compute-version" as const,
+            url: "https://api.prisma.test/v1/versions/version-1",
+            foundryVersionId: "foundry-1",
+            uploadUrl: null,
+          });
+        },
+        getComputeServiceVersion: (id: string) => {
+          calls.push(["getComputeServiceVersion", id]);
+          return Effect.succeed({
+            id,
+            type: "compute-version" as const,
+            url: "https://api.prisma.test/v1/versions/version-1",
+            foundryVersionId: "foundry-1",
+            status: "new",
+            previewDomain: "version-1.preview.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const deletedBinding = {
+          sid: "RemovedConnection",
+          action: "delete",
+          data: {
+            env: {
+              DELETED_BINDING: "must-not-sync",
+            },
+          },
+        } as ResourceBinding<Compute["Binding"]> & { action: "delete" };
+        const output = yield* provider.reconcile({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            serviceName: "api",
+            branchId: null,
+            skipCodeUpload: true,
+            start: false,
+            skipPromote: true,
+            env: {
+              DATABASE_URL: Redacted.make("postgres://explicit"),
+              BOUND_ONLY: null,
+            },
+          },
+          olds: undefined,
+          output: {
+            computeServiceId: "service-1",
+            computeVersionId: undefined,
+            projectId: "project-1",
+            serviceName: "api",
+            regionId: "us-east-1",
+            versionEndpointDomain: undefined,
+            versionUrl: undefined,
+            serviceEndpointDomain: "api.prisma.build",
+            url: "https://api.prisma.build",
+            promoted: false,
+            previousVersionId: undefined,
+            previousVersionAction: undefined,
+            artifactHash: undefined,
+            local: false,
+          },
+          session: undefined as never,
+          bindings: [
+            {
+              sid: "Connection",
+              data: {
+                env: {
+                  DATABASE_URL: Redacted.make("postgres://bound"),
+                  BOUND_ONLY: "from-binding",
+                  ACTIVE_BINDING: "from-active-binding",
+                },
+              },
+            },
+            deletedBinding,
+          ],
+        });
+
+        expect(output.environmentKeys).toEqual([
+          "ACTIVE_BINDING",
+          "DATABASE_URL",
+        ]);
+        expect(calls).toContainEqual([
+          "createEnvironmentVariable",
+          {
+            projectId: "project-1",
+            class: "production",
+            key: "DATABASE_URL",
+            value: "postgres://explicit",
+          },
+        ]);
+        expect(calls).toContainEqual([
+          "createEnvironmentVariable",
+          {
+            projectId: "project-1",
+            class: "production",
+            key: "ACTIVE_BINDING",
+            value: "from-active-binding",
+          },
+        ]);
+        expect(calls).not.toContainEqual([
+          "createEnvironmentVariable",
+          {
+            projectId: "project-1",
+            class: "production",
+            key: "DELETED_BINDING",
+            value: "must-not-sync",
+          },
+        ]);
+        expect(calls).not.toContainEqual([
+          "createEnvironmentVariable",
+          {
+            projectId: "project-1",
+            class: "production",
+            key: "BOUND_ONLY",
+            value: "from-binding",
+          },
+        ]);
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
 
   it.effect("removes env vars from previously managed bindings", () => {
     const calls: Array<[string, unknown]> = [];
