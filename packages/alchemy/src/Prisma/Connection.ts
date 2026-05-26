@@ -28,7 +28,6 @@ import type {
   DatabaseConnectionWithSecrets,
   PrismaSecretConnection,
 } from "./Types.ts";
-import { isCompute } from "./Compute.ts";
 
 export interface ConnectionProps {
   /**
@@ -199,6 +198,18 @@ export type ConnectionEnvValue = Output.Output<
   string | Redacted.Redacted<string> | undefined
 >;
 
+type ConnectionEnvBindingHost = Resource<
+  string,
+  object | undefined,
+  object,
+  { env?: Record<string, ConnectionEnvValue> }
+>;
+
+const supportsConnectionEnvBinding = (
+  host: ResourceLike,
+): host is ConnectionEnvBindingHost =>
+  host.Type === "Prisma.Compute" || host.Type === "AWS.Lambda.Function";
+
 export interface ConnectionEnvOptions {
   /**
    * Env var name for the app-facing database URL. Set to `false` to omit.
@@ -283,7 +294,7 @@ export type ConnectionEnv<
  * });
  * ```
  *
- * @section Binding to Compute
+ * @section Binding to Platforms
  * @example Use a connection inside an Effect-native app
  * ```typescript
  * const connection = yield* Prisma.Connection("api", {
@@ -614,10 +625,10 @@ export class ConnectionBindingPolicy extends Binding.Policy<
 export const ConnectionBindingPolicyLive =
   ConnectionBindingPolicy.layer.succeed(
     Effect.fnUntraced(function* (host: ResourceLike, connection: Connection) {
-      if (!isCompute(host)) {
+      if (!supportsConnectionEnvBinding(host)) {
         return yield* Effect.die(
           new Error(
-            `Prisma.Connection.bind does not support runtime '${host.Type}'`,
+            `Prisma.Connection.bind supports Prisma.Compute and AWS.Lambda.Function runtimes, got '${host.Type}'`,
           ),
         );
       }

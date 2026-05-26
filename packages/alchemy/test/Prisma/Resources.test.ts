@@ -605,6 +605,98 @@ describe("Prisma resource providers", () => {
     },
   );
 
+  it.effect("Connection.bind records env for AWS Lambda function hosts", () => {
+    const stored: Record<string, Output.Output> = {};
+    let capturedBindingEnv: Record<string, Output.Output> | undefined;
+    const runtime = {
+      Type: "AWS.Lambda.Function",
+      id: "Api",
+      env: stored,
+      set: (id: string, output: Output.Output) =>
+        Effect.sync(() => {
+          const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          stored[key] = output;
+          return key;
+        }),
+      get: <T>(key: string): Effect.Effect<T> => {
+        const output = stored[key];
+        if (!output) return Effect.die(`missing runtime binding ${key}`);
+        return Output.evaluate(output, {}) as Effect.Effect<T>;
+      },
+    };
+    const host = {
+      Type: "AWS.Lambda.Function",
+      LogicalId: "Api",
+      FQN: "Api",
+      bind: (...args: unknown[]) =>
+        args[0] instanceof Array
+          ? (binding: { env?: Record<string, Output.Output> }) =>
+              Effect.sync(() => {
+                capturedBindingEnv = binding.env;
+              })
+          : Effect.void,
+    };
+    const connection = {
+      Type: "Prisma.Connection",
+      LogicalId: "Connection",
+      FQN: "Connection",
+      connectionId: Output.asOutput("connection-1"),
+      databaseId: Output.asOutput("database-1"),
+      connectionString: Output.asOutput(undefined),
+      directConnectionString: Output.asOutput(Redacted.make("postgres://api")),
+      pooledConnectionString: Output.asOutput(undefined),
+      accelerateConnectionString: Output.asOutput(undefined),
+      host: Output.asOutput("db.example.test"),
+      user: Output.asOutput("api"),
+      password: Output.asOutput(Redacted.make("password")),
+    } as PrismaConnection;
+
+    return Effect.gen(function* () {
+      const db = yield* PrismaConnection.bind(connection);
+      const keys = connectionBindingEnvKeys(connection);
+      const env = yield* Output.evaluate(
+        capturedBindingEnv ?? {},
+        {},
+      ) as Effect.Effect<Record<string, unknown>>;
+
+      expect(Object.keys(env)).toEqual(
+        expect.arrayContaining([
+          keys.connectionId,
+          keys.databaseId,
+          keys.directConnectionString,
+          keys.password,
+        ]),
+      );
+      expect(env[keys.connectionId]).toBe("connection-1");
+      expect(env[keys.databaseId]).toBe("database-1");
+      expect(
+        redactedValue(
+          env[keys.directConnectionString] as
+            | string
+            | Redacted.Redacted<string>
+            | undefined,
+        ),
+      ).toBe("postgres://api");
+      expect(
+        redactedValue(
+          env[keys.password] as string | Redacted.Redacted<string> | undefined,
+        ),
+      ).toBe("password");
+      expect(yield* db.databaseUrl).toBe("postgres://api");
+    }).pipe(
+      Effect.provide(ConnectionBindingLive),
+      Effect.provide(ConnectionBindingPolicyLive),
+      Effect.provide(Layer.succeed(RuntimeContext, runtime)),
+      Effect.provide(Layer.succeed(Self, host)),
+      Effect.provide(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
+        ),
+      ),
+    );
+  });
+
   it.effect("rejects conflicting ComputeService branch inputs", () => {
     const { client } = makeClient();
 
