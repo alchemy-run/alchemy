@@ -1540,19 +1540,31 @@ export const ComputeProvider = () =>
                 skipCodeUpload: effectiveNews.skipCodeUpload,
               },
             );
+            createdVersionId = created.id;
+            const cleanupCreatedVersion = destroyComputeVersion(
+              client,
+              created.id,
+              effectiveNews,
+            ).pipe(Effect.catch(() => Effect.void));
             if (artifact.bytes !== undefined && !created.uploadUrl) {
+              yield* cleanupCreatedVersion;
               return yield* Effect.fail(
                 new Error(
                   "Prisma Compute version creation did not return an upload URL.",
                 ),
               );
             }
-            createdVersionId = created.id;
             if (created.uploadUrl && artifact.bytes !== undefined) {
               yield* uploadArtifact(
                 created.uploadUrl,
                 artifact.bytes,
                 "application/gzip",
+              ).pipe(
+                Effect.catch((error) =>
+                  cleanupCreatedVersion.pipe(
+                    Effect.andThen(() => Effect.fail(error)),
+                  ),
+                ),
               );
             }
             version = yield* client.getComputeServiceVersion(created.id).pipe(

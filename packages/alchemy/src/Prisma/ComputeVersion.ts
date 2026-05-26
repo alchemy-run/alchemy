@@ -360,7 +360,12 @@ export const ComputeVersionProvider = () =>
               },
             );
             createdUploadUrl = created.uploadUrl;
+            const cleanupCreatedVersion = destroyComputeVersion(
+              client,
+              created.id,
+            ).pipe(Effect.catch(() => Effect.void));
             if (artifact !== undefined && !created.uploadUrl) {
+              yield* cleanupCreatedVersion;
               return yield* Effect.fail(
                 new Error(
                   "Prisma Compute version creation did not return an upload URL.",
@@ -372,6 +377,12 @@ export const ComputeVersionProvider = () =>
                 created.uploadUrl,
                 artifact,
                 news.artifactContentType ?? "application/octet-stream",
+              ).pipe(
+                Effect.catch((error) =>
+                  cleanupCreatedVersion.pipe(
+                    Effect.andThen(() => Effect.fail(error)),
+                  ),
+                ),
               );
             }
             version = yield* client.getComputeVersion(created.id).pipe(

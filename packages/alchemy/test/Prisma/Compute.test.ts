@@ -434,9 +434,11 @@ describe("Prisma Compute", () => {
   );
 
   it.effect("fails when Prisma omits an upload URL for app artifacts", () => {
+    const calls: Array<[string, unknown?]> = [];
     const client = {
-      getComputeService: () =>
-        Effect.succeed({
+      getComputeService: () => {
+        calls.push(["getComputeService"]);
+        return Effect.succeed({
           id: "service-1",
           type: "compute-service" as const,
           url: "https://api.prisma.test/v1/compute-services/service-1",
@@ -447,16 +449,35 @@ describe("Prisma Compute", () => {
           latestVersionId: null,
           serviceEndpointDomain: "api.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
-        }),
+        });
+      },
       listEnvironmentVariables: () => Effect.succeed([]),
-      createServiceComputeVersion: () =>
-        Effect.succeed({
+      createServiceComputeVersion: () => {
+        calls.push(["createServiceComputeVersion"]);
+        return Effect.succeed({
           id: "version-1",
           type: "compute-version" as const,
           url: "https://api.prisma.test/v1/versions/version-1",
           foundryVersionId: "foundry-1",
           uploadUrl: null,
-        }),
+        });
+      },
+      getComputeServiceVersion: (id: string) => {
+        calls.push(["getComputeServiceVersion", id]);
+        return Effect.succeed({
+          id,
+          type: "compute-version" as const,
+          url: `https://api.prisma.test/v1/versions/${id}`,
+          foundryVersionId: "foundry-1",
+          status: "new",
+          previewDomain: null,
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      deleteComputeServiceVersion: (id: string) => {
+        calls.push(["deleteComputeServiceVersion", id]);
+        return Effect.void;
+      },
     } as unknown as PrismaManagementClient;
 
     return Effect.gen(function* () {
@@ -499,12 +520,122 @@ describe("Prisma Compute", () => {
       expect((error as Error).message).toContain(
         "did not return an upload URL",
       );
+      expect(calls).toContainEqual([
+        "deleteComputeServiceVersion",
+        "version-1",
+      ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
       Effect.provide(PlatformServices),
     );
   });
+
+  it.effect(
+    "deletes created Compute version when artifact upload fails",
+    () => {
+      const calls: Array<[string, unknown?]> = [];
+      const client = {
+        getComputeService: () =>
+          Effect.succeed({
+            id: "service-1",
+            type: "compute-service" as const,
+            url: "https://api.prisma.test/v1/compute-services/service-1",
+            name: "api",
+            region: { id: "us-east-1", name: "US East" },
+            projectId: "project-1",
+            branchId: null,
+            latestVersionId: null,
+            serviceEndpointDomain: "api.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          }),
+        listEnvironmentVariables: () => Effect.succeed([]),
+        createServiceComputeVersion: () => {
+          calls.push(["createServiceComputeVersion"]);
+          return Effect.succeed({
+            id: "version-1",
+            type: "compute-version" as const,
+            url: "https://api.prisma.test/v1/versions/version-1",
+            foundryVersionId: "foundry-1",
+            uploadUrl: "https://upload.prisma.test/app.tar.gz",
+          });
+        },
+        getComputeServiceVersion: (id: string) => {
+          calls.push(["getComputeServiceVersion", id]);
+          return Effect.succeed({
+            id,
+            type: "compute-version" as const,
+            url: `https://api.prisma.test/v1/versions/${id}`,
+            foundryVersionId: "foundry-1",
+            status: "new",
+            previewDomain: null,
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+        deleteComputeServiceVersion: (id: string) => {
+          calls.push(["deleteComputeServiceVersion", id]);
+          return Effect.void;
+        },
+      } as unknown as PrismaManagementClient;
+      const http = HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response("upload failed", { status: 500 }),
+          ),
+        ),
+      );
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const error = yield* provider
+          .reconcile({
+            id: "App",
+            instanceId: "00000000000000000000000000000000",
+            news: {
+              project: "project-1",
+              serviceName: "api",
+              artifact: "archive-bytes",
+              branchId: null,
+              start: false,
+              skipPromote: true,
+            },
+            olds: undefined,
+            output: {
+              computeServiceId: "service-1",
+              computeVersionId: undefined,
+              projectId: "project-1",
+              serviceName: "api",
+              regionId: "us-east-1",
+              versionEndpointDomain: undefined,
+              versionUrl: undefined,
+              serviceEndpointDomain: "api.prisma.build",
+              url: "https://api.prisma.build",
+              promoted: false,
+              previousVersionId: undefined,
+              previousVersionAction: undefined,
+              artifactHash: undefined,
+              local: false,
+            },
+            session: undefined as never,
+            bindings: [],
+          })
+          .pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain("artifact upload failed");
+        expect(calls).toContainEqual([
+          "deleteComputeServiceVersion",
+          "version-1",
+        ]);
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
 
   it.effect("uploads a pre-created artifact from artifactPath", () => {
     let uploaded:
