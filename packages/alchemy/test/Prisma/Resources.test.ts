@@ -2267,6 +2267,181 @@ describe("Prisma resource providers", () => {
     );
   });
 
+  it.effect("clears previously managed project settings", () => {
+    const calls: Call[] = [];
+    const client = {
+      getProject: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getProject", id]);
+          return {
+            id,
+            type: "project" as const,
+            url: `https://api.prisma.test/v1/projects/${id}`,
+            name: "app",
+            createdAt,
+            defaultRegion: "us-east-1",
+            workspace: resourceRef("workspaces", "workspace-1", "team"),
+          };
+        }),
+      updateProject: (id: string, input: unknown) =>
+        Effect.sync(() => {
+          calls.push(["updateProject", { id, input }]);
+          return {
+            id,
+            type: "project" as const,
+            url: `https://api.prisma.test/v1/projects/${id}`,
+            name: "app",
+            createdAt,
+            defaultRegion: "us-east-1",
+            workspace: resourceRef("workspaces", "workspace-1", "team"),
+          };
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const projectProvider = yield* PrismaProject.Provider;
+      const project = yield* projectProvider.reconcile(
+        reconcileInput(
+          "Project",
+          { name: "app", createDatabase: false },
+          {
+            projectId: "project-1",
+            projectName: "app",
+            workspaceId: "workspace-1",
+            createdAt,
+            defaultRegion: "us-east-1",
+            databaseId: undefined,
+            defaultConnectionId: undefined,
+            connectionString: undefined,
+            directConnectionString: undefined,
+            pooledConnectionString: undefined,
+            accelerateConnectionString: undefined,
+            host: undefined,
+            user: undefined,
+            password: undefined,
+          },
+          {
+            name: "app",
+            createDatabase: false,
+            settings: { preview: true },
+          },
+        ),
+      );
+
+      expect(project.projectId).toBe("project-1");
+      expect(calls).toEqual([
+        ["getProject", "project-1"],
+        [
+          "updateProject",
+          {
+            id: "project-1",
+            input: { name: "app", settings: {} },
+          },
+        ],
+      ]);
+    }).pipe(
+      Effect.provide(
+        ProjectProvider().pipe(
+          Layer.provide(Layer.succeed(PrismaClient, client)),
+        ),
+      ),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(Stack, {
+        name: "prisma-project-settings-test",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "test"),
+    );
+  });
+
+  it.effect("renames a project without clearing unmanaged settings", () => {
+    const calls: Call[] = [];
+    const client = {
+      getProject: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getProject", id]);
+          return {
+            id,
+            type: "project" as const,
+            url: `https://api.prisma.test/v1/projects/${id}`,
+            name: "app",
+            createdAt,
+            defaultRegion: "us-east-1",
+            workspace: resourceRef("workspaces", "workspace-1", "team"),
+          };
+        }),
+      updateProject: (id: string, input: unknown) =>
+        Effect.sync(() => {
+          calls.push(["updateProject", { id, input }]);
+          return {
+            id,
+            type: "project" as const,
+            url: `https://api.prisma.test/v1/projects/${id}`,
+            name: "renamed",
+            createdAt,
+            defaultRegion: "us-east-1",
+            workspace: resourceRef("workspaces", "workspace-1", "team"),
+          };
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const projectProvider = yield* PrismaProject.Provider;
+      yield* projectProvider.reconcile(
+        reconcileInput(
+          "Project",
+          { name: "renamed", createDatabase: false },
+          {
+            projectId: "project-1",
+            projectName: "app",
+            workspaceId: "workspace-1",
+            createdAt,
+            defaultRegion: "us-east-1",
+            databaseId: undefined,
+            defaultConnectionId: undefined,
+            connectionString: undefined,
+            directConnectionString: undefined,
+            pooledConnectionString: undefined,
+            accelerateConnectionString: undefined,
+            host: undefined,
+            user: undefined,
+            password: undefined,
+          },
+          { name: "app", createDatabase: false },
+        ),
+      );
+
+      expect(calls).toEqual([
+        ["getProject", "project-1"],
+        [
+          "updateProject",
+          {
+            id: "project-1",
+            input: { name: "renamed" },
+          },
+        ],
+      ]);
+    }).pipe(
+      Effect.provide(
+        ProjectProvider().pipe(
+          Layer.provide(Layer.succeed(PrismaClient, client)),
+        ),
+      ),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provideService(Stack, {
+        name: "prisma-project-rename-test",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+      }),
+      Effect.provideService(Stage, "test"),
+    );
+  });
+
   it.effect("finds the default database when its name is omitted", () => {
     const calls: Call[] = [];
     const client = {

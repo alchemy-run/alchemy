@@ -226,7 +226,7 @@ export const ProjectProvider = () =>
             password: output?.password,
           });
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, olds, output }) {
           const name = yield* createName(id, news.name);
           const projectId = isPrismaDevId(output?.projectId)
             ? undefined
@@ -279,13 +279,13 @@ export const ProjectProvider = () =>
             secrets = result.secrets;
           }
 
-          if (
-            project.name !== name ||
-            (news.settings && Object.keys(news.settings).length > 0)
-          ) {
+          const settingsChanged =
+            JSON.stringify(news.settings ?? {}) !==
+            JSON.stringify(olds?.settings ?? {});
+          if (project.name !== name || settingsChanged) {
             project = yield* client.updateProject(project.id, {
               name,
-              settings: news.settings,
+              ...(settingsChanged ? { settings: news.settings ?? {} } : {}),
             });
           }
 
