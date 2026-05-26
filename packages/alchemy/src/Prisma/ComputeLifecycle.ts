@@ -129,6 +129,40 @@ const computeVersionDeleteFailed = (
   );
 };
 
+const ensureVersionDeletedAfterFallbackNotFound = (
+  client: PrismaManagementClient,
+  versionId: string,
+  statusAtDelete: string | undefined,
+  fallbackError: unknown,
+  primaryError: unknown,
+) =>
+  observeComputeVersion(client, versionId).pipe(
+    Effect.as(true),
+    Effect.catchIf(isNotFound, () => Effect.succeed(false)),
+    Effect.catch((observeError) =>
+      Effect.fail(
+        computeVersionDeleteFailed(
+          versionId,
+          statusAtDelete,
+          observeError,
+          primaryError,
+        ),
+      ),
+    ),
+    Effect.flatMap((stillExists) =>
+      stillExists
+        ? Effect.fail(
+            computeVersionDeleteFailed(
+              versionId,
+              statusAtDelete,
+              fallbackError,
+              primaryError,
+            ),
+          )
+        : Effect.void,
+    ),
+  );
+
 export const waitForComputeVersionStatus = Effect.fn(function* (
   client: PrismaManagementClient,
   versionId: string,
@@ -212,23 +246,36 @@ export const destroyComputeVersion: (
       stopped = true;
     }
 
-    yield* client.deleteComputeServiceVersion(versionId).pipe(
-      Effect.catch((primaryError) =>
-        client.deleteComputeVersion(versionId).pipe(
-          Effect.catchIf(isNotFound, () => Effect.void),
-          Effect.catch((fallbackError) =>
-            Effect.fail(
-              computeVersionDeleteFailed(
-                versionId,
-                statusAtDelete,
-                fallbackError,
-                primaryError,
+    yield* client
+      .deleteComputeServiceVersion(versionId)
+      .pipe(
+        Effect.catch((primaryError) =>
+          client
+            .deleteComputeVersion(versionId)
+            .pipe(
+              Effect.catch((fallbackError) =>
+                isNotFound(fallbackError)
+                  ? isNotFound(primaryError)
+                    ? Effect.void
+                    : ensureVersionDeletedAfterFallbackNotFound(
+                        client,
+                        versionId,
+                        statusAtDelete,
+                        fallbackError,
+                        primaryError,
+                      )
+                  : Effect.fail(
+                      computeVersionDeleteFailed(
+                        versionId,
+                        statusAtDelete,
+                        fallbackError,
+                        primaryError,
+                      ),
+                    ),
               ),
             ),
-          ),
         ),
-      ),
-    );
+      );
 
     return {
       versionId,

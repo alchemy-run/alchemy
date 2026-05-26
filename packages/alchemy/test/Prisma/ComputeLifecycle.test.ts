@@ -487,6 +487,146 @@ describe("Prisma Compute lifecycle helpers", () => {
       }),
   );
 
+  it.effect(
+    "re-observes before accepting a global delete not-found after service delete fails",
+    () =>
+      Effect.gen(function* () {
+        const calls: string[] = [];
+        const client = {
+          getComputeServiceVersion: (versionId: string) =>
+            Effect.sync(() => {
+              calls.push(`get:${versionId}`);
+              return {
+                id: versionId,
+                type: "compute-version" as const,
+                url: `https://api.test/${versionId}`,
+                foundryVersionId: `foundry-${versionId}`,
+                status: "stopped",
+                previewDomain: `${versionId}.example.test`,
+                createdAt: "2026-01-01T00:00:00Z",
+              };
+            }),
+          deleteComputeServiceVersion: (versionId: string) =>
+            Effect.gen(function* () {
+              calls.push(`delete:${versionId}`);
+              return yield* Effect.fail(
+                new PrismaApiError({
+                  method: "DELETE",
+                  path: `/v1/compute-services/versions/${versionId}`,
+                  status: 500,
+                  message: "Internal Server Error",
+                }),
+              );
+            }),
+          deleteComputeVersion: (versionId: string) =>
+            Effect.gen(function* () {
+              calls.push(`delete-global:${versionId}`);
+              return yield* Effect.fail(
+                new PrismaApiError({
+                  method: "DELETE",
+                  path: `/v1/versions/${versionId}`,
+                  status: 404,
+                  message: "not found",
+                }),
+              );
+            }),
+        } as unknown as PrismaManagementClient;
+
+        const error = yield* destroyComputeVersion(
+          client,
+          "version-observable",
+        ).pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain(
+          "Service-scoped delete failed: Prisma API returned HTTP 500",
+        );
+        expect((error as Error).message).toContain(
+          "Global delete fallback failed: Prisma API returned HTTP 404",
+        );
+        expect(calls).toEqual([
+          "get:version-observable",
+          "delete:version-observable",
+          "delete-global:version-observable",
+          "get:version-observable",
+        ]);
+      }),
+  );
+
+  it.effect(
+    "accepts a global delete not-found after service delete fails once the version is gone",
+    () =>
+      Effect.gen(function* () {
+        const calls: string[] = [];
+        let observed = false;
+        const client = {
+          getComputeServiceVersion: (versionId: string) =>
+            Effect.gen(function* () {
+              calls.push(`get:${versionId}`);
+              if (observed) {
+                return yield* Effect.fail(
+                  new PrismaApiError({
+                    method: "GET",
+                    path: `/v1/compute-services/versions/${versionId}`,
+                    status: 404,
+                    message: "not found",
+                  }),
+                );
+              }
+              observed = true;
+              return {
+                id: versionId,
+                type: "compute-version" as const,
+                url: `https://api.test/${versionId}`,
+                foundryVersionId: `foundry-${versionId}`,
+                status: "stopped",
+                previewDomain: `${versionId}.example.test`,
+                createdAt: "2026-01-01T00:00:00Z",
+              };
+            }),
+          deleteComputeServiceVersion: (versionId: string) =>
+            Effect.gen(function* () {
+              calls.push(`delete:${versionId}`);
+              return yield* Effect.fail(
+                new PrismaApiError({
+                  method: "DELETE",
+                  path: `/v1/compute-services/versions/${versionId}`,
+                  status: 500,
+                  message: "Internal Server Error",
+                }),
+              );
+            }),
+          deleteComputeVersion: (versionId: string) =>
+            Effect.gen(function* () {
+              calls.push(`delete-global:${versionId}`);
+              return yield* Effect.fail(
+                new PrismaApiError({
+                  method: "DELETE",
+                  path: `/v1/versions/${versionId}`,
+                  status: 404,
+                  message: "not found",
+                }),
+              );
+            }),
+        } as unknown as PrismaManagementClient;
+
+        const result = yield* destroyComputeVersion(client, "version-gone");
+
+        expect(result).toEqual({
+          versionId: "version-gone",
+          previousStatus: "stopped",
+          stopped: false,
+          deleted: true,
+        });
+        expect(calls).toEqual([
+          "get:version-gone",
+          "delete:version-gone",
+          "delete-global:version-gone",
+          "get:version-gone",
+        ]);
+      }),
+  );
+
   it.effect("destroys every version before deleting the service", () =>
     Effect.gen(function* () {
       const { client, calls } = makeClient();
