@@ -180,6 +180,27 @@ export class ConnectionBinding extends Binding.Service<
  *   name: "api",
  * });
  * ```
+ *
+ * @section Binding to Compute
+ * @example Use a connection inside an Effect-native app
+ * ```typescript
+ * const connection = yield* Prisma.Connection("api", {
+ *   database,
+ *   name: "api",
+ * });
+ *
+ * export default Prisma.Compute(
+ *   "api",
+ *   { project, serviceName: "api", main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const db = yield* Prisma.Connection.bind(connection);
+ *     const databaseUrl = yield* db.directConnectionString;
+ *     return {
+ *       fetch: HttpServerResponse.text(databaseUrl ?? ""),
+ *     };
+ *   }).pipe(Effect.provide(Prisma.ConnectionBindingLive)),
+ * );
+ * ```
  */
 export const Connection = Resource<Connection>("Prisma.Connection")({
   bind: ConnectionBinding.bind,

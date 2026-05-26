@@ -526,6 +526,8 @@ describe("Prisma Compute", () => {
         expect(tarText).toContain("compute.manifest.json");
         expect(tarText).toContain("bundle/index.js");
         expect(tarText).toContain("Prisma Compute bootstrap starting");
+        expect(tarText.includes("ALCHEMY_PHASE")).toBe(true);
+        expect(tarText.includes("runtime")).toBe(true);
         expect(tarText).toContain("effect-native-ok");
         expect(calls).toContainEqual([
           "createServiceComputeVersion",

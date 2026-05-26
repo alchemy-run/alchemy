@@ -950,7 +950,13 @@ const program = tag.pipe(
       Layer.provideMerge(BunHttpServer()),
       Layer.provideMerge(platform),
       Layer.provideMerge(
-        Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv()),
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.orElse(
+            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
+            ConfigProvider.fromEnv(),
+          ),
+        ),
       ),
       Layer.provideMerge(
         Layer.succeed(
