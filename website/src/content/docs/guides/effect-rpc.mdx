@@ -556,3 +556,48 @@ for external consumers and RPC for internal services.
 - The same `TaskRpcs` value drives a fully typed client via
   `RpcClient.make`, with errors as typed values rather than HTTP
   status codes.
+
+## Sugar: `Cloudflare.RpcWorker`
+
+The `Cloudflare.Worker(...)` + `RpcServer.toHttpEffect(...)` recipe is
+identical for every RPC Worker, so Alchemy ships a thin wrapper that
+takes the `RpcGroup` directly in props and removes the `{ fetch }`
+wrapper:
+
+```typescript
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { TaskRpcs } from "./rpcs.ts";
+
+export default class Worker extends Cloudflare.RpcWorker<Worker>()(
+  "Worker",
+  { main: import.meta.filename, schema: TaskRpcs },
+  Effect.gen(function* () {
+    const handlers = TaskRpcs.toLayer({ getTask: /* ... */ });
+    return RpcServer.toHttpEffect(TaskRpcs).pipe(
+      Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerJson)),
+    );
+  }),
+) {}
+```
+
+Functionally identical to the long form above — yielding the class
+returns the same `Worker` resource — but `props.schema` lets a second
+Worker bind a typed client without re-importing `RpcClient`:
+
+```typescript
+// INIT: register the binding, get the typed client
+const tasks = yield* Cloudflare.RpcWorker.bind(TaskWorker);
+
+// PER-REQUEST: just call methods directly
+proxyGetTask: ({ id }) => tasks.getTask({ id }),
+```
+
+The bind goes over the in-account service binding (not the public
+internet) and the client is typed by `TaskWorker`'s declared schema.
+A `Proxy` defers each call's underlying `RpcClient` construction so
+Cloudflare's "no cross-request I/O" rule is satisfied transparently.
+See the [RPC Worker tutorial](/tutorial/cloudflare/rpc-worker) for an
+end-to-end walk-through.

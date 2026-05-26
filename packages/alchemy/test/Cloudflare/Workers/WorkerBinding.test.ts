@@ -31,7 +31,7 @@ test(
   "target worker's own fetch handler responds",
   Effect.gen(function* () {
     const { targetUrl } = yield* stack;
-    const client = yield* HttpClient.HttpClient;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     const res = yield* client.get(targetUrl).pipe(coldStartRetry);
     expect(res.status).toBe(200);
@@ -44,7 +44,7 @@ test(
   "async caller can call target's RPC method via service binding",
   Effect.gen(function* () {
     const { asyncCallerUrl } = yield* stack;
-    const client = yield* HttpClient.HttpClient;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     const res = yield* client
       .get(`${asyncCallerUrl}/?name=alice`)
@@ -59,7 +59,7 @@ test(
   "effect caller can call target's RPC method via bindWorker",
   Effect.gen(function* () {
     const { effectCallerUrl } = yield* stack;
-    const client = yield* HttpClient.HttpClient;
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     const res = yield* client
       .get(`${effectCallerUrl}/?name=bob`)
