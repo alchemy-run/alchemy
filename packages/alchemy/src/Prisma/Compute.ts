@@ -65,6 +65,9 @@ type ObservedComputeVersion = Omit<ApiComputeVersion, "createdAt"> & {
   createdAt?: string;
 };
 
+const ComputeTypeId = "Prisma.Compute" as const;
+type ComputeTypeId = typeof ComputeTypeId;
+
 export interface ComputeCommandBuild {
   /**
    * Shell command that creates the deployable output directory.
@@ -301,7 +304,7 @@ export interface ComputeProps extends PlatformProps {
 }
 
 export interface Compute extends Resource<
-  "Prisma.Compute",
+  ComputeTypeId,
   ComputeProps,
   {
     /**
@@ -387,14 +390,14 @@ export type ComputeServices = never;
 export type ComputeShape = Main<ComputeServices>;
 
 export interface ComputeRuntimeContext extends Server.ProcessContext {
-  readonly Type: "Prisma.Compute";
+  readonly Type: ComputeTypeId;
 }
 
 export const isCompute = (value: unknown): value is Compute =>
   typeof value === "object" &&
   value !== null &&
   "Type" in value &&
-  value.Type === "Prisma.Compute";
+  value.Type === ComputeTypeId;
 
 const hasEffectNativeComputeInput = (props: ComputeProps) =>
   props.isExternal !== true &&
@@ -433,6 +436,29 @@ const isEffectNativeCompute = (props: ComputeProps) =>
  *       fetch: HttpServerResponse.text("ok"),
  *     };
  *   }),
+ * );
+ * ```
+ *
+ * @section Runtime Bindings
+ * @example Bind a Prisma Connection
+ * ```typescript
+ * export default Prisma.Compute(
+ *   "api",
+ *   {
+ *     project,
+ *     serviceName: "api",
+ *     main: import.meta.filename,
+ *   },
+ *   Effect.gen(function* () {
+ *     const db = yield* Prisma.Connection.bind(connection);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const databaseUrl = yield* db.databaseUrl;
+ *         return HttpServerResponse.text(databaseUrl ?? "");
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Prisma.ConnectionBindingLive)),
  * );
  * ```
  *
@@ -503,7 +529,7 @@ export const Compute: Platform<
       | InputProps<ComputeProps>
       | Effect.Effect<InputProps<ComputeProps>, never, PropsReq>,
   ): Effect.Effect<Compute, never, Providers | PropsReq>;
-} = Platform("Prisma.Compute", {
+} = Platform(ComputeTypeId, {
   createRuntimeContext: (id): ComputeRuntimeContext => {
     const runners: Effect.Effect<void, never, unknown>[] = [];
     const env: Record<string, unknown> = {};
@@ -524,7 +550,7 @@ export const Compute: Platform<
       });
 
     return {
-      Type: "Prisma.Compute",
+      Type: ComputeTypeId,
       id,
       env,
       set: (bindingId: string, output: Output.Output) =>
