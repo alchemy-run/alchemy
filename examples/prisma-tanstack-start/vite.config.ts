@@ -7,7 +7,7 @@ import { defineConfig } from "vite";
 export default defineConfig({
   server: { port: Number(process.env.PORT ?? "3000") },
   plugins: [
-    tanstackStart(),
+    tanstackStart({ router: { quoteStyle: "double", semicolons: true } }),
     nitro(),
     prismaVitePlugin("prisma-next.config.ts", { logLevel: "silent" }),
     // React's Vite plugin must come after TanStack Start.
