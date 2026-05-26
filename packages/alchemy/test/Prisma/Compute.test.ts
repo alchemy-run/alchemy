@@ -60,6 +60,37 @@ describe("Prisma Compute", () => {
     );
   });
 
+  it.effect("rejects disabled start when promotion is enabled", () => {
+    const client = {} as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            serviceName: "api",
+            start: false,
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "start: false requires skipPromote: true",
+      );
+    }).pipe(
+      Effect.provide(ComputeProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+    );
+  });
+
   it.effect("rejects conflicting branch attachment inputs", () => {
     const client = {} as PrismaManagementClient;
 

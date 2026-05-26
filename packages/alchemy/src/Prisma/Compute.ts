@@ -262,6 +262,7 @@ export interface ComputeProps extends PlatformProps {
   skipCodeUpload?: boolean;
   /**
    * Start the created/reused version.
+   * Set `skipPromote: true` when disabling start.
    *
    * @default true
    */
@@ -780,6 +781,13 @@ const validateComputeProps = (props: ComputeProps) =>
       return yield* Effect.fail(
         new Error(
           "destroyOldVersion cannot be combined with skipPromote because the previous version stays active when promotion is skipped.",
+        ),
+      );
+    }
+    if (props.start === false && !(props.skipPromote ?? false)) {
+      return yield* Effect.fail(
+        new Error(
+          "start: false requires skipPromote: true because Prisma Compute promotion requires a running version.",
         ),
       );
     }
