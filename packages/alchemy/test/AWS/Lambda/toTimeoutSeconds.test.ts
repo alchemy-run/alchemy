@@ -7,53 +7,42 @@ describe("toTimeoutSeconds", () => {
     expect(toTimeoutSeconds(undefined)).toBeUndefined();
   });
 
-  it("decodes a Duration object", () => {
+  it("converts a Duration to whole seconds", () => {
     expect(toTimeoutSeconds(Duration.seconds(30))).toBe(30);
     expect(toTimeoutSeconds(Duration.minutes(2))).toBe(120);
   });
 
-  it("decodes a millis number", () => {
-    expect(toTimeoutSeconds(30_000)).toBe(30);
-  });
-
-  it("decodes a template string", () => {
-    expect(toTimeoutSeconds("45 seconds")).toBe(45);
-    expect(toTimeoutSeconds("1 minute")).toBe(60);
-  });
-
-  it("decodes a [seconds, nanos] tuple", () => {
-    expect(toTimeoutSeconds([15, 0])).toBe(15);
-  });
-
-  it("rounds sub-second durations up to 1", () => {
+  it("rounds sub-second and partial durations up", () => {
     expect(toTimeoutSeconds(Duration.millis(1))).toBe(1);
-    expect(toTimeoutSeconds(Duration.millis(500))).toBe(1);
-  });
-
-  it("rounds up partial seconds", () => {
     expect(toTimeoutSeconds(Duration.millis(1500))).toBe(2);
     expect(toTimeoutSeconds(Duration.millis(2001))).toBe(3);
   });
 
-  it("decodes a JSON-serialized Duration (Millis)", () => {
-    const jsonShape = JSON.parse(JSON.stringify(Duration.seconds(42)));
-    expect(jsonShape).toEqual({
-      _id: "Duration",
-      _tag: "Millis",
-      millis: 42_000,
+  it("returns undefined for an infinite Duration", () => {
+    expect(toTimeoutSeconds(Duration.infinity)).toBeUndefined();
+  });
+
+  describe("after state JSON round-trip", () => {
+    const roundTrip = (d: Duration.Duration) =>
+      JSON.parse(JSON.stringify(d)) as Duration.Duration;
+
+    it("converts a rehydrated Millis Duration", () => {
+      const json = roundTrip(Duration.seconds(42));
+      expect(json).toEqual({
+        _id: "Duration",
+        _tag: "Millis",
+        millis: 42_000,
+      });
+      expect(toTimeoutSeconds(json)).toBe(42);
     });
-    expect(toTimeoutSeconds(jsonShape)).toBe(42);
-  });
 
-  it("decodes a JSON-serialized Duration (Nanos)", () => {
-    const jsonShape = JSON.parse(
-      JSON.stringify(Duration.nanos(5_000_000_000n)),
-    );
-    expect(toTimeoutSeconds(jsonShape)).toBe(5);
-  });
+    it("converts a rehydrated Nanos Duration", () => {
+      const json = roundTrip(Duration.nanos(5_000_000_000n));
+      expect(toTimeoutSeconds(json)).toBe(5);
+    });
 
-  it("returns undefined for a JSON-serialized Infinity Duration", () => {
-    const jsonShape = JSON.parse(JSON.stringify(Duration.infinity));
-    expect(toTimeoutSeconds(jsonShape)).toBeUndefined();
+    it("returns undefined for a rehydrated Infinity Duration", () => {
+      expect(toTimeoutSeconds(roundTrip(Duration.infinity))).toBeUndefined();
+    });
   });
 });

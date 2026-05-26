@@ -97,45 +97,41 @@ export interface FunctionProps extends PlatformProps {
   };
   /**
    * Maximum execution time before the function is forcibly terminated.
-   *
-   * Accepts any {@link Duration.Input} — a `Duration`, a number of
-   * milliseconds, a string like `"30 seconds"`, or a `[seconds, nanos]` tuple.
    * Rounded up to whole seconds.
    *
    * @default 3 seconds (AWS Lambda default)
    */
-  timeout?: Duration.Input;
+  timeout?: Duration.Duration;
 }
 
 /**
- * Normalize a {@link FunctionProps.timeout} value to whole seconds.
+ * Normalize a {@link FunctionProps.timeout} to whole seconds.
  *
- * Why: `Duration` objects don't survive JSON state round-trips
- * (`{_id:"Duration",_tag:"Millis",millis:N}` is rejected by `Duration.decode`),
- * so we accept that re-hydrated shape directly alongside any
- * `Duration.DurationInput`.
+ * State JSON round-trips flatten a `Duration` to its `toJSON` shape
+ * (`{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`), which is not a
+ * valid `Duration.Input`. Reconstruct an input that `Duration.toSeconds`
+ * accepts before delegating.
  */
 export const toTimeoutSeconds = (
-  timeout: FunctionProps["timeout"],
+  timeout: Duration.Duration | undefined,
 ): number | undefined => {
   if (timeout === undefined) return undefined;
-  if (
-    typeof timeout === "object" &&
-    timeout !== null &&
-    !Array.isArray(timeout) &&
-    (timeout as { _id?: unknown })._id === "Duration"
-  ) {
-    const t = timeout as
-      | { _tag: "Millis"; millis: number }
-      | { _tag: "Nanos"; nanos: string | number | bigint }
-      | { _tag: "Infinity" };
-    if (t._tag === "Millis") return Math.max(1, Math.ceil(t.millis / 1000));
-    if (t._tag === "Nanos") {
-      return Math.max(1, Math.ceil(Number(t.nanos) / 1_000_000_000));
-    }
-    return undefined;
-  }
-  return Math.max(1, Math.ceil(Duration.toSeconds(timeout)));
+  const json = timeout as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  const input: Duration.Input =
+    json._id === "Duration"
+      ? json._tag === "Millis"
+        ? json.millis!
+        : json._tag === "Nanos"
+          ? BigInt(json.nanos!)
+          : "Infinity"
+      : timeout;
+  const seconds = Duration.toSeconds(input);
+  return Number.isFinite(seconds) ? Math.max(1, Math.ceil(seconds)) : undefined;
 };
 
 export interface Function extends Resource<
