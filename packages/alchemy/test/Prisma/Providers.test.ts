@@ -50,12 +50,16 @@ describe("Prisma providers", () => {
         resourceTypes.map((type) => Provider.findProviderByType(type as any)),
         { concurrency: "unbounded" },
       );
+      const bindingPolicy = yield* Provider.findProviderByType(
+        Prisma.ConnectionBindingPolicy.key,
+      );
 
       expect(providers).toHaveLength(resourceTypes.length);
       for (const provider of providers) {
         expect(typeof provider.reconcile).toBe("function");
         expect(typeof provider.delete).toBe("function");
       }
+      expect(typeof bindingPolicy).toBe("function");
     }).pipe(providePrismaDev),
   );
 
