@@ -658,6 +658,25 @@ const findService = (
       ),
     );
 
+const getComputeVersion = (client: PrismaManagementClient, versionId: string) =>
+  client
+    .getComputeServiceVersion(versionId)
+    .pipe(
+      Effect.catch((primaryError) =>
+        typeof client.getComputeVersion === "function"
+          ? client
+              .getComputeVersion(versionId)
+              .pipe(
+                Effect.catch((fallbackError) =>
+                  isNotFound(primaryError)
+                    ? Effect.fail(fallbackError)
+                    : Effect.fail(primaryError),
+                ),
+              )
+          : Effect.fail(primaryError),
+      ),
+    );
+
 const createService = (
   client: PrismaManagementClient,
   projectId: string,
@@ -1567,11 +1586,9 @@ export const ComputeProvider = () =>
               });
           if (!service) return undefined;
           const readVersion = (id: string) =>
-            client
-              .getComputeServiceVersion(id)
-              .pipe(
-                Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-              );
+            getComputeVersion(client, id).pipe(
+              Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+            );
           const outputVersion = output?.computeVersionId
             ? yield* readVersion(output.computeVersionId)
             : undefined;
@@ -1653,11 +1670,9 @@ export const ComputeProvider = () =>
 
           let version: ObservedComputeVersion | undefined =
             output?.computeVersionId && output.artifactHash === artifact.hash
-              ? yield* client
-                  .getComputeServiceVersion(output.computeVersionId)
-                  .pipe(
-                    Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                  )
+              ? yield* getComputeVersion(client, output.computeVersionId).pipe(
+                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+                )
               : undefined;
           let createdVersionId: string | undefined;
 
@@ -1696,7 +1711,7 @@ export const ComputeProvider = () =>
                 ),
               );
             }
-            version = yield* client.getComputeServiceVersion(created.id).pipe(
+            version = yield* getComputeVersion(client, created.id).pipe(
               Effect.catchIf(isNotFound, () =>
                 Effect.succeed({
                   id: created.id,

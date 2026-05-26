@@ -455,6 +455,87 @@ describe("Prisma Compute", () => {
   });
 
   it.effect(
+    "falls back to the global version route when Compute read sees a service-scoped miss",
+    () => {
+      const calls: Array<[string, unknown]> = [];
+      const client = {
+        listProjectComputeServices: (projectId: string, query: unknown) => {
+          calls.push(["listProjectComputeServices", { projectId, query }]);
+          return Effect.succeed([
+            {
+              id: "service-1",
+              type: "compute-service" as const,
+              url: "https://api.prisma.test/v1/compute-services/service-1",
+              name: "api",
+              region: { id: "us-east-1", name: "US East" },
+              projectId,
+              branchId: "branch-main",
+              latestVersionId: "version-live",
+              serviceEndpointDomain: "api.prisma.build",
+              createdAt: "2026-01-01T00:00:00Z",
+            },
+          ]);
+        },
+        getComputeServiceVersion: (id: string) => {
+          calls.push(["getComputeServiceVersion", id]);
+          return Effect.fail(
+            new PrismaApiError({
+              method: "GET",
+              path: `/v1/compute-services/versions/${id}`,
+              status: 404,
+              message: "not found",
+            }),
+          );
+        },
+        getComputeVersion: (id: string) => {
+          calls.push(["getComputeVersion", id]);
+          return Effect.succeed({
+            id,
+            type: "compute-version" as const,
+            url: `https://api.prisma.test/v1/versions/${id}`,
+            foundryVersionId: "foundry-live",
+            status: "running",
+            previewDomain: "version-live.preview.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const output = yield* provider.read!({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          olds: {
+            project: "project-1",
+            serviceName: "api",
+          },
+          output: undefined,
+        });
+
+        expect(output?.computeVersionId).toBe("version-live");
+        expect(output?.promoted).toBe(true);
+        expect(output?.versionUrl).toBe(
+          "https://version-live.preview.prisma.build",
+        );
+        expect(calls).toEqual([
+          [
+            "listProjectComputeServices",
+            { projectId: "project-1", query: { limit: 100 } },
+          ],
+          ["getComputeServiceVersion", "version-live"],
+          ["getComputeVersion", "version-live"],
+        ]);
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
+  it.effect(
     "marks stored Compute version unpromoted when live latest differs",
     () => {
       const calls: Array<[string, unknown]> = [];
