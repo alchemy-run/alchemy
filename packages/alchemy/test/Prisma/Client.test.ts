@@ -915,6 +915,67 @@ describe("PrismaClient", () => {
     });
   });
 
+  it.effect(
+    "does not retry transient API failures for transfer requests",
+    () => {
+      const captured: Captured[] = [];
+      let attempts = 0;
+      const http = HttpClient.make((request) =>
+        Effect.sync(() => {
+          attempts += 1;
+          const url = new URL(request.url);
+          captured.push({
+            url: request.url,
+            method: request.method,
+            pathname: url.pathname,
+            search: url.search,
+            authorization: request.headers.authorization,
+            bodyJson: undefined,
+          });
+          return HttpClientResponse.fromWeb(
+            request,
+            json(
+              {
+                error: {
+                  message: "transient platform failure",
+                },
+              },
+              { status: 500 },
+            ),
+          );
+        }),
+      );
+      const layer = PrismaClientLive.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.succeed(HttpClient.HttpClient, http),
+            Layer.succeed(PrismaEnvironment, {
+              type: "serviceToken" as const,
+              serviceToken: Redacted.make("test-token"),
+              source: { type: "env" as const },
+              baseUrl: "https://api.prisma.test",
+            }),
+          ),
+        ),
+      );
+
+      return Effect.gen(function* () {
+        const error = yield* withClient((client) =>
+          client.transferProject("project-1", {
+            recipientAccessToken: "recipient-token",
+          }),
+        ).pipe(Effect.provide(layer), Effect.flip);
+
+        expect(error).toBeInstanceOf(PrismaApiError);
+        expect(attempts).toBe(1);
+        expect(captured.map((request) => request.method)).toEqual(["POST"]);
+        expect(captured.map((request) => request.pathname)).toEqual([
+          "/v1/projects/project-1/transfer",
+        ]);
+      });
+    },
+  );
+
   it.effect("retries transient transport failures", () => {
     let attempts = 0;
     const http = HttpClient.make((request) =>

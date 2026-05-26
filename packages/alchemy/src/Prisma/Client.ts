@@ -492,8 +492,7 @@ const isRetryableStatus = (status: number) =>
 const isRetryablePost = (path: string) =>
   path.endsWith("/start") ||
   path.endsWith("/stop") ||
-  path.endsWith("/promote") ||
-  path.endsWith("/transfer");
+  path.endsWith("/promote");
 
 const isRetryableRequest = (method: Method, path: string) =>
   method === "GET" ||
