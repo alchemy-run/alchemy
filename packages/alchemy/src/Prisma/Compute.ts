@@ -49,6 +49,8 @@ import { tailComputeVersionLogs } from "./PrismaLogs.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
+  concreteIdsChanged,
+  isInputObject,
   isPrismaDevId,
   resolveProjectId,
   unresolvedProjectIdOf,
@@ -1526,18 +1528,22 @@ export const ComputeProvider = () =>
       return {
         stables: ["computeServiceId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!isResolved(news)) return undefined;
+          if (!isInputObject(news)) return undefined;
+          const stableProps = {
+            regionId: news.regionId,
+          };
+          if (!isResolved(stableProps)) return undefined;
           if (output?.local || isPrismaDevId(output?.computeServiceId)) {
             return { action: "update" } as const;
           }
           const oldProjectId = unresolvedProjectIdOf(olds.project);
-          const newProjectId = unresolvedProjectIdOf(news.project);
-          if (oldProjectId === undefined || newProjectId === undefined) {
-            return undefined;
-          }
+          const newProjectId = isResolved(news.project)
+            ? unresolvedProjectIdOf(news.project)
+            : undefined;
           if (
-            newProjectId !== oldProjectId ||
-            (news.regionId ?? "us-east-1") !== (olds.regionId ?? "us-east-1")
+            concreteIdsChanged(oldProjectId, newProjectId) ||
+            (stableProps.regionId ?? "us-east-1") !==
+              (olds.regionId ?? "us-east-1")
           ) {
             return { action: "replace" } as const;
           }

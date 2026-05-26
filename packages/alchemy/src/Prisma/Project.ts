@@ -12,7 +12,7 @@ import {
   type PrismaManagementClient,
 } from "./Client.ts";
 import { destroyComputeProject } from "./ComputeLifecycle.ts";
-import { isPrismaDevId } from "./Refs.ts";
+import { isInputObject, isPrismaDevId } from "./Refs.ts";
 import type { Providers } from "./Providers.ts";
 import type {
   Database,
@@ -175,23 +175,38 @@ export const ProjectProvider = () =>
       return {
         stables: ["projectId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
-          if (!isResolved(news)) return undefined;
           if (isPrismaDevId(output?.projectId)) {
             return { action: "update" } as const;
           }
-          const nextName = yield* createName(id, news.name);
-          const oldName =
-            output?.projectName ?? (yield* createName(id, olds.name));
+          if (!isInputObject(news)) return undefined;
+          const replacementProps = {
+            region: news.region,
+            createDatabase: news.createDatabase,
+          };
+          if (!isResolved(replacementProps)) return undefined;
           if (
-            (news.region ?? "us-east-1") !==
+            (replacementProps.region ?? "us-east-1") !==
               (olds.region ?? output?.defaultRegion ?? "us-east-1") ||
-            (news.createDatabase ?? true) !== (olds.createDatabase ?? true)
+            (replacementProps.createDatabase ?? true) !==
+              (olds.createDatabase ?? true)
           ) {
             return { action: "replace" } as const;
           }
+          const updateProps = {
+            name: news.name,
+            settings: news.settings,
+          };
+          if (!isResolved(updateProps)) return undefined;
+          const resolvedUpdateProps = updateProps as Pick<
+            ProjectProps,
+            "name" | "settings"
+          >;
+          const nextName = yield* createName(id, resolvedUpdateProps.name);
+          const oldName =
+            output?.projectName ?? (yield* createName(id, olds.name));
           if (
             nextName !== oldName ||
-            JSON.stringify(news.settings ?? {}) !==
+            JSON.stringify(resolvedUpdateProps.settings ?? {}) !==
               JSON.stringify(olds.settings ?? {})
           ) {
             return { action: "update" } as const;

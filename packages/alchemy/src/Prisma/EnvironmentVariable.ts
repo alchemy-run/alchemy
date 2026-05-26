@@ -12,6 +12,8 @@ import {
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
+  concreteIdsChanged,
+  isInputObject,
   isPrismaDevId,
   resolveProjectId,
   unresolvedProjectIdOf,
@@ -200,23 +202,34 @@ export const EnvironmentVariableProvider = () =>
       return {
         stables: ["environmentVariableId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!isResolved(news)) return undefined;
+          if (!isInputObject(news)) return undefined;
+          const replacementProps = {
+            class: news.class,
+            key: news.key,
+          };
+          if (!isResolved(replacementProps)) return undefined;
+          const resolvedReplacementProps = replacementProps as Pick<
+            EnvironmentVariableProps,
+            "class" | "key"
+          >;
           if (isPrismaDevId(output?.environmentVariableId)) {
             return { action: "update" } as const;
           }
           const oldProjectId = unresolvedProjectIdOf(olds.project);
-          const newProjectId = unresolvedProjectIdOf(news.project);
-          if (oldProjectId === undefined || newProjectId === undefined) {
-            return undefined;
-          }
+          const newProjectId = isResolved(news.project)
+            ? unresolvedProjectIdOf(news.project)
+            : undefined;
           if (
-            newProjectId !== oldProjectId ||
-            news.class !== olds.class ||
-            news.key !== olds.key
+            concreteIdsChanged(oldProjectId, newProjectId) ||
+            resolvedReplacementProps.class !== olds.class ||
+            resolvedReplacementProps.key !== olds.key
           ) {
             return { action: "replace" } as const;
           }
-          if (valueOf(news.value) !== valueOf(olds.value)) {
+          if (
+            isResolved(news.value) &&
+            valueOf(news.value) !== valueOf(olds.value)
+          ) {
             return { action: "update" } as const;
           }
           return undefined;

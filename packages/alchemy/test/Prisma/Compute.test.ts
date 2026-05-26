@@ -10,6 +10,7 @@ import {
   PrismaClient,
   type PrismaManagementClient,
 } from "@/Prisma/Client";
+import * as Output from "@/Output";
 import type { ResourceBinding } from "@/Resource";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { describe, expect, it } from "@effect/vitest";
@@ -185,6 +186,54 @@ describe("Prisma Compute", () => {
         expect((error as Error).message).toContain(
           "handler must be `default` or a valid JavaScript export identifier",
         );
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+      );
+    },
+  );
+
+  it.effect(
+    "replaces Compute when region changes even if project is unresolved",
+    () => {
+      const client = {} as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const diff = yield* provider.diff!({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          olds: {
+            project: "project-1",
+            serviceName: "api",
+            regionId: "us-east-1",
+          },
+          news: {
+            project: Output.asOutput("project-1"),
+            serviceName: "api",
+            regionId: "us-west-2",
+          },
+          oldBindings: [],
+          newBindings: [],
+          output: {
+            computeServiceId: "service-1",
+            computeVersionId: "version-1",
+            projectId: "project-1",
+            serviceName: "api",
+            regionId: "us-east-1",
+            versionEndpointDomain: "version-1.preview.prisma.build",
+            versionUrl: "https://version-1.preview.prisma.build",
+            serviceEndpointDomain: "api.prisma.build",
+            url: "https://api.prisma.build",
+            promoted: true,
+            previousVersionId: undefined,
+            previousVersionAction: undefined,
+            artifactHash: "hash-1",
+            local: false,
+          },
+        } as never);
+
+        expect(diff).toEqual({ action: "replace" });
       }).pipe(
         Effect.provide(ComputeProvider()),
         Effect.provide(Layer.succeed(PrismaClient, client)),

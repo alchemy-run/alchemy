@@ -11,6 +11,8 @@ import {
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
+  concreteIdsChanged,
+  isInputObject,
   isPrismaDevId,
   resolveProjectId,
   unresolvedProjectIdOf,
@@ -145,20 +147,31 @@ export const SourceRepositoryProvider = () =>
       return {
         stables: ["sourceRepositoryId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!isResolved(news)) return undefined;
+          if (!isInputObject(news)) return undefined;
+          const diffProps = {
+            provider: news.provider,
+            providerRepositoryId: news.providerRepositoryId,
+            installationId: news.installationId,
+          };
+          if (!isResolved(diffProps)) return undefined;
+          const resolvedDiffProps = diffProps as Pick<
+            SourceRepositoryProps,
+            "provider" | "providerRepositoryId" | "installationId"
+          >;
           if (isPrismaDevId(output?.sourceRepositoryId)) {
             return { action: "update" } as const;
           }
           const oldProjectId = unresolvedProjectIdOf(olds.project);
-          const newProjectId = unresolvedProjectIdOf(news.project);
-          if (oldProjectId === undefined || newProjectId === undefined) {
-            return undefined;
-          }
+          const newProjectId = isResolved(news.project)
+            ? unresolvedProjectIdOf(news.project)
+            : undefined;
           if (
-            newProjectId !== oldProjectId ||
-            (news.provider ?? "github") !== (olds.provider ?? "github") ||
-            news.providerRepositoryId !== olds.providerRepositoryId ||
-            news.installationId !== olds.installationId
+            concreteIdsChanged(oldProjectId, newProjectId) ||
+            (resolvedDiffProps.provider ?? "github") !==
+              (olds.provider ?? "github") ||
+            resolvedDiffProps.providerRepositoryId !==
+              olds.providerRepositoryId ||
+            resolvedDiffProps.installationId !== olds.installationId
           ) {
             return { action: "replace" } as const;
           }

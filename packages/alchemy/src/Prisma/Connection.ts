@@ -17,6 +17,8 @@ import {
 import type { Database } from "./Database.ts";
 import type { Providers } from "./Providers.ts";
 import {
+  concreteIdsChanged,
+  isInputObject,
   isPrismaDevId,
   resolveDatabaseId,
   unresolvedDatabaseIdOf,
@@ -665,19 +667,30 @@ export const ConnectionProvider = () =>
       return {
         stables: ["connectionId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!isResolved(news)) return undefined;
+          if (!isInputObject(news)) return undefined;
+          const diffProps = {
+            name: news.name,
+            rotate: news.rotate,
+          };
+          if (!isResolved(diffProps)) return undefined;
+          const resolvedDiffProps = diffProps as Pick<
+            ConnectionProps,
+            "name" | "rotate"
+          >;
           if (isPrismaDevId(output?.connectionId)) {
             return { action: "update" } as const;
           }
           const oldDatabaseId = unresolvedDatabaseIdOf(olds.database);
-          const newDatabaseId = unresolvedDatabaseIdOf(news.database);
-          if (oldDatabaseId === undefined || newDatabaseId === undefined) {
-            return undefined;
-          }
-          if (newDatabaseId !== oldDatabaseId || news.name !== olds.name) {
+          const newDatabaseId = isResolved(news.database)
+            ? unresolvedDatabaseIdOf(news.database)
+            : undefined;
+          if (
+            concreteIdsChanged(oldDatabaseId, newDatabaseId) ||
+            resolvedDiffProps.name !== olds.name
+          ) {
             return { action: "replace" } as const;
           }
-          if ((news.rotate ?? false) !== (olds.rotate ?? false)) {
+          if ((resolvedDiffProps.rotate ?? false) !== (olds.rotate ?? false)) {
             return { action: "update" } as const;
           }
           return undefined;

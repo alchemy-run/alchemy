@@ -12,6 +12,8 @@ import { destroyComputeService } from "./ComputeLifecycle.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
+  concreteIdsChanged,
+  isInputObject,
   isPrismaDevId,
   resolveProjectId,
   unresolvedProjectIdOf,
@@ -198,25 +200,36 @@ export const ComputeServiceProvider = () =>
       return {
         stables: ["computeServiceId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!isResolved(news)) return undefined;
+          if (!isInputObject(news)) return undefined;
+          const diffProps = {
+            displayName: news.displayName,
+            regionId: news.regionId,
+            branchId: news.branchId,
+            branchGitName: news.branchGitName,
+          };
+          if (!isResolved(diffProps)) return undefined;
+          const resolvedDiffProps = diffProps as Pick<
+            ComputeServiceProps,
+            "displayName" | "regionId" | "branchId" | "branchGitName"
+          >;
           if (isPrismaDevId(output?.computeServiceId)) {
             return { action: "update" } as const;
           }
           const oldProjectId = unresolvedProjectIdOf(olds.project);
-          const newProjectId = unresolvedProjectIdOf(news.project);
-          if (oldProjectId === undefined || newProjectId === undefined) {
-            return undefined;
-          }
+          const newProjectId = isResolved(news.project)
+            ? unresolvedProjectIdOf(news.project)
+            : undefined;
           if (
-            newProjectId !== oldProjectId ||
-            (news.regionId ?? "us-east-1") !== (olds.regionId ?? "us-east-1")
+            concreteIdsChanged(oldProjectId, newProjectId) ||
+            (resolvedDiffProps.regionId ?? "us-east-1") !==
+              (olds.regionId ?? "us-east-1")
           ) {
             return { action: "replace" } as const;
           }
           if (
-            news.displayName !== olds.displayName ||
-            news.branchId !== olds.branchId ||
-            news.branchGitName !== olds.branchGitName
+            resolvedDiffProps.displayName !== olds.displayName ||
+            resolvedDiffProps.branchId !== olds.branchId ||
+            resolvedDiffProps.branchGitName !== olds.branchGitName
           ) {
             return { action: "update" } as const;
           }

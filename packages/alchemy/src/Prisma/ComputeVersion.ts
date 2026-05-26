@@ -3,8 +3,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../Diff.ts";
-import type { Input } from "../Input.ts";
-import * as Output from "../Output.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
@@ -22,6 +20,8 @@ import { tailComputeVersionLogs } from "./PrismaLogs.ts";
 import type { ComputeService } from "./ComputeService.ts";
 import type { Providers } from "./Providers.ts";
 import {
+  concreteIdsChanged,
+  isInputObject,
   isPrismaDevId,
   resolveComputeServiceId,
   unresolvedComputeServiceIdOf,
@@ -33,18 +33,6 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 type ObservedComputeVersion = Omit<ApiComputeVersion, "createdAt"> & {
   createdAt?: string;
 };
-
-type ComputeVersionInputObject = {
-  [Key in keyof ComputeVersionProps]: Input<ComputeVersionProps[Key]>;
-};
-
-const isInputObject = (
-  value: Input<ComputeVersionProps>,
-): value is ComputeVersionInputObject =>
-  typeof value === "object" &&
-  value !== null &&
-  !Output.isOutput(value) &&
-  !Effect.isEffect(value);
 
 export interface ComputeVersionProps {
   /**
@@ -298,10 +286,10 @@ export const ComputeVersionProvider = () =>
             computeService: olds.computeService,
             ...resolvedVersionContent,
           });
-          const computeServiceChanged =
-            oldComputeServiceId !== undefined &&
-            newComputeServiceId !== undefined &&
-            newComputeServiceId !== oldComputeServiceId;
+          const computeServiceChanged = concreteIdsChanged(
+            oldComputeServiceId,
+            newComputeServiceId,
+          );
           if (
             computeServiceChanged ||
             JSON.stringify(resolvedVersionContent.portMapping ?? {}) !==

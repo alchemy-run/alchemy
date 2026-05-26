@@ -13,6 +13,8 @@ import {
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
+  concreteIdsChanged,
+  isInputObject,
   isPrismaDevId,
   resolveProjectId,
   unresolvedProjectIdOf,
@@ -311,28 +313,46 @@ export const DatabaseProvider = () =>
       return {
         stables: ["databaseId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!isResolved(news)) return undefined;
+          if (!isInputObject(news)) return undefined;
+          const diffProps = {
+            region: news.region,
+            isDefault: news.isDefault,
+            source: news.source,
+            name: news.name,
+            branchId: news.branchId,
+            branchGitName: news.branchGitName,
+          };
+          if (!isResolved(diffProps)) return undefined;
+          const resolvedDiffProps = diffProps as Pick<
+            DatabaseProps,
+            | "region"
+            | "isDefault"
+            | "source"
+            | "name"
+            | "branchId"
+            | "branchGitName"
+          >;
           if (isPrismaDevId(output?.databaseId)) {
             return { action: "update" } as const;
           }
           const oldProjectId = unresolvedProjectIdOf(olds.project);
-          const newProjectId = unresolvedProjectIdOf(news.project);
-          if (oldProjectId === undefined || newProjectId === undefined) {
-            return undefined;
-          }
+          const newProjectId = isResolved(news.project)
+            ? unresolvedProjectIdOf(news.project)
+            : undefined;
           if (
-            newProjectId !== oldProjectId ||
-            (news.region ?? "us-east-1") !==
+            concreteIdsChanged(oldProjectId, newProjectId) ||
+            (resolvedDiffProps.region ?? "us-east-1") !==
               (olds.region ?? output?.region ?? "us-east-1") ||
-            (news.isDefault ?? false) !== (olds.isDefault ?? false) ||
-            !sameJson(news.source, olds.source)
+            (resolvedDiffProps.isDefault ?? false) !==
+              (olds.isDefault ?? false) ||
+            !sameJson(resolvedDiffProps.source, olds.source)
           ) {
             return { action: "replace" } as const;
           }
           if (
-            news.name !== olds.name ||
-            news.branchId !== olds.branchId ||
-            news.branchGitName !== olds.branchGitName
+            resolvedDiffProps.name !== olds.name ||
+            resolvedDiffProps.branchId !== olds.branchId ||
+            resolvedDiffProps.branchGitName !== olds.branchGitName
           ) {
             return { action: "update" } as const;
           }

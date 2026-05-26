@@ -1,14 +1,32 @@
 import * as Effect from "effect/Effect";
+import type { Input } from "../Input.ts";
 import * as Output from "../Output.ts";
 import type { ComputeService } from "./ComputeService.ts";
 import type { Database } from "./Database.ts";
 import type { Project } from "./Project.ts";
+
+export type InputObject<T extends object> = {
+  [Key in keyof T]: Input<T[Key]>;
+};
+
+export const isInputObject = <T extends object>(
+  value: Input<T>,
+): value is InputObject<T> & Input<T> =>
+  typeof value === "object" &&
+  value !== null &&
+  !Output.isOutput(value) &&
+  !Effect.isEffect(value);
 
 export const isPrismaDevId = (value: unknown): value is string =>
   typeof value === "string" && value.startsWith("dev:");
 
 export const concreteIdOf = (value: unknown): string | undefined =>
   typeof value === "string" && !isPrismaDevId(value) ? value : undefined;
+
+export const concreteIdsChanged = (
+  oldId: string | undefined,
+  newId: string | undefined,
+) => oldId !== undefined && newId !== undefined && newId !== oldId;
 
 const resolveId = (label: string, value: unknown) =>
   Effect.gen(function* () {
