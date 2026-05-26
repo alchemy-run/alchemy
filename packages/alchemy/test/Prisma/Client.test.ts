@@ -1,5 +1,6 @@
 import {
   extractConnectionSecrets,
+  PrismaApiError,
   PrismaClient,
   PrismaClientLive,
   type PrismaManagementClient,
@@ -778,6 +779,140 @@ describe("PrismaClient", () => {
         "/v1/compute-services/versions/version-1",
       ]);
     }).pipe(Effect.provide(TestClock.layer()));
+  });
+
+  it.effect("retries transient API failures for safe lifecycle posts", () => {
+    const captured: Captured[] = [];
+    let attempts = 0;
+    const http = HttpClient.make((request) =>
+      Effect.sync(() => {
+        attempts += 1;
+        const url = new URL(request.url);
+        captured.push({
+          url: request.url,
+          method: request.method,
+          pathname: url.pathname,
+          search: url.search,
+          authorization: request.headers.authorization,
+          bodyJson: undefined,
+        });
+        return HttpClientResponse.fromWeb(
+          request,
+          attempts < 3
+            ? json(
+                {
+                  error: {
+                    message: "transient platform failure",
+                  },
+                },
+                { status: 500 },
+              )
+            : data({
+                id: "version-1",
+                type: "compute-version",
+                url: "https://api.prisma.test/v1/versions/version-1",
+                foundryVersionId: "foundry-1",
+                status: "running",
+                previewDomain: "version-1.prisma.test",
+              }),
+        );
+      }),
+    );
+    const layer = PrismaClientLive.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          Layer.succeed(HttpClient.HttpClient, http),
+          Layer.succeed(PrismaEnvironment, {
+            type: "serviceToken" as const,
+            serviceToken: Redacted.make("test-token"),
+            source: { type: "env" as const },
+            baseUrl: "https://api.prisma.test",
+          }),
+        ),
+      ),
+    );
+
+    return Effect.gen(function* () {
+      const fiber = yield* withClient((client) =>
+        client.startComputeServiceVersion("version-1"),
+      ).pipe(
+        Effect.provide(layer),
+        Effect.forkChild({ startImmediately: true }),
+      );
+      yield* TestClock.adjust("1 second");
+      const version = yield* Fiber.join(fiber);
+
+      expect(attempts).toBe(3);
+      expect(version.previewDomain).toBe("version-1.prisma.test");
+      expect(captured.map((request) => request.method)).toEqual([
+        "POST",
+        "POST",
+        "POST",
+      ]);
+      expect(captured.map((request) => request.pathname)).toEqual([
+        "/v1/compute-services/versions/version-1/start",
+        "/v1/compute-services/versions/version-1/start",
+        "/v1/compute-services/versions/version-1/start",
+      ]);
+    }).pipe(Effect.provide(TestClock.layer()));
+  });
+
+  it.effect("does not retry transient API failures for create requests", () => {
+    const captured: Captured[] = [];
+    let attempts = 0;
+    const http = HttpClient.make((request) =>
+      Effect.sync(() => {
+        attempts += 1;
+        const url = new URL(request.url);
+        captured.push({
+          url: request.url,
+          method: request.method,
+          pathname: url.pathname,
+          search: url.search,
+          authorization: request.headers.authorization,
+          bodyJson: undefined,
+        });
+        return HttpClientResponse.fromWeb(
+          request,
+          json(
+            {
+              error: {
+                message: "transient platform failure",
+              },
+            },
+            { status: 500 },
+          ),
+        );
+      }),
+    );
+    const layer = PrismaClientLive.pipe(
+      Layer.provide(
+        Layer.mergeAll(
+          Layer.succeed(HttpClient.HttpClient, http),
+          Layer.succeed(PrismaEnvironment, {
+            type: "serviceToken" as const,
+            serviceToken: Redacted.make("test-token"),
+            source: { type: "env" as const },
+            baseUrl: "https://api.prisma.test",
+          }),
+        ),
+      ),
+    );
+
+    return Effect.gen(function* () {
+      const error = yield* withClient((client) =>
+        client.createServiceComputeVersion("service-1", {
+          portMapping: { http: 3000 },
+        }),
+      ).pipe(Effect.provide(layer), Effect.flip);
+
+      expect(error).toBeInstanceOf(PrismaApiError);
+      expect(attempts).toBe(1);
+      expect(captured.map((request) => request.method)).toEqual(["POST"]);
+      expect(captured.map((request) => request.pathname)).toEqual([
+        "/v1/compute-services/service-1/versions",
+      ]);
+    });
   });
 
   it.effect("retries transient transport failures", () => {

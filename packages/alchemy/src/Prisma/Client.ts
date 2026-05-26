@@ -486,15 +486,33 @@ export const extractConnectionSecrets = (
 
 export const requestBody = <T>(response: DataResponse<T>): T => response.data;
 
-const retryTransient = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+const isRetryableStatus = (status: number) =>
+  status === 0 || status === 408 || status === 429 || status >= 500;
+
+const isRetryablePost = (path: string) =>
+  path.endsWith("/start") ||
+  path.endsWith("/stop") ||
+  path.endsWith("/promote") ||
+  path.endsWith("/transfer");
+
+const isRetryableRequest = (method: Method, path: string) =>
+  method === "GET" ||
+  method === "DELETE" ||
+  method === "PATCH" ||
+  method === "PUT" ||
+  (method === "POST" && isRetryablePost(path));
+
+const retryTransient = <A, E, R>(
+  method: Method,
+  path: string,
+  effect: Effect.Effect<A, E, R>,
+) =>
   effect.pipe(
     Effect.retry({
       while: (e) =>
         e instanceof PrismaApiError &&
-        (e.status === 0 ||
-          e.status === 408 ||
-          e.status === 429 ||
-          e.status >= 500),
+        isRetryableRequest(method, path) &&
+        isRetryableStatus(e.status),
       schedule: Schedule.exponential("100 millis").pipe(
         Schedule.both(Schedule.recurs(4)),
       ),
@@ -582,6 +600,8 @@ function makePrismaClient(): Effect.Effect<
       options?: RequestOptions,
     ): Effect.Effect<T, PrismaApiError | PrismaApiDecodeError> =>
       retryTransient(
+        method,
+        path,
         Effect.gen(function* () {
           const url = yield* buildUrl(path, options?.query);
           const req = makeRequest(method, url, options);
