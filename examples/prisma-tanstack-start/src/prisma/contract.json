@@ -53,8 +53,12 @@
         "user": {
           "cardinality": "N:1",
           "on": {
-            "localFields": ["userId"],
-            "targetFields": ["id"]
+            "localFields": [
+              "userId"
+            ],
+            "targetFields": [
+              "id"
+            ]
           },
           "to": "User"
         }
@@ -118,8 +122,12 @@
         "posts": {
           "cardinality": "1:N",
           "on": {
-            "localFields": ["id"],
-            "targetFields": ["userId"]
+            "localFields": [
+              "id"
+            ],
+            "targetFields": [
+              "userId"
+            ]
           },
           "to": "Post"
         }
@@ -183,18 +191,24 @@
         },
         "foreignKeys": [
           {
-            "columns": ["userId"],
+            "columns": [
+              "userId"
+            ],
             "constraint": true,
             "index": true,
             "references": {
-              "columns": ["id"],
+              "columns": [
+                "id"
+              ],
               "table": "user"
             }
           }
         ],
         "indexes": [],
         "primaryKey": {
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         },
         "uniques": []
       },
@@ -231,7 +245,9 @@
         "foreignKeys": [],
         "indexes": [],
         "primaryKey": {
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         },
         "uniques": []
       }
