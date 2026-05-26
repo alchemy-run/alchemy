@@ -3,6 +3,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { Project as MorphProject, SyntaxKind } from "ts-morph";
 
 const forbiddenPatterns = [
   {
@@ -52,6 +53,12 @@ const documentedResources = [
   "Project",
   "SourceRepository",
 ] as const;
+
+const resourceConfigInterfaces = {
+  Compute: ["ComputeBuild", "ComputeDev", "ComputeProps"],
+  Connection: ["ConnectionEnvOptions"],
+  Database: ["DatabaseDev"],
+} as const;
 
 const stripStrings = (source: string) =>
   source
@@ -119,6 +126,60 @@ describe("Prisma source conventions", () => {
         expect(resourceDoc).toContain("@section");
         expect(resourceDoc).toContain("@example");
       }
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("documents public Prisma resource props and attributes", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const sourceRoot = path.resolve(import.meta.dirname, "../../src/Prisma");
+      const project = new MorphProject({ useInMemoryFileSystem: true });
+      const missingDocs: string[] = [];
+
+      for (const resource of documentedResources) {
+        const fileName = `${resource}.ts`;
+        const source = yield* fs.readFileString(
+          path.join(sourceRoot, fileName),
+        );
+        const sourceFile = project.createSourceFile(fileName, source, {
+          overwrite: true,
+        });
+        const configInterfaces = [
+          `${resource}Props`,
+          ...(resourceConfigInterfaces[
+            resource as keyof typeof resourceConfigInterfaces
+          ] ?? []),
+        ];
+
+        for (const interfaceName of configInterfaces) {
+          const declaration = sourceFile.getInterface(interfaceName);
+          if (declaration === undefined) continue;
+          for (const property of declaration.getProperties()) {
+            if (property.getJsDocs().length === 0) {
+              missingDocs.push(
+                `${fileName}:${interfaceName}.${property.getName()}`,
+              );
+            }
+          }
+        }
+
+        const resourceDeclaration = sourceFile.getInterface(resource);
+        const attributes = resourceDeclaration
+          ?.getExtends()[0]
+          ?.getTypeArguments()[2]
+          ?.asKind(SyntaxKind.TypeLiteral);
+        if (attributes === undefined) continue;
+        for (const property of attributes.getProperties()) {
+          if (property.getJsDocs().length === 0) {
+            missingDocs.push(
+              `${fileName}:${resource}.Attributes.${property.getName()}`,
+            );
+          }
+        }
+      }
+
+      expect(missingDocs).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });
