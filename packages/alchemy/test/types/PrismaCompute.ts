@@ -2,6 +2,7 @@ import * as Prisma from "@/Prisma";
 import type { RuntimeContext } from "@/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
 
 declare const connection: Prisma.Connection;
 
@@ -26,9 +27,14 @@ export const PrismaComputeApiLive = PrismaComputeApi.make(
       connectionId: () => db.connectionId,
       fetch: Effect.gen(function* () {
         const databaseUrl = yield* db.databaseUrl;
-        return HttpServerResponse.json({
+        const exitCode = yield* Effect.gen(function* () {
+          const child = yield* ChildProcess.make("echo", ["ok"]);
+          return yield* child.exitCode;
+        }).pipe(Effect.catch(() => Effect.succeed(-1)));
+        return yield* HttpServerResponse.json({
           ok: true,
           hasDatabaseUrl: databaseUrl !== undefined,
+          exitCode,
         });
       }),
     });

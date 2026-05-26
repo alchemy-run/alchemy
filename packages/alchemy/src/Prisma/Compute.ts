@@ -385,7 +385,7 @@ export interface Compute extends Resource<
   Providers
 > {}
 
-export type ComputeServices = never;
+export type ComputeServices = Server.ProcessServices;
 
 export type ComputeShape = Main<ComputeServices>;
 
