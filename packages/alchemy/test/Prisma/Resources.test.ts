@@ -1670,10 +1670,14 @@ describe("Prisma resource providers", () => {
         }),
       deleteProject: (id: string) =>
         failNotFound("deleteProject", id, "DELETE", `/v1/projects/${id}`),
+      getDatabase: (id: string) =>
+        failNotFound("getDatabase", id, "GET", `/v1/databases/${id}`),
       deleteDatabase: (id: string) =>
         failNotFound("deleteDatabase", id, "DELETE", `/v1/databases/${id}`),
       deleteConnection: (id: string) =>
         failNotFound("deleteConnection", id, "DELETE", `/v1/connections/${id}`),
+      getBranch: (id: string) =>
+        failNotFound("getBranch", id, "GET", `/v1/branches/${id}`),
       deleteBranch: (id: string) =>
         failNotFound("deleteBranch", id, "DELETE", `/v1/branches/${id}`),
       deleteEnvironmentVariable: (id: string) =>
@@ -1753,9 +1757,9 @@ describe("Prisma resource providers", () => {
       expect(calls).toEqual([
         ["listProjectComputeServices", "project-1"],
         ["deleteProject", "project-1"],
-        ["deleteDatabase", "database-1"],
+        ["getDatabase", "database-1"],
         ["deleteConnection", "connection-1"],
-        ["deleteBranch", "branch-1"],
+        ["getBranch", "branch-1"],
         ["deleteEnvironmentVariable", "env-1"],
         ["deleteSourceRepository", "repo-1"],
         ["listServiceComputeVersions", "service-1"],
@@ -3251,6 +3255,11 @@ describe("Prisma resource providers", () => {
         Effect.sync(() => {
           calls.push(["deleteDatabase", id]);
         }),
+      getDatabase: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getDatabase", id]);
+          return { id, isDefault: false };
+        }),
       deleteConnection: (id: string) =>
         Effect.sync(() => {
           calls.push(["deleteConnection", id]);
@@ -3258,6 +3267,11 @@ describe("Prisma resource providers", () => {
       deleteBranch: (id: string) =>
         Effect.sync(() => {
           calls.push(["deleteBranch", id]);
+        }),
+      getBranch: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getBranch", id]);
+          return { id, isDefault: false };
         }),
       listProjectComputeServices: (projectId: string, query: unknown) =>
         Effect.sync(() => {
@@ -3365,8 +3379,10 @@ describe("Prisma resource providers", () => {
         ["deleteComputeService", "service-1"],
         ["deleteSourceRepository", "repo-1"],
         ["deleteEnvironmentVariable", "env-1"],
+        ["getBranch", "branch-1"],
         ["deleteBranch", "branch-1"],
         ["deleteConnection", "connection-1"],
+        ["getDatabase", "database-1"],
         ["deleteDatabase", "database-1"],
         [
           "listProjectComputeServices",
@@ -3420,6 +3436,52 @@ describe("Prisma resource providers", () => {
       } as never);
 
       expect(calls).toEqual([
+        [
+          "note",
+          "Skipping direct delete for default Prisma database; Prisma removes it when the owning project is deleted.",
+        ],
+      ]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
+  it.effect("checks live database default state before deleting", () => {
+    const calls: Call[] = [];
+    const client = {
+      getDatabase: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getDatabase", id]);
+          return { id, isDefault: true };
+        }),
+      deleteDatabase: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteDatabase", id]);
+        }),
+    } as unknown as PrismaManagementClient;
+
+    const session = {
+      note: (message: string) =>
+        Effect.sync(() => {
+          calls.push(["note", message]);
+        }),
+    };
+
+    return Effect.gen(function* () {
+      const databaseProvider = yield* PrismaDatabase.Provider;
+      yield* databaseProvider.delete({
+        id: "Postgres",
+        instanceId: "00000000000000000000000000000000",
+        olds: {} as never,
+        output: {
+          databaseId: "database-1",
+          projectId: "project-1",
+          isDefault: false,
+        },
+        session,
+        bindings: [],
+      } as never);
+
+      expect(calls).toEqual([
+        ["getDatabase", "database-1"],
         [
           "note",
           "Skipping direct delete for default Prisma database; Prisma removes it when the owning project is deleted.",
@@ -3488,6 +3550,52 @@ describe("Prisma resource providers", () => {
       } as never);
 
       expect(calls).toEqual([
+        [
+          "note",
+          "Skipping direct delete for default Prisma branch; Prisma removes it when the owning project is deleted.",
+        ],
+      ]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
+  it.effect("checks live branch default state before deleting", () => {
+    const calls: Call[] = [];
+    const client = {
+      getBranch: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getBranch", id]);
+          return { id, isDefault: true };
+        }),
+      deleteBranch: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteBranch", id]);
+        }),
+    } as unknown as PrismaManagementClient;
+
+    const session = {
+      note: (message: string) =>
+        Effect.sync(() => {
+          calls.push(["note", message]);
+        }),
+    };
+
+    return Effect.gen(function* () {
+      const branchProvider = yield* PrismaBranch.Provider;
+      yield* branchProvider.delete({
+        id: "MainBranch",
+        instanceId: "00000000000000000000000000000000",
+        olds: {} as never,
+        output: {
+          branchId: "branch-1",
+          projectId: "project-1",
+          isDefault: false,
+        },
+        session,
+        bindings: [],
+      } as never);
+
+      expect(calls).toEqual([
+        ["getBranch", "branch-1"],
         [
           "note",
           "Skipping direct delete for default Prisma branch; Prisma removes it when the owning project is deleted.",

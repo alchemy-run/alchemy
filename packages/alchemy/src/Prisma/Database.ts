@@ -467,7 +467,15 @@ export const DatabaseProvider = () =>
         }),
         delete: Effect.fn(function* ({ output, session }) {
           if (isPrismaDevId(output.databaseId)) return;
-          if (output.isDefault) {
+          const database = output.isDefault
+            ? output
+            : yield* client
+                .getDatabase(output.databaseId)
+                .pipe(
+                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+                );
+          if (!database) return;
+          if (database.isDefault) {
             // Prisma treats the default database as project-owned state, not
             // an independently deletable resource.
             if (session !== undefined) {
