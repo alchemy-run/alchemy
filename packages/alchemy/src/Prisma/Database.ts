@@ -293,6 +293,22 @@ const branchAttachment = (props: DatabaseProps) =>
           branchGitName: undefined,
         };
 
+const newlyCreatedDatabaseNeedsBranchSync = (
+  database: ApiDatabase,
+  props: DatabaseProps,
+) => {
+  if (props.branchId !== undefined && !isPrismaDevId(props.branchId)) {
+    return database.branchId !== props.branchId;
+  }
+  if (props.branchGitName === undefined) {
+    return false;
+  }
+  if (props.branchGitName === null) {
+    return database.branchId !== null;
+  }
+  return database.branchId === null;
+};
+
 const validateDatabaseProps = (props: DatabaseProps) =>
   Effect.gen(function* () {
     if (props.branchId !== undefined && props.branchGitName !== undefined) {
@@ -439,7 +455,7 @@ export const DatabaseProvider = () =>
           }
 
           const needsPatch = createdDatabase
-            ? false
+            ? newlyCreatedDatabaseNeedsBranchSync(database, news)
             : (news.name !== undefined && database.name !== news.name) ||
               (yield* branchNeedsSync(client, projectId, database, news));
           if (needsPatch) {

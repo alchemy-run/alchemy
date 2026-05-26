@@ -3077,6 +3077,102 @@ describe("Prisma resource providers", () => {
     },
   );
 
+  it.effect(
+    "syncs branchGitName after creating a database when Prisma omits branchId",
+    () => {
+      const calls: Call[] = [];
+      const database = {
+        id: "database-1",
+        type: "database" as const,
+        url: "https://api.prisma.test/v1/databases/database-1",
+        name: "main",
+        status: "ready" as const,
+        createdAt,
+        isDefault: false,
+        defaultConnectionId: "connection-1",
+        connections: [],
+        project: resourceRef("projects", "project-1", "app"),
+        region: { id: "us-east-1", name: "US East" },
+        source: { type: "empty" },
+        branchId: null,
+      };
+      const client = {
+        listProjectDatabases: (projectId: string, query: unknown) =>
+          Effect.sync(() => {
+            calls.push(["listProjectDatabases", { projectId, query }]);
+            return [];
+          }),
+        createDatabase: (input: unknown) =>
+          Effect.sync(() => {
+            calls.push(["createDatabase", input]);
+            return database;
+          }),
+        updateDatabase: (id: string, input: unknown) =>
+          Effect.sync(() => {
+            calls.push(["updateDatabase", { id, input }]);
+            return {
+              ...database,
+              branchId: "branch-main",
+            };
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaDatabase.Provider;
+        const output = yield* provider.reconcile(
+          reconcileInput("Database", {
+            project: "project-1",
+            name: "main",
+            region: "us-east-1",
+            branchGitName: "main",
+          }),
+        );
+
+        expect(output.branchId).toBe("branch-main");
+        expect(calls).toEqual([
+          [
+            "listProjectDatabases",
+            { projectId: "project-1", query: { limit: 100 } },
+          ],
+          [
+            "createDatabase",
+            {
+              projectId: "project-1",
+              name: "main",
+              region: "us-east-1",
+              isDefault: false,
+              source: undefined,
+              branchId: undefined,
+              branchGitName: "main",
+            },
+          ],
+          [
+            "updateDatabase",
+            {
+              id: "database-1",
+              input: {
+                name: "main",
+                branchId: undefined,
+                branchGitName: "main",
+              },
+            },
+          ],
+        ]);
+      }).pipe(
+        Effect.provide(providerLayer(client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provideService(Stack, {
+          name: "prisma-database-created-branch-sync-test",
+          stage: "test",
+          resources: {},
+          bindings: {},
+          actions: {},
+        }),
+        Effect.provideService(Stage, "test"),
+      );
+    },
+  );
+
   it.effect("ensures a default database on an existing Prisma project", () => {
     const calls: Call[] = [];
     const client = {
