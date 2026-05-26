@@ -205,10 +205,33 @@ type ConnectionEnvBindingHost = Resource<
   { env?: Record<string, ConnectionEnvValue> }
 >;
 
+type ConnectionWorkerTextBinding =
+  | {
+      type: "plain_text";
+      name: string;
+      text: string;
+    }
+  | {
+      type: "secret_text";
+      name: string;
+      text: string;
+    };
+
+type ConnectionWorkerBindingHost = Resource<
+  "Cloudflare.Worker",
+  object | undefined,
+  object,
+  { bindings?: ConnectionWorkerTextBinding[] }
+>;
+
 const supportsConnectionEnvBinding = (
   host: ResourceLike,
 ): host is ConnectionEnvBindingHost =>
   host.Type === "Prisma.Compute" || host.Type === "AWS.Lambda.Function";
+
+const supportsConnectionWorkerBinding = (
+  host: ResourceLike,
+): host is ConnectionWorkerBindingHost => host.Type === "Cloudflare.Worker";
 
 export interface ConnectionEnvOptions {
   /**
@@ -333,6 +356,23 @@ export type ConnectionEnv<
  * export default AWS.Lambda.Function(
  *   "api",
  *   { main: import.meta.filename, url: true },
+ *   Effect.gen(function* () {
+ *     const db = yield* Prisma.Connection.bind(connection);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const databaseUrl = yield* db.databaseUrl;
+ *         return yield* HttpServerResponse.text(databaseUrl ?? "");
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Prisma.ConnectionBindingLive)),
+ * );
+ * ```
+ *
+ * @example Use a connection inside an Effect-native Cloudflare Worker
+ * ```typescript
+ * export default Cloudflare.Worker(
+ *   "api",
+ *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const db = yield* Prisma.Connection.bind(connection);
  *     return {
@@ -540,6 +580,48 @@ const connectionBindingEnv = (connection: Connection) => {
   };
 };
 
+const workerBindingValue = (
+  name: string,
+  value: ConnectionEnvValue,
+): Output.Output<ConnectionWorkerTextBinding> =>
+  value.pipe(
+    Output.map((resolved) => {
+      if (Redacted.isRedacted(resolved)) {
+        return {
+          type: "secret_text",
+          name,
+          text: Redacted.value(resolved),
+        };
+      }
+      return {
+        type: "plain_text",
+        name,
+        text: resolved ?? encodeConnectionValue({ kind: "undefined" }),
+      };
+    }),
+  );
+
+const connectionWorkerBindings = (
+  connection: Connection,
+): Output.Output<ConnectionWorkerTextBinding>[] => {
+  const keys = connectionBindingEnvKeys(connection);
+  const env = encodedConnectionBindingEnv(connection);
+  return [
+    workerBindingValue(keys.connectionId, env.connectionId),
+    workerBindingValue(keys.databaseId, env.databaseId),
+    workerBindingValue(keys.connectionString, env.connectionString),
+    workerBindingValue(keys.directConnectionString, env.directConnectionString),
+    workerBindingValue(keys.pooledConnectionString, env.pooledConnectionString),
+    workerBindingValue(
+      keys.accelerateConnectionString,
+      env.accelerateConnectionString,
+    ),
+    workerBindingValue(keys.host, env.host),
+    workerBindingValue(keys.user, env.user),
+    workerBindingValue(keys.password, env.password),
+  ];
+};
+
 const redactedToString = (
   value: Redacted.Redacted<string> | string | undefined,
 ): string | undefined =>
@@ -642,17 +724,25 @@ export class ConnectionBindingPolicy extends Binding.Policy<
 export const ConnectionBindingPolicyLive =
   ConnectionBindingPolicy.layer.succeed(
     Effect.fnUntraced(function* (host: ResourceLike, connection: Connection) {
-      if (!supportsConnectionEnvBinding(host)) {
-        return yield* Effect.die(
-          new Error(
-            `Prisma.Connection.bind supports Prisma.Compute and AWS.Lambda.Function runtimes, got '${host.Type}'`,
-          ),
-        );
+      if (supportsConnectionEnvBinding(host)) {
+        yield* host.bind`${connection}`({
+          env: connectionBindingEnv(connection),
+        });
+        return;
       }
 
-      yield* host.bind`${connection}`({
-        env: connectionBindingEnv(connection),
-      });
+      if (supportsConnectionWorkerBinding(host)) {
+        yield* host.bind`${connection}`({
+          bindings: connectionWorkerBindings(connection),
+        });
+        return;
+      }
+
+      return yield* Effect.die(
+        new Error(
+          `Prisma.Connection.bind supports Prisma.Compute, AWS.Lambda.Function, and Cloudflare.Worker runtimes, got '${host.Type}'`,
+        ),
+      );
     }),
   );
 

@@ -751,6 +751,110 @@ describe("Prisma resource providers", () => {
     }).pipe(
       Effect.provide(ConnectionBindingLive),
       Effect.provide(ConnectionBindingPolicyLive),
+      Effect.provide(inMemoryState()),
+      Effect.provide(Layer.succeed(RuntimeContext, runtime)),
+      Effect.provide(Layer.succeed(Self, host)),
+      Effect.provide(
+        Layer.succeed(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
+        ),
+      ),
+    );
+  });
+
+  it.effect("Connection.bind records native text bindings for Workers", () => {
+    const workerEnv: Record<string, string> = {};
+    let capturedBindings: unknown[] | undefined;
+    const runtime = {
+      Type: "Cloudflare.Worker",
+      id: "Worker",
+      env: {},
+      set: (id: string) => Effect.succeed(id.replaceAll(/[^a-zA-Z0-9]/g, "_")),
+      get: <T>(key: string): Effect.Effect<T> => {
+        const value = workerEnv[key];
+        if (value === undefined) {
+          return Effect.die(`missing worker binding ${key}`);
+        }
+        return Effect.succeed(value as T);
+      },
+    };
+    const host = {
+      Type: "Cloudflare.Worker",
+      LogicalId: "Worker",
+      FQN: "Worker",
+      bind: (...args: unknown[]) =>
+        args[0] instanceof Array
+          ? (binding: {
+              bindings?: Output.Output<{
+                type: string;
+                name: string;
+                text: string;
+              }>[];
+            }) =>
+              Effect.sync(() => {
+                capturedBindings = binding.bindings;
+              })
+          : Effect.void,
+    };
+    const connection = {
+      Type: "Prisma.Connection",
+      LogicalId: "Connection",
+      FQN: "Connection",
+      connectionId: Output.asOutput("connection-1"),
+      databaseId: Output.asOutput("database-1"),
+      connectionString: Output.asOutput(undefined),
+      directConnectionString: Output.asOutput(Redacted.make("postgres://api")),
+      pooledConnectionString: Output.asOutput(undefined),
+      accelerateConnectionString: Output.asOutput(undefined),
+      host: Output.asOutput("db.example.test"),
+      user: Output.asOutput("api"),
+      password: Output.asOutput(Redacted.make("password")),
+    } as PrismaConnection;
+
+    return Effect.gen(function* () {
+      const db = yield* PrismaConnection.bind(connection);
+      const keys = connectionBindingEnvKeys(connection);
+      const bindings = (yield* Output.evaluate(
+        capturedBindings ?? [],
+        {},
+      )) as Array<{ type: string; name: string; text: string }>;
+
+      for (const binding of bindings) {
+        workerEnv[binding.name] = binding.text;
+      }
+
+      expect(bindings).toEqual(
+        expect.arrayContaining([
+          {
+            type: "plain_text",
+            name: keys.connectionId,
+            text: "connection-1",
+          },
+          {
+            type: "plain_text",
+            name: keys.databaseId,
+            text: "database-1",
+          },
+          {
+            type: "secret_text",
+            name: keys.directConnectionString,
+            text: "postgres://api",
+          },
+          {
+            type: "secret_text",
+            name: keys.password,
+            text: "password",
+          },
+        ]),
+      );
+      expect(yield* db.connectionString).toBeUndefined();
+      expect(yield* db.databaseUrl).toBe("postgres://api");
+      expect(yield* db.password).toBe("password");
+    }).pipe(
+      Effect.provide(ConnectionBindingLive),
+      Effect.provide(ConnectionBindingPolicyLive),
+      Effect.provide(inMemoryState()),
       Effect.provide(Layer.succeed(RuntimeContext, runtime)),
       Effect.provide(Layer.succeed(Self, host)),
       Effect.provide(
