@@ -1037,11 +1037,15 @@ export const LiveWorkerProvider = () =>
 
       const getExpectedDurableObjectClassNames = (
         bindings: readonly WorkerBinding[] | undefined,
+        workerName: string,
       ) =>
         Array.from(
           new Set(
             bindings?.flatMap((binding) =>
-              binding.type === "durable_object_namespace" && binding.className
+              binding.type === "durable_object_namespace" &&
+              binding.className &&
+              (binding.scriptName === undefined ||
+                binding.scriptName === workerName)
                 ? [binding.className]
                 : [],
             ) ?? [],
@@ -1294,7 +1298,7 @@ export const LiveWorkerProvider = () =>
         } satisfies Worker["Attributes"]["hash"];
         const metadataBindings = bindings.flatMap((b) => b.data.bindings ?? []);
         const expectedDurableObjectClassNames =
-          getExpectedDurableObjectClassNames(metadataBindings);
+          getExpectedDurableObjectClassNames(metadataBindings, name);
         let metadataAssets:
           | workers.PutScriptRequest["metadata"]["assets"]
           | undefined;

@@ -71,6 +71,131 @@ const fetchReady = (url: string, expected: string) =>
     );
   });
 
+const fetchJsonReady = <T>(url: string) =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.get(url).pipe(
+      Effect.flatMap((r) =>
+        r.status === 200
+          ? Effect.succeed(r)
+          : Effect.fail(new Error(`Worker not ready: ${r.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: 15 }),
+    );
+    return (yield* res.json) as T;
+  });
+
+const hostWorkerScript = `import { DurableObject } from "cloudflare:workers";
+export class Counter extends DurableObject {
+  async increment() {
+    const value = (await this.ctx.storage.get("count")) ?? 0;
+    const next = value + 1;
+    await this.ctx.storage.put("count", next);
+    return next;
+  }
+  async reset() {
+    await this.ctx.storage.delete("count");
+  }
+  async get() {
+    return (await this.ctx.storage.get("count")) ?? 0;
+  }
+}
+export default {
+  async fetch(request, env) {
+    const stub = env.Counter.getByName("shared");
+    const url = new URL(request.url);
+    if (url.pathname === "/increment") {
+      return Response.json({ value: await stub.increment() });
+    }
+    if (url.pathname === "/get") {
+      return Response.json({ value: await stub.get() });
+    }
+    if (url.pathname === "/reset") {
+      await stub.reset();
+      return Response.json({ ok: true });
+    }
+    return new Response("Not Found", { status: 404 });
+  },
+};
+`;
+
+const consumerWorkerScript = `export default {
+  async fetch(request, env) {
+    const stub = env.Counter.getByName("shared");
+    const url = new URL(request.url);
+    if (url.pathname === "/increment") {
+      return Response.json({ value: await stub.increment() });
+    }
+    if (url.pathname === "/get") {
+      return Response.json({ value: await stub.get() });
+    }
+    if (url.pathname === "/reset") {
+      await stub.reset();
+      return Response.json({ ok: true });
+    }
+    return new Response("Not Found", { status: 404 });
+  },
+};
+`;
+
+test.provider(
+  "async worker durable object binding accepts scriptName",
+  (scratch) =>
+    Effect.gen(function* () {
+      yield* scratch.deploy(
+        Effect.gen(function* () {
+          return {
+            host: yield* Cloudflare.Worker("host-worker", {
+              script: hostWorkerScript,
+              bindings: {
+                Counter: Cloudflare.DurableObjectNamespace("Counter"),
+              },
+            }),
+          };
+        }),
+      );
+
+      const deployed = yield* scratch.deploy(
+        Effect.gen(function* () {
+          const host = yield* Cloudflare.Worker("host-worker", {
+            script: hostWorkerScript,
+            bindings: {
+              Counter: Cloudflare.DurableObjectNamespace("Counter"),
+            },
+          });
+          const consumer = yield* Cloudflare.Worker("consumer-worker", {
+            script: consumerWorkerScript,
+            bindings: {
+              Counter: Cloudflare.DurableObjectNamespace("Counter", {
+                scriptName: host.workerName,
+              }),
+            },
+          });
+
+          return { consumer, host };
+        }),
+      );
+
+      const reset = yield* fetchJsonReady<{ ok: boolean }>(
+        `${deployed.host.url}/reset`,
+      );
+      expect(reset.ok).toBe(true);
+
+      const first = yield* fetchJsonReady<{ value: number }>(
+        `${deployed.consumer.url}/increment`,
+      );
+      expect(first.value).toBe(1);
+
+      const second = yield* fetchJsonReady<{ value: number }>(
+        `${deployed.host.url}/get`,
+      );
+      expect(second.value).toBe(1);
+
+      yield* scratch.destroy();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
 // Walk an async worker through four redeploys against the same scratch state,
 // each one swapping in a new script + bindings shape so we exercise the
 // migration paths `putWorker` relies on:
