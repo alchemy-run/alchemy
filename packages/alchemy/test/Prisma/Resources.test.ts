@@ -1,5 +1,6 @@
 import { Branch as PrismaBranch, BranchProvider } from "@/Prisma/Branch";
 import { PrismaApiError, PrismaClient } from "@/Prisma/Client";
+import { Compute as PrismaCompute } from "@/Prisma/Compute";
 import {
   ComputeService as PrismaComputeService,
   ComputeServiceProvider,
@@ -26,6 +27,7 @@ import {
   EnvironmentVariableProvider,
 } from "@/Prisma/EnvironmentVariable";
 import { Project as PrismaProject, ProjectProvider } from "@/Prisma/Project";
+import { Providers as PrismaProviderCollection } from "@/Prisma/Providers";
 import {
   SourceRepository as PrismaSourceRepository,
   SourceRepositoryProvider,
@@ -34,7 +36,8 @@ import * as Output from "@/Output";
 import type { PrismaManagementClient } from "@/Prisma/Client";
 import { RuntimeContext } from "@/RuntimeContext";
 import { Self } from "@/Self";
-import { Stack } from "@/Stack";
+import { Stack, type StackSpec } from "@/Stack";
+import { inMemoryState } from "@/State/InMemoryState";
 import { Stage } from "@/Stage";
 import { describe, expect, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -510,6 +513,92 @@ describe("Prisma resource providers", () => {
           Layer.succeed(
             ConfigProvider.ConfigProvider,
             ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
+          ),
+        ),
+      );
+    },
+  );
+
+  it.effect(
+    "Prisma.Compute records Connection.bind env on platform bindings",
+    () => {
+      const stack: Omit<StackSpec, "output"> = {
+        name: "prisma-compute-binding-test",
+        stage: "test",
+        resources: {},
+        bindings: {},
+        actions: {},
+      };
+      const connection = {
+        Type: "Prisma.Connection",
+        LogicalId: "Connection",
+        FQN: "Api/Connection",
+        connectionId: Output.asOutput("connection-1"),
+        databaseId: Output.asOutput("database-1"),
+        connectionString: Output.asOutput(undefined),
+        directConnectionString: Output.asOutput(
+          Redacted.make("postgres://api"),
+        ),
+        pooledConnectionString: Output.asOutput(
+          Redacted.make("prisma+postgres://api"),
+        ),
+        accelerateConnectionString: Output.asOutput(undefined),
+        host: Output.asOutput("db.example.test"),
+        user: Output.asOutput("api"),
+        password: Output.asOutput(Redacted.make("password")),
+      } as PrismaConnection;
+
+      return Effect.gen(function* () {
+        const app = yield* PrismaCompute(
+          "App",
+          {
+            project: "project-1",
+            serviceName: "api",
+            main: "app.ts",
+          },
+          Effect.gen(function* () {
+            yield* PrismaConnection.bind(connection);
+          }).pipe(Effect.provide(ConnectionBindingLive)),
+        );
+
+        const keys = connectionBindingEnvKeys(connection);
+        const binding = stack.bindings[app.FQN]?.[0];
+        const env = yield* Output.evaluate(binding?.data.env ?? {}, {});
+
+        expect(binding?.sid).toBe("Connection");
+        expect(Object.keys(env)).toEqual(
+          expect.arrayContaining([
+            keys.connectionId,
+            keys.databaseId,
+            keys.directConnectionString,
+            keys.pooledConnectionString,
+            keys.password,
+          ]),
+        );
+        expect(env[keys.connectionId]).toBe("connection-1");
+        expect(env[keys.databaseId]).toBe("database-1");
+        expect(
+          redactedValue(env[keys.directConnectionString] ?? undefined),
+        ).toBe("postgres://api");
+        expect(
+          redactedValue(env[keys.pooledConnectionString] ?? undefined),
+        ).toBe("prisma+postgres://api");
+        expect(redactedValue(env[keys.password] ?? undefined)).toBe("password");
+      }).pipe(
+        Effect.provide(ConnectionBindingPolicyLive),
+        Effect.provide(inMemoryState()),
+        Effect.provide(
+          Layer.succeed(PrismaProviderCollection, {
+            kind: "ProviderCollection" as const,
+            get: () => undefined,
+          }),
+        ),
+        Effect.provideService(Stack, stack),
+        Effect.provideService(Stage, "test"),
+        Effect.provide(
+          Layer.succeed(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "plan" }),
           ),
         ),
       );

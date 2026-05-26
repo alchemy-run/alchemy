@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -540,12 +541,7 @@ export const Compute: Platform<
           return key;
         }),
       get: <T>(key: string) =>
-        Effect.sync(() => process.env[key]).pipe(
-          Effect.flatMap((value) =>
-            value === undefined
-              ? Effect.die(`Environment variable '${key}' not found`)
-              : Effect.succeed(value),
-          ),
+        Config.string(key).pipe(
           Effect.map((value) => {
             try {
               const parsed = JSON.parse(value);
@@ -562,6 +558,13 @@ export const Compute: Platform<
               return value;
             }
           }),
+          Effect.catch((cause) =>
+            Effect.die(
+              new Error(`Failed to get environment variable: ${key}`, {
+                cause,
+              }),
+            ),
+          ),
         ) as Effect.Effect<T>,
       run: ((effect: Effect.Effect<void, never, unknown>) =>
         Effect.sync(() => {
