@@ -460,11 +460,16 @@ export const ComputeVersionProvider = () =>
             );
           }
           if (news.promote ?? false) {
-            const promoted = yield* client.promoteComputeService(
-              computeServiceId,
-              version.id,
-            );
-            serviceEndpointDomain = promoted.serviceEndpointDomain;
+            const service = yield* client.getComputeService(computeServiceId);
+            if (service.latestVersionId === version.id) {
+              serviceEndpointDomain = service.serviceEndpointDomain;
+            } else {
+              const promoted = yield* client.promoteComputeService(
+                computeServiceId,
+                version.id,
+              );
+              serviceEndpointDomain = promoted.serviceEndpointDomain;
+            }
           }
 
           return attrsFrom(version, computeServiceId, {

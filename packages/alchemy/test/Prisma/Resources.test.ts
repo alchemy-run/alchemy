@@ -2063,6 +2063,22 @@ describe("Prisma resource providers", () => {
               createdAt,
             };
           }),
+        getComputeService: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getComputeService", id]);
+            return {
+              id,
+              type: "compute-service" as const,
+              url: `https://api.prisma.test/v1/compute-services/${id}`,
+              name: "api",
+              region: { id: "us-east-1", name: "US East" },
+              projectId: "project-1",
+              branchId: null,
+              latestVersionId: null,
+              serviceEndpointDomain: "api.prisma.build",
+              createdAt,
+            };
+          }),
         promoteComputeService: (computeServiceId: string, versionId: string) =>
           Effect.sync(() => {
             calls.push([
@@ -2100,6 +2116,7 @@ describe("Prisma resource providers", () => {
           ["getComputeServiceVersion", "version-1"],
           ["startComputeVersion", "version-1"],
           ["getComputeServiceVersion", "version-1"],
+          ["getComputeService", "service-1"],
           [
             "promoteComputeService",
             { computeServiceId: "service-1", versionId: "version-1" },
