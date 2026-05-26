@@ -89,6 +89,7 @@ export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
                               type: "durable_object_namespace",
                               name: bindingName,
                               className: binding.className ?? binding.name,
+                              scriptName: binding.scriptName,
                             }
                           : binding.Type === "Cloudflare.D1Database"
                             ? {

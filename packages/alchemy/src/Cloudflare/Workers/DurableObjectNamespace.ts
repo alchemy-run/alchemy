@@ -54,6 +54,8 @@ export interface DurableObjectNamespaceLike<Shape = any> {
   /** @internal phantom */
   className?: string;
   /** @internal phantom */
+  scriptName?: Input<string>;
+  /** @internal phantom */
   Shape?: Shape;
 }
 
@@ -104,8 +106,8 @@ export interface DurableObjectNamespaceProps {
   /**
    * @default name
    */
-  className: string;
-  // scriptName?: string | undefined;
+  className?: string;
+  scriptName?: Input<string> | undefined;
   // environment?: string | undefined;
   // sqlite?: boolean | undefined;
   // namespaceId?: string | undefined;
@@ -809,6 +811,7 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
           name: namespace,
           className:
             (args[1] as DurableObjectNamespaceProps)?.className || namespace,
+          scriptName: (args[1] as DurableObjectNamespaceProps)?.scriptName,
         };
       } else if (Effect.isEffect(propsOrImpl)) {
         // inline Effect DO
