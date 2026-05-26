@@ -1,4 +1,4 @@
-import * as lockfile from "@alchemy.run/node-utils";
+import { lock } from "@alchemy.run/node-utils/lockfile";
 import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
 import * as path from "pathe";
@@ -24,7 +24,7 @@ export const withLock = <A, E, R>(
   return Effect.acquireUseRelease(
     Effect.promise(async () => {
       await fs.mkdir(lockDir, { recursive: true });
-      return await lockfile.lock(lockPath, {
+      return await lock(lockPath, {
         retries: { retries: 600, minTimeout: 50, maxTimeout: 50 },
         stale: 5_000,
         realpath: false,

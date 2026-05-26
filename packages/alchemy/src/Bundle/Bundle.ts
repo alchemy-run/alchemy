@@ -6,7 +6,12 @@ import * as Stream from "effect/Stream";
 import assert from "node:assert";
 import * as rolldown from "rolldown";
 import { sha256, sha256Object } from "../Util/sha256.ts";
+import {
+  bundleAnalyzerPlugin,
+  type BundleAnalyzerPluginOptions,
+} from "./BundleAnalyzerPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
+import { rawPlugin } from "./RawPlugin.ts";
 
 /**
  * Extra options accepted by {@link build} / {@link watch} on top of the
@@ -24,6 +29,16 @@ export interface BundleExtraOptions {
    * - `false`: plugin is disabled.
    */
   readonly pure?: PurePluginOptions | false;
+  /**
+   * Configures the {@link bundleAnalyzerPlugin} which emits a bundle analysis
+   * report alongside the bundle output, describing chunks, modules, and the
+   * import graph reachable from each entry point.
+   *
+   * - `undefined` / `false` (default): plugin is disabled.
+   * - `true`: plugin is enabled with default options.
+   * - `BundleAnalyzerPluginOptions`: plugin is enabled with the provided options.
+   */
+  readonly bundleAnalyzer?: BundleAnalyzerPluginOptions | boolean;
 }
 
 export interface BundleOutput {
@@ -86,7 +101,7 @@ export const build = (
     try: async () => {
       const bundle = await rolldown.rolldown({
         ...inputOptions,
-        plugins: withPurePlugin(inputOptions.plugins, extra?.pure),
+        plugins: [inputOptions.plugins, builtInPlugins(extra)],
         optimization: inputOptions.optimization ?? {
           inlineConst: {
             mode: "smart",
@@ -94,7 +109,7 @@ export const build = (
           },
         },
       });
-      const result = await bundle.generate(outputOptions);
+      const result = await bundle.write(outputOptions);
       await bundle.close();
       return result.output;
     },
@@ -128,7 +143,8 @@ export const watch = (
         const watcher = rolldown.watch({
           ...inputOptions,
           plugins: [
-            withPurePlugin(inputOptions.plugins, extra?.pure),
+            inputOptions.plugins,
+            builtInPlugins(extra),
             // The watcher event listener does not receive the bundle output, so we grab it using a plugin.
             {
               name: "alchemy:watch-bundle",
@@ -266,19 +282,25 @@ export function bundleOutputFromRolldownOutputBundle(
 }
 
 /**
- * Composes the user-provided plugin chain with the default
- * {@link purePlugin} according to the `pure` option.
+ * Returns the built-in plugins appended after the user-provided plugin chain,
+ * configured by {@link BundleExtraOptions}.
  *
- * The pure plugin is appended LAST so it sees module ids that have already
- * been resolved into `node_modules/<pkg>/...` by upstream resolver plugins
- * such as `@distilled.cloud/cloudflare-rolldown-plugin`.
+ * These run LAST so they see module ids that have already been resolved into
+ * `node_modules/<pkg>/...` by upstream resolver plugins such as
+ * `@distilled.cloud/cloudflare-rolldown-plugin`.
  */
-function withPurePlugin(
-  plugins: rolldown.RolldownPluginOption,
-  pure: PurePluginOptions | false | undefined,
+function builtInPlugins(
+  extra?: BundleExtraOptions,
 ): rolldown.RolldownPluginOption {
-  if (pure === false) return plugins;
-  return [plugins, purePlugin(pure ?? {})];
+  return [
+    extra?.bundleAnalyzer
+      ? bundleAnalyzerPlugin(
+          extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer,
+        )
+      : undefined,
+    extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
+    rawPlugin(),
+  ];
 }
 
 function bundleErrorFromUnknown(error: unknown): BundleError {

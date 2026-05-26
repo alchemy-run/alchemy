@@ -19,36 +19,36 @@ the rest.
 
 ## The encapsulation problem
 
-Say you want a simple `getJob(id)` function backed by a KV namespace.
-The straightforward thing is to call the binding directly:
+Say you want a Worker that serves jobs from a KV namespace. The
+straightforward thing is to bind the KV in the Worker's init
+closure and call it from `fetch`:
 
 ```typescript
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-const getJob = (id: string) =>
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.filename },
   Effect.gen(function* () {
     const kv = yield* Cloudflare.KVNamespaceBinding.bind(MyKV);
-    return yield* kv.get<Job>(id, "json");
-  });
+
+    return {
+      fetch: Effect.gen(function* () {
+        const job = yield* kv.get<Job>("job-1", "json");
+        return HttpServerResponse.json(job);
+      }),
+    };
+  }),
+);
 ```
 
-Look at the inferred type:
-
-```typescript
-const getJob: (id: string) => Effect.Effect<
-  Job | null,
-  KVNamespaceError,
-  WorkerEnvironment  // ← leaks Cloudflare runtime
->;
-```
-
-`WorkerEnvironment` is only available inside a deployed Cloudflare
-Worker. By appearing in `getJob`'s signature, it pins the function
-— and everything that calls it — to running inside a Cloudflare
-Worker. You can't reuse `getJob` from a Lambda, a container, a
-test, or any other runtime; the type system has tied it to one
-specific cloud.
+This works, but the handler is welded to KV. The `fetch` body
+mentions `kv.get`, knows the value shape comes back as `"json"`,
+and propagates `KVNamespaceError`. Moving the data to DynamoDB or
+swapping in an in-memory fake for tests means rewriting `fetch` —
+not just the storage wiring.
 
 A Layer is the answer.
 
@@ -144,20 +144,22 @@ The next deploy tears down the KV namespace and creates whatever
 
 ## Where runtime requirements live
 
-The leaky `getJob` from earlier:
+The handler that called `kv.get` directly had a `fetch` body typed
+roughly:
 
 ```typescript
-Effect.Effect<Job | null, KVNamespaceError, WorkerEnvironment>
+Effect.Effect<Response, KVNamespaceError, Alchemy.RuntimeContext>
 ```
 
-The Layer-wrapped equivalent:
+The KV-specific error and the implicit dependence on a Cloudflare
+binding both leak into the handler's signature. The Layer-wrapped
+equivalent collapses to:
 
 ```typescript
-Effect.Effect<Job, NotFound, Alchemy.RuntimeContext>
+Effect.Effect<Response, JobError, Alchemy.RuntimeContext>
 ```
 
-`WorkerEnvironment` is gone. It hasn't disappeared — it's been
-absorbed by the Layer:
+The Cloudflare-specific surface is gone — absorbed by the Layer:
 
 ```typescript
 export const KVNamespaceBindingLive = Layer.effect(
