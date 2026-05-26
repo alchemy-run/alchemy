@@ -1173,6 +1173,13 @@ describe("Prisma resource providers", () => {
           "GET",
           `/v1/compute-services/${computeServiceId}/versions`,
         ),
+      deleteComputeService: (id: string) =>
+        failNotFound(
+          "deleteComputeService",
+          id,
+          "DELETE",
+          `/v1/compute-services/${id}`,
+        ),
       getComputeServiceVersion: (id: string) =>
         failNotFound(
           "getComputeServiceVersion",
@@ -1228,6 +1235,7 @@ describe("Prisma resource providers", () => {
         ["deleteEnvironmentVariable", "env-1"],
         ["deleteSourceRepository", "repo-1"],
         ["listServiceComputeVersions", "service-1"],
+        ["deleteComputeService", "service-1"],
         ["getComputeServiceVersion", "version-1"],
       ]);
     }).pipe(Effect.provide(providerLayer(client)));

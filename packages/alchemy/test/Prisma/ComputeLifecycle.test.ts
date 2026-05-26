@@ -540,6 +540,18 @@ describe("Prisma Compute lifecycle helpers", () => {
               }),
             );
           }),
+        deleteComputeService: (serviceId: string) =>
+          Effect.gen(function* () {
+            calls.push(`delete-service:${serviceId}`);
+            return yield* Effect.fail(
+              new PrismaApiError({
+                method: "DELETE",
+                path: `/v1/compute-services/${serviceId}`,
+                status: 404,
+                message: "not found",
+              }),
+            );
+          }),
       } as unknown as PrismaManagementClient;
 
       const result = yield* destroyComputeService(client, "missing-service");
@@ -547,9 +559,12 @@ describe("Prisma Compute lifecycle helpers", () => {
       expect(result).toEqual({
         computeServiceId: "missing-service",
         deletedVersionIds: [],
-        serviceDeleted: false,
+        serviceDeleted: true,
       });
-      expect(calls).toEqual(["list:missing-service"]);
+      expect(calls).toEqual([
+        "list:missing-service",
+        "delete-service:missing-service",
+      ]);
     }),
   );
 
@@ -715,6 +730,18 @@ describe("Prisma Compute lifecycle helpers", () => {
               }),
             );
           }),
+        deleteProject: (projectId: string) =>
+          Effect.gen(function* () {
+            calls.push(`delete-project:${projectId}`);
+            return yield* Effect.fail(
+              new PrismaApiError({
+                method: "DELETE",
+                path: `/v1/projects/${projectId}`,
+                status: 404,
+                message: "not found",
+              }),
+            );
+          }),
       } as unknown as PrismaManagementClient;
 
       const result = yield* destroyComputeProject(client, "missing-project");
@@ -723,9 +750,12 @@ describe("Prisma Compute lifecycle helpers", () => {
         projectId: "missing-project",
         deletedServiceIds: [],
         deletedVersionIds: [],
-        projectDeleted: false,
+        projectDeleted: true,
       });
-      expect(calls).toEqual(["list-services:missing-project"]);
+      expect(calls).toEqual([
+        "list-services:missing-project",
+        "delete-project:missing-project",
+      ]);
     }),
   );
 

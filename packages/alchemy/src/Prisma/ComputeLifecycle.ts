@@ -290,16 +290,25 @@ export const destroyComputeService: (
       keepService?: boolean;
     } = {},
   ) {
+    const deleteService = Effect.fn(function* () {
+      if (options.keepService) return false;
+      yield* client
+        .deleteComputeService(computeServiceId)
+        .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+      return true;
+    });
+
     const versions = yield* client
       .listServiceComputeVersions(computeServiceId, {
         limit: 100,
       })
       .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
     if (!versions) {
+      const serviceDeleted = yield* deleteService();
       return {
         computeServiceId,
         deletedVersionIds: [],
-        serviceDeleted: false,
+        serviceDeleted,
       } satisfies DestroyComputeServiceResult;
     }
     const deletedVersionIds: string[] = [];
@@ -308,13 +317,7 @@ export const destroyComputeService: (
       if (result.deleted) deletedVersionIds.push(version.id);
     }
 
-    let serviceDeleted = false;
-    if (!options.keepService) {
-      yield* client
-        .deleteComputeService(computeServiceId)
-        .pipe(Effect.catchIf(isNotFound, () => Effect.void));
-      serviceDeleted = true;
-    }
+    const serviceDeleted = yield* deleteService();
 
     return {
       computeServiceId,
@@ -342,17 +345,26 @@ export const destroyComputeProject: (
       keepProject?: boolean;
     } = {},
   ) {
+    const deleteProject = Effect.fn(function* () {
+      if (options.keepProject) return false;
+      yield* client
+        .deleteProject(projectId)
+        .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+      return true;
+    });
+
     const services = yield* client
       .listProjectComputeServices(projectId, {
         limit: 100,
       })
       .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
     if (!services) {
+      const projectDeleted = yield* deleteProject();
       return {
         projectId,
         deletedServiceIds: [],
         deletedVersionIds: [],
-        projectDeleted: false,
+        projectDeleted,
       } satisfies DestroyComputeProjectResult;
     }
 
@@ -364,13 +376,7 @@ export const destroyComputeProject: (
       if (result.serviceDeleted) deletedServiceIds.push(service.id);
     }
 
-    let projectDeleted = false;
-    if (!options.keepProject) {
-      yield* client
-        .deleteProject(projectId)
-        .pipe(Effect.catchIf(isNotFound, () => Effect.void));
-      projectDeleted = true;
-    }
+    const projectDeleted = yield* deleteProject();
 
     return {
       projectId,
