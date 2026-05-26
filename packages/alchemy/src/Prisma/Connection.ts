@@ -230,6 +230,45 @@ export interface ConnectionEnvOptions {
   databaseId?: string | false;
 }
 
+type ConnectionEnvOptionValue<
+  Options extends ConnectionEnvOptions | undefined,
+  Key extends keyof ConnectionEnvOptions,
+> = Options extends ConnectionEnvOptions ? Options[Key] : undefined;
+
+type ConnectionEnvKey<Name, Default extends string> = [Name] extends [false]
+  ? never
+  : Name extends string
+    ? Name
+    : Default;
+
+type ConnectionEnvEntry<Name, Default extends string> =
+  ConnectionEnvKey<Name, Default> extends infer Key extends string
+    ? { [K in Key]: ConnectionEnvValue }
+    : {};
+
+export type ConnectionEnv<
+  Options extends ConnectionEnvOptions | undefined = undefined,
+> = ConnectionEnvEntry<
+  ConnectionEnvOptionValue<Options, "databaseUrl">,
+  "DATABASE_URL"
+> &
+  ConnectionEnvEntry<
+    ConnectionEnvOptionValue<Options, "directUrl">,
+    "DIRECT_URL"
+  > &
+  ConnectionEnvEntry<
+    ConnectionEnvOptionValue<Options, "pooledDatabaseUrl">,
+    "POOLED_DATABASE_URL"
+  > &
+  ConnectionEnvEntry<
+    ConnectionEnvOptionValue<Options, "connectionId">,
+    "PRISMA_CONNECTION_ID"
+  > &
+  ConnectionEnvEntry<
+    ConnectionEnvOptionValue<Options, "databaseId">,
+    "PRISMA_DATABASE_ID"
+  >;
+
 /**
  * A Prisma database connection/API key.
  *
@@ -353,30 +392,33 @@ const setEnvValue = (
  * `Prisma.Compute({ env })` or build command env. `DATABASE_URL` and
  * `DIRECT_URL` use the direct connection string with a legacy fallback.
  */
-export const connectionEnv = (
+export const connectionEnv = <
+  const Options extends ConnectionEnvOptions | undefined = undefined,
+>(
   connection: Connection,
-  options: ConnectionEnvOptions = {},
-): Record<string, ConnectionEnvValue> => {
+  options?: Options,
+): ConnectionEnv<Options> => {
+  const resolved: ConnectionEnvOptions = options ?? {};
   const env: Record<string, ConnectionEnvValue> = {};
   const appUrl = connectionUrl(connection);
-  setEnvValue(env, envKey(options.databaseUrl, "DATABASE_URL"), appUrl);
-  setEnvValue(env, envKey(options.directUrl, "DIRECT_URL"), appUrl);
+  setEnvValue(env, envKey(resolved.databaseUrl, "DATABASE_URL"), appUrl);
+  setEnvValue(env, envKey(resolved.directUrl, "DIRECT_URL"), appUrl);
   setEnvValue(
     env,
-    envKey(options.pooledDatabaseUrl, "POOLED_DATABASE_URL"),
+    envKey(resolved.pooledDatabaseUrl, "POOLED_DATABASE_URL"),
     connectionUrl(connection, "pooled"),
   );
   setEnvValue(
     env,
-    envKey(options.connectionId, "PRISMA_CONNECTION_ID"),
+    envKey(resolved.connectionId, "PRISMA_CONNECTION_ID"),
     connection.connectionId,
   );
   setEnvValue(
     env,
-    envKey(options.databaseId, "PRISMA_DATABASE_ID"),
+    envKey(resolved.databaseId, "PRISMA_DATABASE_ID"),
     connection.databaseId,
   );
-  return env;
+  return env as ConnectionEnv<Options>;
 };
 
 export const connectionBindingEnvKeys = (

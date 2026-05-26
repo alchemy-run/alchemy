@@ -44,6 +44,11 @@ import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 type Call = [operation: string, input?: unknown];
+type Equal<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : false;
+type Expect<T extends true> = T;
 
 const createdAt = "2026-01-01T00:00:00Z";
 const updatedAt = "2026-01-01T00:00:01Z";
@@ -349,6 +354,29 @@ describe("Prisma resource providers", () => {
       return Effect.gen(function* () {
         const url = yield* Output.evaluate(connectionUrl(connection), {});
         const env = connectionEnv(connection);
+        const customEnv = connectionEnv(connection, {
+          databaseUrl: "APP_DATABASE_URL",
+          directUrl: false,
+          pooledDatabaseUrl: "POOL_URL",
+          connectionId: false,
+          databaseId: "DB_ID",
+        });
+        type DefaultKeys = Expect<
+          Equal<
+            keyof typeof env,
+            | "DATABASE_URL"
+            | "DIRECT_URL"
+            | "POOLED_DATABASE_URL"
+            | "PRISMA_CONNECTION_ID"
+            | "PRISMA_DATABASE_ID"
+          >
+        >;
+        type CustomKeys = Expect<
+          Equal<
+            keyof typeof customEnv,
+            "APP_DATABASE_URL" | "POOL_URL" | "DB_ID"
+          >
+        >;
         const databaseUrl = yield* Output.evaluate(env.DATABASE_URL, {});
         const directUrl = yield* Output.evaluate(env.DIRECT_URL, {});
         const pooledDatabaseUrl = yield* Output.evaluate(
@@ -360,6 +388,12 @@ describe("Prisma resource providers", () => {
           {},
         );
         const databaseId = yield* Output.evaluate(env.PRISMA_DATABASE_ID, {});
+        const customDatabaseUrl = yield* Output.evaluate(
+          customEnv.APP_DATABASE_URL,
+          {},
+        );
+        const customPooledUrl = yield* Output.evaluate(customEnv.POOL_URL, {});
+        const customDatabaseId = yield* Output.evaluate(customEnv.DB_ID, {});
 
         expect(redactedValue(url)).toBe("postgres://legacy");
         expect(redactedValue(databaseUrl)).toBe("postgres://legacy");
@@ -369,6 +403,9 @@ describe("Prisma resource providers", () => {
         );
         expect(connectionId).toBe("connection-1");
         expect(databaseId).toBe("database-1");
+        expect(redactedValue(customDatabaseUrl)).toBe("postgres://legacy");
+        expect(redactedValue(customPooledUrl)).toBe("prisma+postgres://pooled");
+        expect(customDatabaseId).toBe("database-1");
       });
     },
   );
