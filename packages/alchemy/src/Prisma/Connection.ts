@@ -295,7 +295,7 @@ export type ConnectionEnv<
  * ```
  *
  * @section Binding to Platforms
- * @example Use a connection inside an Effect-native app
+ * @example Pass conventional env vars to Compute
  * ```typescript
  * const connection = yield* Prisma.Connection("api", {
  *   database,
@@ -311,11 +311,28 @@ export type ConnectionEnv<
  * });
  * ```
  *
- * @example Use a connection inside an Effect-native app
+ * @example Use a connection inside an Effect-native Compute app
  * ```typescript
  * export default Prisma.Compute(
  *   "api",
  *   { project, serviceName: "api", main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const db = yield* Prisma.Connection.bind(connection);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const databaseUrl = yield* db.databaseUrl;
+ *         return yield* HttpServerResponse.text(databaseUrl ?? "");
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Prisma.ConnectionBindingLive)),
+ * );
+ * ```
+ *
+ * @example Use a connection inside an Effect-native Lambda function
+ * ```typescript
+ * export default AWS.Lambda.Function(
+ *   "api",
+ *   { main: import.meta.filename, url: true },
  *   Effect.gen(function* () {
  *     const db = yield* Prisma.Connection.bind(connection);
  *     return {
