@@ -892,6 +892,141 @@ describe("Prisma Compute", () => {
   );
 
   it.effect(
+    "creates a new version when branch attachment changes without artifact changes",
+    () => {
+      const calls: Array<[string, unknown]> = [];
+      let branchId: string | null = "branch-main";
+      let versionCounter = 0;
+
+      const service = () => ({
+        id: "service-1",
+        type: "compute-service" as const,
+        url: "https://api.prisma.test/v1/compute-services/service-1",
+        name: "api",
+        region: { id: "us-east-1", name: "US East" },
+        projectId: "project-1",
+        branchId,
+        latestVersionId: "version-seed",
+        serviceEndpointDomain: "api.prisma.build",
+        createdAt: "2026-01-01T00:00:00Z",
+      });
+
+      const client = {
+        getComputeService: (id: string) => {
+          calls.push(["getComputeService", id]);
+          return Effect.succeed(service());
+        },
+        updateComputeService: (
+          id: string,
+          input: { branchId?: string | null },
+        ) => {
+          calls.push(["updateComputeService", { id, input }]);
+          branchId = input.branchId ?? null;
+          return Effect.succeed(service());
+        },
+        createServiceComputeVersion: (
+          computeServiceId: string,
+          input: unknown,
+        ) => {
+          versionCounter += 1;
+          const id = `version-${versionCounter}`;
+          calls.push([
+            "createServiceComputeVersion",
+            { computeServiceId, input, id },
+          ]);
+          return Effect.succeed({
+            id,
+            type: "compute-version" as const,
+            url: `https://api.prisma.test/v1/versions/${id}`,
+            foundryVersionId: `foundry-${versionCounter}`,
+            uploadUrl: null,
+          });
+        },
+        getComputeServiceVersion: (id: string) => {
+          calls.push(["getComputeServiceVersion", id]);
+          return Effect.succeed({
+            id,
+            type: "compute-version" as const,
+            url: `https://api.prisma.test/v1/versions/${id}`,
+            foundryVersionId: id.replace("version", "foundry"),
+            status: "new",
+            previewDomain: `${id}.preview.prisma.build`,
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+      } as unknown as PrismaManagementClient;
+
+      const baseProps = {
+        project: "project-1",
+        serviceName: "api",
+        branchId: "branch-main",
+        skipCodeUpload: true,
+        start: false,
+        skipPromote: true,
+      };
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const first = yield* provider.reconcile({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: baseProps,
+          olds: undefined,
+          output: {
+            computeServiceId: "service-1",
+            computeVersionId: undefined,
+            projectId: "project-1",
+            serviceName: "api",
+            regionId: "us-east-1",
+            versionEndpointDomain: undefined,
+            versionUrl: undefined,
+            serviceEndpointDomain: "api.prisma.build",
+            url: "https://api.prisma.build",
+            promoted: false,
+            previousVersionId: undefined,
+            previousVersionAction: undefined,
+            artifactHash: undefined,
+            local: false,
+          },
+          session: undefined as never,
+          bindings: [],
+        });
+
+        const second = yield* provider.reconcile({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: { ...baseProps, branchId: "branch-feature" },
+          olds: baseProps,
+          output: first,
+          session: undefined as never,
+          bindings: [],
+        });
+
+        expect(first.computeVersionId).toBe("version-1");
+        expect(second.computeVersionId).toBe("version-2");
+        expect(second.artifactHash).not.toBe(first.artifactHash);
+        expect(calls).toContainEqual([
+          "updateComputeService",
+          {
+            id: "service-1",
+            input: {
+              displayName: "api",
+              branchId: "branch-feature",
+              branchGitName: undefined,
+            },
+          },
+        ]);
+        expect(
+          calls.filter(([name]) => name === "createServiceComputeVersion"),
+        ).toHaveLength(2);
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+      );
+    },
+  );
+
+  it.effect(
     "does not mutate remote Compute state when artifact resolution fails",
     () => {
       const calls: Array<[string, unknown?]> = [];

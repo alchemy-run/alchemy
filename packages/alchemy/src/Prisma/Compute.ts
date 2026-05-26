@@ -379,7 +379,8 @@ export interface Compute extends Resource<
      */
     environmentClass?: "production" | "preview";
     /**
-     * Hash of the uploaded artifact or reused artifact inputs.
+     * Fingerprint of the uploaded artifact/reused artifact inputs and the
+     * branch attachment that Prisma resolves environment variables from.
      */
     artifactHash: string | undefined;
     /**
@@ -1644,6 +1645,10 @@ export const ComputeProvider = () =>
               Effect.fail(computeApiUnavailable()),
             ),
           );
+          const deploymentHash = yield* sha256Object({
+            artifact: artifact.hash,
+            branchId: service.branchId,
+          });
           const previousVersionId = service.latestVersionId ?? null;
           const previousEnvironmentClass =
             olds?.envClass ?? output?.environmentClass ?? "production";
@@ -1667,7 +1672,7 @@ export const ComputeProvider = () =>
           );
 
           let version: ObservedComputeVersion | undefined =
-            output?.computeVersionId && output.artifactHash === artifact.hash
+            output?.computeVersionId && output.artifactHash === deploymentHash
               ? yield* observeComputeVersion(
                   client,
                   output.computeVersionId,
@@ -1844,7 +1849,7 @@ export const ComputeProvider = () =>
             previousVersionAction,
             environmentKeys: managedEnvKeys(effectiveNews.env),
             environmentClass,
-            artifactHash: artifact.hash,
+            artifactHash: deploymentHash,
             local: false,
           };
         }),
