@@ -2044,6 +2044,12 @@ describe("Prisma resource providers", () => {
               createdAt,
             };
           }),
+        startComputeServiceVersion: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["startComputeServiceVersion", id]);
+            status = "running";
+            return { previewDomain: "version-1.preview.prisma.build" };
+          }),
         startComputeVersion: (id: string) =>
           Effect.sync(() => {
             calls.push(["startComputeVersion", id]);
@@ -2114,7 +2120,7 @@ describe("Prisma resource providers", () => {
             },
           ],
           ["getComputeServiceVersion", "version-1"],
-          ["startComputeVersion", "version-1"],
+          ["startComputeServiceVersion", "version-1"],
           ["getComputeServiceVersion", "version-1"],
           ["getComputeService", "service-1"],
           [

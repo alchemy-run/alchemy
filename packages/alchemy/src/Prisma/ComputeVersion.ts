@@ -17,6 +17,7 @@ import {
   waitForComputeVersionStatus,
 } from "./ComputeLifecycle.ts";
 import { observeComputeVersion } from "./Internal/ComputeVersionObserve.ts";
+import { startComputeServiceVersionWithFallback } from "./Internal/ComputeVersionStart.ts";
 import { tailComputeVersionLogs } from "./PrismaLogs.ts";
 import type { ComputeService } from "./ComputeService.ts";
 import type { Providers } from "./Providers.ts";
@@ -441,14 +442,10 @@ export const ComputeVersionProvider = () =>
               version.status !== "running" &&
               version.status !== "provisioning"
             ) {
-              const started = yield* client
-                .startComputeVersion(version.id)
-                .pipe(
-                  Effect.catchIf(
-                    (e) => isNotFound(e) || isConflict(e),
-                    () => Effect.succeed(undefined),
-                  ),
-                );
+              const started = yield* startComputeServiceVersionWithFallback(
+                client,
+                version.id,
+              );
               if (started) {
                 version = { ...version, previewDomain: started.previewDomain };
               }

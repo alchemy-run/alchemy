@@ -716,6 +716,99 @@ describe("Prisma ComputeVersion", () => {
     );
   });
 
+  it.effect(
+    "falls back to the global start route for direct Compute versions",
+    () => {
+      const calls: Array<[string, unknown?]> = [];
+      let status = "new";
+      const client = {
+        createServiceComputeVersion: (
+          computeServiceId: string,
+          input: unknown,
+        ) => {
+          calls.push([
+            "createServiceComputeVersion",
+            { computeServiceId, input },
+          ]);
+          return Effect.succeed({
+            id: "version-1",
+            type: "compute-version" as const,
+            url: "https://api.prisma.test/v1/versions/version-1",
+            foundryVersionId: "foundry-1",
+            uploadUrl: null,
+          });
+        },
+        getComputeServiceVersion: (id: string) => {
+          calls.push(["getComputeServiceVersion", id]);
+          return Effect.succeed({
+            id,
+            type: "compute-version" as const,
+            url: `https://api.prisma.test/v1/versions/${id}`,
+            foundryVersionId: "foundry-1",
+            status,
+            previewDomain: "version-1.preview.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+        startComputeServiceVersion: (id: string) =>
+          Effect.gen(function* () {
+            calls.push(["startComputeServiceVersion", id]);
+            return yield* Effect.fail(
+              new PrismaApiError({
+                method: "POST",
+                path: `/v1/compute-services/versions/${id}/start`,
+                status: 404,
+                message: "not found",
+              }),
+            );
+          }),
+        startComputeVersion: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["startComputeVersion", id]);
+            status = "running";
+            return { previewDomain: "version-1.preview.prisma.build" };
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaComputeVersion.Provider;
+        const output = yield* provider.reconcile({
+          id: "Version",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            computeService: "service-1",
+            skipCodeUpload: true,
+            start: true,
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        });
+
+        expect(output.status).toBe("running");
+        expect(calls).toEqual([
+          [
+            "createServiceComputeVersion",
+            {
+              computeServiceId: "service-1",
+              input: { portMapping: undefined, skipCodeUpload: true },
+            },
+          ],
+          ["getComputeServiceVersion", "version-1"],
+          ["startComputeServiceVersion", "version-1"],
+          ["startComputeVersion", "version-1"],
+          ["getComputeServiceVersion", "version-1"],
+        ]);
+      }).pipe(
+        Effect.provide(ComputeVersionProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
   it.effect("tails ComputeVersion logs through the provider", () =>
     withWebSocketServer((server) =>
       Effect.gen(function* () {
