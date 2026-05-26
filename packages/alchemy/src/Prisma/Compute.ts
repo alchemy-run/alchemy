@@ -798,6 +798,13 @@ const validateComputeProps = (props: ComputeProps) =>
         new Error("branchId and branchGitName are mutually exclusive."),
       );
     }
+    if (props.branchGitName === null) {
+      return yield* Effect.fail(
+        new Error(
+          "Prisma.Compute requires an attached branch because Compute version creation resolves environment variables from the service branch. Omit branchGitName to use main, or set branchId/branchGitName.",
+        ),
+      );
+    }
     if (props.artifact !== undefined && props.artifactPath !== undefined) {
       return yield* Effect.fail(
         new Error("artifact and artifactPath are mutually exclusive."),
@@ -811,6 +818,11 @@ const validateComputeProps = (props: ComputeProps) =>
     if ((props.skipCodeUpload ?? false) && props.artifactPath !== undefined) {
       return yield* Effect.fail(
         new Error("skipCodeUpload cannot be combined with artifactPath."),
+      );
+    }
+    if ((props.skipCodeUpload ?? false) && props.build !== undefined) {
+      return yield* Effect.fail(
+        new Error("skipCodeUpload cannot be combined with build."),
       );
     }
     if (hasEffectNativeComputeInput(props)) {
@@ -1277,21 +1289,33 @@ const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
   };
 });
 
-const ensureService = Effect.fn(function* (
+const findExistingService = Effect.fn(function* (
   client: PrismaManagementClient,
+  projectId: string,
   props: ComputeProps,
   output: Compute["Attributes"] | undefined,
 ) {
-  const projectId = yield* resolveProjectId(props.project);
   const computeServiceId =
     output?.computeServiceId && !isPrismaDevId(output.computeServiceId)
       ? output.computeServiceId
       : undefined;
-  let service = computeServiceId
+  return computeServiceId
     ? yield* client
         .getComputeService(computeServiceId)
         .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)))
     : yield* findService(client, projectId, props.serviceName);
+});
+
+const ensureService = Effect.fn(function* (
+  client: PrismaManagementClient,
+  projectId: string,
+  props: ComputeProps,
+  output: Compute["Attributes"] | undefined,
+  observedService?: ApiComputeService,
+) {
+  let service =
+    observedService ??
+    (yield* findExistingService(client, projectId, props, output));
 
   let createdService = false;
   if (!service) {
@@ -1329,6 +1353,20 @@ const ensureService = Effect.fn(function* (
 
   return service;
 });
+
+const ensureSkipCodeUploadCanFork = (
+  props: ComputeProps,
+  service: ApiComputeService | undefined,
+) =>
+  Effect.gen(function* () {
+    if (!(props.skipCodeUpload ?? false)) return;
+    if (service?.latestVersionId) return;
+    return yield* Effect.fail(
+      new Error(
+        "skipCodeUpload requires an existing Prisma Compute version to fork from. Upload and start a version first, or remove skipCodeUpload.",
+      ),
+    );
+  });
 
 const findEnvironmentVariable = (
   client: PrismaManagementClient,
@@ -1632,10 +1670,29 @@ export const ComputeProvider = () =>
           yield* validateComputeProps(effectiveNews);
           const projectId = yield* resolveProjectId(effectiveNews.project);
           const artifact = yield* resolveArtifact(effectiveNews);
+          const observedService = effectiveNews.skipCodeUpload
+            ? yield* findExistingService(
+                client,
+                projectId,
+                effectiveNews,
+                output,
+              ).pipe(
+                Effect.retry({
+                  while: isProjectScopedNotFound,
+                  schedule: projectConsistencySchedule,
+                }),
+                Effect.catchIf(isComputeServiceRouteNotFound, () =>
+                  Effect.fail(computeApiUnavailable()),
+                ),
+              )
+            : undefined;
+          yield* ensureSkipCodeUploadCanFork(effectiveNews, observedService);
           const service = yield* ensureService(
             client,
+            projectId,
             effectiveNews,
             output,
+            observedService,
           ).pipe(
             Effect.retry({
               while: isProjectScopedNotFound,

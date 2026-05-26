@@ -123,6 +123,102 @@ describe("Prisma Compute", () => {
     );
   });
 
+  it.effect("rejects unassigned branch attachment for Compute deploys", () => {
+    const client = {} as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            serviceName: "api",
+            branchGitName: null,
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("requires an attached branch");
+    }).pipe(
+      Effect.provide(ComputeProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+    );
+  });
+
+  it.effect("rejects skipCodeUpload without a version to fork", () => {
+    const calls: Array<[string, unknown]> = [];
+    const client = {
+      getComputeService: (id: string) => {
+        calls.push(["getComputeService", id]);
+        return Effect.succeed({
+          id,
+          type: "compute-service" as const,
+          url: `https://api.prisma.test/v1/compute-services/${id}`,
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId: "project-1",
+          branchId: "branch-main",
+          latestVersionId: null,
+          serviceEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            serviceName: "api",
+            branchId: "branch-main",
+            skipCodeUpload: true,
+            start: false,
+            skipPromote: true,
+          },
+          olds: undefined,
+          output: {
+            computeServiceId: "service-1",
+            computeVersionId: undefined,
+            projectId: "project-1",
+            serviceName: "api",
+            regionId: "us-east-1",
+            versionEndpointDomain: undefined,
+            versionUrl: undefined,
+            serviceEndpointDomain: "api.prisma.build",
+            url: "https://api.prisma.build",
+            promoted: false,
+            previousVersionId: undefined,
+            previousVersionAction: undefined,
+            artifactHash: undefined,
+            local: false,
+          },
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "skipCodeUpload requires an existing Prisma Compute version",
+      );
+      expect(calls).toEqual([["getComputeService", "service-1"]]);
+    }).pipe(
+      Effect.provide(ComputeProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+    );
+  });
+
   it.effect("rejects effect-native Compute without a main module", () => {
     const client = {} as PrismaManagementClient;
 
@@ -580,7 +676,7 @@ describe("Prisma Compute", () => {
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
-            branchId: "branch-main",
+            branchId: null,
             latestVersionId: "version-live",
             serviceEndpointDomain: "api.prisma.build",
             createdAt: "2026-01-01T00:00:00Z",
@@ -659,7 +755,7 @@ describe("Prisma Compute", () => {
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
-          branchId: null,
+          branchId: "branch-main",
           latestVersionId: "version-live",
           serviceEndpointDomain: "api.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
@@ -710,7 +806,7 @@ describe("Prisma Compute", () => {
         news: {
           project: "project-1",
           serviceName: "api",
-          branchGitName: null,
+          branchId: "branch-main",
           skipCodeUpload: true,
           skipPromote: true,
           verifyUrl: false,
@@ -815,7 +911,7 @@ describe("Prisma Compute", () => {
             type: "compute-version" as const,
             url: "https://api.prisma.test/v1/versions/version-1",
             foundryVersionId: "foundry-1",
-            uploadUrl: null,
+            uploadUrl: "https://upload.prisma.test/version-1.tar.gz",
           });
         },
         getComputeServiceVersion: (id: string) => {
@@ -831,6 +927,9 @@ describe("Prisma Compute", () => {
           });
         },
       } as unknown as PrismaManagementClient;
+      const http = HttpClient.make((request) =>
+        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
+      );
 
       return Effect.gen(function* () {
         const provider = yield* Compute.Provider;
@@ -841,7 +940,7 @@ describe("Prisma Compute", () => {
             project: "project-1",
             serviceName: "api",
             branchId: "branch-main",
-            skipCodeUpload: true,
+            artifact: "archive-bytes",
             start: false,
             skipPromote: true,
           },
@@ -887,6 +986,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(ComputeProvider()),
         Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       );
     },
   );
@@ -959,7 +1059,7 @@ describe("Prisma Compute", () => {
       const baseProps = {
         project: "project-1",
         serviceName: "api",
-        branchId: "branch-main",
+        branchId: null,
         skipCodeUpload: true,
         start: false,
         skipPromote: true,
@@ -1098,8 +1198,8 @@ describe("Prisma Compute", () => {
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
-          branchId: null,
-          latestVersionId: null,
+          branchId: "branch-main",
+          latestVersionId: "version-old",
           serviceEndpointDomain: "api.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
         });
@@ -1143,7 +1243,7 @@ describe("Prisma Compute", () => {
             project: "project-1",
             serviceName: "api",
             artifact: "archive-bytes",
-            branchId: null,
+            branchId: "branch-main",
             start: false,
             skipPromote: true,
           },
@@ -1197,7 +1297,7 @@ describe("Prisma Compute", () => {
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
-            branchId: null,
+            branchId: "branch-main",
             latestVersionId: null,
             serviceEndpointDomain: "api.prisma.build",
             createdAt: "2026-01-01T00:00:00Z",
@@ -1249,7 +1349,7 @@ describe("Prisma Compute", () => {
               project: "project-1",
               serviceName: "api",
               artifact: "archive-bytes",
-              branchId: null,
+              branchId: "branch-main",
               start: false,
               skipPromote: true,
             },
@@ -1302,8 +1402,8 @@ describe("Prisma Compute", () => {
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
-          branchId: null,
-          latestVersionId: null,
+          branchId: "branch-main",
+          latestVersionId: "version-old",
           serviceEndpointDomain: "api.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
         });
@@ -1366,7 +1466,7 @@ describe("Prisma Compute", () => {
             project: "project-1",
             serviceName: "api",
             artifact: "archive-bytes",
-            branchId: null,
+            branchId: "branch-main",
           },
           olds: undefined,
           output: {
@@ -1418,7 +1518,7 @@ describe("Prisma Compute", () => {
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
           branchId: null,
-          latestVersionId: null,
+          latestVersionId: "version-old",
           serviceEndpointDomain: "api.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
         }),
@@ -1532,8 +1632,8 @@ describe("Prisma Compute", () => {
             name: "api",
             region: { id: "us-east-1", name: "US East" },
             projectId,
-            branchId: null,
-            latestVersionId: null,
+            branchId: "branch-main",
+            latestVersionId: "version-old",
             serviceEndpointDomain: "api.prisma.build",
             createdAt: "2026-01-01T00:00:00Z",
           });
@@ -1620,7 +1720,7 @@ describe("Prisma Compute", () => {
           news: {
             project: "project-1",
             serviceName: "api",
-            branchGitName: null,
+            branchId: "branch-main",
             main,
             port: 4555,
             start: false,
@@ -1675,8 +1775,8 @@ describe("Prisma Compute", () => {
           name: "api",
           region: { id: "us-east-1", name: "US East" },
           projectId,
-          branchId: null,
-          latestVersionId: null,
+          branchId: "branch-main",
+          latestVersionId: "version-old",
           serviceEndpointDomain: "api.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
         }),
@@ -1747,7 +1847,7 @@ describe("Prisma Compute", () => {
         news: {
           project: "project-1",
           serviceName: "api",
-          branchGitName: null,
+          branchId: "branch-main",
           main,
           handler: "Api",
           start: false,
@@ -1977,7 +2077,7 @@ describe("Prisma Compute", () => {
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
             branchId: null,
-            latestVersionId: null,
+            latestVersionId: "version-old",
             serviceEndpointDomain: "api.prisma.build",
             createdAt: "2026-01-01T00:00:00Z",
           };
@@ -2030,7 +2130,7 @@ describe("Prisma Compute", () => {
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
           branchId: null,
-          latestVersionId: null,
+          latestVersionId: "version-old",
           serviceEndpointDomain: "api.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
         });
@@ -2174,7 +2274,7 @@ describe("Prisma Compute", () => {
             region: { id: "us-east-1", name: "US East" },
             projectId: "project-1",
             branchId: null,
-            latestVersionId: null,
+            latestVersionId: "version-old",
             serviceEndpointDomain: "api.prisma.build",
             createdAt: "2026-01-01T00:00:00Z",
           });
@@ -2216,7 +2316,7 @@ describe("Prisma Compute", () => {
             type: "compute-version" as const,
             url: "https://api.prisma.test/v1/versions/version-1",
             foundryVersionId: "foundry-1",
-            uploadUrl: null,
+            uploadUrl: "https://upload.prisma.test/version-1.tar.gz",
           });
         },
         getComputeServiceVersion: (id: string) => {
@@ -2232,6 +2332,9 @@ describe("Prisma Compute", () => {
           });
         },
       } as unknown as PrismaManagementClient;
+      const http = HttpClient.make((request) =>
+        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
+      );
 
       return Effect.gen(function* () {
         const provider = yield* Compute.Provider;
@@ -2372,7 +2475,7 @@ describe("Prisma Compute", () => {
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
           branchId: null,
-          latestVersionId: null,
+          latestVersionId: "version-old",
           serviceEndpointDomain: "api.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
         });
@@ -2503,7 +2606,7 @@ describe("Prisma Compute", () => {
           region: { id: "us-east-1", name: "US East" },
           projectId: "project-1",
           branchId: "branch-main",
-          latestVersionId: null,
+          latestVersionId: "version-old",
           serviceEndpointDomain: "api.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
         });
@@ -3025,7 +3128,7 @@ describe("Prisma Compute", () => {
         name: "api",
         region: { id: "us-east-1", name: "US East" },
         projectId: "project-1",
-        branchId: "branch-main",
+        branchId: null,
         latestVersionId: null,
         serviceEndpointDomain: "api.prisma.build",
         createdAt: "2026-01-01T00:00:00Z",
@@ -3090,7 +3193,7 @@ describe("Prisma Compute", () => {
             type: "compute-version" as const,
             url: "https://api.prisma.test/v1/versions/version-1",
             foundryVersionId: "foundry-1",
-            uploadUrl: null,
+            uploadUrl: "https://upload.prisma.test/version-1.tar.gz",
           });
         },
         getComputeServiceVersion: (id: string) => {
@@ -3106,6 +3209,9 @@ describe("Prisma Compute", () => {
           });
         },
       } as unknown as PrismaManagementClient;
+      const http = HttpClient.make((request) =>
+        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
+      );
 
       return Effect.gen(function* () {
         const provider = yield* Compute.Provider;
@@ -3115,7 +3221,7 @@ describe("Prisma Compute", () => {
           news: {
             project: "project-1",
             serviceName: "api",
-            skipCodeUpload: true,
+            artifact: "archive-bytes",
             start: false,
             skipPromote: true,
           },
@@ -3156,10 +3262,21 @@ describe("Prisma Compute", () => {
             },
           ],
           [
+            "updateComputeService",
+            {
+              id: "service-1",
+              input: {
+                displayName: "api",
+                branchId: undefined,
+                branchGitName: "main",
+              },
+            },
+          ],
+          [
             "createServiceComputeVersion",
             {
               computeServiceId: "service-1",
-              input: { portMapping: { http: 8080 }, skipCodeUpload: true },
+              input: { portMapping: { http: 8080 }, skipCodeUpload: undefined },
             },
           ],
           ["getComputeServiceVersion", "version-1"],
@@ -3167,7 +3284,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(ComputeProvider()),
         Effect.provide(Layer.succeed(PrismaClient, client)),
-        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
       );
     },
@@ -3640,7 +3757,7 @@ describe("Prisma Compute", () => {
         name: "api",
         region: { id: "us-east-1", name: "US East" },
         projectId: "project-1",
-        branchId: null,
+        branchId: "branch-main",
         latestVersionId,
         serviceEndpointDomain: "api.prisma.build",
         createdAt: "2026-01-01T00:00:00Z",
@@ -3672,7 +3789,7 @@ describe("Prisma Compute", () => {
             type: "compute-version" as const,
             url: "https://api.prisma.test/v1/versions/version-1",
             foundryVersionId: "foundry-1",
-            uploadUrl: null,
+            uploadUrl: "https://upload.prisma.test/version-1.tar.gz",
           });
         },
         getComputeServiceVersion: (id: string) => {
@@ -3697,12 +3814,15 @@ describe("Prisma Compute", () => {
             return { serviceEndpointDomain: "api.prisma.build" };
           }),
       } as unknown as PrismaManagementClient;
+      const http = HttpClient.make((request) =>
+        Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null))),
+      );
 
       const news = {
         project: "project-1",
         serviceName: "api",
-        branchId: null,
-        skipCodeUpload: true,
+        branchId: "branch-main",
+        artifact: "archive-bytes",
         verifyUrl: false,
       };
 
@@ -3745,6 +3865,7 @@ describe("Prisma Compute", () => {
       }).pipe(
         Effect.provide(ComputeProvider()),
         Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
       );
     },
