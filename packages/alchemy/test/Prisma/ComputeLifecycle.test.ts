@@ -195,6 +195,112 @@ describe("Prisma Compute lifecycle helpers", () => {
       }),
   );
 
+  it.effect(
+    "preserves the service-scoped read error when global read also fails",
+    () =>
+      Effect.gen(function* () {
+        const calls: string[] = [];
+        const client = {
+          getComputeServiceVersion: (versionId: string) =>
+            Effect.gen(function* () {
+              calls.push(`get:${versionId}`);
+              return yield* Effect.fail(
+                new PrismaApiError({
+                  method: "GET",
+                  path: `/v1/compute-services/versions/${versionId}`,
+                  status: 500,
+                  message: "Internal Server Error",
+                }),
+              );
+            }),
+          getComputeVersion: (versionId: string) =>
+            Effect.gen(function* () {
+              calls.push(`get-global:${versionId}`);
+              return yield* Effect.fail(
+                new PrismaApiError({
+                  method: "GET",
+                  path: `/v1/versions/${versionId}`,
+                  status: 404,
+                  message: "not found",
+                }),
+              );
+            }),
+        } as unknown as PrismaManagementClient;
+
+        const error = yield* destroyComputeVersion(
+          client,
+          "version-error",
+        ).pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(PrismaApiError);
+        expect((error as PrismaApiError).status).toBe(500);
+        expect(calls).toEqual([
+          "get:version-error",
+          "get-global:version-error",
+        ]);
+      }),
+  );
+
+  it.effect(
+    "preserves the service-scoped stop error when global stop also fails",
+    () =>
+      Effect.gen(function* () {
+        const calls: string[] = [];
+        const client = {
+          getComputeServiceVersion: (versionId: string) =>
+            Effect.sync(() => {
+              calls.push(`get:${versionId}`);
+              return {
+                id: versionId,
+                type: "compute-version" as const,
+                url: `https://api.test/${versionId}`,
+                foundryVersionId: `foundry-${versionId}`,
+                status: "running",
+                previewDomain: `${versionId}.example.test`,
+                createdAt: "2026-01-01T00:00:00Z",
+              };
+            }),
+          stopComputeServiceVersion: (versionId: string) =>
+            Effect.gen(function* () {
+              calls.push(`stop:${versionId}`);
+              return yield* Effect.fail(
+                new PrismaApiError({
+                  method: "POST",
+                  path: `/v1/compute-services/versions/${versionId}/stop`,
+                  status: 500,
+                  message: "Internal Server Error",
+                }),
+              );
+            }),
+          stopComputeVersion: (versionId: string) =>
+            Effect.gen(function* () {
+              calls.push(`stop-global:${versionId}`);
+              return yield* Effect.fail(
+                new PrismaApiError({
+                  method: "POST",
+                  path: `/v1/versions/${versionId}/stop`,
+                  status: 404,
+                  message: "not found",
+                }),
+              );
+            }),
+        } as unknown as PrismaManagementClient;
+
+        const error = yield* destroyComputeVersion(
+          client,
+          "version-stop-error",
+        ).pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(PrismaApiError);
+        expect((error as PrismaApiError).status).toBe(500);
+        expect(calls).toEqual([
+          "get:version-stop-error",
+          "stop:version-stop-error",
+          "stop-global:version-stop-error",
+        ]);
+      }),
+  );
+
   it.effect("stops a running version before deleting it", () =>
     Effect.gen(function* () {
       const { client, calls } = makeClient();

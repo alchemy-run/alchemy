@@ -89,10 +89,18 @@ const getComputeVersion = (client: PrismaManagementClient, versionId: string) =>
   client
     .getComputeServiceVersion(versionId)
     .pipe(
-      Effect.catch((error) =>
+      Effect.catch((primaryError) =>
         typeof client.getComputeVersion === "function"
-          ? client.getComputeVersion(versionId)
-          : Effect.fail(error),
+          ? client
+              .getComputeVersion(versionId)
+              .pipe(
+                Effect.catch((fallbackError) =>
+                  isNotFound(primaryError)
+                    ? Effect.fail(fallbackError)
+                    : Effect.fail(primaryError),
+                ),
+              )
+          : Effect.fail(primaryError),
       ),
     );
 
@@ -102,12 +110,17 @@ const stopComputeVersion = (
 ) =>
   client.stopComputeServiceVersion(versionId).pipe(
     Effect.catchIf(isConflict, () => Effect.void),
-    Effect.catch((error) =>
+    Effect.catch((primaryError) =>
       typeof client.stopComputeVersion === "function"
-        ? client
-            .stopComputeVersion(versionId)
-            .pipe(Effect.catchIf(isConflict, () => Effect.void))
-        : Effect.fail(error),
+        ? client.stopComputeVersion(versionId).pipe(
+            Effect.catchIf(isConflict, () => Effect.void),
+            Effect.catch((fallbackError) =>
+              isNotFound(primaryError)
+                ? Effect.fail(fallbackError)
+                : Effect.fail(primaryError),
+            ),
+          )
+        : Effect.fail(primaryError),
     ),
   );
 
