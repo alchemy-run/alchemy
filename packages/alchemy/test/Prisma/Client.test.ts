@@ -1,4 +1,5 @@
 import {
+  extractConnectionSecrets,
   PrismaClient,
   PrismaClientLive,
   type PrismaManagementClient,
@@ -559,6 +560,49 @@ const routeCoverageHarness = () => {
 };
 
 describe("PrismaClient", () => {
+  it("ignores null connection secret fields", () => {
+    const secrets = extractConnectionSecrets({
+      id: "connection-1",
+      type: "connection",
+      url: "https://api.prisma.test/v1/connections/connection-1",
+      name: "api",
+      createdAt: "2026-01-01T00:00:00Z",
+      kind: "postgres",
+      connectionString: null,
+      endpoints: {
+        direct: {
+          host: "direct.prisma.test",
+          port: 5432,
+          connectionString: null,
+        },
+        pooled: {
+          host: "pooled.prisma.test",
+          port: 5432,
+          connectionString: "postgres://pooled",
+        },
+      },
+      directConnection: {
+        host: "legacy.prisma.test",
+        pass: null,
+        user: "api",
+      },
+      database: {
+        id: "database-1",
+        url: "https://api.prisma.test/v1/databases/database-1",
+        name: "main",
+      },
+    } as unknown as Parameters<typeof extractConnectionSecrets>[0]);
+
+    expect(secrets.connectionString).toBeUndefined();
+    expect(secrets.directConnectionString).toBeUndefined();
+    expect(Redacted.value(secrets.pooledConnectionString!)).toBe(
+      "postgres://pooled",
+    );
+    expect(secrets.host).toBe("legacy.prisma.test");
+    expect(secrets.user).toBe("api");
+    expect(secrets.password).toBeUndefined();
+  });
+
   it.effect("paginates list endpoints and sends bearer auth", () => {
     const { layer, captured } = harness();
 

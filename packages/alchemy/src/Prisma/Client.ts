@@ -450,6 +450,11 @@ export const isNotFound = (error: unknown): boolean =>
 export const isConflict = (error: unknown): boolean =>
   error instanceof PrismaApiError && error.status === 409;
 
+const redactedString = (
+  value: unknown,
+): Redacted.Redacted<string> | undefined =>
+  typeof value === "string" ? Redacted.make(value) : undefined;
+
 export const extractConnectionSecrets = (
   connection:
     | DatabaseConnection
@@ -465,23 +470,17 @@ export const extractConnectionSecrets = (
   const legacy = connection.connectionString;
   const password = connection.pass ?? connection.directConnection?.pass;
   return {
-    connectionString: legacy !== undefined ? Redacted.make(legacy) : undefined,
-    directConnectionString:
-      direct !== undefined ? Redacted.make(direct) : undefined,
-    pooledConnectionString:
-      pooled !== undefined ? Redacted.make(pooled) : undefined,
-    accelerateConnectionString:
-      accelerate !== undefined ? Redacted.make(accelerate) : undefined,
+    connectionString: redactedString(legacy),
+    directConnectionString: redactedString(direct),
+    pooledConnectionString: redactedString(pooled),
+    accelerateConnectionString: redactedString(accelerate),
     host:
       connection.host ??
       connection.directConnection?.host ??
       withSecrets.endpoints?.direct?.host ??
       null,
     user: connection.user ?? connection.directConnection?.user ?? null,
-    password:
-      password !== undefined && password !== null
-        ? Redacted.make(password)
-        : undefined,
+    password: redactedString(password),
   };
 };
 
