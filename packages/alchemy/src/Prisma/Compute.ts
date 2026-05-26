@@ -1290,7 +1290,8 @@ const destroyComputeEnvironment = Effect.fn(function* (
   > = {},
 ) {
   const deleted: string[] = [];
-  for (const key of Object.keys(plainEnv(env))) {
+  for (const [key, value] of Object.entries(plainEnv(env))) {
+    if (value === null) continue;
     const variable = yield* findEnvironmentVariable(
       client,
       projectId,

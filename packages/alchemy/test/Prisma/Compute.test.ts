@@ -3150,6 +3150,7 @@ describe("Prisma Compute", () => {
           serviceName: "api",
           env: {
             TOKEN: Redacted.make("secret"),
+            ALREADY_ABSENT: null,
             SKIP_ME: undefined,
           },
         },
