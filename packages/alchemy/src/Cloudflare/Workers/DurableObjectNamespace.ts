@@ -104,9 +104,15 @@ export type DurableObjectServices =
 
 export interface DurableObjectNamespaceProps {
   /**
+   * Name of the exported `DurableObject` class.
+   *
    * @default name
    */
   className?: string;
+  /**
+   * Worker script that hosts the Durable Object class. Omit this when the
+   * namespace is hosted by the Worker that declares the binding.
+   */
   scriptName?: Input<string> | undefined;
   // environment?: string | undefined;
   // sqlite?: boolean | undefined;
@@ -639,7 +645,8 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * runtime), declare Durable Objects in the `bindings` prop of the
  * Worker resource. Pass a `DurableObjectNamespace` reference with a
  * `className` matching the exported `DurableObject` subclass in your
- * worker source file. Use `Cloudflare.InferEnv` to get a fully typed
+ * worker source file. If `className` is omitted, it defaults to the
+ * namespace name. Use `Cloudflare.InferEnv` to get a fully typed
  * `env` object that includes the namespace.
  *
  * @example Declaring a DO binding in the stack
@@ -652,9 +659,7 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
  *   bindings: {
- *     Counter: Cloudflare.DurableObjectNamespace<Counter>("Counter", {
- *       className: "Counter",
- *     }),
+ *     Counter: Cloudflare.DurableObjectNamespace<Counter>("Counter"),
  *   },
  * });
  * ```
@@ -679,6 +684,52 @@ export class DurableObjectNamespaceScope extends Context.Service<
  *     return ++this.counter;
  *   }
  * }
+ * ```
+ *
+ * @section Cross-Script Binding in an Async Worker
+ * Async Workers can also bind to a Durable Object hosted by another
+ * Worker script. The host Worker declares and exports the DO class. The
+ * consumer Worker declares a `DurableObjectNamespace` with `scriptName`
+ * set to the host Worker's script name.
+ *
+ * Cross-script async bindings are references only: the consumer uploads
+ * the binding metadata, but Alchemy does not drive class migrations for
+ * the foreign class. Deploy the host first so Cloudflare can verify that
+ * the target script exports the requested class.
+ *
+ * @example Host Worker owns the Durable Object class
+ * ```typescript
+ * const host = yield* Cloudflare.Worker("Host", {
+ *   main: "./src/host.ts",
+ *   bindings: {
+ *     Counter: Cloudflare.DurableObjectNamespace<Counter>("Counter"),
+ *   },
+ * });
+ * ```
+ *
+ * @example Consumer Worker binds to the host script
+ * ```typescript
+ * const consumer = yield* Cloudflare.Worker("Consumer", {
+ *   main: "./src/consumer.ts",
+ *   bindings: {
+ *     Counter: Cloudflare.DurableObjectNamespace<Counter>("Counter", {
+ *       scriptName: host.workerName,
+ *     }),
+ *   },
+ * });
+ * ```
+ *
+ * @example Binding to a different exported class name
+ * ```typescript
+ * const consumer = yield* Cloudflare.Worker("Consumer", {
+ *   main: "./src/consumer.ts",
+ *   bindings: {
+ *     Counter: Cloudflare.DurableObjectNamespace<Counter>("Counter", {
+ *       className: "CounterV2",
+ *       scriptName: host.workerName,
+ *     }),
+ *   },
+ * });
  * ```
  */
 export const DurableObjectNamespace: DurableObjectNamespaceClass =
