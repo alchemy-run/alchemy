@@ -6,6 +6,7 @@ import {
   PrismaApiError,
   type PrismaManagementClient,
 } from "./Client.ts";
+import { stopComputeServiceVersionWithFallback } from "./Internal/ComputeVersionActions.ts";
 import { observeComputeVersion } from "./Internal/ComputeVersionObserve.ts";
 import type { ComputeVersion } from "./Types.ts";
 export { isConflict } from "./Client.ts";
@@ -86,26 +87,6 @@ export interface DestroyComputeProjectResult {
 const DEFAULT_TIMEOUT_SECONDS = 120;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 const DELETE_CONFLICT_RETRY_ATTEMPTS = 3;
-
-const stopComputeVersion = (
-  client: PrismaManagementClient,
-  versionId: string,
-) =>
-  client.stopComputeServiceVersion(versionId).pipe(
-    Effect.catchIf(isConflict, () => Effect.void),
-    Effect.catch((primaryError) =>
-      typeof client.stopComputeVersion === "function"
-        ? client.stopComputeVersion(versionId).pipe(
-            Effect.catchIf(isConflict, () => Effect.void),
-            Effect.catch((fallbackError) =>
-              isNotFound(primaryError)
-                ? Effect.fail(fallbackError)
-                : Effect.fail(primaryError),
-            ),
-          )
-        : Effect.fail(primaryError),
-    ),
-  );
 
 const computeVersionDeleteFailed = (
   versionId: string,
@@ -215,7 +196,7 @@ export const destroyComputeVersion: (
     let statusAtDelete = previousStatus;
     let stopped = false;
     if (version.status === "running" || version.status === "provisioning") {
-      yield* stopComputeVersion(client, versionId).pipe(
+      yield* stopComputeServiceVersionWithFallback(client, versionId).pipe(
         Effect.catchIf(
           (e) => isNotFound(e),
           () => Effect.void,

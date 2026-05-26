@@ -23,3 +23,22 @@ export const startComputeServiceVersionWithFallback = (
         : Effect.fail(primaryError),
     ),
   );
+
+export const stopComputeServiceVersionWithFallback = (
+  client: PrismaManagementClient,
+  versionId: string,
+) =>
+  client.stopComputeServiceVersion(versionId).pipe(
+    Effect.catchIf(isConflict, () => Effect.void),
+    Effect.catch((primaryError) =>
+      isNotFound(primaryError)
+        ? client.stopComputeVersion(versionId).pipe(
+            Effect.catchIf(
+              (fallbackError) =>
+                isNotFound(fallbackError) || isConflict(fallbackError),
+              () => Effect.void,
+            ),
+          )
+        : Effect.fail(primaryError),
+    ),
+  );

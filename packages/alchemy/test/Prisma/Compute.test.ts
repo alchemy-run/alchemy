@@ -2885,8 +2885,23 @@ describe("Prisma Compute", () => {
             return { serviceEndpointDomain: "api.prisma.build" };
           }),
         stopComputeServiceVersion: (id: string) =>
-          Effect.sync(() => {
+          Effect.gen(function* () {
             calls.push(["stopComputeServiceVersion", id]);
+            if (id === "version-1") {
+              return yield* Effect.fail(
+                new PrismaApiError({
+                  method: "POST",
+                  path: `/v1/compute-services/versions/${id}/stop`,
+                  status: 404,
+                  message: "not found",
+                }),
+              );
+            }
+            versions.set(id, "stopped");
+          }),
+        stopComputeVersion: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["stopComputeVersion", id]);
             versions.set(id, "stopped");
           }),
         deleteComputeServiceVersion: (id: string) =>
@@ -3037,6 +3052,7 @@ describe("Prisma Compute", () => {
             { computeServiceId: "service-1", versionId: "version-2" },
           ],
           ["stopComputeServiceVersion", "version-1"],
+          ["stopComputeVersion", "version-1"],
           ["getComputeServiceVersion", "version-1"],
           ["getComputeServiceVersion", "version-1"],
           ["deleteComputeServiceVersion", "version-1"],

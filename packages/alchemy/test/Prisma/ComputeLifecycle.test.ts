@@ -242,7 +242,7 @@ describe("Prisma Compute lifecycle helpers", () => {
   );
 
   it.effect(
-    "preserves the service-scoped stop error when global stop also fails",
+    "preserves the service-scoped stop error without route fallback",
     () =>
       Effect.gen(function* () {
         const calls: string[] = [];
@@ -272,18 +272,6 @@ describe("Prisma Compute lifecycle helpers", () => {
                 }),
               );
             }),
-          stopComputeVersion: (versionId: string) =>
-            Effect.gen(function* () {
-              calls.push(`stop-global:${versionId}`);
-              return yield* Effect.fail(
-                new PrismaApiError({
-                  method: "POST",
-                  path: `/v1/versions/${versionId}/stop`,
-                  status: 404,
-                  message: "not found",
-                }),
-              );
-            }),
         } as unknown as PrismaManagementClient;
 
         const error = yield* destroyComputeVersion(
@@ -296,7 +284,6 @@ describe("Prisma Compute lifecycle helpers", () => {
         expect(calls).toEqual([
           "get:version-stop-error",
           "stop:version-stop-error",
-          "stop-global:version-stop-error",
         ]);
       }),
   );

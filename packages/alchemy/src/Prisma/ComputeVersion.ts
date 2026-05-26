@@ -16,8 +16,8 @@ import {
   isConflict,
   waitForComputeVersionStatus,
 } from "./ComputeLifecycle.ts";
+import { startComputeServiceVersionWithFallback } from "./Internal/ComputeVersionActions.ts";
 import { observeComputeVersion } from "./Internal/ComputeVersionObserve.ts";
-import { startComputeServiceVersionWithFallback } from "./Internal/ComputeVersionStart.ts";
 import { tailComputeVersionLogs } from "./PrismaLogs.ts";
 import type { ComputeService } from "./ComputeService.ts";
 import type { Providers } from "./Providers.ts";

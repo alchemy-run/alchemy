@@ -45,8 +45,11 @@ import {
   toDeploymentUrl,
   waitForComputeVersionStatus,
 } from "./ComputeLifecycle.ts";
+import {
+  startComputeServiceVersionWithFallback,
+  stopComputeServiceVersionWithFallback,
+} from "./Internal/ComputeVersionActions.ts";
 import { observeComputeVersion } from "./Internal/ComputeVersionObserve.ts";
-import { startComputeServiceVersionWithFallback } from "./Internal/ComputeVersionStart.ts";
 import { tailComputeVersionLogs } from "./PrismaLogs.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
@@ -1758,11 +1761,9 @@ export const ComputeProvider = () =>
               serviceEndpointDomain = promoted.serviceEndpointDomain;
             }
             if (previousVersionId && previousVersionId !== version.id) {
-              yield* client.stopComputeServiceVersion(previousVersionId).pipe(
-                Effect.catchIf(
-                  (e) => isNotFound(e) || isConflict(e),
-                  () => Effect.void,
-                ),
+              yield* stopComputeServiceVersionWithFallback(
+                client,
+                previousVersionId,
               );
               yield* waitForComputeVersionStatus(
                 client,

@@ -170,8 +170,8 @@ const internalPrismaDeepImports = [
   "ComputeApp",
   "ComputeVersionObserve",
   "EnvironmentVariableValidation",
+  "Internal/ComputeVersionActions",
   "Internal/ComputeVersionObserve",
-  "Internal/ComputeVersionStart",
   "PrismaDevDatabase",
   "Refs",
 ] as const;
