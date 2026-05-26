@@ -3406,6 +3406,11 @@ describe("Prisma resource providers", () => {
   it.effect("skips direct delete for a default Prisma database", () => {
     const calls: Call[] = [];
     const client = {
+      getDatabase: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getDatabase", id]);
+          return { id, isDefault: true };
+        }),
       deleteDatabase: (id: string) =>
         Effect.sync(() => {
           calls.push(["deleteDatabase", id]);
@@ -3435,6 +3440,7 @@ describe("Prisma resource providers", () => {
       } as never);
 
       expect(calls).toEqual([
+        ["getDatabase", "database-1"],
         [
           "note",
           "Skipping direct delete for default Prisma database; Prisma removes it when the owning project is deleted.",
@@ -3492,6 +3498,11 @@ describe("Prisma resource providers", () => {
   it.effect("skips default Prisma database delete without a session", () => {
     const calls: Call[] = [];
     const client = {
+      getDatabase: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getDatabase", id]);
+          return { id, isDefault: true };
+        }),
       deleteDatabase: (id: string) =>
         Effect.sync(() => {
           calls.push(["deleteDatabase", id]);
@@ -3513,13 +3524,54 @@ describe("Prisma resource providers", () => {
         bindings: [],
       } as never);
 
-      expect(calls).toEqual([]);
+      expect(calls).toEqual([["getDatabase", "database-1"]]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
+  it.effect("deletes a database when stale state says it is default", () => {
+    const calls: Call[] = [];
+    const client = {
+      getDatabase: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getDatabase", id]);
+          return { id, isDefault: false };
+        }),
+      deleteDatabase: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteDatabase", id]);
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const databaseProvider = yield* PrismaDatabase.Provider;
+      yield* databaseProvider.delete({
+        id: "Postgres",
+        instanceId: "00000000000000000000000000000000",
+        olds: {} as never,
+        output: {
+          databaseId: "database-1",
+          projectId: "project-1",
+          isDefault: true,
+        },
+        session: undefined,
+        bindings: [],
+      } as never);
+
+      expect(calls).toEqual([
+        ["getDatabase", "database-1"],
+        ["deleteDatabase", "database-1"],
+      ]);
     }).pipe(Effect.provide(providerLayer(client)));
   });
 
   it.effect("skips direct delete for a default Prisma branch", () => {
     const calls: Call[] = [];
     const client = {
+      getBranch: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getBranch", id]);
+          return { id, isDefault: true };
+        }),
       deleteBranch: (id: string) =>
         Effect.sync(() => {
           calls.push(["deleteBranch", id]);
@@ -3549,6 +3601,7 @@ describe("Prisma resource providers", () => {
       } as never);
 
       expect(calls).toEqual([
+        ["getBranch", "branch-1"],
         [
           "note",
           "Skipping direct delete for default Prisma branch; Prisma removes it when the owning project is deleted.",
@@ -3606,6 +3659,11 @@ describe("Prisma resource providers", () => {
   it.effect("skips default Prisma branch delete without a session", () => {
     const calls: Call[] = [];
     const client = {
+      getBranch: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getBranch", id]);
+          return { id, isDefault: true };
+        }),
       deleteBranch: (id: string) =>
         Effect.sync(() => {
           calls.push(["deleteBranch", id]);
@@ -3627,7 +3685,43 @@ describe("Prisma resource providers", () => {
         bindings: [],
       } as never);
 
-      expect(calls).toEqual([]);
+      expect(calls).toEqual([["getBranch", "branch-1"]]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
+  it.effect("deletes a branch when stale state says it is default", () => {
+    const calls: Call[] = [];
+    const client = {
+      getBranch: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getBranch", id]);
+          return { id, isDefault: false };
+        }),
+      deleteBranch: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteBranch", id]);
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const branchProvider = yield* PrismaBranch.Provider;
+      yield* branchProvider.delete({
+        id: "MainBranch",
+        instanceId: "00000000000000000000000000000000",
+        olds: {} as never,
+        output: {
+          branchId: "branch-1",
+          projectId: "project-1",
+          isDefault: true,
+        },
+        session: undefined,
+        bindings: [],
+      } as never);
+
+      expect(calls).toEqual([
+        ["getBranch", "branch-1"],
+        ["deleteBranch", "branch-1"],
+      ]);
     }).pipe(Effect.provide(providerLayer(client)));
   });
 

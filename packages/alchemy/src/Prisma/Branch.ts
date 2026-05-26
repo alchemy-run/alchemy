@@ -194,13 +194,9 @@ export const BranchProvider = () =>
         }),
         delete: Effect.fn(function* ({ output, session }) {
           if (isPrismaDevId(output.branchId)) return;
-          const branch = output.isDefault
-            ? output
-            : yield* client
-                .getBranch(output.branchId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                );
+          const branch = yield* client
+            .getBranch(output.branchId)
+            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
           if (!branch) return;
           if (branch.isDefault) {
             // Prisma treats the default branch as project-owned state, not an
