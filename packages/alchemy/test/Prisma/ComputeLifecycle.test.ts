@@ -78,6 +78,18 @@ describe("Prisma Compute lifecycle helpers", () => {
               }),
             );
           }),
+        getComputeVersion: (versionId: string) =>
+          Effect.gen(function* () {
+            calls.push(`get-global:${versionId}`);
+            return yield* Effect.fail(
+              new PrismaApiError({
+                method: "GET",
+                path: `/v1/versions/${versionId}`,
+                status: 404,
+                message: "not found",
+              }),
+            );
+          }),
       } as unknown as PrismaManagementClient;
 
       const result = yield* destroyComputeVersion(client, "missing-version");
@@ -88,8 +100,99 @@ describe("Prisma Compute lifecycle helpers", () => {
         stopped: false,
         deleted: false,
       });
-      expect(calls).toEqual(["get:missing-version"]);
+      expect(calls).toEqual([
+        "get:missing-version",
+        "get-global:missing-version",
+      ]);
     }),
+  );
+
+  it.effect(
+    "falls back to global version routes when service-scoped routes miss",
+    () =>
+      Effect.gen(function* () {
+        const calls: string[] = [];
+        let status = "running";
+        const client = {
+          getComputeServiceVersion: (versionId: string) =>
+            Effect.gen(function* () {
+              calls.push(`get:${versionId}`);
+              return yield* Effect.fail(
+                new PrismaApiError({
+                  method: "GET",
+                  path: `/v1/compute-services/versions/${versionId}`,
+                  status: 404,
+                  message: "not found",
+                }),
+              );
+            }),
+          getComputeVersion: (versionId: string) =>
+            Effect.sync(() => {
+              calls.push(`get-global:${versionId}`);
+              return {
+                id: versionId,
+                type: "compute-version" as const,
+                url: `https://api.test/${versionId}`,
+                foundryVersionId: `foundry-${versionId}`,
+                status,
+                previewDomain: `${versionId}.example.test`,
+                createdAt: "2026-01-01T00:00:00Z",
+              };
+            }),
+          stopComputeServiceVersion: (versionId: string) =>
+            Effect.gen(function* () {
+              calls.push(`stop:${versionId}`);
+              return yield* Effect.fail(
+                new PrismaApiError({
+                  method: "POST",
+                  path: `/v1/compute-services/versions/${versionId}/stop`,
+                  status: 404,
+                  message: "not found",
+                }),
+              );
+            }),
+          stopComputeVersion: (versionId: string) =>
+            Effect.sync(() => {
+              calls.push(`stop-global:${versionId}`);
+              status = "stopped";
+            }),
+          deleteComputeServiceVersion: (versionId: string) =>
+            Effect.gen(function* () {
+              calls.push(`delete:${versionId}`);
+              return yield* Effect.fail(
+                new PrismaApiError({
+                  method: "DELETE",
+                  path: `/v1/compute-services/versions/${versionId}`,
+                  status: 404,
+                  message: "not found",
+                }),
+              );
+            }),
+          deleteComputeVersion: (versionId: string) =>
+            Effect.sync(() => {
+              calls.push(`delete-global:${versionId}`);
+            }),
+        } as unknown as PrismaManagementClient;
+
+        const result = yield* destroyComputeVersion(client, "version-global");
+
+        expect(result).toEqual({
+          versionId: "version-global",
+          previousStatus: "running",
+          stopped: true,
+          deleted: true,
+        });
+        expect(calls).toEqual([
+          "get:version-global",
+          "get-global:version-global",
+          "stop:version-global",
+          "stop-global:version-global",
+          "get:version-global",
+          "get-global:version-global",
+          "delete:version-global",
+          "delete-global:version-global",
+        ]);
+      }),
   );
 
   it.effect("stops a running version before deleting it", () =>

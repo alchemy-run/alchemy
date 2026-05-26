@@ -85,6 +85,32 @@ export interface DestroyComputeProjectResult {
 const DEFAULT_TIMEOUT_SECONDS = 120;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 
+const getComputeVersion = (client: PrismaManagementClient, versionId: string) =>
+  client
+    .getComputeServiceVersion(versionId)
+    .pipe(
+      Effect.catch((error) =>
+        typeof client.getComputeVersion === "function"
+          ? client.getComputeVersion(versionId)
+          : Effect.fail(error),
+      ),
+    );
+
+const stopComputeVersion = (
+  client: PrismaManagementClient,
+  versionId: string,
+) =>
+  client.stopComputeServiceVersion(versionId).pipe(
+    Effect.catchIf(isConflict, () => Effect.void),
+    Effect.catch((error) =>
+      typeof client.stopComputeVersion === "function"
+        ? client
+            .stopComputeVersion(versionId)
+            .pipe(Effect.catchIf(isConflict, () => Effect.void))
+        : Effect.fail(error),
+    ),
+  );
+
 const computeVersionDeleteFailed = (
   versionId: string,
   statusAtDelete: string | undefined,
@@ -137,7 +163,7 @@ export const waitForComputeVersionStatus = Effect.fn(function* (
   const startedAt = yield* Effect.sync(() => Date.now());
 
   while (true) {
-    const version = yield* client.getComputeServiceVersion(versionId);
+    const version = yield* getComputeVersion(client, versionId);
     if (version.status === targetStatus) {
       return version as ComputeVersion;
     }
@@ -177,9 +203,9 @@ export const destroyComputeVersion: (
     versionId: string,
     options: WaitForComputeVersionStatusOptions = {},
   ) {
-    const version = yield* client
-      .getComputeServiceVersion(versionId)
-      .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+    const version = yield* getComputeVersion(client, versionId).pipe(
+      Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+    );
     if (!version) {
       return {
         versionId,
@@ -193,9 +219,9 @@ export const destroyComputeVersion: (
     let statusAtDelete = previousStatus;
     let stopped = false;
     if (version.status === "running" || version.status === "provisioning") {
-      yield* client.stopComputeServiceVersion(versionId).pipe(
+      yield* stopComputeVersion(client, versionId).pipe(
         Effect.catchIf(
-          (e) => isNotFound(e) || isConflict(e),
+          (e) => isNotFound(e),
           () => Effect.void,
         ),
       );
@@ -210,7 +236,6 @@ export const destroyComputeVersion: (
     }
 
     yield* client.deleteComputeServiceVersion(versionId).pipe(
-      Effect.catchIf(isNotFound, () => Effect.void),
       Effect.catch((primaryError) =>
         client.deleteComputeVersion(versionId).pipe(
           Effect.catchIf(isNotFound, () => Effect.void),
