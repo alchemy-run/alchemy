@@ -725,6 +725,32 @@ describe("Prisma resource providers", () => {
         expect(
           yield* databaseProvider.diff!(
             diffInput(
+              {
+                project: "project-1",
+                name: "main",
+                region: "us-east-1",
+                source: {
+                  type: "backup",
+                  databaseId: "database-source",
+                  backupId: "backup-1",
+                },
+              },
+              {
+                project: "project-1",
+                name: "main",
+                region: "us-east-1",
+                source: {
+                  backupId: "backup-1",
+                  databaseId: "database-source",
+                  type: "backup",
+                },
+              },
+            ),
+          ),
+        ).toBeUndefined();
+        expect(
+          yield* databaseProvider.diff!(
+            diffInput(
               { project: "project-1", name: "main", region: "us-east-1" },
               {
                 project: Output.asOutput("project-1"),

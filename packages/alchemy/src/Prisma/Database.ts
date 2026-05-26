@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
+import { deepEqual, isResolved } from "../Diff.ts";
 import * as Redacted from "effect/Redacted";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -215,9 +215,6 @@ export interface Database extends Resource<
  */
 export const Database = Resource<Database>("Prisma.Database");
 
-const sameJson = (a: unknown, b: unknown) =>
-  JSON.stringify(a) === JSON.stringify(b);
-
 const findDatabase = (
   client: PrismaManagementClient,
   projectId: string,
@@ -345,7 +342,7 @@ export const DatabaseProvider = () =>
               (olds.region ?? output?.region ?? "us-east-1") ||
             (resolvedDiffProps.isDefault ?? false) !==
               (olds.isDefault ?? false) ||
-            !sameJson(resolvedDiffProps.source, olds.source)
+            !deepEqual(resolvedDiffProps.source, olds.source)
           ) {
             return { action: "replace" } as const;
           }
