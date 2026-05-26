@@ -1172,6 +1172,7 @@ describe("Prisma Compute", () => {
           skipCodeUpload: true,
           start: false,
           skipPromote: true,
+          envClass: "preview",
         },
         olds: undefined,
         output: {
@@ -1206,11 +1207,12 @@ describe("Prisma Compute", () => {
 
       expect(output.computeVersionId).toBe("version-1");
       expect(output.environmentKeys).toEqual(["DATABASE_URL", "SHARED_FLAG"]);
+      expect(output.environmentClass).toBe("preview");
       expect(calls).toContainEqual([
         "createEnvironmentVariable",
         {
           projectId: "project-1",
-          class: "production",
+          class: "preview",
           key: "DATABASE_URL",
           value: "postgres://bound",
         },
@@ -1219,7 +1221,7 @@ describe("Prisma Compute", () => {
         "createEnvironmentVariable",
         {
           projectId: "project-1",
-          class: "production",
+          class: "preview",
           key: "SHARED_FLAG",
           value: "from-binding",
         },
@@ -3261,6 +3263,7 @@ describe("Prisma Compute", () => {
           previousVersionId: undefined,
           previousVersionAction: undefined,
           environmentKeys: ["TOKEN"],
+          environmentClass: "preview",
           artifactHash: "hash-1",
           local: false,
         },
@@ -3273,7 +3276,7 @@ describe("Prisma Compute", () => {
           "listEnvironmentVariables",
           {
             projectId: "project-1",
-            class: "production",
+            class: "preview",
             key: "TOKEN",
             limit: 2,
           },

@@ -364,6 +364,10 @@ export interface Compute extends Resource<
      */
     environmentKeys?: string[];
     /**
+     * Prisma environment class used for the managed environment variable keys.
+     */
+    environmentClass?: "production" | "preview";
+    /**
      * Hash of the uploaded artifact or reused artifact inputs.
      */
     artifactHash: string | undefined;
@@ -1479,6 +1483,7 @@ export const ComputeProvider = () =>
             previousVersionId: output?.previousVersionId,
             previousVersionAction: output?.previousVersionAction,
             environmentKeys: output?.environmentKeys,
+            environmentClass: output?.environmentClass ?? olds.envClass,
             artifactHash: output?.artifactHash,
             local: false,
           };
@@ -1509,21 +1514,24 @@ export const ComputeProvider = () =>
             ),
           );
           const previousVersionId = service.latestVersionId ?? null;
+          const previousEnvironmentClass =
+            olds?.envClass ?? output?.environmentClass ?? "production";
+          const environmentClass = effectiveNews.envClass ?? "production";
           yield* cleanupRemovedComputeEnvironment(
             client,
             projectId,
-            olds?.envClass ?? "production",
+            previousEnvironmentClass,
             {
               ...envKeysRecord(output?.environmentKeys),
               ...olds?.env,
             },
-            effectiveNews.envClass ?? "production",
+            environmentClass,
             effectiveNews.env,
           );
           yield* syncComputeEnvironment(
             client,
             projectId,
-            effectiveNews.envClass ?? "production",
+            environmentClass,
             effectiveNews.env,
           );
 
@@ -1684,6 +1692,7 @@ export const ComputeProvider = () =>
             previousVersionId,
             previousVersionAction,
             environmentKeys: managedEnvKeys(effectiveNews.env),
+            environmentClass,
             artifactHash: artifact.hash,
             local: false,
           };
@@ -1700,7 +1709,7 @@ export const ComputeProvider = () =>
           yield* destroyComputeEnvironment(
             client,
             output.projectId,
-            olds?.envClass ?? "production",
+            olds?.envClass ?? output.environmentClass ?? "production",
             {
               ...envKeysRecord(output.environmentKeys),
               ...olds?.env,
@@ -1759,6 +1768,7 @@ export const ComputeDevProvider = () =>
             previousVersionId: undefined,
             previousVersionAction: undefined,
             environmentKeys: managedEnvKeys(effectiveNews.env),
+            environmentClass: effectiveNews.envClass ?? "production",
             artifactHash: undefined,
             local: true,
           };
