@@ -170,9 +170,12 @@ const internalPrismaDeepImports = [
   "ComputeApp",
   "ComputeVersionObserve",
   "EnvironmentVariableValidation",
+  "Internal/ComputeVersionObserve",
   "PrismaDevDatabase",
   "Refs",
 ] as const;
+
+const internalPrismaRootFiles = ["PrismaDevDatabase", "Refs"] as const;
 
 const importPackagePath = (specifier: string) =>
   import(/* @vite-ignore */ specifier);
@@ -245,12 +248,7 @@ describe("Prisma public surface", () => {
         [
           "index.ts",
           ...publicPrismaDeepImports.map((moduleName) => `${moduleName}.ts`),
-          ...internalPrismaDeepImports
-            .filter(
-              (moduleName) =>
-                moduleName === "PrismaDevDatabase" || moduleName === "Refs",
-            )
-            .map((moduleName) => `${moduleName}.ts`),
+          ...internalPrismaRootFiles.map((moduleName) => `${moduleName}.ts`),
         ].sort(),
       );
     }).pipe(Effect.provide(NodeServices.layer)),
@@ -271,7 +269,10 @@ describe("Prisma public surface", () => {
         );
 
         for (const moduleName of internalPrismaDeepImports) {
-          expect(packageJson.exports[`./Prisma/${moduleName}`]).toBeNull();
+          const exportPath = moduleName.startsWith("Internal/")
+            ? "./Prisma/Internal/*"
+            : `./Prisma/${moduleName}`;
+          expect(packageJson.exports[exportPath]).toBeNull();
         }
       }).pipe(Effect.provide(NodeServices.layer)),
   );

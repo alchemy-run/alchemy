@@ -16,6 +16,7 @@ import {
   isConflict,
   waitForComputeVersionStatus,
 } from "./ComputeLifecycle.ts";
+import { observeComputeVersion } from "./Internal/ComputeVersionObserve.ts";
 import { tailComputeVersionLogs } from "./PrismaLogs.ts";
 import type { ComputeService } from "./ComputeService.ts";
 import type { Providers } from "./Providers.ts";
@@ -166,26 +167,6 @@ const findVersion = (
             ),
           ),
         );
-
-const getComputeVersion = (client: PrismaManagementClient, versionId: string) =>
-  (typeof client.getComputeServiceVersion === "function"
-    ? client.getComputeServiceVersion(versionId)
-    : client.getComputeVersion(versionId)
-  ).pipe(
-    Effect.catch((primaryError) =>
-      typeof client.getComputeVersion === "function"
-        ? client
-            .getComputeVersion(versionId)
-            .pipe(
-              Effect.catch((fallbackError) =>
-                isNotFound(primaryError)
-                  ? Effect.fail(fallbackError)
-                  : Effect.fail(primaryError),
-              ),
-            )
-        : Effect.fail(primaryError),
-    ),
-  );
 
 const attrsFrom = (
   version: ObservedComputeVersion,
@@ -350,15 +331,18 @@ export const ComputeVersionProvider = () =>
             output?.foundryVersionId,
           );
           const version = output?.computeVersionId
-            ? yield* getComputeVersion(client, output.computeVersionId).pipe(
+            ? yield* observeComputeVersion(
+                client,
+                output.computeVersionId,
+              ).pipe(
                 Effect.catchIf(isNotFound, () =>
                   listed
-                    ? getComputeVersion(client, listed.id)
+                    ? observeComputeVersion(client, listed.id)
                     : Effect.succeed(undefined),
                 ),
               )
             : listed
-              ? yield* getComputeVersion(client, listed.id)
+              ? yield* observeComputeVersion(client, listed.id)
               : undefined;
           return version
             ? attrsFrom(version, computeServiceId, output)
@@ -395,7 +379,7 @@ export const ComputeVersionProvider = () =>
             ? undefined
             : output?.computeVersionId;
           let version: ObservedComputeVersion | undefined = computeVersionId
-            ? yield* getComputeVersion(client, computeVersionId).pipe(
+            ? yield* observeComputeVersion(client, computeVersionId).pipe(
                 Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
               )
             : undefined;
@@ -434,7 +418,7 @@ export const ComputeVersionProvider = () =>
                 ),
               );
             }
-            version = yield* getComputeVersion(client, created.id).pipe(
+            version = yield* observeComputeVersion(client, created.id).pipe(
               Effect.catchIf(isNotFound, () =>
                 Effect.succeed({
                   id: created.id,

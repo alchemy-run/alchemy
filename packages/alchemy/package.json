@@ -199,6 +199,7 @@
     "./Prisma/ComputeApp": null,
     "./Prisma/ComputeVersionObserve": null,
     "./Prisma/EnvironmentVariableValidation": null,
+    "./Prisma/Internal/*": null,
     "./Prisma/PrismaDevDatabase": null,
     "./Prisma/Refs": null,
     "./Prisma/*": {
