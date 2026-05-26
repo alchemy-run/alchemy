@@ -41,13 +41,15 @@ export type GetBindingType<T> =
                         ? Artifacts
                         : T extends Cloudflare.Images
                           ? ImagesBinding
-                          : T extends Cloudflare.Hyperdrive
-                            ? Hyperdrive
-                            : T extends Cloudflare.DurableObjectNamespaceLike
-                              ? DurableObjectNamespace<
-                                  Exclude<T["Shape"], undefined>
-                                >
-                              : T;
+                          : T extends Cloudflare.BrowserRendering
+                            ? Fetcher
+                            : T extends Cloudflare.Hyperdrive
+                              ? Hyperdrive
+                              : T extends Cloudflare.DurableObjectNamespaceLike
+                                ? DurableObjectNamespace<
+                                    Exclude<T["Shape"], undefined>
+                                  >
+                                : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

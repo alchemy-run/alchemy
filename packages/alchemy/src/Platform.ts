@@ -7,6 +7,7 @@ import type { Scope } from "effect/Scope";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { SingleShotGen } from "effect/Utils";
 import type { PolicyLike } from "./Binding.ts";
+import type { Dependencies } from "./Dependencies.ts";
 import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
@@ -65,16 +66,16 @@ export interface Platform<
   Type: Resource["Type"];
   Provider: Provider<Resource>;
 
-  <Self, Shape>(): {
+  <Self, Shape, Deps = never>(): {
     <PropsReq = never>(
       id: string,
       props:
         | InputProps<Resource["Props"]>
         | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
     ): Effect.Effect<
-      Resource & Rpc<Self>,
+      Resource & Rpc<Self> & Dependencies<Deps>,
       never,
-      Self | Resource["Providers"] | PropsReq
+      Resource["Providers"] | PropsReq
     > & {
       make<InitReq = never>(
         impl: Effect.Effect<Shape, never, InitReq>,

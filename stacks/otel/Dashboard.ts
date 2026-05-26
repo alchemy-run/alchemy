@@ -71,9 +71,13 @@ export const CliOverviewDashboard = Axiom.Dashboard(
     // exist as a column. `column_ifexists` lets the queries parse
     // against an empty dataset (otherwise APL rejects them with
     // `invalid field: "service.version"`).
+    // `bin_size` drives every TimeSeries chart's bucket width so a
+    // single filter flips the whole dashboard between hourly / daily /
+    // weekly aggregation. Queries reference it as
+    // `bin(_time, totimespan(bin_size))`.
     const declarations: Input<string> = isProd
-      ? `declare query_parameters (alchemy_version:string = "");`
-      : Output.interpolate`declare query_parameters (dataset_filter:string = "${t}", alchemy_version:string = "");`;
+      ? `declare query_parameters (alchemy_version:string = "", bin_size:string = "1h");`
+      : Output.interpolate`declare query_parameters (dataset_filter:string = "${t}", alchemy_version:string = "", bin_size:string = "1h");`;
     const datasetExpr: Input<string> = isProd
       ? Output.interpolate`['${t}']`
       : "table(dataset_filter)";
@@ -108,6 +112,19 @@ export const CliOverviewDashboard = Axiom.Dashboard(
                   ],
                 },
               ]),
+          {
+            id: "bin_size",
+            type: "select",
+            name: "aggregation period",
+            active: true,
+            selectType: "list",
+            options: [
+              { id: "1h", key: "1 hour", value: "1h", default: true },
+              { id: "6h", key: "6 hours", value: "6h" },
+              { id: "1d", key: "1 day", value: "1d" },
+              { id: "7d", key: "7 days", value: "7d" },
+            ],
+          },
           {
             id: "alchemy_version",
             type: "select",
@@ -255,7 +272,7 @@ export const CliOverviewDashboard = Axiom.Dashboard(
               ${datasetExpr}${versionFilterWhere}
               | where name == "state_store.init"
               | extend store=tostring(['attributes.custom']['alchemy.state_store.id'])
-              | summarize count=count() by store, bin_auto(_time)
+              | summarize count=count() by store, bin(_time, totimespan(bin_size))
               | order by _time asc
             `,
         },
@@ -272,14 +289,14 @@ export const CliOverviewDashboard = Axiom.Dashboard(
               ${datasetExpr}${versionFilterWhere}
               | extend project=tostring(['resource.custom']['alchemy.git.origin_hash'])
               | where project != ""
-              | summarize projects=dcount(project) by bin(_time, 1d)
+              | summarize projects=dcount(project) by bin(_time, totimespan(bin_size))
               | order by _time asc
             `,
         },
       },
       {
         id: "active-users-over-time-hourly",
-        name: "Active users per hour (non-CI)",
+        name: "Active users (non-CI)",
         type: "TimeSeries",
         query: {
           apl: Output.interpolate`
@@ -288,14 +305,14 @@ export const CliOverviewDashboard = Axiom.Dashboard(
               | extend uid=tostring(['resource.custom']['alchemy.user.id']),
                        ci=tostring(['resource.custom']['alchemy.ci'])
               | where ci != "true" and uid != ""
-              | summarize users=dcount(uid) by bin(_time, 1h)
+              | summarize users=dcount(uid) by bin(_time, totimespan(bin_size))
               | order by _time asc
             `,
         },
       },
       {
         id: "active-users-over-time-daily",
-        name: "Active users per day (CI vs local)",
+        name: "Active users (CI vs local)",
         type: "TimeSeries",
         query: {
           apl: Output.interpolate`
@@ -305,7 +322,7 @@ export const CliOverviewDashboard = Axiom.Dashboard(
                        ci=tostring(['resource.custom']['alchemy.ci'])
               | where uid != ""
               | extend bucket=iff(ci == "true", "ci", "local")
-              | summarize users=dcount(uid) by bucket, bin(_time, 1d)
+              | summarize users=dcount(uid) by bucket, bin(_time, totimespan(bin_size))
               | order by _time asc
             `,
         },
@@ -322,7 +339,7 @@ export const CliOverviewDashboard = Axiom.Dashboard(
                        ci=tostring(['resource.custom']['alchemy.ci'])
               | where project != ""
               | extend bucket=iff(ci == "true", "ci", "local")
-              | summarize projects=dcount(project) by bucket, bin(_time, 1d)
+              | summarize projects=dcount(project) by bucket, bin(_time, totimespan(bin_size))
               | order by _time asc
             `,
         },
@@ -340,7 +357,7 @@ export const CliOverviewDashboard = Axiom.Dashboard(
               ${datasetExpr}${versionFilterWhere}
               | where name == "state_store.deploy"
               | extend status=iff(tobool(['error']), "error", "success")
-              | summarize count=count() by status, bin_auto(_time)
+              | summarize count=count() by status, bin(_time, totimespan(bin_size))
               | order by _time asc
             `,
         },
@@ -464,7 +481,7 @@ export const CliOverviewDashboard = Axiom.Dashboard(
               | where ['resource.custom']['alchemy.state_store.script_name'] != ""
               | extend op=tostring(['attributes.custom']['alchemy.state_store.op'])
               | where op != ""
-              | summarize count=count() by op, bin_auto(_time)
+              | summarize count=count() by op, bin(_time, totimespan(bin_size))
               | order by _time asc
             `,
         },
@@ -517,7 +534,7 @@ export const CliOverviewDashboard = Axiom.Dashboard(
               | where name == "state_store.init"
               | extend hash=tostring(['attributes.custom']['alchemy.cloudflare.account_hash'])
               | where hash != ""
-              | summarize stores=dcount(hash) by bin(_time, 1d)
+              | summarize stores=dcount(hash) by bin(_time, totimespan(bin_size))
               | order by _time asc
             `,
         },
