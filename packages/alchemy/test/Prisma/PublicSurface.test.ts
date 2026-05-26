@@ -191,6 +191,11 @@ describe("Prisma public surface", () => {
     await expect(import(specifier)).rejects.toThrow();
   });
 
+  it("does not expose internal Compute version observation helpers", async () => {
+    const specifier = "alchemy/Prisma/ComputeVersionObserve";
+    await expect(import(specifier)).rejects.toThrow();
+  });
+
   it.effect("pins Prisma package export map entries", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

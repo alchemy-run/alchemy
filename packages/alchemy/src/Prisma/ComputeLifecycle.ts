@@ -6,7 +6,6 @@ import {
   PrismaApiError,
   type PrismaManagementClient,
 } from "./Client.ts";
-import { observeComputeVersion } from "./ComputeVersionObserve.ts";
 import type { ComputeVersion } from "./Types.ts";
 export { isConflict } from "./Client.ts";
 
@@ -87,6 +86,26 @@ const DEFAULT_TIMEOUT_SECONDS = 120;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 const DELETE_CONFLICT_RETRY_ATTEMPTS = 3;
 
+const getComputeVersion = (client: PrismaManagementClient, versionId: string) =>
+  (typeof client.getComputeServiceVersion === "function"
+    ? client.getComputeServiceVersion(versionId)
+    : client.getComputeVersion(versionId)
+  ).pipe(
+    Effect.catch((primaryError) =>
+      typeof client.getComputeVersion === "function"
+        ? client
+            .getComputeVersion(versionId)
+            .pipe(
+              Effect.catch((fallbackError) =>
+                isNotFound(primaryError)
+                  ? Effect.fail(fallbackError)
+                  : Effect.fail(primaryError),
+              ),
+            )
+        : Effect.fail(primaryError),
+    ),
+  );
+
 const stopComputeVersion = (
   client: PrismaManagementClient,
   versionId: string,
@@ -159,7 +178,7 @@ export const waitForComputeVersionStatus = Effect.fn(function* (
   const startedAt = yield* Effect.sync(() => Date.now());
 
   while (true) {
-    const version = yield* observeComputeVersion(client, versionId);
+    const version = yield* getComputeVersion(client, versionId);
     if (version.status === targetStatus) {
       return version as ComputeVersion;
     }
@@ -199,7 +218,7 @@ export const destroyComputeVersion: (
     versionId: string,
     options: WaitForComputeVersionStatusOptions = {},
   ) {
-    const version = yield* observeComputeVersion(client, versionId).pipe(
+    const version = yield* getComputeVersion(client, versionId).pipe(
       Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
     );
     if (!version) {
