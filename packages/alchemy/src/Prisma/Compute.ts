@@ -1742,23 +1742,25 @@ export const ComputeProvider = () =>
             | "still-active"
             | null = previousVersionId ? "still-active" : null;
           if (!(effectiveNews.skipPromote ?? false)) {
-            const promoted = yield* client
-              .promoteComputeService(service.id, version.id)
-              .pipe(
-                Effect.catch((error) =>
-                  createdVersionId === version.id
-                    ? destroyComputeVersion(
-                        client,
-                        version.id,
-                        effectiveNews,
-                      ).pipe(
-                        Effect.catch(() => Effect.void),
-                        Effect.andThen(() => Effect.fail(error)),
-                      )
-                    : Effect.fail(error),
-                ),
-              );
-            serviceEndpointDomain = promoted.serviceEndpointDomain;
+            if (previousVersionId !== version.id) {
+              const promoted = yield* client
+                .promoteComputeService(service.id, version.id)
+                .pipe(
+                  Effect.catch((error) =>
+                    createdVersionId === version.id
+                      ? destroyComputeVersion(
+                          client,
+                          version.id,
+                          effectiveNews,
+                        ).pipe(
+                          Effect.catch(() => Effect.void),
+                          Effect.andThen(() => Effect.fail(error)),
+                        )
+                      : Effect.fail(error),
+                  ),
+                );
+              serviceEndpointDomain = promoted.serviceEndpointDomain;
+            }
             if (previousVersionId && previousVersionId !== version.id) {
               yield* client.stopComputeServiceVersion(previousVersionId).pipe(
                 Effect.catchIf(

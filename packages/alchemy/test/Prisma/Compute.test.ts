@@ -3214,6 +3214,129 @@ describe("Prisma Compute", () => {
   );
 
   it.effect(
+    "does not re-promote an already promoted matching Compute version",
+    () => {
+      const calls: Array<[string, unknown]> = [];
+      let latestVersionId: string | null = null;
+
+      const service = () => ({
+        id: "service-1",
+        type: "compute-service" as const,
+        url: "https://api.prisma.test/v1/compute-services/service-1",
+        name: "api",
+        region: { id: "us-east-1", name: "US East" },
+        projectId: "project-1",
+        branchId: null,
+        latestVersionId,
+        serviceEndpointDomain: "api.prisma.build",
+        createdAt: "2026-01-01T00:00:00Z",
+      });
+
+      const client = {
+        listProjectComputeServices: (projectId: string, query: unknown) => {
+          calls.push(["listProjectComputeServices", { projectId, query }]);
+          return Effect.succeed([]);
+        },
+        createProjectComputeService: (projectId: string, input: unknown) => {
+          calls.push(["createProjectComputeService", { projectId, input }]);
+          return Effect.succeed(service());
+        },
+        getComputeService: (id: string) => {
+          calls.push(["getComputeService", id]);
+          return Effect.succeed(service());
+        },
+        createServiceComputeVersion: (
+          computeServiceId: string,
+          input: unknown,
+        ) => {
+          calls.push([
+            "createServiceComputeVersion",
+            { computeServiceId, input },
+          ]);
+          return Effect.succeed({
+            id: "version-1",
+            type: "compute-version" as const,
+            url: "https://api.prisma.test/v1/versions/version-1",
+            foundryVersionId: "foundry-1",
+            uploadUrl: null,
+          });
+        },
+        getComputeServiceVersion: (id: string) => {
+          calls.push(["getComputeServiceVersion", id]);
+          return Effect.succeed({
+            id,
+            type: "compute-version" as const,
+            url: `https://api.prisma.test/v1/versions/${id}`,
+            foundryVersionId: "foundry-1",
+            status: "running",
+            previewDomain: "version-1.preview.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+        promoteComputeService: (computeServiceId: string, versionId: string) =>
+          Effect.sync(() => {
+            calls.push([
+              "promoteComputeService",
+              { computeServiceId, versionId },
+            ]);
+            latestVersionId = versionId;
+            return { serviceEndpointDomain: "api.prisma.build" };
+          }),
+      } as unknown as PrismaManagementClient;
+
+      const news = {
+        project: "project-1",
+        serviceName: "api",
+        branchId: null,
+        skipCodeUpload: true,
+        verifyUrl: false,
+      };
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const first = yield* provider.reconcile({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          news,
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        });
+
+        const second = yield* provider.reconcile({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          news,
+          olds: news,
+          output: first,
+          session: undefined as never,
+          bindings: [],
+        });
+
+        expect(first.computeVersionId).toBe("version-1");
+        expect(second.computeVersionId).toBe("version-1");
+        expect(second.previousVersionId).toBe("version-1");
+        expect(
+          calls.filter(([name]) => name === "promoteComputeService"),
+        ).toEqual([
+          [
+            "promoteComputeService",
+            { computeServiceId: "service-1", versionId: "version-1" },
+          ],
+        ]);
+        expect(
+          calls.filter(([name]) => name === "createServiceComputeVersion"),
+        ).toHaveLength(1);
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
+  it.effect(
     "surfaces platform cleanup context when destroying old version fails",
     () => {
       const calls: Array<[string, unknown]> = [];
