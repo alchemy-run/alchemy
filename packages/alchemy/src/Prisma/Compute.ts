@@ -1529,10 +1529,6 @@ export const ComputeProvider = () =>
         stables: ["computeServiceId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
-          const stableProps = {
-            regionId: news.regionId,
-          };
-          if (!isResolved(stableProps)) return undefined;
           if (output?.local || isPrismaDevId(output?.computeServiceId)) {
             return { action: "update" } as const;
           }
@@ -1542,8 +1538,8 @@ export const ComputeProvider = () =>
             : undefined;
           if (
             concreteIdsChanged(oldProjectId, newProjectId) ||
-            (stableProps.regionId ?? "us-east-1") !==
-              (olds.regionId ?? "us-east-1")
+            (isResolved(news.regionId) &&
+              (news.regionId ?? "us-east-1") !== (olds.regionId ?? "us-east-1"))
           ) {
             return { action: "replace" } as const;
           }
