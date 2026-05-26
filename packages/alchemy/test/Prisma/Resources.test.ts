@@ -2087,7 +2087,7 @@ describe("Prisma resource providers", () => {
               },
             },
           ],
-          ["getComputeVersion", "version-1"],
+          ["getComputeServiceVersion", "version-1"],
           ["startComputeVersion", "version-1"],
           ["getComputeServiceVersion", "version-1"],
           [

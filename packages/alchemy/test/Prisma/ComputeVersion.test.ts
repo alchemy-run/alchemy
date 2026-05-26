@@ -3,7 +3,11 @@ import {
   ComputeVersionProvider,
 } from "@/Prisma/ComputeVersion";
 import * as Output from "@/Output";
-import { PrismaClient, type PrismaManagementClient } from "@/Prisma/Client";
+import {
+  PrismaApiError,
+  PrismaClient,
+  type PrismaManagementClient,
+} from "@/Prisma/Client";
 import { PlatformServices } from "@/Util/PlatformServices";
 import { sha256, sha256Object } from "@/Util/sha256";
 import { describe, expect, it } from "@effect/vitest";
@@ -233,6 +237,89 @@ describe("Prisma ComputeVersion", () => {
       Effect.provide(PlatformServices),
     );
   });
+
+  it.effect(
+    "falls back to the global version route when read sees a service-scoped miss",
+    () => {
+      const calls: Array<[string, unknown?]> = [];
+      const client = {
+        listServiceComputeVersions: (
+          computeServiceId: string,
+          query: unknown,
+        ) =>
+          Effect.sync(() => {
+            calls.push([
+              "listServiceComputeVersions",
+              { computeServiceId, query },
+            ]);
+            return [];
+          }),
+        getComputeServiceVersion: (id: string) =>
+          Effect.gen(function* () {
+            calls.push(["getComputeServiceVersion", id]);
+            return yield* Effect.fail(
+              new PrismaApiError({
+                method: "GET",
+                path: `/v1/compute-services/versions/${id}`,
+                status: 404,
+                message: "not found",
+              }),
+            );
+          }),
+        getComputeVersion: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getComputeVersion", id]);
+            return {
+              id,
+              type: "compute-version" as const,
+              url: `https://api.prisma.test/v1/versions/${id}`,
+              foundryVersionId: "foundry-1",
+              status: "stopped",
+              previewDomain: "version-1.preview.prisma.build",
+              createdAt: "2026-01-01T00:00:00Z",
+            };
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaComputeVersion.Provider;
+        const output = yield* provider.read!({
+          id: "Version",
+          instanceId: "00000000000000000000000000000000",
+          olds: {
+            computeService: "service-1",
+          },
+          output: {
+            computeVersionId: "version-1",
+            computeServiceId: "service-1",
+            foundryVersionId: "foundry-1",
+            status: "running",
+            previewDomain: undefined,
+            uploadUrl: undefined,
+            artifactHash: undefined,
+            serviceEndpointDomain: undefined,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        });
+
+        expect(output?.computeVersionId).toBe("version-1");
+        expect(output?.status).toBe("stopped");
+        expect(calls).toEqual([
+          [
+            "listServiceComputeVersions",
+            { computeServiceId: "service-1", query: { limit: 100 } },
+          ],
+          ["getComputeServiceVersion", "version-1"],
+          ["getComputeVersion", "version-1"],
+        ]);
+      }).pipe(
+        Effect.provide(ComputeVersionProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
 
   it.effect("replaces when artifactPath contents change", () => {
     const client = {} as PrismaManagementClient;

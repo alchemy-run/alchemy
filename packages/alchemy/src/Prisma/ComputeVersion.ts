@@ -16,6 +16,7 @@ import {
   isConflict,
   waitForComputeVersionStatus,
 } from "./ComputeLifecycle.ts";
+import { observeComputeVersion } from "./ComputeVersionObserve.ts";
 import { tailComputeVersionLogs } from "./PrismaLogs.ts";
 import type { ComputeService } from "./ComputeService.ts";
 import type { Providers } from "./Providers.ts";
@@ -330,17 +331,18 @@ export const ComputeVersionProvider = () =>
             output?.foundryVersionId,
           );
           const version = output?.computeVersionId
-            ? yield* client
-                .getComputeVersion(output.computeVersionId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () =>
-                    listed
-                      ? client.getComputeVersion(listed.id)
-                      : Effect.succeed(undefined),
-                  ),
-                )
+            ? yield* observeComputeVersion(
+                client,
+                output.computeVersionId,
+              ).pipe(
+                Effect.catchIf(isNotFound, () =>
+                  listed
+                    ? observeComputeVersion(client, listed.id)
+                    : Effect.succeed(undefined),
+                ),
+              )
             : listed
-              ? yield* client.getComputeVersion(listed.id)
+              ? yield* observeComputeVersion(client, listed.id)
               : undefined;
           return version
             ? attrsFrom(version, computeServiceId, output)
@@ -377,11 +379,9 @@ export const ComputeVersionProvider = () =>
             ? undefined
             : output?.computeVersionId;
           let version: ObservedComputeVersion | undefined = computeVersionId
-            ? yield* client
-                .getComputeVersion(computeVersionId)
-                .pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
+            ? yield* observeComputeVersion(client, computeVersionId).pipe(
+                Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+              )
             : undefined;
 
           if (!version) {
@@ -418,7 +418,7 @@ export const ComputeVersionProvider = () =>
                 ),
               );
             }
-            version = yield* client.getComputeVersion(created.id).pipe(
+            version = yield* observeComputeVersion(client, created.id).pipe(
               Effect.catchIf(isNotFound, () =>
                 Effect.succeed({
                   id: created.id,
