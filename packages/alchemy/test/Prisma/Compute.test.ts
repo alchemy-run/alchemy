@@ -1280,6 +1280,60 @@ describe("Prisma Compute", () => {
     });
   });
 
+  it.effect("refuses to sync system-managed Compute env vars", () => {
+    const calls: Array<[string, unknown]> = [];
+    const systemVariable = {
+      id: "env-system",
+      type: "environment-variable" as const,
+      url: "https://api.prisma.test/v1/environment-variables/env-system",
+      projectId: "project-1",
+      branchId: null,
+      class: "production" as const,
+      key: "PRISMA_INTERNAL_URL",
+      valueKid: "kid-system",
+      isManagedBySystem: true,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+    const client = {
+      listEnvironmentVariables: (query: unknown) => {
+        calls.push(["list", query]);
+        return Effect.succeed([systemVariable]);
+      },
+      updateEnvironmentVariable: (id: string, input: unknown) => {
+        calls.push(["update", { id, input }]);
+        return Effect.succeed(systemVariable);
+      },
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const error = yield* syncComputeEnvironment(
+        client,
+        "project-1",
+        "production",
+        {
+          PRISMA_INTERNAL_URL: "secret",
+        },
+      ).pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "is managed by Prisma and cannot be managed by Alchemy",
+      );
+      expect(calls).toEqual([
+        [
+          "list",
+          {
+            projectId: "project-1",
+            class: "production",
+            key: "PRISMA_INTERNAL_URL",
+            limit: 2,
+          },
+        ],
+      ]);
+    });
+  });
+
   it.effect("validates Compute env vars before remote writes", () => {
     const calls: Array<[string, unknown]> = [];
     const client = {

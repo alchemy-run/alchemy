@@ -180,6 +180,18 @@ const attrsFrom = (
   updatedAt: variable.updatedAt,
 });
 
+const systemManagedVariableError = (key: string) =>
+  new Error(
+    `Prisma environment variable '${key}' is managed by Prisma and cannot be managed by Alchemy.`,
+  );
+
+const ensureUserManagedVariable = (variable: ApiEnvironmentVariable) =>
+  Effect.gen(function* () {
+    if (variable.isManagedBySystem) {
+      return yield* Effect.fail(systemManagedVariableError(variable.key));
+    }
+  });
+
 export const EnvironmentVariableProvider = () =>
   Provider.effect(
     EnvironmentVariable,
@@ -271,6 +283,7 @@ export const EnvironmentVariableProvider = () =>
             variable = result.variable;
             created = result.created;
           }
+          yield* ensureUserManagedVariable(variable);
           if (
             !created &&
             (output?.value === undefined ||
@@ -282,8 +295,16 @@ export const EnvironmentVariableProvider = () =>
           }
           return attrsFrom(variable, value);
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, session }) {
           if (isPrismaDevId(output.environmentVariableId)) return;
+          if (output.isManagedBySystem) {
+            if (session !== undefined) {
+              yield* session.note(
+                `Skipping direct delete for system-managed Prisma environment variable '${output.key}'.`,
+              );
+            }
+            return;
+          }
           yield* client
             .deleteEnvironmentVariable(output.environmentVariableId)
             .pipe(Effect.catchIf(isNotFound, () => Effect.void));

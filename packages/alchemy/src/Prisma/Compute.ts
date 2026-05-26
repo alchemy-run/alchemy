@@ -1327,6 +1327,22 @@ const findEnvironmentVariable = (
       ),
     );
 
+const systemManagedEnvironmentVariableError = (key: string) =>
+  new Error(
+    `Prisma environment variable '${key}' is managed by Prisma and cannot be managed by Alchemy.`,
+  );
+
+const ensureUserManagedEnvironmentVariable = (
+  variable: ApiEnvironmentVariable,
+) =>
+  Effect.gen(function* () {
+    if (variable.isManagedBySystem) {
+      return yield* Effect.fail(
+        systemManagedEnvironmentVariableError(variable.key),
+      );
+    }
+  });
+
 export const syncComputeEnvironment = Effect.fn(function* (
   client: PrismaManagementClient,
   projectId: string,
@@ -1350,6 +1366,9 @@ export const syncComputeEnvironment = Effect.fn(function* (
       cls,
       key,
     );
+    if (variable) {
+      yield* ensureUserManagedEnvironmentVariable(variable);
+    }
     if (value === null) {
       if (variable) {
         yield* client
@@ -1394,6 +1413,7 @@ const destroyComputeEnvironment = Effect.fn(function* (
       key,
     ).pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
     if (!variable) continue;
+    if (variable.isManagedBySystem) continue;
     yield* client
       .deleteEnvironmentVariable(variable.id)
       .pipe(Effect.catchIf(isNotFound, () => Effect.void));
@@ -1427,6 +1447,7 @@ const cleanupRemovedComputeEnvironment = Effect.fn(function* (
       key,
     );
     if (!variable) continue;
+    if (variable.isManagedBySystem) continue;
     yield* client
       .deleteEnvironmentVariable(variable.id)
       .pipe(Effect.catchIf(isNotFound, () => Effect.void));

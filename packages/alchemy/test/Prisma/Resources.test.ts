@@ -1667,6 +1667,112 @@ describe("Prisma resource providers", () => {
     },
   );
 
+  it.effect("refuses to mutate system-managed environment variables", () => {
+    const calls: Call[] = [];
+    const systemVariable = {
+      id: "env-system",
+      type: "environment-variable" as const,
+      url: "https://api.prisma.test/v1/environment-variables/env-system",
+      projectId: "project-1",
+      branchId: null,
+      class: "production" as const,
+      key: "PRISMA_INTERNAL_URL",
+      valueKid: "kid-system",
+      isManagedBySystem: true,
+      createdAt,
+      updatedAt,
+    };
+    const client = {
+      listEnvironmentVariables: (query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listEnvironmentVariables", query]);
+          return [systemVariable];
+        }),
+      updateEnvironmentVariable: (id: string, input: unknown) =>
+        Effect.sync(() => {
+          calls.push(["updateEnvironmentVariable", { id, input }]);
+          return systemVariable;
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const envProvider = yield* PrismaEnvironmentVariable.Provider;
+      const error = yield* envProvider
+        .reconcile(
+          reconcileInput("EnvironmentVariable", {
+            project: "project-1",
+            class: "production" as const,
+            key: "PRISMA_INTERNAL_URL",
+            value: Redacted.make("secret"),
+          }),
+        )
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "is managed by Prisma and cannot be managed by Alchemy",
+      );
+      expect(calls).toEqual([
+        [
+          "listEnvironmentVariables",
+          {
+            projectId: "project-1",
+            class: "production",
+            key: "PRISMA_INTERNAL_URL",
+            limit: 2,
+          },
+        ],
+      ]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
+  it.effect(
+    "skips direct delete for system-managed environment variables",
+    () => {
+      const calls: Call[] = [];
+      const notes: string[] = [];
+      const client = {
+        deleteEnvironmentVariable: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["deleteEnvironmentVariable", id]);
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const envProvider = yield* PrismaEnvironmentVariable.Provider;
+        yield* envProvider.delete!({
+          id: "EnvironmentVariable",
+          instanceId: "00000000000000000000000000000000",
+          olds: {} as never,
+          output: {
+            environmentVariableId: "env-system",
+            projectId: "project-1",
+            branchId: null,
+            class: "production",
+            key: "PRISMA_INTERNAL_URL",
+            value: Redacted.make("secret"),
+            valueKid: "kid-system",
+            isManagedBySystem: true,
+            createdAt,
+            updatedAt,
+          },
+          session: {
+            note: (message: string) =>
+              Effect.sync(() => {
+                notes.push(message);
+              }),
+          } as never,
+          bindings: [],
+        });
+
+        expect(calls).toEqual([]);
+        expect(notes).toEqual([
+          "Skipping direct delete for system-managed Prisma environment variable 'PRISMA_INTERNAL_URL'.",
+        ]);
+      }).pipe(Effect.provide(providerLayer(client)));
+    },
+  );
+
   it.effect("validates Prisma environment variable writes locally", () => {
     const calls: Call[] = [];
     const client = {
