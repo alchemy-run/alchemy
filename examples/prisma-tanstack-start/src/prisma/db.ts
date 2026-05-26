@@ -25,7 +25,10 @@ export function getDb(): Db {
     });
 
     cached = {
-      db: postgres<Contract>({ contractJson, pg: pool }),
+      db: postgres<Contract>({
+        contractJson,
+        binding: { kind: "pgPool", pool },
+      }),
       pool,
     };
   }
