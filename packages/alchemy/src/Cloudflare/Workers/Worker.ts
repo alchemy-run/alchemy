@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
@@ -223,7 +224,19 @@ export interface WorkerProps<
    */
   observability?: WorkerObservability;
   tags?: string[];
-  main: string;
+  /**
+   * Path to the Worker's entry module. Bundled with rolldown before
+   * upload. Mutually exclusive with {@link script} — provide exactly one.
+   */
+  main?: string;
+  /**
+   * Raw module source for the Worker. When provided, bundling is bypassed
+   * entirely and this string is uploaded as a single ESM module
+   * (`main.js`). Useful for tiny inline workers (tests, fixtures,
+   * one-offs) and any case where you've already produced the final
+   * bundle elsewhere. Mutually exclusive with {@link main}.
+   */
+  script?: string;
   compatibility?: {
     date?: string;
     flags?: ("nodejs_compat" | "nodejs_als" | (string & {}))[];
@@ -1099,7 +1112,7 @@ export const LiveWorkerProvider = () =>
         bundler
           .build({
             id,
-            main: props.main,
+            main: props.main!,
             compatibility: getCompatibility(props),
             entry: props.isExternal
               ? {
@@ -1113,6 +1126,11 @@ export const LiveWorkerProvider = () =>
             extraOptions: props.build,
           })
           .pipe(Artifacts.cached("build"));
+
+      const hashScript = (script: string) =>
+        Effect.sync(() =>
+          crypto.createHash("sha256").update(script).digest("hex"),
+        );
 
       const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
         const compatibility = getCompatibility(props);
@@ -1156,6 +1174,24 @@ export const LiveWorkerProvider = () =>
         opts: { skipAssetsRead?: boolean } = {},
       ) =>
         Effect.gen(function* () {
+          if (props.script !== undefined) {
+            const [assets, bundleHash] = yield* Effect.all(
+              [
+                opts.skipAssetsRead
+                  ? Effect.succeed(undefined)
+                  : prepareAssets(props.assets),
+                hashScript(props.script),
+              ],
+              { concurrency: "unbounded" },
+            );
+            return {
+              assets,
+              bundle: {
+                files: [{ path: "main.js", content: props.script }],
+                hash: bundleHash,
+              },
+            };
+          }
           if (props.vite) {
             const [{ assets, bundle }, input] = yield* Effect.all(
               [
@@ -1403,16 +1439,19 @@ export const LiveWorkerProvider = () =>
         }
 
         // Backward compatibility for old workers that have DO bindings but no
-        // alchemy:do tags yet.
+        // alchemy:do tags yet. Cross-script bindings (`scriptName` set to
+        // anything other than this worker) are NEVER candidates for
+        // delete-class migrations — the class lives on the foreign script
+        // and we don't own its lifecycle.
         if (Object.keys(oldDoClassNameByLogicalId).length === 0) {
           for (const oldBinding of oldBindings) {
+            const ownedLocally =
+              !("scriptName" in oldBinding) || oldBinding.scriptName === name;
             if (
               oldBinding.type === "durable_object_namespace" &&
               "className" in oldBinding &&
               oldBinding.className &&
-              (!("scriptName" in oldBinding) ||
-                !oldBinding.scriptName ||
-                oldBinding.scriptName === name) &&
+              ownedLocally &&
               !currentDoBindings.some(
                 (binding) => binding.bindingName === oldBinding.name,
               )
@@ -1641,6 +1680,25 @@ export const LiveWorkerProvider = () =>
         props: WorkerProps,
         output: Worker["Attributes"],
       ) {
+        if (props.script !== undefined) {
+          const scriptHash = yield* hashScript(props.script);
+          if (scriptHash !== output.hash?.bundle) {
+            return true;
+          }
+          if (!props.assets) {
+            return false;
+          }
+          const assetsHash =
+            typeof props.assets === "object" &&
+            "path" in props.assets &&
+            "hash" in props.assets
+              ? (props.assets.hash as string)
+              : undefined;
+          if (assetsHash === undefined) {
+            return true;
+          }
+          return assetsHash !== output.hash?.assets;
+        }
         if (props.vite) {
           const input = yield* hashDirectory({
             cwd: props.vite.rootDir,
@@ -2090,23 +2148,38 @@ function getDurableObjectBindings(
   bindings: ReadonlyArray<ResourceBinding>,
   workerName: string,
 ) {
+  // Resource authors (and the `make`/`yield* Tag`/plan-vs-apply machinery)
+  // can register the same DO binding multiple times under the same logical
+  // id — `binding()` is a plain `worker.bind` and intentionally has no
+  // dedup. Collapse duplicates here so each `(logicalId, bindingName,
+  // className)` tuple appears at most once. We also exclude cross-script
+  // references: a `scriptName` pointing to *another* worker means this
+  // worker just references a foreign class — ship the binding to
+  // Cloudflare, but don't drive class migrations for it.
+  const seen = new Set<string>();
   return bindings.flatMap((binding) =>
-    (binding.data.bindings ?? []).flatMap((item: WorkerBinding) =>
-      item.type === "durable_object_namespace" &&
-      "className" in item &&
-      item.className &&
-      (!("scriptName" in item) ||
-        !item.scriptName ||
-        item.scriptName === workerName)
-        ? [
-            {
-              logicalId: binding.sid,
-              bindingName: item.name,
-              className: item.className,
-            },
-          ]
-        : [],
-    ),
+    (binding.data.bindings ?? []).flatMap((item: WorkerBinding) => {
+      if (
+        item.type !== "durable_object_namespace" ||
+        !("className" in item) ||
+        !item.className
+      ) {
+        return [];
+      }
+      if (item.scriptName !== undefined && item.scriptName !== workerName) {
+        return [];
+      }
+      const dedupKey = `${binding.sid}::${item.name}::${item.className}`;
+      if (seen.has(dedupKey)) return [];
+      seen.add(dedupKey);
+      return [
+        {
+          logicalId: binding.sid,
+          bindingName: item.name,
+          className: item.className,
+        },
+      ];
+    }),
   );
 }
 

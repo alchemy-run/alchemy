@@ -245,7 +245,7 @@ export const LocalWorkerProvider = () =>
           hyperdrives,
           bundleOptions: {
             id,
-            main: props.main,
+            main: props.main!,
             compatibility,
             entry: props.isExternal
               ? { kind: "external" }
