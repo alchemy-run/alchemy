@@ -1625,6 +1625,68 @@ describe("Prisma resource providers", () => {
     },
   );
 
+  it.effect("validates Prisma environment variable writes locally", () => {
+    const calls: Call[] = [];
+    const client = {
+      listEnvironmentVariables: (query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listEnvironmentVariables", query]);
+          return [];
+        }),
+      createEnvironmentVariable: (input: unknown) =>
+        Effect.sync(() => {
+          calls.push(["createEnvironmentVariable", input]);
+          return {
+            id: "env-1",
+            type: "environment-variable" as const,
+            url: "https://api.prisma.test/v1/environment-variables/env-1",
+            projectId: "project-1",
+            branchId: null,
+            class: "production" as const,
+            key: "TOKEN",
+            valueKid: "kid-1",
+            isManagedBySystem: false,
+            createdAt,
+            updatedAt,
+          };
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const envProvider = yield* PrismaEnvironmentVariable.Provider;
+      const invalidKey = yield* envProvider
+        .reconcile(
+          reconcileInput("EnvironmentVariable", {
+            project: "project-1",
+            class: "production" as const,
+            key: "bad-key",
+            value: Redacted.make("secret"),
+          }),
+        )
+        .pipe(Effect.flip);
+      const emptyValue = yield* envProvider
+        .reconcile(
+          reconcileInput("EnvironmentVariable", {
+            project: "project-1",
+            class: "production" as const,
+            key: "TOKEN",
+            value: "",
+          }),
+        )
+        .pipe(Effect.flip);
+
+      expect(invalidKey).toBeInstanceOf(Error);
+      expect((invalidKey as Error).message).toContain(
+        "must match POSIX env-var key shape",
+      );
+      expect(emptyValue).toBeInstanceOf(Error);
+      expect((emptyValue as Error).message).toContain(
+        "value must be non-empty",
+      );
+      expect(calls).toEqual([]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
   it.effect("updates mutable Prisma resources from observed state", () => {
     const calls: Call[] = [];
     const client = {

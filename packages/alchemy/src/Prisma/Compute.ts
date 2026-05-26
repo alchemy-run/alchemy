@@ -39,6 +39,10 @@ import {
 } from "./ComputeBuild.ts";
 import { createComputeArchive, normalizeEntrypoint } from "./ComputeArchive.ts";
 import {
+  validateEnvironmentVariableKey,
+  validateEnvironmentVariableWrite,
+} from "./EnvironmentVariableValidation.ts";
+import {
   destroyComputeService,
   destroyComputeVersion,
   isConflict,
@@ -717,6 +721,14 @@ const branchAttachment = (props: ComputeProps) =>
 
 const validateComputeProps = (props: ComputeProps) =>
   Effect.gen(function* () {
+    for (const [key, value] of Object.entries(props.env ?? {})) {
+      if (value === undefined) continue;
+      if (value === null) {
+        yield* validateEnvironmentVariableKey(key);
+      } else {
+        yield* validateEnvironmentVariableWrite(key, value);
+      }
+    }
     if ((props.skipPromote ?? false) && (props.destroyOldVersion ?? false)) {
       return yield* Effect.fail(
         new Error(
@@ -1279,6 +1291,11 @@ export const syncComputeEnvironment = Effect.fn(function* (
   const synced: string[] = [];
   const deleted: string[] = [];
   for (const [key, value] of Object.entries(plainEnv(env))) {
+    if (value === null) {
+      yield* validateEnvironmentVariableKey(key);
+    } else {
+      yield* validateEnvironmentVariableWrite(key, value);
+    }
     const variable = yield* findEnvironmentVariable(
       client,
       projectId,

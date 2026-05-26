@@ -9,6 +9,7 @@ import {
   isNotFound,
   type PrismaManagementClient,
 } from "./Client.ts";
+import { validateEnvironmentVariableWrite } from "./EnvironmentVariableValidation.ts";
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import {
@@ -190,6 +191,7 @@ export const EnvironmentVariableProvider = () =>
             : undefined;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
+          yield* validateEnvironmentVariableWrite(news.key, news.value);
           const projectId = yield* resolveProjectId(news.project);
           const variableId = isPrismaDevId(output?.environmentVariableId)
             ? undefined

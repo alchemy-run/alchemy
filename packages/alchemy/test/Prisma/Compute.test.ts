@@ -1135,6 +1135,60 @@ describe("Prisma Compute", () => {
     });
   });
 
+  it.effect("validates Compute env vars before remote writes", () => {
+    const calls: Array<[string, unknown]> = [];
+    const client = {
+      getComputeService: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getComputeService", id]);
+          return {
+            id,
+            type: "compute-service" as const,
+            url: "https://api.prisma.test/v1/compute-services/service-1",
+            name: "api",
+            region: { id: "us-east-1", name: "US East" },
+            projectId: "project-1",
+            branchId: null,
+            latestVersionId: null,
+            serviceEndpointDomain: "api.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          };
+        }),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            serviceName: "api",
+            artifact: "v1",
+            env: {
+              "bad-key": "secret",
+            },
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "must match POSIX env-var key shape",
+      );
+      expect(calls).toEqual([]);
+    }).pipe(
+      Effect.provide(ComputeProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(PlatformServices),
+    );
+  });
+
   it.effect("merges binding env into Compute deployment env", () => {
     const calls: Array<[string, unknown]> = [];
     const client = {
