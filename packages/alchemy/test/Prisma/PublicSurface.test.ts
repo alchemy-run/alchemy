@@ -181,6 +181,11 @@ describe("Prisma public surface", () => {
     expect(Prisma.Postgres).toBe(Prisma.Database);
   });
 
+  it("does not expose the previous ComputeApp deep import", async () => {
+    const specifier = "alchemy/Prisma/ComputeApp";
+    await expect(import(specifier)).rejects.toThrow();
+  });
+
   it.effect("pins Prisma package export map entries", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
