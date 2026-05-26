@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import { withLock } from "./Lock.ts";
 
 /**
@@ -13,6 +14,20 @@ import { withLock } from "./Lock.ts";
  * `prettyPrint` is intentionally excluded: it's read-only display.
  */
 const LOCKED_METHODS = new Set(["read", "login", "logout", "configure"]);
+
+/**
+ * Methods that may drive an interactive flow (prompts, browser-based
+ * OAuth, etc.). A process-wide mutex serializes these across providers
+ * so that, e.g., Cloudflare's `configure` finishes its prompt sequence
+ * before Planetscale's begins — even when the two auth provider Layers
+ * are built in parallel as part of a single `providers()` Layer.
+ *
+ * The clack prompt wrapper in `Util/Clank.ts` enforces per-prompt
+ * serialization; this mutex enforces per-flow serialization so the user
+ * sees one provider's prompts grouped together rather than interleaved.
+ */
+const INTERACTIVE_METHODS = new Set(["login", "configure"]);
+const interactiveMutex = Semaphore.makeUnsafe(1);
 
 export class AuthError extends Schema.TaggedErrorClass<AuthError>()(
   "AuthError",
@@ -143,13 +158,18 @@ export const AuthProvider =
               Object.entries(service).map(([methodName, fn]) => [
                 methodName,
                 (...args: Parameters<typeof fn>) => {
-                  const eff = (fn as any)(...args).pipe(
+                  let eff = (fn as any)(...args).pipe(
                     Effect.provideContext(ctx),
                   );
-                  if (!LOCKED_METHODS.has(methodName)) return eff;
-                  // First positional arg is always `profileName`.
-                  const profileName = args[0] as string;
-                  return withLock(`${profileName}-${name}`, eff);
+                  if (LOCKED_METHODS.has(methodName)) {
+                    // First positional arg is always `profileName`.
+                    const profileName = args[0] as string;
+                    eff = withLock(`${profileName}-${name}`, eff);
+                  }
+                  if (INTERACTIVE_METHODS.has(methodName)) {
+                    eff = Semaphore.withPermits(interactiveMutex, 1)(eff);
+                  }
+                  return eff;
                 },
               ]),
             ),
