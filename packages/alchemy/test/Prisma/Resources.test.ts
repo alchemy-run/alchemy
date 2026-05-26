@@ -11,6 +11,7 @@ import {
 import {
   Connection as PrismaConnection,
   ConnectionProvider,
+  connectionBindingEnvKeys,
 } from "@/Prisma/Connection";
 import {
   Database as PrismaDatabase,
@@ -293,6 +294,21 @@ const diffInput = <Props, Attrs>(olds: Props, news: Props, output?: Attrs) =>
   }) as never;
 
 describe("Prisma resource providers", () => {
+  it("derives namespaced-safe env keys for connection bindings", () => {
+    expect(
+      connectionBindingEnvKeys({
+        FQN: "Connection",
+        LogicalId: "Connection",
+      }).directConnectionString,
+    ).toBe("PRISMA_CONNECTION_DIRECT_CONNECTION_STRING");
+    expect(
+      connectionBindingEnvKeys({
+        FQN: "Api/Connection",
+        LogicalId: "Connection",
+      }).directConnectionString,
+    ).toBe("PRISMA_API_CONNECTION_DIRECT_CONNECTION_STRING");
+  });
+
   it.effect("rejects conflicting ComputeService branch inputs", () => {
     const { client } = makeClient();
 

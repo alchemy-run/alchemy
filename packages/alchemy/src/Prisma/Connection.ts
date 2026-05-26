@@ -189,9 +189,13 @@ const envName = (value: string) =>
   value.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
 
 export const connectionBindingEnvKeys = (
-  connection: Pick<Connection, "LogicalId">,
+  connection: Pick<Connection, "FQN" | "LogicalId">,
 ): ConnectionBindingEnvKeys => {
-  const prefix = `PRISMA_${envName(connection.LogicalId)}`;
+  const name =
+    connection.FQN === connection.LogicalId
+      ? connection.LogicalId
+      : connection.FQN;
+  const prefix = `PRISMA_${envName(name)}`;
   return {
     connectionId: `${prefix}_CONNECTION_ID`,
     databaseId: `${prefix}_DATABASE_ID`,
