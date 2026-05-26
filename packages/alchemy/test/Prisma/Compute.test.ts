@@ -1,8 +1,10 @@
 import {
   Compute,
+  ComputeDevProvider,
   ComputeProvider,
   syncComputeEnvironment,
 } from "@/Prisma/Compute";
+import { AlchemyContext } from "@/AlchemyContext";
 import {
   PrismaApiError,
   PrismaClient,
@@ -153,6 +155,47 @@ describe("Prisma Compute", () => {
       Effect.provide(Layer.succeed(PrismaClient, client)),
     );
   });
+
+  it.effect("dev provider applies the same Compute prop validation", () =>
+    Effect.gen(function* () {
+      const provider = yield* Compute.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            project: "project-1",
+            serviceName: "api",
+            skipPromote: true,
+            destroyOldVersion: true,
+            dev: {
+              url: "http://localhost:3000",
+            },
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "destroyOldVersion cannot be combined with skipPromote",
+      );
+    }).pipe(
+      Effect.provide(ComputeDevProvider()),
+      Effect.provide(
+        Layer.succeed(AlchemyContext, {
+          dotAlchemy: ".alchemy",
+          updateStateStore: false,
+          dev: true,
+          adopt: false,
+        }),
+      ),
+      Effect.provide(PlatformServices),
+    ),
+  );
 
   it.effect("reads the live latest version when adopting Compute", () => {
     const calls: Array<[string, unknown]> = [];

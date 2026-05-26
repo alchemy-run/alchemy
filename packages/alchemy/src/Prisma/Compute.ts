@@ -1773,6 +1773,7 @@ export const ComputeDevProvider = () =>
               ...news.env,
             },
           };
+          yield* validateComputeProps(effectiveNews);
           const projectId = yield* resolveProjectId(effectiveNews.project);
           if (!ctx.dev) {
             return yield* Effect.fail(
