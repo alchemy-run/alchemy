@@ -9,10 +9,7 @@ import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as RpcClient from "effect/unstable/rpc/RpcClient";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
-import {
-  CallerRpcs,
-  TargetRpcs,
-} from "./fixtures/rpc-worker-binding/group.ts";
+import { CallerRpcs, TargetRpcs } from "./fixtures/rpc-worker-binding/group.ts";
 import Stack from "./fixtures/rpc-worker-binding/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({

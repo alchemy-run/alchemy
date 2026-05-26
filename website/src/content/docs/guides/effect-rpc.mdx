@@ -601,3 +601,98 @@ A `Proxy` defers each call's underlying `RpcClient` construction so
 Cloudflare's "no cross-request I/O" rule is satisfied transparently.
 See the [RPC Worker tutorial](/tutorial/cloudflare/rpc-worker) for an
 end-to-end walk-through.
+
+`RpcWorker` also supports a **modular form** that separates the
+class declaration from its runtime — useful when a consumer Worker
+should be able to import the class for binding without pulling in
+the host's runtime:
+
+```typescript
+// Modular: class declaration carries no impl.
+export class TaskWorker extends Cloudflare.RpcWorker<TaskWorker>()(
+  "TaskWorker",
+  { main: import.meta.filename, schema: TaskRpcs },
+) {}
+
+// Runtime lives in a separate Layer — only the host script imports it.
+export default TaskWorker.make(
+  Effect.gen(function* () {
+    const handlers = TaskRpcs.toLayer({ /* ... */ });
+    return RpcServer.toHttpEffect(TaskRpcs).pipe(
+      Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerJson)),
+    );
+  }),
+);
+```
+
+The class can also declare DOs it publishes via the second type
+argument — `RpcWorker<Self, Deps>()` mirrors
+`Cloudflare.Worker<Self, Bindings, Deps>` so cross-script
+`Counter.from(TaskWorker)` type-checks.
+
+## Sugar: `Cloudflare.RpcDurableObjectNamespace`
+
+The same shape applies to Durable Objects.
+`Cloudflare.RpcDurableObjectNamespace<Self>()(...)` mirrors the
+regular DO class but the inner Effect returns the piped
+`RpcServer.toHttpEffect(schema)` Effect directly:
+
+```typescript
+export default class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
+  "Counter",
+  { schema: CounterRpcs },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
+      const handlers = CounterRpcs.toLayer({ /* ... */ });
+      return RpcServer.toHttpEffect(CounterRpcs).pipe(
+        Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
+      );
+    });
+  }),
+) {}
+```
+
+`counters.getByName(id)` returns an `Effect<RpcClient<CounterRpcs>>`
+(yield it inside a per-request scope) rather than alchemy's built-in
+DO method bridge. Reach for this whenever DO method return values
+cross a `Schema.Class` boundary — the built-in bridge
+`JSON.stringify`s each value and loses class identity, while the RPC
+namespace round-trips through the shared `RpcSerialization` codec.
+
+Like `RpcWorker`, the RPC DO supports a **modular form** that
+separates the class from its runtime so consumer Workers can bind
+to it cross-script:
+
+```typescript
+// counter.ts — class declaration carries no impl.
+export class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
+  "Counter",
+  { schema: CounterRpcs },
+) {}
+
+// Runtime lives in a separate Layer — only the host Worker imports it.
+export default Counter.make(
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const state = yield* Cloudflare.DurableObjectState;
+      const handlers = CounterRpcs.toLayer({ /* ... */ });
+      return RpcServer.toHttpEffect(CounterRpcs).pipe(
+        Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
+      );
+    });
+  }),
+);
+```
+
+From a consumer Worker, `Counter.from(HostWorker)` produces a
+typed namespace bound to the host's running DO instances:
+
+```typescript
+const counters = yield* Counter.from(HostWorker);
+const stub = yield* counters.getByName("shared");
+yield* stub.setTitle({ title: "hi" });
+```
+
+See the [RPC Durable Object tutorial](/tutorial/cloudflare/rpc-durable-object)
+for the full walk-through.

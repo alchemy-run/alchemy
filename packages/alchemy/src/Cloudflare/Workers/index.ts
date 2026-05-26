@@ -12,6 +12,7 @@ export * from "./InferEnv.ts";
 export * from "./LocalWorkerProvider.ts";
 export * from "./Request.ts";
 export * from "./Rpc.ts";
+export * from "./RpcDurableObjectNamespace.ts";
 export * from "./RpcWorker.ts";
 export * from "./ScheduledEvents.ts";
 export * from "./WebSocket.ts";

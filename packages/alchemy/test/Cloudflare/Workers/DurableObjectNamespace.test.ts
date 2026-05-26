@@ -19,6 +19,13 @@ const logLevel = Effect.provideService(
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
+// Cap exponential backoff at 3s — keeps the fast-path snappy but stops
+// the geometric blow-up (0.5 + 1 + 2 + 4 + 8 + 16 + 32 + 64s ...) that
+// makes retries dominate test wall time when CF edge is slow.
+const readinessSchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.either(Schedule.spaced("3 seconds")),
+);
+
 test(
   "durable object methods can use binding clients",
   Effect.gen(function* () {
@@ -31,10 +38,7 @@ test(
           ? Effect.succeed(res)
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
-      Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
-      }),
+      Effect.retry({ schedule: readinessSchedule, times: 15 }),
     );
 
     expect(res.status).toBe(200);
@@ -44,21 +48,27 @@ test(
   { timeout: 180_000 },
 );
 
-const fetchReady = (url: string) =>
+// Cloudflare's edge keeps serving the previous worker version for a few
+// seconds after a redeploy, so retrying on 200-only is not enough — the
+// stale version still returns 200 with the old body. Retry until the
+// body matches the expected version string.
+const fetchReady = (url: string, expected: string) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
-    const res = yield* client.get(url).pipe(
+    return yield* client.get(url).pipe(
       Effect.flatMap((r) =>
         r.status === 200
-          ? Effect.succeed(r)
+          ? Effect.flatMap(r.text, (body) =>
+              body === expected
+                ? Effect.succeed(body)
+                : Effect.fail(
+                    new Error(`stale: got ${body}, want ${expected}`),
+                  ),
+            )
           : Effect.fail(new Error(`Worker not ready: ${r.status}`)),
       ),
-      Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 15,
-      }),
+      Effect.retry({ schedule: readinessSchedule, times: 15 }),
     );
-    return yield* res.text;
   });
 
 // Walk an async worker through four redeploys against the same scratch state,
@@ -87,7 +97,7 @@ export default { async fetch() { return new Response("v1"); } };
           };
         }),
       );
-      expect(yield* fetchReady(v1.worker.url!)).toBe("v1");
+      expect(yield* fetchReady(v1.worker.url!, "v1")).toBe("v1");
 
       const v2 = yield* scratch.deploy(
         Effect.gen(function* () {
@@ -106,7 +116,7 @@ export default { async fetch() { return new Response("v2"); } };
           };
         }),
       );
-      expect(yield* fetchReady(v2.worker.url!)).toBe("v2");
+      expect(yield* fetchReady(v2.worker.url!, "v2")).toBe("v2");
 
       const v3 = yield* scratch.deploy(
         Effect.gen(function* () {
@@ -127,7 +137,7 @@ export default { async fetch() { return new Response("v3"); } };
           };
         }),
       );
-      expect(yield* fetchReady(v3.worker.url!)).toBe("v3");
+      expect(yield* fetchReady(v3.worker.url!, "v3")).toBe("v3");
 
       const v4 = yield* scratch.deploy(
         Effect.gen(function* () {
@@ -144,7 +154,7 @@ export default { async fetch() { return new Response("v4"); } };
           };
         }),
       );
-      expect(yield* fetchReady(v4.worker.url!)).toBe("v4");
+      expect(yield* fetchReady(v4.worker.url!, "v4")).toBe("v4");
 
       yield* scratch.destroy();
     }).pipe(logLevel),

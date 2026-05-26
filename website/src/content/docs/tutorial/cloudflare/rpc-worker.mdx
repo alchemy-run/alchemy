@@ -370,12 +370,68 @@ runs the call inside its own scope, and tears the client down with
 the call. The consumer just sees a normal `RpcClient`.
 :::
 
+## Modular form: separate the class from its runtime
+
+The inline form above bakes the runtime into the class
+declaration. The **two-arg form** — `(id, props)` with no impl —
+declares the class as a pure tagged identifier and provides the
+runtime via `static make(impl)`:
+
+```typescript
+// src/worker.ts
+export class Worker extends Cloudflare.RpcWorker<Worker>()(
+  "Worker",
+  { main: import.meta.filename, schema: TaskRpcs },
+) {}
+
+export default Worker.make(
+  Effect.gen(function* () {
+    const handlers = TaskRpcs.toLayer({
+      getTask: ({ id }) => Effect.succeed(`task-${id}`),
+    });
+    return RpcServer.toHttpEffect(TaskRpcs).pipe(
+      Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerJson)),
+    );
+  }),
+);
+```
+
+`Worker.make(impl)` returns a `Layer<Worker>`. Consumers import
+the class for type information; only the script that actually
+hosts the Worker imports the default Layer.
+
+## Host a Durable Object for cross-script binding
+
+`RpcWorker<Self, Deps>()` mirrors `Cloudflare.Worker<Self, Bindings, Deps>`
+— the optional second type argument declares DOs the script
+publishes for cross-script binding:
+
+```diff lang="typescript"
++import { Counter } from "./counter.ts";
+
+-export class Worker extends Cloudflare.RpcWorker<Worker>()(
++export class Worker extends Cloudflare.RpcWorker<Worker, Counter>()(
+   "Worker",
+   { main: import.meta.filename, schema: TaskRpcs },
+ ) {}
+```
+
+With `Counter` declared in `Deps`, any other Worker can write
+`Counter.from(Worker)` and have it type-check — see the
+[RPC Durable Object tutorial](/tutorial/cloudflare/rpc-durable-object)
+for the full cross-script pattern.
+
 ## Recap
 
 - `Cloudflare.RpcWorker` keeps everything from
   [Effect RPC](/guides/effect-rpc) and removes the `{ fetch }`
   wrapper. `props.schema` declares the served `RpcGroup`; the init
   returns the piped `RpcServer.toHttpEffect(schema)` Effect directly.
+- Inline form `(id, props, impl)` bundles the runtime into the
+  class; modular form `(id, props)` + `Class.make(impl)` keeps the
+  class importable without the runtime.
+- `RpcWorker<Self, Deps>()` declares cross-script DOs that
+  consumers can bind to via `Counter.from(Worker)`.
 - A single `Test.make` + `beforeAll(deploy(Stack))` + typed
   `RpcClient.make(TaskRpcs)` gets you an integration test that
   hammers a real `workers.dev` URL.
