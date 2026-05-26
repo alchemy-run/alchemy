@@ -322,9 +322,10 @@ export const ComputeVersionProvider = () =>
         }),
         read: Effect.fn(function* ({ output, olds }) {
           if (isPrismaDevId(output?.computeVersionId)) return undefined;
-          const computeServiceId = yield* resolveComputeServiceId(
-            olds.computeService,
-          );
+          const computeServiceId =
+            output?.computeServiceId && !isPrismaDevId(output.computeServiceId)
+              ? output.computeServiceId
+              : yield* resolveComputeServiceId(olds.computeService);
           const listed = yield* findVersion(
             client,
             computeServiceId,

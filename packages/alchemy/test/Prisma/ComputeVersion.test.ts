@@ -321,6 +321,76 @@ describe("Prisma ComputeVersion", () => {
     },
   );
 
+  it.effect(
+    "uses the output compute service ID when reading a saved version",
+    () => {
+      const calls: Array<[string, unknown?]> = [];
+      const client = {
+        listServiceComputeVersions: (
+          computeServiceId: string,
+          query: unknown,
+        ) =>
+          Effect.sync(() => {
+            calls.push([
+              "listServiceComputeVersions",
+              { computeServiceId, query },
+            ]);
+            return [];
+          }),
+        getComputeServiceVersion: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getComputeServiceVersion", id]);
+            return {
+              id,
+              type: "compute-version" as const,
+              url: `https://api.prisma.test/v1/versions/${id}`,
+              foundryVersionId: "foundry-1",
+              status: "running",
+              previewDomain: "version-1.preview.prisma.build",
+              createdAt: "2026-01-01T00:00:00Z",
+            };
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* PrismaComputeVersion.Provider;
+        const output = yield* provider.read!({
+          id: "Version",
+          instanceId: "00000000000000000000000000000000",
+          olds: {
+            computeService: "service-from-olds",
+          },
+          output: {
+            computeVersionId: "version-1",
+            computeServiceId: "service-from-output",
+            foundryVersionId: "foundry-1",
+            status: "stopped",
+            previewDomain: undefined,
+            uploadUrl: undefined,
+            artifactHash: undefined,
+            serviceEndpointDomain: undefined,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        });
+
+        expect(output?.computeServiceId).toBe("service-from-output");
+        expect(output?.status).toBe("running");
+        expect(calls).toEqual([
+          [
+            "listServiceComputeVersions",
+            { computeServiceId: "service-from-output", query: { limit: 100 } },
+          ],
+          ["getComputeServiceVersion", "version-1"],
+        ]);
+      }).pipe(
+        Effect.provide(ComputeVersionProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
   it.effect("replaces when artifactPath contents change", () => {
     const client = {} as PrismaManagementClient;
 
