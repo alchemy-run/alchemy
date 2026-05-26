@@ -920,7 +920,7 @@ describe("Prisma Compute lifecycle helpers", () => {
   );
 
   it.effect(
-    "re-observes compute services when project delete reports active versions",
+    "re-observes compute services when project delete reports dependencies",
     () =>
       Effect.gen(function* () {
         const calls: string[] = [];
@@ -992,8 +992,9 @@ describe("Prisma Compute lifecycle helpers", () => {
                   new PrismaApiError({
                     method: "DELETE",
                     path: `/v1/projects/${projectId}`,
-                    status: 409,
-                    message: "active compute versions exist",
+                    status: 400,
+                    message:
+                      "Project cannot be deleted due to existing dependencies.",
                   }),
                 );
               }

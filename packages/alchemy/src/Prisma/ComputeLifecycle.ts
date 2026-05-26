@@ -88,6 +88,13 @@ const DEFAULT_TIMEOUT_SECONDS = 120;
 const DEFAULT_POLL_INTERVAL_MS = 1_000;
 const DELETE_CONFLICT_RETRY_ATTEMPTS = 3;
 
+const isProjectDeleteBlocked = (error: unknown): boolean =>
+  isConflict(error) ||
+  (error instanceof PrismaApiError &&
+    error.method === "DELETE" &&
+    error.path.startsWith("/v1/projects/") &&
+    error.status === 400);
+
 const computeVersionDeleteFailed = (
   versionId: string,
   statusAtDelete: string | undefined,
@@ -410,7 +417,7 @@ export const destroyComputeProject: (
         const deleted = yield* client.deleteProject(projectId).pipe(
           Effect.as(true),
           Effect.catchIf(isNotFound, () => Effect.succeed(true)),
-          Effect.catchIf(isConflict, (error) =>
+          Effect.catchIf(isProjectDeleteBlocked, (error) =>
             attempt + 1 < DELETE_CONFLICT_RETRY_ATTEMPTS
               ? cleanupServices().pipe(Effect.as(false))
               : Effect.fail(error),
