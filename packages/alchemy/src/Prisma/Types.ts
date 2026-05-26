@@ -201,8 +201,7 @@ export interface DatabaseUpdateInput {
 export type DatabaseSourceInput =
   | { type: "empty" }
   | { type: "database"; databaseId: string }
-  | { type: "backup"; databaseId: string; backupId: string }
-  | Record<string, unknown>;
+  | { type: "backup"; databaseId: string; backupId: string };
 
 export interface Backup {
   id: string;
