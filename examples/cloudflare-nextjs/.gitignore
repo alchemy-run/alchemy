@@ -1,6 +1,7 @@
 node_modules
 .next
 .open-next
+.open-next-bundled
 .wrangler
 .alchemy
 out

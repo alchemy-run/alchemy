@@ -1,11 +1,9 @@
 // Server Component — renders inside the OpenNext worker on Cloudflare
 // when deployed via `bun run deploy`.
 //
-// If the deploy goes through alchemy's default rolldown step, the
-// OpenNext bundle is rewritten in ways that break the worker at request
-// time (`createGenericHandler` blows up because its dynamic `import()`
-// resolver returns `undefined`). Setting `bundle: false` in
-// `alchemy.run.ts` is what keeps this page reachable in production.
+// Wrangler's dry-run bundle step prepares the OpenNext output for the
+// Cloudflare runtime. Alchemy then uploads that generated worker with
+// `bundle: false`, so it does not run a second rolldown pass.
 export default function HomePage() {
   return (
     <main style={{ maxWidth: "48rem", margin: "0 auto" }}>
@@ -28,8 +26,9 @@ export default function HomePage() {
       </p>
       <p>
         This page is rendered server-side inside a Cloudflare Worker. It only
-        renders correctly because alchemy uploaded the OpenNext bundle
-        byte-for-byte instead of running it through rolldown a second time.
+        renders correctly because alchemy uploaded the Wrangler-produced
+        OpenNext worker byte-for-byte instead of running it through rolldown a
+        second time.
       </p>
       <p style={{ color: "#71717a", fontSize: "0.875rem" }}>
         Rendered at <time>{new Date().toISOString()}</time>

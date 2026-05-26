@@ -4,7 +4,7 @@ Minimal Next.js app deployed to a Cloudflare Worker via [OpenNext]. The
 worker is uploaded by alchemy with
 [`Cloudflare.Worker({ bundle: false })`][bundle-false], which is the
 supported way to ship pre-built worker bundles produced by external
-tools (OpenNext, wrangler, custom build pipelines, …) without alchemy
+tools (OpenNext, Wrangler, custom build pipelines, …) without alchemy
 re-bundling them through rolldown.
 
 This example is the condensed version of the original
@@ -16,10 +16,15 @@ This example is the condensed version of the original
 
 ## What this example demonstrates
 
-`@opennextjs/cloudflare build` emits a complete, runtime-ready ESM
-worker at `.open-next/worker.js`. When alchemy runs that file through
-its default rolldown step, dynamic `import()` calls inside the OpenNext
-runtime are rewritten in ways that break the worker at request time:
+`@opennextjs/cloudflare build` emits `.open-next/worker.js` plus sibling
+modules. That output still needs Wrangler's Cloudflare bundling pass for
+runtime compatibility. In this example, `wrangler deploy --dry-run
+--outdir=.open-next-bundled` produces the final worker at
+`.open-next-bundled/worker.js`.
+
+When alchemy runs OpenNext output through its default rolldown step,
+dynamic `import()` calls inside the OpenNext runtime are rewritten in
+ways that break the worker at request time:
 
 ```text
 UnknownCloudflareError: Uncaught TypeError: Cannot destructure
@@ -27,14 +32,14 @@ property 'name' of '(intermediate value)' as it is undefined.
   at worker.js:1:23445 in createGenericHandler
 ```
 
-`bundle: false` opts out of the rolldown step entirely. The OpenNext
-output is uploaded byte-for-byte and the worker boots normally.
+`bundle: false` opts out of alchemy's rolldown step entirely. The
+Wrangler-produced worker is uploaded byte-for-byte and boots normally.
 
 The relevant lines are in [`alchemy.run.ts`](./alchemy.run.ts):
 
 ```ts
 yield* Cloudflare.Worker("NextjsWorker", {
-  main: ".open-next/worker.js",
+  main: ".open-next-bundled/worker.js",
   bundle: false, // ← upload `main` as-is, no rolldown
   assets: { directory: ".open-next/assets", /* … */ },
   // …
@@ -48,13 +53,13 @@ yield* Cloudflare.Worker("NextjsWorker", {
 | `alchemy.run.ts`       | Single-stack alchemy program with `bundle: false`          |
 | `next.config.mjs`      | Next.js config + `initOpenNextCloudflareForDev`            |
 | `open-next.config.ts`  | Minimal `@opennextjs/cloudflare` config                    |
-| `wrangler.jsonc`       | Required by `opennextjs-cloudflare build`'s sanity check   |
+| `wrangler.jsonc`       | Config for OpenNext and Wrangler's dry-run bundle step     |
 | `src/app/layout.tsx`   | Root layout                                                |
 | `src/app/page.tsx`     | Server-rendered home page                                  |
 
 The Next.js app is intentionally trivial — a single Server Component
-home page. Anything richer would obscure the point: that the OpenNext
-output reaches Cloudflare unmodified.
+home page. Anything richer would obscure the point: that the final
+externally produced worker reaches Cloudflare unmodified.
 
 ## Deploy
 
@@ -69,10 +74,12 @@ bun run deploy
 `bun run deploy` runs:
 
 1. `next build` — produce a Next.js production build
-2. `opennextjs-cloudflare build` — wrap it as a Cloudflare worker bundle
-   under `.open-next/`
-3. `alchemy deploy` — read `.open-next/worker.js`, hash it, and upload
-   it to Cloudflare untouched (because `bundle: false` is set)
+2. `opennextjs-cloudflare build` — emit OpenNext's Cloudflare worker
+   files under `.open-next/`
+3. `wrangler deploy --dry-run --outdir=.open-next-bundled` — produce the
+   runtime-ready Worker bundle without deploying it
+4. `alchemy deploy` — read `.open-next-bundled/worker.js`, hash it, and
+   upload it to Cloudflare untouched (because `bundle: false` is set)
 
 When the deploy finishes, alchemy prints the `workers.dev` URL. Open it
 to see the home page rendered server-side inside the worker.

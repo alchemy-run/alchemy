@@ -1,10 +1,7 @@
 {
-  // Exists only to satisfy `opennextjs-cloudflare build`'s sanity check.
-  // The actual deploy is driven by `alchemy.run.ts`, which reads the
-  // OpenNext output (`.open-next/`) directly and ignores wrangler.
-  //
-  // If you switch this example to wrangler-based deploys, replace the
-  // values below with real ones.
+  // Used by `opennextjs-cloudflare build` and by `wrangler deploy
+  // --dry-run --outdir=.open-next-bundled`, which creates the
+  // Cloudflare-ready worker bundle that alchemy uploads.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cloudflare-nextjs-example",
   "main": ".open-next/worker.js",

@@ -7,9 +7,9 @@ import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import * as pathe from "pathe";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -18,17 +18,17 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Path to a hand-written ESM bundle that must be uploaded as-is.
-// Re-bundling would strip the SENTINEL comment and likely rename
-// `kSentinel`, both of which we assert against below.
-const main = pathe.resolve(import.meta.dirname, "preBundledWorker.mjs");
-
 test.provider(
   "bundle: false uploads main byte-for-byte (no rolldown step)",
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
       const { accountId } = yield* CloudflareEnvironment;
+      // Path to a hand-written ESM bundle that must be uploaded as-is.
+      // Re-bundling would strip the SENTINEL comment and likely rename
+      // `kSentinel`, both of which we assert against below.
+      const main = path.resolve(import.meta.dirname, "preBundledWorker.mjs");
 
       yield* stack.destroy();
 
@@ -61,12 +61,10 @@ test.provider(
       // string literal, so the body check is mostly a smoke test;
       // the hash assertion above is the primary guarantee.
       if (worker.url) {
-        const response = yield* Effect.tryPromise(() => fetch(worker.url!));
-        const body = yield* Effect.tryPromise(() => response.text());
-        expect(body).toEqual("alchemy-bundle-false-test/7f1c");
-        expect(response.headers.get("x-alchemy-sentinel")).toEqual(
-          "alchemy-bundle-false-test/7f1c",
-        );
+        yield* expectWorkerResponse(worker.url, {
+          body: "alchemy-bundle-false-test/7f1c",
+          header: "x-alchemy-sentinel",
+        });
       }
 
       // Re-deploy with no changes: hash must remain stable.
@@ -86,7 +84,43 @@ test.provider(
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
-    }).pipe(logLevel),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+);
+
+test.provider("bundle: false uploads imported sibling modules", (stack) =>
+  Effect.gen(function* () {
+    const path = yield* Path.Path;
+    const { accountId } = yield* CloudflareEnvironment;
+    const mainWithImport = path.resolve(
+      import.meta.dirname,
+      "preBundledWorkerWithImport.mjs",
+    );
+
+    yield* stack.destroy();
+
+    const worker = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.Worker("BundleFalseWorkerWithImport", {
+          main: mainWithImport,
+          bundle: false,
+          subdomain: { enabled: true, previewsEnabled: true },
+          compatibility: {
+            date: "2024-01-01",
+          },
+        });
+      }),
+    );
+
+    if (worker.url) {
+      yield* expectWorkerResponse(worker.url, {
+        body: "alchemy-bundle-false-imported-module/4d2a",
+        header: "x-alchemy-imported-sentinel",
+      });
+    }
+
+    yield* stack.destroy();
+    yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+  }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
 );
 
 const waitForWorkerToBeDeleted = Effect.fn(function* (
@@ -109,3 +143,33 @@ const waitForWorkerToBeDeleted = Effect.fn(function* (
 });
 
 class WorkerStillExists extends Data.TaggedError("WorkerStillExists") {}
+class WorkerResponseNotReady extends Data.TaggedError(
+  "WorkerResponseNotReady",
+)<{
+  body: string;
+  header: string | null;
+}> {}
+
+const expectWorkerResponse = Effect.fn(function* (
+  url: string,
+  expected: { body: string; header: string },
+) {
+  const actual = yield* Effect.gen(function* () {
+    const response = yield* Effect.tryPromise(() => fetch(url));
+    const body = yield* Effect.tryPromise(() => response.text());
+    const header = response.headers.get(expected.header);
+    if (body !== expected.body || header !== expected.body) {
+      return yield* new WorkerResponseNotReady({ body, header });
+    }
+    return { body, header };
+  }).pipe(
+    Effect.retry({
+      while: (error) => error instanceof WorkerResponseNotReady,
+      schedule: Schedule.exponential("500 millis").pipe(
+        Schedule.both(Schedule.recurs(20)),
+      ),
+    }),
+  );
+  expect(actual.body).toEqual(expected.body);
+  expect(actual.header).toEqual(expected.body);
+});

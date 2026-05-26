@@ -5,19 +5,13 @@ import * as Effect from "effect/Effect";
 // Deploy a Next.js app via OpenNext + Cloudflare Workers, exercising
 // the `bundle: false` code path on `Cloudflare.Worker`.
 //
-// `.open-next/worker.js` is a complete, runtime-ready ESM bundle
-// produced by `@opennextjs/cloudflare`. Re-running it through
-// alchemy's rolldown step rewrites the dynamic `import()` calls that
-// OpenNext relies on, which makes the deploy fail Cloudflare's
-// validation step with:
+// `@opennextjs/cloudflare` emits `.open-next/worker.js` plus sibling
+// modules. Wrangler's dry-run bundle step then applies the same
+// Cloudflare compatibility transforms it uses for deploys and writes a
+// single runtime-ready worker to `.open-next-bundled/worker.js`.
 //
-//   UnknownCloudflareError: Uncaught TypeError: Cannot destructure
-//   property 'name' of '(intermediate value)' as it is undefined.
-//   at worker.js:1:23445 in createGenericHandler
-//
-// `bundle: false` short-circuits the rolldown step and uploads the
-// OpenNext output byte-for-byte, which is what the upstream tool
-// expects.
+// `bundle: false` short-circuits alchemy's rolldown step and uploads
+// that externally produced worker byte-for-byte.
 export default Alchemy.Stack(
   "CloudflareNextjsExample",
   {
@@ -26,7 +20,7 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const worker = yield* Cloudflare.Worker("NextjsWorker", {
-      main: ".open-next/worker.js",
+      main: ".open-next-bundled/worker.js",
       bundle: false,
       assets: {
         directory: ".open-next/assets",

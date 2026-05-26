@@ -1163,6 +1163,10 @@ export const LiveWorkerProvider = () =>
           crypto.createHash("sha256").update(bytes).digest("hex"),
         );
 
+      const rawModuleImportPattern =
+        /(?:import|export)\s+(?:[^'"]*?\s+from\s*)?["'](\.{1,2}\/[^"']+)["']|import\s*\(\s*["'](\.{1,2}\/[^"']+)["']\s*\)/g;
+      const jsModuleExtensions = new Set([".js", ".mjs", ".cjs"]);
+
       const sanitizeMain = (main: string) =>
         Effect.sync(() => {
           try {
@@ -1174,19 +1178,131 @@ export const LiveWorkerProvider = () =>
 
       const prepareRawBundle = Effect.fnUntraced(function* (main: string) {
         const fs = yield* FileSystem.FileSystem;
-        const realMain = yield* sanitizeMain(main);
-        const content = yield* fs.readFile(realMain).pipe(
+        const sanitizedMain = yield* sanitizeMain(main);
+        const realMain = yield* fs.realPath(sanitizedMain).pipe(
           Effect.mapError(
             (cause) =>
               new Bundle.BundleError({
-                message: `Failed to read worker bundle: ${realMain}`,
+                message: `Failed to resolve worker bundle: ${sanitizedMain}`,
                 cause,
               }),
           ),
         );
-        const hash = yield* hashBytes(content);
+        const rootDir = path.dirname(realMain);
+        const visited = new Set<string>();
+        const files: Bundle.BundleFile[] = [];
+
+        const readRawModuleFile = (filename: string) =>
+          fs.readFile(filename).pipe(
+            Effect.mapError(
+              (cause) =>
+                new Bundle.BundleError({
+                  message: `Failed to read worker bundle module: ${filename}`,
+                  cause,
+                }),
+            ),
+          );
+
+        const decodeModuleSource = (content: Uint8Array) =>
+          Effect.sync(() => new TextDecoder().decode(content));
+
+        const findRelativeImports = (source: string) =>
+          Effect.sync(() => {
+            const imports: string[] = [];
+            rawModuleImportPattern.lastIndex = 0;
+            let match: RegExpExecArray | null;
+            while ((match = rawModuleImportPattern.exec(source)) !== null) {
+              const specifier = match[1] ?? match[2];
+              if (specifier) {
+                imports.push(specifier);
+              }
+            }
+            return imports;
+          });
+
+        const resolveRawModuleImport = Effect.fnUntraced(function* (
+          from: string,
+          specifier: string,
+        ) {
+          const specifierPath = specifier.replace(/[?#].*$/, "");
+          const absolute = path.resolve(path.dirname(from), specifierPath);
+          const realImport = yield* fs.realPath(absolute).pipe(
+            Effect.mapError(
+              (cause) =>
+                new Bundle.BundleError({
+                  message: `Failed to resolve worker bundle import "${specifier}" from ${from}`,
+                  cause,
+                }),
+            ),
+          );
+          const relative = path.relative(rootDir, realImport);
+          if (
+            relative === "" ||
+            relative.startsWith("..") ||
+            path.isAbsolute(relative)
+          ) {
+            return yield* new Bundle.BundleError({
+              message: `Worker bundle import "${specifier}" from ${from} resolves outside ${rootDir}`,
+            });
+          }
+          return {
+            filename: realImport,
+            bundlePath: relative,
+          };
+        });
+
+        const collectRawModule = Effect.fnUntraced(function* (
+          filename: string,
+          bundlePath: string,
+        ): Generator<Effect.Effect<any, Bundle.BundleError, never>, void, any> {
+          if (visited.has(filename)) {
+            return;
+          }
+          visited.add(filename);
+
+          const content = yield* readRawModuleFile(filename);
+          const hash = yield* hashBytes(content);
+          files.push({ path: bundlePath, content, hash });
+
+          if (!jsModuleExtensions.has(path.extname(filename))) {
+            return;
+          }
+
+          const source = yield* decodeModuleSource(content);
+          const imports = yield* findRelativeImports(source);
+          for (const specifier of imports) {
+            const imported = yield* resolveRawModuleImport(filename, specifier);
+            yield* collectRawModule(imported.filename, imported.bundlePath);
+          }
+        });
+
+        yield* collectRawModule(realMain, path.basename(realMain));
+
+        if (files.length === 0) {
+          return yield* new Bundle.BundleError({
+            message: `Worker bundle has no files: ${realMain}`,
+          });
+        }
+
+        const sortedFiles = [
+          files[0],
+          ...files.slice(1).sort((a, b) => a.path.localeCompare(b.path)),
+        ] as [Bundle.BundleFile, ...Bundle.BundleFile[]];
+        const hashEffect =
+          sortedFiles.length === 1
+            ? Effect.succeed(sortedFiles[0].hash)
+            : hashScript(
+                JSON.stringify(
+                  sortedFiles.map((file) => ({
+                    path: file.path,
+                    hash: file.hash,
+                  })),
+                ),
+              );
+        const hash = yield* hashEffect;
+
         return {
-          files: [{ path: "main.js", content, hash }],
+          files: sortedFiles,
           hash,
         } satisfies Bundle.BundleOutput;
       });

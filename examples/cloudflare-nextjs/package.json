@@ -10,7 +10,7 @@
   "type": "module",
   "scripts": {
     "build": "next build",
-    "build:worker": "next build && opennextjs-cloudflare build",
+    "build:worker": "next build && opennextjs-cloudflare build && wrangler deploy --dry-run --outdir=.open-next-bundled",
     "deploy": "bun run build:worker && alchemy deploy",
     "destroy": "alchemy destroy",
     "dev": "next dev",
