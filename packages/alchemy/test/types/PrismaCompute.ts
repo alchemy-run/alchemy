@@ -6,6 +6,14 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 
 declare const connection: Prisma.Connection;
 
+type Equal<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : false;
+type Expect<T extends true> = T;
+type EffectRequirement<T> =
+  T extends Effect.Effect<unknown, unknown, infer R> ? R : never;
+
 interface ApiShape {
   connectionId(): Effect.Effect<string, never, RuntimeContext>;
 }
@@ -22,6 +30,12 @@ export class PrismaComputeApi extends Prisma.Compute<
 export const PrismaComputeApiLive = PrismaComputeApi.make(
   Effect.gen(function* () {
     const db = yield* Prisma.Connection.bind(connection);
+    type _DatabaseUrlIsRuntimeOnly = Expect<
+      Equal<EffectRequirement<typeof db.databaseUrl>, RuntimeContext>
+    >;
+    type _ConnectionIdIsRuntimeOnly = Expect<
+      Equal<EffectRequirement<typeof db.connectionId>, RuntimeContext>
+    >;
 
     return PrismaComputeApi.of({
       connectionId: () => db.connectionId,
