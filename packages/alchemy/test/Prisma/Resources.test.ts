@@ -1679,6 +1679,13 @@ describe("Prisma resource providers", () => {
         failNotFound("getBranch", id, "GET", `/v1/branches/${id}`),
       deleteBranch: (id: string) =>
         failNotFound("deleteBranch", id, "DELETE", `/v1/branches/${id}`),
+      getEnvironmentVariable: (id: string) =>
+        failNotFound(
+          "getEnvironmentVariable",
+          id,
+          "GET",
+          `/v1/environment-variables/${id}`,
+        ),
       deleteEnvironmentVariable: (id: string) =>
         failNotFound(
           "deleteEnvironmentVariable",
@@ -1759,7 +1766,7 @@ describe("Prisma resource providers", () => {
         ["getDatabase", "database-1"],
         ["deleteConnection", "connection-1"],
         ["getBranch", "branch-1"],
-        ["deleteEnvironmentVariable", "env-1"],
+        ["getEnvironmentVariable", "env-1"],
         ["deleteSourceRepository", "repo-1"],
         ["listServiceComputeVersions", "service-1"],
         ["deleteComputeService", "service-1"],
@@ -2259,6 +2266,23 @@ describe("Prisma resource providers", () => {
       const calls: Call[] = [];
       const notes: string[] = [];
       const client = {
+        getEnvironmentVariable: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getEnvironmentVariable", id]);
+            return {
+              id,
+              type: "environment-variable" as const,
+              url: `https://api.prisma.test/v1/environment-variables/${id}`,
+              projectId: "project-1",
+              branchId: null,
+              class: "production" as const,
+              key: "PRISMA_INTERNAL_URL",
+              valueKid: "kid-system",
+              isManagedBySystem: true,
+              createdAt,
+              updatedAt,
+            };
+          }),
         deleteEnvironmentVariable: (id: string) =>
           Effect.sync(() => {
             calls.push(["deleteEnvironmentVariable", id]);
@@ -2292,9 +2316,135 @@ describe("Prisma resource providers", () => {
           bindings: [],
         });
 
-        expect(calls).toEqual([]);
+        expect(calls).toEqual([["getEnvironmentVariable", "env-system"]]);
         expect(notes).toEqual([
           "Skipping direct delete for system-managed Prisma environment variable 'PRISMA_INTERNAL_URL'.",
+        ]);
+      }).pipe(Effect.provide(providerLayer(client)));
+    },
+  );
+
+  it.effect(
+    "checks live environment variable ownership before deleting",
+    () => {
+      const calls: Call[] = [];
+      const client = {
+        getEnvironmentVariable: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getEnvironmentVariable", id]);
+            return {
+              id,
+              type: "environment-variable" as const,
+              url: `https://api.prisma.test/v1/environment-variables/${id}`,
+              projectId: "project-1",
+              branchId: null,
+              class: "production" as const,
+              key: "PRISMA_INTERNAL_URL",
+              valueKid: "kid-system",
+              isManagedBySystem: true,
+              createdAt,
+              updatedAt,
+            };
+          }),
+        deleteEnvironmentVariable: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["deleteEnvironmentVariable", id]);
+          }),
+      } as unknown as PrismaManagementClient;
+
+      const session = {
+        note: (message: string) =>
+          Effect.sync(() => {
+            calls.push(["note", message]);
+          }),
+      };
+
+      return Effect.gen(function* () {
+        const envProvider = yield* PrismaEnvironmentVariable.Provider;
+        yield* envProvider.delete!({
+          id: "EnvironmentVariable",
+          instanceId: "00000000000000000000000000000000",
+          olds: {} as never,
+          output: {
+            environmentVariableId: "env-system",
+            projectId: "project-1",
+            branchId: null,
+            class: "production",
+            key: "TOKEN",
+            value: Redacted.make("secret"),
+            valueKid: "kid-user",
+            isManagedBySystem: false,
+            createdAt,
+            updatedAt,
+          },
+          session: session as never,
+          bindings: [],
+        });
+
+        expect(calls).toEqual([
+          ["getEnvironmentVariable", "env-system"],
+          [
+            "note",
+            "Skipping direct delete for system-managed Prisma environment variable 'PRISMA_INTERNAL_URL'.",
+          ],
+        ]);
+      }).pipe(Effect.provide(providerLayer(client)));
+    },
+  );
+
+  it.effect(
+    "deletes an environment variable when stale state says system-managed",
+    () => {
+      const calls: Call[] = [];
+      const client = {
+        getEnvironmentVariable: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["getEnvironmentVariable", id]);
+            return {
+              id,
+              type: "environment-variable" as const,
+              url: `https://api.prisma.test/v1/environment-variables/${id}`,
+              projectId: "project-1",
+              branchId: null,
+              class: "production" as const,
+              key: "TOKEN",
+              valueKid: "kid-user",
+              isManagedBySystem: false,
+              createdAt,
+              updatedAt,
+            };
+          }),
+        deleteEnvironmentVariable: (id: string) =>
+          Effect.sync(() => {
+            calls.push(["deleteEnvironmentVariable", id]);
+          }),
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const envProvider = yield* PrismaEnvironmentVariable.Provider;
+        yield* envProvider.delete!({
+          id: "EnvironmentVariable",
+          instanceId: "00000000000000000000000000000000",
+          olds: {} as never,
+          output: {
+            environmentVariableId: "env-1",
+            projectId: "project-1",
+            branchId: null,
+            class: "production",
+            key: "PRISMA_INTERNAL_URL",
+            value: Redacted.make("secret"),
+            valueKid: "kid-system",
+            isManagedBySystem: true,
+            createdAt,
+            updatedAt,
+          },
+          session: undefined as never,
+          bindings: [],
+        });
+
+        expect(calls).toEqual([
+          ["getEnvironmentVariable", "env-1"],
+          ["deleteEnvironmentVariable", "env-1"],
         ]);
       }).pipe(Effect.provide(providerLayer(client)));
     },
@@ -3319,6 +3469,23 @@ describe("Prisma resource providers", () => {
         Effect.sync(() => {
           calls.push(["deleteComputeService", id]);
         }),
+      getEnvironmentVariable: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getEnvironmentVariable", id]);
+          return {
+            id,
+            type: "environment-variable" as const,
+            url: `https://api.prisma.test/v1/environment-variables/${id}`,
+            projectId: "project-1",
+            branchId: null,
+            class: "production" as const,
+            key: "TOKEN",
+            valueKid: "kid-1",
+            isManagedBySystem: false,
+            createdAt,
+            updatedAt,
+          };
+        }),
       deleteEnvironmentVariable: (id: string) =>
         Effect.sync(() => {
           calls.push(["deleteEnvironmentVariable", id]);
@@ -3377,6 +3544,7 @@ describe("Prisma resource providers", () => {
         ["deleteComputeServiceVersion", "version-1"],
         ["deleteComputeService", "service-1"],
         ["deleteSourceRepository", "repo-1"],
+        ["getEnvironmentVariable", "env-1"],
         ["deleteEnvironmentVariable", "env-1"],
         ["getBranch", "branch-1"],
         ["deleteBranch", "branch-1"],

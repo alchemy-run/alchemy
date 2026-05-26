@@ -301,16 +301,22 @@ export const EnvironmentVariableProvider = () =>
         }),
         delete: Effect.fn(function* ({ output, session }) {
           if (isPrismaDevId(output.environmentVariableId)) return;
-          if (output.isManagedBySystem) {
+          const variable = yield* client
+            .getEnvironmentVariable(output.environmentVariableId)
+            .pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+          if (!variable) return;
+          if (variable.isManagedBySystem) {
+            // Prisma-owned environment variables are provider-managed system
+            // state and are not deletable through this resource lifecycle.
             if (session !== undefined) {
               yield* session.note(
-                `Skipping direct delete for system-managed Prisma environment variable '${output.key}'.`,
+                `Skipping direct delete for system-managed Prisma environment variable '${variable.key}'.`,
               );
             }
             return;
           }
           yield* client
-            .deleteEnvironmentVariable(output.environmentVariableId)
+            .deleteEnvironmentVariable(variable.id)
             .pipe(Effect.catchIf(isNotFound, () => Effect.void));
         }),
       };
