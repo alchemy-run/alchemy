@@ -1676,6 +1676,16 @@ export const ComputeProvider = () =>
                 )
               : undefined;
           let createdVersionId: string | undefined;
+          const cleanupCreatedVersionOnFailure = (
+            versionId: string,
+            error: unknown,
+          ) =>
+            createdVersionId === versionId
+              ? destroyComputeVersion(client, versionId, effectiveNews).pipe(
+                  Effect.catch(() => Effect.void),
+                  Effect.andThen(() => Effect.fail(error)),
+                )
+              : Effect.fail(error);
 
           if (!version) {
             const created = yield* client.createServiceComputeVersion(
@@ -1724,25 +1734,47 @@ export const ComputeProvider = () =>
                   createdAt: undefined,
                 }),
               ),
+              Effect.catch((error) =>
+                cleanupCreatedVersionOnFailure(created.id, error),
+              ),
+            );
+          }
+          if (!version) {
+            return yield* Effect.fail(
+              new Error(
+                "Prisma Compute version could not be resolved after creation.",
+              ),
             );
           }
 
           if (effectiveNews.start ?? true) {
-            if (
-              version.status !== "running" &&
-              version.status !== "provisioning"
-            ) {
-              yield* startComputeServiceVersionWithFallback(client, version.id);
-            }
-            version = yield* waitForComputeVersionStatus(
-              client,
-              version.id,
-              "running",
-              effectiveNews,
-            );
-            yield* waitForDeploymentUrl(
-              toDeploymentUrl(version.previewDomain),
-              effectiveNews,
+            const currentVersion = version;
+            const versionId = currentVersion.id;
+            version = yield* Effect.gen(function* () {
+              if (
+                currentVersion.status !== "running" &&
+                currentVersion.status !== "provisioning"
+              ) {
+                yield* startComputeServiceVersionWithFallback(
+                  client,
+                  currentVersion.id,
+                );
+              }
+              const running = yield* waitForComputeVersionStatus(
+                client,
+                currentVersion.id,
+                "running",
+                effectiveNews,
+              );
+              yield* waitForDeploymentUrl(
+                toDeploymentUrl(running.previewDomain),
+                effectiveNews,
+              );
+              return running;
+            }).pipe(
+              Effect.catch((error) =>
+                cleanupCreatedVersionOnFailure(versionId, error),
+              ),
             );
           }
 
@@ -1758,16 +1790,7 @@ export const ComputeProvider = () =>
                 .promoteComputeService(service.id, version.id)
                 .pipe(
                   Effect.catch((error) =>
-                    createdVersionId === version.id
-                      ? destroyComputeVersion(
-                          client,
-                          version.id,
-                          effectiveNews,
-                        ).pipe(
-                          Effect.catch(() => Effect.void),
-                          Effect.andThen(() => Effect.fail(error)),
-                        )
-                      : Effect.fail(error),
+                    cleanupCreatedVersionOnFailure(version.id, error),
                   ),
                 );
               serviceEndpointDomain = promoted.serviceEndpointDomain;

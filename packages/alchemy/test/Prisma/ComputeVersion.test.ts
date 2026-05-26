@@ -161,6 +161,181 @@ describe("Prisma ComputeVersion", () => {
     );
   });
 
+  it.effect("deletes created Compute version when start fails", () => {
+    const calls: Array<[string, unknown?]> = [];
+    const client = {
+      createServiceComputeVersion: () => {
+        calls.push(["createServiceComputeVersion"]);
+        return Effect.succeed({
+          id: "version-1",
+          type: "compute-version" as const,
+          url: "https://api.prisma.test/v1/versions/version-1",
+          foundryVersionId: "foundry-1",
+          uploadUrl: null,
+        });
+      },
+      getComputeServiceVersion: (id: string) => {
+        calls.push(["getComputeServiceVersion", id]);
+        return Effect.succeed({
+          id,
+          type: "compute-version" as const,
+          url: `https://api.prisma.test/v1/versions/${id}`,
+          foundryVersionId: "foundry-1",
+          status: "new",
+          previewDomain: null,
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      startComputeServiceVersion: (id: string) => {
+        calls.push(["startComputeServiceVersion", id]);
+        return Effect.fail(
+          new PrismaApiError({
+            method: "POST",
+            path: `/v1/compute-services/versions/${id}/start`,
+            status: 500,
+            message: "start failed",
+          }),
+        );
+      },
+      deleteComputeServiceVersion: (id: string) => {
+        calls.push(["deleteComputeServiceVersion", id]);
+        return Effect.void;
+      },
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* PrismaComputeVersion.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "Version",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            computeService: "service-1",
+            skipCodeUpload: true,
+            start: true,
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(PrismaApiError);
+      expect((error as PrismaApiError).message).toBe("start failed");
+      expect(calls).toContainEqual([
+        "deleteComputeServiceVersion",
+        "version-1",
+      ]);
+    }).pipe(
+      Effect.provide(ComputeVersionProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
+
+  it.effect("deletes created Compute version when promotion fails", () => {
+    const calls: Array<[string, unknown?]> = [];
+    let status = "new";
+    const client = {
+      createServiceComputeVersion: () => {
+        calls.push(["createServiceComputeVersion"]);
+        return Effect.succeed({
+          id: "version-1",
+          type: "compute-version" as const,
+          url: "https://api.prisma.test/v1/versions/version-1",
+          foundryVersionId: "foundry-1",
+          uploadUrl: null,
+        });
+      },
+      getComputeServiceVersion: (id: string) => {
+        calls.push(["getComputeServiceVersion", id]);
+        return Effect.succeed({
+          id,
+          type: "compute-version" as const,
+          url: `https://api.prisma.test/v1/versions/${id}`,
+          foundryVersionId: "foundry-1",
+          status,
+          previewDomain: "version-1.preview.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      startComputeServiceVersion: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["startComputeServiceVersion", id]);
+          status = "running";
+          return { previewDomain: "version-1.preview.prisma.build" };
+        }),
+      getComputeService: (id: string) => {
+        calls.push(["getComputeService", id]);
+        return Effect.succeed({
+          id,
+          type: "compute-service" as const,
+          url: `https://api.prisma.test/v1/compute-services/${id}`,
+          name: "api",
+          region: { id: "us-east-1", name: "US East" },
+          projectId: "project-1",
+          branchId: null,
+          latestVersionId: null,
+          serviceEndpointDomain: "api.prisma.build",
+          createdAt: "2026-01-01T00:00:00Z",
+        });
+      },
+      promoteComputeService: (computeServiceId: string, versionId: string) => {
+        calls.push(["promoteComputeService", { computeServiceId, versionId }]);
+        return Effect.fail(
+          new PrismaApiError({
+            method: "POST",
+            path: `/v1/compute-services/${computeServiceId}/promote`,
+            status: 500,
+            message: "promote failed",
+          }),
+        );
+      },
+      stopComputeServiceVersion: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["stopComputeServiceVersion", id]);
+          status = "stopped";
+        }),
+      deleteComputeServiceVersion: (id: string) => {
+        calls.push(["deleteComputeServiceVersion", id]);
+        return Effect.void;
+      },
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* PrismaComputeVersion.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "Version",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            computeService: "service-1",
+            skipCodeUpload: true,
+            promote: true,
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(PrismaApiError);
+      expect((error as PrismaApiError).message).toBe("promote failed");
+      expect(calls).toContainEqual([
+        "deleteComputeServiceVersion",
+        "version-1",
+      ]);
+    }).pipe(
+      Effect.provide(ComputeVersionProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
+
   it.effect("uploads version artifact bytes from artifactPath", () => {
     let uploaded:
       | { url: string; contentType: string | undefined; bytes: Uint8Array }
