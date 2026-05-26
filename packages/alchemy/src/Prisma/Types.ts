@@ -93,7 +93,7 @@ export interface EndpointDetail {
 }
 
 export interface EndpointDetailWithSecret extends EndpointDetail {
-  connectionString: string;
+  connectionString?: string;
 }
 
 export interface ConnectionEndpoints {
@@ -145,12 +145,10 @@ export interface DatabaseConnectionCreateInput extends Omit<
   "databaseId"
 > {}
 
-export interface DatabaseSource {
-  type: string;
-  databaseId?: string | null;
-  backupId?: string | null;
-  [key: string]: unknown;
-}
+export type DatabaseSource =
+  | { type: "empty" }
+  | { type: "database"; databaseId: string }
+  | { type: "backup"; databaseId: string; backupId: string };
 
 export interface Database {
   id: string;
@@ -164,7 +162,7 @@ export interface Database {
   connections: DatabaseConnection[];
   project: ResourceRef;
   region: { id: string; name: string } | null;
-  source: DatabaseSource;
+  source: DatabaseSource | null;
   branchId: string | null;
 }
 
