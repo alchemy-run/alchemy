@@ -3,6 +3,7 @@ import { isResolved } from "../Diff.ts";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
+import * as Output from "../Output.ts";
 import * as Provider from "../Provider.ts";
 import { Resource, type ResourceLike } from "../Resource.ts";
 import { RuntimeContext } from "../RuntimeContext.ts";
@@ -252,6 +253,12 @@ const redactedToString = (
 ): string | undefined =>
   Redacted.isRedacted(value) ? Redacted.value(value) : value;
 
+const runtimeOutput = <A>(
+  key: string,
+  output: Output.Output<A>,
+): Effect.Effect<A, never, RuntimeContext> =>
+  output.bind(key).pipe(Effect.flatMap((effect) => effect));
+
 export const ConnectionBindingLive = Layer.effect(
   ConnectionBinding,
   Effect.gen(function* () {
@@ -259,25 +266,29 @@ export const ConnectionBindingLive = Layer.effect(
 
     return Effect.fn(function* (connection: Connection) {
       yield* policy(connection);
+      const keys = connectionBindingEnvKeys(connection);
       return {
-        connectionId: yield* connection.connectionId,
-        databaseId: yield* connection.databaseId,
-        connectionString: (yield* connection.connectionString).pipe(
-          Effect.map(redactedToString),
-        ),
-        directConnectionString: (yield* connection.directConnectionString).pipe(
-          Effect.map(redactedToString),
-        ),
-        pooledConnectionString: (yield* connection.pooledConnectionString).pipe(
-          Effect.map(redactedToString),
-        ),
-        accelerateConnectionString:
-          (yield* connection.accelerateConnectionString).pipe(
-            Effect.map(redactedToString),
-          ),
-        host: yield* connection.host,
-        user: yield* connection.user,
-        password: (yield* connection.password).pipe(
+        connectionId: runtimeOutput(keys.connectionId, connection.connectionId),
+        databaseId: runtimeOutput(keys.databaseId, connection.databaseId),
+        connectionString: runtimeOutput(
+          keys.connectionString,
+          connection.connectionString,
+        ).pipe(Effect.map(redactedToString)),
+        directConnectionString: runtimeOutput(
+          keys.directConnectionString,
+          connection.directConnectionString,
+        ).pipe(Effect.map(redactedToString)),
+        pooledConnectionString: runtimeOutput(
+          keys.pooledConnectionString,
+          connection.pooledConnectionString,
+        ).pipe(Effect.map(redactedToString)),
+        accelerateConnectionString: runtimeOutput(
+          keys.accelerateConnectionString,
+          connection.accelerateConnectionString,
+        ).pipe(Effect.map(redactedToString)),
+        host: runtimeOutput(keys.host, connection.host),
+        user: runtimeOutput(keys.user, connection.user),
+        password: runtimeOutput(keys.password, connection.password).pipe(
           Effect.map(redactedToString),
         ),
       } satisfies ConnectionBindingClient;

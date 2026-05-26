@@ -364,12 +364,18 @@ describe("Prisma resource providers", () => {
       return Effect.gen(function* () {
         const db = yield* PrismaConnection.bind(connection);
 
+        expect(Object.keys(stored)).toEqual([]);
         expect(yield* db.connectionId).toBe("connection-1");
         expect(yield* db.directConnectionString).toBe("postgres://direct");
         expect(yield* db.pooledConnectionString).toBe("prisma://pooled");
         expect(yield* db.password).toBe("password");
         expect(Object.keys(stored)).toEqual(
-          expect.arrayContaining(["connection_1", "_redacted_"]),
+          expect.arrayContaining([
+            "PRISMA_API_CONNECTION_CONNECTION_ID",
+            "PRISMA_API_CONNECTION_DIRECT_CONNECTION_STRING",
+            "PRISMA_API_CONNECTION_POOLED_CONNECTION_STRING",
+            "PRISMA_API_CONNECTION_PASSWORD",
+          ]),
         );
       }).pipe(
         Effect.provide(ConnectionBindingLive),
