@@ -18,8 +18,15 @@ export const assertDefined = <T>(value: T | undefined, message: string): T => {
 };
 
 export const asEffect = <T, Err = never, Req = never>(
-  effect: T | Effect.Effect<T, Err, Req>,
+  effect:
+    | T
+    | Effect.Effect<T, Err, Req>
+    | { asEffect: () => Effect.Effect<T, Err, Req> },
 ): Effect.Effect<T, Err, Req> =>
-  Effect.isEffect(effect) ? effect : Effect.succeed(effect);
+  typeof (effect as any)?.asEffect === "function"
+    ? (effect as any).asEffect()
+    : Effect.isEffect(effect)
+      ? effect
+      : Effect.succeed(effect as T);
 
 export type IsNever<T> = [T] extends [never] ? true : false;

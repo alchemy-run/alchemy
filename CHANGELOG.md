@@ -1,3 +1,34 @@
+## v2.0.0-beta.44
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- Bundle analyzer plugin &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/405 [<samp>(28b8c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/28b8c7a4)
+- **cloudflare**:
+  - Support Artifacts binding in dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/419 [<samp>(3917e)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/3917ef3a)
+  - **zaraz**: Add ZarazConfig resource &nbsp;-&nbsp; by **Alex** in https://github.com/alchemy-run/alchemy-effect/issues/371 [<samp>(7a232)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/7a232990)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Node.js import resolution error from @alchemy.run/node-utils &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/406 [<samp>(4820d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/4820da51)
+- **bundle**:
+  - Support Vite-style ?raw imports &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/411 [<samp>(0e989)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/0e98917c)
+- **cli**:
+  - Filter bun's "not in project directory" watcher warning &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/124 [<samp>(67370)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/673701e6)
+- **cloudflare**:
+  - Update cloudflare-tools to 0.6.1 &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/403 [<samp>(cb68e)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/cb68ef48)
+  - Remove extraneous logs &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/410 [<samp>(7bb5d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/7bb5d132)
+  - Harden local durable object handling &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/408 [<samp>(19e80)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/19e80aa2)
+  - Update cloudflare-tools to 0.6.3 &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/418 [<samp>(60826)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/60826480)
+  - Optimize WorkerBridge imports and silence warning &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/420 [<samp>(aa9ee)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/aa9ee151)
+- **dev**:
+  - Dangling processes after dev server exits &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/382 [<samp>(6a8a0)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6a8a0258)
+- **website**:
+  - Extract privacy.mdx style block to css file &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/398 [<samp>(fd72a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/fd72a9de)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.43...HEAD)
+
+---
+
 ## v2.0.0-beta.43
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

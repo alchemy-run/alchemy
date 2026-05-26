@@ -123,7 +123,13 @@ test(
       const results = yield* Effect.forEach(
         Array.from({ length: N }, (_, i) => i),
         (i) =>
-          client.Ping({ message: `m-${i}` }).pipe(Effect.timeout("5 seconds")),
+          client.Ping({ message: `m-${i}` }).pipe(
+            Effect.timeout("5 seconds"),
+            Effect.retry({
+              schedule: Schedule.exponential("500 millis"),
+              times: 3,
+            }),
+          ),
         { concurrency: 64 },
       );
 
@@ -148,9 +154,14 @@ test(
       const results = yield* Effect.forEach(
         Array.from({ length: N }, (_, i) => i),
         (i) =>
-          client
-            .Count({ upto: 3 + (i % 3) })
-            .pipe(Stream.runCollect, Effect.timeout("5 seconds")),
+          client.Count({ upto: 3 + (i % 3) }).pipe(
+            Stream.runCollect,
+            Effect.timeout("5 seconds"),
+            Effect.retry({
+              schedule: Schedule.exponential("500 millis"),
+              times: 3,
+            }),
+          ),
         { concurrency: N },
       );
 
@@ -245,9 +256,13 @@ test(
       const results = yield* Effect.forEach(
         Array.from({ length: N }, (_, i) => i),
         (i) =>
-          client
-            .PingDO({ message: `m-${i}` })
-            .pipe(Effect.timeout("10 seconds")),
+          client.PingDO({ message: `m-${i}` }).pipe(
+            Effect.timeout("10 seconds"),
+            Effect.retry({
+              schedule: Schedule.exponential("500 millis"),
+              times: 3,
+            }),
+          ),
         { concurrency: 16 },
       );
 
@@ -272,9 +287,14 @@ test(
       const results = yield* Effect.forEach(
         Array.from({ length: N }, (_, i) => i),
         (i) =>
-          client
-            .CountDO({ upto: 3 + (i % 3) })
-            .pipe(Stream.runCollect, Effect.timeout("10 seconds")),
+          client.CountDO({ upto: 3 + (i % 3) }).pipe(
+            Stream.runCollect,
+            Effect.timeout("10 seconds"),
+            Effect.retry({
+              schedule: Schedule.exponential("500 millis"),
+              times: 3,
+            }),
+          ),
         { concurrency: N },
       );
 

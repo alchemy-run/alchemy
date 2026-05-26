@@ -12,6 +12,23 @@ import type { WebSocketConstructor } from "effect/unstable/socket/Socket";
 
 const isBun = typeof Bun !== "undefined";
 
+/**
+ * Constructs a layer with different implementations for Bun and Node.
+ */
+export const platformLayer = <A, E, R>(constructors: {
+  bun: () => Promise<Layer.Layer<A, E, R>>;
+  node: () => Promise<Layer.Layer<A, E, R>>;
+}) =>
+  Layer.unwrap(
+    Effect.promise(async () => {
+      if (isBun) {
+        return await constructors.bun();
+      } else {
+        return await constructors.node();
+      }
+    }),
+  );
+
 export type PlatformServices =
   | ChildProcessSpawner
   | FileSystem
@@ -21,29 +38,25 @@ export type PlatformServices =
   // WebSocketConstructor is not included in NodeServices/BunServices, but required for Workers tail
   | WebSocketConstructor;
 
-export const PlatformServices: Layer.Layer<PlatformServices> = Effect.promise(
-  async () => {
-    if (isBun) {
-      const [BunServices, BunSocket] = await Promise.all([
-        import("@effect/platform-bun/BunServices"),
-        import("@effect/platform-bun/BunSocket"),
-      ]);
-      return Layer.merge(
-        BunServices.layer,
-        BunSocket.layerWebSocketConstructor,
-      );
-    } else {
-      const [NodeServices, NodeSocket] = await Promise.all([
-        import("@effect/platform-node/NodeServices"),
-        import("@effect/platform-node/NodeSocket"),
-      ]);
-      return Layer.merge(
-        NodeServices.layer,
-        NodeSocket.layerWebSocketConstructor,
-      );
-    }
+export const PlatformServices: Layer.Layer<PlatformServices> = platformLayer({
+  bun: async () => {
+    const [BunServices, BunSocket] = await Promise.all([
+      import("@effect/platform-bun/BunServices"),
+      import("@effect/platform-bun/BunSocket"),
+    ]);
+    return Layer.merge(BunServices.layer, BunSocket.layerWebSocketConstructor);
   },
-).pipe(Layer.unwrap);
+  node: async () => {
+    const [NodeServices, NodeSocket] = await Promise.all([
+      import("@effect/platform-node/NodeServices"),
+      import("@effect/platform-node/NodeSocket"),
+    ]);
+    return Layer.merge(
+      NodeServices.layer,
+      NodeSocket.layerWebSocketConstructor,
+    );
+  },
+});
 
 export const runMain = <E, A>(
   effect: Effect.Effect<A, E>,
@@ -67,15 +80,16 @@ export const httpServer = (
   port: number = 0,
   host: string = "127.0.0.1",
 ): Layer.Layer<HttpServer, ServeError> =>
-  Effect.promise(async () => {
-    if (isBun) {
+  platformLayer({
+    bun: async () => {
       const BunHttpServer = await import("@effect/platform-bun/BunHttpServer");
       return BunHttpServer.layer({ hostname: host, port });
-    } else {
+    },
+    node: async () => {
       const [NodeHttpServer, Http] = await Promise.all([
         import("@effect/platform-node/NodeHttpServer"),
         import("node:http"),
       ]);
       return NodeHttpServer.layerServer(Http.createServer, { host, port });
-    }
-  }).pipe(Layer.unwrap);
+    },
+  });
