@@ -10,6 +10,7 @@ import {
   RpcSerialization,
 } from "effect/unstable/rpc";
 import type * as RpcClientError from "effect/unstable/rpc/RpcClientError";
+import type { Dependencies } from "../../Dependencies.ts";
 import type { HttpEffect } from "../../Http.ts";
 import type { Rpc as RpcShape } from "../../Rpc.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
@@ -49,10 +50,19 @@ const SchemaSymbol = Symbol.for("alchemy.RpcWorker.schema");
 // rpc client. We don't tie it to a specific `Effect.R` since the
 // requirements come from the underlying `Cloudflare.Worker` factory
 // and shouldn't leak into the Stack-side service signature.
+//
+// `Deps` mirrors `Cloudflare.Worker<Self, Bindings, Deps>` — declares
+// the DOs / Workers this script publishes for cross-script binding so
+// `Counter.from(WorkerA)` type-checks from another script.
 export interface RpcWorkerYieldable<
   Self,
   Rpcs extends Rpc.Any,
-> extends Effect.Effect<Worker<{}> & RpcShape<Self>, never, any> {
+  Deps = never,
+> extends Effect.Effect<
+  Worker<{}> & RpcShape<Self> & Dependencies<Deps>,
+  never,
+  any
+> {
   /** @internal */
   readonly [SchemaSymbol]: RpcGroup.RpcGroup<Rpcs>;
 }
@@ -71,12 +81,38 @@ export interface RpcWorkerClass extends Effect.Effect<
   /**
    * Class-based form: `class X extends RpcWorker<X>()(name, props, impl)`.
    *
+   * The optional second type argument `Deps` mirrors
+   * `Cloudflare.Worker<Self, Bindings, Deps>` — it declares the DOs
+   * this Worker publishes for cross-script binding so consumers can
+   * write `Counter.from(WorkerA)` and have it type-check. `Rpcs` is
+   * always inferred from `props.schema`.
+   *
    * Yielding the class in a Stack returns the {@link Worker} resource
    * (so `worker.url`, `worker.workerName`, etc. work as usual). To get
    * a typed `RpcClient` for *this* worker's rpc group from inside
    * another worker's init, call {@link RpcWorker.bind}.
    */
-  <Self>(): {
+  <Self, Deps = never>(): {
+    /**
+     * Modular form (no impl). Mirrors `Cloudflare.Worker<Self>()(id, props)`.
+     * Use `WorkerClass.make(impl)` to provide the runtime as a
+     * `Layer.Layer<Self>` so consumers that don't host the worker can
+     * import the class without pulling its runtime into their bundle.
+     */
+    <Rpcs extends Rpc.Any>(
+      id: string,
+      props: RpcWorkerProps<Rpcs>,
+    ): RpcWorkerYieldable<Self, Rpcs, Deps> & {
+      new (_: never): {};
+      make<InnerR = never, InitReq = never>(
+        impl: Effect.Effect<
+          Effect.Effect<HttpEffect<InnerR>, never, InnerR>,
+          never,
+          InitReq
+        >,
+      ): Layer.Layer<Self, never, Exclude<InitReq | InnerR, never>>;
+    };
+    /** Inline-impl form. */
     <Rpcs extends Rpc.Any, InnerR = never, InitReq = never>(
       id: string,
       props: RpcWorkerProps<Rpcs>,
@@ -85,7 +121,7 @@ export interface RpcWorkerClass extends Effect.Effect<
         never,
         InitReq
       >,
-    ): RpcWorkerYieldable<Self, Rpcs> & {
+    ): RpcWorkerYieldable<Self, Rpcs, Deps> & {
       // Phantom — `class X extends RpcWorker<X>()(...)` carries `X`
       // through the result type via `Rpc<Self>` on the binding side;
       // the instance shape itself is empty (no methods exposed on
@@ -302,6 +338,51 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  * );
  * ```
  *
+ * @section Modular form: separate the class from its runtime
+ * @example Class declaration with no impl + `static make(impl)`
+ * The inline class form above bundles the runtime into the class
+ * declaration. The two-arg form `(id, props)` declares the class
+ * as a pure tagged identifier; provide the runtime separately via
+ * `WorkerClass.make(impl)` so consumers can import the class for
+ * binding without pulling the host's runtime into their bundle.
+ * ```typescript
+ * export class TaskWorker extends Cloudflare.RpcWorker<TaskWorker>()(
+ *   "TaskWorker",
+ *   { main: import.meta.filename, schema: TaskRpcs },
+ * ) {}
+ *
+ * // Only the host script imports this default export; consumers
+ * // import the class above for `RpcWorker.bind(TaskWorker)`.
+ * export default TaskWorker.make(
+ *   Effect.gen(function* () {
+ *     const handlers = TaskRpcs.toLayer({
+ *       getTask: ({ id }) => Effect.succeed(`task-${id}`),
+ *     });
+ *     return RpcServer.toHttpEffect(TaskRpcs).pipe(
+ *       Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerJson)),
+ *     );
+ *   }),
+ * );
+ * ```
+ *
+ * @section Hosting a Durable Object for cross-script binding
+ * @example `RpcWorker<Self, Deps>()` declares published DOs
+ * The optional second type argument `Deps` mirrors
+ * `Cloudflare.Worker<Self, Bindings, Deps>` — it declares the DOs
+ * this Worker publishes for cross-script binding. With `Counter`
+ * named in `Deps`, any other Worker can write
+ * `Counter.from(TaskWorker)` and have it type-check.
+ * ```typescript
+ * import { Counter } from "./counter.ts";
+ *
+ * export class TaskWorker extends Cloudflare.RpcWorker<TaskWorker, Counter>()(
+ *   "TaskWorker",
+ *   { main: import.meta.filename, schema: TaskRpcs },
+ * ) {}
+ * ```
+ * See {@link RpcDurableObjectNamespace} for the consumer side
+ * (`Counter.from(TaskWorker)`).
+ *
  * @section Binding it from another worker
  * @example `Cloudflare.RpcWorker.bind(WorkerClass)`
  * Inside another worker's init, `RpcWorker.bind(WorkerClass)`
@@ -391,13 +472,22 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  */
 export const RpcWorker: RpcWorkerClass = (() => {
   const fn = (...args: any[]) => {
-    // Class-form: zero args returns the `(name, props, impl) =>` builder.
+    // Class-form: zero args returns the inner builder. Inner-arg arity
+    // distinguishes modular (`(id, props)`, no impl — `static make(impl)`
+    // provides the runtime) from inline-impl (`(id, props, impl)`).
     if (args.length === 0) {
-      return (
-        id: string,
-        props: RpcWorkerProps<any>,
-        impl: Effect.Effect<Effect.Effect<HttpEffect<any>>>,
-      ) => build(id, props, impl);
+      return (...inner: any[]) => {
+        if (inner.length === 2) {
+          const [id, props] = inner as [string, RpcWorkerProps<any>];
+          return buildModular(id, props);
+        }
+        const [id, props, impl] = inner as [
+          string,
+          RpcWorkerProps<any>,
+          Effect.Effect<Effect.Effect<HttpEffect<any>>>,
+        ];
+        return build(id, props, impl);
+      };
     }
     // Bare form: `(name, props, impl)`.
     const [id, props, impl] = args as [
@@ -412,6 +502,33 @@ export const RpcWorker: RpcWorkerClass = (() => {
   tagged.bind = bind;
   return tagged;
 })() as any;
+
+const wrapImpl = (impl: Effect.Effect<Effect.Effect<HttpEffect<any>>>) =>
+  // The user's inner Effect resolves to `HttpEffect`; the underlying
+  // `Cloudflare.Worker` expects `{ fetch: HttpEffect }`. Box it.
+  Effect.map(
+    impl,
+    (fetch) => ({ fetch }) as unknown as { fetch: HttpEffect<any> },
+  );
+
+const buildModular = (id: string, props: RpcWorkerProps<any>) => {
+  const { schema, ...workerProps } = props;
+  // Delegate to `Cloudflare.Worker<Self>()(id, props)` (modular form)
+  // so we inherit its `static make(impl)` plumbing for free. We just
+  // wrap the user's HttpEffect-returning impl into the `{ fetch }`
+  // shape `Cloudflare.Worker` expects, and stash the rpc schema on
+  // the class so `RpcWorker.bind(WorkerClass)` can recover it.
+  const Underlying: any = (WorkerCtor as any)()(id, workerProps);
+  const klass = class extends effectClass(
+    (Underlying as { asEffect(): Effect.Effect<Worker> }).asEffect(),
+  ) {
+    static make = (
+      impl: Effect.Effect<Effect.Effect<HttpEffect<any>>>,
+    ): Layer.Layer<any, never, any> => Underlying.make(wrapImpl(impl));
+  } as unknown as Record<symbol | string, unknown>;
+  klass[SchemaSymbol] = schema;
+  return klass;
+};
 
 const build = (
   id: string,

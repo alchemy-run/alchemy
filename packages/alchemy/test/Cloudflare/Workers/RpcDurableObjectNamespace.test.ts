@@ -29,6 +29,26 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 const rpcWorkerStack = beforeAll(deploy(RpcWorkerStack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(RpcWorkerStack));
 
+// Cap exponential backoff at 3s so retries stay bounded when CF edge is
+// slow (otherwise the geometric blow-up dominates wall time).
+const readinessSchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.either(Schedule.spaced("3 seconds")),
+);
+
+// Suffix DO instance ids with a per-process random tag so reruns under
+// `NO_DESTROY=1` don't collide with persisted state from earlier runs
+// (the DO's `count` lives in `state.storage`).
+const runId = Math.random().toString(36).slice(2, 10);
+const k = (name: string) => `${name}-${runId}`;
+
+const resetCounter = (url: string, id: string) =>
+  Effect.gen(function* () {
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    yield* client
+      .post(`${url}/counter/${id}/reset`)
+      .pipe(Effect.retry({ schedule: readinessSchedule, times: 10 }));
+  });
+
 const rpcClientLayer = (url: string) =>
   RpcClient.layerProtocolHttp({ url }).pipe(
     Layer.provide(FetchHttpClient.layer),
@@ -41,22 +61,19 @@ test(
   "RpcDurableObjectNamespace: Increment / Get round-trip via Worker",
   Effect.gen(function* () {
     const { url } = yield* stack;
+    const alpha = k("alpha");
+    yield* resetCounter(url, alpha);
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const incRes = yield* client.post(`${url}/counter/alpha/increment`).pipe(
-      Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 10,
-      }),
-    );
+    const incRes = yield* client.post(`${url}/counter/${alpha}/increment`);
     expect(incRes.status).toBe(200);
     const inc = (yield* incRes.json) as { count: number };
     expect(inc.count).toBe(1);
 
-    yield* client.post(`${url}/counter/alpha/increment`);
-    yield* client.post(`${url}/counter/alpha/increment`);
+    yield* client.post(`${url}/counter/${alpha}/increment`);
+    yield* client.post(`${url}/counter/${alpha}/increment`);
 
-    const getRes = yield* client.get(`${url}/counter/alpha`);
+    const getRes = yield* client.get(`${url}/counter/${alpha}`);
     expect(getRes.status).toBe(200);
     const got = (yield* getRes.json) as { count: number };
     expect(got.count).toBe(3);
@@ -68,16 +85,20 @@ test(
   "RpcDurableObjectNamespace: separate getByName(id) instances are isolated",
   Effect.gen(function* () {
     const { url } = yield* stack;
+    const betaId = k("beta");
+    const gammaId = k("gamma");
+    yield* resetCounter(url, betaId);
+    yield* resetCounter(url, gammaId);
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    yield* client
-      .post(`${url}/counter/beta/increment`)
-      .pipe(Effect.retry({ times: 5 }));
+    yield* client.post(`${url}/counter/${betaId}/increment`);
 
-    const beta = (yield* (yield* client.get(`${url}/counter/beta`)).json) as {
+    const beta = (yield* (yield* client.get(`${url}/counter/${betaId}`))
+      .json) as {
       count: number;
     };
-    const gamma = (yield* (yield* client.get(`${url}/counter/gamma`)).json) as {
+    const gamma = (yield* (yield* client.get(`${url}/counter/${gammaId}`))
+      .json) as {
       count: number;
     };
     expect(beta.count).toBe(1);
@@ -90,10 +111,11 @@ test(
   "RpcDurableObjectNamespace: streaming RPC via getByName(id).CountUpTo",
   Effect.gen(function* () {
     const { url } = yield* stack;
+    const delta = k("delta");
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
     const res = yield* client
-      .get(`${url}/counter/delta/stream?upto=4`)
+      .get(`${url}/counter/${delta}/stream?upto=4`)
       .pipe(Effect.retry({ times: 5 }));
     expect(res.status).toBe(200);
     const body = yield* res.text;
@@ -128,24 +150,21 @@ test(
   "RpcDurableObjectNamespace: 100 concurrent Increment calls do not hang",
   Effect.gen(function* () {
     const { url } = yield* stack;
+    const concurrent = k("concurrent");
+    yield* resetCounter(url, concurrent);
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    yield* client.post(`${url}/counter/concurrent/increment`).pipe(
-      Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 10,
-      }),
-    );
+    yield* client.post(`${url}/counter/${concurrent}/increment`);
 
     const N = 100;
     const results = yield* Effect.forEach(
       Array.from({ length: N }, (_, i) => i),
       () =>
-        client.post(`${url}/counter/concurrent/increment`).pipe(
+        client.post(`${url}/counter/${concurrent}/increment`).pipe(
           Effect.flatMap((res) => res.json),
           Effect.timeout("10 seconds"),
           Effect.retry({
-            schedule: Schedule.exponential("500 millis"),
+            schedule: readinessSchedule,
             times: 3,
           }),
         ),
@@ -153,7 +172,7 @@ test(
     );
 
     expect(results).toHaveLength(N);
-    const finalRes = yield* client.get(`${url}/counter/concurrent`);
+    const finalRes = yield* client.get(`${url}/counter/${concurrent}`);
     const final = (yield* finalRes.json) as { count: number };
     expect(final.count).toBe(N + 1);
   }).pipe(logLevel),
@@ -175,7 +194,7 @@ test(
           c.Ping({ message: `m-${i}` }).pipe(
             Effect.timeout("10 seconds"),
             Effect.retry({
-              schedule: Schedule.exponential("500 millis"),
+              schedule: readinessSchedule,
               times: 3,
             }),
           ),
@@ -206,7 +225,7 @@ test(
           c.PingDO({ message: `m-${i}` }).pipe(
             Effect.timeout("10 seconds"),
             Effect.retry({
-              schedule: Schedule.exponential("500 millis"),
+              schedule: readinessSchedule,
               times: 3,
             }),
           ),
@@ -238,7 +257,7 @@ test(
             Stream.runCollect,
             Effect.timeout("10 seconds"),
             Effect.retry({
-              schedule: Schedule.exponential("500 millis"),
+              schedule: readinessSchedule,
               times: 3,
             }),
           ),
