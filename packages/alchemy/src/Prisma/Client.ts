@@ -433,15 +433,20 @@ export interface SourceRepositoryListQuery extends PaginationQuery {
   projectId: string;
 }
 
-export interface ProjectCreateResult extends Project {
-  database: DatabaseCreateResult | null;
-}
-
 export interface DatabaseCreateResult extends Database {
   connections: DatabaseConnectionWithSecrets[];
   apiKeys?: DatabaseConnectionWithSecrets[];
   connectionString?: string | null;
   directConnection?: { host: string; pass: string; user: string } | null;
+}
+
+export interface ProjectCreateDatabaseResult extends Omit<
+  DatabaseCreateResult,
+  "project"
+> {}
+
+export interface ProjectCreateResult extends Project {
+  database: ProjectCreateDatabaseResult | null;
 }
 
 export const isNotFound = (error: unknown): boolean =>

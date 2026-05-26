@@ -146,9 +146,11 @@ const defaultDatabase = (client: PrismaManagementClient, projectId: string) =>
     .listProjectDatabases(projectId, { limit: 100 })
     .pipe(Effect.map((databases) => databases.find((db) => db.isDefault)));
 
+type ProjectDatabaseAttrs = Pick<Database, "id" | "defaultConnectionId">;
+
 const attrsFrom = (
   project: ApiProject,
-  database: Database | undefined,
+  database: ProjectDatabaseAttrs | undefined,
   secrets: PrismaSecretConnection,
 ): Project["Attributes"] => ({
   projectId: project.id,
@@ -249,7 +251,7 @@ export const ProjectProvider = () =>
                 )
             : yield* findProjectByName(client, name);
 
-          let createdDatabase: Database | undefined;
+          let createdDatabase: ProjectDatabaseAttrs | undefined;
           let secrets: PrismaSecretConnection = {};
           if (!project) {
             const result = yield* client
