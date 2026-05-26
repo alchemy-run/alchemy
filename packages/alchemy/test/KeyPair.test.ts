@@ -1,73 +1,82 @@
 import * as NodeCrypto from "node:crypto";
 import { KeyPair, KeyPairProvider } from "@/KeyPair";
-import { Provider } from "@/Provider";
-import { describe, expect, it } from "@effect/vitest";
+import { inMemoryState } from "@/State";
+import * as Test from "@/Test/Vitest";
+import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
-const invokeReconcile = (
-  news: KeyPair["Props"],
-  output?: KeyPair["Attributes"],
-) =>
-  Effect.gen(function* () {
-    const provider = yield* Provider<KeyPair>(KeyPair.Type);
-    return yield* provider.reconcile({
-      id: "test",
-      instanceId: "test",
-      news,
-      olds: undefined,
-      output,
-      session: undefined as any,
-      bindings: {} as any,
-    });
-  }).pipe(Effect.provide(KeyPairProvider()));
+const { test } = Test.make({
+  providers: KeyPairProvider(),
+  state: inMemoryState(),
+});
 
-const assertPemKeyPair = (attrs: KeyPair["Attributes"]) => {
+const assertPemKeyPair = (attrs: {
+  privateKey: Redacted.Redacted<string>;
+  publicKey: string;
+}) => {
   const priv = Redacted.value(attrs.privateKey);
   expect(priv).toMatch(/^-----BEGIN PRIVATE KEY-----/);
   expect(priv).toMatch(/-----END PRIVATE KEY-----/);
   expect(attrs.publicKey).toMatch(/^-----BEGIN PUBLIC KEY-----/);
   expect(attrs.publicKey).toMatch(/-----END PUBLIC KEY-----/);
-  // Node will throw if the PEM is malformed.
+  // Node throws if the PEM is malformed.
   NodeCrypto.createPrivateKey(priv);
   NodeCrypto.createPublicKey(attrs.publicKey);
 };
 
 describe("Alchemy.KeyPair", () => {
-  it.effect("mints an ed25519 keypair by default", () =>
+  test.provider("mints an ed25519 keypair by default", (stack) =>
     Effect.gen(function* () {
-      const attrs = yield* invokeReconcile({});
+      const attrs = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* KeyPair("ed25519-default");
+        }),
+      );
       expect(attrs.algorithm).toBe("ed25519");
       assertPemKeyPair(attrs);
     }),
   );
 
-  it.effect("mints an rsa keypair when requested", () =>
+  test.provider("mints an rsa keypair when requested", (stack) =>
     Effect.gen(function* () {
-      const attrs = yield* invokeReconcile({
-        algorithm: "rsa",
-        modulusLength: 2048,
-      });
+      const attrs = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* KeyPair("rsa-key", {
+            algorithm: "rsa",
+            modulusLength: 2048,
+          });
+        }),
+      );
       expect(attrs.algorithm).toBe("rsa");
       assertPemKeyPair(attrs);
     }),
   );
 
-  it.effect("mints an ec keypair when requested", () =>
+  test.provider("mints an ec keypair when requested", (stack) =>
     Effect.gen(function* () {
-      const attrs = yield* invokeReconcile({
-        algorithm: "ec",
-        namedCurve: "P-256",
-      });
+      const attrs = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* KeyPair("ec-key", {
+            algorithm: "ec",
+            namedCurve: "P-256",
+          });
+        }),
+      );
       expect(attrs.algorithm).toBe("ec");
       assertPemKeyPair(attrs);
     }),
   );
 
-  it.effect("preserves the keypair across reconciles", () =>
+  test.provider("preserves the keypair across deploys", (stack) =>
     Effect.gen(function* () {
-      const first = yield* invokeReconcile({});
-      const second = yield* invokeReconcile({}, first);
+      const program = Effect.gen(function* () {
+        return yield* KeyPair("stable-key");
+      });
+
+      const first = yield* stack.deploy(program);
+      const second = yield* stack.deploy(program);
+
       expect(Redacted.value(second.privateKey)).toBe(
         Redacted.value(first.privateKey),
       );

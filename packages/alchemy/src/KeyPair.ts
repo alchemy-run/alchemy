@@ -37,9 +37,50 @@ export type KeyPair = Resource<
 /**
  * A deterministic-in-state public/private keypair generator.
  *
- * The keypair is generated once on create and then persisted in state so
- * subsequent deploys keep the same keys unless the resource is replaced.
- * `privateKey` is PEM-encoded `pkcs8` and `publicKey` is PEM-encoded `spki`.
+ * The keypair is generated once on first reconcile and then persisted in
+ * state so subsequent deploys keep the same keys unless the resource is
+ * replaced. `privateKey` is PEM-encoded `pkcs8` and `publicKey` is
+ * PEM-encoded `spki`.
+ *
+ * @resource
+ *
+ * @section Generating a Keypair
+ * @example Default ed25519 keypair
+ * ```typescript
+ * const keys = yield* KeyPair("signing-key");
+ * // keys.privateKey: Redacted<string>  (PEM pkcs8)
+ * // keys.publicKey:  string            (PEM spki)
+ * // keys.algorithm:  "ed25519"
+ * ```
+ *
+ * @example RSA keypair
+ * ```typescript
+ * const keys = yield* KeyPair("rsa-key", {
+ *   algorithm: "rsa",
+ *   modulusLength: 2048,
+ * });
+ * ```
+ *
+ * @example EC keypair on a named curve
+ * ```typescript
+ * const keys = yield* KeyPair("ec-key", {
+ *   algorithm: "ec",
+ *   namedCurve: "P-256",
+ * });
+ * ```
+ *
+ * @section Consuming the Keys
+ * @example Pass the private key to a Worker as a secret
+ * ```typescript
+ * const keys = yield* KeyPair("signing-key");
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   bindings: {
+ *     SIGNING_KEY: keys.privateKey,
+ *     PUBLIC_KEY: keys.publicKey,
+ *   },
+ * });
+ * ```
  */
 export const KeyPair = Resource<KeyPair>("Alchemy.KeyPair");
 
