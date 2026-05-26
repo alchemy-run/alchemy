@@ -227,6 +227,85 @@ describe("Prisma Compute", () => {
   });
 
   it.effect(
+    "marks stored Compute version unpromoted when live latest differs",
+    () => {
+      const calls: Array<[string, unknown]> = [];
+      const client = {
+        getComputeService: (id: string) => {
+          calls.push(["getComputeService", id]);
+          return Effect.succeed({
+            id,
+            type: "compute-service" as const,
+            url: "https://api.prisma.test/v1/compute-services/service-1",
+            name: "api",
+            region: { id: "us-east-1", name: "US East" },
+            projectId: "project-1",
+            branchId: "branch-main",
+            latestVersionId: "version-live",
+            serviceEndpointDomain: "api.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+        getComputeServiceVersion: (id: string) => {
+          calls.push(["getComputeServiceVersion", id]);
+          return Effect.succeed({
+            id,
+            type: "compute-version" as const,
+            url: `https://api.prisma.test/v1/versions/${id}`,
+            foundryVersionId: `foundry-${id}`,
+            status: "running",
+            previewDomain: `${id}.preview.prisma.build`,
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const output = yield* provider.read!({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          olds: {
+            project: "project-1",
+            serviceName: "api",
+          },
+          output: {
+            computeServiceId: "service-1",
+            computeVersionId: "version-old",
+            projectId: "project-1",
+            serviceName: "api",
+            regionId: "us-east-1",
+            versionEndpointDomain: "version-old.preview.prisma.build",
+            versionUrl: "https://version-old.preview.prisma.build",
+            serviceEndpointDomain: "api.prisma.build",
+            url: "https://api.prisma.build",
+            promoted: true,
+            previousVersionId: undefined,
+            previousVersionAction: undefined,
+            artifactHash: "hash-old",
+            local: false,
+          },
+        });
+
+        expect(output?.computeVersionId).toBe("version-old");
+        expect(output?.promoted).toBe(false);
+        expect(output?.versionEndpointDomain).toBe(
+          "version-old.preview.prisma.build",
+        );
+        expect(calls).toEqual([
+          ["getComputeService", "service-1"],
+          ["getComputeServiceVersion", "version-old"],
+        ]);
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(FetchHttpClient.layer),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
+  it.effect(
     "syncs a newly created service branch before creating a version",
     () => {
       const calls: Array<[string, unknown]> = [];

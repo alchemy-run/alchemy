@@ -1467,9 +1467,7 @@ export const ComputeProvider = () =>
               toDeploymentUrl(version?.previewDomain ?? undefined),
             promoted:
               service.latestVersionId !== null &&
-              version?.id === service.latestVersionId
-                ? true
-                : (output?.promoted ?? false),
+              version?.id === service.latestVersionId,
             previousVersionId: output?.previousVersionId,
             previousVersionAction: output?.previousVersionAction,
             environmentKeys: output?.environmentKeys,
