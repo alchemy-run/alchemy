@@ -6,6 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 const { test } = Test.make({ providers: Prisma.providers(), dev: true });
 
@@ -63,6 +64,71 @@ test.provider("dev mode supports the same stack shape with Project", (stack) =>
 
     yield* stack.destroy();
   }),
+);
+
+test.provider(
+  "dev mode records effect-native Connection.bind env on Compute",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const output = yield* stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Prisma.Project("Project", {
+            name: "local-project",
+          });
+          const database = yield* Prisma.Database("Database", {
+            project,
+            name: "main",
+          });
+          const connection = yield* Prisma.Connection("Connection", {
+            database,
+            name: "api",
+          });
+          const keys = Prisma.connectionBindingEnvKeys(connection);
+          const app = yield* Prisma.Compute(
+            "App",
+            {
+              project,
+              serviceName: "api",
+              main: import.meta.filename,
+              dev: {
+                url: "http://localhost:8787",
+              },
+            },
+            Effect.gen(function* () {
+              const db = yield* Prisma.Connection.bind(connection);
+
+              return {
+                fetch: Effect.gen(function* () {
+                  const connectionId = yield* db.connectionId;
+                  return HttpServerResponse.text(connectionId);
+                }),
+              };
+            }).pipe(Effect.provide(Prisma.ConnectionBindingLive)),
+          );
+
+          return { app, keys };
+        }),
+      );
+
+      expect(output.app.local).toBe(true);
+      expect(output.app.environmentKeys).toEqual(
+        expect.arrayContaining([
+          output.keys.connectionId,
+          output.keys.databaseId,
+          output.keys.connectionString,
+          output.keys.directConnectionString,
+          output.keys.pooledConnectionString,
+          output.keys.accelerateConnectionString,
+          output.keys.host,
+          output.keys.user,
+          output.keys.password,
+        ]),
+      );
+
+      yield* stack.destroy();
+    }),
 );
 
 test.provider(
