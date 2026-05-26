@@ -203,6 +203,12 @@ export interface ComputeProps extends PlatformProps {
    */
   bundle?: ComputeBundleOptions;
   /**
+   * Effect-native runtime exports populated by the Platform constructor.
+   *
+   * @internal
+   */
+  exports?: string[] | Record<string, unknown>;
+  /**
    * Build command and output directory. Set to `"auto"` or `{ type: "auto" }`
    * to use Prisma Compute-style framework detection for Next.js, Nuxt, Astro,
    * TanStack Start, or Bun. Set to `false` to upload `path` as a pre-built
@@ -385,13 +391,12 @@ export const isCompute = (value: unknown): value is Compute =>
   "Type" in value &&
   value.Type === "Prisma.Compute";
 
-const isEffectNativeCompute = (props: ComputeProps) =>
+const hasEffectNativeComputeInput = (props: ComputeProps) =>
   props.isExternal !== true &&
-  props.main !== undefined &&
-  props.artifact === undefined &&
-  props.artifactPath === undefined &&
-  props.build === undefined &&
-  props.skipCodeUpload !== true;
+  (props.main !== undefined || props.exports !== undefined);
+
+const isEffectNativeCompute = (props: ComputeProps) =>
+  hasEffectNativeComputeInput(props);
 
 /**
  * A Prisma Compute deployment resource.
@@ -706,6 +711,34 @@ const validateComputeProps = (props: ComputeProps) =>
         new Error("skipCodeUpload cannot be combined with artifactPath."),
       );
     }
+    if (hasEffectNativeComputeInput(props)) {
+      if (props.main === undefined) {
+        return yield* Effect.fail(
+          new Error(
+            "Effect-native Prisma Compute apps require `main`. Set `main: import.meta.filename`.",
+          ),
+        );
+      }
+      if (props.artifact !== undefined || props.artifactPath !== undefined) {
+        return yield* Effect.fail(
+          new Error(
+            "Effect-native Prisma Compute apps cannot use artifact or artifactPath.",
+          ),
+        );
+      }
+      if (props.build !== undefined) {
+        return yield* Effect.fail(
+          new Error("Effect-native Prisma Compute apps cannot use build."),
+        );
+      }
+      if (props.skipCodeUpload) {
+        return yield* Effect.fail(
+          new Error(
+            "Effect-native Prisma Compute apps cannot skip code upload.",
+          ),
+        );
+      }
+    }
   });
 
 const branchNeedsSync = Effect.fn(function* (
@@ -1019,6 +1052,11 @@ const resolveArtifact = Effect.fn(function* (props: ComputeProps) {
     if (props.skipCodeUpload) {
       return yield* Effect.fail(
         new Error("Effect-native Prisma Compute apps cannot skip code upload."),
+      );
+    }
+    if (props.build !== undefined) {
+      return yield* Effect.fail(
+        new Error("Effect-native Prisma Compute apps cannot use build."),
       );
     }
     const artifact = yield* bundleEffectCompute(props);
