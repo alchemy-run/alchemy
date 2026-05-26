@@ -72,6 +72,7 @@ export interface ComputeVersionProps {
   start?: boolean;
   /**
    * Promote the version to the service's stable endpoint after start.
+   * If `start` is omitted, enabling promotion starts the version first.
    *
    * @default false
    */
@@ -365,6 +366,11 @@ export const ComputeVersionProvider = () =>
               new Error("skipCodeUpload cannot be combined with artifactPath."),
             );
           }
+          if ((news.promote ?? false) && news.start === false) {
+            return yield* Effect.fail(
+              new Error("promote cannot be combined with start: false."),
+            );
+          }
           const artifact = yield* readUploadArtifact(news);
           const artifactHash =
             artifact === undefined
@@ -437,7 +443,8 @@ export const ComputeVersionProvider = () =>
           }
 
           let serviceEndpointDomain = output?.serviceEndpointDomain;
-          if (news.start ?? false) {
+          const shouldStart = news.start ?? news.promote ?? false;
+          if (shouldStart) {
             if (
               version.status !== "running" &&
               version.status !== "provisioning"

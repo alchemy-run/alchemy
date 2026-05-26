@@ -608,6 +608,7 @@ describe("Prisma ComputeVersion", () => {
   it.effect("does not re-promote an already promoted Compute version", () => {
     const calls: Array<[string, unknown?]> = [];
     let latestVersionId: string | null = null;
+    let status = "new";
 
     const service = () => ({
       id: "service-1",
@@ -646,11 +647,17 @@ describe("Prisma ComputeVersion", () => {
           type: "compute-version" as const,
           url: `https://api.prisma.test/v1/versions/${id}`,
           foundryVersionId: "foundry-1",
-          status: "new",
+          status,
           previewDomain: "version-1.preview.prisma.build",
           createdAt: "2026-01-01T00:00:00Z",
         });
       },
+      startComputeServiceVersion: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["startComputeServiceVersion", id]);
+          status = "running";
+          return { previewDomain: "version-1.preview.prisma.build" };
+        }),
       getComputeService: (id: string) => {
         calls.push(["getComputeService", id]);
         return Effect.succeed(service());
@@ -698,6 +705,9 @@ describe("Prisma ComputeVersion", () => {
       expect(second.computeVersionId).toBe("version-1");
       expect(second.serviceEndpointDomain).toBe("api.prisma.build");
       expect(
+        calls.filter(([name]) => name === "startComputeServiceVersion"),
+      ).toEqual([["startComputeServiceVersion", "version-1"]]);
+      expect(
         calls.filter(([name]) => name === "promoteComputeService"),
       ).toEqual([
         [
@@ -708,6 +718,40 @@ describe("Prisma ComputeVersion", () => {
       expect(
         calls.filter(([name]) => name === "createServiceComputeVersion"),
       ).toHaveLength(1);
+    }).pipe(
+      Effect.provide(ComputeVersionProvider()),
+      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(FetchHttpClient.layer),
+      Effect.provide(PlatformServices),
+    );
+  });
+
+  it.effect("rejects promotion when start is explicitly disabled", () => {
+    const client = {} as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const provider = yield* PrismaComputeVersion.Provider;
+      const error = yield* provider
+        .reconcile({
+          id: "Version",
+          instanceId: "00000000000000000000000000000000",
+          news: {
+            computeService: "service-1",
+            skipCodeUpload: true,
+            start: false,
+            promote: true,
+          },
+          olds: undefined,
+          output: undefined,
+          session: undefined as never,
+          bindings: [],
+        })
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "promote cannot be combined with start: false",
+      );
     }).pipe(
       Effect.provide(ComputeVersionProvider()),
       Effect.provide(Layer.succeed(PrismaClient, client)),
