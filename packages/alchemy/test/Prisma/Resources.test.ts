@@ -10,6 +10,7 @@ import {
   ComputeVersionProvider,
 } from "@/Prisma/ComputeVersion";
 import {
+  ConnectionBinding,
   ConnectionBindingLive,
   ConnectionBindingPolicyLive,
   Connection as PrismaConnection,
@@ -507,6 +508,70 @@ describe("Prisma resource providers", () => {
       }).pipe(
         Effect.provide(ConnectionBindingLive),
         Effect.provide(ConnectionBindingPolicyLive),
+        Effect.provide(Layer.succeed(RuntimeContext, runtime)),
+        Effect.provide(Layer.succeed(Self, host)),
+        Effect.provide(
+          Layer.succeed(
+            ConfigProvider.ConfigProvider,
+            ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
+          ),
+        ),
+      );
+    },
+  );
+
+  it.effect(
+    "ConnectionBindingLive does not require the deploy-time policy at runtime",
+    () => {
+      const stored: Record<string, Output.Output> = {};
+      const runtime = {
+        Type: "Prisma.Compute",
+        id: "App",
+        env: stored,
+        set: (id: string, output: Output.Output) =>
+          Effect.sync(() => {
+            const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
+            stored[key] = output;
+            return key;
+          }),
+        get: <T>(key: string): Effect.Effect<T> => {
+          const output = stored[key];
+          if (!output) return Effect.die(`missing runtime binding ${key}`);
+          return Output.evaluate(output, {}) as Effect.Effect<T>;
+        },
+      };
+      const host = {
+        Type: "Prisma.Compute",
+        LogicalId: "App",
+        FQN: "App",
+        bind: () => Effect.die("runtime should not attach bindings"),
+      };
+      const connection = {
+        Type: "Prisma.Connection",
+        LogicalId: "Connection",
+        FQN: "Connection",
+        connectionId: Output.asOutput("connection-1"),
+        databaseId: Output.asOutput("database-1"),
+        connectionString: Output.asOutput(undefined),
+        directConnectionString: Output.asOutput(
+          Redacted.make("postgres://runtime"),
+        ),
+        pooledConnectionString: Output.asOutput(undefined),
+        accelerateConnectionString: Output.asOutput(undefined),
+        host: Output.asOutput("db.example.test"),
+        user: Output.asOutput("api"),
+        password: Output.asOutput(Redacted.make("password")),
+      } as PrismaConnection;
+
+      return Effect.gen(function* () {
+        const db = yield* PrismaConnection.bind(connection);
+
+        expect(yield* db.connectionId).toBe("connection-1");
+        expect(yield* db.databaseUrl).toBe("postgres://runtime");
+      }).pipe(
+        // Binding.Policy still appears in the generic layer requirements,
+        // but at runtime the policy lookup is intentionally absent and no-ops.
+        Effect.provide(ConnectionBindingLive as Layer.Layer<ConnectionBinding>),
         Effect.provide(Layer.succeed(RuntimeContext, runtime)),
         Effect.provide(Layer.succeed(Self, host)),
         Effect.provide(
