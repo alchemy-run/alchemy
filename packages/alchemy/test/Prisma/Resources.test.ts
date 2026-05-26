@@ -2267,6 +2267,69 @@ describe("Prisma resource providers", () => {
     );
   });
 
+  it.effect("finds the default database when its name is omitted", () => {
+    const calls: Call[] = [];
+    const client = {
+      listProjectDatabases: (projectId: string, query: unknown) =>
+        Effect.sync(() => {
+          calls.push(["listProjectDatabases", { projectId, query }]);
+          return [
+            {
+              id: "database-reporting",
+              type: "database" as const,
+              url: "https://api.prisma.test/v1/databases/database-reporting",
+              name: "reporting",
+              status: "ready" as const,
+              createdAt,
+              isDefault: false,
+              defaultConnectionId: null,
+              connections: [],
+              project: resourceRef("projects", "project-1", "app"),
+              region: { id: "us-east-1", name: "US East" },
+              source: { type: "empty" },
+              branchId: null,
+            },
+            {
+              id: "database-default",
+              type: "database" as const,
+              url: "https://api.prisma.test/v1/databases/database-default",
+              name: "main",
+              status: "ready" as const,
+              createdAt,
+              isDefault: true,
+              defaultConnectionId: "connection-1",
+              connections: [],
+              project: resourceRef("projects", "project-1", "app"),
+              region: { id: "us-east-1", name: "US East" },
+              source: { type: "empty" },
+              branchId: null,
+            },
+          ];
+        }),
+      createDatabase: () => Effect.die("default database should be found"),
+    } as unknown as PrismaManagementClient;
+
+    return Effect.gen(function* () {
+      const databaseProvider = yield* PrismaDatabase.Provider;
+      const database = yield* databaseProvider.reconcile(
+        reconcileInput("Database", {
+          project: "project-1",
+          isDefault: true,
+        }),
+      );
+
+      expect(database.databaseId).toBe("database-default");
+      expect(database.databaseName).toBe("main");
+      expect(database.isDefault).toBe(true);
+      expect(calls).toEqual([
+        [
+          "listProjectDatabases",
+          { projectId: "project-1", query: { limit: 100 } },
+        ],
+      ]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
   it.effect("deletes Prisma resources through their management APIs", () => {
     const calls: Call[] = [];
     const status = new Map([["version-1", "running"]]);

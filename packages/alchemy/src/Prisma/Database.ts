@@ -219,15 +219,19 @@ const sameJson = (a: unknown, b: unknown) =>
 const findDatabase = (
   client: PrismaManagementClient,
   projectId: string,
-  name: string | undefined,
+  props: Pick<DatabaseProps, "isDefault" | "name">,
 ) =>
-  name === undefined
+  props.name === undefined && !(props.isDefault ?? false)
     ? Effect.succeed(undefined)
     : client
         .listProjectDatabases(projectId, { limit: 100 })
         .pipe(
           Effect.map((databases) =>
-            databases.find((d: ApiDatabase) => d.name === name),
+            databases.find((database: ApiDatabase) =>
+              props.name === undefined
+                ? database.isDefault
+                : database.name === props.name,
+            ),
           ),
         );
 
@@ -347,7 +351,7 @@ export const DatabaseProvider = () =>
             : yield* Effect.gen(function* () {
                 const projectId = unresolvedProjectIdOf(olds.project);
                 return projectId
-                  ? yield* findDatabase(client, projectId, olds.name)
+                  ? yield* findDatabase(client, projectId, olds)
                   : undefined;
               });
           if (!database) return undefined;
@@ -373,7 +377,7 @@ export const DatabaseProvider = () =>
                 .pipe(
                   Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
                 )
-            : yield* findDatabase(client, projectId, news.name);
+            : yield* findDatabase(client, projectId, news);
 
           let secrets: PrismaSecretConnection = {};
           let createdDatabase = false;
@@ -396,13 +400,13 @@ export const DatabaseProvider = () =>
                   created: true,
                 })),
                 Effect.catchIf(isConflict, () =>
-                  news.name === undefined
+                  news.name === undefined && !(news.isDefault ?? false)
                     ? Effect.fail(
                         new Error(
                           "Prisma database already exists but cannot be read because no name was provided",
                         ),
                       )
-                    : findDatabase(client, projectId, news.name).pipe(
+                    : findDatabase(client, projectId, news).pipe(
                         Effect.flatMap((database) =>
                           database
                             ? Effect.succeed({
