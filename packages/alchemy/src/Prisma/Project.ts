@@ -179,16 +179,12 @@ export const ProjectProvider = () =>
             return { action: "update" } as const;
           }
           if (!isInputObject(news)) return undefined;
-          const replacementProps = {
-            region: news.region,
-            createDatabase: news.createDatabase,
-          };
-          if (!isResolved(replacementProps)) return undefined;
           if (
-            (replacementProps.region ?? "us-east-1") !==
-              (olds.region ?? output?.defaultRegion ?? "us-east-1") ||
-            (replacementProps.createDatabase ?? true) !==
-              (olds.createDatabase ?? true)
+            (isResolved(news.region) &&
+              (news.region ?? "us-east-1") !==
+                (olds.region ?? output?.defaultRegion ?? "us-east-1")) ||
+            (isResolved(news.createDatabase) &&
+              (news.createDatabase ?? true) !== (olds.createDatabase ?? true))
           ) {
             return { action: "replace" } as const;
           }

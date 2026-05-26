@@ -203,15 +203,6 @@ export const EnvironmentVariableProvider = () =>
         stables: ["environmentVariableId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
-          const replacementProps = {
-            class: news.class,
-            key: news.key,
-          };
-          if (!isResolved(replacementProps)) return undefined;
-          const resolvedReplacementProps = replacementProps as Pick<
-            EnvironmentVariableProps,
-            "class" | "key"
-          >;
           if (isPrismaDevId(output?.environmentVariableId)) {
             return { action: "update" } as const;
           }
@@ -221,8 +212,8 @@ export const EnvironmentVariableProvider = () =>
             : undefined;
           if (
             concreteIdsChanged(oldProjectId, newProjectId) ||
-            resolvedReplacementProps.class !== olds.class ||
-            resolvedReplacementProps.key !== olds.key
+            (isResolved(news.class) && news.class !== olds.class) ||
+            (isResolved(news.key) && news.key !== olds.key)
           ) {
             return { action: "replace" } as const;
           }

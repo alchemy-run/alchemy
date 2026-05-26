@@ -696,15 +696,6 @@ export const ConnectionProvider = () =>
         stables: ["connectionId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
-          const diffProps = {
-            name: news.name,
-            rotate: news.rotate,
-          };
-          if (!isResolved(diffProps)) return undefined;
-          const resolvedDiffProps = diffProps as Pick<
-            ConnectionProps,
-            "name" | "rotate"
-          >;
           if (isPrismaDevId(output?.connectionId)) {
             return { action: "update" } as const;
           }
@@ -714,11 +705,12 @@ export const ConnectionProvider = () =>
             : undefined;
           if (
             concreteIdsChanged(oldDatabaseId, newDatabaseId) ||
-            resolvedDiffProps.name !== olds.name
+            (isResolved(news.name) && news.name !== olds.name)
           ) {
             return { action: "replace" } as const;
           }
-          if ((resolvedDiffProps.rotate ?? false) !== (olds.rotate ?? false)) {
+          if (!isResolved(news.rotate)) return undefined;
+          if ((news.rotate ?? false) !== (olds.rotate ?? false)) {
             return { action: "update" } as const;
           }
           return undefined;

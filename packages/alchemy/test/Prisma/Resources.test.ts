@@ -781,6 +781,18 @@ describe("Prisma resource providers", () => {
               {
                 name: "app",
                 region: "us-west-2",
+                createDatabase: Output.asOutput(false),
+              },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
+        expect(
+          yield* projectProvider.diff!(
+            diffInput(
+              { name: "app", region: "us-east-1", createDatabase: false },
+              {
+                name: "app",
+                region: "us-west-2",
                 createDatabase: false,
                 settings: Output.asOutput({}),
               },
@@ -913,6 +925,18 @@ describe("Prisma resource providers", () => {
             ),
           ),
         ).toEqual({ action: "replace" });
+        expect(
+          yield* connectionProvider.diff!(
+            diffInput(
+              { database: "database-1", name: "api", rotate: false },
+              {
+                database: "database-1",
+                name: "worker",
+                rotate: Output.asOutput(false),
+              },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
 
         expect(
           yield* branchProvider.diff!(
@@ -935,6 +959,18 @@ describe("Prisma resource providers", () => {
             diffInput(
               { project: "project-1", gitName: "main" },
               { project: Output.asOutput("project-1"), gitName: "release" },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
+        expect(
+          yield* branchProvider.diff!(
+            diffInput(
+              { project: "project-1", gitName: "main", isDefault: false },
+              {
+                project: "project-1",
+                gitName: "release",
+                isDefault: Output.asOutput(false),
+              },
             ),
           ),
         ).toEqual({ action: "replace" });
@@ -1104,6 +1140,24 @@ describe("Prisma resource providers", () => {
             ),
           ),
         ).toEqual({ action: "replace" });
+        expect(
+          yield* envProvider.diff!(
+            diffInput(
+              {
+                project: "project-1",
+                class: "production" as const,
+                key: "TOKEN",
+                value: "secret",
+              },
+              {
+                project: "project-1",
+                class: "preview" as const,
+                key: Output.asOutput("TOKEN"),
+                value: "secret",
+              },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
 
         expect(
           yield* repoProvider.diff!(
@@ -1120,6 +1174,22 @@ describe("Prisma resource providers", () => {
               {
                 project: Output.asOutput("project-1"),
                 providerRepositoryId: 456,
+              },
+            ),
+          ),
+        ).toEqual({ action: "replace" });
+        expect(
+          yield* repoProvider.diff!(
+            diffInput(
+              {
+                project: "project-1",
+                providerRepositoryId: 123,
+                installationId: "install-1",
+              },
+              {
+                project: "project-1",
+                providerRepositoryId: 456,
+                installationId: Output.asOutput("install-1"),
               },
             ),
           ),

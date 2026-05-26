@@ -148,16 +148,6 @@ export const SourceRepositoryProvider = () =>
         stables: ["sourceRepositoryId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
-          const diffProps = {
-            provider: news.provider,
-            providerRepositoryId: news.providerRepositoryId,
-            installationId: news.installationId,
-          };
-          if (!isResolved(diffProps)) return undefined;
-          const resolvedDiffProps = diffProps as Pick<
-            SourceRepositoryProps,
-            "provider" | "providerRepositoryId" | "installationId"
-          >;
           if (isPrismaDevId(output?.sourceRepositoryId)) {
             return { action: "update" } as const;
           }
@@ -167,11 +157,12 @@ export const SourceRepositoryProvider = () =>
             : undefined;
           if (
             concreteIdsChanged(oldProjectId, newProjectId) ||
-            (resolvedDiffProps.provider ?? "github") !==
-              (olds.provider ?? "github") ||
-            resolvedDiffProps.providerRepositoryId !==
-              olds.providerRepositoryId ||
-            resolvedDiffProps.installationId !== olds.installationId
+            (isResolved(news.provider) &&
+              (news.provider ?? "github") !== (olds.provider ?? "github")) ||
+            (isResolved(news.providerRepositoryId) &&
+              news.providerRepositoryId !== olds.providerRepositoryId) ||
+            (isResolved(news.installationId) &&
+              news.installationId !== olds.installationId)
           ) {
             return { action: "replace" } as const;
           }

@@ -114,15 +114,6 @@ export const BranchProvider = () =>
         stables: ["branchId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
-          const diffProps = {
-            gitName: news.gitName,
-            isDefault: news.isDefault,
-          };
-          if (!isResolved(diffProps)) return undefined;
-          const resolvedDiffProps = diffProps as Pick<
-            BranchProps,
-            "gitName" | "isDefault"
-          >;
           if (isPrismaDevId(output?.branchId)) {
             return { action: "update" } as const;
           }
@@ -132,13 +123,12 @@ export const BranchProvider = () =>
             : undefined;
           if (
             concreteIdsChanged(oldProjectId, newProjectId) ||
-            resolvedDiffProps.gitName !== olds.gitName
+            (isResolved(news.gitName) && news.gitName !== olds.gitName)
           ) {
             return { action: "replace" } as const;
           }
-          if (
-            (resolvedDiffProps.isDefault ?? false) !== (olds.isDefault ?? false)
-          ) {
+          if (!isResolved(news.isDefault)) return undefined;
+          if ((news.isDefault ?? false) !== (olds.isDefault ?? false)) {
             return { action: "update" } as const;
           }
           return undefined;
