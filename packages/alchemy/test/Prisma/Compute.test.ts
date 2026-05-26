@@ -289,6 +289,58 @@ describe("Prisma Compute", () => {
     },
   );
 
+  it.effect(
+    "updates Compute when props are unchanged so artifacts can rehash",
+    () => {
+      const client = {} as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const diff = yield* provider.diff!({
+          id: "App",
+          instanceId: "00000000000000000000000000000000",
+          olds: {
+            project: "project-1",
+            serviceName: "api",
+            regionId: "us-east-1",
+            path: ".",
+            entrypoint: "server.ts",
+          },
+          news: {
+            project: "project-1",
+            serviceName: "api",
+            regionId: "us-east-1",
+            path: ".",
+            entrypoint: "server.ts",
+          },
+          oldBindings: [],
+          newBindings: [],
+          output: {
+            computeServiceId: "service-1",
+            computeVersionId: "version-1",
+            projectId: "project-1",
+            serviceName: "api",
+            regionId: "us-east-1",
+            versionEndpointDomain: "version-1.preview.prisma.build",
+            versionUrl: "https://version-1.preview.prisma.build",
+            serviceEndpointDomain: "api.prisma.build",
+            url: "https://api.prisma.build",
+            promoted: true,
+            previousVersionId: undefined,
+            previousVersionAction: undefined,
+            artifactHash: "hash-1",
+            local: false,
+          },
+        } as never);
+
+        expect(diff).toEqual({ action: "update" });
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+      );
+    },
+  );
+
   it.effect("dev provider applies the same Compute prop validation", () =>
     Effect.gen(function* () {
       const provider = yield* Compute.Provider;

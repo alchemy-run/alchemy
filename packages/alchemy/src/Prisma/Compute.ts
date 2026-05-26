@@ -1543,6 +1543,8 @@ export const ComputeProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+          // Source files/build output can change with no prop change, so
+          // reconcile must rerun and decide from the computed artifact hash.
           return { action: "update" } as const;
         }),
         read: Effect.fn(function* ({ output, olds }) {
