@@ -1354,6 +1354,11 @@ export const LiveWorkerProvider = () =>
         metadataBindings.push(
           {
             type: "plain_text",
+            name: "ALCHEMY_PHASE",
+            text: "runtime",
+          },
+          {
+            type: "plain_text",
             name: "ALCHEMY_STACK_NAME",
             text: stack.name,
           },

@@ -85,3 +85,34 @@ export const toOutput = <T, R = never>(
   }
   return Output.asOutput(source as T) as Output.Output<T, R>;
 };
+
+import * as ConfigProvider from "effect/ConfigProvider";
+import { ALCHEMY_PHASE } from "./Phase.ts";
+import { CurrentRuntimeContext } from "./RuntimeContext.ts";
+
+export const makePlatformConfigProvider = Effect.gen(function* () {
+  const configProvider = yield* ConfigProvider.ConfigProvider;
+  const phase = yield* ALCHEMY_PHASE;
+
+  return ConfigProvider.make(
+    Effect.fnUntraced(function* (path) {
+      const ctx = yield* CurrentRuntimeContext;
+      const key = path.map((p) => p.toString()).join("_");
+      const node = yield* configProvider.get(path);
+      if (phase === "plan" && node) {
+        // bind it to the RuntimeContext if running in plan phase
+        const output = Output.literal(node.value);
+        yield* ctx?.set(key, output) ?? Effect.void;
+        return node;
+      } else if (phase === "runtime" && ctx) {
+        // retrieve from the RuntimeContext if running in runtime phase
+        const value = yield* ctx.get<string>(key);
+        if (value) {
+          return ConfigProvider.makeValue(value as string);
+        }
+      }
+      // fallback to the config provider otherwise
+      return node;
+    }),
+  );
+});

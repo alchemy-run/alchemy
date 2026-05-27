@@ -1,3 +1,4 @@
+import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
@@ -16,6 +17,7 @@ import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
 import type { Rpc } from "./Rpc.ts";
 import { RuntimeContext, type BaseRuntimeContext } from "./RuntimeContext.ts";
+import { makePlatformConfigProvider } from "./Secret.ts";
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
@@ -345,27 +347,29 @@ export const Platform = <
                     : Effect.void,
                 ),
                 Effect.provide(
-                  Layer.provideMerge(
-                    Layer.mergeAll(
-                      Layer.succeed(Platform.Platform, runtimeContext),
-                      Layer.succeed(PlatformContext, runtimeContext),
-                      Layer.succeed(RuntimeContext, runtimeContext),
-                      Layer.succeed(resource.Self, instance),
-                      Layer.succeed(Platform.Self, instance),
-                      Layer.succeed(Self, instance),
-                      runtimeContext.planServices
-                        ? Layer.unwrap(
-                            ALCHEMY_PHASE.pipe(
-                              Effect.map((phase) =>
-                                phase === "plan"
-                                  ? runtimeContext.planServices!
-                                  : Layer.empty,
+                  Layer.effect(ConfigProvider, makePlatformConfigProvider).pipe(
+                    Layer.provideMerge(
+                      Layer.mergeAll(
+                        Layer.succeed(Platform.Platform, runtimeContext),
+                        Layer.succeed(PlatformContext, runtimeContext),
+                        Layer.succeed(RuntimeContext, runtimeContext),
+                        Layer.succeed(resource.Self, instance),
+                        Layer.succeed(Platform.Self, instance),
+                        Layer.succeed(Self, instance),
+                        runtimeContext.planServices
+                          ? Layer.unwrap(
+                              ALCHEMY_PHASE.pipe(
+                                Effect.map((phase) =>
+                                  phase === "plan"
+                                    ? runtimeContext.planServices!
+                                    : Layer.empty,
+                                ),
                               ),
-                            ),
-                          )
-                        : Layer.empty,
+                            )
+                          : Layer.empty,
+                      ),
                     ),
-                    Layer.succeedContext(outerServices),
+                    Layer.provideMerge(Layer.succeedContext(outerServices)),
                   ),
                 ),
               );
