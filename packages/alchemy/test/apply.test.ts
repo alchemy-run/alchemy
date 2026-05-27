@@ -11,12 +11,14 @@ import {
 import * as Test from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import { Data, Layer } from "effect";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
   ArtifactProbe,
   BindingTarget,
   DeletedBindingRegressionTarget,
+  DurationResource,
   Function,
   PhasedTarget,
   StaticStablesResource,
@@ -4295,6 +4297,43 @@ describe("stack output persistence", () => {
         }).pipe(stack.deploy);
 
         expect(result).toEqual({ downstream: "shared" });
+      }),
+  );
+});
+
+describe("Duration round-trip through state", () => {
+  test.provider(
+    "input Duration reaches reconcile as a real Duration and output Duration re-hydrates as a real Duration on the next deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        const first = yield* stack.deploy(
+          DurationResource("Timer", { timeout: Duration.seconds(15) }),
+        );
+
+        // Reconcile saw a real Duration: arithmetic worked.
+        expect(Duration.isDuration(first.observedTimeout)).toBe(true);
+        expect(Duration.toMillis(first.observedTimeout)).toBe(15_000);
+        expect(Duration.isDuration(first.computedTimeout)).toBe(true);
+        expect(Duration.toMillis(first.computedTimeout)).toBe(16_000);
+
+        // Second deploy: identical props. The engine reads the previous
+        // output from state. If the Duration weren't revived, `output`
+        // (a plain `{_id,_tag,millis}` shape) would fail `isDuration` and
+        // `Duration.toMillis` would throw.
+        const second = yield* stack.deploy(
+          DurationResource("Timer", { timeout: Duration.seconds(15) }),
+        );
+        expect(Duration.isDuration(second.observedTimeout)).toBe(true);
+        expect(Duration.toMillis(second.observedTimeout)).toBe(15_000);
+        expect(Duration.isDuration(second.computedTimeout)).toBe(true);
+        expect(Duration.toMillis(second.computedTimeout)).toBe(16_000);
+
+        // The persisted state itself should round-trip to a real Duration.
+        const persisted = yield* getState<{
+          attr: DurationResource["Attributes"];
+        }>("Timer");
+        expect(Duration.isDuration(persisted.attr.computedTimeout)).toBe(true);
+        expect(Duration.toMillis(persisted.attr.computedTimeout)).toBe(16_000);
       }),
   );
 });
