@@ -716,11 +716,11 @@ describe.concurrent("Cloudflare.Worker", () => {
       }).pipe(logLevel),
   );
 
-  // `urls` should reflect the workers.dev URL when the subdomain is
-  // enabled and be empty when it isn't. `worker.url` is just `urls[0]`,
+  // `domains` should reflect the workers.dev URL when the subdomain is
+  // enabled and be empty when it isn't. `worker.url` is just `domains[0]`,
   // so the two must stay in lockstep across deploys.
   test.provider(
-    "urls reflects the workers.dev subdomain and tracks url",
+    "domains reflects the workers.dev subdomain and tracks url",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* CloudflareEnvironment;
@@ -730,7 +730,7 @@ describe.concurrent("Cloudflare.Worker", () => {
         const deploy = (url: boolean) =>
           stack.deploy(
             Effect.gen(function* () {
-              return yield* Cloudflare.Worker("UrlsWorker", {
+              return yield* Cloudflare.Worker("DomainsWorker", {
                 main,
                 url,
                 compatibility: { date: "2024-01-01" },
@@ -739,12 +739,12 @@ describe.concurrent("Cloudflare.Worker", () => {
           );
 
         const enabled = yield* deploy(true);
-        expect(enabled.urls).toHaveLength(1);
-        expect(enabled.urls[0]).toMatch(/\.workers\.dev$/);
-        expect(enabled.url).toEqual(enabled.urls[0]);
+        expect(enabled.domains).toHaveLength(1);
+        expect(enabled.domains[0]).toMatch(/\.workers\.dev$/);
+        expect(enabled.url).toEqual(enabled.domains[0]);
 
         const disabled = yield* deploy(false);
-        expect(disabled.urls).toEqual([]);
+        expect(disabled.domains).toEqual([]);
         expect(disabled.url).toBeUndefined();
 
         yield* stack.destroy();
@@ -752,13 +752,13 @@ describe.concurrent("Cloudflare.Worker", () => {
       }).pipe(logLevel),
   );
 
-  // When custom domains are attached, they come first in `urls` (in the
-  // order the user provided them), followed by the workers.dev URL when
-  // the subdomain is enabled. `worker.url` is `urls[0]`, so the custom
-  // domain wins.
+  // When custom domains are attached, they come first in `domains` (in
+  // the order the user provided them), followed by the workers.dev URL
+  // when the subdomain is enabled. `worker.url` is `domains[0]`, so the
+  // custom domain wins.
   const customDomainZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
   test.provider.skipIf(!customDomainZone)(
-    "urls puts custom domains before workers.dev and url is the first",
+    "domains puts custom domains before workers.dev and url is the first",
     (stack) =>
       Effect.gen(function* () {
         const { accountId } = yield* CloudflareEnvironment;
@@ -778,14 +778,14 @@ describe.concurrent("Cloudflare.Worker", () => {
           }),
         );
 
-        expect(worker.urls.slice(0, 2)).toEqual([
+        expect(worker.domains.slice(0, 2)).toEqual([
           `https://${domainA}`,
           `https://${domainB}`,
         ]);
-        expect(worker.urls[2]).toMatch(/\.workers\.dev$/);
+        expect(worker.domains[2]).toMatch(/\.workers\.dev$/);
         expect(worker.url).toEqual(`https://${domainA}`);
 
-        // Reorder — `urls[0]` should follow.
+        // Reorder — `domains[0]` should follow.
         const swapped = yield* stack.deploy(
           Effect.gen(function* () {
             return yield* Cloudflare.Worker("CustomDomainWorker", {
@@ -795,7 +795,7 @@ describe.concurrent("Cloudflare.Worker", () => {
             });
           }),
         );
-        expect(swapped.urls.slice(0, 2)).toEqual([
+        expect(swapped.domains.slice(0, 2)).toEqual([
           `https://${domainB}`,
           `https://${domainA}`,
         ]);

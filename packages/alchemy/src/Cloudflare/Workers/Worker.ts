@@ -276,7 +276,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
-    urls: string[];
+    domains: string[];
     crons: string[];
     hash?: {
       assets: string | undefined;
@@ -1641,19 +1641,19 @@ export const LiveWorkerProvider = () =>
           );
         }
         const desiredDomains = normalizeDomains(news.domain);
-        const previousUrls = output?.urls ?? [];
-        if (desiredDomains.length > 0 || previousUrls.length > 0) {
+        const previousDomains = output?.domains ?? [];
+        if (desiredDomains.length > 0 || previousDomains.length > 0) {
           yield* session.note(
             `Reconciling custom domains (${desiredDomains.length}) ...`,
           );
         }
-        const domains = yield* reconcileDomains(name, desiredDomains);
+        const reconciled = yield* reconcileDomains(name, desiredDomains);
         const workersDevUrl =
           news.url !== false
             ? `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`
             : undefined;
-        const urls = [
-          ...domains.map((d) => `https://${d.hostname}`),
+        const domains = [
+          ...reconciled.map((d) => `https://${d.hostname}`),
           ...(workersDevUrl ? [workersDevUrl] : []),
         ];
         const crons = yield* reconcileCrons(
@@ -1666,11 +1666,11 @@ export const LiveWorkerProvider = () =>
           workerId: worker.id ?? name,
           workerName: name,
           logpush: worker.logpush ?? undefined,
-          url: urls[0],
+          url: domains[0],
           tags: settings.tags ?? metadata.tags,
           durableObjectNamespaces,
           accountId,
-          urls,
+          domains,
           crons,
           hash,
         } satisfies Worker["Attributes"];
@@ -1770,7 +1770,7 @@ export const LiveWorkerProvider = () =>
           const newDomains = normalizeDomains(news.domain)
             .map((h) => `https://${h}`)
             .sort();
-          const oldDomains = (output?.urls ?? [])
+          const oldDomains = (output?.domains ?? [])
             .filter((u) => !u.endsWith(".workers.dev"))
             .sort();
           const domainsChanged =
@@ -1933,7 +1933,7 @@ export const LiveWorkerProvider = () =>
             tags: existingSettings?.tags ?? tags,
             durableObjectNamespaces,
             accountId,
-            urls: [],
+            domains: [],
             crons: [],
           } satisfies Worker["Attributes"];
         }),
@@ -1968,7 +1968,7 @@ export const LiveWorkerProvider = () =>
             ]);
             // Preserve the order the user provided in `olds.domain`. The
             // Cloudflare API returns domains in non-deterministic order,
-            // which would cause downstream `worker.urls[0]` reads to flip
+            // which would cause downstream `worker.domains[0]` reads to flip
             // between deploys. Drift (domains we don't know about) is
             // appended after the user-ordered ones.
             const userOrder = normalizeDomains(olds?.domain);
@@ -1986,7 +1986,7 @@ export const LiveWorkerProvider = () =>
             const workersDevUrl = subdomain.enabled
               ? `https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`
               : undefined;
-            const urls = [
+            const domains = [
               ...orderedHostnames.map((h) => `https://${h}`),
               ...(workersDevUrl ? [workersDevUrl] : []),
             ];
@@ -1999,12 +1999,12 @@ export const LiveWorkerProvider = () =>
               workerId: workerName,
               workerName,
               logpush: settings.logpush ?? undefined,
-              url: urls[0],
+              url: domains[0],
               tags: settings.tags ?? undefined,
               durableObjectNamespaces: getDurableObjectNamespaces(
                 settings.bindings,
               ),
-              urls,
+              domains,
               crons,
             } satisfies Worker["Attributes"];
 
