@@ -118,8 +118,16 @@ before dead-lettering. For finer control, call `msg.ack()` /
 ## Tune batching and backoff
 
 `messages(queue, props)` accepts a settings object. Time fields are
-`Duration.Input` — pass a `Duration`, a number of milliseconds, or
-a string like `"5 seconds"`.
+`Duration.Input` — any of these are accepted:
+
+```typescript
+maxWaitTime: Duration.seconds(5)   // a Duration value
+maxWaitTime: 5_000                 // a number of milliseconds
+maxWaitTime: "5 seconds"           // a "<number> <unit>" string
+```
+
+Units in the string form are plural (`"seconds"`, `"millis"`,
+`"minutes"`, ...) — that's Effect's `Duration.Unit` shape.
 
 ```diff lang="typescript"
 +import * as Duration from "effect/Duration";
