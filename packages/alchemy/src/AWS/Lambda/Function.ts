@@ -426,9 +426,13 @@ export const Function: Platform<
         }),
       get: <T>(key: string) =>
         Config.string(key).pipe(
+          Config.withDefault(undefined),
           Effect.flatMap((val) =>
             Effect.try({
               try: () => {
+                if (val === undefined) {
+                  return undefined;
+                }
                 const value = JSON.parse(val);
                 if (
                   value !== null &&
