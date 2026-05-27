@@ -214,7 +214,7 @@ export const LocalWorkerProvider = () =>
                 encodeURIComponent(`${id}-${binding.className}`);
             } else if (binding.type === "workflow") {
               workflows[binding.name] = {
-                name: binding.name,
+                name: binding.workflowName,
                 className: binding.className,
                 scriptName:
                   binding.scriptName && binding.scriptName !== name
