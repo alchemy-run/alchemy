@@ -378,7 +378,7 @@ export const LocalWorkerProvider = () =>
           url,
           tags: [],
           durableObjectNamespaces: config.durableObjectNamespaces,
-          domains: [],
+          domains: [url],
           crons: Array.from(
             new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
           ),

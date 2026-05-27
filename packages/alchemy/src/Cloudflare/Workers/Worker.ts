@@ -276,7 +276,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
     tags: string[] | undefined;
     durableObjectNamespaces: Record<string, string>;
     accountId: string;
-    domains: { hostname: string; id: string; zoneId: string }[];
+    domains: string[];
     crons: string[];
     hash?: {
       assets: string | undefined;
@@ -883,11 +883,7 @@ export const LiveWorkerProvider = () =>
           );
         });
 
-      const reconcileDomains = (
-        scriptName: string,
-        desired: string[],
-        _previous: Worker["Attributes"]["domains"],
-      ) =>
+      const reconcileDomains = (scriptName: string, desired: string[]) =>
         Effect.gen(function* () {
           // Always query the live state of domains attached to *this*
           // Worker rather than trusting `_previous` from local state.
@@ -1651,11 +1647,15 @@ export const LiveWorkerProvider = () =>
             `Reconciling custom domains (${desiredDomains.length}) ...`,
           );
         }
-        const domains = yield* reconcileDomains(
-          name,
-          desiredDomains,
-          previousDomains,
-        );
+        const reconciled = yield* reconcileDomains(name, desiredDomains);
+        const workersDevUrl =
+          news.url !== false
+            ? `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`
+            : undefined;
+        const domains = [
+          ...reconciled.map((d) => `https://${d.hostname}`),
+          ...(workersDevUrl ? [workersDevUrl] : []),
+        ];
         const crons = yield* reconcileCrons(
           name,
           normalizeCrons([...getCronBindings(bindings), ...(news.crons ?? [])]),
@@ -1666,10 +1666,7 @@ export const LiveWorkerProvider = () =>
           workerId: worker.id ?? name,
           workerName: name,
           logpush: worker.logpush ?? undefined,
-          url:
-            news.url !== false
-              ? `https://${name}.${yield* getAccountSubdomain(accountId)}.workers.dev`
-              : undefined,
+          url: domains[0],
           tags: settings.tags ?? metadata.tags,
           durableObjectNamespaces,
           accountId,
@@ -1770,9 +1767,11 @@ export const LiveWorkerProvider = () =>
           if (!output) {
             return;
           }
-          const newDomains = normalizeDomains(news.domain).sort();
+          const newDomains = normalizeDomains(news.domain)
+            .map((h) => `https://${h}`)
+            .sort();
           const oldDomains = (output?.domains ?? [])
-            .map((d) => d.hostname)
+            .filter((u) => !u.endsWith(".workers.dev"))
             .sort();
           const domainsChanged =
             newDomains.length !== oldDomains.length ||
@@ -1967,6 +1966,30 @@ export const LiveWorkerProvider = () =>
                 service: workerName,
               }).pipe(Effect.map((r) => r.result ?? [])),
             ]);
+            // Preserve the order the user provided in `olds.domain`. The
+            // Cloudflare API returns domains in non-deterministic order,
+            // which would cause downstream `worker.domains[0]` reads to flip
+            // between deploys. Drift (domains we don't know about) is
+            // appended after the user-ordered ones.
+            const userOrder = normalizeDomains(olds?.domain);
+            const orderedHostnames = [
+              ...userOrder.flatMap(
+                (h) =>
+                  domainsList.find((d) => d.hostname === h)?.hostname ?? [],
+              ),
+              ...domainsList.flatMap((d) =>
+                d.hostname && !userOrder.includes(d.hostname)
+                  ? [d.hostname]
+                  : [],
+              ),
+            ];
+            const workersDevUrl = subdomain.enabled
+              ? `https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`
+              : undefined;
+            const domains = [
+              ...orderedHostnames.map((h) => `https://${h}`),
+              ...(workersDevUrl ? [workersDevUrl] : []),
+            ];
             const crons = yield* getWorkerCrons(workerName);
             yield* Effect.logInfo(
               `Cloudflare Worker read: found ${workerName}`,
@@ -1976,18 +1999,12 @@ export const LiveWorkerProvider = () =>
               workerId: workerName,
               workerName,
               logpush: settings.logpush ?? undefined,
-              url: subdomain.enabled
-                ? `https://${workerName}.${yield* getAccountSubdomain(accountId)}.workers.dev`
-                : undefined,
+              url: domains[0],
               tags: settings.tags ?? undefined,
               durableObjectNamespaces: getDurableObjectNamespaces(
                 settings.bindings,
               ),
-              domains: domainsList.flatMap((d) =>
-                d.id && d.hostname && d.zoneId
-                  ? [{ id: d.id, hostname: d.hostname, zoneId: d.zoneId }]
-                  : [],
-              ),
+              domains,
               crons,
             } satisfies Worker["Attributes"];
 
@@ -2072,13 +2089,30 @@ export const LiveWorkerProvider = () =>
           yield* Effect.logInfo(
             `Cloudflare Worker delete: deleting ${output.workerName}`,
           );
-          if (output.domains?.length) {
+          // Look up live domain IDs rather than trusting persisted state.
+          // We no longer track `{ id, zoneId }` on the output; fetching
+          // straight from Cloudflare handles both the normal case and
+          // adopted workers whose domains we never recorded.
+          const liveDomains = yield* listDomains({
+            accountId: output.accountId,
+            service: output.workerName,
+          }).pipe(
+            Effect.map((r) => r.result ?? []),
+            Effect.catch(() => Effect.succeed([])),
+          );
+          if (liveDomains.length) {
             yield* Effect.all(
-              output.domains.map((d) =>
-                deleteDomain({
-                  accountId: output.accountId,
-                  domainId: d.id,
-                }).pipe(Effect.catchTag("DomainNotFound", () => Effect.void)),
+              liveDomains.flatMap((d) =>
+                d.id
+                  ? [
+                      deleteDomain({
+                        accountId: output.accountId,
+                        domainId: d.id,
+                      }).pipe(
+                        Effect.catchTag("DomainNotFound", () => Effect.void),
+                      ),
+                    ]
+                  : [],
               ),
               { concurrency: "unbounded" },
             );
