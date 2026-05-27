@@ -3,6 +3,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import type { Counter as CounterClass } from "./src/AsyncWorker.ts";
 import EffectWorker from "./src/EffectWorker.ts";
+import SecondaryApi from "./src/SecondaryApi.ts";
 
 export const Counter = Cloudflare.DurableObjectNamespace<CounterClass>(
   "Counter",
@@ -29,10 +30,12 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const asyncWorker = yield* AsyncWorker;
     const effectWorker = yield* EffectWorker;
+    const secondaryApi = yield* SecondaryApi;
 
     return {
       asyncWorker: asyncWorker.url,
       effectWorker: effectWorker.url,
+      secondaryApi: secondaryApi.url,
     };
   }),
 );
