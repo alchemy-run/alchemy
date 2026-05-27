@@ -11,12 +11,14 @@ import {
 import * as Test from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import { Data, Layer } from "effect";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
   ArtifactProbe,
   BindingTarget,
   DeletedBindingRegressionTarget,
+  DurationResource,
   Function,
   PhasedTarget,
   StaticStablesResource,
@@ -4225,5 +4227,113 @@ describe("Redacted props/outputs survive deploy", () => {
       expect(state?.status).toBe("updated");
       expect(Redacted.value((state!.attr as any).redacted)).toBe("new");
     }),
+  );
+});
+
+describe("stack output persistence", () => {
+  const getStackOutput = (stack: string, stage: string) =>
+    Effect.gen(function* () {
+      const state = yield* State;
+      return yield* state.getOutput({ stack, stage });
+    });
+
+  test.provider(
+    "apply persists the resolved stack output via state.setOutput",
+    (stack) =>
+      Effect.gen(function* () {
+        const result = yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "hello" });
+          return { url: A.string };
+        }).pipe(stack.deploy);
+        expect(result).toEqual({ url: "hello" });
+
+        const persisted = yield* getStackOutput(stack.name, "test").pipe(
+          Effect.provide(stack.state),
+        );
+        expect(persisted).toEqual({ url: "hello" });
+      }),
+  );
+
+  test.provider(
+    "redeploys overwrite the persisted stack output with the new value",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "v1" });
+          return { url: A.string };
+        }).pipe(stack.deploy);
+
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "v2" });
+          return { url: A.string };
+        }).pipe(stack.deploy);
+
+        const persisted = yield* getStackOutput(stack.name, "test").pipe(
+          Effect.provide(stack.state),
+        );
+        expect(persisted).toEqual({ url: "v2" });
+      }),
+  );
+
+  test.provider(
+    "another stack can read the persisted output via Output.stackRef",
+    (stack) =>
+      Effect.gen(function* () {
+        // First deploy: write the stack output we'll later reference.
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { string: "shared" });
+          return { url: A.string };
+        }).pipe(stack.deploy);
+
+        // Second deploy: a downstream resource consumes the previously
+        // persisted stack output via Output.stackRef. The deploy
+        // succeeds because state.getOutput finds it.
+        const result = yield* Effect.gen(function* () {
+          const upstream = yield* Output.stackRef<{ url: string }>(stack.name);
+          const B = yield* TestResource("B", {
+            string: (upstream as any).url,
+          });
+          return { downstream: B.string };
+        }).pipe(stack.deploy);
+
+        expect(result).toEqual({ downstream: "shared" });
+      }),
+  );
+});
+
+describe("Duration round-trip through state", () => {
+  test.provider(
+    "input Duration reaches reconcile as a real Duration and output Duration re-hydrates as a real Duration on the next deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        const first = yield* stack.deploy(
+          DurationResource("Timer", { timeout: Duration.seconds(15) }),
+        );
+
+        // Reconcile saw a real Duration: arithmetic worked.
+        expect(Duration.isDuration(first.observedTimeout)).toBe(true);
+        expect(Duration.toMillis(first.observedTimeout)).toBe(15_000);
+        expect(Duration.isDuration(first.computedTimeout)).toBe(true);
+        expect(Duration.toMillis(first.computedTimeout)).toBe(16_000);
+
+        // Second deploy: identical props. The engine reads the previous
+        // output from state. If the Duration weren't revived, `output`
+        // (a plain `{_id,_tag,millis}` shape) would fail `isDuration` and
+        // `Duration.toMillis` would throw.
+        const second = yield* stack.deploy(
+          DurationResource("Timer", { timeout: Duration.seconds(15) }),
+        );
+        expect(Duration.isDuration(second.observedTimeout)).toBe(true);
+        expect(Duration.toMillis(second.observedTimeout)).toBe(15_000);
+        expect(Duration.isDuration(second.computedTimeout)).toBe(true);
+        expect(Duration.toMillis(second.computedTimeout)).toBe(16_000);
+
+        // The persisted state itself should round-trip to a real Duration.
+        const persisted = yield* getState<{
+          attr: DurationResource["Attributes"];
+        }>("Timer");
+        expect(Duration.isDuration(persisted.attr.computedTimeout)).toBe(true);
+        expect(Duration.toMillis(persisted.attr.computedTimeout)).toBe(16_000);
+      }),
   );
 });

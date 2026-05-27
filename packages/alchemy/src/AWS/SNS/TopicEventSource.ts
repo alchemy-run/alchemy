@@ -35,8 +35,5 @@ export const notifications = <T extends Topic>(
     process: (
       stream: Stream.Stream<TopicNotification, never, StreamReq>,
     ) => Effect.Effect<void, never, Req>,
-  ) =>
-    TopicEventSource.asEffect().pipe(
-      Effect.flatMap((source) => source(topic, props, process)),
-    ),
+  ) => TopicEventSource.use((source) => source(topic, props, process)),
 });

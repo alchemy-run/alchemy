@@ -27,6 +27,11 @@ export type ReplacementOldResourceState =
   | ReplacementResourceState;
 
 interface BaseResourceState {
+  /**
+   * Discriminator vs {@link ActionState}. Optional for back-compat: legacy
+   * persisted rows have no `kind` field and are implicitly resources.
+   */
+  readonly kind?: "resource";
   /** Type of the Resource (e.g. AWS.Lambda.Function) */
   resourceType: string;
   /** Namespace of the Resource */

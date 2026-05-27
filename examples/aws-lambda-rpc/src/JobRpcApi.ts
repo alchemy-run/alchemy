@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import {
   Rpc,
   RpcGroup,
@@ -82,6 +82,5 @@ export const JobRpcsLive = JobRpcs.toLayer(
 );
 
 export const JobRpcHttpEffect = RpcServer.toHttpEffect(JobRpcs).pipe(
-  Effect.provide(JobRpcsLive),
-  Effect.provide(RpcSerialization.layerJson),
+  Effect.provide(Layer.mergeAll(JobRpcsLive, RpcSerialization.layerJson)),
 );

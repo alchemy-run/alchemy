@@ -414,7 +414,7 @@ export default function BrowserHotReload() {
           title="~/my-app"
           badge="DEV"
           badgeColor="var(--alc-accent-bright)"
-          bodyMinHeight={320}
+          maxLines={15}
         >
           {lines.map((l) => (
             <Line key={l.key}>{l.text}</Line>

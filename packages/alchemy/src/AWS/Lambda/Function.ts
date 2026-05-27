@@ -7,9 +7,11 @@ import { Region } from "@distilled.cloud/aws/Region";
 import type * as lambda from "aws-lambda";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
@@ -93,7 +95,44 @@ export interface FunctionProps extends PlatformProps {
     subnetIds: string[];
     securityGroupIds: string[];
   };
+  /**
+   * Maximum execution time before the function is forcibly terminated.
+   * Rounded up to whole seconds.
+   *
+   * @default 3 seconds (AWS Lambda default)
+   */
+  timeout?: Duration.Duration;
 }
+
+/**
+ * Normalize a {@link FunctionProps.timeout} to whole seconds.
+ *
+ * State JSON round-trips flatten a `Duration` to its `toJSON` shape
+ * (`{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`), which is not a
+ * valid `Duration.Input`. Reconstruct an input that `Duration.toSeconds`
+ * accepts before delegating.
+ */
+export const toTimeoutSeconds = (
+  timeout: Duration.Duration | undefined,
+): number | undefined => {
+  if (timeout === undefined) return undefined;
+  const json = timeout as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  const input: Duration.Input =
+    json._id === "Duration"
+      ? json._tag === "Millis"
+        ? json.millis!
+        : json._tag === "Nanos"
+          ? BigInt(json.nanos!)
+          : "Infinity"
+      : timeout;
+  const seconds = Duration.toSeconds(input);
+  return Number.isFinite(seconds) ? Math.max(1, Math.ceil(seconds)) : undefined;
+};
 
 export interface Function extends Resource<
   FunctionTypeId,
@@ -368,27 +407,52 @@ export const Function: Platform<
       set: (id: string, output: Output.Output) =>
         Effect.sync(() => {
           const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
-          env[key] = output.pipe(Output.map((value) => JSON.stringify(value)));
+          // Preserve `Redacted`-ness across the Output → Lambda env var
+          // round-trip. `JSON.stringify(Redacted)` would emit the literal
+          // string `"<redacted>"` and lose the value, so secrets are
+          // serialized with a `{_tag: "Redacted", value: ...}` marker
+          // that the runtime `get` path detects and rebuilds.
+          env[key] = output.pipe(
+            Output.map((value) =>
+              Redacted.isRedacted(value)
+                ? JSON.stringify({
+                    _tag: "Redacted",
+                    value: Redacted.value(value),
+                  })
+                : JSON.stringify(value),
+            ),
+          );
           return key;
         }),
       get: <T>(key: string) =>
-        Config.string(key)
-          .asEffect()
-          .pipe(
-            Effect.flatMap((val) =>
-              Effect.try({
-                try: () => JSON.parse(val) as T,
-                catch: () => val, // assume it's just a string
+        Config.string(key).pipe(
+          Effect.flatMap((val) =>
+            Effect.try({
+              try: () => {
+                const value = JSON.parse(val);
+                if (
+                  value !== null &&
+                  typeof value === "object" &&
+                  (value as { _tag?: unknown })._tag === "Redacted" &&
+                  "value" in (value as object)
+                ) {
+                  return Redacted.make(
+                    (value as { value: unknown }).value,
+                  ) as unknown as T;
+                }
+                return value as T;
+              },
+              catch: () => val, // assume it's just a string
+            }),
+          ),
+          Effect.catch((cause) =>
+            Effect.die(
+              new Error(`Failed to get environment variable: ${key}`, {
+                cause,
               }),
             ),
-            Effect.catch((cause) =>
-              Effect.die(
-                new Error(`Failed to get environment variable: ${key}`, {
-                  cause,
-                }),
-              ),
-            ),
           ),
+        ),
       serve: (handler: HttpEffect) =>
         ctx.listen(makeFunctionHttpHandler(handler)),
       listen: ((
@@ -641,6 +705,7 @@ export const FunctionProvider = () =>
                 (importPath) => `
 import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import { Stack } from "alchemy/Stack";
+import { makeEntrypointLayer } from "alchemy/Runtime";
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
@@ -652,13 +717,10 @@ import * as Region from "@distilled.cloud/aws/Region";
 import * as Context from "effect/Context";
 import { MinimumLogLevel } from "effect/References";
 
-import entry from "${importPath}";
+import entrypoint from ${JSON.stringify(importPath)};
 
 const tag = Context.Service("${Self.key}")
-const layer =
-  typeof entry?.build === "function"
-    ? entry
-    : Layer.effect(tag, typeof entry?.asEffect === "function" ? entry.asEffect() : entry);
+const layer = makeEntrypointLayer(tag, entrypoint);
 
 const platform = Layer.mergeAll(
   nodeServicesLayer,
@@ -670,8 +732,8 @@ const platform = Layer.mergeAll(
 const stack = Layer.effect(
   Stack,
   Effect.all([
-    Config.string("ALCHEMY_STACK_NAME").asEffect(),
-    Config.string("ALCHEMY_STAGE").asEffect()
+    Config.string("ALCHEMY_STACK_NAME"),
+    Config.string("ALCHEMY_STAGE")
   ]).pipe(
     Effect.map(([name, stage]) => ({
       name,
@@ -682,7 +744,7 @@ const stack = Layer.effect(
   )
 );
 
-const handlerEffect = tag.asEffect().pipe(
+const handlerEffect = tag.pipe(
   Effect.flatMap(func => func.RuntimeContext.exports),
   Effect.flatMap(exports => exports.handler),
   Effect.provide(
@@ -848,6 +910,7 @@ export default await Effect.runPromise(handlerEffect)
               }
             : undefined,
           Tags: tags,
+          Timeout: toTimeoutSeconds(news.timeout),
           VpcConfig: news.vpc
             ? {
                 SubnetIds: news.vpc.subnetIds,
@@ -1095,6 +1158,11 @@ export default await Effect.runPromise(handlerEffect)
             })).hash
           ) {
             // code changed
+            return { action: "update" };
+          }
+          if (
+            toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)
+          ) {
             return { action: "update" };
           }
         }),

@@ -1,9 +1,21 @@
 import { DurableObject } from "cloudflare:workers";
 import type { AsyncWorkerEnv } from "../alchemy.run.ts";
+import wasm from "./modules/wasm-example.wasm";
+
+interface AddInstance {
+  exports: {
+    add(a: number, b: number): number;
+  };
+}
 
 export default {
-  async fetch(_request, env) {
-    const counter = env.Counter.getByName("my-counter");
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname === "/wasm") {
+      const instance = (await WebAssembly.instantiate(wasm)) as AddInstance;
+      return Response.json({ result: instance.exports.add(3, 4) });
+    }
+    const counter = env.COUNTER.getByName("my-counter");
     const count = await counter.increment();
     return new Response(`Hello, world! ${count}`);
   },

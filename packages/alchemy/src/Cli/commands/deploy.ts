@@ -83,7 +83,7 @@ export const execStack = Effect.fn(function* ({
   const services = Layer.mergeAll(
     Layer.effect(
       AlchemyContext,
-      AlchemyContext.asEffect().pipe(
+      AlchemyContext.pipe(
         Effect.map((ctx) => ({
           ...ctx,
           dev,
@@ -125,6 +125,7 @@ export const execStack = Effect.fn(function* ({
               // TODO(sam): probably better to have Plan.destroy and Plan.update
               resources: {},
               bindings: {},
+              actions: {},
               output: {},
             }
           : stack,

@@ -10,17 +10,22 @@ import * as Build from "../Build/index.ts";
 import * as Provider from "../Provider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
+import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as Access from "./Access.ts";
 import * as AiGateway from "./AiGateway/index.ts";
+import * as AnalyticsEngine from "./AnalyticsEngine/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Artifacts from "./Artifacts/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
+import * as BrowserRendering from "./BrowserRendering/index.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Containers from "./Container/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as D1 from "./D1/index.ts";
+import * as Email from "./Email/index.ts";
 import * as Hyperdrive from "./Hyperdrive/index.ts";
+import * as Images from "./Images/index.ts";
 import * as KV from "./KV/index.ts";
 import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
@@ -29,6 +34,7 @@ import * as Tunnel from "./Tunnel/index.ts";
 import * as VpcService from "./VpcService/index.ts";
 import * as Workers from "./Workers/index.ts";
 import * as Workflows from "./Workers/Workflow.ts";
+import * as Zaraz from "./Zaraz/index.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
@@ -49,13 +55,20 @@ export const providers = () =>
       ApiToken.UserApiToken,
       AiGateway.AiGateway,
       AiGateway.AiGatewayBindingPolicy,
+      AnalyticsEngine.AnalyticsEngineDatasetBindingPolicy,
       Artifacts.ArtifactsBindingPolicy,
+      BrowserRendering.BrowserRenderingBindingPolicy,
       Command,
       Containers.Container,
       D1.D1ConnectionPolicy,
       D1.D1Database,
+      Email.EmailAddress,
+      Email.EmailRouting,
+      Email.EmailRule,
+      Email.SendEmailBindingPolicy,
       Hyperdrive.Hyperdrive,
       Hyperdrive.HyperdriveBindingPolicy,
+      Images.ImagesBindingPolicy,
       KV.KVNamespace,
       KV.KVNamespaceBindingPolicy,
       Queue.Queue,
@@ -69,11 +82,14 @@ export const providers = () =>
       SecretsStore.Secret,
       Tunnel.Tunnel,
       VpcService.VpcService,
+      KeyPair,
       Random,
       Workers.BindWorkerPolicy,
+      Workers.CronEventSourcePolicy,
       Workers.FetchPolicy,
       Workers.Worker,
       Workflows.WorkflowResource,
+      Zaraz.ZarazConfig,
     ]),
   ).pipe(
     Layer.provide(
@@ -82,12 +98,19 @@ export const providers = () =>
         ApiToken.UserApiTokenProvider(),
         AiGateway.AiGatewayProvider(),
         AiGateway.AiGatewayBindingPolicyLive,
+        AnalyticsEngine.AnalyticsEngineDatasetBindingPolicyLive,
         Artifacts.ArtifactsBindingPolicyLive,
+        BrowserRendering.BrowserRenderingBindingPolicyLive,
         Containers.ContainerProvider(),
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
+        Email.EmailAddressProvider(),
+        Email.EmailRoutingProvider(),
+        Email.EmailRuleProvider(),
+        Email.SendEmailBindingPolicyLive,
         Hyperdrive.HyperdriveBindingPolicyLive,
         Hyperdrive.HyperdriveProvider(),
+        Images.ImagesBindingPolicyLive,
         KV.KVNamespaceBindingPolicyLive,
         KV.KVNamespaceProvider(),
         Queue.QueueBindingPolicyLive,
@@ -102,13 +125,19 @@ export const providers = () =>
         Tunnel.TunnelProvider(),
         VpcService.VpcServiceProvider(),
         Workers.BindWorkerPolicyLive,
+        Workers.CronEventSourcePolicyLive,
         Workers.FetchPolicyLive,
         Workers.WorkerProvider(),
         Workflows.WorkflowProvider(),
+        Zaraz.ZarazConfigProvider(),
       ),
     ),
     Layer.provideMerge(
-      Layer.mergeAll(Build.CommandProvider(), RandomProvider()),
+      Layer.mergeAll(
+        Build.CommandProvider(),
+        KeyPairProvider(),
+        RandomProvider(),
+      ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),

@@ -7,10 +7,14 @@ import type { Scope } from "effect/Scope";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { SingleShotGen } from "effect/Utils";
 import type { PolicyLike } from "./Binding.ts";
+import type { Dependencies } from "./Dependencies.ts";
+import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
+import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
+import type { Rpc } from "./Rpc.ts";
 import { RuntimeContext, type BaseRuntimeContext } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
@@ -35,13 +39,10 @@ export type Main<InitServices = never> = void | {
       >;
 };
 
-export type Rpc<Shape> = {
-  "~alchemy/rpc": Shape;
-};
-
 // services provided to the Resource
 export type PlatformServices =
   | RuntimeContext
+  | ExecutionContext
   | HttpClient
   | PolicyLike
   | Provider<any>
@@ -65,16 +66,16 @@ export interface Platform<
   Type: Resource["Type"];
   Provider: Provider<Resource>;
 
-  <Self, Shape>(): {
+  <Self, Shape, Deps = never>(): {
     <PropsReq = never>(
       id: string,
       props:
         | InputProps<Resource["Props"]>
         | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
     ): Effect.Effect<
-      Resource & Rpc<Self>,
+      Resource & Rpc<Self> & Dependencies<Deps>,
       never,
-      Self | Resource["Providers"] | PropsReq
+      Resource["Providers"] | PropsReq
     > & {
       make<InitReq = never>(
         impl: Effect.Effect<Shape, never, InitReq>,
@@ -193,7 +194,7 @@ export const Platform = <
   type Impl = Effect.Effect<any>;
 
   const resource = Resource(type);
-  const PlatformContext = RuntimeContext(type);
+  const PlatformContext = RuntimeContext;
 
   const constructor = (
     id?: string,
@@ -242,8 +243,18 @@ export const Platform = <
               }),
             )
         ).pipe(
-          Effect.tap(
-            (resource) => hooks.onCreate?.(resource as R, props) ?? Effect.void,
+          Effect.tap((resource) =>
+            hooks.onCreate
+              ? Effect.flatMap(
+                  // `props` may itself be an Effect (e.g. when wrapped by
+                  // `Cloudflare.Vite` via `Effect.map`); resolve it before
+                  // handing it to the hook so `onCreate` always sees the
+                  // plain props object — the second call site (in
+                  // `cls.make`) already does this.
+                  Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
+                  (resolved) => hooks.onCreate!(resource as R, resolved),
+                )
+              : Effect.void,
           ),
         );
       return Object.assign(
@@ -260,7 +271,7 @@ export const Platform = <
           asEffect,
           // @ts-expect-error
           pipe: (...args: any[]) => asEffect().pipe(...args),
-          [Symbol.iterator]: () => new SingleShotGen({ asEffect }),
+          [Symbol.iterator]: () => new SingleShotGen(asEffect()),
         },
       );
     } else {
@@ -279,18 +290,18 @@ export const Platform = <
         `Platform<${type}<${id}>>`,
       );
       static [Symbol.iterator](): Iterator<
-        Effect.Yieldable<any, void, never, Self>,
+        Effect.Effect<void, never, Self>,
         Resource,
         void
       > {
-        return new SingleShotGen(this) as any;
+        return new SingleShotGen(this.asEffect()) as any;
       }
       static asEffect() {
-        return this.Self.asEffect();
+        return this.Self;
       }
       static pipe(...args: any[]) {
         // @ts-expect-error
-        return pipe(this.asEffect(), ...args);
+        return pipe(this, ...args);
       }
       static of = (shape: any) => shape;
       static make = (impl: Impl) => {
@@ -324,8 +335,13 @@ export const Platform = <
               yield* impl.pipe(
                 Effect.flatMap((impl) =>
                   impl?.fetch
-                    ? (runtimeContext.serve?.(impl.fetch) ??
-                      Effect.die("No serve handler"))
+                    ? // Hand the full impl to `serve` so the runtime can
+                      // expose any non-handler methods on the impl shape
+                      // (e.g. RPC methods on a Cloudflare Worker) alongside
+                      // the standard `fetch` handler.
+                      (runtimeContext.serve?.(impl.fetch, {
+                        shape: impl as Record<string, unknown>,
+                      }) ?? Effect.die("No serve handler"))
                     : Effect.void,
                 ),
                 Effect.provide(
@@ -337,6 +353,17 @@ export const Platform = <
                       Layer.succeed(resource.Self, instance),
                       Layer.succeed(Platform.Self, instance),
                       Layer.succeed(Self, instance),
+                      runtimeContext.planServices
+                        ? Layer.unwrap(
+                            ALCHEMY_PHASE.pipe(
+                              Effect.map((phase) =>
+                                phase === "plan"
+                                  ? runtimeContext.planServices!
+                                  : Layer.empty,
+                              ),
+                            ),
+                          )
+                        : Layer.empty,
                     ),
                     Layer.succeedContext(outerServices),
                   ),
@@ -360,7 +387,7 @@ export const Platform = <
             }),
           ),
         );
-        const self = Self.asEffect() as any; // TODO(sam): why do we need to cast?
+        const self = Self as any; // TODO(sam): why do we need to cast?
 
         return Layer.provideMerge(
           Layer.mergeAll(
@@ -380,7 +407,7 @@ export const Platform = <
 
   const instance = Object.assign(constructor, resource, {
     Platform: Platform,
-    asEffect: () => resource.Self.asEffect(),
+    asEffect: () => resource.Self,
     ...methods,
   }) as any;
   return instance;

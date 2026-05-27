@@ -39,9 +39,11 @@ const ACCENT = "var(--alc-accent-bright)";
 export default function StateStoreBootstrap({
   title = "~/my-app",
   bare,
+  maxLines = 12,
 }: {
   title?: string;
   bare?: boolean;
+  maxLines?: number;
 }) {
   const [cmd, setCmd] = useState("");
   const [caret, setCaret] = useState(false);
@@ -188,7 +190,7 @@ export default function StateStoreBootstrap({
       title={title}
       badge="DEPLOY"
       badgeColor={ACCENT}
-      bodyMinHeight={360}
+      maxLines={maxLines}
       bare={bare}
     >
       <Line>

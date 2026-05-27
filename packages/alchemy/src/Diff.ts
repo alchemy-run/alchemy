@@ -87,26 +87,47 @@ export const havePropsChanged = <Props extends object>(
   newProps: Props,
 ) =>
   Output.hasOutputs(newProps) ||
-  JSON.stringify(canonicalize(oldProps ?? {})) !==
-    JSON.stringify(canonicalize(newProps ?? {}));
+  JSON.stringify(canonicalize(oldProps ?? {}, false)) !==
+    JSON.stringify(canonicalize(newProps ?? {}, false));
+
+export type DeepEqualOptions = {
+  /**
+   * When true, treat `null` and `undefined` as equivalent at any depth.
+   * Useful when comparing cloud-API responses (which often return `null`
+   * for unconfigured optional fields) against desired-state shapes built
+   * from `props?.x` (which leave the same fields `undefined`).
+   *
+   * @default false
+   */
+  stripNullish?: boolean;
+};
 
 /**
  * Sort-keys deep equality for plain data (objects, arrays, primitives).
  * Use in provider `diff` handlers instead of ad-hoc `JSON.stringify` comparisons.
+ *
+ * By default, `null` and `undefined` are treated as distinct. Pass
+ * `{ stripNullish: true }` to opt into treating them as equivalent.
  */
-export const deepEqual = (a: unknown, b: unknown): boolean =>
-  JSON.stringify(canonicalize(a ?? undefined)) ===
-  JSON.stringify(canonicalize(b ?? undefined));
+export const deepEqual = (
+  a: unknown,
+  b: unknown,
+  options?: DeepEqualOptions,
+): boolean =>
+  JSON.stringify(canonicalize(a, options?.stripNullish ?? false)) ===
+  JSON.stringify(canonicalize(b, options?.stripNullish ?? false));
 
-const canonicalize = (value: unknown): unknown => {
+const canonicalize = (value: unknown, stripNullish: boolean): unknown => {
+  if (stripNullish && value == null) return undefined;
   if (Array.isArray(value)) {
-    return value.map(canonicalize);
+    return value.map((v) => canonicalize(v, stripNullish));
   }
   if (value && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value)
+        .filter(([, nested]) => !stripNullish || nested != null)
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, nested]) => [key, canonicalize(nested)]),
+        .map(([key, nested]) => [key, canonicalize(nested, stripNullish)]),
     );
   }
   return value;

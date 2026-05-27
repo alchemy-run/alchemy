@@ -4,32 +4,24 @@ import * as Clank from "../Util/Clank.ts";
 import { AuthError } from "./AuthProvider.ts";
 
 export const getEnv = (key: string) =>
-  Config.string(key)
-    .asEffect()
-    .pipe(Effect.orElseSucceed(() => undefined));
+  Config.string(key).pipe(Effect.orElseSucceed(() => undefined));
 
 export const getEnvRequired = (key: string) =>
-  Config.string(key)
-    .asEffect()
-    .pipe(
-      Effect.catch(() =>
-        Effect.fail(new AuthError({ message: `Missing required env: ${key}` })),
-      ),
-    );
+  Config.string(key).pipe(
+    Effect.catch(() =>
+      Effect.fail(new AuthError({ message: `Missing required env: ${key}` })),
+    ),
+  );
 
 export const getEnvRedacted = (key: string) =>
-  Config.redacted(key)
-    .asEffect()
-    .pipe(Effect.orElseSucceed(() => undefined));
+  Config.redacted(key).pipe(Effect.orElseSucceed(() => undefined));
 
 export const getEnvRedactedRequired = (key: string) =>
-  Config.redacted(key)
-    .asEffect()
-    .pipe(
-      Effect.catch(() =>
-        Effect.fail(new AuthError({ message: `Missing required env: ${key}` })),
-      ),
-    );
+  Config.redacted(key).pipe(
+    Effect.catch(() =>
+      Effect.fail(new AuthError({ message: `Missing required env: ${key}` })),
+    ),
+  );
 
 export const retryOnce = <A, R>(
   self: Effect.Effect<A, Clank.PromptCancelled, R>,

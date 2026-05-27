@@ -395,6 +395,38 @@ export class PutRecordPolicy extends Binding.Policy<...>()("AWS.Kinesis.PutRecor
 export const PutRecordPolicyLive = Layer.effect(PutRecordPolicy, ...);
 ```
 
+### Runtime-only methods: color with `Alchemy.RuntimeContext`
+
+The runtime callable returned by a `Binding.Service` (the inner Effect inside `.bind(resource)`'s return) **must** declare `Alchemy.RuntimeContext` as a requirement. This is how Alchemy models "this code can only run inside a deployed Function/Worker" at the type level — analogous to a colored function.
+
+```ts
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+
+export class GetItem extends Binding.Service<
+  GetItem,
+  <T extends Table>(
+    table: T,
+  ) => Effect.Effect<
+    (
+      request: GetItemRequest,
+    ) => Effect.Effect<
+      DynamoDB.GetItemOutput,
+      DynamoDB.GetItemError,
+      RuntimeContext // ← runtime-only
+    >
+  >
+>()("AWS.DynamoDB.GetItem") {}
+```
+
+Rules:
+
+- **Outer Effect** (the `bind(resource)` setup) runs at the Function's init phase. It does NOT require `RuntimeContext`.
+- **Inner Effect** (the actual SDK invocation) only makes sense inside a running Function. It MUST require `RuntimeContext`.
+- Resolve cloud-environment services (`WorkerEnvironment`, AWS SDK clients, etc.) once during Layer construction and close over them. Do NOT leak `WorkerEnvironment` / `Lambda.FunctionEnvironment` onto the runtime callable — that couples downstream service code to a specific cloud and breaks Layer encapsulation. The Function/Worker runtime satisfies `RuntimeContext` automatically.
+- The implementation can return `Effect.Effect<A, E>` without explicitly providing `RuntimeContext` (it's contravariant in `R`); just declare it on the interface.
+
+Why this matters: consumers can build cloud-agnostic services on top of bindings using `Layer.effect(Tag, ...)` without polluting their service interface with `WorkerEnvironment`. See [Layers concept](./website/src/content/docs/concepts/layers.mdx).
+
 After implementing, register the Policy in `AWS.providers()()`:
 
 - Add the `*PolicyLive` layer to `bindings()` in [Providers.ts](./packages/alchemy/src/AWS/Providers.ts)
@@ -508,6 +540,141 @@ Never use `Date.now()` when constructing the physical name of a resource. You sh
 See the [VPC Smoke Test](./test/AWS/EC2/Vpc.smoke.test.ts) for an example.
 
 11. Add the resource-level JSDoc (`@section` + `@example` blocks) and field-level JSDoc on each prop/attribute on the source `.ts` file. Then run `bun generate:api-reference` to refresh `website/src/content/docs/providers/{Cloud}/{Resource}.md`. Do NOT manually edit the generated markdown.
+
+# Test Fixtures for Effect-Native Workers / Functions
+
+To test runtime behavior of an Effect-native Worker, Workflow, Lambda, etc., write a **fixture** that defines the Worker/Function with the bindings under test and exposes one HTTP route per behavior, then write a **test** that deploys the fixture once via `beforeAll` and drives it over HTTP.
+
+## File system layout
+
+Put fixtures in a `fixtures/` directory next to the test file. Each test suite owns its own fixtures — never reach across suites:
+
+```sh
+packages/alchemy/test/{Cloud}/{Service}/{Resource}.test.ts
+packages/alchemy/test/{Cloud}/{Service}/fixtures/{worker|workflow|handler}.ts
+```
+
+## Fixture shape
+
+Resolve the bindings, expose one route per behavior, default-export the class so the test can deploy it directly:
+
+```ts
+// fixtures/worker.ts
+import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Gateway } from "./gateway.ts";
+
+export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
+  "TestWorker",
+  {
+    main: import.meta.filename,
+  },
+  Effect.gen(function* () {
+    const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/url")) {
+          const url = yield* aiGateway.getUrl().pipe(Effect.orDie);
+          return yield* HttpServerResponse.json({ url });
+        }
+        return HttpServerResponse.text("ok");
+      }),
+    };
+  }).pipe(Effect.provide(Cloudflare.AiGatewayBindingLive)),
+) {}
+```
+
+## Test shape
+
+Compose a `Stack` that deploys the fixture, share one deploy across the file with `beforeAll`/`afterAll`, drive it via `HttpClient`, and retry the first request through edge propagation:
+
+```ts
+// Service.test.ts
+import * as Alchemy from "@/index.ts";
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Vitest";
+import { expect } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import TestWorker from "./fixtures/worker.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+});
+
+const Stack = Alchemy.Stack(
+  "ServiceTestStack",
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  Effect.gen(function* () {
+    const worker = yield* TestWorker;
+    return { url: worker.url.as<string>() };
+  }),
+);
+
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+
+test(
+  "deployed worker exercises the binding",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+
+    const res = yield* client.get(`${url}/url`).pipe(
+      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 10 }),
+    );
+    expect(res.status).toBe(200);
+    const body = (yield* res.json) as { url: string };
+    expect(body.url).toContain("gateway.ai.cloudflare.com");
+  }),
+  { timeout: 180_000 },
+);
+```
+
+Notes:
+
+- `Test.make({ providers: Cloudflare.providers() })` gives you `test`, `beforeAll`, `afterAll`, `deploy`, `destroy`.
+- `beforeAll(deploy(Stack))` returns a handle (`stack` above) that every `test` body can `yield*` to get the stack outputs.
+- `afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack))` is the standard cleanup — set `NO_DESTROY=1` locally to keep the deployment around between runs while iterating.
+- Always retry the first request (`Schedule.exponential("500 millis")`) — fresh workers.dev URLs and Lambda function URLs take a few seconds to start serving 200s.
+- For POST: use `client.post(url)` for empty bodies, or `HttpClient.execute(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(body)))` for typed bodies.
+- **Never use `while (Date.now() < deadline)` loops to poll** for an async side effect (a workflow status, a cron fire, a queue drain, eventual-consistency read, etc.). Use `Effect.repeat` with a `Schedule` and an `until` predicate so the polling participates in the Effect runtime — tracing, interruption, and error propagation work correctly, and the intent is declarative. Cap iterations with `times: N` (or a bounded schedule) so the test fails fast instead of running until the vitest timeout:
+
+  ```ts
+  // good — declarative, bounded, interruption-safe
+  const value = yield* fetchValue.pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("5 seconds"),
+      until: (v) => v.ready,
+      times: 36,
+    }),
+  );
+
+  // bad — opaque loop, ignores interruption, leaks into vitest timeout
+  let value: Value | undefined;
+  const deadline = Date.now() + 180_000;
+  while (Date.now() < deadline) {
+    value = yield* fetchValue;
+    if (value.ready) break;
+    yield* Effect.sleep("5 seconds");
+  }
+  ```
+
+  See [CronEventSource.test.ts](./packages/alchemy/test/Cloudflare/Workers/CronEventSource.test.ts) for a real-world example (polling a DO via the worker's `/times` route until the cron handler fires).
+
+## Reference implementations
+
+- Cloudflare AiGateway — [worker fixture](./packages/alchemy/test/Cloudflare/AiGateway/worker.ts) + [test](./packages/alchemy/test/Cloudflare/AiGateway/AiGateway.test.ts) (the deploy+fetch case lives at the bottom of the file)
+- Cloudflare D1Connection — [worker fixture](./packages/alchemy/test/Cloudflare/D1/d1-worker.ts) + [test](./packages/alchemy/test/Cloudflare/D1/D1Binding.test.ts)
+- Cloudflare Workflow — [workflow fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/test-workflow.ts) + [worker fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/workflow-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/Workflow.test.ts)
+- Cloudflare Cron Trigger — [worker + DO fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/cron-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/CronEventSource.test.ts) (cron handler writes to a DO; test polls a fetch route with `Effect.repeat` until the scheduled handler fires)
+- Cloudflare Images — [worker fixture](./packages/alchemy/test/Cloudflare/Images/images-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Images/Images.test.ts)
+- AWS Lambda (DynamoDB bindings) — [Lambda fixture](./packages/alchemy/test/AWS/DynamoDB/handler.ts) + [test](./packages/alchemy/test/AWS/DynamoDB/Bindings.test.ts) (one `describe("<BindingName>")` per binding, all driving the same deployed Lambda)
 
 # Spec-Driven Service Bring-Up
 

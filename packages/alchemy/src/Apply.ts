@@ -21,24 +21,34 @@ import { toFqn } from "./FQN.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
-import { type Apply, type Delete, type Plan } from "./Plan.ts";
+import {
+  type ActionApply,
+  type Apply,
+  type Delete,
+  type Plan,
+} from "./Plan.ts";
 import { findProviderByType } from "./Provider.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
-import { recordResourceOp, type ResourceOp } from "./Telemetry/Metrics.ts";
 import {
+  type ActionState,
   type CreatedResourceState,
   type CreatingResourceState,
   type DeletingResourceState,
+  type PersistedState,
+  type RanActionState,
   type ReplacedResourceState,
   type ReplacingResourceState,
   type ResourceState,
+  type RunningActionState,
   type UpdatedResourceState,
   type UpdatingReourceState,
   State,
   StateStoreError,
 } from "./State/index.ts";
+import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
+import { hashInput } from "./Util/hash.ts";
 
 export type ApplyEffect<
   P extends Plan,
@@ -139,7 +149,7 @@ export const apply = <P extends Plan>(
       {
         id: string;
         type: string;
-        status: Extract<ApplyStatus, "created" | "updated">;
+        status: Extract<ApplyStatus, "created" | "updated" | "ran" | "skipped">;
       }
     >();
 
@@ -185,7 +195,14 @@ export const apply = <P extends Plan>(
     const outputs = Object.fromEntries(
       Object.entries(tracker).map(([fqn, t]) => [fqn, t.output]),
     );
-    return yield* Output.evaluate(plan.output, outputs);
+    const resolved = yield* Output.evaluate(plan.output, outputs);
+
+    // Persist the stack's evaluated outputs so cross-stack references
+    // (`yield* OtherStack` / `OtherStack.stage.<name>` / `Output.stackRef`)
+    // can read them back out of the state store.
+    yield* state.setOutput({ stack: stackName, stage, value: resolved });
+
+    return resolved;
   }).pipe(
     ensureArtifactStore,
     Effect.withSpan("apply", {
@@ -211,12 +228,12 @@ const executePlan = Effect.fnUntraced(function* (
     {
       id: string;
       type: string;
-      status: Extract<ApplyStatus, "created" | "updated">;
+      status: Extract<ApplyStatus, "created" | "updated" | "ran" | "skipped">;
     }
   >,
   session: PlanStatusSession,
   state: {
-    set: <V extends ResourceState>(req: {
+    set: <V extends PersistedState>(req: {
       stack: string;
       stage: string;
       fqn: string;
@@ -226,9 +243,29 @@ const executePlan = Effect.fnUntraced(function* (
   stackName: string,
   stage: string,
 ) {
+  // Resources and tasks share the same FQN namespace and DAG, so the
+  // scheduler tracks them together. Each entry gets a single Deferred that
+  // signals "my output is available in `tracker`."
+  const allNodes: Record<string, Apply | ActionApply> = {
+    ...plan.resources,
+    ...plan.actions,
+  };
+
   const ready = Object.fromEntries(
     yield* Effect.all(
-      Object.keys(plan.resources).map((fqn) =>
+      Object.keys(allNodes).map((fqn) =>
+        Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
+      ),
+    ),
+  ) as Record<string, Deferred.Deferred<void>>;
+
+  // `readyStable` fires only when a node has reached its TERMINAL output —
+  // resources after `reconcile`, tasks after the body completes. Resource
+  // precreate stubs do NOT signal `readyStable`, so any consumer that
+  // requires stable inputs (e.g. Tasks) waits past the precreate phase.
+  const readyStable = Object.fromEntries(
+    yield* Effect.all(
+      Object.keys(allNodes).map((fqn) =>
         Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
       ),
     ),
@@ -247,25 +284,50 @@ const executePlan = Effect.fnUntraced(function* (
       { concurrency: "unbounded" },
     );
 
+  const waitForStableDeps = (fqns: string[]) =>
+    Effect.all(
+      fqns
+        .filter((fqn) => fqn in readyStable)
+        .map((fqn) => Deferred.await(readyStable[fqn])),
+      { concurrency: "unbounded" },
+    );
+
   const failures: LifecycleFailure[] = [];
 
   yield* Effect.all(
-    Object.entries(plan.resources).map(([fqn, node]) =>
-      executeNode(
-        fqn,
-        node,
-        tracker,
-        ready,
-        terminalStatuses,
-        session,
-        state,
-        stackName,
-        stage,
-        getOutputs,
-        waitForDeps,
-        failures,
-        plan.cycleMembers.has(fqn),
-      ),
+    Object.entries(allNodes).map(([fqn, node]) =>
+      (node as ActionApply).kind === "action"
+        ? executeActionNode(
+            fqn,
+            node as ActionApply,
+            tracker,
+            ready,
+            readyStable,
+            terminalStatuses,
+            session,
+            state,
+            stackName,
+            stage,
+            getOutputs,
+            waitForStableDeps,
+            failures,
+          )
+        : executeNode(
+            fqn,
+            node as Apply,
+            tracker,
+            ready,
+            readyStable,
+            terminalStatuses as any,
+            session,
+            state,
+            stackName,
+            stage,
+            getOutputs,
+            waitForDeps,
+            failures,
+            plan.cycleMembers.has(fqn),
+          ),
     ),
     { concurrency: "unbounded" },
   );
@@ -290,6 +352,7 @@ const executeNode = (
   node: Apply,
   tracker: Record<string, ResourceTracker>,
   ready: Record<string, Deferred.Deferred<void>>,
+  readyStable: Record<string, Deferred.Deferred<void>>,
   terminalStatuses: Map<
     string,
     {
@@ -341,8 +404,27 @@ const executeNode = (
       });
 
     const markTerminal = (status: "created" | "updated") =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         terminalStatuses.set(fqn, {
+          id: logicalId,
+          type: node.resource.Type,
+          status,
+        });
+        // Emit immediately so the CLI surfaces the terminal status as soon
+        // as the resource is actually done — instead of batching every
+        // resource's "created"/"updated" event to the end of apply(), which
+        // makes long-running siblings appear stuck in "creating" until the
+        // entire deploy finishes.
+        //
+        // Cycle members are exempt: their initial pass produces an
+        // intermediate result that Phase 3 (`converge`) will overwrite once
+        // the SCC reaches a fixed point. Emitting "created"/"updated" here
+        // would surface that intermediate state to the CLI before the real
+        // terminal status is known. Their final status is flushed from
+        // `terminalStatuses` after `converge` completes.
+        if (inCycle) return;
+        yield* session.emit({
+          kind: "status-change",
           id: logicalId,
           type: node.resource.Type,
           status,
@@ -350,6 +432,10 @@ const executeNode = (
       });
 
     const signalReady = Deferred.succeed(ready[fqn], void 0);
+    // Signal only after reconcile completes — never during precreate. Tasks
+    // (and any other consumer that calls `waitForStableDeps`) block on this
+    // so they observe the resource's final attrs rather than a stub.
+    const signalReadyStable = Deferred.succeed(readyStable[fqn], void 0);
 
     const storeAndSignal = (t: ResourceTracker) =>
       Effect.gen(function* () {
@@ -360,6 +446,8 @@ const executeNode = (
     // ── noop ──
 
     if (node.action === "noop") {
+      // No work to do — the persisted attr is already stable.
+      yield* signalReadyStable;
       yield* storeAndSignal({
         output: node.state.attr,
         props: node.state.props,
@@ -506,11 +594,16 @@ const executeNode = (
           });
         }
 
-        yield* report("creating");
+        // While we're waiting on upstream outputs the resource isn't actually
+        // creating anything yet — surface that as "pending" so the CLI doesn't
+        // look stuck in "creating" for slow-upstream deploys.
+        yield* report("pending");
 
         // Create runs against fully resolved upstream outputs and bindings, not the
         // raw Output expressions stored in the plan.
         yield* waitForDeps(allUpstreamFqns());
+
+        yield* report("creating");
         const outputs = getOutputs();
 
         const news = (yield* Output.evaluate(node.props, outputs)) as Record<
@@ -563,6 +656,7 @@ const executeNode = (
           instanceId,
         };
         yield* signalReady;
+        yield* signalReadyStable;
 
         yield* markTerminal("created");
         return;
@@ -591,6 +685,9 @@ const executeNode = (
           });
         }
 
+        // See create-flow note: while we're waiting on upstream outputs
+        // this resource isn't actually updating yet.
+        yield* report("pending");
         yield* waitForDeps(allUpstreamFqns());
         const outputs = getOutputs();
 
@@ -694,6 +791,7 @@ const executeNode = (
         // the deferred has already been resolved by the early `storeAndSignal`
         // above and `signalReady` is a no-op the second time.
         yield* signalReady;
+        yield* signalReadyStable;
 
         yield* markTerminal("updated");
         return;
@@ -711,6 +809,7 @@ const executeNode = (
             instanceId,
           };
           yield* signalReady;
+          yield* signalReadyStable;
           yield* markTerminal("created");
           return;
         }
@@ -794,11 +893,15 @@ const executeNode = (
           });
         }
 
-        yield* report("creating replacement");
+        // See create-flow note: while we're waiting on upstream outputs
+        // the replacement isn't actually being created yet.
+        yield* report("pending");
 
         // Replacement create is evaluated exactly like create, but against the new
         // generation's instance id and with the previous generations preserved in `old`.
         yield* waitForDeps(allUpstreamFqns());
+
+        yield* report("creating replacement");
         const outputs = getOutputs();
 
         const news = (yield* Output.evaluate(node.props, outputs)) as Record<
@@ -857,6 +960,7 @@ const executeNode = (
           instanceId,
         };
         yield* signalReady;
+        yield* signalReadyStable;
 
         // Keep progress anchored to the live replacement while GC drains the
         // previous generation(s) in the background.
@@ -882,6 +986,10 @@ const executeNode = (
           cause,
         });
         yield* Deferred.failCause(ready[fqn], cause as Cause.Cause<never>);
+        yield* Deferred.failCause(
+          readyStable[fqn],
+          cause as Cause.Cause<never>,
+        );
         yield* session.emit({
           kind: "status-change",
           id: node.resource.LogicalId,
@@ -900,6 +1008,172 @@ const executeNode = (
     }),
   ) as Effect.Effect<void, never, never>;
 
+// ── Task execution ─────────────────────────────────────────────────────────
+//
+// Tasks slot into the same scheduler as resources. They have no provider
+// lifecycle — just a single Effect that runs when inputs change (or when
+// `--force` is set). The output value is written to `tracker[fqn].output`
+// so downstream Output evaluation works identically to resource attrs.
+
+const executeActionNode = (
+  fqn: string,
+  node: ActionApply,
+  tracker: Record<string, ResourceTracker>,
+  ready: Record<string, Deferred.Deferred<void>>,
+  readyStable: Record<string, Deferred.Deferred<void>>,
+  terminalStatuses: Map<
+    string,
+    {
+      id: string;
+      type: string;
+      status: Extract<ApplyStatus, "created" | "updated" | "ran" | "skipped">;
+    }
+  >,
+  session: PlanStatusSession,
+  state: {
+    set: <V extends PersistedState>(req: {
+      stack: string;
+      stage: string;
+      fqn: string;
+      value: V;
+    }) => Effect.Effect<V, StateStoreError, never>;
+  },
+  stackName: string,
+  stage: string,
+  getOutputs: () => Record<string, any>,
+  waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
+  failures: LifecycleFailure[],
+): Effect.Effect<void, never, any> =>
+  Effect.gen(function* () {
+    const task = node.def;
+    const logicalId = task.LogicalId;
+    const namespace = task.Namespace;
+
+    const commit = <S extends ActionState>(value: Omit<S, "namespace">) =>
+      state.set({
+        stack: stackName,
+        stage,
+        fqn,
+        value: { ...value, namespace } as S,
+      });
+
+    const report = (status: ApplyStatus) =>
+      session.emit({
+        kind: "status-change",
+        id: logicalId,
+        type: task.Type,
+        status,
+      });
+
+    const signalReady = Deferred.succeed(ready[fqn], void 0);
+    const signalReadyStable = Deferred.succeed(readyStable[fqn], void 0);
+
+    if (node.action === "noop") {
+      tracker[fqn] = {
+        output: node.state.output,
+        props: { __input: node.state.input },
+        bindings: [],
+        instanceId: fqn,
+      };
+      yield* signalReady;
+      yield* signalReadyStable;
+      terminalStatuses.set(fqn, {
+        id: logicalId,
+        type: task.Type,
+        status: "skipped",
+      });
+      yield* report("skipped");
+      return;
+    }
+
+    // ── run ──
+    // Tasks wait on `waitForStableDeps` (post-reconcile attrs) for their
+    // upstreams, which is often the slowest dep chain in the deploy.
+    // Surface that as "pending" instead of having the task show no status
+    // until its run actually starts.
+    yield* report("pending");
+    yield* waitForDeps(
+      Object.keys(Output.resolveUpstream(node.input)).filter(
+        (f) => f in readyStable,
+      ),
+    );
+
+    const outputs = getOutputs();
+    const resolvedInput = (yield* Output.evaluate(node.input, outputs)) as any;
+    const inputHashValue = yield* hashInput(resolvedInput);
+
+    yield* commit<RunningActionState>({
+      kind: "action",
+      status: "running",
+      fqn,
+      logicalId,
+      actionType: task.Type,
+      inputHash: inputHashValue,
+      input: resolvedInput,
+      downstream: node.downstream,
+    });
+    yield* report("running");
+
+    const result = yield* task.Run(resolvedInput);
+
+    yield* commit<RanActionState>({
+      kind: "action",
+      status: "ran",
+      fqn,
+      logicalId,
+      actionType: task.Type,
+      inputHash: inputHashValue,
+      input: resolvedInput,
+      output: result,
+      downstream: node.downstream,
+    });
+
+    tracker[fqn] = {
+      output: result,
+      props: { __input: resolvedInput },
+      bindings: [],
+      instanceId: fqn,
+    };
+    yield* signalReady;
+    yield* signalReadyStable;
+    terminalStatuses.set(fqn, {
+      id: logicalId,
+      type: task.Type,
+      status: "ran",
+    });
+    yield* report("ran");
+  }).pipe(
+    Effect.catchCause((cause) =>
+      Effect.gen(function* () {
+        failures.push({
+          fqn,
+          logicalId: node.def.LogicalId,
+          type: node.def.Type,
+          cause,
+        });
+        yield* Deferred.failCause(ready[fqn], cause as Cause.Cause<never>);
+        yield* Deferred.failCause(
+          readyStable[fqn],
+          cause as Cause.Cause<never>,
+        );
+        yield* session.emit({
+          kind: "status-change",
+          id: node.def.LogicalId,
+          type: node.def.Type,
+          status: "fail",
+        });
+      }),
+    ),
+    Effect.withSpan("apply.action", {
+      attributes: {
+        "alchemy.action.fqn": fqn,
+        "alchemy.action.type": node.def.Type,
+        "alchemy.action.logical_id": node.def.LogicalId,
+        "alchemy.action.verb": node.action,
+      },
+    }),
+  ) as Effect.Effect<void, never, any>;
+
 // ── Phase 3: imperative convergence loop ───────────────────────────────────
 //
 // After the initial concurrent pass, some resources may have been created
@@ -917,12 +1191,12 @@ const converge = Effect.fnUntraced(function* (
     {
       id: string;
       type: string;
-      status: Extract<ApplyStatus, "created" | "updated">;
+      status: Extract<ApplyStatus, "created" | "updated" | "ran" | "skipped">;
     }
   >,
   session: PlanStatusSession,
   state: {
-    set: <V extends ResourceState>(req: {
+    set: <V extends PersistedState>(req: {
       stack: string;
       stage: string;
       fqn: string;
@@ -1027,6 +1301,75 @@ const converge = Effect.fnUntraced(function* (
       });
     }
 
+    // Tasks: re-run when their resolved input drifts vs. the value they
+    // last applied with (e.g. an upstream resource produced new attrs in
+    // this pass). Skipped (noop) tasks are not re-checked here — their
+    // recorded inputHash is authoritative until the next plan.
+    for (const [fqn, node] of Object.entries(plan.actions)) {
+      if (node.action !== "run") continue;
+      if (!tracker[fqn]) continue;
+
+      const outputs = Object.fromEntries(
+        Object.entries(tracker).map(([k, t]) => [k, t.output]),
+      );
+      const newInput = (yield* Output.evaluate(node.input, outputs)) as any;
+      const newHash = yield* hashInput(newInput);
+      const oldInput = tracker[fqn].props?.__input;
+      const oldHash = yield* hashInput(oldInput);
+      if (newHash === oldHash) continue;
+
+      anyUpdated = true;
+
+      yield* state.set({
+        stack: stackName,
+        stage,
+        fqn,
+        value: {
+          kind: "action",
+          status: "running",
+          fqn,
+          logicalId: node.def.LogicalId,
+          namespace: node.def.Namespace,
+          actionType: node.def.Type,
+          inputHash: newHash,
+          input: newInput,
+          downstream: node.downstream,
+        } satisfies RunningActionState,
+      });
+
+      const result = yield* node.def.Run(newInput);
+
+      yield* state.set({
+        stack: stackName,
+        stage,
+        fqn,
+        value: {
+          kind: "action",
+          status: "ran",
+          fqn,
+          logicalId: node.def.LogicalId,
+          namespace: node.def.Namespace,
+          actionType: node.def.Type,
+          inputHash: newHash,
+          input: newInput,
+          output: result,
+          downstream: node.downstream,
+        } satisfies RanActionState,
+      });
+
+      tracker[fqn] = {
+        output: result,
+        props: { __input: newInput },
+        bindings: [],
+        instanceId: fqn,
+      };
+      terminalStatuses.set(fqn, {
+        id: node.def.LogicalId,
+        type: node.def.Type,
+        status: "ran",
+      });
+    }
+
     if (!anyUpdated) break;
   }
 });
@@ -1041,6 +1384,32 @@ const collectGarbage = Effect.fnUntraced(function* (
   const stack = yield* Stack;
   const stackName = stack.name;
   const stage = yield* Stage;
+
+  // Task deletions are pure state drops — no body is invoked. Run them in
+  // parallel before resource GC; tasks never have provider-side dependencies
+  // to wait on.
+  yield* Effect.all(
+    Object.entries(plan.actionDeletions ?? {}).map(([fqn, node]) =>
+      node === undefined
+        ? Effect.void
+        : Effect.gen(function* () {
+            yield* session.emit({
+              kind: "status-change",
+              id: node.def.LogicalId,
+              type: node.def.Type,
+              status: "deleting",
+            });
+            yield* state.delete({ stack: stackName, stage, fqn });
+            yield* session.emit({
+              kind: "status-change",
+              id: node.def.LogicalId,
+              type: node.def.Type,
+              status: "deleted",
+            });
+          }),
+    ),
+    { concurrency: "unbounded" },
+  );
 
   const deleteGraph = Effect.fnUntraced(function* (
     deletionGraph: Record<string, Delete | ReplacedResourceState | undefined>,

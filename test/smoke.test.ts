@@ -7,10 +7,12 @@
  * Modes:
  *   default              → test against the workspace `workspace:*` deps as-is
  *   SMOKE_CANARY=1       → pack + publish alchemy / better-auth / pr-package
- *                          tarballs to pkg.ing under a fresh tag, swap each
- *                          example's `workspace:*` refs for the pkg.ing URLs,
- *                          `bun install`, run, then `git checkout` the example
- *                          package.json files and reinstall on the way out.
+ *                          tarballs to pkg.ing under a fresh tag, add the
+ *                          pkg.ing URLs to the root workspace catalog, rewrite
+ *                          each example's `workspace:*` refs to `catalog:`,
+ *                          run a single root install, then `git checkout` the
+ *                          mutated package.json files and reinstall once on
+ *                          the way out.
  *
  * Env vars:
  *   SMOKE_RUNTIME    `bun` or `pnpm`                        (default: "bun")
@@ -23,6 +25,7 @@
 import { $ } from "bun";
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import * as fs from "node:fs/promises";
+import * as os from "node:os";
 import * as path from "node:path";
 
 const ROOT = path.resolve(import.meta.dir, "..");
@@ -68,25 +71,72 @@ const PUBLISHED = [
 const canary = process.env.SMOKE_CANARY === "1";
 const host = process.env.PKGING_HOST ?? "pkg.ing";
 
-async function run(cmd: string[], cwd: string): Promise<number> {
-  const proc = Bun.spawn(cmd, {
+async function run(
+  cmd: string[] | readonly string[],
+  cwd: string,
+  env?: Record<string, string>,
+): Promise<number> {
+  const proc = Bun.spawn([...cmd], {
     cwd,
     stdout: "inherit",
     stderr: "inherit",
-    env: { ...process.env, ALCHEMY_NO_TUI: "1" },
+    env: { ...process.env, ALCHEMY_NO_TUI: "1", ...env },
   });
   return await proc.exited;
 }
 
-// When the matrix is pinned to a single runtime (CI), use that runtime's
-// own `add` command so its install path gets exercised end-to-end —
-// otherwise (local: both runtimes) fall back to bun, which writes the
-// shared `node_modules` once for both subsequent runs.
-const PRIMARY_RUNTIME: Runtime = RUNTIMES[0];
-const addCmd = (specs: string[]): string[] =>
-  PRIMARY_RUNTIME === "bun"
-    ? ["bun", "add", ...specs]
-    : ["pnpm", "add", ...specs];
+// Install every active runtime so each runtime's exec works against a
+// node_modules layout it understands. Bun runs first because it writes
+// the flat layout; pnpm 11 then layers its `.pnpm` virtual store on top
+// so `pnpm exec` doesn't trip its implicit `runDepsStatusCheck` install
+// inside an example directory at test time. When `SMOKE_RUNTIME` pins a
+// single runtime, only that one installs.
+//
+// Canary mode mutates example package.json files at runtime, so the
+// lockfile is intentionally stale during the run — `--no-frozen-lockfile`
+// lets the install resolve the new `catalog:` refs. CI defaults pnpm to
+// frozen-lockfile, which would otherwise fail with ERR_PNPM_OUTDATED_LOCKFILE.
+//
+// `Bun.spawn` has no TTY, so pnpm 11 aborts non-interactive `node_modules`
+// removal with `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` unless we set
+// `CI=1`. Only forwarded to pnpm — alchemy's `loadFromEnv` short-circuits
+// to env-only credentials when `CI=true`, which would break local runs
+// that rely on the AWS SDK credential chain.
+type InstallStep = { cmd: readonly string[]; env?: Record<string, string> };
+const installCmds = (): readonly InstallStep[] => {
+  const cmds: InstallStep[] = [];
+  if (RUNTIMES.includes("bun")) {
+    cmds.push({ cmd: ["bun", "install", "--no-frozen-lockfile"] });
+  }
+  if (RUNTIMES.includes("pnpm")) {
+    cmds.push({
+      cmd: ["pnpm", "install", "--no-frozen-lockfile"],
+      env: { CI: "1" },
+    });
+  }
+  return cmds;
+};
+
+const installAll = async (): Promise<void> => {
+  for (const { cmd, env } of installCmds()) {
+    expect(await run(cmd, ROOT, env)).toBe(0);
+  }
+};
+
+const ROOT_PKG_PATH = path.join(ROOT, "package.json");
+const examplePkgPath = (e: string) =>
+  path.join(ROOT, "examples", e, "package.json");
+
+type Pkg = {
+  workspaces?: { catalog?: Record<string, string> };
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+};
+
+const readJson = async <T>(p: string): Promise<T> =>
+  JSON.parse(await fs.readFile(p, "utf8")) as T;
+const writeJson = async (p: string, v: unknown) =>
+  fs.writeFile(p, `${JSON.stringify(v, null, 2)}\n`);
 
 const PNPM_WORKSPACE_PATH = path.join(ROOT, "pnpm-workspace.yaml");
 
@@ -189,66 +239,54 @@ if (canary) {
       }
     }
 
-    // `<runtime> add` mutates the root lockfile + install cache — running
-    // them in parallel across examples races on both. Keep sequential.
+    // Add the canary tarball URLs to the root catalog and rewrite each
+    // example's `workspace:*` ref for a published package to `catalog:`.
+    // One install at the root then resolves every example at once — much
+    // faster than `<runtime> add` per (example × published package).
+    const rootPkg = await readJson<Pkg>(ROOT_PKG_PATH);
+    rootPkg.workspaces ??= {};
+    rootPkg.workspaces.catalog ??= {};
+    for (const { name } of PUBLISHED) {
+      rootPkg.workspaces.catalog[name] = `https://${host}/${name}/${tag}`;
+    }
+    await writeJson(ROOT_PKG_PATH, rootPkg);
+
     for (const example of examples) {
-      const exampleDir = path.join(ROOT, "examples", example);
-      const pkg = JSON.parse(
-        await fs.readFile(path.join(exampleDir, "package.json"), "utf8"),
-      );
-      const adds: string[] = [];
+      const p = examplePkgPath(example);
+      const pkg = await readJson<Pkg>(p);
+      let mutated = false;
       for (const k of ["dependencies", "devDependencies"] as const) {
         const deps = pkg[k];
         if (!deps) continue;
         for (const [n, v] of Object.entries(deps)) {
-          if (v === "workspace:*" && PUBLISHED.some((p) => p.name === n)) {
-            adds.push(`${n}@https://${host}/${n}/${tag}`);
+          if (v === "workspace:*" && PUBLISHED.some((pp) => pp.name === n)) {
+            deps[n] = "catalog:";
+            mutated = true;
           }
         }
       }
-      if (adds.length > 0) {
-        expect(await run(addCmd(adds), exampleDir)).toBe(0);
-      }
+      if (mutated) await writeJson(p, pkg);
     }
+
+    // Mirror the new catalog entries into pnpm-workspace.yaml so the
+    // pnpm leg sees them too.
+    await writePnpmWorkspace();
+
+    await installAll();
   }, TIMEOUT);
 }
 
 /**
- * Restore every example's published-package deps (alchemy / better-auth /
- * pr-package) back to `workspace:*`. Idempotent — only emits an `add`
- * command when something is actually pointing at a non-workspace source,
- * so this is a no-op for the non-canary path that never mutates anything
- * in the first place.
+ * Restore the root + example package.json files via `git checkout` and
+ * reinstall once. No-op when nothing has been mutated (non-canary mode).
  */
 const restoreWorkspaceDeps = async () => {
-  // Sequential — concurrent add calls race on the root lockfile.
-  for (const example of examples) {
-    const exampleDir = path.join(ROOT, "examples", example);
-    let pkg: {
-      dependencies?: Record<string, string>;
-      devDependencies?: Record<string, string>;
-    };
-    try {
-      pkg = JSON.parse(
-        await fs.readFile(path.join(exampleDir, "package.json"), "utf8"),
-      );
-    } catch {
-      continue;
-    }
-    const adds: string[] = [];
-    for (const k of ["dependencies", "devDependencies"] as const) {
-      const deps = pkg[k];
-      if (!deps) continue;
-      for (const [n, v] of Object.entries(deps)) {
-        if (PUBLISHED.some((p) => p.name === n) && v !== "workspace:*") {
-          adds.push(`${n}@workspace:*`);
-        }
-      }
-    }
-    if (adds.length > 0) {
-      console.log(`→ restoring ${example}: ${adds.join(" ")}`);
-      await run(["bun", "add", ...adds], exampleDir);
-    }
+  if (!canary) return;
+  const paths = [ROOT_PKG_PATH, ...examples.map(examplePkgPath)];
+  await run(["git", "checkout", "--", ...paths], ROOT);
+  await writePnpmWorkspace();
+  for (const { cmd, env } of installCmds()) {
+    await run(cmd, ROOT, env);
   }
 };
 
@@ -282,6 +320,302 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 // finishes its destroy → deploy → destroy before pnpm starts in the same
 // directory (otherwise both runs race on shared build outputs like
 // vite's `dist/` and `.alchemy/`).
+// ────────────────────────────────────────────────────────────────────────
+// Monorepo smoke tests
+//
+// The monorepo examples (`monorepo-single-stack`, `monorepo-multi-stack`)
+// can't be tested in-place like the flat examples above — they ship with
+// a `_package.json` instead of `package.json` so the root workspace
+// install doesn't try to wire them in as nested workspaces with their
+// own `workspace:*` graphs.
+//
+// For each (monorepo, runtime) pair we:
+//   1. `bun pm pack` `packages/alchemy` once → tarball
+//   2. copy the example to a fresh temp dir (skipping build artifacts)
+//   3. rename `_package.json` → `package.json`
+//   4. rewrite every `alchemy: workspace:*` ref to `file:<tarball>`
+//      and substitute `catalog:` refs against the root catalog
+//   5. write `pnpm-workspace.yaml` when running under pnpm
+//   6. install with the runtime, then run destroy → deploy → destroy
+//
+// `monorepo-single-stack` has one `alchemy.run.ts` at the root.
+// `monorepo-multi-stack` has one per package; deploy backend → frontend,
+// destroy frontend → backend.
+// ────────────────────────────────────────────────────────────────────────
+
+type Monorepo = {
+  name: "monorepo-single-stack" | "monorepo-multi-stack";
+  // The directories (relative to the monorepo root) where `alchemy
+  // {deploy,destroy}` must run, in deploy order. Destroy runs in
+  // reverse.
+  deployDirs: readonly string[];
+};
+
+const monorepos: readonly Monorepo[] = [
+  { name: "monorepo-single-stack", deployDirs: ["."] },
+  { name: "monorepo-multi-stack", deployDirs: ["backend", "frontend"] },
+];
+
+let alchemyTarball: string | undefined;
+
+beforeAll(async () => {
+  const pkgDir = path.join(ROOT, "packages", "alchemy");
+  for (const f of await fs.readdir(pkgDir)) {
+    if (f.endsWith(".tgz")) await fs.rm(path.join(pkgDir, f));
+  }
+  // pnpm resolves `alchemy` via `lib/` (node import condition) so it
+  // must reflect current `src/`; bun pm pack does not run a build.
+  expect(await run(["bun", "run", "build"], pkgDir)).toBe(0);
+  expect(await run(["bun", "pm", "pack", "--destination", "."], pkgDir)).toBe(
+    0,
+  );
+  const tgz = (await fs.readdir(pkgDir)).find((f) => f.endsWith(".tgz"));
+  if (!tgz) throw new Error(`bun pm pack produced no tarball in ${pkgDir}`);
+  alchemyTarball = path.join(pkgDir, tgz);
+}, TIMEOUT);
+
+const SKIP_COPY = new Set([
+  "node_modules",
+  "dist",
+  ".alchemy",
+  ".turbo",
+  ".wrangler",
+  "tsconfig.tsbuildinfo",
+]);
+
+const copyMonorepo = async (src: string, dst: string): Promise<void> => {
+  await fs.mkdir(dst, { recursive: true });
+  for (const entry of await fs.readdir(src, { withFileTypes: true })) {
+    if (SKIP_COPY.has(entry.name)) continue;
+    const s = path.join(src, entry.name);
+    const d = path.join(dst, entry.name);
+    if (entry.isDirectory()) {
+      await copyMonorepo(s, d);
+    } else if (entry.isSymbolicLink()) {
+      // Skip — likely a workspace symlink that won't exist in the copy.
+    } else {
+      await fs.copyFile(s, d);
+    }
+  }
+};
+
+const PUBLISHED_NAMES = new Set<string>(PUBLISHED.map((p) => p.name));
+
+const resolveCatalog = (rootCatalog: Record<string, string>) => {
+  return (deps: Record<string, string> | undefined): boolean => {
+    if (!deps) return false;
+    let mutated = false;
+    for (const [name, version] of Object.entries(deps)) {
+      const isPublished = PUBLISHED_NAMES.has(name);
+      if (
+        isPublished &&
+        (version === "workspace:*" || version === "catalog:")
+      ) {
+        // In canary mode the root catalog has been rewritten with
+        // pkg.ing URLs (see canary `beforeAll`); resolve through it
+        // so the monorepo install actually exercises the canary
+        // install path. Otherwise fall back to the locally-packed
+        // tarball for `alchemy` so monorepos still test against the
+        // workspace's current source on a non-canary run.
+        const fromCatalog = rootCatalog[name];
+        if (canary && fromCatalog) {
+          deps[name] = fromCatalog;
+        } else if (name === "alchemy") {
+          if (!alchemyTarball) throw new Error("alchemy tarball not built");
+          deps[name] = `file:${alchemyTarball}`;
+        } else {
+          throw new Error(
+            `dependency ${name} is "${version}" but no entry in root catalog (canary=${canary})`,
+          );
+        }
+        mutated = true;
+      } else if (version === "catalog:") {
+        const resolved = rootCatalog[name];
+        if (!resolved) {
+          throw new Error(
+            `dependency ${name} is "catalog:" but no entry in root catalog`,
+          );
+        }
+        deps[name] = resolved;
+        mutated = true;
+      }
+    }
+    return mutated;
+  };
+};
+
+const rewritePackageJson = async (
+  pkgPath: string,
+  resolve: (deps: Record<string, string> | undefined) => boolean,
+): Promise<void> => {
+  const pkg = await readJson<
+    Pkg & { peerDependencies?: Record<string, string> }
+  >(pkgPath);
+  const a = resolve(pkg.dependencies);
+  const b = resolve(pkg.devDependencies);
+  const c = resolve(pkg.peerDependencies);
+  if (a || b || c) await writeJson(pkgPath, pkg);
+};
+
+const setupMonorepo = async (
+  m: Monorepo,
+  runtime: Runtime,
+): Promise<string> => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), `alchemy-${m.name}-`));
+  const dst = path.join(tmp, m.name);
+  await copyMonorepo(path.join(ROOT, "examples", m.name), dst);
+
+  // _package.json → package.json at root
+  const tmpRootPkg = path.join(dst, "_package.json");
+  const finalRootPkg = path.join(dst, "package.json");
+  await fs.rename(tmpRootPkg, finalRootPkg);
+
+  // Resolve `catalog:` refs using the example's own catalog first (it's
+  // the source of truth — `examples/monorepo-*/_package.json#workspaces.catalog`),
+  // falling back to the repo-root catalog for anything the example doesn't
+  // pin. Drop the example's `alchemy` catalog entry — it points at
+  // `file:../packages/alchemy` which doesn't exist in the temp checkout.
+  // `resolveCatalog` then rewrites `alchemy` (and other PUBLISHED refs)
+  // to either the canary pkg.ing URL (canary mode) or the locally-packed
+  // tarball (default).
+  const rootPkg = await readJson<Pkg>(ROOT_PKG_PATH);
+  const rootCatalog = rootPkg.workspaces?.catalog ?? {};
+  const copyRootPkg = await readJson<Pkg>(finalRootPkg);
+  const exampleCatalog = copyRootPkg.workspaces?.catalog ?? {};
+  delete exampleCatalog.alchemy;
+  if (copyRootPkg.workspaces) {
+    copyRootPkg.workspaces.catalog = exampleCatalog;
+    await writeJson(finalRootPkg, copyRootPkg);
+  }
+  const mergedCatalog: Record<string, string> = {
+    ...rootCatalog,
+    ...exampleCatalog,
+  };
+  const resolve = resolveCatalog(mergedCatalog);
+
+  // Root may declare deps too (single-stack runs `alchemy` from the
+  // root, so it needs `node_modules/.bin/alchemy` hoisted there).
+  await rewritePackageJson(finalRootPkg, resolve);
+  for (const sub of ["backend", "frontend"] as const) {
+    await rewritePackageJson(path.join(dst, sub, "package.json"), resolve);
+  }
+
+  if (runtime === "pnpm") {
+    // Mirror scripts/pnpm-workspace.ts — pnpm 11 fails install
+    // (`ERR_PNPM_IGNORED_BUILDS`) on `workerd` / `msgpackr-extract` /
+    // `esbuild` / `sharp` unless their build scripts are explicitly
+    // allowlisted.
+    const builds = [
+      "@parcel/watcher",
+      "esbuild",
+      "msgpackr-extract",
+      "sharp",
+      "workerd",
+    ];
+    const yaml = [
+      "onlyBuiltDependencies:",
+      ...builds.map((n) => `  - ${JSON.stringify(n)}`),
+      "",
+      "allowBuilds:",
+      ...builds.map((n) => `  ${JSON.stringify(n)}: true`),
+      "",
+      "packages:",
+      "  - backend",
+      "  - frontend",
+      "",
+    ].join("\n");
+    await fs.writeFile(path.join(dst, "pnpm-workspace.yaml"), yaml);
+  }
+
+  expect(
+    await run(
+      runtime === "bun"
+        ? ["bun", "install"]
+        : ["pnpm", "install", "--no-frozen-lockfile"],
+      dst,
+    ),
+  ).toBe(0);
+
+  // The frontend's Vite build resolves the backend via its `import`
+  // condition (`./lib/*.js`), so the workspace must be compiled
+  // (`tsc -b` at the root walks the project references) before any
+  // deploy runs.
+  expect(
+    await run(
+      runtime === "bun" ? ["bun", "run", "build"] : ["pnpm", "run", "build"],
+      dst,
+    ),
+  ).toBe(0);
+
+  return dst;
+};
+
+for (const m of monorepos) {
+  let prev: Promise<unknown> = Promise.resolve();
+  for (const runtime of RUNTIMES) {
+    const stagePrefix = (process.env.SMOKE_STAGE ?? "smoke")
+      .replace(/[^a-zA-Z0-9-]/g, "-")
+      .toLowerCase();
+    const stage = `${stagePrefix}-${runtime}-${m.name}`
+      .replace(/[^a-zA-Z0-9-]/g, "-")
+      .toLowerCase();
+    const cmd = (action: "destroy" | "deploy") =>
+      runtime === "bun"
+        ? ["bun", "alchemy", action, "--stage", stage, "--yes"]
+        : ["pnpm", "exec", "alchemy", action, "--stage", stage, "--yes"];
+
+    const myPrev = prev;
+    let release!: () => void;
+    prev = new Promise<void>((r) => {
+      release = r;
+    });
+
+    test.concurrent(
+      `${m.name} (${runtime}): destroy → deploy → destroy`,
+      async () => {
+        await myPrev.catch(() => {});
+        const dst = await setupMonorepo(m, runtime);
+        try {
+          const deployOrder = m.deployDirs.map((d) => path.join(dst, d));
+          const destroyOrder = [...deployOrder].reverse();
+          for (const d of destroyOrder) {
+            expect(await run(cmd("destroy"), d)).toBe(0);
+          }
+          for (const d of deployOrder) {
+            expect(await run(cmd("deploy"), d)).toBe(0);
+          }
+          for (const d of destroyOrder) {
+            expect(await run(cmd("destroy"), d)).toBe(0);
+          }
+        } finally {
+          release();
+          // Best-effort cleanup of the temp checkout; leave it on
+          // failure so a developer can inspect.
+          await fs.rm(path.dirname(dst), { recursive: true, force: true });
+        }
+      },
+      TIMEOUT,
+    );
+  }
+}
+
+// Some examples model the production "shared infra + per-PR compute"
+// pattern via cross-stage references (e.g. `cloudflare-neon-drizzle`
+// has a `pr-*` stage that references a long-lived `staging-*` stage
+// owning the Neon project). To keep tests isolated from one another,
+// each test owns *both* stages — `staging-${stage}` is deployed first,
+// then the main stage, then both are torn down in reverse order so the
+// dependency edge (pr → staging) is respected.
+//
+// We only set up the pre-stage when the main stage starts with `pr-`,
+// because that's the only branch in the example that crosses stages.
+// Local `smoke-*` and `dev_<user>` stages just stand up their own
+// project inline and don't need the pre-stage.
+const PRE_DEPLOY_STAGES: Record<string, (stage: string) => string[]> = {
+  "cloudflare-neon-drizzle": (stage) =>
+    stage.startsWith("pr-") ? [`staging-${stage}`] : [],
+};
+
 for (const example of examples) {
   const cwd = path.join(ROOT, "examples", example);
   let prev: Promise<unknown> = Promise.resolve();
@@ -295,10 +629,19 @@ for (const example of examples) {
     const stage = `${stagePrefix}-${runtime}-${example}`
       .replace(/[^a-zA-Z0-9-]/g, "-")
       .toLowerCase();
-    const cmd = (action: "destroy" | "deploy") =>
+    const cmd = (action: "destroy" | "deploy", stageOverride = stage) =>
       runtime === "bun"
-        ? ["bun", "alchemy", action, "--stage", stage, "--yes"]
-        : ["pnpm", "exec", "alchemy", action, "--stage", stage, "--yes"];
+        ? ["bun", "alchemy", action, "--stage", stageOverride, "--yes"]
+        : [
+            "pnpm",
+            "exec",
+            "alchemy",
+            action,
+            "--stage",
+            stageOverride,
+            "--yes",
+          ];
+    const preStages = PRE_DEPLOY_STAGES[example]?.(stage) ?? [];
 
     const myPrev = prev;
     let release!: () => void;
@@ -315,9 +658,23 @@ for (const example of examples) {
         // is already attributed to the right test.
         await myPrev.catch(() => {});
         try {
+          // Clean up any leftovers across all stages before deploying.
+          // Order: dependents (main) first, dependencies (pre-stages) last.
           expect(await run(cmd("destroy"), cwd)).toBe(0);
+          for (const s of [...preStages].reverse()) {
+            expect(await run(cmd("destroy", s), cwd)).toBe(0);
+          }
+          // Deploy: pre-stages first (data plane), main last (compute).
+          for (const s of preStages) {
+            expect(await run(cmd("deploy", s), cwd)).toBe(0);
+          }
           expect(await run(cmd("deploy"), cwd)).toBe(0);
+          // Tear down in reverse so cross-stage refs stay resolvable
+          // until the dependent stage is gone.
           expect(await run(cmd("destroy"), cwd)).toBe(0);
+          for (const s of [...preStages].reverse()) {
+            expect(await run(cmd("destroy", s), cwd)).toBe(0);
+          }
         } finally {
           release();
         }

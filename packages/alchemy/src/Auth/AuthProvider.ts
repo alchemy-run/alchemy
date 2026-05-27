@@ -220,7 +220,7 @@ export const getAuthProvider = <
 >(
   name: string,
 ): Effect.Effect<AuthProvider<Config, Credentials>, AuthError, AuthProviders> =>
-  Effect.flatMap(AuthProviders.asEffect(), (registry) =>
+  AuthProviders.use((registry) =>
     registry[name] == null
       ? Effect.fail(
           new AuthError({

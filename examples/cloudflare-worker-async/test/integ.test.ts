@@ -23,6 +23,19 @@ test(
   }),
 );
 
+test(
+  "echoes env.API_KEY",
+  Effect.gen(function* () {
+    const out = (yield* stack) as unknown;
+    const url = typeof out === "string" ? out : (out as { url: string }).url;
+
+    const response = yield* HttpClient.get(`${url}/api-key`);
+    expect(response.status).toBe(200);
+    const body = yield* response.text;
+    expect(body).toBe("SOME_API_KEY");
+  }),
+);
+
 /**
  * Native (async) queue handler round-trip. The async worker exports
  * a plain `queue(batch, env)` handler that writes each message body

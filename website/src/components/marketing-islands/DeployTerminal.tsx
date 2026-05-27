@@ -301,7 +301,7 @@ export default function DeployTerminal({
       title={title}
       badge={mode !== "idle" ? MODE_LABEL[mode] : undefined}
       badgeColor={accent}
-      bodyMinHeight={296}
+      maxLines={13}
       bare={bare}
     >
       <Line>

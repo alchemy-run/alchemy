@@ -7,21 +7,27 @@ import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { type Fetcher } from "../Fetcher.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
-import { type Container, ContainerError } from "./Container.ts";
-
+import {
+  type Container,
+  ContainerError,
+  type ContainerStartupOptions,
+} from "./Container.ts";
 /**
  * Runs the Container in a Durable Object and monitors it, providing a durable fetch and RPC interface to it.
  */
 export const start = Effect.fnUntraced(function* <
   Shape extends Container,
   Req = never,
->(containerEff: Effect.Effect<Shape, never, Req | DurableObjectState>) {
+>(
+  containerEff: Effect.Effect<Shape, never, Req | DurableObjectState>,
+  options?: ContainerStartupOptions,
+) {
   const container = yield* containerEff;
 
   const ensureRunning = Effect.gen(function* () {
     if (yield* container.running) return;
     yield* Effect.logInfo("Container not running, starting...");
-    yield* container.start();
+    yield* container.start(options);
     yield* Effect.logInfo("Container started, launching monitor");
     yield* Effect.forkDetach(
       container.monitor().pipe(

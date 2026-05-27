@@ -191,23 +191,21 @@ export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> =
             return key;
           }),
         get: <T>(key: string) =>
-          Config.string(key)
-            .asEffect()
-            .pipe(
-              Effect.flatMap((value) =>
-                Effect.try({
-                  try: () => JSON.parse(value) as T,
-                  catch: (error) => error as Error,
+          Config.string(key).pipe(
+            Effect.flatMap((value) =>
+              Effect.try({
+                try: () => JSON.parse(value) as T,
+                catch: (error) => error as Error,
+              }),
+            ),
+            Effect.catch((cause) =>
+              Effect.die(
+                new Error(`Failed to get environment variable: ${key}`, {
+                  cause,
                 }),
               ),
-              Effect.catch((cause) =>
-                Effect.die(
-                  new Error(`Failed to get environment variable: ${key}`, {
-                    cause,
-                  }),
-                ),
-              ),
             ),
+          ),
         run: (effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
             runners.push(effect);
@@ -494,7 +492,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Region from "@distilled.cloud/aws/Region";
 
-import { ${handler} as handler } from "${importPath}";
+import { ${handler} as handler } from ${JSON.stringify(importPath)};
 
 const platform = Layer.mergeAll(
   NodeServices.layer,
@@ -508,8 +506,8 @@ const program = handler.pipe(
     Layer.effect(
       Stack,
       Effect.all([
-        Config.string("ALCHEMY_STACK_NAME").asEffect(),
-        Config.string("ALCHEMY_STAGE").asEffect()
+        Config.string("ALCHEMY_STACK_NAME"),
+        Config.string("ALCHEMY_STAGE")
       ]).pipe(
         Effect.map(([name, stage]) => ({
           name,

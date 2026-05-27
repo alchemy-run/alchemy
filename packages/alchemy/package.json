@@ -1,13 +1,13 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.35",
+  "version": "2.0.0-beta.44",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alchemy-run/alchemy-effect.git",
-    "directory": "package/alchemy"
+    "directory": "packages/alchemy"
   },
   "bin": {
     "alchemy": "./bin/cli.js"
@@ -39,12 +39,6 @@
       "bun": "./src/*.ts",
       "worker": "./src/*.ts",
       "import": "./lib/*.js"
-    },
-    "./Agent": {
-      "types": "./lib/Agent/index.d.ts",
-      "bun": "./src/Agent/index.ts",
-      "worker": "./src/Agent/index.ts",
-      "import": "./lib/Agent/index.js"
     },
     "./Auth": {
       "types": "./lib/Auth/index.d.ts",
@@ -136,6 +130,12 @@
       "worker": "./src/Cloudflare/index.ts",
       "import": "./lib/Cloudflare/index.js"
     },
+    "./Cloudflare/Bridge": {
+      "types": "./lib/Cloudflare/Bridge.d.ts",
+      "bun": "./src/Cloudflare/Bridge.ts",
+      "worker": "./src/Cloudflare/Bridge.ts",
+      "import": "./lib/Cloudflare/Bridge.js"
+    },
     "./Cloudflare/Live": {
       "types": "./lib/Cloudflare/Live.d.ts",
       "bun": "./src/Cloudflare/Live.ts",
@@ -195,6 +195,24 @@
       "bun": "./src/Output.ts",
       "worker": "./src/Output.ts",
       "import": "./lib/Output.js"
+    },
+    "./Planetscale": {
+      "types": "./lib/Planetscale/index.d.ts",
+      "bun": "./src/Planetscale/index.ts",
+      "worker": "./src/Planetscale/index.ts",
+      "import": "./lib/Planetscale/index.js"
+    },
+    "./Planetscale/*": {
+      "types": "./lib/Planetscale/*/index.d.ts",
+      "bun": "./src/Planetscale/*/index.ts",
+      "worker": "./src/Planetscale/*/index.ts",
+      "import": "./lib/Planetscale/*/index.js"
+    },
+    "./Runtime": {
+      "types": "./lib/Runtime.d.ts",
+      "bun": "./src/Runtime.ts",
+      "worker": "./src/Runtime.ts",
+      "import": "./lib/Runtime.js"
     },
     "./Process": {
       "types": "./lib/Process/index.d.ts",
@@ -270,9 +288,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.31",
-    "@ai-sdk/openai": "^3.0.23",
-    "@ai-sdk/provider": "^3.0.8",
+    "@alchemy.run/node-utils": "catalog:",
     "@aws-sdk/credential-providers": "catalog:",
     "@clack/prompts": "^0.11.0",
     "@distilled.cloud/aws": "catalog:",
@@ -283,7 +299,7 @@
     "@distilled.cloud/cloudflare-vite-plugin": "catalog:",
     "@distilled.cloud/core": "catalog:",
     "@distilled.cloud/neon": "catalog:",
-    "pg": "^8.13.0",
+    "@distilled.cloud/planetscale": "catalog:",
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
@@ -291,30 +307,27 @@
     "@smithy/shared-ini-file-loader": "catalog:",
     "@smithy/types": "catalog:",
     "@types/aws-lambda": "catalog:",
-    "@types/libsodium-wrappers": "^0.8.2",
-    "ai": "catalog:",
     "aws4fetch": "catalog:",
     "capnweb": "^0.6.1",
     "fast-glob": "^3.3.2",
     "fast-xml-parser": "catalog:",
-    "foreground-child": "^4.0.3",
-    "ignore": "^7.0.5",
     "ink": "^6.3.1",
     "jszip": "^3.10.1",
     "libsodium-wrappers": "^0.8.3",
     "magic-string": "^0.30.21",
+    "mysql2": "^3.15.3",
     "pathe": "^2.0.3",
+    "pg": "^8.13.0",
     "picomatch": "^4.0.4",
-    "proper-lockfile": "^4.1.2",
     "react": "^19.2.0",
     "rolldown": "catalog:",
-    "sonda": "catalog:",
-    "web-tree-sitter": "catalog:",
+    "undici": "^7.16.0",
     "yaml": "catalog:"
   },
   "devDependencies": {
     "@clack/prompts": "^0.11.0",
     "@cloudflare/workers-types": "catalog:",
+    "@cloudflare/puppeteer": "^1.1.0",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
@@ -324,7 +337,6 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/picomatch": "^4.0.0",
-    "@types/proper-lockfile": "^4.1.4",
     "@types/react": "^19.2.2",
     "@types/ws": "^8.18.1",
     "better-auth": "catalog:",

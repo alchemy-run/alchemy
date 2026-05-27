@@ -6,6 +6,8 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -183,6 +185,75 @@ test.provider(
     }).pipe(logLevel),
   { timeout: 360_000 },
 );
+
+test.provider(
+  "Vite: `env` props are inlined as `import.meta.env.*` into the bundle",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-vite-env-",
+        tempRoot,
+        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      });
+      const memoInclude = ["index.html", "src/**", "package.json"];
+      const marker = `vite-env-${Date.now()}`;
+
+      const site = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Vite("FixViteEnv", {
+            ...viteProps(rootDir, memoInclude),
+            env: { VITE_TEST_MARKER: marker },
+          });
+        }),
+      );
+
+      expect(site.url).toBeDefined();
+      // Resolve the hashed bundle URL by reading the deployed HTML, then
+      // assert the marker that `main.ts` references via
+      // `import.meta.env.VITE_TEST_MARKER` was actually inlined into the
+      // served JS asset by `Cloudflare.Vite`'s `env`-→-`define` plumbing.
+      const bundleUrl = yield* discoverBundleUrl(site.url!);
+      yield* expectUrlContains(bundleUrl, marker, {
+        timeout: "60 seconds",
+        label: "VITE_TEST_MARKER inlined into client bundle",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
+const discoverBundleUrl = (siteUrl: string) =>
+  Effect.gen(function* () {
+    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    return yield* Effect.gen(function* () {
+      const res = yield* client.get(`${siteUrl}/`);
+      const html = yield* res.text;
+      const match = html.match(
+        /<script[^>]+src="(\/assets\/[^"]+\.js)"[^>]*>/i,
+      );
+      if (!match) {
+        // Fresh deploys can briefly return Cloudflare's "There is
+        // nothing here yet" HTML page instead of the SPA index — retry.
+        return yield* Effect.fail(
+          new Error(
+            `Could not find /assets/*.js script tag in HTML: ${html.slice(0, 200)}`,
+          ),
+        );
+      }
+      return `${siteUrl}${match[1]}`;
+    }).pipe(
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 10,
+      }),
+    );
+  });
 
 const viteProps = (rootDir: string, memoInclude: string[]) => ({
   rootDir,

@@ -12,6 +12,10 @@ export type ApplyStatus =
   | "deleted"
   | "replacing"
   | "replaced"
+  // Action lifecycle (see {@link Action})
+  | "running"
+  | "ran"
+  | "skipped"
   | "fail";
 
 export type ApplyEvent = AnnotateEvent | StatusChangeEvent;
