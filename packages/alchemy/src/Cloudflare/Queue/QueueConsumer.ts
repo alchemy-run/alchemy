@@ -3,11 +3,12 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { HttpClient } from "effect/unstable/http/HttpClient";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import type { Providers } from "../Providers.ts";
+import type { Credentials, Providers } from "../Providers.ts";
 
 // ~60s budget — Worker reconcile uploads typically land in 2–10s,
 // but a fresh container/asset deploy can stretch that.
@@ -135,19 +136,20 @@ export const QueueConsumerProvider = () =>
       const updateConsumer = yield* queues.updateConsumer;
       const deleteConsumer = yield* queues.deleteConsumer;
 
+      // This is a workaround because you cannot `yield* queues.listConsumers` and call `.items` on the result.
+      const context = yield* Effect.context<HttpClient | Credentials>();
+
       // Cloudflare allows a single Worker consumer per queue, so the
       // first match in the paginated stream is the only one. Using
       // `.items` defeats single-page lookups that would otherwise
       // miss late-arriving consumers under eventual consistency.
-      const findWorkerConsumer = (
-        acct: string,
-        queueId: string,
-      ): Effect.Effect<ObservedConsumer | undefined, any, any> =>
+      const findWorkerConsumer = (acct: string, queueId: string) =>
         queues.listConsumers.items({ accountId: acct, queueId }).pipe(
           Stream.map(toObserved),
           Stream.filter((c): c is ObservedConsumer => c !== undefined),
           Stream.runHead,
           Effect.map(Option.getOrUndefined),
+          Effect.provide(context),
         );
 
       return {
