@@ -9,6 +9,7 @@ import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import type { FunctionContext } from "../../Serverless/Function.ts";
+import * as DurationUtil from "../../Util/Duration.ts";
 import { isWorker, isWorkerEvent } from "../Workers/Worker.ts";
 import type { Queue } from "./Queue.ts";
 import { QueueConsumer } from "./QueueConsumer.ts";
@@ -40,16 +41,6 @@ export interface MessagesProps {
   deadLetterQueue?: string;
 }
 
-const toMillis = (input: Duration.Input | undefined) =>
-  input === undefined
-    ? undefined
-    : Math.max(0, Math.ceil(Duration.toMillis(input)));
-
-const toSeconds = (input: Duration.Input | undefined) =>
-  input === undefined
-    ? undefined
-    : Math.max(0, Math.ceil(Duration.toSeconds(input)));
-
 /**
  * Convert a {@link MessagesProps} (with `Duration.Input` time fields)
  * into the numeric settings shape Cloudflare's `QueueConsumer` API
@@ -63,8 +54,8 @@ export const toConsumerSettings = (props: MessagesProps) => ({
   batchSize: props.batchSize,
   maxConcurrency: props.maxConcurrency,
   maxRetries: props.maxRetries,
-  maxWaitTimeMs: toMillis(props.maxWaitTime),
-  retryDelay: toSeconds(props.retryDelay),
+  maxWaitTimeMs: DurationUtil.toMillis(props.maxWaitTime),
+  retryDelay: DurationUtil.toSeconds(props.retryDelay),
 });
 
 /**

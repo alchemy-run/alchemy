@@ -124,10 +124,8 @@ before dead-lettering. For finer control, call `msg.ack()` /
 maxWaitTime: Duration.seconds(5)   // a Duration value
 maxWaitTime: 5_000                 // a number of milliseconds
 maxWaitTime: "5 seconds"           // a "<number> <unit>" string
+retryDelay: "1 second"             // singular and plural units both work
 ```
-
-Units in the string form are plural (`"seconds"`, `"millis"`,
-`"minutes"`, ...) — that's Effect's `Duration.Unit` shape.
 
 ```diff lang="typescript"
 +import * as Duration from "effect/Duration";
