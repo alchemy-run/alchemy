@@ -139,10 +139,7 @@ export const QueueConsumerProvider = () =>
       // first match in the paginated stream is the only one. Using
       // `.items` defeats single-page lookups that would otherwise
       // miss late-arriving consumers under eventual consistency.
-      const findWorkerConsumer = (
-        acct: string,
-        queueId: string,
-      ): Effect.Effect<ObservedConsumer | undefined, any, any> =>
+      const findWorkerConsumer = (acct: string, queueId: string) =>
         queues.listConsumers.items({ accountId: acct, queueId }).pipe(
           Stream.map(toObserved),
           Stream.filter((c): c is ObservedConsumer => c !== undefined),
