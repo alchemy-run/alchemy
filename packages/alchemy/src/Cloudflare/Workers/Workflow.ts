@@ -484,7 +484,14 @@ export const WorkflowProvider = () =>
       const deleteWorkflow = yield* workflows.deleteWorkflow;
 
       return WorkflowResource.Provider.of({
-        stables: ["workflowId", "accountId"],
+        // The `workflowId` is no longer marked as stable because if you start in dev mode, the ID will change on first deploy.
+        stables: ["accountId"],
+        diff: Effect.fnUntraced(function* ({ output }) {
+          // If the workflowId starts with "dev:", and we're not in dev mode, trigger an update so the workflow is created.
+          if (output?.workflowId.startsWith("dev:") && !ctx.dev) {
+            return { action: "update" };
+          }
+        }),
         reconcile: Effect.fnUntraced(function* ({ news, output }) {
           const acct = output?.accountId ?? accountId;
           yield* Effect.logInfo(
