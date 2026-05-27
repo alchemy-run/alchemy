@@ -1,6 +1,7 @@
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
@@ -477,6 +478,7 @@ export const WorkflowProvider = () =>
   Provider.effect(
     WorkflowResource,
     Effect.gen(function* () {
+      const ctx = yield* AlchemyContext;
       const { accountId } = yield* CloudflareEnvironment;
       const putWorkflow = yield* workflows.putWorkflow;
       const deleteWorkflow = yield* workflows.deleteWorkflow;
@@ -488,6 +490,15 @@ export const WorkflowProvider = () =>
           yield* Effect.logInfo(
             `Cloudflare Workflow reconcile: ${news.workflowName}`,
           );
+          if (ctx.dev) {
+            return {
+              workflowId: output?.workflowId ?? `dev:${crypto.randomUUID()}`,
+              accountId,
+              workflowName: news.workflowName,
+              className: news.className,
+              scriptName: news.scriptName,
+            };
+          }
           // Cloudflare's `putWorkflow` is a true PUT-as-upsert: identical
           // payloads converge to the same state and a missing workflow is
           // created on the spot. There is no separate observe step needed
