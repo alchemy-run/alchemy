@@ -47,6 +47,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
+import { isResolved } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
@@ -378,16 +379,26 @@ export const LocalWorkerProvider = () =>
       });
 
       return {
-        diff: Effect.fn(function* ({ id, news, newBindings }) {
+        diff: Effect.fn(function* ({ id, news, newBindings, output }) {
+          if (!isResolved(news) || !isResolved(newBindings)) return undefined;
           const options = {
             id,
             props: news,
-            bindings: newBindings,
+            // Filter out duplicate bindings by sid so the hash is stable.
+            // TODO(sam): Should we do this in core?
+            bindings: newBindings.filter(
+              (binding, index) =>
+                newBindings.findIndex((b) => b.sid === binding.sid) === index,
+            ),
           };
           const hash = Hash.structure(options);
+          if (instances.get(options.id)?.hash === hash) {
+            return { action: "noop" };
+          }
+          const name = yield* createWorkerName(id, news.name);
           return {
-            action:
-              instances.get(options.id)?.hash === hash ? "noop" : "update",
+            action: "update",
+            stables: output?.workerName === name ? ["workerName"] : undefined,
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, bindings }) {
