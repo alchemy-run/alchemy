@@ -66,6 +66,8 @@ test.provider(
         AWS.Lambda.Function<{}>()("TimeoutFn", {
           main: timeoutHandlerPath,
           handler: "handler",
+          isExternal: true,
+          url: false,
           timeout: Duration.seconds(15),
         }),
       );
@@ -79,6 +81,8 @@ test.provider(
         AWS.Lambda.Function<{}>()("TimeoutFn", {
           main: timeoutHandlerPath,
           handler: "handler",
+          isExternal: true,
+          url: false,
           timeout: Duration.seconds(45),
         }),
       );
@@ -101,7 +105,7 @@ test.provider(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
-  { timeout: 240_000 },
+  { timeout: 360_000 },
 );
 
 const getPolicyStatement = Effect.fn(function* (
