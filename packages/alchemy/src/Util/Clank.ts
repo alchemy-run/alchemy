@@ -1,23 +1,12 @@
 import * as p from "@clack/prompts";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Semaphore from "effect/Semaphore";
 import { ChildProcess } from "effect/unstable/process";
 
 export class PromptCancelled extends Data.TaggedError("PromptCancelled") {}
 export const retryIfCancelled = Effect.retry({
   while: (e: unknown) => e instanceof PromptCancelled,
 });
-
-/**
- * Process-wide mutex that serializes interactive prompts. Without it,
- * concurrent Effects (e.g. parallel layer construction in `alchemy login`)
- * can race into `@clack/prompts` simultaneously — both grab stdin and
- * the user sees garbled, interleaved prompts. Each prompt now waits for
- * the previous one to settle (resolve, cancel, or interrupt) before its
- * input loop begins.
- */
-const promptMutex = Semaphore.makeUnsafe(1);
 
 /**
  * Wraps a clack prompt (which returns a `Promise<T | symbol>` where the
@@ -28,37 +17,29 @@ const promptMutex = Semaphore.makeUnsafe(1);
  * Uses `Effect.callback` so fiber interruption propagates via the abort
  * signal to any async resources we own; the clack prompt itself is left
  * to resolve — its result is ignored after interruption.
- *
- * Serialized through {@link promptMutex} so concurrent callers queue
- * instead of fighting over stdin.
  */
 export const prompt = <T>(
   fn: () => Promise<T | symbol>,
 ): Effect.Effect<T, PromptCancelled> =>
-  Semaphore.withPermits(
-    promptMutex,
-    1,
-  )(
-    Effect.callback<T, PromptCancelled>((resume, signal) => {
-      let settled = false;
-      fn().then(
-        (result) => {
-          if (settled || signal.aborted) return;
-          settled = true;
-          if (p.isCancel(result)) {
-            resume(Effect.fail(new PromptCancelled()));
-          } else {
-            resume(Effect.succeed(result as T));
-          }
-        },
-        (err) => {
-          if (settled || signal.aborted) return;
-          settled = true;
-          resume(Effect.die(err));
-        },
-      );
-    }),
-  );
+  Effect.callback<T, PromptCancelled>((resume, signal) => {
+    let settled = false;
+    fn().then(
+      (result) => {
+        if (settled || signal.aborted) return;
+        settled = true;
+        if (p.isCancel(result)) {
+          resume(Effect.fail(new PromptCancelled()));
+        } else {
+          resume(Effect.succeed(result as T));
+        }
+      },
+      (err) => {
+        if (settled || signal.aborted) return;
+        settled = true;
+        resume(Effect.die(err));
+      },
+    );
+  });
 
 export const success = (str: string) => Effect.sync(() => p.log.success(str));
 export const warn = (str: string) => Effect.sync(() => p.log.warn(str));
