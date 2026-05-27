@@ -47,11 +47,9 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import { InstanceId } from "../../InstanceId.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
-import { Stage } from "../../Stage.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { getCompatibility } from "./Compatibility.ts";
@@ -182,18 +180,12 @@ export const LocalWorkerProvider = () =>
         id,
         props,
         bindings,
-        instanceId,
       }: {
         id: string;
         props: WorkerProps;
         bindings: ResourceBinding<Worker["Binding"]>[];
-        instanceId: string;
       }) {
-        const name = yield* createWorkerName(id, props.name).pipe(
-          Effect.provideService(Stack, stack),
-          Effect.provideService(Stage, stack.stage),
-          Effect.provideService(InstanceId, instanceId),
-        );
+        const name = yield* createWorkerName(id, props.name);
         const compatibility = getCompatibility(props);
         const workerBindings: BindingHook<BindingServices>[] = [];
         const durableObjectNamespaces: Record<string, string> = {};
@@ -341,7 +333,6 @@ export const LocalWorkerProvider = () =>
         id: string;
         props: WorkerProps;
         bindings: ResourceBinding<Worker["Binding"]>[];
-        instanceId: string;
       }) {
         const { id, props, bindings } = options;
         const config = yield* buildConfig(options);
@@ -387,12 +378,11 @@ export const LocalWorkerProvider = () =>
       });
 
       return {
-        diff: Effect.fn(function* ({ id, news, newBindings, instanceId }) {
+        diff: Effect.fn(function* ({ id, news, newBindings }) {
           const options = {
             id,
             props: news,
             bindings: newBindings,
-            instanceId,
           };
           const hash = Hash.structure(options);
           return {
@@ -400,8 +390,8 @@ export const LocalWorkerProvider = () =>
               instances.get(options.id)?.hash === hash ? "noop" : "update",
           };
         }),
-        reconcile: Effect.fn(function* ({ id, news, bindings, instanceId }) {
-          const options = { id, props: news, bindings, instanceId };
+        reconcile: Effect.fn(function* ({ id, news, bindings }) {
+          const options = { id, props: news, bindings };
           const hash = Hash.structure(options);
           const existing = instances.get(options.id);
           if (existing) {
