@@ -7,6 +7,7 @@ import { Region } from "@distilled.cloud/aws/Region";
 import type * as lambda from "aws-lambda";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -94,7 +95,44 @@ export interface FunctionProps extends PlatformProps {
     subnetIds: string[];
     securityGroupIds: string[];
   };
+  /**
+   * Maximum execution time before the function is forcibly terminated.
+   * Rounded up to whole seconds.
+   *
+   * @default 3 seconds (AWS Lambda default)
+   */
+  timeout?: Duration.Duration;
 }
+
+/**
+ * Normalize a {@link FunctionProps.timeout} to whole seconds.
+ *
+ * State JSON round-trips flatten a `Duration` to its `toJSON` shape
+ * (`{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`), which is not a
+ * valid `Duration.Input`. Reconstruct an input that `Duration.toSeconds`
+ * accepts before delegating.
+ */
+export const toTimeoutSeconds = (
+  timeout: Duration.Duration | undefined,
+): number | undefined => {
+  if (timeout === undefined) return undefined;
+  const json = timeout as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  const input: Duration.Input =
+    json._id === "Duration"
+      ? json._tag === "Millis"
+        ? json.millis!
+        : json._tag === "Nanos"
+          ? BigInt(json.nanos!)
+          : "Infinity"
+      : timeout;
+  const seconds = Duration.toSeconds(input);
+  return Number.isFinite(seconds) ? Math.max(1, Math.ceil(seconds)) : undefined;
+};
 
 export interface Function extends Resource<
   FunctionTypeId,
@@ -872,6 +910,7 @@ export default await Effect.runPromise(handlerEffect)
               }
             : undefined,
           Tags: tags,
+          Timeout: toTimeoutSeconds(news.timeout),
           VpcConfig: news.vpc
             ? {
                 SubnetIds: news.vpc.subnetIds,
@@ -1119,6 +1158,11 @@ export default await Effect.runPromise(handlerEffect)
             })).hash
           ) {
             // code changed
+            return { action: "update" };
+          }
+          if (
+            toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)
+          ) {
             return { action: "update" };
           }
         }),

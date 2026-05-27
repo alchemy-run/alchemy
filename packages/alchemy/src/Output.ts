@@ -1,4 +1,5 @@
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import type { Pipeable } from "effect/Pipeable";
@@ -589,6 +590,9 @@ export const evaluate: <A, Req = never>(
     if (Array.isArray(expr)) {
       return yield* Effect.all(expr.map((item) => evaluate(item, upstream)));
     } else if (Redacted.isRedacted(expr)) {
+      return expr;
+    } else if (Duration.isDuration(expr)) {
+      // Opaque value — see resolveInput in Plan.ts for rationale.
       return expr;
     } else if (typeof expr === "object" && expr !== null) {
       return Object.fromEntries(

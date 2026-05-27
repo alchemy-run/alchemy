@@ -1,4 +1,5 @@
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -374,6 +375,11 @@ export const make = <A>(
         } else if (Output.isExpr(input)) {
           return yield* resolveOutput(input);
         } else if (Redacted.isRedacted(input)) {
+          return input;
+        } else if (Duration.isDuration(input)) {
+          // Duration is an opaque value; walking its internal `.value`
+          // would destroy the prototype and produce a plain `{ value: ... }`
+          // object that downstream consumers can't interpret.
           return input;
         } else if (Array.isArray(input)) {
           return yield* Effect.all(input.map(resolveInput), {
