@@ -10,6 +10,7 @@ import * as Build from "../Build/index.ts";
 import * as Provider from "../Provider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
+import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as Access from "./Access.ts";
 import * as AiGateway from "./AiGateway/index.ts";
@@ -81,6 +82,7 @@ export const providers = () =>
       SecretsStore.Secret,
       Tunnel.Tunnel,
       VpcService.VpcService,
+      KeyPair,
       Random,
       Workers.BindWorkerPolicy,
       Workers.CronEventSourcePolicy,
@@ -131,7 +133,11 @@ export const providers = () =>
       ),
     ),
     Layer.provideMerge(
-      Layer.mergeAll(Build.CommandProvider(), RandomProvider()),
+      Layer.mergeAll(
+        Build.CommandProvider(),
+        KeyPairProvider(),
+        RandomProvider(),
+      ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
