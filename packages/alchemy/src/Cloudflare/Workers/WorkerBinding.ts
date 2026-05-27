@@ -1,5 +1,7 @@
 import type * as workers from "@distilled.cloud/cloudflare/workers";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as Binding from "../../Binding.ts";
 import type { Rpc } from "../../Rpc.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
@@ -43,7 +45,10 @@ export type WorkerBindingResource =
   | Images
   | Hyperdrive
   | Worker
-  | DurableObjectNamespaceLike<any>;
+  | DurableObjectNamespaceLike<any>
+  | string
+  | Redacted.Redacted<any>
+  | Config.Config<any>;
 
 export type WorkerBindings = {
   [bindingName in string]: WorkerBindingResource;

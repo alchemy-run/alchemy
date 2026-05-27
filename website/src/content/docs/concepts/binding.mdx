@@ -52,8 +52,8 @@ export default Cloudflare.Worker(
 );
 ```
 
-**Async style** — declare bindings on the resource, type the env
-with `InferEnv`:
+**Async style** — declare bindings on the resource's `env` prop,
+type the env with `InferEnv`:
 
 ```typescript
 // alchemy.run.ts
@@ -61,7 +61,7 @@ export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
-  bindings: { Bucket, KV },
+  env: { Bucket, KV },
 });
 
 // src/worker.ts

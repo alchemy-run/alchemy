@@ -15,7 +15,7 @@ export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
 
 export const AsyncWorker = Cloudflare.Worker("AsyncWorker", {
   main: "./src/AsyncWorker.ts",
-  bindings: {
+  env: {
     COUNTER: Counter,
   },
 });

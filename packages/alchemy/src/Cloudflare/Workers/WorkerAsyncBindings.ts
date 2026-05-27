@@ -21,10 +21,10 @@ export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
   resource: Worker,
   props: InputProps<WorkerProps<WorkerBindingProps>>,
 ) {
-  if (props.bindings) {
-    for (const bindingName in props.bindings) {
+  if (props.env) {
+    for (const bindingName in props.env) {
       // @ts-expect-error
-      const bindingEff = props.bindings?.[bindingName] as
+      const bindingEff = props.env?.[bindingName] as
         | WorkerBindingResource
         | Effect.Effect<WorkerBindingResource>;
       // Bindings can be passed as a plain resource value, an Effect that

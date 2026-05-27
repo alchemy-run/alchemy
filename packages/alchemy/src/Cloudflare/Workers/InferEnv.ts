@@ -11,7 +11,7 @@ export type InferEnv<W> =
   W extends Effect.Effect<infer A, infer _E, infer _R>
     ? InferEnv<A>
     : W extends Worker<any>
-      ? InferEnv<Exclude<W["Props"]["bindings"], undefined>>
+      ? InferEnv<Exclude<W["Props"]["env"], undefined>>
       : {
           [k in keyof W]: GetBindingType<W[k]>;
         };

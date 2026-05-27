@@ -294,7 +294,7 @@ const Queue = yield* AWS.SQS.Queue("Queue", {
 
 const Worker = yield* Cloudflare.Worker("Worker", {
   main: import.meta.path,
-  bindings: { Bucket, Sessions, Queue },
+  env: { Bucket, Sessions, Queue },
 });
 ```
 
