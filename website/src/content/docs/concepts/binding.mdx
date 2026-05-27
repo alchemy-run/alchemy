@@ -184,22 +184,26 @@ one expression:
 const outbound = yield* SQS.Queue("Outbound");
 const sink = yield* SQS.QueueSink.bind(outbound);
 
-yield* SQS.messages(InboundQueue).subscribe((records) =>
+yield* DynamoDB.stream(OrdersTable, {
+  streamViewType: "NEW_AND_OLD_IMAGES",
+  startingPosition: "LATEST",
+}).process<Order>((records) =>
   records.pipe(
-    Stream.map((r) => JSON.parse(r.body) as Event),
-    Stream.filter((e) => e.type === "checkout.completed"),
-    Stream.map((e) => JSON.stringify({ orderId: e.orderId })),
+    Stream.filterMap((r) => Option.fromNullable(r.dynamodb.NewImage)),
+    Stream.filter((order) => order.status === "PAID"),
+    Stream.map((order) => JSON.stringify({ orderId: order.id })),
     Stream.run(sink),
   ),
 );
 ```
 
 Two `bind()` calls, one pipeline. Alchemy generates **both** sides
-of the policy automatically — `sqs:ReceiveMessage`/`DeleteMessage`
-on `InboundQueue`, `sqs:SendMessageBatch` on `Outbound` — plus the
-event-source mapping. There is no env-var plumbing, no
-`SendMessageBatchCommand` chunking by hand, and the sink coalesces
-the stream into 10-message batches under the hood.
+of the policy automatically — `dynamodb:DescribeStream` /
+`GetRecords` / `GetShardIterator` on `OrdersTable`'s stream,
+`sqs:SendMessageBatch` on `Outbound` — plus the event-source
+mapping. There is no env-var plumbing, no `SendMessageBatchCommand`
+chunking by hand, and the sink coalesces the stream into 10-message
+batches under the hood.
 
 Drop in `Effect.retry`, `Stream.throttle`, `Stream.groupedWithin`,
 or `Stream.mapEffect` anywhere along the chain — they're all the
