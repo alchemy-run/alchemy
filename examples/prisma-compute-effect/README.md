@@ -1,0 +1,49 @@
+# Prisma Compute Effect
+
+Minimal Effect-native Prisma Compute service managed by Alchemy.
+
+This example is intentionally not a framework app. It shows the provider-native
+runtime path:
+
+- `Prisma.Project`
+- `Prisma.Branch`
+- `Prisma.Postgres`
+- `Prisma.Connection`
+- `Prisma.Compute(..., Effect.gen(...))`
+- `Prisma.Connection.bind(Connection)` inside the deployed runtime
+
+The deployed service responds on `/` and `/api/health` with JSON showing the
+bound database and connection IDs.
+
+## Deploy
+
+```sh
+export PRISMA_SERVICE_TOKEN="..."
+bun run deploy
+```
+
+`PRISMA_API_TOKEN` also works.
+
+## Check It
+
+```sh
+curl "$URL/"
+curl "$URL/api/health"
+```
+
+The response should include:
+
+```json
+{
+  "ok": true,
+  "mode": "effect-native",
+  "hasDatabaseUrl": true
+}
+```
+
+## Destroy
+
+```sh
+export PRISMA_SERVICE_TOKEN="..."
+bun run destroy
+```
