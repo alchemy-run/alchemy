@@ -49,7 +49,7 @@ export const Bucket = Cloudflare.R2Bucket("Bucket");
 
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
-  bindings: { Bucket },
+  env: { Bucket },
 });
 
 export default Alchemy.Stack(
@@ -74,7 +74,7 @@ Key differences:
 ## Step 2: Keep your async handler
 
 Your existing Worker runtime code does not need to change. The async
-pattern passes bindings as props on the Worker resource and uses
+pattern declares bindings on the Worker's `env` prop and uses
 `Cloudflare.InferEnv` to type the `env` object:
 
 ```typescript twoslash
@@ -84,7 +84,7 @@ pattern passes bindings as props on the Worker resource and uses
 
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
-  bindings: { Bucket },
+  env: { Bucket },
 });
 ```
 
@@ -107,9 +107,8 @@ export default {
 ```
 
 `Cloudflare.InferEnv` derives a fully typed `env` object from the
-`bindings` you declared on the Worker. You get type safety on the
-binding names and their APIs without using Effect in your runtime
-code.
+`env` declared on the Worker. You get type safety on the binding
+names and their APIs without using Effect in your runtime code.
 
 :::tip
 This is the recommended migration path. Get your infrastructure on v2
@@ -135,8 +134,8 @@ When you're ready, you can switch to Effect-native Workers. This
 gives you typed errors, composable retries, and Effect's `HttpServer`
 integration.
 
-Instead of passing `bindings` as props, you bind resources in the
-Worker's Init phase using `yield*`:
+Instead of declaring `env` bindings on the resource props, you bind
+resources in the Worker's Init phase using `yield*`:
 
 ```typescript twoslash
 // @noErrors
@@ -189,7 +188,7 @@ import * as Effect from "effect/Effect";
 -
 -export const Worker = Cloudflare.Worker("Worker", {
 -  main: "./src/worker.ts",
--  bindings: { Bucket },
+-  env: { Bucket },
 -});
 
 export default Alchemy.Stack(
@@ -210,7 +209,7 @@ export default Alchemy.Stack(
 | Stack        | `await alchemy("name")`       | `Alchemy.Stack("name", ...)`  | `Alchemy.Stack("name", ...)`       |
 | Resources    | `await R2Bucket(...)`         | `Cloudflare.R2Bucket(...)`    | `Cloudflare.R2Bucket(...)`         |
 | Worker entry | `entrypoint`                  | `main`                        | `main: import.meta.path`           |
-| Bindings     | `bindings: { KEY: resource }` | `bindings: { Key: resource }` | `yield* Resource.bind(ref)`        |
+| Bindings     | `bindings: { KEY: resource }` | `env: { Key: resource }`      | `yield* Resource.bind(ref)`        |
 | Runtime code | `async fetch(req, env)`       | `async fetch(req, env)`       | `Effect.gen(function* () { ... })` |
 | Lifecycle    | `await app.finalize()`        | automatic                     | automatic                          |
 | Type safety  | runtime errors                | typed `env` via `InferEnv`    | full Effect type system            |

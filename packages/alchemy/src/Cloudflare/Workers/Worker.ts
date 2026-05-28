@@ -1,6 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -173,7 +174,9 @@ type NormalizedBindings<
     any,
     any
   >
-    ? T
+    ? T extends Redacted.Redacted<infer T> | Config.Config<infer T>
+      ? T
+      : T
     : Extract<Bindings[B], WorkerBindingResource>;
 } & (undefined extends AssetsConfig ? {} : { ASSETS: Assets });
 
@@ -181,7 +184,6 @@ export type WorkerAssetsConfig = string | AssetsProps | AssetsWithHash;
 
 export interface WorkerProps<
   Bindings extends WorkerBindingProps = any,
-  Env extends WorkerEnv = WorkerEnv,
   Assets extends WorkerAssetsConfig | undefined =
     | WorkerAssetsConfig
     | undefined,
@@ -243,9 +245,27 @@ export interface WorkerProps<
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
-  env?: Env;
   exports?: string[];
-  bindings?: Bindings;
+  /**
+   * Environment variables and native Cloudflare Bindings to bind to
+   * the Worker. Accepts:
+   *
+   * - Resource references (R2 bucket, KV namespace, D1 database,
+   *   another Worker, Durable Object, etc.) — emitted as the
+   *   corresponding native binding.
+   * - `effect/Config` values (`Config.redacted`, `Config.string`,
+   *   `Config.number`, …) — resolved at deploy time and bound as
+   *   `secret_text` on Cloudflare regardless of the `Config`
+   *   constructor used. See
+   *   {@link https://v2.alchemy.run/concepts/secrets | Concepts › Secrets and Variables}.
+   * - Literal values — routed by shape: `Redacted<string>` →
+   *   `secret_text`, `string` → `plain_text`, anything else → `json`.
+   *
+   * In Effect-native Workers you can alternatively `yield*` a
+   * `Config` in the Init phase to register the binding implicitly;
+   * `env` is the only option for async (non-Effect) Workers.
+   */
+  env?: Bindings;
   /**
    * Cron expressions that trigger the Worker's scheduled handler.
    *
@@ -332,9 +352,10 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * as-is. Your handler is a plain `async fetch` — no Effect runtime
  * is included in the bundle.
  *
- * Use the `bindings` prop to declare which resources are available
- * at runtime, and `Cloudflare.InferEnv` to extract a fully typed
- * `env` object from those bindings.
+ * Use the `env` prop to declare which resources, `Config` values,
+ * and literal env vars are available at runtime, and
+ * `Cloudflare.InferEnv` to extract a fully typed `env` object from
+ * them.
  *
  * See the {@link https://alchemy.run/guides/async-worker | Async Workers Guide}
  * for a comprehensive walkthrough of all binding types (R2, D1,
@@ -350,7 +371,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
- *   bindings: { db, bucket },
+ *   env: { db, bucket },
  * });
  * ```
  *
@@ -658,31 +679,20 @@ export const Worker: Platform<
 > & {
   <
     const Bindings extends WorkerBindingProps = {},
-    const Env extends WorkerEnv = {},
     const Assets extends WorkerAssetsConfig | undefined = undefined,
     Req = never,
   >(
     id: string,
     props:
-      | InputProps<WorkerProps<Bindings, Env, Assets>>
-      | Effect.Effect<
-          InputProps<WorkerProps<Bindings, Env, Assets>>,
-          never,
-          Req
-        >,
+      | InputProps<WorkerProps<Bindings, Assets>>
+      | Effect.Effect<InputProps<WorkerProps<Bindings, Assets>>, never, Req>,
   ): Effect.Effect<
-    Worker<
-      {
-        [binding in keyof NormalizedBindings<
-          Bindings,
-          Assets
-        >]: NormalizedBindings<Bindings, Assets>[binding];
-      } & {
-        [K in keyof Env]: Env[K] extends Redacted.Redacted<infer T>
-          ? T
-          : Env[K];
-      }
-    >,
+    Worker<{
+      [binding in keyof NormalizedBindings<
+        Bindings,
+        Assets
+      >]: NormalizedBindings<Bindings, Assets>[binding];
+    }>,
     never,
     Req | Providers
   >;
@@ -1136,7 +1146,25 @@ export const LiveWorkerProvider = () =>
         const compatibility = getCompatibility(props);
         const { assetsDirectory, serverBundle } = yield* Vite.viteBuild(
           props.vite?.rootDir,
-          props.env ?? {},
+          Object.fromEntries(
+            (yield* Effect.all(
+              Object.entries(props.env ?? {}).map(
+                Effect.fnUntraced(function* ([key, value]) {
+                  return [
+                    key,
+                    typeof value === "string"
+                      ? value
+                      : Redacted.isRedacted(value) &&
+                          typeof Redacted.value(value) === "string"
+                        ? Redacted.value(value)
+                        : Config.isConfig(value) || Effect.isEffect(value)
+                          ? yield* value
+                          : undefined,
+                  ];
+                }),
+              ),
+            )).filter(([_, value]) => value !== undefined),
+          ),
           {
             compatibilityDate: compatibility.date,
             compatibilityFlags: compatibility.flags,
@@ -1368,11 +1396,16 @@ export const LiveWorkerProvider = () =>
         if (news.env) {
           for (const [key, value] of Object.entries(news.env)) {
             if (value === undefined) continue;
+            if (metadataBindings.some((b) => b.name === key)) continue;
             if (Redacted.isRedacted(value)) {
+              const unredacted = Redacted.value(value);
               metadataBindings.push({
                 type: "secret_text",
                 name: key,
-                text: Redacted.value(value),
+                text:
+                  typeof unredacted === "string"
+                    ? unredacted
+                    : JSON.stringify(unredacted),
               });
             } else if (typeof value === "string") {
               metadataBindings.push({
