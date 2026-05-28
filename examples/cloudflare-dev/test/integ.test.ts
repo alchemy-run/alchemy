@@ -59,6 +59,21 @@ test(
   }),
 );
 
+test(
+  "AsyncWorker receives bindings, including variables and secrets",
+  Effect.gen(function* () {
+    const { asyncWorker } = yield* stack;
+    const response = yield* HttpClient.get(new URL("/env", asyncWorker!));
+    expect(response.status).toBe(200);
+    const body = yield* response.json;
+    expect(body).toMatchObject({
+      MY_SECRET: "my-secret-abc123",
+      MY_VARIABLE: "my-variable-abc123",
+      COUNTER: {},
+    });
+  }),
+);
+
 /**
  * EffectWorker binds a KV namespace via `Cloudflare.KVNamespace.bind(KV)`
  * and returns the result of `kv.list()` as JSON. A successful response
