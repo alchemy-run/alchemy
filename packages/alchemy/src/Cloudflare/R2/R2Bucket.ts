@@ -9,7 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type * as Cloudflare from "../Providers.ts";
-import * as Zone from "../Zone.ts";
+import * as Zone from "../Zone/index.ts";
 import { R2BucketBinding } from "./R2BucketBinding.ts";
 
 export const isR2Bucket = (value: unknown): value is R2Bucket =>

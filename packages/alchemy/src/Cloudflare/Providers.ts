@@ -35,6 +35,7 @@ import * as VpcService from "./VpcService/index.ts";
 import * as Workers from "./Workers/index.ts";
 import * as Workflows from "./Workers/Workflow.ts";
 import * as Zaraz from "./Zaraz/index.ts";
+import * as Zone from "./Zone/index.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
@@ -90,6 +91,7 @@ export const providers = () =>
       Workers.Worker,
       Workflows.WorkflowResource,
       Zaraz.ZarazConfig,
+      Zone.Zone,
     ]),
   ).pipe(
     Layer.provide(
@@ -130,6 +132,7 @@ export const providers = () =>
         Workers.WorkerProvider(),
         Workflows.WorkflowProvider(),
         Zaraz.ZarazConfigProvider(),
+        Zone.ZoneProvider(),
       ),
     ),
     Layer.provideMerge(
