@@ -5,12 +5,15 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { listSqlFiles, readSqlFile } from "../../Sql/SqlFile.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { cloneD1Database } from "./D1Clone.ts";
 import { importD1Database } from "./D1Import.ts";
 import { applyMigrations } from "./D1Migrations.ts";
-import { listSqlFiles, readSqlFile } from "../../Sql/SqlFile.ts";
+
+export const isD1Database = (value: unknown): value is D1Database =>
+  typeof value === "object" && (value as any)?.Type === "Cloudflare.D1Database";
 
 export type Jurisdiction = "default" | "eu" | "fedramp";
 export type PrimaryLocationHint =
