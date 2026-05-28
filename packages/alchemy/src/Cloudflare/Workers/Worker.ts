@@ -1613,14 +1613,19 @@ export const LiveWorkerProvider = () =>
         // Cloudflare currently has it (disabled by default, or whatever
         // a previous failed/external action left it as).
         const desiredSubdomainEnabled = news.url !== false;
-        const observedSubdomainEnabled = yield* getScriptSubdomain({
+        const observedSubdomain = yield* getScriptSubdomain({
           accountId,
           scriptName: name,
         }).pipe(
-          Effect.map((s) => s.enabled === true),
-          Effect.catch(() => Effect.succeed(false)),
+          Effect.orElseSucceed<workers.GetScriptSubdomainResponse>(() => ({
+            enabled: false,
+            previewsEnabled: false,
+          })),
         );
-        if (desiredSubdomainEnabled !== observedSubdomainEnabled) {
+        if (
+          desiredSubdomainEnabled !== observedSubdomain.enabled ||
+          desiredSubdomainEnabled !== observedSubdomain.previewsEnabled
+        ) {
           yield* session.note(
             `${desiredSubdomainEnabled ? "Enabling" : "Disabling"} workers.dev subdomain...`,
           );
