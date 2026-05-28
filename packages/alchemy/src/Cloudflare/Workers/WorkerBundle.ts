@@ -99,6 +99,8 @@ export const WorkerBundle = Effect.gen(function* () {
       }
     }).pipe(
       Effect.flatMap((path) => fs.realPath(path)),
+      //* fix windows paths
+      Effect.map((path) => path.replaceAll("\\", "/")),
       Effect.mapError(
         (cause) =>
           new Bundle.BundleError({

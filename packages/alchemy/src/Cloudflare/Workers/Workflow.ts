@@ -1,6 +1,7 @@
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
@@ -477,17 +478,34 @@ export const WorkflowProvider = () =>
   Provider.effect(
     WorkflowResource,
     Effect.gen(function* () {
+      const ctx = yield* AlchemyContext;
       const { accountId } = yield* CloudflareEnvironment;
       const putWorkflow = yield* workflows.putWorkflow;
       const deleteWorkflow = yield* workflows.deleteWorkflow;
 
       return WorkflowResource.Provider.of({
-        stables: ["workflowId", "accountId"],
+        // The `workflowId` is no longer marked as stable because if you start in dev mode, the ID will change on first deploy.
+        stables: ["accountId"],
+        diff: Effect.fnUntraced(function* ({ output }) {
+          // If the workflowId starts with "dev:", and we're not in dev mode, trigger an update so the workflow is created.
+          if (output?.workflowId.startsWith("dev:") && !ctx.dev) {
+            return { action: "update" };
+          }
+        }),
         reconcile: Effect.fnUntraced(function* ({ news, output }) {
           const acct = output?.accountId ?? accountId;
           yield* Effect.logInfo(
             `Cloudflare Workflow reconcile: ${news.workflowName}`,
           );
+          if (ctx.dev) {
+            return {
+              workflowId: output?.workflowId ?? `dev:${crypto.randomUUID()}`,
+              accountId,
+              workflowName: news.workflowName,
+              className: news.className,
+              scriptName: news.scriptName,
+            };
+          }
           // Cloudflare's `putWorkflow` is a true PUT-as-upsert: identical
           // payloads converge to the same state and a missing workflow is
           // created on the spot. There is no separate observe step needed
