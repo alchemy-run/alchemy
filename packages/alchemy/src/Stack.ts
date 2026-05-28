@@ -10,6 +10,7 @@ import * as Scope from "effect/Scope";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
+import type { ActionLike } from "./Action.ts";
 import { AlchemyContext, AlchemyContextLive } from "./AlchemyContext.ts";
 import { provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
@@ -20,7 +21,6 @@ import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
-import type { ActionLike } from "./Action.ts";
 import type { State } from "./State/State.ts";
 import { loadConfigProvider } from "./Util/ConfigProvider.ts";
 import { effectClass, taggedFunction } from "./Util/effect.ts";
@@ -291,8 +291,8 @@ const alchemy = (overrides?: { dev?: boolean }) =>
       : AlchemyContextLive,
   );
 
-export const evalStack = <A, B, Err, Req>(
-  effect: StackEffect<CompiledStack<A>, Stage | AlchemyContext>,
+export const evalStack = <A, B, StackErr, Err, Req>(
+  effect: StackEffect<CompiledStack<A>, StackErr, Stage | AlchemyContext>,
   fn: (stack: CompiledStack<A>) => Effect.Effect<B, Err, Req>,
   options: {
     stage: string;
