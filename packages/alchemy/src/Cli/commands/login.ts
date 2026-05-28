@@ -18,6 +18,7 @@ import {
   envFile,
   importStack,
   instrumentCommand,
+  printProfile,
   profile,
   script,
   stage,
@@ -113,11 +114,17 @@ export const loginCommand = Command.make(
               yield* provider
                 .read(profile, cfg)
                 .pipe(Effect.catch(() => provider.login(profile, cfg)));
-
-              yield* provider.prettyPrint(profile, cfg);
             }),
           { discard: true },
         );
+
+        // Print the resulting profile using the same renderer as
+        // `alchemy profile show`.
+        const final = yield* profiles.getProfile(profile);
+        if (final != null) {
+          yield* Console.log("");
+          yield* printProfile(profile, final, authProviders);
+        }
       }).pipe(Effect.provide(services));
     }),
   ),
