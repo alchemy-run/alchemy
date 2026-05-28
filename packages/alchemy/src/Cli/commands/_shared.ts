@@ -9,7 +9,12 @@ import * as Argument from "effect/unstable/cli/Argument";
 import * as CliError from "effect/unstable/cli/CliError";
 import * as Flag from "effect/unstable/cli/Flag";
 
-import { AuthError } from "../../Auth/AuthProvider.ts";
+import {
+  type AuthProvider,
+  AuthError,
+  AuthProviders,
+} from "../../Auth/AuthProvider.ts";
+import type { AlchemyProfile } from "../../Auth/Profile.ts";
 import type * as Stack from "../../Stack.ts";
 import { recordCli } from "../../Telemetry/Metrics.ts";
 import { PromptCancelled } from "../../Util/Clank.ts";
@@ -253,6 +258,45 @@ export const instrumentCommand =
       }),
       recordCli(command),
     );
+
+/**
+ * Render a profile's stored credential entries the same way across
+ * `alchemy login` and `alchemy profile show`: one `── Provider ──`
+ * header per entry, then either the provider's own `prettyPrint` block
+ * (preferred) or a JSON-style fallback when the provider isn't
+ * registered in the supplied {@link AuthProviders} registry.
+ */
+export const printProfile = Effect.fn(function* (
+  profile: string,
+  stored: AlchemyProfile,
+  registry: AuthProviders["Service"],
+) {
+  yield* Console.log(`Profile: ${profile}`);
+  const names = Object.keys(stored).sort();
+  if (names.length === 0) {
+    yield* Console.log("(no providers configured)");
+    return;
+  }
+  for (const name of names) {
+    const cfg = stored[name]!;
+    yield* Console.log("");
+    yield* Console.log(`── ${name} ──`);
+    const provider: AuthProvider | undefined = registry[name];
+    if (provider == null) {
+      yield* Console.log(`  method: ${cfg.method}`);
+      const { method: _method, ...rest } = cfg as Record<string, unknown> & {
+        method: string;
+      };
+      for (const [k, v] of Object.entries(rest)) {
+        yield* Console.log(
+          `  ${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`,
+        );
+      }
+      continue;
+    }
+    yield* provider.prettyPrint(profile, cfg);
+  }
+});
 
 export const importStack = Effect.fn(function* (main: string) {
   const path = yield* Path.Path;
