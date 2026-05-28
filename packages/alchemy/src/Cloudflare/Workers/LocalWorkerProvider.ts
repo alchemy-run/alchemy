@@ -10,7 +10,6 @@ import {
   type Assets as RuntimeAssets,
   type DurableObjectNamespace as RuntimeDurableObjectNamespace,
   type RuntimeServices,
-  type WorkflowEntry,
 } from "@distilled.cloud/cloudflare-runtime";
 import {
   Ai,
@@ -164,7 +163,6 @@ export const LocalWorkerProvider = () =>
             ),
             modules: yield* toRuntimeModules(bundle),
             assets: toRuntimeAssets(worker.assets),
-            workflows: worker.workflows,
           })
           .pipe(Scope.provide(scope));
         const previous = workerdScopes.get(worker.id);
@@ -190,7 +188,6 @@ export const LocalWorkerProvider = () =>
         const workerBindings: BindingHook<BindingServices>[] = [];
         const durableObjectNamespaces: Record<string, string> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
-        const workflows: Record<string, WorkflowEntry> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
             if (
@@ -204,15 +201,6 @@ export const LocalWorkerProvider = () =>
               durableObjectNamespaces[binding.className] =
                 binding.namespaceId ??
                 encodeURIComponent(`${id}-${binding.className}`);
-            } else if (binding.type === "workflow") {
-              workflows[binding.name] = {
-                name: binding.workflowName,
-                className: binding.className,
-                scriptName:
-                  binding.scriptName && binding.scriptName !== name
-                    ? binding.scriptName
-                    : undefined,
-              };
             }
             workerBindings.push(yield* toRuntimeBinding(binding));
           }
@@ -249,7 +237,6 @@ export const LocalWorkerProvider = () =>
           workerBindings,
           durableObjectNamespaces,
           hyperdrives,
-          workflows,
           bundleOptions: {
             id,
             main: props.main!,
@@ -352,7 +339,6 @@ export const LocalWorkerProvider = () =>
                 ),
                 hyperdrives: config.hyperdrives,
                 assets: toRuntimeAssets(config.assets),
-                workflows: config.workflows,
               },
               context,
             },
@@ -461,8 +447,8 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
       return yield* unsupported();
     case "durable_object_namespace":
       return DurableObjectNamespace.local({
-        name: b.name,
-        className: b.className!,
+        binding: b.name,
+        className: b.className,
         scriptName: b.scriptName,
       });
     case "hyperdrive":
@@ -496,7 +482,7 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "send_email":
       return yield* unsupported();
     case "service":
-      return Service.local({ name: b.name, scriptName: b.service });
+      return Service.local({ binding: b.name, scriptName: b.service });
     case "text_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "vectorize":
@@ -508,7 +494,12 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "worker_loader":
       return WorkerLoader.local(b.name);
     case "workflow":
-      return Workflows.local(b.name);
+      return Workflows.local({
+        binding: b.name,
+        workflowName: b.workflowName,
+        className: b.className,
+        scriptName: b.scriptName,
+      });
     default:
       return yield* unsupported();
   }
