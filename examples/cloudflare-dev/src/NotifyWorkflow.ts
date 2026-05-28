@@ -1,5 +1,5 @@
-import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { KV } from "./KV.ts";
@@ -16,10 +16,7 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
     // Bind a `secret_text` on the workflow at plantime. Using a literal
     // (instead of `Config.redacted("WORKFLOW_SECRET")`) keeps the integ
     // test self-contained — no `.env` setup required.
-    const workflowSecret = yield* Alchemy.Secret(
-      "WORKFLOW_SECRET",
-      "wf-secret-abc123",
-    );
+    const secret = yield* Config.redacted("WORKFLOW_SECRET");
     // Regression guard for https://github.com/alchemy-run/alchemy-effect/pull/71
     //
     // The kv binding internally yields `Cloudflare.WorkerEnvironment` —
@@ -54,7 +51,6 @@ export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>(
       // returns `Redacted<string>`; unwrap only where the value needs to
       // leave the workflow (here, in the broadcast + the returned output
       // so the integ test can assert end-to-end propagation).
-      const secret = yield* workflowSecret;
       const secretValue = Redacted.value(secret);
 
       const processed = yield* Cloudflare.task(

@@ -77,20 +77,8 @@ Standalone how-to pages. Each solves a specific problem; read in any order.
 - [Building Infrastructure Layers](https://v2.alchemy.run/guides/infrastructure-layers) — Package resources + bindings + runtime glue into a typed Effect Layer, then swap a KV-backed implementation for an R2-backed one without touching the consumer.
 - [Migrating from v1](https://v2.alchemy.run/guides/migrating-from-v1) — Migrate your Alchemy v1 (async/await) project to Alchemy v2.
 - [Monorepos](https://v2.alchemy.run/guides/monorepo) — Two patterns for organizing an Alchemy monorepo with a backend API and a frontend website — one shared stack (recommended) or one stack per package — with the trade-offs and a working example for each.
-- [Secrets and env vars](https://v2.alchemy.run/guides/secrets) — Wire OPENAI_API_KEY (or any .env value) into a Cloudflare Worker as a secret_text binding using Alchemy.Secret and Effect's Config.
+- [Secrets and env vars](https://v2.alchemy.run/guides/secrets) — Wire OPENAI_API_KEY from .env into a Cloudflare Worker as a secret_text binding.
 - [Shared database across stages](https://v2.alchemy.run/guides/shared-database) — Have ephemeral PR-preview stages reference a long-lived Neon Postgres project from staging instead of provisioning their own — fast previews, copy-on-write branches, no extra Postgres clusters.
-
-## Blog
-
-- [alchemy@2.0.0-beta.35](https://v2.alchemy.run/blog/2026-05-08-beta-35) — A Stream-shaped Effect consumer for Cloudflare Queues, R2 bucket custom domains, non-string env bindings on Workers, Neon logical replication, and a round of CLI quality-of-life.
-- [alchemy@2.0.0-beta.36](https://v2.alchemy.run/blog/2026-05-09-beta-36) — Cloudflare Images binding, Hyperdrive as a Worker binding, R2 object lifecycle rules, and a dev-mode networking fix.
-- [Secrets and Variables](https://v2.alchemy.run/blog/2026-05-11-secrets-and-variables) — Bind a value into your deploy target's env and get back a typed runtime accessor — the same one-liner works for Cloudflare Workers and AWS Lambda.
-- [alchemy@2.0.0-beta.37](https://v2.alchemy.run/blog/2026-05-12-beta-37) — Cross-stack and cross-stage references, fully-typed Worker-to-Worker bindings, Workflows with typed I/O, `Alchemy.Secret` / `Alchemy.Variable`, cron triggers, an Analytics Engine binding, and R2 buckets that finally empty themselves on destroy.
-- [alchemy@2.0.0-beta.38](https://v2.alchemy.run/blog/2026-05-13-beta-38) — Cloudflare Email Routing and the `send_email` Worker binding, a new `Action` plan node for arbitrary Effects that run during apply, a leaner Neon provider on the typed `@distilled.cloud/neon` SDK, and a transport-error retry fix.
-- [alchemy@2.0.0-beta.39](https://v2.alchemy.run/blog/2026-05-13-beta-39) — A small, high-impact fix release — `VITE_*` env props are now inlined into the client bundle, the Cloudflare Worker HTTP adapter runs handlers through Effect's standard HTTP lifecycle (unblocking `RpcServer.toHttpEffect`), and the `SendEmail` binding from beta.38 is now wired into Worker binding inference.
-- [alchemy@2.0.0-beta.40](https://v2.alchemy.run/blog/2026-05-15-beta-40) — Cloudflare local dev gains a real Vite dev server (HMR, SSR, client + worker in one process), AiGateway stops reporting spurious updates on every deploy, the Worker HTTP server returns generic 500s while logging the full Cause server-side, and a handful of fixes around entrypoint generation, container startup, and the dev lockfile.
-- [alchemy@2.0.0-beta.41](https://v2.alchemy.run/blog/2026-05-20-beta-41) — A big internal rewrite of the Cloudflare Worker runtime fixes hung requests and dropped responses from RPC and HTTP API workers. The Worker entrypoint is now a thin shell over `WorkerBridge.ts`, scopes are linearized per request, and the same schema-driven pattern (HTTP API, RPC, and Durable Object proxies) is now stable end-to-end.
-- [alchemy@2.0.0-beta.43](https://v2.alchemy.run/blog/2026-05-21-beta-43) — v2.0.0-beta.43 includes a new `alchemy/Planetscale` provider, improvements to how Resources and Bindings are encapsulated in Layers, and a handful of other fixes.
 
 ## Providers — auto-generated API reference
 

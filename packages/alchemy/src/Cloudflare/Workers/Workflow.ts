@@ -1,4 +1,5 @@
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
+import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -174,7 +175,7 @@ export interface WorkflowClass extends Effect.Effect<
   <_Self>(): {
     <Input = unknown, Result = unknown, InitReq = never>(
       name: string,
-      impl: Effect.Effect<WorkflowImpl<Input, Result>, never, InitReq>,
+      impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
     ): Effect.Effect<
       WorkflowHandle<Input, Result>,
       never,
@@ -185,7 +186,7 @@ export interface WorkflowClass extends Effect.Effect<
   };
   <Input = unknown, Result = unknown, InitReq = never>(
     name: string,
-    impl: Effect.Effect<WorkflowImpl<Input, Result>, never, InitReq>,
+    impl: Effect.Effect<WorkflowImpl<Input, Result>, ConfigError, InitReq>,
   ): Effect.Effect<
     WorkflowHandle<Input, Result>,
     never,

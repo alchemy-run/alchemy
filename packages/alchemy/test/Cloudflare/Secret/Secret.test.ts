@@ -15,9 +15,9 @@ import {
   STRING_VAR_VALUE,
 } from "./fixtures/worker.ts";
 /**
- * `Alchemy.Secret("CONFIG_SECRET", Config.string(...))` resolves against
- * the active `ConfigProvider` at deploy time. The default provider reads
- * from `process.env`, so populate it before `beforeAll(deploy(Stack))`
+ * `Config.redacted("CONFIG_SECRET")` resolves against the active
+ * `ConfigProvider` at deploy time. The default provider reads from
+ * `process.env`, so populate it before `beforeAll(deploy(Stack))`
  * compiles the stack.
  */
 const CONFIG_SECRET_VALUE = (process.env.CONFIG_SECRET =
@@ -66,7 +66,7 @@ const fetchWhenReady = (url: string) =>
   });
 
 test(
-  "Alchemy.Secret literal round-trips to runtime as Redacted<string>",
+  "Config.redacted with literal default round-trips to runtime as Redacted<string>",
   Effect.gen(function* () {
     const { url } = yield* stack;
     expect(url).toBeTypeOf("string");
@@ -84,7 +84,7 @@ test(
 );
 
 test(
-  "Alchemy.Secret resolved from Config(env) deploys as a secret_text and round-trips",
+  "Config.redacted resolved from env deploys as a secret_text and round-trips",
   Effect.gen(function* () {
     const { url } = yield* stack;
 
@@ -101,7 +101,7 @@ test(
 );
 
 test(
-  "Alchemy.Variable string round-trips to runtime as a string",
+  "Config.string round-trips to runtime as a string",
   Effect.gen(function* () {
     const { url } = yield* stack;
 
@@ -115,7 +115,7 @@ test(
 );
 
 test(
-  "Alchemy.Variable number round-trips to runtime preserving the number type",
+  "Config.number round-trips to runtime preserving the number type",
   Effect.gen(function* () {
     const { url } = yield* stack;
 
@@ -129,7 +129,7 @@ test(
 );
 
 test(
-  "Alchemy.Variable object round-trips to runtime preserving nested shape",
+  "Config.string with object default round-trips to runtime preserving nested shape",
   Effect.gen(function* () {
     const { url } = yield* stack;
 

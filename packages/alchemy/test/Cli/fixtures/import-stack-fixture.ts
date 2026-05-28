@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
-import { Stack } from "../../../src/Stack.ts";
-import * as State from "../../../src/State/index.ts";
+import { Stack } from "@/Stack.ts";
+import * as State from "@/State/index.ts";
 import { TestLayers } from "../../test.resources.ts";
 
 export default Stack(

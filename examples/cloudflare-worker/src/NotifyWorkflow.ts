@@ -13,7 +13,6 @@ export const WORKFLOW_SECRET_VALUE = Redacted.make("wf-secret-abc123");
 
 export default class NotifyWorkflow extends Cloudflare.Workflow<NotifyWorkflow>()(
   "Notifier",
-  // @ts-expect-error
   Effect.gen(function* () {
     const rooms = yield* Room;
 
