@@ -17,6 +17,8 @@ import { ExecutionContext } from "../../ExecutionContext.ts";
 import { makeEntrypointLayer } from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
+import cloudflare_workers from "./cloudflare_workers.ts";
+import { isScopeEjected } from "./HttpServer.ts";
 import {
   ErrorTag,
   type RpcErrorEnvelope,
@@ -31,7 +33,6 @@ import {
   WorkerExecutionContext,
 } from "./Worker.ts";
 import type { WorkerRuntimeContext } from "./WorkerRuntimeContext.ts";
-import cloudflare_workers from "./cloudflare_workers.ts";
 
 /**
  * Makes the WorkerEntrypoint class and bridges to Effect fetch and RPC calls.
@@ -88,9 +89,11 @@ export const makeWorkerBridge = (
         Effect.runPromiseExit,
       )
       .finally(() =>
-        Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>
-          ctx.waitUntil(promise),
-        ),
+        isScopeEjected(scope)
+          ? undefined
+          : Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>
+              ctx.waitUntil(promise),
+            ),
       );
   };
   class WorkerBridge extends Base {
