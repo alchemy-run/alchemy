@@ -13,19 +13,26 @@ import {
 } from "@distilled.cloud/cloudflare-runtime";
 import {
   Ai,
+  AnalyticsEngine,
   Artifacts,
   Assets,
   Browser,
   D1,
   Data,
+  DispatchNamespace,
   DurableObjectNamespace,
   Hyperdrive,
   Images,
   Json,
   KvNamespace,
+  MtlsCertificate,
+  Pipelines,
   R2Bucket,
+  RateLimit,
+  SendEmail,
   Service,
   Text,
+  Vectorize,
   VersionMetadata,
   WasmModule,
   WorkerLoader,
@@ -432,7 +439,7 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "ai":
       return Ai.remote(b.name);
     case "analytics_engine":
-      return yield* unsupported();
+      return AnalyticsEngine.local(b.name, b.dataset);
     case "artifacts":
       return Artifacts.remote(b.name, b.namespace);
     case "assets":
@@ -444,7 +451,10 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "data_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "dispatch_namespace":
-      return yield* unsupported();
+      return DispatchNamespace.remote({
+        binding: b.name,
+        namespace: b.namespace,
+      });
     case "durable_object_namespace":
       return DurableObjectNamespace.local({
         binding: b.name,
@@ -462,9 +472,9 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "kv_namespace":
       return KvNamespace.remote(b.name, b.namespaceId);
     case "mtls_certificate":
-      return yield* unsupported();
+      return MtlsCertificate.remote(b.name, b.certificateId);
     case "pipelines":
-      return yield* unsupported();
+      return Pipelines.remote(b.name, b.pipeline);
     case "plain_text":
       return Text.local(b.name, b.text);
     case "queue":
@@ -472,7 +482,11 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "r2_bucket":
       return R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
     case "ratelimit":
-      return yield* unsupported();
+      return RateLimit.local({
+        binding: b.name,
+        simple: b.simple,
+        namespaceId: b.namespaceId,
+      });
     case "secret_key":
       return yield* unsupported();
     case "secret_text":
@@ -480,13 +494,18 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "secrets_store_secret":
       return yield* unsupported();
     case "send_email":
-      return yield* unsupported();
+      return SendEmail.remote({
+        binding: b.name,
+        destinationAddress: b.destinationAddress,
+        allowedDestinationAddresses: b.allowedDestinationAddresses,
+        allowedSenderAddresses: b.allowedSenderAddresses,
+      });
     case "service":
       return Service.local({ binding: b.name, scriptName: b.service });
     case "text_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "vectorize":
-      return yield* unsupported();
+      return Vectorize.remote(b.name, b.indexName);
     case "version_metadata":
       return VersionMetadata.local(b.name);
     case "wasm_module":
