@@ -18,6 +18,7 @@ import {
   envFile,
   importStack,
   instrumentCommand,
+  printProfile,
   profile,
   script,
   stage,
@@ -91,10 +92,12 @@ export const loginCommand = Command.make(
           (provider) =>
             Effect.gen(function* () {
               const existing = yield* profiles.getProfile(profile);
-              const stored = existing?.[provider.name];
+              // --configure treats every provider as missing, so configure
+              // runs unconditionally and overwrites the stored entry.
+              const stored = configure ? undefined : existing?.[provider.name];
 
               let cfg: { method: string };
-              if (configure || stored == null) {
+              if (stored == null) {
                 cfg = yield* provider.configure(profile, { ci });
                 yield* profiles.setProfile(profile, {
                   ...existing,
@@ -104,11 +107,24 @@ export const loginCommand = Command.make(
                 cfg = stored;
               }
 
-              yield* provider.login(profile, cfg);
-              yield* provider.prettyPrint(profile, cfg);
+              // `read` succeeds when creds are present and not expired
+              // (refreshing OAuth proactively if near expiry). Any failure
+              // — missing file, dead refresh token, etc. — falls through
+              // to `login`.
+              yield* provider
+                .read(profile, cfg)
+                .pipe(Effect.catch(() => provider.login(profile, cfg)));
             }),
           { discard: true },
         );
+
+        // Print the resulting profile using the same renderer as
+        // `alchemy profile show`.
+        const final = yield* profiles.getProfile(profile);
+        if (final != null) {
+          yield* Console.log("");
+          yield* printProfile(profile, final, authProviders);
+        }
       }).pipe(Effect.provide(services));
     }),
   ),
