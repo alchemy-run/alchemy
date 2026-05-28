@@ -2,6 +2,7 @@ import type * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import type { Json } from "effect/Schema";
 import * as Binding from "../../Binding.ts";
 import type { Rpc } from "../../Rpc.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
@@ -32,6 +33,11 @@ export type WorkerSettingsBinding = Exclude<
 >[number];
 
 export type WorkerBindingResource =
+  // Config values
+  | Json
+  | Redacted.Redacted<Json>
+  | Config.Config<Json>
+  // CF resources
   | Assets
   | R2Bucket
   | D1Database
@@ -45,10 +51,7 @@ export type WorkerBindingResource =
   | Images
   | Hyperdrive
   | Worker
-  | DurableObjectNamespaceLike<any>
-  | string
-  | Redacted.Redacted<any>
-  | Config.Config<any>;
+  | DurableObjectNamespaceLike<any>;
 
 export type WorkerBindings = {
   [bindingName in string]: WorkerBindingResource;

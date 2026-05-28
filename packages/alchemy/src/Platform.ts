@@ -366,6 +366,7 @@ export const Platform = <
                           const ctx = yield* CurrentRuntimeContext;
                           const key = path.map((p) => p.toString()).join("_");
                           const node = yield* configProvider.get(path);
+
                           if (phase === "plan" && node) {
                             // bind it to the RuntimeContext if running in plan phase
                             const output = Output.literal(node.value);

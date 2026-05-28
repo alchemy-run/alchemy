@@ -230,7 +230,12 @@ export const LocalWorkerProvider = () =>
         for (const [key, value] of Object.entries(props.env ?? {})) {
           if (value === undefined) continue;
           if (Redacted.isRedacted(value)) {
-            workerBindings.push(Text.binding(key, Redacted.value(value)));
+            const unredacted = Redacted.value(value);
+            if (typeof unredacted === "string") {
+              workerBindings.push(Text.binding(key, unredacted));
+            } else {
+              workerBindings.push(Json.binding(key, unredacted));
+            }
           } else if (typeof value === "string") {
             workerBindings.push(Text.binding(key, value));
           } else {

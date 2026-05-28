@@ -1,7 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
-import type { Config } from "effect/Config";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -174,7 +174,7 @@ type NormalizedBindings<
     any,
     any
   >
-    ? T extends Redacted.Redacted<infer T> | Config<infer T>
+    ? T extends Redacted.Redacted<infer T> | Config.Config<infer T>
       ? T
       : T
     : Extract<Bindings[B], WorkerBindingResource>;
@@ -1151,17 +1151,23 @@ export const LiveWorkerProvider = () =>
         const { assetsDirectory, serverBundle } = yield* Vite.viteBuild(
           props.vite?.rootDir,
           Object.fromEntries(
-            Object.entries(props.env ?? {})
-              .map(([key, value]) => [
-                key,
-                typeof value === "string"
-                  ? value
-                  : Redacted.isRedacted(value) &&
-                      typeof Redacted.value(value) === "string"
-                    ? Redacted.value(value)
-                    : undefined,
-              ])
-              .filter(([_, value]) => value !== undefined),
+            (yield* Effect.all(
+              Object.entries(props.env ?? {}).map(
+                Effect.fnUntraced(function* ([key, value]) {
+                  return [
+                    key,
+                    typeof value === "string"
+                      ? value
+                      : Redacted.isRedacted(value) &&
+                          typeof Redacted.value(value) === "string"
+                        ? Redacted.value(value)
+                        : Config.isConfig(value) || Effect.isEffect(value)
+                          ? yield* value
+                          : undefined,
+                  ];
+                }),
+              ),
+            )).filter(([_, value]) => value !== undefined),
           ),
           {
             compatibilityDate: compatibility.date,
@@ -1390,6 +1396,36 @@ export const LiveWorkerProvider = () =>
             text: stack.stage,
           },
         );
+        // Add environment variables as metadata bindings
+        if (news.env) {
+          for (const [key, value] of Object.entries(news.env)) {
+            if (value === undefined) continue;
+            if (metadataBindings.some((b) => b.name === key)) continue;
+            if (Redacted.isRedacted(value)) {
+              const unredacted = Redacted.value(value);
+              metadataBindings.push({
+                type: "secret_text",
+                name: key,
+                text:
+                  typeof unredacted === "string"
+                    ? unredacted
+                    : JSON.stringify(unredacted),
+              });
+            } else if (typeof value === "string") {
+              metadataBindings.push({
+                type: "plain_text",
+                name: key,
+                text: value,
+              });
+            } else {
+              metadataBindings.push({
+                type: "json",
+                name: key,
+                json: value,
+              });
+            }
+          }
+        }
         yield* Effect.logInfo(
           `Cloudflare Worker ${olds ? "update" : "create"}: uploading script for ${name}`,
         );
