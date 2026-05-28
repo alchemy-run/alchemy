@@ -2,19 +2,23 @@ import type { PutScriptRequest } from "@distilled.cloud/cloudflare/workers";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import type { JsonArray, JsonObject } from "effect/Schema";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
+import { isAiGateway } from "../AiGateway/AiGateway.ts";
 import { isAnalyticsEngineDataset } from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
 import { isArtifacts } from "../Artifacts/Artifacts.ts";
 import { isBrowserRendering } from "../BrowserRendering/BrowserRendering.ts";
+import { isD1Database } from "../D1/D1Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isHyperdrive } from "../Hyperdrive/Hyperdrive.ts";
 import { getHyperdriveDevOrigin } from "../Hyperdrive/HyperdriveBinding.ts";
 import { isImages } from "../Images/Images.ts";
+import { isKVNamespace } from "../KV/KVNamespace.ts";
+import { isQueue } from "../Queue/Queue.ts";
+import { isR2Bucket } from "../R2/R2Bucket.ts";
 import { isAssets } from "./Assets.ts";
 import { isDurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
@@ -68,32 +72,12 @@ const toBinding = (
   // narrowing to Redacted<unknown> doesn't work for us, we need any
   const isRedacted: (a: any) => a is Redacted.Redacted<any> =
     Redacted.isRedacted;
-  const isJsonArray = (a: any): a is JsonArray => Array.isArray(a);
-  const isJsonObject = (a: any): a is JsonObject =>
-    typeof a === "object" &&
-    a !== null &&
-    !Array.isArray(a) &&
-    typeof a.Type !== "string" &&
-    !Effect.isEffect(a) &&
-    !Config.isConfig(a);
+
   if (typeof binding === "string") {
     return {
       type: "plain_text",
       name: bindingName,
       text: binding,
-    };
-  } else if (
-    binding === null ||
-    typeof binding === "number" ||
-    typeof binding === "boolean" ||
-    Array.isArray(binding) ||
-    isJsonArray(binding) ||
-    isJsonObject(binding)
-  ) {
-    return {
-      type: "json",
-      name: bindingName,
-      json: binding,
     };
   } else if (isRedacted(binding)) {
     const val = Redacted.value(binding);
@@ -160,13 +144,13 @@ const toBinding = (
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
     };
-  } else if (binding.Type === "Cloudflare.D1Database") {
+  } else if (isD1Database(binding)) {
     return {
       type: "d1",
       id: binding.databaseId,
       name: bindingName,
     };
-  } else if (binding.Type === "Cloudflare.R2Bucket") {
+  } else if (isR2Bucket(binding)) {
     return {
       type: "r2_bucket",
       name: bindingName,
@@ -177,24 +161,24 @@ const toBinding = (
         ),
       ),
     };
-  } else if (binding.Type === "Cloudflare.KVNamespace") {
+  } else if (isKVNamespace(binding)) {
     return {
       type: "kv_namespace",
       name: bindingName,
       namespaceId: binding.namespaceId,
     };
-  } else if (binding.Type === "Cloudflare.Queue") {
+  } else if (isQueue(binding)) {
     return {
       type: "queue",
       name: bindingName,
       queueName: binding.queueName,
     };
-  } else if (binding.Type === "Cloudflare.AiGateway") {
+  } else if (isAiGateway(binding)) {
     return {
       type: "ai",
       name: bindingName,
     };
-  } else if (binding.Type === "Cloudflare.Hyperdrive") {
+  } else if (isHyperdrive(binding)) {
     return {
       type: "hyperdrive",
       name: bindingName,
@@ -206,9 +190,13 @@ const toBinding = (
       name: bindingName,
       service: binding.workerName,
     };
+  } else {
+    return {
+      type: "json",
+      name: bindingName,
+      json: binding,
+    };
   }
-  // TODO(sam): handle others
-  return undefined;
 };
 
 export const getCronBindings = (

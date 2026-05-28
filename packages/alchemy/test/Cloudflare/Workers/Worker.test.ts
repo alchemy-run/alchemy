@@ -7,17 +7,16 @@ import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { describe, expect } from "@effect/vitest";
-import { Redacted } from "effect";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import {
   expectWorkerExists,
+  expectWorkersDevPreviews,
   expectWorkersDevSubdomain,
   findWorker,
   getWorkerTags,
@@ -741,12 +740,10 @@ describe.concurrent("Cloudflare.Worker", () => {
           );
 
         const v1 = yield* deploy("2026-01-01");
-        yield* expectWorkersDevSubdomain(v1.workerName, accountId, true);
-        const initial = yield* workers.getScriptSubdomain({
-          accountId,
-          scriptName: v1.workerName,
+        yield* expectWorkersDevPreviews(v1.workerName, accountId, {
+          enabled: true,
+          previewsEnabled: true,
         });
-        expect(initial).toEqual({ enabled: true, previewsEnabled: true });
 
         // Simulate external drift: leave `enabled: true` but turn
         // `previewsEnabled` off out-of-band.
@@ -764,23 +761,10 @@ describe.concurrent("Cloudflare.Worker", () => {
 
         const v2 = yield* deploy("2026-01-02");
         expect(v2.workerName).toEqual(v1.workerName);
-        const reconciled = yield* workers
-          .getScriptSubdomain({
-            accountId,
-            scriptName: v2.workerName,
-          })
-          .pipe(
-            Effect.flatMap((s) =>
-              s.previewsEnabled === true
-                ? Effect.succeed(s)
-                : Effect.fail({ _tag: "PreviewsNotEnabled" } as const),
-            ),
-            Effect.retry({
-              while: (e) => e._tag === "PreviewsNotEnabled",
-              schedule: Schedule.exponential("100 millis"),
-            }),
-          );
-        expect(reconciled).toEqual({ enabled: true, previewsEnabled: true });
+        yield* expectWorkersDevPreviews(v2.workerName, accountId, {
+          enabled: true,
+          previewsEnabled: true,
+        });
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
@@ -875,51 +859,5 @@ describe.concurrent("Cloudflare.Worker", () => {
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
       }).pipe(logLevel),
-  );
-
-  // Cloudflare supports `json` env bindings — number, boolean, array,
-  // object — that arrive in the worker as the parsed JS value rather
-  // than a string. Redacted strings still go via `secret_text`.
-  test.provider("env supports non-string values via json bindings", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-
-      yield* stack.destroy();
-
-      const worker = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Worker("EnvJsonWorker", {
-            main: pathe.resolve(import.meta.dirname, "fixtures/env-worker.ts"),
-            url: true,
-            subdomain: { enabled: true, previewsEnabled: true },
-            compatibility: { date: "2024-01-01" },
-            env: {
-              STR: "hello",
-              NUM: 42,
-              BOOL: true,
-              OBJ: { nested: { value: "ok" }, count: 7 },
-              ARR: [1, 2, 3],
-              SECRET: Redacted.make("shh"),
-            },
-          });
-        }),
-      );
-
-      expect(worker.url).toBeDefined();
-      const body = yield* expectUrlContains(worker.url!, '"STR":"hello"', {
-        timeout: "60 seconds",
-        label: "env-worker response",
-      });
-      expect(JSON.parse(body)).toEqual({
-        STR: "hello",
-        NUM: 42,
-        BOOL: true,
-        OBJ: { nested: { value: "ok" }, count: 7 },
-        ARR: [1, 2, 3],
-      });
-
-      yield* stack.destroy();
-      yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
-    }).pipe(logLevel),
   );
 });

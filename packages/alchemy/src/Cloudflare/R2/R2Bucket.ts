@@ -12,6 +12,9 @@ import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone.ts";
 import { R2BucketBinding } from "./R2BucketBinding.ts";
 
+export const isR2Bucket = (value: unknown): value is R2Bucket =>
+  typeof value === "object" && (value as any)?.Type === "Cloudflare.R2Bucket";
+
 export type R2BucketName = string;
 
 export type R2BucketCustomDomainZone = Zone.ZoneReference;

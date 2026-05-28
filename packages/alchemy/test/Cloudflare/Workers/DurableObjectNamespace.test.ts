@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "./fixtures/do-rpc/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -26,6 +27,21 @@ const readinessSchedule = Schedule.exponential("500 millis").pipe(
   Schedule.either(Schedule.spaced("3 seconds")),
 );
 
+const readinessRetries = 15;
+
+// The test runtime's HttpClient (FetchHttpClient/undici) keeps HTTP/1.1
+// connections alive and pooled. A pooled connection stays pinned to a single
+// Cloudflare edge metal, so when that metal lags the freshly-deployed version
+// every retry rides the same stale socket and keeps reading the old body for
+// the life of the keep-alive — even though the new version is already live.
+// Forcing `Connection: close` makes each readiness attempt open a fresh
+// connection, letting it land on an edge that has the new version (this is
+// why a brand-new `curl` sees the update immediately while a kept-alive
+// client does not). See do-rpc DurableObjectNamespace test investigation.
+const freshConn = HttpClient.mapRequest(
+  HttpClientRequest.setHeader("connection", "close"),
+);
+
 test(
   "durable object methods can use binding clients",
   Effect.gen(function* () {
@@ -45,16 +61,21 @@ test(
     const body = (yield* res.json) as { value: string };
     expect(body.value).toBe("ok");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );
 
-// Cloudflare's edge keeps serving the previous worker version for a few
-// seconds after a redeploy, so retrying on 200-only is not enough — the
-// stale version still returns 200 with the old body. Retry until the
-// body matches the expected version string.
+// While a freshly pre-created worker is propagating, Cloudflare's edge
+// serves Alchemy's pre-create stub, which responds 200 with this plain-text
+// body. It is not the real script, so any poll that sees it must retry.
+const DEPLOY_PLACEHOLDER = "Alchemy worker is being deployed...";
+
+// Cloudflare's edge keeps serving the previous worker version (or the
+// pre-create stub) for a while after a (re)deploy, so retrying on 200-only
+// is not enough — the stale version still returns 200 with the old body.
+// Retry until the body matches the expected version string.
 const fetchReady = (url: string, expected: string) =>
   Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient;
+    const client = freshConn(yield* HttpClient.HttpClient);
     return yield* client.get(url).pipe(
       Effect.flatMap((r) =>
         r.status === 200
@@ -67,22 +88,31 @@ const fetchReady = (url: string, expected: string) =>
             )
           : Effect.fail(new Error(`Worker not ready: ${r.status}`)),
       ),
-      Effect.retry({ schedule: readinessSchedule, times: 15 }),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
     );
   });
 
 const fetchJsonReady = <T>(url: string) =>
   Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient;
-    const res = yield* client.get(url).pipe(
+    const client = freshConn(yield* HttpClient.HttpClient);
+    return yield* client.get(url).pipe(
+      // Parse the body INSIDE the retry: the pre-create stub answers 200 with
+      // a non-JSON placeholder, so JSON decoding must be part of the readiness
+      // check (a 200 status alone does not mean the real script is live yet).
       Effect.flatMap((r) =>
-        r.status === 200
-          ? Effect.succeed(r)
-          : Effect.fail(new Error(`Worker not ready: ${r.status}`)),
+        r.status !== 200
+          ? Effect.fail(new Error(`Worker not ready: ${r.status}`))
+          : Effect.flatMap(r.text, (body) =>
+              body.includes(DEPLOY_PLACEHOLDER)
+                ? Effect.fail(new Error("stale: still deploying"))
+                : Effect.try({
+                    try: () => JSON.parse(body) as T,
+                    catch: () => new Error(`non-json body: ${body}`),
+                  }),
+            ),
       ),
-      Effect.retry({ schedule: readinessSchedule, times: 15 }),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
     );
-    return (yield* res.json) as T;
   });
 
 const hostWorkerScript = `import { DurableObject } from "cloudflare:workers";
@@ -193,7 +223,7 @@ test.provider(
 
       yield* scratch.destroy();
     }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );
 
 // Walk an async worker through four redeploys against the same scratch state,
