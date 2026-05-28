@@ -122,10 +122,6 @@ const SECTIONS: Section[] = [
       "Standalone how-to pages. Each solves a specific problem; read in any order.",
     pages: { directory: "guides" },
   },
-  {
-    heading: "Blog",
-    pages: { directory: "blog" },
-  },
 ];
 
 const PROVIDERS_SECTION = `## Providers — auto-generated API reference

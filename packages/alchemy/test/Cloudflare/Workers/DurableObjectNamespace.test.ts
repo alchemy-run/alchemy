@@ -147,7 +147,7 @@ test.provider(
           return {
             host: yield* Cloudflare.Worker("host-worker", {
               script: hostWorkerScript,
-              bindings: {
+              env: {
                 Counter: Cloudflare.DurableObjectNamespace("Counter"),
               },
             }),
@@ -159,13 +159,13 @@ test.provider(
         Effect.gen(function* () {
           const host = yield* Cloudflare.Worker("host-worker", {
             script: hostWorkerScript,
-            bindings: {
+            env: {
               Counter: Cloudflare.DurableObjectNamespace("Counter"),
             },
           });
           const consumer = yield* Cloudflare.Worker("consumer-worker", {
             script: consumerWorkerScript,
-            bindings: {
+            env: {
               Counter: Cloudflare.DurableObjectNamespace("Counter", {
                 scriptName: host.workerName,
               }),
@@ -215,7 +215,7 @@ test.provider(
 export class DO_A extends DurableObject {}
 export default { async fetch() { return new Response("v1"); } };
 `,
-              bindings: {
+              env: {
                 DO_A: Cloudflare.DurableObjectNamespace("DO_A"),
               },
             }),
@@ -232,7 +232,7 @@ export default { async fetch() { return new Response("v1"); } };
 export class DO_A_v2 extends DurableObject {}
 export default { async fetch() { return new Response("v2"); } };
 `,
-              bindings: {
+              env: {
                 DO_A: Cloudflare.DurableObjectNamespace("DO_A", {
                   className: "DO_A_v2",
                 }),
@@ -252,7 +252,7 @@ export class DO_A_v2 extends DurableObject {}
 export class DO_B extends DurableObject {}
 export default { async fetch() { return new Response("v3"); } };
 `,
-              bindings: {
+              env: {
                 DO_A: Cloudflare.DurableObjectNamespace("DO_A", {
                   className: "DO_A_v2",
                 }),
@@ -272,7 +272,7 @@ export default { async fetch() { return new Response("v3"); } };
 export class DO_B extends DurableObject {}
 export default { async fetch() { return new Response("v4"); } };
 `,
-              bindings: {
+              env: {
                 DO_B: Cloudflare.DurableObjectNamespace("DO_B"),
               },
             }),

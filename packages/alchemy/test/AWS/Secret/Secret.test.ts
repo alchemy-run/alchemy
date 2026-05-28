@@ -17,9 +17,9 @@ import SecretsTestFunctionLive, {
 } from "./fixtures/handler.ts";
 
 /**
- * `Alchemy.Secret("CONFIG_SECRET", Config.string(...))` resolves against
- * the active `ConfigProvider` at deploy time. The default provider reads
- * from `process.env`, so populate it before `beforeAll(deploy(Stack))`
+ * `Config.redacted("CONFIG_SECRET")` resolves against the active
+ * `ConfigProvider` at deploy time. The default provider reads from
+ * `process.env`, so populate it before `beforeAll(deploy(Stack))`
  * compiles the stack.
  */
 const CONFIG_SECRET_VALUE = "sk-from-aws-config-source-xyz";
@@ -70,7 +70,7 @@ const getJson = (url: string) =>
   );
 
 test(
-  "Alchemy.Secret literal round-trips to Lambda runtime as Redacted<string>",
+  "Config.redacted with literal default round-trips to Lambda runtime as Redacted<string>",
   Effect.gen(function* () {
     const { url } = yield* stack;
     expect(url).toBeTypeOf("string");
@@ -89,7 +89,7 @@ test(
 );
 
 test(
-  "Alchemy.Secret resolved from Config(env) round-trips through Lambda env",
+  "Config.redacted resolved from env round-trips through Lambda env",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");
@@ -107,7 +107,7 @@ test(
 );
 
 test(
-  "Alchemy.Variable string round-trips to Lambda runtime as a string",
+  "Config.string round-trips to Lambda runtime as a string",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");
@@ -122,7 +122,7 @@ test(
 );
 
 test(
-  "Alchemy.Variable number round-trips to Lambda runtime preserving the number type",
+  "Config.number round-trips to Lambda runtime preserving the number type",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");
@@ -137,7 +137,7 @@ test(
 );
 
 test(
-  "Alchemy.Variable object round-trips to Lambda runtime preserving nested shape",
+  "Config.string with object default round-trips to Lambda runtime preserving nested shape",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");

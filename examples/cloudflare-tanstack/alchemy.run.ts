@@ -7,7 +7,7 @@ export const Website = Cloudflare.Vite("Website", {
   compatibility: {
     flags: ["nodejs_compat"],
   },
-  bindings: {
+  env: {
     BUCKET: Bucket,
     BACKEND: Backend,
   },

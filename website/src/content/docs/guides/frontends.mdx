@@ -85,7 +85,7 @@ import { Bucket } from "./Bucket.ts";
 import { DB } from "./DB.ts";
 
 export const App = Cloudflare.Vite("App", {
-  bindings: { Bucket, DB },
+  env: { Bucket, DB },
 });
 
 // In your SSR loader / server function:

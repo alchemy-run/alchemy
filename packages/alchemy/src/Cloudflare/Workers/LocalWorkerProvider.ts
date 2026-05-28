@@ -10,23 +10,29 @@ import {
   type Assets as RuntimeAssets,
   type DurableObjectNamespace as RuntimeDurableObjectNamespace,
   type RuntimeServices,
-  type WorkflowEntry,
 } from "@distilled.cloud/cloudflare-runtime";
 import {
   Ai,
+  AnalyticsEngine,
   Artifacts,
   Assets,
   Browser,
   D1,
   Data,
+  DispatchNamespace,
   DurableObjectNamespace,
   Hyperdrive,
   Images,
   Json,
   KvNamespace,
+  MtlsCertificate,
+  Pipelines,
   R2Bucket,
+  RateLimit,
+  SendEmail,
   Service,
   Text,
+  Vectorize,
   VersionMetadata,
   WasmModule,
   WorkerLoader,
@@ -165,7 +171,6 @@ export const LocalWorkerProvider = () =>
             ),
             modules: yield* toRuntimeModules(bundle),
             assets: toRuntimeAssets(worker.assets),
-            workflows: worker.workflows,
           })
           .pipe(Scope.provide(scope));
         const previous = workerdScopes.get(worker.id);
@@ -191,7 +196,6 @@ export const LocalWorkerProvider = () =>
         const workerBindings: BindingHook<BindingServices>[] = [];
         const durableObjectNamespaces: Record<string, string> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
-        const workflows: Record<string, WorkflowEntry> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
             if (
@@ -205,15 +209,6 @@ export const LocalWorkerProvider = () =>
               durableObjectNamespaces[binding.className] =
                 binding.namespaceId ??
                 encodeURIComponent(`${id}-${binding.className}`);
-            } else if (binding.type === "workflow") {
-              workflows[binding.name] = {
-                name: binding.workflowName,
-                className: binding.className,
-                scriptName:
-                  binding.scriptName && binding.scriptName !== name
-                    ? binding.scriptName
-                    : undefined,
-              };
             }
             workerBindings.push(yield* toRuntimeBinding(binding));
           }
@@ -236,7 +231,12 @@ export const LocalWorkerProvider = () =>
         for (const [key, value] of Object.entries(props.env ?? {})) {
           if (value === undefined) continue;
           if (Redacted.isRedacted(value)) {
-            workerBindings.push(Text.local(key, Redacted.value(value)));
+            const unredacted = Redacted.value(value);
+            if (typeof unredacted === "string") {
+              workerBindings.push(Text.local(key, unredacted));
+            } else {
+              workerBindings.push(Json.local(key, unredacted));
+            }
           } else if (typeof value === "string") {
             workerBindings.push(Text.local(key, value));
           } else {
@@ -250,7 +250,6 @@ export const LocalWorkerProvider = () =>
           workerBindings,
           durableObjectNamespaces,
           hyperdrives,
-          workflows,
           bundleOptions: {
             id,
             main: props.main!,
@@ -353,7 +352,6 @@ export const LocalWorkerProvider = () =>
                 ),
                 hyperdrives: config.hyperdrives,
                 assets: toRuntimeAssets(config.assets),
-                workflows: config.workflows,
               },
               context,
             },
@@ -457,7 +455,7 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "ai":
       return Ai.remote(b.name);
     case "analytics_engine":
-      return yield* unsupported();
+      return AnalyticsEngine.local(b.name, b.dataset);
     case "artifacts":
       return Artifacts.remote(b.name, b.namespace);
     case "assets":
@@ -469,11 +467,14 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "data_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "dispatch_namespace":
-      return yield* unsupported();
+      return DispatchNamespace.remote({
+        binding: b.name,
+        namespace: b.namespace,
+      });
     case "durable_object_namespace":
       return DurableObjectNamespace.local({
-        name: b.name,
-        className: b.className!,
+        binding: b.name,
+        className: b.className,
         scriptName: b.scriptName,
       });
     case "hyperdrive":
@@ -487,9 +488,9 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "kv_namespace":
       return KvNamespace.remote(b.name, b.namespaceId);
     case "mtls_certificate":
-      return yield* unsupported();
+      return MtlsCertificate.remote(b.name, b.certificateId);
     case "pipelines":
-      return yield* unsupported();
+      return Pipelines.remote(b.name, b.pipeline);
     case "plain_text":
       return Text.local(b.name, b.text);
     case "queue":
@@ -497,7 +498,11 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "r2_bucket":
       return R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
     case "ratelimit":
-      return yield* unsupported();
+      return RateLimit.local({
+        binding: b.name,
+        simple: b.simple,
+        namespaceId: b.namespaceId,
+      });
     case "secret_key":
       return yield* unsupported();
     case "secret_text":
@@ -505,13 +510,18 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "secrets_store_secret":
       return yield* unsupported();
     case "send_email":
-      return yield* unsupported();
+      return SendEmail.remote({
+        binding: b.name,
+        destinationAddress: b.destinationAddress,
+        allowedDestinationAddresses: b.allowedDestinationAddresses,
+        allowedSenderAddresses: b.allowedSenderAddresses,
+      });
     case "service":
-      return Service.local({ name: b.name, scriptName: b.service });
+      return Service.local({ binding: b.name, scriptName: b.service });
     case "text_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "vectorize":
-      return yield* unsupported();
+      return Vectorize.remote(b.name, b.indexName);
     case "version_metadata":
       return VersionMetadata.local(b.name);
     case "wasm_module":
@@ -519,7 +529,12 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "worker_loader":
       return WorkerLoader.local(b.name);
     case "workflow":
-      return Workflows.local(b.name);
+      return Workflows.local({
+        binding: b.name,
+        workflowName: b.workflowName,
+        className: b.className,
+        scriptName: b.scriptName,
+      });
     default:
       return yield* unsupported();
   }

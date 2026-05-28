@@ -4,13 +4,11 @@ import type { Input, InputProps } from "@/Input";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
 import { UnsatisfiedResourceCycle } from "@/Plan";
-import { Secret } from "@/Secret";
-import { Variable } from "@/Variable";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import {
-  inMemoryState,
   InMemoryService,
+  inMemoryState,
   State,
   type ResourceState,
   type ResourceStatus,
@@ -2404,98 +2402,6 @@ describe("Redacted props/outputs are preserved through plan", () => {
       const bProps = bNode.props as TestResourceProps;
       expect(Redacted.isRedacted(bProps.redacted)).toBe(true);
       expect(Redacted.value(bProps.redacted!)).toBe("hunter2");
-    }),
-  );
-});
-
-describe("NamedExpr (Alchemy.Secret / Alchemy.Variable) resolution", () => {
-  test(
-    "Alchemy.Variable literal flows into a downstream prop as the unwrapped value",
-    Effect.gen(function* () {
-      const plan = yield* Effect.gen(function* () {
-        yield* TestResource("A", {
-          string: Variable("STRING_VAR", "hello") as any,
-        });
-      }).pipe(makePlan);
-
-      const node: any = plan.resources.A!;
-      expect(node.action).toBe("create");
-      expect((node.props as TestResourceProps).string).toBe("hello");
-    }),
-  );
-
-  test(
-    "Alchemy.Secret literal flows into a downstream prop as a Redacted",
-    Effect.gen(function* () {
-      const plan = yield* Effect.gen(function* () {
-        yield* TestResource("A", {
-          string: "x",
-          redacted: Secret("API_KEY", "hunter2") as any,
-        });
-      }).pipe(makePlan);
-
-      const node: any = plan.resources.A!;
-      expect(node.action).toBe("create");
-      const props = node.props as TestResourceProps;
-      expect(Redacted.isRedacted(props.redacted)).toBe(true);
-      expect(Redacted.value(props.redacted!)).toBe("hunter2");
-    }),
-  );
-
-  test(
-    "Alchemy.Secret pre-redacted input flows through unchanged",
-    Effect.gen(function* () {
-      const plan = yield* Effect.gen(function* () {
-        yield* TestResource("A", {
-          string: "x",
-          redacted: Secret("API_KEY", Redacted.make("already-redacted")) as any,
-        });
-      }).pipe(makePlan);
-
-      const node: any = plan.resources.A!;
-      const props = node.props as TestResourceProps;
-      expect(Redacted.isRedacted(props.redacted)).toBe(true);
-      expect(Redacted.value(props.redacted!)).toBe("already-redacted");
-    }),
-  );
-
-  test(
-    "no-op when prior state already has the same Alchemy.Secret value",
-    Effect.gen(function* () {
-      yield* seed({
-        A: {
-          instanceId,
-          providerVersion: 0,
-          logicalId: "A",
-          fqn: "A",
-          namespace: undefined,
-          resourceType: "Test.TestResource",
-          status: "created",
-          props: {
-            string: "x",
-            redacted: Redacted.make("hunter2"),
-          },
-          attr: {
-            string: "x",
-            stringArray: [],
-            stableString: "A",
-            stableArray: ["A"],
-            replaceString: undefined,
-            redacted: Redacted.make("hunter2"),
-            redactedArray: undefined,
-          },
-          downstream: [],
-          bindings: [],
-        },
-      });
-      const plan = yield* Effect.gen(function* () {
-        yield* TestResource("A", {
-          string: "x",
-          redacted: Secret("API_KEY", "hunter2") as any,
-        });
-      }).pipe(makePlan);
-
-      expect(plan.resources.A!.action).toBe("noop");
     }),
   );
 });

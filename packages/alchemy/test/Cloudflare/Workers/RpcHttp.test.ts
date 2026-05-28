@@ -22,7 +22,26 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const stack = beforeAll(deploy(Stack));
+const stack = beforeAll(
+  deploy(Stack).pipe(
+    // Ping the Worker to ensure it's ready.
+    // Subsequent calls should succeed without retries.
+    Effect.tap(({ url }) =>
+      Effect.gen(function* () {
+        const client = yield* RpcClient.make(WorkerRpcs);
+        const result = yield* client.Ping({ message: "warmup" }).pipe(
+          Effect.tapError(Console.log),
+          Effect.retry({
+            schedule: Schedule.exponential("500 millis"),
+            times: 5,
+          }),
+        );
+        expect(result.echo).toBe("warmup");
+        expect(result.n).toBeGreaterThan(0);
+      }).pipe(Effect.scoped, Effect.provide(clientLayer(url))),
+    ),
+  ),
+);
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 // The Cloudflare Worker fetch adapter (`workersHttpHandler`) currently
@@ -54,13 +73,9 @@ test(
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
-      const result = yield* client.Ping({ message: "hello" }).pipe(
-        Effect.tapError(Console.log),
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 5,
-        }),
-      );
+      const result = yield* client
+        .Ping({ message: "hello" })
+        .pipe(Effect.tapError(Console.log));
       expect(result.echo).toBe("hello");
       expect(result.n).toBeGreaterThan(0);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
@@ -75,13 +90,7 @@ test(
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
-      const values = yield* client.Count({ upto: 5 }).pipe(
-        Stream.runCollect,
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 5,
-        }),
-      );
+      const values = yield* client.Count({ upto: 5 }).pipe(Stream.runCollect);
       expect(values).toEqual([1, 2, 3, 4, 5]);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
@@ -96,13 +105,7 @@ test(
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
       const messages = ["a", "b", "c", "d"];
-      const values = yield* client.Echo({ messages }).pipe(
-        Stream.runCollect,
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 5,
-        }),
-      );
+      const values = yield* client.Echo({ messages }).pipe(Stream.runCollect);
       expect(values).toEqual(
         messages.map((message, index) => ({ index, message })),
       );
@@ -187,13 +190,9 @@ test(
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
-      const result = yield* client.PingDO({ message: "hello-do" }).pipe(
-        Effect.tapError(Console.log),
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 5,
-        }),
-      );
+      const result = yield* client
+        .PingDO({ message: "hello-do" })
+        .pipe(Effect.tapError(Console.log));
       expect(result.echo).toBe("hello-do");
       expect(result.n).toBeGreaterThan(0);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
@@ -208,13 +207,7 @@ test(
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
-      const values = yield* client.CountDO({ upto: 5 }).pipe(
-        Stream.runCollect,
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 5,
-        }),
-      );
+      const values = yield* client.CountDO({ upto: 5 }).pipe(Stream.runCollect);
       expect(values).toEqual([1, 2, 3, 4, 5]);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
@@ -229,13 +222,7 @@ test(
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
       const messages = ["a", "b", "c", "d"];
-      const values = yield* client.EchoDO({ messages }).pipe(
-        Stream.runCollect,
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 5,
-        }),
-      );
+      const values = yield* client.EchoDO({ messages }).pipe(Stream.runCollect);
       expect(values).toEqual(
         messages.map((message, index) => ({ index, message })),
       );

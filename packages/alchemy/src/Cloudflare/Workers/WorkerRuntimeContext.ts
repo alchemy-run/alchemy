@@ -33,17 +33,11 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
     get: (key: string) =>
       Effect.serviceOption(WorkerEnvironment).pipe(
         Effect.map(Option.getOrUndefined),
-        Effect.flatMap((env) =>
-          env
-            ? Effect.succeed(env[key])
-            : Effect.die("WorkerEnvironment not found"),
-        ),
-        Effect.flatMap((value) =>
-          value
-            ? Effect.succeed(value)
-            : Effect.die(`Environment variable '${key}' not found`),
-        ),
+        Effect.map((env) => env?.[key]),
         Effect.map((json) => {
+          if (json === undefined) {
+            return undefined;
+          }
           try {
             const value = JSON.parse(json);
             // The `set` path serializes Redacted values as

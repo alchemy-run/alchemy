@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import type * as Effect from "effect/Effect";
+import type { Redacted } from "effect/Redacted";
 import type * as Stream from "effect/Stream";
 import type { Rpc } from "../../Rpc.ts";
 import type * as Cloudflare from "../index.ts";
@@ -11,7 +12,7 @@ export type InferEnv<W> =
   W extends Effect.Effect<infer A, infer _E, infer _R>
     ? InferEnv<A>
     : W extends Worker<any>
-      ? InferEnv<Exclude<W["Props"]["bindings"], undefined>>
+      ? InferEnv<Exclude<W["Props"]["env"], undefined>>
       : {
           [k in keyof W]: GetBindingType<W[k]>;
         };
@@ -49,7 +50,11 @@ export type GetBindingType<T> =
                                 ? DurableObjectNamespace<
                                     Exclude<T["Shape"], undefined>
                                   >
-                                : T;
+                                : T extends Redacted<any>
+                                  ? // redacteds are always stored as secret_text, so are always string
+                                    // we JSON.stringify when not a Redacted<string>
+                                    string
+                                  : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.
