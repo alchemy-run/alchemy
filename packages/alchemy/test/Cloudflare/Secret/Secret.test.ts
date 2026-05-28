@@ -1,4 +1,3 @@
-import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
@@ -8,22 +7,21 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
-import SecretsTestWorker, {
-  CONFIG_SECRET_ENV_KEY,
+import Stack from "./fixtures/stack.ts";
+import {
   LITERAL_SECRET_VALUE,
   NUMBER_VAR_VALUE,
   OBJECT_VAR_VALUE,
   STRING_VAR_VALUE,
 } from "./fixtures/worker.ts";
-
 /**
  * `Alchemy.Secret("CONFIG_SECRET", Config.string(...))` resolves against
  * the active `ConfigProvider` at deploy time. The default provider reads
  * from `process.env`, so populate it before `beforeAll(deploy(Stack))`
  * compiles the stack.
  */
-const CONFIG_SECRET_VALUE = "sk-from-config-source-xyz";
-process.env[CONFIG_SECRET_ENV_KEY] = CONFIG_SECRET_VALUE;
+const CONFIG_SECRET_VALUE = (process.env.CONFIG_SECRET =
+  "sk-from-config-source-xyz");
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -32,20 +30,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
-);
-
-const Stack = Alchemy.Stack(
-  "AlchemySecretWorkerStack",
-  {
-    providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
-  },
-  Effect.gen(function* () {
-    const worker = yield* SecretsTestWorker;
-    return {
-      url: worker.url.as<string>(),
-    };
-  }),
 );
 
 const stack = beforeAll(deploy(Stack));

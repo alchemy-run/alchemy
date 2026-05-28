@@ -9,7 +9,7 @@ export interface BaseRuntimeContext {
   Type: string;
   id: string;
   env: Record<string, any>;
-  get<T>(key: string): Effect.Effect<T>;
+  get<T>(key: string): Effect.Effect<T | undefined>;
   set(id: string, output: Output): Effect.Effect<string>;
   exports?: Effect.Effect<Record<string, any>>;
   serve?<Req = never>(

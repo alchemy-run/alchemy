@@ -31,13 +31,11 @@ export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
 export * from "./Resource.ts";
 export * as Schema from "./Schema.ts";
-export { Secret } from "./Secret.ts";
 export * as Server from "./Server/index.ts";
 export * as Serverless from "./Serverless/index.ts";
 export { Stack } from "./Stack.ts";
 export * from "./Stage.ts";
 export { inMemoryState, localState } from "./State/index.ts";
-export { Variable } from "./Variable.ts";
 
 export * as Construct from "./Construct.ts";
 
