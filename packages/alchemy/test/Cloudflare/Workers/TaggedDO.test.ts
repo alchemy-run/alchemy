@@ -21,7 +21,7 @@ const logLevel = Effect.provideService(
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-const testTimeout = 180_000;
+const testTimeout = 20_000;
 const requestTimeout = "5 seconds";
 // Fresh `*.workers.dev` URLs propagate through the edge over a few seconds —
 // the first requests routinely return 404 / 500 before the script is

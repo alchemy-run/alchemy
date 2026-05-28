@@ -108,5 +108,5 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(clientLayer(callerUrl)));
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );
