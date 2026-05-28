@@ -77,20 +77,16 @@ test(
       Effect.provideService(HttpClient.HttpClient, client),
     );
 
-    const first = yield* client
-      .post(`${urlA}/d1/increment`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+    const first = yield* requestUntilReady(client.post(`${urlA}/d1/increment`));
     expect(first.status).toBe(200);
     expect((yield* first.json) as { value: number }).toEqual({ value: 1 });
 
-    const second = yield* client
-      .post(`${urlA}/d1/increment`)
-      .pipe(Effect.timeout(requestTimeout));
+    const second = yield* requestUntilReady(
+      client.post(`${urlA}/d1/increment`),
+    );
     expect((yield* second.json) as { value: number }).toEqual({ value: 2 });
 
-    const fromB = yield* client
-      .get(`${urlB}/d1`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+    const fromB = yield* requestUntilReady(client.get(`${urlB}/d1`));
     expect(fromB.status).toBe(200);
     expect((yield* fromB.json) as { value: number }).toEqual({ value: 2 });
   }).pipe(logLevel),
@@ -112,20 +108,16 @@ test(
       Effect.provideService(HttpClient.HttpClient, client),
     );
 
-    const first = yield* client
-      .post(`${urlA}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+    const first = yield* requestUntilReady(client.post(`${urlA}/do/increment`));
     expect(first.status).toBe(200);
     expect((yield* first.json) as { value: number }).toEqual({ value: 1 });
 
-    const second = yield* client
-      .post(`${urlA}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout));
+    const second = yield* requestUntilReady(
+      client.post(`${urlA}/do/increment`),
+    );
     expect((yield* second.json) as { value: number }).toEqual({ value: 2 });
 
-    const fromB = yield* client
-      .get(`${urlB}/do`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+    const fromB = yield* requestUntilReady(client.get(`${urlB}/do`));
     expect(fromB.status).toBe(200);
     expect((yield* fromB.json) as { value: number }).toEqual({ value: 2 });
   }).pipe(logLevel),
@@ -151,44 +143,26 @@ test(
     );
 
     // Increment via WorkerA and WorkerB (both route to WorkerA's hosted Counter).
-    yield* client
-      .post(`${urlA}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
-    yield* client
-      .post(`${urlB}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout));
+    yield* requestUntilReady(client.post(`${urlA}/do/increment`));
+    yield* requestUntilReady(client.post(`${urlB}/do/increment`));
 
-    const fromA = yield* client
-      .get(`${urlA}/do`)
-      .pipe(Effect.timeout(requestTimeout));
+    const fromA = yield* requestUntilReady(client.get(`${urlA}/do`));
     expect((yield* fromA.json) as { value: number }).toEqual({ value: 2 });
 
     // WorkerC hosts its own Counter namespace via `Counter.from(WorkerC)`,
     // so its DO instance has never been written to.
-    const fromC = yield* client
-      .get(`${urlC}/do`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+    const fromC = yield* requestUntilReady(client.get(`${urlC}/do`));
     expect((yield* fromC.json) as { value: number }).toEqual({ value: 0 });
 
     // Writes through WorkerC do not leak back to WorkerA/B either.
-    yield* client
-      .post(`${urlC}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout));
-    yield* client
-      .post(`${urlC}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout));
-    yield* client
-      .post(`${urlC}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout));
+    yield* requestUntilReady(client.post(`${urlC}/do/increment`));
+    yield* requestUntilReady(client.post(`${urlC}/do/increment`));
+    yield* requestUntilReady(client.post(`${urlC}/do/increment`));
 
-    const cAfter = yield* client
-      .get(`${urlC}/do`)
-      .pipe(Effect.timeout(requestTimeout));
+    const cAfter = yield* requestUntilReady(client.get(`${urlC}/do`));
     expect((yield* cAfter.json) as { value: number }).toEqual({ value: 3 });
 
-    const aAfter = yield* client
-      .get(`${urlA}/do`)
-      .pipe(Effect.timeout(requestTimeout));
+    const aAfter = yield* requestUntilReady(client.get(`${urlA}/do`));
     expect((yield* aAfter.json) as { value: number }).toEqual({ value: 2 });
   }).pipe(logLevel),
   { timeout: testTimeout },
@@ -209,22 +183,12 @@ test(
       Effect.provideService(HttpClient.HttpClient, client),
     );
 
-    yield* client
-      .post(`${urlB}/d1/increment`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
-    yield* client
-      .post(`${urlB}/d1/increment`)
-      .pipe(Effect.timeout(requestTimeout));
-    yield* client
-      .post(`${urlB}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout));
+    yield* requestUntilReady(client.post(`${urlB}/d1/increment`));
+    yield* requestUntilReady(client.post(`${urlB}/d1/increment`));
+    yield* requestUntilReady(client.post(`${urlB}/do/increment`));
 
-    const d1FromA = yield* client
-      .get(`${urlA}/d1`)
-      .pipe(Effect.timeout(requestTimeout));
-    const doFromA = yield* client
-      .get(`${urlA}/do`)
-      .pipe(Effect.timeout(requestTimeout));
+    const d1FromA = yield* requestUntilReady(client.get(`${urlA}/d1`));
+    const doFromA = yield* requestUntilReady(client.get(`${urlA}/do`));
 
     expect((yield* d1FromA.json) as { value: number }).toEqual({ value: 2 });
     expect((yield* doFromA.json) as { value: number }).toEqual({ value: 1 });

@@ -6,6 +6,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import { TaskApi } from "./fixtures/http-api/api.ts";
 import Stack from "./fixtures/http-api/stack.ts";
@@ -19,16 +20,45 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const testTimeout = 15_000;
-const burstTimeout = 30_000;
+const testTimeout = 60_000;
+const burstTimeout = 90_000;
 const requestTimeout = "5 seconds";
+// A fresh Cloudflare deploy is eventually consistent and NOT atomic across
+// edge PoPs: the script, the workers.dev route, and each binding (R2 / D1 /
+// DO namespace + migration) propagate independently. Until they converge,
+// requests landing on a cold PoP return a `404` (route not resolvable) or a
+// `500` (script up, binding not ready). New DO namespaces / D1 databases are
+// the slowest, so the readiness window comfortably exceeds 15s in the tail.
+// Retry on a steady 1.5s cadence for ~30s so every first-touch request rides
+// out the convergence window regardless of which PoP it hits.
 const readinessRetry = {
-  schedule: Schedule.exponential("250 millis"),
-  times: 6,
+  schedule: Schedule.spaced("1500 millis"),
+  times: 20,
 } as const;
 
 const makeClient = (url: string) =>
   HttpApiClient.make(TaskApi, { baseUrl: url });
+
+// The raw `HttpClient` (used for transport-level CORS checks) does not fail on
+// a non-2xx status, so `Effect.retry` won't fire on the freshly-deployed edge
+// 404/500 window. Explicitly `Effect.fail` non-2xx responses to force the
+// retry (unlike the typed `HttpApiClient`, which already fails on them).
+const requestUntilReady = (
+  effect: Effect.Effect<HttpClientResponse, unknown, never>,
+) =>
+  effect.pipe(
+    Effect.timeout(requestTimeout),
+    Effect.flatMap(
+      Effect.fnUntraced(function* (res) {
+        return res.status >= 200 && res.status < 300
+          ? res
+          : yield* Effect.fail(
+              new Error(`Worker not ready: ${res.status} ${yield* res.text}`),
+            );
+      }),
+    ),
+    Effect.retry(readinessRetry),
+  );
 
 // Gate the deploy on the worker having propagated to the edge: hit both the
 // R2-backed (`createTask`) and DO-backed (`createTaskDO`) paths once, retrying
@@ -65,15 +95,19 @@ test(
 
     const created = yield* client.Tasks.createTask({
       payload: { title: "Write docs" },
-    }).pipe(Effect.timeout(requestTimeout));
+    }).pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
     expect(created.title).toBe("Write docs");
     expect(created.completed).toBe(false);
     expect(created.id).toBeTypeOf("string");
 
-    const fetched = yield* client.Tasks.getTask({ params: { id: created.id } });
+    const fetched = yield* client.Tasks.getTask({
+      params: { id: created.id },
+    }).pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
     expect(fetched.id).toBe(created.id);
     expect(fetched.title).toBe("Write docs");
 
+    // No retry here: `TaskNotFound` is the expected domain result, not a
+    // transient readiness failure — retrying would just re-run the 404.
     const missing = yield* client.Tasks.getTask({
       params: { id: "does-not-exist" },
     }).pipe(Effect.flip);
@@ -93,8 +127,8 @@ test(
     // HttpApi surface, so this single check uses the raw HttpClient.
     const client = yield* HttpClient.HttpClient;
 
-    const res = yield* client
-      .execute(
+    const res = yield* requestUntilReady(
+      client.execute(
         HttpClientRequest.make("OPTIONS")(url).pipe(
           HttpClientRequest.setHeaders({
             Origin: "https://example.com",
@@ -102,8 +136,8 @@ test(
             "Access-Control-Request-Headers": "content-type",
           }),
         ),
-      )
-      .pipe(Effect.timeout(requestTimeout));
+      ),
+    );
     expect(res.headers["access-control-allow-origin"]).toBeDefined();
   }).pipe(logLevel),
   { timeout: testTimeout },
@@ -115,14 +149,14 @@ test(
     const { url } = yield* stack;
     const client = yield* HttpClient.HttpClient;
 
-    const res = yield* client
-      .execute(
+    const res = yield* requestUntilReady(
+      client.execute(
         HttpClientRequest.post(`${url}/`).pipe(
           HttpClientRequest.setHeaders({ Origin: "https://example.com" }),
           HttpClientRequest.bodyJsonUnsafe({ title: "cors-check" }),
         ),
-      )
-      .pipe(Effect.timeout(requestTimeout));
+      ),
+    );
     expect(res.status).toBe(200);
     expect(res.headers["access-control-allow-origin"]).toBeDefined();
   }).pipe(logLevel),

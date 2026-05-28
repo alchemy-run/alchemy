@@ -8,7 +8,10 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+});
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
