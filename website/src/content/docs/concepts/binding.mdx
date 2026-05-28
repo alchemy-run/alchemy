@@ -128,24 +128,86 @@ consumes one consumes the other.
 ## Event sources
 
 An **event source** is a binding that triggers your function when
-something happens on a resource (DynamoDB stream, SQS message, S3
-object event, etc.):
+something happens on a resource. It hands you the records as an
+Effect `Stream`, so the whole event loop becomes a value you can map,
+filter, batch, and pipe:
 
 ```typescript
-yield* DynamoDB.stream(table, {
+yield* SQS.messages(InboundQueue).subscribe((records) =>
+  records.pipe(
+    Stream.map((r) => r.body),
+    Stream.runForEach(Console.log),
+  ),
+);
+```
+
+The other event sources have the same shape — only the record type
+and the entry-point name change:
+
+| Source                    | Entry point                | Stream element        |
+| ------------------------- | -------------------------- | --------------------- |
+| `SQS.messages(queue)`     | `.subscribe(fn)`           | `SQSRecord`           |
+| `Kinesis.records(stream)` | `.process(fn)`             | `KinesisStreamRecord` |
+| `DynamoDB.stream(table)`  | `.process(fn)`             | `StreamRecord<T>`     |
+
+One call wires the event-source mapping, the IAM (or Cloudflare
+binding), and the typed `Stream`.
+
+## Sinks
+
+A **sink** is the dual of an event source: a binding for *writing*
+that exposes the resource as an Effect [`Sink`](https://effect.website/docs/sink/introduction/).
+It batches input chunks into the underlying batch API
+(`SendMessageBatch`, `PutRecords`, `PublishBatch`) and emits the
+minimal IAM to go with it.
+
+```typescript
+const sink = yield* SQS.QueueSink.bind(OutboundQueue);
+// → Sink<void, string, readonly string[], never>
+// → policy: sqs:SendMessage + sqs:SendMessageBatch on OutboundQueue's ARN
+
+yield* Stream.fromIterable(["a", "b", "c"]).pipe(Stream.run(sink));
+```
+
+Sinks are typed by the element they accept, so the type system stops
+you from feeding the wrong shape in: `QueueSink` and `TopicSink` take
+`string`, `StreamSink` takes `PutRecordsRequestEntry` (you keep
+control of `PartitionKey`).
+
+### Source → transform → sink
+
+Where the model pays off is when you compose them. Because every step
+is just `Stream` / `Sink`, the whole pipe-and-transform pipeline is
+one expression:
+
+```typescript
+const outbound = yield* SQS.Queue("Outbound");
+const sink = yield* SQS.QueueSink.bind(outbound);
+
+yield* DynamoDB.stream(OrdersTable, {
   streamViewType: "NEW_AND_OLD_IMAGES",
   startingPosition: "LATEST",
-  batchSize: 10,
-}).process((stream) =>
-  stream.pipe(
-    Stream.map((record) => JSON.stringify(record)),
+}).process<Order>((records) =>
+  records.pipe(
+    Stream.filterMap((r) => Option.fromNullable(r.dynamodb.NewImage)),
+    Stream.filter((order) => order.status === "PAID"),
+    Stream.map((order) => JSON.stringify({ orderId: order.id })),
     Stream.run(sink),
   ),
 );
 ```
 
-Event sources work like regular bindings — they attach the necessary
-permissions and the event source mapping in one call.
+Two `bind()` calls, one pipeline. Alchemy generates **both** sides
+of the policy automatically — `dynamodb:DescribeStream` /
+`GetRecords` / `GetShardIterator` on `OrdersTable`'s stream,
+`sqs:SendMessageBatch` on `Outbound` — plus the event-source
+mapping. There is no env-var plumbing, no `SendMessageBatchCommand`
+chunking by hand, and the sink coalesces the stream into 10-message
+batches under the hood.
+
+Drop in `Effect.retry`, `Stream.throttle`, `Stream.groupedWithin`,
+or `Stream.mapEffect` anywhere along the chain — they're all the
+same `Stream` you'd write in a plain Effect program.
 
 ## How it works under the hood
 
@@ -170,8 +232,8 @@ for a deeper look.
 ## All of Effect, on every binding
 
 Bindings return `Effect` values. That means `Effect.retry`,
-`timeout`, `catchTag`, `Stream`, `Sink` — they all just work, with
-typed error channels:
+`timeout`, `catchTag` — they all just work, with typed error
+channels:
 
 ```typescript
 const sendWithRetry = enqueue({ MessageBody: msg }).pipe(
