@@ -12,6 +12,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -710,6 +711,76 @@ describe.concurrent("Cloudflare.Worker", () => {
         expect(v3.workerName).toEqual(v1.workerName);
         expect(v3.url).toBeDefined();
         yield* expectWorkersDevSubdomain(v3.workerName, accountId, true);
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+      }).pipe(logLevel),
+  );
+
+  // Drift regression: if something external (a previous failed deploy,
+  // a Cloudflare dashboard toggle, the bootstrap path in `loginWithCloudflare`)
+  // leaves the workers.dev subdomain in `enabled: true, previewsEnabled: false`,
+  // a redeploy must observe `previewsEnabled` and flip it back on. The
+  // pre-fix reconciler diffed only `enabled` against desired, so it
+  // skipped the API call and let the drift persist.
+  test.provider(
+    "redeploy re-enables previewsEnabled when externally disabled",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        // Deploy with different compatibility dates to force the update.
+        const deploy = (date: string) =>
+          stack.deploy(
+            Cloudflare.Worker("SubdomainPreviewsDriftWorker", {
+              main,
+              compatibility: { date },
+            }),
+          );
+
+        const v1 = yield* deploy("2026-01-01");
+        yield* expectWorkersDevSubdomain(v1.workerName, accountId, true);
+        const initial = yield* workers.getScriptSubdomain({
+          accountId,
+          scriptName: v1.workerName,
+        });
+        expect(initial).toEqual({ enabled: true, previewsEnabled: true });
+
+        // Simulate external drift: leave `enabled: true` but turn
+        // `previewsEnabled` off out-of-band.
+        yield* workers.createScriptSubdomain({
+          accountId,
+          scriptName: v1.workerName,
+          enabled: true,
+          previewsEnabled: false,
+        });
+        const drifted = yield* workers.getScriptSubdomain({
+          accountId,
+          scriptName: v1.workerName,
+        });
+        expect(drifted).toEqual({ enabled: true, previewsEnabled: false });
+
+        const v2 = yield* deploy("2026-01-02");
+        expect(v2.workerName).toEqual(v1.workerName);
+        const reconciled = yield* workers
+          .getScriptSubdomain({
+            accountId,
+            scriptName: v2.workerName,
+          })
+          .pipe(
+            Effect.flatMap((s) =>
+              s.previewsEnabled === true
+                ? Effect.succeed(s)
+                : Effect.fail({ _tag: "PreviewsNotEnabled" } as const),
+            ),
+            Effect.retry({
+              while: (e) => e._tag === "PreviewsNotEnabled",
+              schedule: Schedule.exponential("100 millis"),
+            }),
+          );
+        expect(reconciled).toEqual({ enabled: true, previewsEnabled: true });
 
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
