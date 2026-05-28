@@ -382,12 +382,7 @@ export const LocalWorkerProvider = () =>
           const options = {
             id,
             props: news,
-            // Filter out duplicate bindings by sid so the hash is stable.
-            // TODO(sam): Should we do this in core?
-            bindings: newBindings.filter(
-              (binding, index) =>
-                newBindings.findIndex((b) => b.sid === binding.sid) === index,
-            ),
+            bindings: newBindings,
           };
           const hash = Hash.structure(options);
           if (instances.get(options.id)?.hash === hash) {
