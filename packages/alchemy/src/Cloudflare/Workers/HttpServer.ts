@@ -1,4 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -65,14 +66,17 @@ const toHandledWebResponse = <Req>(
   Effect.gen(function* () {
     // `toHandled` exposes the final response through this callback, not its
     // return value. Keep the assignment isolated here so callers get Response.
-    let webResponse: Response | undefined;
-    yield* EffectHttp.toHandled(handler, (request, response) => {
-      webResponse = HttpServerResponse.toWeb(
-        EffectHttp.scopeTransferToStream(response),
-        { withoutBody: request.method === "HEAD" },
-      );
-      return Effect.void;
-    });
-
-    return webResponse!;
+    const context = yield* Effect.context();
+    const webResponse = yield* Deferred.make<Response>();
+    yield* EffectHttp.toHandled(handler, (request, response) =>
+      Deferred.succeed(
+        webResponse,
+        // Conversion to web response with options matches `EffectHttp.toWebHandler`'s callback.
+        HttpServerResponse.toWeb(EffectHttp.scopeTransferToStream(response), {
+          withoutBody: request.method === "HEAD",
+          context,
+        }),
+      ),
+    );
+    return yield* Deferred.await(webResponse);
   });
