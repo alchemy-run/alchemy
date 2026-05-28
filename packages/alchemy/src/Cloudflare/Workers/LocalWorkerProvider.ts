@@ -10,23 +10,29 @@ import {
   type Assets as RuntimeAssets,
   type DurableObjectNamespace as RuntimeDurableObjectNamespace,
   type RuntimeServices,
-  type WorkflowEntry,
 } from "@distilled.cloud/cloudflare-runtime";
 import {
   Ai,
+  AnalyticsEngine,
   Artifacts,
   Assets,
   Browser,
   D1,
   Data,
+  DispatchNamespace,
   DurableObjectNamespace,
   Hyperdrive,
   Images,
   Json,
   KvNamespace,
+  MtlsCertificate,
+  Pipelines,
   R2Bucket,
+  RateLimit,
+  SendEmail,
   Service,
   Text,
+  Vectorize,
   VersionMetadata,
   WasmModule,
   WorkerLoader,
@@ -47,11 +53,9 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import { InstanceId } from "../../InstanceId.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
-import { Stage } from "../../Stage.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { getCompatibility } from "./Compatibility.ts";
@@ -166,7 +170,6 @@ export const LocalWorkerProvider = () =>
             ),
             modules: yield* toRuntimeModules(bundle),
             assets: toRuntimeAssets(worker.assets),
-            workflows: worker.workflows,
           })
           .pipe(Scope.provide(scope));
         const previous = workerdScopes.get(worker.id);
@@ -182,23 +185,16 @@ export const LocalWorkerProvider = () =>
         id,
         props,
         bindings,
-        instanceId,
       }: {
         id: string;
         props: WorkerProps;
         bindings: ResourceBinding<Worker["Binding"]>[];
-        instanceId: string;
       }) {
-        const name = yield* createWorkerName(id, props.name).pipe(
-          Effect.provideService(Stack, stack),
-          Effect.provideService(Stage, stack.stage),
-          Effect.provideService(InstanceId, instanceId),
-        );
+        const name = yield* createWorkerName(id, props.name);
         const compatibility = getCompatibility(props);
         const workerBindings: BindingHook<BindingServices>[] = [];
         const durableObjectNamespaces: Record<string, string> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
-        const workflows: Record<string, WorkflowEntry> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
             if (
@@ -212,15 +208,6 @@ export const LocalWorkerProvider = () =>
               durableObjectNamespaces[binding.className] =
                 binding.namespaceId ??
                 encodeURIComponent(`${id}-${binding.className}`);
-            } else if (binding.type === "workflow") {
-              workflows[binding.name] = {
-                name: binding.workflowName,
-                className: binding.className,
-                scriptName:
-                  binding.scriptName && binding.scriptName !== name
-                    ? binding.scriptName
-                    : undefined,
-              };
             }
             workerBindings.push(yield* toRuntimeBinding(binding));
           }
@@ -262,7 +249,6 @@ export const LocalWorkerProvider = () =>
           workerBindings,
           durableObjectNamespaces,
           hyperdrives,
-          workflows,
           bundleOptions: {
             id,
             main: props.main!,
@@ -346,7 +332,6 @@ export const LocalWorkerProvider = () =>
         id: string;
         props: WorkerProps;
         bindings: ResourceBinding<Worker["Binding"]>[];
-        instanceId: string;
       }) {
         const { id, props, bindings } = options;
         const config = yield* buildConfig(options);
@@ -366,7 +351,6 @@ export const LocalWorkerProvider = () =>
                 ),
                 hyperdrives: config.hyperdrives,
                 assets: toRuntimeAssets(config.assets),
-                workflows: config.workflows,
               },
               context,
             },
@@ -383,7 +367,7 @@ export const LocalWorkerProvider = () =>
           url,
           tags: [],
           durableObjectNamespaces: config.durableObjectNamespaces,
-          domains: [],
+          domains: [url],
           crons: Array.from(
             new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
           ),
@@ -392,12 +376,11 @@ export const LocalWorkerProvider = () =>
       });
 
       return {
-        diff: Effect.fn(function* ({ id, news, newBindings, instanceId }) {
+        diff: Effect.fn(function* ({ id, news, newBindings }) {
           const options = {
             id,
             props: news,
             bindings: newBindings,
-            instanceId,
           };
           const hash = Hash.structure(options);
           return {
@@ -405,8 +388,8 @@ export const LocalWorkerProvider = () =>
               instances.get(options.id)?.hash === hash ? "noop" : "update",
           };
         }),
-        reconcile: Effect.fn(function* ({ id, news, bindings, instanceId }) {
-          const options = { id, props: news, bindings, instanceId };
+        reconcile: Effect.fn(function* ({ id, news, bindings }) {
+          const options = { id, props: news, bindings };
           const hash = Hash.structure(options);
           const existing = instances.get(options.id);
           if (existing) {
@@ -461,7 +444,7 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "ai":
       return Ai.remote(b.name);
     case "analytics_engine":
-      return yield* unsupported();
+      return AnalyticsEngine.local(b.name, b.dataset);
     case "artifacts":
       return Artifacts.remote(b.name, b.namespace);
     case "assets":
@@ -473,11 +456,14 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "data_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "dispatch_namespace":
-      return yield* unsupported();
+      return DispatchNamespace.remote({
+        binding: b.name,
+        namespace: b.namespace,
+      });
     case "durable_object_namespace":
       return DurableObjectNamespace.local({
-        name: b.name,
-        className: b.className!,
+        binding: b.name,
+        className: b.className,
         scriptName: b.scriptName,
       });
     case "hyperdrive":
@@ -491,9 +477,9 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "kv_namespace":
       return KvNamespace.remote(b.name, b.namespaceId);
     case "mtls_certificate":
-      return yield* unsupported();
+      return MtlsCertificate.remote(b.name, b.certificateId);
     case "pipelines":
-      return yield* unsupported();
+      return Pipelines.remote(b.name, b.pipeline);
     case "plain_text":
       return Text.local(b.name, b.text);
     case "queue":
@@ -501,7 +487,11 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "r2_bucket":
       return R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
     case "ratelimit":
-      return yield* unsupported();
+      return RateLimit.local({
+        binding: b.name,
+        simple: b.simple,
+        namespaceId: b.namespaceId,
+      });
     case "secret_key":
       return yield* unsupported();
     case "secret_text":
@@ -509,13 +499,18 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "secrets_store_secret":
       return yield* unsupported();
     case "send_email":
-      return yield* unsupported();
+      return SendEmail.remote({
+        binding: b.name,
+        destinationAddress: b.destinationAddress,
+        allowedDestinationAddresses: b.allowedDestinationAddresses,
+        allowedSenderAddresses: b.allowedSenderAddresses,
+      });
     case "service":
-      return Service.local({ name: b.name, scriptName: b.service });
+      return Service.local({ binding: b.name, scriptName: b.service });
     case "text_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "vectorize":
-      return yield* unsupported();
+      return Vectorize.remote(b.name, b.indexName);
     case "version_metadata":
       return VersionMetadata.local(b.name);
     case "wasm_module":
@@ -523,7 +518,12 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "worker_loader":
       return WorkerLoader.local(b.name);
     case "workflow":
-      return Workflows.local(b.name);
+      return Workflows.local({
+        binding: b.name,
+        workflowName: b.workflowName,
+        className: b.className,
+        scriptName: b.scriptName,
+      });
     default:
       return yield* unsupported();
   }

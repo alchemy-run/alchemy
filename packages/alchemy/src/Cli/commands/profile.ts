@@ -9,11 +9,20 @@ import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
 import { Profile, withProfileOverride } from "../../Auth/Profile.ts";
 import { AwsAuth } from "../../AWS/AuthProvider.ts";
+import { AxiomAuth } from "../../Axiom/AuthProvider.ts";
 import { CloudflareAuth } from "../../Cloudflare/Auth/AuthProvider.ts";
+import { GitHubAuth } from "../../GitHub/AuthProvider.ts";
+import { NeonAuth } from "../../Neon/AuthProvider.ts";
+import { PlanetscaleAuth } from "../../Planetscale/AuthProvider.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 
-import { envFile, instrumentCommand, profile } from "./_shared.ts";
+import {
+  envFile,
+  instrumentCommand,
+  printProfile,
+  profile,
+} from "./_shared.ts";
 
 const showCommand = Command.make(
   "show",
@@ -36,14 +45,6 @@ const showCommand = Command.make(
         return;
       }
 
-      yield* Console.log(`Profile: ${profile}`);
-
-      const providerNames = Object.keys(stored).sort();
-      if (providerNames.length === 0) {
-        yield* Console.log("(no providers configured)");
-        return;
-      }
-
       const authProviders: AuthProviders["Service"] = {};
       const authRegistry = Layer.succeed(AuthProviders, authProviders);
       const services = Layer.mergeAll(
@@ -54,33 +55,22 @@ const showCommand = Command.make(
         Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
         // Building these layers triggers their AuthProviderLayer effect, which
         // registers the provider into the shared `authProviders` registry.
-        Layer.provide(Layer.mergeAll(CloudflareAuth, AwsAuth), authRegistry),
+        Layer.provide(
+          Layer.mergeAll(
+            AwsAuth,
+            AxiomAuth,
+            CloudflareAuth,
+            GitHubAuth,
+            NeonAuth,
+            PlanetscaleAuth,
+          ),
+          authRegistry,
+        ),
       );
 
-      yield* Effect.gen(function* () {
-        for (const name of providerNames) {
-          const cfg = stored[name]!;
-          yield* Console.log("");
-          yield* Console.log(`── ${name} ──`);
-          const provider = authProviders[name];
-          if (provider == null) {
-            // Unknown provider — fall back to a JSON dump so the user can still
-            // see what's stored even if its module isn't bundled into the CLI.
-            yield* Console.log(`method: ${cfg.method}`);
-            const { method: _method, ...rest } = cfg as Record<
-              string,
-              unknown
-            > & { method: string };
-            for (const [k, v] of Object.entries(rest)) {
-              yield* Console.log(
-                `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`,
-              );
-            }
-            continue;
-          }
-          yield* provider.prettyPrint(profile, cfg);
-        }
-      }).pipe(Effect.provide(services));
+      yield* printProfile(profile, stored, authProviders).pipe(
+        Effect.provide(services),
+      );
     }),
   ),
 );
