@@ -430,7 +430,7 @@ const finishBootstrap = ({
   isCI: boolean;
 }) =>
   Effect.gen(function* () {
-    yield* deployStateStore(scriptName, localState);
+    const { authToken } = yield* deployStateStore(scriptName, localState);
 
     // Don't trust the `authToken` returned by `deploy(...)`: when
     // adoption kicks in (the Secrets Store secret already existed),
@@ -442,7 +442,7 @@ const finishBootstrap = ({
     // actually deployed. `loginWithCloudflare` also persists the
     // credentials file (skipping the write in CI), so we don't need
     // to do that explicitly here.
-    const { url, authToken } = yield* loginWithCloudflare();
+    const { url } = yield* loginWithCloudflare();
     const httpState = yield* makeCloudflareStateStore({ url, authToken });
     // `profileName` is intentionally unused here — `loginWithCloudflare`
     // resolves it itself. Reference it to keep the surrounding API
