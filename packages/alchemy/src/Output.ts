@@ -7,7 +7,7 @@ import * as Redacted from "effect/Redacted";
 import { SingleShotGen } from "effect/Utils";
 import { getRefMetadata, isRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
-import { RuntimeContext } from "./RuntimeContext.ts";
+import { RuntimeContext, sanitizeKey } from "./RuntimeContext.ts";
 import { Stack } from "./Stack.ts";
 import { Stage } from "./Stage.ts";
 import * as State from "./State/State.ts";
@@ -113,9 +113,11 @@ export abstract class BaseExpr<A = any, Req = any> implements Output<A, Req> {
   }
 
   public bind(id: string): any {
+    // `set`/`get` store keys verbatim, so canonicalize here (the caller's job).
+    const key = sanitizeKey(id);
     return RuntimeContext.pipe(
       Effect.flatMap((ctx) =>
-        Effect.map(ctx.set(id, this), (key) => ctx.get<A>(key)),
+        Effect.map(ctx.set(key, this), (k) => ctx.get<A>(k)),
       ),
     );
   }

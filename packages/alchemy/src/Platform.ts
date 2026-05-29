@@ -21,6 +21,7 @@ import type { Rpc } from "./Rpc.ts";
 import {
   CurrentRuntimeContext,
   RuntimeContext,
+  sanitizeKey,
   type BaseRuntimeContext,
 } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
@@ -364,7 +365,12 @@ export const Platform = <
                       return ConfigProvider.make(
                         Effect.fnUntraced(function* (path) {
                           const ctx = yield* CurrentRuntimeContext;
-                          const key = path.map((p) => p.toString()).join("_");
+                          // `set`/`get` store keys verbatim, so canonicalize the
+                          // logical config path here (the caller's job) before
+                          // handing it to the RuntimeContext.
+                          const key = sanitizeKey(
+                            path.map((p) => p.toString()).join("_"),
+                          );
                           const node = yield* configProvider.get(path);
                           if (phase === "plan" && node) {
                             // bind it to the RuntimeContext if running in plan phase
