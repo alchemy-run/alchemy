@@ -137,8 +137,10 @@ const buildConsumerMap = (accountId: string, queueIds: ReadonlyArray<string>) =>
             Effect.sync(() => {
               for (const c of res.result ?? []) {
                 const consumerId = c.consumerId;
-                const script = "script" in c ? c.script : undefined;
-                if (!consumerId || !script) return;
+                // The distilled SDK exposes the consumer's worker as
+                // `scriptName` (from `script_name`), not `script`.
+                const script = c.scriptName ?? undefined;
+                if (!consumerId || !script) continue;
                 const entry = map.get(script) ?? [];
                 entry.push({ queueId, consumerId });
                 map.set(script, entry);
@@ -390,9 +392,29 @@ const listAllWorkflows = (accountId: string) =>
 const cleanupWorkflows = (accountId: string) =>
   Effect.gen(function* () {
     const all = yield* listAllWorkflows(accountId);
+    // `DELETE /workflows/{name}` 400s with `no_deployed_versions` for any
+    // workflow that never had a version deployed — the control plane can't
+    // delete a versionless workflow. Issuing that DELETE is the bad request,
+    // so filter those out up front (check the first page of versions) instead
+    // of firing a doomed delete and swallowing the error.
+    const deletable = yield* Effect.forEach(
+      all,
+      (w) =>
+        workflows.listVersions({ accountId, workflowName: w.name }).pipe(
+          Effect.map((res) => ((res.result?.length ?? 0) > 0 ? [w] : [])),
+          Effect.catchTag("WorkflowNotFound", () => Effect.succeed([])),
+        ),
+      { concurrency: 8 },
+    ).pipe(Effect.map((xs) => xs.flat()));
+    const skipped = all.length - deletable.length;
+    if (skipped > 0) {
+      yield* Console.log(
+        `→ skipping ${skipped} workflow(s) with no deployed versions (not deletable)`,
+      );
+    }
     return yield* driveCleanup(
       "workflows",
-      all,
+      deletable,
       (w) => `${w.name} (${w.id})`,
       (w) =>
         workflows

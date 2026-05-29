@@ -1,7 +1,7 @@
 import { Artifacts } from "@/Artifacts";
 import { isResolved } from "@/Diff.ts";
 import * as Provider from "@/Provider.ts";
-import { Resource } from "@/Resource";
+import { Resource, type ResourceBinding } from "@/Resource";
 import * as State from "@/State/index";
 import { isUnknown } from "@/Util/unknown";
 import * as Context from "effect/Context";
@@ -135,8 +135,14 @@ export const bindingTargetProvider = () =>
     BindingTarget,
     Effect.gen(function* () {
       return {
-        diff: Effect.fn(function* ({ news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news = {}, olds = {}, newBindings }) {
           if (!isResolved(news)) return undefined;
+          const hooks = Option.getOrUndefined(
+            yield* Effect.serviceOption(TestResourceHooks),
+          );
+          if (hooks?.diff && isResolved(newBindings)) {
+            yield* hooks.diff(id, newBindings as ResourceBinding[]);
+          }
           const n = news as BindingTargetProps;
           const o = olds as BindingTargetProps;
           if (n.replaceString !== o.replaceString) {
@@ -325,6 +331,15 @@ export class TestResourceHooks extends Context.Service<
     create?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
     update?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
     delete?: (id: string) => Effect.Effect<void, any>;
+    /**
+     * If provided, invoked from a binding-aware provider's `diff` with the
+     * exact `newBindings` array the engine handed it. Lets a test assert what
+     * the plan stage observes (e.g. that duplicates were collapsed by sid).
+     */
+    diff?: (
+      id: string,
+      newBindings: ResourceBinding[],
+    ) => Effect.Effect<void, any>;
     /**
      * If provided, the read hook is invoked for the resource's `read` lifecycle
      * operation. Return:
