@@ -16,9 +16,13 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   // dev: true,
 });
 
-const stack = beforeAll(deploy(Stack));
+// This stack deploys a Container (Sandbox) whose image build + push can take
+// well over the default 120s hook budget, so give deploy/destroy more room.
+const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
 
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
+  timeout: 600_000,
+});
 
 test(
   "integ",

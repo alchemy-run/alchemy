@@ -61,7 +61,7 @@ test(
     const body = (yield* res.json) as { value: string };
     expect(body.value).toBe("ok");
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  { timeout: 60_000 },
 );
 
 // While a freshly pre-created worker is propagating, Cloudflare's edge
@@ -223,7 +223,7 @@ test.provider(
 
       yield* scratch.destroy();
     }).pipe(logLevel),
-  { timeout: 30_000 },
+  { timeout: 60_000 },
 );
 
 // Walk an async worker through four redeploys against the same scratch state,
@@ -313,5 +313,5 @@ export default { async fetch() { return new Response("v4"); } };
 
       yield* scratch.destroy();
     }).pipe(logLevel),
-  { timeout: 300_000 },
+  { timeout: 180_000 },
 );

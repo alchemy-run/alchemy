@@ -45,8 +45,10 @@ export const SecretsTestFunctionLive = SecretsTestFunction.make(
     );
 
     // Secret from a `Config` — resolved against the active
-    // `ConfigProvider` (process.env) at deploy time.
-    const configSecret = yield* Config.redacted("CONFIG_SECRET");
+    // `ConfigProvider` (process.env) at deploy time. The test populates
+    // `process.env[CONFIG_SECRET_ENV_KEY]` before deploying, so source
+    // from that same key (not a hard-coded literal).
+    const configSecret = yield* Config.redacted(CONFIG_SECRET_ENV_KEY);
 
     // Plain string variable — string round-trip.
     const stringVar = yield* Config.string("STRING_VAR").pipe(

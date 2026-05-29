@@ -523,6 +523,10 @@ export const R2BucketProvider = () =>
                       while: isNoSuchBucket,
                       schedule: r2BucketEndpointConsistencySchedule,
                     }),
+                    Effect.retry({
+                      while: isDomainInUseConflict,
+                      schedule: r2CustomDomainConflictSchedule,
+                    }),
                   );
                   return toCustomDomainAttributes({ ...created, zoneId });
                 }
@@ -845,3 +849,22 @@ const isNoSuchBucket = (error: unknown): boolean =>
   error !== null &&
   "_tag" in error &&
   (error as { _tag: unknown })._tag === "NoSuchBucket";
+
+// Cloudflare keys a custom domain to a single bucket at the zone level. After a
+// domain is deleted, re-attaching the same hostname can transiently 409 with
+// "Domain already in use" until the prior association is fully released. Treat
+// that narrow conflict as eventual consistency and retry it on create.
+const isDomainInUseConflict = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  "_tag" in error &&
+  (error as { _tag: unknown })._tag === "Conflict" &&
+  "message" in error &&
+  typeof (error as { message: unknown }).message === "string" &&
+  (error as { message: string }).message.toLowerCase().includes("in use");
+
+// Releasing a custom domain after delete can lag a few seconds, so give the
+// conflict a longer, bounded budget than the bucket-endpoint lag above.
+const r2CustomDomainConflictSchedule = Schedule.spaced("2 seconds").pipe(
+  Schedule.both(Schedule.recurs(8)),
+);

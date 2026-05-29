@@ -13,7 +13,7 @@ export const DatabaseBinding = Effect.fn(function* (
         {
           type: "d1",
           name: database.LogicalId,
-          id: database.databaseId,
+          databaseId: database.databaseId,
         },
       ],
     });

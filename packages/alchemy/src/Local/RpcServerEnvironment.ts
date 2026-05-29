@@ -29,7 +29,7 @@ export const layer = (environment: RpcServerEnvironment) =>
     CredentialsStoreLive,
     Layer.succeed(AuthProviders, {}),
     ConfigProvider.layer(
-      loadConfigProvider(Option.fromUndefinedOr(environment.envFile)).pipe(
+      loadConfigProvider(Option.fromNullishOr(environment.envFile)).pipe(
         Effect.map((base) => withProfileOverride(base, environment.profile)),
       ),
     ),

@@ -37,7 +37,11 @@ export default defineConfig({
         extends: true,
         test: {
           name: "alchemy",
-          pool: "threads",
+          // Bun's worker_threads segfaults under vitest's "threads" pool
+          // (tinypool) at worker spawn. "forks" uses child_process, which
+          // Bun handles reliably. Tests here are network/IO-bound, so the
+          // per-fork startup cost is negligible.
+          pool: "forks",
           maxWorkers: 32,
           sequence: { concurrent: true },
           include: ["test/**/*.test.ts"],
