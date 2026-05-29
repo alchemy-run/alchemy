@@ -116,15 +116,11 @@ export default Worker(
       secret.pipe(
         Effect.map((expected) =>
           BearerTokenValidator.of({
-            validate: (token) => {
-              console.log(
-                `received: "${token}", expected: "${Redacted.value(expected)}"`,
-              );
-              return !!expected &&
-                timingSafeEqual(token, Redacted.value(expected))
+            validate: (token) =>
+              !!expected &&
+              timingSafeEqual(token.trim(), Redacted.value(expected).trim())
                 ? Effect.void
-                : Effect.fail(new HttpApiError.Unauthorized());
-            },
+                : Effect.fail(new HttpApiError.Unauthorized()),
           }),
         ),
       ),
