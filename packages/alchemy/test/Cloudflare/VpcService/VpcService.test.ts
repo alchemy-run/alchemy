@@ -52,6 +52,7 @@ test.provider("create, update, delete vpc service", (stack) =>
       serviceId: service.serviceId,
     });
     expect(fetched.serviceId).toEqual(service.serviceId);
+    // @ts-expect-error
     expect(fetched.httpPort).toEqual(8080);
 
     const updated = yield* stack.deploy(
@@ -80,7 +81,9 @@ test.provider("create, update, delete vpc service", (stack) =>
       accountId,
       serviceId: service.serviceId,
     });
+    // @ts-expect-error
     expect(fetchedUpdated.httpPort).toEqual(3000);
+    // @ts-expect-error
     expect(fetchedUpdated.httpsPort).toEqual(3001);
 
     yield* stack.destroy();

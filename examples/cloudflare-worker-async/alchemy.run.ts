@@ -2,7 +2,6 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Config } from "effect";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import type { Counter as CounterClass } from "./src/worker.ts";
 
 export const DB = Cloudflare.D1Database("DB");
@@ -33,7 +32,7 @@ export const Worker = Cloudflare.Worker("Worker", {
     // Self-contained default so the example deploys without external secrets;
     // the integ test asserts this value round-trips through env.API_KEY.
     API_KEY: Config.redacted("SOME_API_KEY").pipe(
-      Config.withDefault(Redacted.make("SOME_API_KEY")),
+      Config.withDefault("SOME_API_KEY"),
     ),
     DB,
     Bucket,

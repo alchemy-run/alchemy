@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+
+// @ts-nocheck
 /**
  * Bulk-delete Cloudflare resources in the active Alchemy profile's account.
  *

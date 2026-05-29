@@ -437,7 +437,7 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "browser":
       return Browser.remote(b.name);
     case "d1":
-      return D1.remote(b.name, b.id);
+      return D1.remote(b.name, b.databaseId);
     case "data_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "dispatch_namespace":
