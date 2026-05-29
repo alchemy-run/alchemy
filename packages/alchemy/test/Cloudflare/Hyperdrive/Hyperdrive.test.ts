@@ -5,8 +5,8 @@ import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { MinimumLogLevel } from "effect/References";
 import * as Redacted from "effect/Redacted";
+import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -47,6 +47,7 @@ test.provider.skip("create and delete hyperdrive with default props", (stack) =>
       hyperdriveId: hd.hyperdriveId,
     });
     expect(actual.id).toEqual(hd.hyperdriveId);
+    // @ts-expect-error
     expect(actual.origin.host).toEqual(baseOrigin.host);
 
     yield* stack.destroy();

@@ -147,7 +147,7 @@ const toBinding = (
   } else if (isD1Database(binding)) {
     return {
       type: "d1",
-      id: binding.databaseId,
+      databaseId: binding.databaseId,
       name: bindingName,
     };
   } else if (isR2Bucket(binding)) {

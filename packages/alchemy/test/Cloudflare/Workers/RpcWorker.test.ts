@@ -21,6 +21,28 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+// Cap exponential backoff at 3s so retries stay bounded when the CF edge is
+// slow (otherwise the geometric blow-up dominates wall time).
+const readinessSchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.either(Schedule.spaced("3 seconds")),
+);
+
+// The caller worker forwards to the target via the service binding and wraps
+// the call in `Effect.orDie` (see fixtures/caller-worker.ts). On a freshly
+// deployed worker the service binding hasn't propagated to every Cloudflare
+// edge yet, so the first calls fail with `Worker not found.` — which arrives
+// at the client as a DEFECT, and `Effect.retry` does not retry defects.
+// Promote defects to failures so the readiness retry can absorb the transient
+// binding-propagation error (a genuine bug would simply keep failing until the
+// retry budget is exhausted).
+const retryReadyN =
+  (times: number) =>
+  <A, E, R>(eff: Effect.Effect<A, E, R>) =>
+    eff.pipe(
+      Effect.catchDefect((defect) => Effect.fail(defect)),
+      Effect.retry({ schedule: readinessSchedule, times }),
+    );
+
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
@@ -57,13 +79,9 @@ test(
     const { callerUrl } = yield* stack;
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(CallerRpcs);
-      const result = yield* client.ProxyGreet({ name: "alchemy" }).pipe(
-        Effect.tapError(Console.log),
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 5,
-        }),
-      );
+      const result = yield* client
+        .ProxyGreet({ name: "alchemy" })
+        .pipe(Effect.tapError(Console.log), retryReadyN(10));
       expect(result.greeting).toBe("hello alchemy");
     }).pipe(Effect.scoped, Effect.provide(clientLayer(callerUrl)));
   }).pipe(logLevel),
@@ -81,24 +99,15 @@ test(
       // burst — workerd surfaces "Worker not found" defects until the
       // target script is fully propagated to the same edge that the
       // caller worker hits.
-      yield* client.ProxyGreet({ name: "warmup" }).pipe(
-        Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 10,
-        }),
-      );
+      yield* client.ProxyGreet({ name: "warmup" }).pipe(retryReadyN(10));
 
       const N = 100;
       const results = yield* Effect.forEach(
         Array.from({ length: N }, (_, i) => i),
         (i) =>
-          client.ProxyGreet({ name: `peer-${i}` }).pipe(
-            Effect.timeout("10 seconds"),
-            Effect.retry({
-              schedule: Schedule.exponential("500 millis"),
-              times: 10,
-            }),
-          ),
+          client
+            .ProxyGreet({ name: `peer-${i}` })
+            .pipe(Effect.timeout("10 seconds"), retryReadyN(10)),
         { concurrency: 32 },
       );
 
@@ -108,5 +117,5 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(clientLayer(callerUrl)));
   }).pipe(logLevel),
-  { timeout: 30_000 },
+  { timeout: 60_000 },
 );
