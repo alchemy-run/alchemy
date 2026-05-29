@@ -7,10 +7,7 @@ import type { HookOptions } from "node:test";
 import type { AlchemyContext } from "../AlchemyContext.ts";
 import type { CompiledStack } from "../Stack.ts";
 import type { Stage } from "../Stage.ts";
-import { installLocalhostDns } from "../Util/LocalhostDns.ts";
 import * as Core from "./Core.ts";
-
-installLocalhostDns();
 
 export type MakeOptions<ROut = any> = Core.MakeOptions<ROut>;
 export type ScratchStack = Core.ScratchStack;
