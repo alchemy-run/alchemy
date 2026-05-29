@@ -13,7 +13,7 @@ import {
 
 export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
   extends
-    Omit<WorkerProps<Bindings, WorkerAssetsConfig>, "assets">,
+    Omit<WorkerProps<Bindings, WorkerAssetsConfig>, "assets" | "dev">,
     Omit<CommandProps, "env"> {
   /**
    * Optional configuration for static asset routing behavior.
@@ -158,6 +158,9 @@ export const StaticSite = <
           hash: build.hash,
           config: props.assetsConfig,
         },
+        // Omit the dev command from WorkerProps since it's different from WorkerProps["dev"].
+        // TODO: we'll need to update this when we add local dev support for StaticSite.
+        dev: undefined,
       })),
     );
   }).pipe(Namespace.push(id));
