@@ -1,5 +1,4 @@
 import {
-  layerLocalProxy,
   layerRuntime,
   Runtime,
   RuntimeError,
@@ -38,13 +37,13 @@ import {
   WorkerLoader,
   Workflows,
 } from "@distilled.cloud/cloudflare-runtime/bindings";
-import * as LocalProxy from "@distilled.cloud/cloudflare-runtime/proxy/LocalProxy";
+import * as WorkerProxy from "@distilled.cloud/cloudflare-runtime/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Hash from "effect/Hash";
-import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
@@ -76,23 +75,20 @@ export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidat
   },
 ) {}
 
-export const localRuntimeServices = (options: { port?: number } = {}) =>
+export const localRuntimeServices = () =>
   RpcProvider.providerServicesEffect(
     Effect.gen(function* () {
       const { accountId } = yield* CloudflareEnvironment;
       const { dotAlchemy } = yield* AlchemyContext;
       const path = yield* Path.Path;
-      return Layer.merge(
-        layerRuntime({
-          api: {
-            accountId,
-          },
-          storage: {
-            directory: path.join(dotAlchemy, "local"),
-          },
-        }),
-        layerLocalProxy(options.port ?? 0),
-      );
+      return layerRuntime({
+        api: {
+          accountId,
+        },
+        storage: {
+          directory: path.join(dotAlchemy, "local"),
+        },
+      });
     }),
   );
 
@@ -115,7 +111,49 @@ export const LocalWorkerProvider = () =>
       const runtime = yield* Runtime;
       const stack = yield* Stack;
       const path = yield* Path.Path;
-      const localProxy = yield* LocalProxy.LocalProxy;
+      const workerProxy = yield* WorkerProxy.WorkerProxy;
+      const proxyInstances = new Map<
+        string,
+        {
+          serverOptions: WorkerConfig["dev"];
+          instance: WorkerProxy.WorkerProxyInstance;
+          scope: Scope.Closeable;
+        }
+      >();
+
+      const startProxy = Effect.fn(function* (
+        id: string,
+        serverOptions: WorkerConfig["dev"],
+      ) {
+        const scope = yield* Scope.fork(rootScope);
+        const instance = yield* workerProxy
+          .serve(serverOptions)
+          .pipe(Scope.provide(scope));
+        proxyInstances.set(id, { serverOptions, instance, scope });
+        return instance;
+      });
+
+      const stopProxy = Effect.fn(function* (id: string) {
+        const existing = proxyInstances.get(id);
+        if (existing) {
+          yield* Scope.close(existing.scope, Exit.void);
+          proxyInstances.delete(id);
+        }
+      });
+
+      const maybeStartProxy = Effect.fn(function* (
+        id: string,
+        serverOptions: WorkerConfig["dev"],
+      ) {
+        const existing = proxyInstances.get(id);
+        if (existing) {
+          if (Equal.equals(existing.serverOptions, serverOptions)) {
+            return existing.instance;
+          }
+          yield* stopProxy(id);
+        }
+        return yield* startProxy(id, serverOptions);
+      });
 
       const toRuntimeModules = Effect.fn(function* (
         bundle: Bundle.BundleOutput,
@@ -157,9 +195,10 @@ export const LocalWorkerProvider = () =>
       const serveScoped = Effect.fnUntraced(function* (
         worker: WorkerConfig,
         bundle: Bundle.BundleOutput,
+        proxy: WorkerProxy.WorkerProxyInstance,
       ) {
         const scope = yield* Effect.scope.pipe(Effect.flatMap(Scope.fork));
-        const address = yield* runtime
+        const url = yield* runtime
           .start({
             name: worker.name,
             compatibilityDate: worker.compatibility.date,
@@ -178,8 +217,8 @@ export const LocalWorkerProvider = () =>
           yield* Effect.forkDetach(Scope.close(previous, Exit.void));
         }
         workerdScopes.set(worker.id, scope);
-        yield* localProxy.setLocalAddress(worker.id, address);
-        return address;
+        yield* proxy.set(url);
+        return url;
       });
 
       const buildConfig = Effect.fn(function* ({
@@ -246,6 +285,11 @@ export const LocalWorkerProvider = () =>
             extraOptions: props.build,
           } satisfies WorkerBundleOptions,
           assets: props.assets,
+          dev: {
+            ...props.dev,
+            // This is the default. Vite and cloudflare-runtime will retry if unavailable, unless `strictPort` is true.
+            port: props.dev?.port ?? 1337,
+          },
         };
       });
 
@@ -254,12 +298,17 @@ export const LocalWorkerProvider = () =>
       const runServer = Effect.fnUntraced(function* (worker: WorkerConfig) {
         let start = Date.now();
         let status: "start" | "update" = "start";
+        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
         yield* bundler.watch(worker.bundleOptions).pipe(
           Stream.tap((event) => {
             if (event._tag === "Start") {
               start = Date.now();
               if (status === "update") {
-                return Effect.log(`[${worker.id}] Rebuilding`);
+                return Effect.all([
+                  Effect.log(`[${worker.id}] Rebuilding`),
+                  // This tells the proxy to queue requests until the updated worker is ready.
+                  Effect.forkChild(proxy.unset()),
+                ]);
               }
             } else if (event._tag === "Error") {
               return Effect.logError(
@@ -275,7 +324,7 @@ export const LocalWorkerProvider = () =>
               : Result.failVoid,
           ),
           Stream.mapEffect((bundle) =>
-            serveScoped(worker, bundle).pipe(
+            serveScoped(worker, bundle, proxy).pipe(
               Effect.exit,
               Effect.tap((exit) => {
                 if (exit._tag === "Success") {
@@ -296,6 +345,7 @@ export const LocalWorkerProvider = () =>
           Stream.runDrain,
           Effect.forkScoped,
         );
+        return proxy.url.toString();
       });
 
       const rootScope = yield* Effect.scope;
@@ -319,9 +369,9 @@ export const LocalWorkerProvider = () =>
         props: WorkerProps;
         bindings: ResourceBinding<Worker["Binding"]>[];
       }) {
-        const { id, props, bindings } = options;
+        const { props, bindings } = options;
         const config = yield* buildConfig(options);
-        const url = yield* localProxy.registerWorker(id);
+        let url: string;
         if (props.vite) {
           const devServer = yield* Vite.viteDev(
             props.vite.rootDir,
@@ -340,11 +390,11 @@ export const LocalWorkerProvider = () =>
               },
               context,
             },
+            config.dev,
           );
-          const localAddress = devServer.resolvedUrls!.local[0].slice(0, -1);
-          yield* localProxy.setLocalAddress(id, localAddress);
+          url = devServer.resolvedUrls!.local[0];
         } else {
-          yield* runServer(config);
+          url = yield* runServer(config);
         }
         return {
           workerId: config.name,
