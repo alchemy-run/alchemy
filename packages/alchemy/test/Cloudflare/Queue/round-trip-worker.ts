@@ -37,7 +37,7 @@ export class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
 ) {}
 
 /**
- * The queue resource the worker produces to and consumes from. The
+ * The queue resources the worker produces to and consumes from. The
  * test deploys this stack, sends N messages via `POST /send?name=K`,
  * waits for the consumer to push them through to the Counter DO,
  * and polls `GET /count?name=K` until the count matches.
@@ -47,6 +47,9 @@ export class Counter extends Cloudflare.DurableObjectNamespace<Counter>()(
  * deploy time, so this fixture has no separate consumer wiring.
  */
 export const RoundTripQueue = Cloudflare.Queue("RoundTripQueue");
+export const SecondaryRoundTripQueue = Cloudflare.Queue(
+  "SecondaryRoundTripQueue",
+);
 
 interface QueueMessageBody {
   name: string;
@@ -64,6 +67,10 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
     const counters = yield* Counter;
     const queueResource = yield* RoundTripQueue;
     const queue = yield* Cloudflare.QueueBinding.bind(queueResource);
+    const secondaryQueueResource = yield* SecondaryRoundTripQueue;
+    const secondaryQueue = yield* Cloudflare.QueueBinding.bind(
+      secondaryQueueResource,
+    );
 
     // Effect-style queue consumer. The handler delegates to the
     // Counter DO so the test can verify the message landed by
@@ -87,6 +94,19 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
       ),
     );
 
+    // A second queue subscription on the same Worker verifies that
+    // dispatch reaches every listener for the `queue` event. Each
+    // listener still scopes itself by queue name internally.
+    yield* Cloudflare.messages<QueueMessageBody>(secondaryQueueResource, {
+      batchSize: 1,
+      maxRetries: 2,
+      retryDelay: "2 seconds",
+    }).subscribe((stream) =>
+      Stream.runForEach(stream, (msg) =>
+        counters.getByName(msg.body.name).record(msg.body.text),
+      ),
+    );
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -96,6 +116,19 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
           const name = url.searchParams.get("name") ?? "default";
           const text = yield* request.text;
           yield* queue.send({ name, text }).pipe(Effect.orDie);
+          return yield* HttpServerResponse.json(
+            { sent: { name, text } },
+            { status: 202 },
+          );
+        }
+
+        if (
+          request.method === "POST" &&
+          url.pathname === "/send-secondary"
+        ) {
+          const name = url.searchParams.get("name") ?? "default";
+          const text = yield* request.text;
+          yield* secondaryQueue.send({ name, text }).pipe(Effect.orDie);
           return yield* HttpServerResponse.json(
             { sent: { name, text } },
             { status: 202 },

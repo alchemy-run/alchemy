@@ -130,11 +130,24 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
             env,
             context,
           };
+          const effects: Effect.Effect<unknown>[] = [];
           for (const handler of handlers) {
             const eff = handler(event);
             if (Effect.isEffect(eff)) {
-              return [eff, services];
+              effects.push(eff);
             }
+          }
+          if (effects.length === 1) {
+            return [effects[0], services];
+          }
+          if (effects.length > 1) {
+            return [
+              Effect.all(effects, {
+                concurrency: "unbounded",
+                discard: true,
+              }),
+              services,
+            ];
           }
           return [
             Effect.die(
