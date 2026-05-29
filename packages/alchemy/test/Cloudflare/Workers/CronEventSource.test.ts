@@ -10,6 +10,7 @@ import CronTestWorker from "./fixtures/cron-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
 });
 
 const logLevel = Effect.provideService(
