@@ -1,3 +1,4 @@
+import { Redacted } from "effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -12,11 +13,10 @@ import {
   StateApi,
   StateAuthLive,
 } from "../../State/HttpStateApi.ts";
-import * as Secret from "../SecretsStore/Secret.ts";
 import { SecretBindingLive } from "../SecretsStore/SecretBinding.ts";
 import { Worker } from "../Workers/Worker.ts";
 import Store from "./Store.ts";
-import { AuthToken } from "./Token.ts";
+import { TokenValue } from "./Token.ts";
 
 export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
 
@@ -108,23 +108,21 @@ export default Worker(
     },
   },
   Effect.gen(function* () {
-    const secret = yield* Secret.Secret.bind(AuthToken);
+    const secret = yield* (yield* TokenValue).text;
     const store = yield* Store;
 
-    const bearerTokenValidator = Layer.succeed(
+    const bearerTokenValidator = Layer.effect(
       BearerTokenValidator,
-      BearerTokenValidator.of({
-        validate: (token) =>
-          // @ts-expect-error - RuntimeContext color fucking us here (TODO fix)
-          secret.get().pipe(
-            Effect.flatMap((expected) =>
-              !!expected && timingSafeEqual(token, expected)
+      secret.pipe(
+        Effect.map((expected) =>
+          BearerTokenValidator.of({
+            validate: (token) =>
+              !!expected && timingSafeEqual(token, Redacted.value(expected))
                 ? Effect.void
                 : Effect.fail(new HttpApiError.Unauthorized()),
-            ),
-            Effect.orDie,
-          ),
-      }),
+          }),
+        ),
+      ),
     );
 
     const versionApi = HttpApiBuilder.group(StateApi, "version", (handlers) =>
