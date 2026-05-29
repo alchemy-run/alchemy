@@ -12,6 +12,7 @@ export const viteDev = (
   rootDir: string = process.cwd(),
   env: Record<string, unknown>,
   pluginOptions: CloudflareVitePluginOptions,
+  serverOptions: vite.ServerOptions,
 ) =>
   Effect.acquireRelease(
     Effect.promise(async () => {
@@ -20,6 +21,7 @@ export const viteDev = (
         root: rootDir,
         define: getDefine(env),
         plugins: [cloudflare(pluginOptions)],
+        server: serverOptions,
       });
       await devServer.listen();
       return devServer;

@@ -283,6 +283,11 @@ export interface WorkerProps<
    * options used to build this Worker. See {@link Bundle.BundleExtraOptions}.
    */
   build?: Bundle.BundleExtraOptions;
+  dev?: {
+    host?: string;
+    port?: number;
+    strictPort?: boolean;
+  };
 }
 
 export type Worker<Bindings extends WorkerBindings = any> = Resource<
