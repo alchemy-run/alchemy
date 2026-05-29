@@ -29,7 +29,7 @@ export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
-export const STATE_STORE_VERSION = 5 as const;
+export const STATE_STORE_VERSION = 6 as const;
 
 /**
  * Hard-coded OTLP/HTTP endpoints. Point at the public ingest relay
@@ -111,19 +111,20 @@ export default Worker(
     const secret = yield* Secret.Secret.bind(AuthToken);
     const store = yield* Store;
 
-    const bearerTokenValidator = Layer.effect(
+    const bearerTokenValidator = Layer.succeed(
       BearerTokenValidator,
-      secret.get().pipe(
-        Effect.map((expected) =>
-          BearerTokenValidator.of({
-            validate: (token) =>
+      BearerTokenValidator.of({
+        validate: (token) =>
+          // @ts-expect-error - RuntimeContext color fucking us here (TODO fix)
+          secret.get().pipe(
+            Effect.flatMap((expected) =>
               !!expected && timingSafeEqual(token, expected)
                 ? Effect.void
                 : Effect.fail(new HttpApiError.Unauthorized()),
-          }),
-        ),
-        Effect.orDie,
-      ),
+            ),
+            Effect.orDie,
+          ),
+      }),
     );
 
     const versionApi = HttpApiBuilder.group(StateApi, "version", (handlers) =>
