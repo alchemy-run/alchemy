@@ -1,8 +1,10 @@
 import { AdoptPolicy, Unowned } from "@/AdoptPolicy";
 import * as Construct from "@/Construct";
+import { dedupeBindings } from "@/Diff";
 import type { Input, InputProps } from "@/Input";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
+import type { ResourceBinding } from "@/Resource";
 import { UnsatisfiedResourceCycle } from "@/Plan";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
@@ -1022,6 +1024,98 @@ test.provider(
       });
     }),
 );
+
+describe("duplicate bindings are collapsed by sid before diff", () => {
+  test(
+    "dedupeBindings keeps the last occurrence of each sid",
+    Effect.sync(() => {
+      const deduped = dedupeBindings([
+        { sid: "Shared", data: { env: { K: "first" } } },
+        { sid: "Other", data: { env: { K: "x" } } },
+        { sid: "Shared", data: { env: { K: "last" } } },
+      ]);
+
+      // The duplicated sid retains its first-seen position but takes the
+      // last value (matching `diffBindings`' `Map`-based collapse).
+      expect(deduped).toEqual([
+        { sid: "Shared", data: { env: { K: "last" } } },
+        { sid: "Other", data: { env: { K: "x" } } },
+      ]);
+    }),
+  );
+
+  test(
+    "diff observes a single binding when the same sid is bound twice",
+    Effect.gen(function* () {
+      yield* seed({
+        A: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "A",
+          fqn: "A",
+          namespace: undefined,
+          resourceType: "Test.BindingTarget",
+          status: "created",
+          props: {
+            name: "target",
+          },
+          attr: {
+            name: "target",
+            env: {},
+          },
+          bindings: [],
+          downstream: [],
+        },
+      });
+
+      // Capture the exact binding list the provider's `diff` receives.
+      const observed: ResourceBinding[][] = [];
+
+      const plan = yield* Effect.gen(function* () {
+        const target = yield* BindingTarget("A", {
+          name: "target",
+        });
+        // The same sid is recorded twice — mirrors a single KV namespace
+        // bound to two consumers that both attach it to the same target,
+        // which pushes a duplicate into `stack.bindings[fqn]`.
+        yield* target.bind("Shared", { env: { FEATURE_FLAG: "on" } });
+        yield* target.bind("Shared", { env: { FEATURE_FLAG: "on" } });
+      }).pipe(
+        makePlan,
+        Effect.provideService(TestResourceHooks, {
+          diff: (_id, newBindings) =>
+            Effect.sync(() => {
+              observed.push(newBindings);
+            }),
+        }),
+      );
+
+      // Before the fix, `diff` saw the raw duplicate pair (length 2) while
+      // `reconcile` saw a deduped list — an inconsistency that made hashing
+      // unstable. Every diff invocation must now see the collapsed list.
+      expect(observed.length).toBeGreaterThan(0);
+      for (const seen of observed) {
+        expect(seen).toHaveLength(1);
+        expect(seen[0]).toMatchObject({
+          sid: "Shared",
+          data: { env: { FEATURE_FLAG: "on" } },
+        });
+      }
+
+      // The plan node likewise collapses to a single create binding.
+      expect(plan.resources.A).toMatchObject({
+        action: "update",
+        bindings: [
+          {
+            action: "create",
+            sid: "Shared",
+            data: { env: { FEATURE_FLAG: "on" } },
+          },
+        ],
+      });
+    }),
+  );
+});
 
 describe("construct namespaces", () => {
   test(

@@ -19,6 +19,7 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import {
+  dedupeBindings,
   diffBindings,
   havePropsChanged,
   isResolved,
@@ -310,7 +311,11 @@ export const make = <A>(
                   : oldState.props;
 
               const oldBindings = oldState.bindings ?? [];
-              const newBindings = stack.bindings[resource.FQN] ?? [];
+              // Collapse duplicate bindings by sid so the binding set handed to
+              // `diff` matches what `reconcile` receives (see `dedupeBindings`).
+              const newBindings = dedupeBindings(
+                stack.bindings[resource.FQN] ?? [],
+              );
 
               const diff = yield* provider.diff
                 ? provider
@@ -633,8 +638,10 @@ export const make = <A>(
             const news = yield* resolveInput(resource.Props);
             const downstream = newDownstreamDependencies[fqn] ?? [];
 
-            const newBindings: ResourceBinding[] = yield* resolveInput(
-              stack.bindings[fqn] ?? [],
+            // Collapse duplicate bindings by sid so the binding set handed to
+            // `diff` matches what `reconcile` receives (see `dedupeBindings`).
+            const newBindings: ResourceBinding[] = dedupeBindings(
+              yield* resolveInput(stack.bindings[fqn] ?? []),
             );
             const persisted = yield* state.get({
               stack: stackName,
