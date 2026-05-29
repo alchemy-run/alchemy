@@ -13,10 +13,11 @@ import {
   StateApi,
   StateAuthLive,
 } from "../../State/HttpStateApi.ts";
+import { Secret } from "../SecretsStore/Secret.ts";
 import { SecretBindingLive } from "../SecretsStore/SecretBinding.ts";
 import { Worker } from "../Workers/Worker.ts";
 import Store from "./Store.ts";
-import { TokenValue } from "./Token.ts";
+import { AuthToken } from "./Token.ts";
 
 export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
 
@@ -108,22 +109,21 @@ export default Worker(
     },
   },
   Effect.gen(function* () {
-    const secret = yield* (yield* TokenValue).text;
+    const remoteSecret = yield* Secret.bind(AuthToken);
     const store = yield* Store;
 
-    const bearerTokenValidator = Layer.effect(
+    const bearerTokenValidator = Layer.succeed(
       BearerTokenValidator,
-      secret.pipe(
-        Effect.map((expected) =>
-          BearerTokenValidator.of({
-            validate: (token) =>
-              !!expected &&
-              timingSafeEqual(token.trim(), Redacted.value(expected).trim())
-                ? Effect.void
-                : Effect.fail(new HttpApiError.Unauthorized()),
-          }),
-        ),
-      ),
+      BearerTokenValidator.of({
+        // @ts-expect-error - TODO(sam): fix RuntimeContext color here
+        validate: Effect.fnUntraced(function* (token) {
+          const expected = yield* remoteSecret.get();
+          return !!expected &&
+            timingSafeEqual(token.trim(), Redacted.value(expected).trim())
+            ? yield* Effect.void
+            : yield* Effect.fail(new HttpApiError.Unauthorized());
+        }),
+      }),
     );
 
     const versionApi = HttpApiBuilder.group(StateApi, "version", (handlers) =>

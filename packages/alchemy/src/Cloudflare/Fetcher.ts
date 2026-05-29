@@ -133,10 +133,8 @@ export const toHttpClient = (fetcher: {
   ) => Effect.Effect<HttpServerResponse.HttpServerResponse, HttpServerError>;
 }) =>
   HttpClient.make((request) => {
-    console.log("toHttpClient: request", request.url);
     return fetcher.fetch(HttpServerRequest.fromClientRequest(request)).pipe(
       Effect.map((response) => {
-        console.log("toHttpClient: response", response);
         return HttpClientResponse.fromWeb(
           request,
           HttpServerResponse.toWeb(response),

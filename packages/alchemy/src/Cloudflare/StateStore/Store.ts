@@ -1,11 +1,12 @@
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 
+import { pipe } from "effect/Function";
 import type {
   ReplacedResourceState,
   ResourceState,
 } from "../../State/ResourceState.ts";
 import { encodeState } from "../../State/StateEncoding.ts";
-import { pipe } from "effect/Function";
 import * as Secret from "../SecretsStore/Secret.ts";
 import { DurableObjectNamespace } from "../Workers/DurableObjectNamespace.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
@@ -25,7 +26,9 @@ export default class Store extends DurableObjectNamespace<Store>()(
       const doState = yield* DurableObjectState;
       const storage = doState.storage;
 
-      const keyHex = yield* encryptionSecret.get().pipe(Effect.orDie);
+      const keyHex = yield* encryptionSecret
+        .get()
+        .pipe(Effect.map(Redacted.value), Effect.orDie);
       const cryptoKey = yield* Effect.tryPromise(() =>
         crypto.subtle.importKey(
           "raw",

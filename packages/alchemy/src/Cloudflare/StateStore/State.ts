@@ -145,7 +145,13 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       yield* Clank.info(
         `Resuming Cloudflare State Store '${scriptName}' deployment...`,
       );
-      yield* finishBootstrap({ scriptName, profileName, localState, isCI });
+      yield* finishBootstrap({
+        scriptName,
+        profileName,
+        localState,
+        isCI,
+        force,
+      });
       yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
       return;
     }
@@ -178,6 +184,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         localState,
         isCI,
         url: credentials.url,
+        force,
       });
       yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
       return;
@@ -191,7 +198,13 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       yield* Clank.info(`Deploying Cloudflare State Store '${scriptName}'...`);
     }
 
-    yield* finishBootstrap({ scriptName, profileName, localState, isCI });
+    yield* finishBootstrap({
+      scriptName,
+      profileName,
+      localState,
+      isCI,
+      force,
+    });
     yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
   }).pipe(
     Effect.withSpan("state_store.bootstrap", {
@@ -221,6 +234,7 @@ export const state = () =>
         "alchemy.state_store.script_name": scriptName,
         "alchemy.state_store.profile": profileName,
         "alchemy.state_store.ci": isCI,
+        "alchemy.state_store.force": false,
       });
       yield* annotateAccountHash(
         yield* Config.boolean("NO_TRACK").pipe(Config.withDefault(false)),
@@ -255,6 +269,7 @@ export const state = () =>
           profileName,
           localState,
           isCI,
+          force: false,
         });
       }
 
@@ -270,6 +285,7 @@ export const state = () =>
           localState,
           isCI,
           url: credentials.url,
+          force: false,
         });
         if (fresh) return fresh;
 
@@ -311,6 +327,7 @@ export const state = () =>
           localState,
           isCI,
           url: credentials.url,
+          force: false,
         });
         if (fresh) return fresh;
 
@@ -346,6 +363,7 @@ export const state = () =>
         profileName,
         localState,
         isCI,
+        force: false,
       });
     }).pipe(recordStateStoreInit, Effect.orDie),
   ).pipe(
@@ -423,14 +441,20 @@ const finishBootstrap = ({
   profileName,
   localState,
   isCI,
+  force,
 }: {
   scriptName: string;
   profileName: string;
   localState: StateService;
   isCI: boolean;
+  force: boolean;
 }) =>
   Effect.gen(function* () {
-    const { authToken } = yield* deployStateStore(scriptName, localState);
+    const { authToken } = yield* deployStateStore(
+      scriptName,
+      localState,
+      force,
+    );
 
     // Don't trust the `authToken` returned by `deploy(...)`: when
     // adoption kicks in (the Secrets Store secret already existed),
@@ -476,7 +500,11 @@ const finishBootstrap = ({
     }),
   );
 
-const deployStateStore = (scriptName: string, state?: StateService) =>
+const deployStateStore = (
+  scriptName: string,
+  state?: StateService,
+  force?: boolean,
+) =>
   Effect.gen(function* () {
     yield* annotateAccountHash();
     const localState = state ?? (yield* makeLocalState());
@@ -485,6 +513,7 @@ const deployStateStore = (scriptName: string, state?: StateService) =>
     const { url, authToken } = yield* deploy({
       // use the script name as the stage name (so the user can have multiple state stores)
       stage: scriptName,
+      force,
       stack: Alchemy.Stack(
         "CloudflareStateStore",
         {
@@ -515,6 +544,9 @@ const deployStateStore = (scriptName: string, state?: StateService) =>
       // TODO(sam): we should not need to do this, but types do complain. fix deploy
       Effect.provide(stateLayer),
     );
+
+    yield* writeCredentials(url, authToken);
+
     // Cloudflare's worker upload is eventually consistent: the deploy
     // call returns as soon as the script upload is accepted, but the
     // edge can keep serving the previous version for several seconds
@@ -642,6 +674,20 @@ export const loginWithCloudflare = () =>
     }),
   );
 
+const writeCredentials = (url: string, authToken: string) =>
+  Effect.gen(function* () {
+    const profileName = yield* ALCHEMY_PROFILE;
+    const credStore = yield* CredentialsStore;
+    yield* credStore.write<HttpStateStoreCredentials>(
+      profileName,
+      CREDENTIALS_FILE,
+      {
+        url,
+        authToken,
+      },
+    );
+  });
+
 const isWorkersPreviewConfigurationError = (error: unknown) =>
   error instanceof EdgeSessionError &&
   (error.message.includes("Invalid Workers Preview configuration") ||
@@ -659,12 +705,14 @@ const redeployIfStale = ({
   profileName,
   localState,
   isCI,
+  force,
 }: {
   url: string;
   scriptName: string;
   profileName: string;
   localState: StateService;
   isCI: boolean;
+  force: boolean;
 }) =>
   Effect.gen(function* () {
     const { matches, expected, observed } = yield* checkStateStoreVersion(url);
@@ -678,6 +726,7 @@ const redeployIfStale = ({
       profileName,
       localState,
       isCI,
+      force,
     });
   }).pipe(
     Effect.withSpan("state_store.redeploy_if_stale", {
