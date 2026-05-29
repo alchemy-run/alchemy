@@ -30,8 +30,7 @@ const readJson = (url: string) =>
     ),
   ).pipe(
     Effect.retry({
-      while: (e): e is WorkerNotReady =>
-        e instanceof WorkerNotReady && e.status >= 400 && e.status < 500,
+      while: (e): e is WorkerNotReady => e instanceof WorkerNotReady,
       schedule: Schedule.exponential("500 millis").pipe(
         Schedule.both(Schedule.recurs(20)),
       ),
