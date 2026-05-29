@@ -41,7 +41,7 @@ import * as Access from "../Access.ts";
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
 import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
-import { AuthTokenSecretName, TokenValue } from "./Token.ts";
+import { AuthToken, AuthTokenSecretName, TokenValue } from "./Token.ts";
 
 /** Filename used for stored credentials under the profile directory. */
 const CREDENTIALS_FILE = "cloudflare-state-store";
@@ -430,7 +430,7 @@ const finishBootstrap = ({
   isCI: boolean;
 }) =>
   Effect.gen(function* () {
-    yield* deployStateStore(scriptName, localState);
+    const { authToken } = yield* deployStateStore(scriptName, localState);
 
     // Don't trust the `authToken` returned by `deploy(...)`: when
     // adoption kicks in (the Secrets Store secret already existed),
@@ -442,7 +442,7 @@ const finishBootstrap = ({
     // actually deployed. `loginWithCloudflare` also persists the
     // credentials file (skipping the write in CI), so we don't need
     // to do that explicitly here.
-    const { url, authToken } = yield* loginWithCloudflare();
+    const { url } = yield* loginWithCloudflare();
     const httpState = yield* makeCloudflareStateStore({ url, authToken });
     // `profileName` is intentionally unused here — `loginWithCloudflare`
     // resolves it itself. Reference it to keep the surrounding API
@@ -494,6 +494,7 @@ const deployStateStore = (scriptName: string, state?: StateService) =>
         Effect.gen(function* () {
           const token = yield* TokenValue;
           const api = yield* Api;
+          yield* AuthToken; // make sure it's in the Secrets Store
 
           // Surface the bearer token so tests and clients can authenticate
           // after deploy. The underlying value lives in the Cloudflare
