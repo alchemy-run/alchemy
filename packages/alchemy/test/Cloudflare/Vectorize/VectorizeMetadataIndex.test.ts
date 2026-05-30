@@ -212,11 +212,6 @@ test.provider(
     }).pipe(logLevel),
 );
 
-type MetadataEntry = {
-  indexType?: string | null;
-  propertyName?: string | null;
-};
-
 const listMetadataIndexes = Effect.fn(function* (
   accountId: string,
   indexName: string,
@@ -224,7 +219,7 @@ const listMetadataIndexes = Effect.fn(function* (
   return yield* vectorize
     .listIndexMetadataIndexes({ accountId, indexName })
     .pipe(
-      Effect.map((res) => (res.metadataIndexes ?? []) as MetadataEntry[]),
+      Effect.map((res) => res.metadataIndexes ?? []),
       Effect.catchTag(["NotFound", "Gone"], () =>
         // Parent index gone — treat as "no metadata indexes".
         Effect.succeed([]),
