@@ -113,8 +113,12 @@ export const VectorizeMetadataIndexProvider = () =>
           ),
         );
         return (
-          list.metadataIndexes?.find((m) => m.propertyName === propertyName) ??
-          undefined
+          (list.metadataIndexes?.find(
+            (m) => m.propertyName === propertyName,
+          ) as
+            // TODO(john): fix type generation error in @distilled.cloud/cloudflare/vectorize
+            | { propertyName: string; indexType: MetadataIndexType }
+            | undefined) ?? undefined
         );
       });
 
