@@ -95,32 +95,31 @@ export const VectorizeMetadataIndexProvider = () =>
       const deleteMetadataIndex = yield* vectorize.deleteIndexMetadataIndex;
       const listMetadataIndexes = yield* vectorize.listIndexMetadataIndexes;
 
-      const findExisting = Effect.fn(function* (
+      const findExisting = (
         acct: string,
         indexName: string,
         propertyName: string,
-      ) {
-        const list = yield* listMetadataIndexes({
+      ) =>
+        listMetadataIndexes({
           accountId: acct,
           indexName,
         }).pipe(
-          Effect.catchTag("CloudflareHttpError", (e) =>
-            // 404 (parent index gone) or 410 (deleted) surface as
-            // CloudflareHttpError. Treat either as "no metadata indexes".
-            e.status === 404 || e.status === 410
-              ? Effect.succeed({ metadataIndexes: [] as Array<never> })
-              : Effect.fail(e),
+          Effect.map((res) => {
+            const index = res.metadataIndexes?.find(
+              (m) => m.propertyName === propertyName,
+            );
+            return index
+              ? {
+                  propertyName: index.propertyName,
+                  indexType:
+                    index.indexType?.toLowerCase() as MetadataIndexType,
+                }
+              : undefined;
+          }),
+          Effect.catchTag(["NotFound", "Gone"], () =>
+            Effect.succeed(undefined),
           ),
         );
-        return (
-          (list.metadataIndexes?.find(
-            (m) => m.propertyName === propertyName,
-          ) as
-            // TODO(john): fix type generation error in @distilled.cloud/cloudflare/vectorize
-            | { propertyName: string; indexType: MetadataIndexType }
-            | undefined) ?? undefined
-        );
-      });
 
       return {
         stables: ["propertyName", "indexName", "accountId"],
@@ -177,10 +176,8 @@ export const VectorizeMetadataIndexProvider = () =>
               propertyName: news.propertyName,
               indexType: news.indexType,
             }).pipe(
-              Effect.catchTag("CloudflareHttpError", (e) =>
-                e.status === 409
-                  ? Effect.succeed({ mutationId: output?.mutationId })
-                  : Effect.fail(e),
+              Effect.catchTag("MetadataIndexAlreadyExists", () =>
+                Effect.succeed({ mutationId: output?.mutationId }),
               ),
             );
             mutationId = created.mutationId ?? undefined;
@@ -200,12 +197,9 @@ export const VectorizeMetadataIndexProvider = () =>
             indexName: output.indexName,
             propertyName: output.propertyName,
           }).pipe(
-            Effect.catchTag("CloudflareHttpError", (e) =>
-              // 404/410 = parent index gone; 400 = metadata index already
-              // absent. All are idempotent no-ops on delete.
-              e.status === 404 || e.status === 410 || e.status === 400
-                ? Effect.void
-                : Effect.fail(e),
+            Effect.catchTag(
+              ["NotFound", "Gone", "MetadataIndexNotFound"],
+              () => Effect.void,
             ),
           );
         }),

@@ -8,6 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { VectorizeIndexBinding } from "./VectorizeIndexBinding.ts";
 
 const VectorizeIndexTypeId = "Cloudflare.VectorizeIndex" as const;
 type VectorizeIndexTypeId = typeof VectorizeIndexTypeId;
@@ -128,7 +129,9 @@ export type VectorizeIndex = Resource<
  *
  * @see https://developers.cloudflare.com/vectorize/
  */
-export const VectorizeIndex = Resource<VectorizeIndex>(VectorizeIndexTypeId);
+export const VectorizeIndex = Resource<VectorizeIndex>(VectorizeIndexTypeId)({
+  bind: VectorizeIndexBinding.bind,
+});
 
 /**
  * Returns true if the given value is a VectorizeIndex resource.
@@ -195,24 +198,23 @@ export const VectorizeIndexProvider = () =>
             output?.indexName ?? (yield* createIndexName(id, olds?.name));
           return yield* getIndex({ accountId: acct, indexName: name }).pipe(
             Effect.map((index) => toAttributes(index, name, acct)),
-            Effect.catchTag("CloudflareHttpError", (e) =>
-              e.status === 404 ? Effect.succeed(undefined) : Effect.fail(e),
+            Effect.catchTag(["NotFound", "Gone"], () =>
+              Effect.succeed(undefined),
             ),
           );
         }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
-          const acct = output?.accountId ?? accountId;
-          const name = yield* createIndexName(id, news.name);
+        reconcile: Effect.fn(function* ({ id, news = {} }) {
+          const indexName = yield* createIndexName(id, news.name);
 
           // Observe — read the live index by name. The name is the stable
           // identifier; fall back through a NotFound to the create path so
           // we recover from out-of-band deletes or partial state-persistence.
           let observed = yield* getIndex({
-            accountId: acct,
-            indexName: name,
+            accountId,
+            indexName,
           }).pipe(
-            Effect.catchTag("CloudflareHttpError", (e) =>
-              e.status === 404 ? Effect.succeed(undefined) : Effect.fail(e),
+            Effect.catchTag(["NotFound", "Gone"], () =>
+              Effect.succeed(undefined),
             ),
           );
 
@@ -221,30 +223,24 @@ export const VectorizeIndexProvider = () =>
           // re-reading it.
           if (!observed) {
             observed = yield* createIndex({
-              accountId: acct,
-              name,
+              accountId,
+              name: indexName,
               config: buildConfig(news),
               description: news.description,
             }).pipe(
-              Effect.catchTag("CloudflareHttpError", (e) =>
-                e.status === 409
-                  ? getIndex({ accountId: acct, indexName: name })
-                  : Effect.fail(e),
+              Effect.catchTag("IndexAlreadyExists", () =>
+                getIndex({ accountId, indexName }),
               ),
             );
           }
 
-          return toAttributes(observed, name, acct);
+          return toAttributes(observed, indexName, accountId);
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* deleteIndex({
             accountId: output.accountId,
             indexName: output.indexName,
-          }).pipe(
-            Effect.catchTag("CloudflareHttpError", (e) =>
-              e.status === 404 ? Effect.void : Effect.fail(e),
-            ),
-          );
+          }).pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.void));
         }),
       };
     }),

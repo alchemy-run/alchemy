@@ -14,46 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-type MetadataEntry = {
-  indexType?: string | null;
-  propertyName?: string | null;
-};
-
-const listMetadataIndexes = Effect.fn(function* (
-  accountId: string,
-  indexName: string,
-) {
-  return yield* vectorize
-    .listIndexMetadataIndexes({ accountId, indexName })
-    .pipe(
-      Effect.map((res) => (res.metadataIndexes ?? []) as MetadataEntry[]),
-      Effect.catchTag("CloudflareHttpError", (e) =>
-        // Parent index gone — treat as "no metadata indexes".
-        e.status === 404 || e.status === 410
-          ? Effect.succeed([] as MetadataEntry[])
-          : Effect.fail(e),
-      ),
-    );
-});
-
-const waitForMetadataIndex = Effect.fn(function* (
-  accountId: string,
-  indexName: string,
-  predicate: (entries: MetadataEntry[]) => boolean,
-) {
-  return yield* listMetadataIndexes(accountId, indexName).pipe(
-    Effect.filterOrFail(
-      predicate,
-      () => new Error("metadata indexes not in expected state"),
-    ),
-    Effect.retry({
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(15)),
-      ),
-    }),
-  );
-});
-
 test.provider("create and delete a metadata index", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
@@ -63,7 +23,7 @@ test.provider("create and delete a metadata index", (stack) =>
     const { index, meta } = yield* stack.deploy(
       Effect.gen(function* () {
         const index = yield* Cloudflare.VectorizeIndex("ParentIdx", {
-          dimensions: 3,
+          dimensions: 32,
           metric: "cosine",
         });
         const meta = yield* Cloudflare.VectorizeMetadataIndex("MetaIdx", {
@@ -87,7 +47,7 @@ test.provider("create and delete a metadata index", (stack) =>
       (entries) => entries.some((e) => e.propertyName === "category"),
     );
     expect(entries.find((e) => e.propertyName === "category")?.indexType).toBe(
-      "string",
+      "String",
     );
 
     yield* stack.destroy();
@@ -107,7 +67,7 @@ test.provider("multiple metadata indexes on the same parent coexist", (stack) =>
     const { index } = yield* stack.deploy(
       Effect.gen(function* () {
         const index = yield* Cloudflare.VectorizeIndex("MultiParent", {
-          dimensions: 3,
+          dimensions: 32,
           metric: "cosine",
         });
         yield* Cloudflare.VectorizeMetadataIndex("CategoryMeta", {
@@ -132,10 +92,10 @@ test.provider("multiple metadata indexes on the same parent coexist", (stack) =>
         entries.some((e) => e.propertyName === "price"),
     );
     expect(entries.find((e) => e.propertyName === "category")?.indexType).toBe(
-      "string",
+      "String",
     );
     expect(entries.find((e) => e.propertyName === "price")?.indexType).toBe(
-      "number",
+      "Number",
     );
 
     yield* stack.destroy();
@@ -150,11 +110,11 @@ test.provider(
 
       yield* stack.destroy();
 
-      // Initial deploy with dimensions=3.
+      // Initial deploy with dimensions=32.
       const { index: oldIndex } = yield* stack.deploy(
         Effect.gen(function* () {
           const index = yield* Cloudflare.VectorizeIndex("ReplaceParent", {
-            dimensions: 3,
+            dimensions: 32,
             metric: "cosine",
           });
           yield* Cloudflare.VectorizeMetadataIndex("ReplaceMeta", {
@@ -174,7 +134,7 @@ test.provider(
       const { index: newIndex, meta: newMeta } = yield* stack.deploy(
         Effect.gen(function* () {
           const index = yield* Cloudflare.VectorizeIndex("ReplaceParent", {
-            dimensions: 8,
+            dimensions: 64,
             metric: "cosine",
           });
           const meta = yield* Cloudflare.VectorizeMetadataIndex("ReplaceMeta", {
@@ -194,9 +154,7 @@ test.provider(
         .getIndex({ accountId, indexName: oldIndex.indexName })
         .pipe(
           Effect.map(() => false),
-          Effect.catchTag("CloudflareHttpError", (e) =>
-            Effect.succeed(e.status === 404),
-          ),
+          Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(true)),
         );
       expect(oldGone).toBe(true);
 
@@ -220,7 +178,7 @@ test.provider(
       const { index } = yield* stack.deploy(
         Effect.gen(function* () {
           const index = yield* Cloudflare.VectorizeIndex("OobParent", {
-            dimensions: 3,
+            dimensions: 32,
             metric: "cosine",
           });
           yield* Cloudflare.VectorizeMetadataIndex("OobMeta", {
@@ -247,3 +205,41 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
 );
+
+type MetadataEntry = {
+  indexType?: string | null;
+  propertyName?: string | null;
+};
+
+const listMetadataIndexes = Effect.fn(function* (
+  accountId: string,
+  indexName: string,
+) {
+  return yield* vectorize
+    .listIndexMetadataIndexes({ accountId, indexName })
+    .pipe(
+      Effect.map((res) => (res.metadataIndexes ?? []) as MetadataEntry[]),
+      Effect.catchTag(["NotFound", "Gone"], () =>
+        // Parent index gone — treat as "no metadata indexes".
+        Effect.succeed([]),
+      ),
+    );
+});
+
+const waitForMetadataIndex = Effect.fn(function* (
+  accountId: string,
+  indexName: string,
+  predicate: (entries: MetadataEntry[]) => boolean,
+) {
+  return yield* listMetadataIndexes(accountId, indexName).pipe(
+    Effect.filterOrFail(
+      predicate,
+      () => new Error("metadata indexes not in expected state"),
+    ),
+    Effect.retry({
+      schedule: Schedule.spaced("2 seconds").pipe(
+        Schedule.both(Schedule.recurs(15)),
+      ),
+    }),
+  );
+});

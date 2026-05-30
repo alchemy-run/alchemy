@@ -15,8 +15,14 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *   GET  /query-filtered — `index.query(vector, { filter: { kind: ... } })`
  *   GET  /get            — `index.getByIds([...])`
  */
+const DIMENSIONS = 32;
+
+/** Builds a deterministic `DIMENSIONS`-length vector seeded by the first values. */
+const vector = (...seed: number[]): number[] =>
+  Array.from({ length: DIMENSIONS }, (_, i) => seed[i] ?? (i % 10) / 10);
+
 export const TestIndex = Cloudflare.VectorizeIndex("VectorizeWorkerIndex", {
-  dimensions: 3,
+  dimensions: DIMENSIONS,
   metric: "cosine",
 });
 
@@ -37,18 +43,34 @@ export default class VectorizeWorker extends Cloudflare.Worker<VectorizeWorker>(
       propertyName: "kind",
       indexType: "string",
     });
-    const vec = yield* Cloudflare.VectorizeConnection.bind(index);
+    const vec = yield* Cloudflare.VectorizeIndex.bind(index);
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://x");
 
+        if (request.method === "GET" && url.pathname === "/health") {
+          return yield* HttpServerResponse.json({ ok: true });
+        }
+
         if (request.method === "POST" && url.pathname === "/upsert") {
           const mutation = yield* vec.upsert([
-            { id: "a", values: [0.1, 0.2, 0.3], metadata: { kind: "first" } },
-            { id: "b", values: [0.9, 0.8, 0.7], metadata: { kind: "second" } },
-            { id: "c", values: [0.4, 0.5, 0.6], metadata: { kind: "third" } },
+            {
+              id: "a",
+              values: vector(0.1, 0.2, 0.3),
+              metadata: { kind: "first" },
+            },
+            {
+              id: "b",
+              values: vector(0.9, 0.8, 0.7),
+              metadata: { kind: "second" },
+            },
+            {
+              id: "c",
+              values: vector(0.4, 0.5, 0.6),
+              metadata: { kind: "third" },
+            },
           ]);
           return yield* HttpServerResponse.json({
             mutationId: mutation.mutationId,
@@ -64,7 +86,7 @@ export default class VectorizeWorker extends Cloudflare.Worker<VectorizeWorker>(
         }
 
         if (request.method === "GET" && url.pathname === "/query") {
-          const matches = yield* vec.query([0.1, 0.2, 0.3], {
+          const matches = yield* vec.query(vector(0.1, 0.2, 0.3), {
             topK: 3,
             returnMetadata: "all",
           });
@@ -75,7 +97,7 @@ export default class VectorizeWorker extends Cloudflare.Worker<VectorizeWorker>(
         }
 
         if (request.method === "GET" && url.pathname === "/query-filtered") {
-          const matches = yield* vec.query([0.1, 0.2, 0.3], {
+          const matches = yield* vec.query(vector(0.1, 0.2, 0.3), {
             topK: 3,
             returnMetadata: "all",
             filter: { kind: { $eq: "second" } },
@@ -99,5 +121,5 @@ export default class VectorizeWorker extends Cloudflare.Worker<VectorizeWorker>(
         return HttpServerResponse.text("Not Found", { status: 404 });
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.VectorizeConnectionLive)),
+  }).pipe(Effect.provide(Cloudflare.VectorizeIndexBindingLive)),
 ) {}

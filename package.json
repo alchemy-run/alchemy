@@ -75,7 +75,7 @@
       "@distilled.cloud/cloudflare-rolldown-plugin": "0.10.1",
       "@distilled.cloud/cloudflare-runtime": "0.10.1",
       "@distilled.cloud/cloudflare-vite-plugin": "0.10.1",
-      "@distilled.cloud/cloudflare": "^0.22.1",
+      "@distilled.cloud/cloudflare": "https://pkg.distilled.cloud/cloudflare/52c4da4",
       "@distilled.cloud/core": "^0.22.1",
       "@distilled.cloud/neon": "^0.22.1",
       "@distilled.cloud/planetscale": "^0.22.1",

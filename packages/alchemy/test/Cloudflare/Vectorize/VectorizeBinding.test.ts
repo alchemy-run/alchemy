@@ -1,12 +1,11 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
-import * as Data from "effect/Data";
+import { assert, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { HttpClientResponse } from "effect/unstable/http";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import VectorizeWorker from "./fixtures/vectorize-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -15,11 +14,6 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
-  status: number;
-  body: string;
-}> {}
 
 /**
  * End-to-end test of `Cloudflare.VectorizeConnection.bind(...)` against a
@@ -35,53 +29,52 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const worker = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* VectorizeWorker;
-        }),
-      );
-
-      expect(worker.url).toBeTypeOf("string");
-      const baseUrl = worker.url as string;
+      const workerUrl = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* VectorizeWorker;
+          }),
+        )
+        .pipe(
+          Effect.flatMap((worker) => {
+            assert.typeOf(worker.url, "string");
+            return HttpClient.get(`${worker.url}/health`).pipe(
+              Effect.flatMap(HttpClientResponse.filterStatusOk),
+              Effect.retry({
+                schedule: Schedule.exponential("500 millis").pipe(
+                  Schedule.both(Schedule.recurs(20)),
+                ),
+              }),
+              Effect.as(worker.url),
+            );
+          }),
+        );
 
       // Fresh workers.dev URLs take a few seconds to start serving 200s.
       // Retry the upsert until the route handler responds.
-      const upsertRes = yield* HttpClient.execute(
-        HttpClientRequest.post(`${baseUrl}/upsert`),
-      ).pipe(
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? Effect.succeed(res)
-            : res.text.pipe(
-                Effect.flatMap((body) =>
-                  Effect.fail(new WorkerNotReady({ status: res.status, body })),
-                ),
-              ),
-        ),
-        Effect.retry({
-          while: (e): e is WorkerNotReady =>
-            e instanceof WorkerNotReady && e.status >= 400 && e.status < 600,
-          schedule: Schedule.exponential("500 millis").pipe(
-            Schedule.both(Schedule.recurs(20)),
-          ),
-        }),
+      const upsertRes = yield* HttpClient.post(`${workerUrl}/upsert`).pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.flatMap((res) => res.json),
       );
-      expect(upsertRes.status).toBe(200);
+      expect(upsertRes).toMatchObject({ mutationId: expect.any(String) });
 
-      const describeRes = yield* HttpClient.get(`${baseUrl}/describe`);
-      expect(describeRes.status).toBe(200);
-      expect(yield* describeRes.json).toMatchObject({ dimensions: 3 });
+      const describeRes = yield* HttpClient.get(`${workerUrl}/describe`).pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.flatMap((res) => res.json),
+      );
+      expect(describeRes).toMatchObject({ dimensions: 32 });
 
       // Mutations are async/eventually consistent — poll the query route
       // until all three upserted vectors are visible.
-      const queryBody = yield* HttpClient.get(`${baseUrl}/query`).pipe(
+      const queryBody = yield* HttpClient.get(`${workerUrl}/query`).pipe(
         Effect.flatMap((res) => res.json),
         Effect.map((body) => body as { count: number; ids: string[] }),
         Effect.filterOrFail(
           (body) => body.count >= 3,
-          () => new WorkerNotReady({ status: 200, body: "not indexed yet" }),
+          () => ({ _tag: "IndexNotUpdated" }) as const,
         ),
         Effect.retry({
+          while: (e) => e._tag === "IndexNotUpdated",
           schedule: Schedule.spaced("3 seconds").pipe(
             Schedule.both(Schedule.recurs(20)),
           ),
@@ -91,30 +84,23 @@ test.provider(
       // The query vector equals "a" exactly, so it should be the top match.
       expect(queryBody.ids[0]).toBe("a");
 
-      const getRes = yield* HttpClient.get(`${baseUrl}/get`);
-      expect(getRes.status).toBe(200);
-      expect(yield* getRes.json).toEqual({ ids: ["a", "b"] });
+      const getRes = yield* HttpClient.get(`${workerUrl}/get`).pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
+        Effect.flatMap((res) => res.json),
+      );
+      expect(getRes).toEqual({ ids: ["a", "b"] });
 
       // Metadata-filtered query: only the vector tagged `kind: "second"`
       // should come back. The metadata index lives on the parent and was
       // created at deploy time before the upsert, so the filter is valid;
       // poll until Cloudflare indexes the upserted vectors with it.
       const filteredBody = yield* HttpClient.get(
-        `${baseUrl}/query-filtered`,
+        `${workerUrl}/query-filtered`,
       ).pipe(
         Effect.flatMap((res) => res.json),
         Effect.map(
           (body) => body as { count: number; ids: string[]; kinds: string[] },
         ),
-        Effect.filterOrFail(
-          (body) => body.count === 1 && body.ids[0] === "b",
-          () => new WorkerNotReady({ status: 200, body: "filter not ready" }),
-        ),
-        Effect.retry({
-          schedule: Schedule.spaced("3 seconds").pipe(
-            Schedule.both(Schedule.recurs(20)),
-          ),
-        }),
       );
       expect(filteredBody.ids).toEqual(["b"]);
       expect(filteredBody.kinds).toEqual(["second"]);

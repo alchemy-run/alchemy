@@ -14,28 +14,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const waitForIndexToBeDeleted = Effect.fn(function* (
-  accountId: string,
-  indexName: string,
-) {
-  yield* vectorize.getIndex({ accountId, indexName }).pipe(
-    Effect.flatMap((index) =>
-      index.name === indexName
-        ? Effect.fail(new Error("still exists"))
-        : Effect.void,
-    ),
-    Effect.catchTag("CloudflareHttpError", (e) =>
-      e.status === 404 ? Effect.void : Effect.fail(e),
-    ),
-    Effect.retry({
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
-      ),
-    }),
-    Effect.ignore,
-  );
-});
-
 test.provider("create and delete index with explicit dimensions", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* CloudflareEnvironment;
@@ -43,11 +21,9 @@ test.provider("create and delete index with explicit dimensions", (stack) =>
     yield* stack.destroy();
 
     const index = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.VectorizeIndex("DefaultIndex", {
-          dimensions: 768,
-          metric: "cosine",
-        });
+      Cloudflare.VectorizeIndex("DefaultIndex", {
+        dimensions: 768,
+        metric: "cosine",
       }),
     );
 
@@ -64,7 +40,7 @@ test.provider("create and delete index with explicit dimensions", (stack) =>
 
     yield* stack.destroy();
 
-    yield* waitForIndexToBeDeleted(accountId, index.indexName);
+    yield* waitForDelete(accountId, index.indexName);
   }).pipe(logLevel),
 );
 
@@ -75,11 +51,9 @@ test.provider("create index from a preset", (stack) =>
     yield* stack.destroy();
 
     const index = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.VectorizeIndex("PresetIndex", {
-          preset: "@cf/baai/bge-base-en-v1.5",
-          description: "preset index",
-        });
+      Cloudflare.VectorizeIndex("PresetIndex", {
+        preset: "@cf/baai/bge-base-en-v1.5",
+        description: "preset index",
       }),
     );
 
@@ -93,7 +67,7 @@ test.provider("create index from a preset", (stack) =>
 
     yield* stack.destroy();
 
-    yield* waitForIndexToBeDeleted(accountId, index.indexName);
+    yield* waitForDelete(accountId, index.indexName);
   }).pipe(logLevel),
 );
 
@@ -104,21 +78,18 @@ test.provider("replaces index when dimensions change", (stack) =>
     yield* stack.destroy();
 
     const index = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.VectorizeIndex("ReplaceIndex", {
-          dimensions: 3,
-          metric: "cosine",
-        });
+      Cloudflare.VectorizeIndex("ReplaceIndex", {
+        dimensions: 32,
+        metric: "cosine",
       }),
     );
-    expect(index.dimensions).toEqual(3);
+    expect(index.dimensions).toEqual(32);
+    expect(index.metric).toEqual("cosine");
 
     const replaced = yield* stack.deploy(
-      Effect.gen(function* () {
-        return yield* Cloudflare.VectorizeIndex("ReplaceIndex", {
-          dimensions: 8,
-          metric: "euclidean",
-        });
+      Cloudflare.VectorizeIndex("ReplaceIndex", {
+        dimensions: 64,
+        metric: "euclidean",
       }),
     );
 
@@ -126,11 +97,27 @@ test.provider("replaces index when dimensions change", (stack) =>
       accountId,
       indexName: replaced.indexName,
     });
-    expect(actual.config?.dimensions).toEqual(8);
+    expect(actual.config?.dimensions).toEqual(64);
     expect(actual.config?.metric).toEqual("euclidean");
 
     yield* stack.destroy();
 
-    yield* waitForIndexToBeDeleted(accountId, replaced.indexName);
+    yield* waitForDelete(accountId, replaced.indexName);
   }).pipe(logLevel),
 );
+
+const waitForDelete = (accountId: string, indexName: string) =>
+  vectorize.getIndex({ accountId, indexName }).pipe(
+    Effect.flatMap((index) =>
+      index.name === indexName
+        ? Effect.fail({ _tag: "IndexNotDeleted" } as const)
+        : Effect.void,
+    ),
+    Effect.catchTag(["NotFound", "Gone"], () => Effect.void),
+    Effect.retry({
+      while: (e) => e._tag === "IndexNotDeleted",
+      schedule: Schedule.exponential("500 millis").pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
+    }),
+  );
