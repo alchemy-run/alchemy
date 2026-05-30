@@ -237,8 +237,8 @@ const waitForMetadataIndex = Effect.fn(function* (
       () => new Error("metadata indexes not in expected state"),
     ),
     Effect.retry({
-      schedule: Schedule.spaced("2 seconds").pipe(
-        Schedule.both(Schedule.recurs(15)),
+      schedule: Schedule.spaced("3 seconds").pipe(
+        Schedule.both(Schedule.recurs(20)),
       ),
     }),
   );
