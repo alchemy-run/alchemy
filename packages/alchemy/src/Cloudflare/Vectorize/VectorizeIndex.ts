@@ -1,5 +1,6 @@
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -7,6 +8,9 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+const VectorizeIndexTypeId = "Cloudflare.VectorizeIndex" as const;
+type VectorizeIndexTypeId = typeof VectorizeIndexTypeId;
 
 export type DistanceMetric = "cosine" | "euclidean" | "dot-product";
 
@@ -65,7 +69,7 @@ export type VectorizeIndexAttributes = {
 };
 
 export type VectorizeIndex = Resource<
-  "Cloudflare.VectorizeIndex",
+  VectorizeIndexTypeId,
   VectorizeIndexProps,
   VectorizeIndexAttributes,
   never,
@@ -124,9 +128,13 @@ export type VectorizeIndex = Resource<
  *
  * @see https://developers.cloudflare.com/vectorize/
  */
-export const VectorizeIndex = Resource<VectorizeIndex>(
-  "Cloudflare.VectorizeIndex",
-);
+export const VectorizeIndex = Resource<VectorizeIndex>(VectorizeIndexTypeId);
+
+/**
+ * Returns true if the given value is a VectorizeIndex resource.
+ */
+export const isVectorizeIndex = (value: unknown): value is VectorizeIndex =>
+  Predicate.hasProperty(value, "Type") && value.Type === VectorizeIndexTypeId;
 
 export const VectorizeIndexProvider = () =>
   Provider.effect(

@@ -7,6 +7,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import D1Worker from "./d1-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -20,6 +21,34 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   status: number;
   body: string;
 }> {}
+
+/**
+ * Wrap an HTTP call so a non-2xx response (workers.dev cold-start
+ * "There is nothing here yet" / "Script not found" pages) becomes a
+ * retryable Effect failure rather than a successful response with a
+ * 404/500 status.
+ */
+const retryUntilOk = <E, R>(
+  eff: Effect.Effect<HttpClientResponse.HttpClientResponse, E, R>,
+) =>
+  eff.pipe(
+    Effect.flatMap((res) =>
+      res.status === 200
+        ? Effect.succeed(res)
+        : res.text.pipe(
+            Effect.flatMap((body) =>
+              Effect.fail(new WorkerNotReady({ status: res.status, body })),
+            ),
+          ),
+    ),
+    Effect.retry({
+      while: (e): e is WorkerNotReady =>
+        e instanceof WorkerNotReady && e.status >= 400 && e.status < 600,
+      schedule: Schedule.exponential("500 millis").pipe(
+        Schedule.both(Schedule.recurs(15)),
+      ),
+    }),
+  );
 
 /**
  * End-to-end test of `Cloudflare.D1Connection.bind(...)` against a real
@@ -119,9 +148,11 @@ test.provider(
       expect(yield* seedRes.json).toMatchObject({ batches: 3, success: true });
 
       // single insert via prepare.bind.run
-      const insertRes = yield* HttpClient.execute(
-        HttpClientRequest.post(`${baseUrl}/users`).pipe(
-          HttpClientRequest.bodyJsonUnsafe({ id: 4, name: "dave" }),
+      const insertRes = yield* retryUntilOk(
+        HttpClient.execute(
+          HttpClientRequest.post(`${baseUrl}/users`).pipe(
+            HttpClientRequest.bodyJsonUnsafe({ id: 4, name: "dave" }),
+          ),
         ),
       );
       expect(insertRes.status).toBe(200);
@@ -131,7 +162,7 @@ test.provider(
       });
 
       // SELECT all via prepare.all
-      const allRes = yield* HttpClient.get(`${baseUrl}/users`);
+      const allRes = yield* retryUntilOk(HttpClient.get(`${baseUrl}/users`));
       expect(allRes.status).toBe(200);
       const allBody = (yield* allRes.json) as {
         success: boolean;
@@ -146,12 +177,12 @@ test.provider(
       ]);
 
       // SELECT one via prepare.bind.first
-      const oneRes = yield* HttpClient.get(`${baseUrl}/users/2`);
+      const oneRes = yield* retryUntilOk(HttpClient.get(`${baseUrl}/users/2`));
       expect(oneRes.status).toBe(200);
       expect(yield* oneRes.json).toEqual({ row: { id: 2, name: "bob" } });
 
       // raw escape hatch (used by Better Auth / Drizzle integrations)
-      const rawRes = yield* HttpClient.get(`${baseUrl}/raw`);
+      const rawRes = yield* retryUntilOk(HttpClient.get(`${baseUrl}/raw`));
       expect(rawRes.status).toBe(200);
       expect(yield* rawRes.json).toEqual({ count: 4 });
 

@@ -11,13 +11,17 @@ interface AddInstance {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname === "/wasm") {
-      const instance = (await WebAssembly.instantiate(wasm)) as AddInstance;
-      return Response.json({ result: instance.exports.add(3, 4) });
+    switch (url.pathname) {
+      case "/env":
+        return Response.json(env);
+      case "/wasm":
+        const instance = (await WebAssembly.instantiate(wasm)) as AddInstance;
+        return Response.json({ result: instance.exports.add(3, 4) });
+      default:
+        const counter = env.COUNTER.getByName("my-counter");
+        const count = await counter.increment();
+        return new Response(`Hello, world! ${count}`);
     }
-    const counter = env.COUNTER.getByName("my-counter");
-    const count = await counter.increment();
-    return new Response(`Hello, world! ${count}`);
   },
 } satisfies ExportedHandler<AsyncWorkerEnv>;
 

@@ -5,6 +5,7 @@ import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import { fileURLToPath } from "node:url";
+import path from "pathe";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { findCwdForBundle } from "../../Bundle/TempRoot.ts";
@@ -98,7 +99,9 @@ export const WorkerBundle = Effect.gen(function* () {
         return main;
       }
     }).pipe(
-      Effect.flatMap((path) => fs.realPath(path)),
+      Effect.flatMap((p) => fs.realPath(p)),
+      //* fix windows paths
+      Effect.map((p) => path.resolve(p)),
       Effect.mapError(
         (cause) =>
           new Bundle.BundleError({

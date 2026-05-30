@@ -19,6 +19,7 @@ export * from "./Destroy.ts";
 export * from "./Diff.ts";
 export * from "./Input.ts";
 export * from "./InstanceId.ts";
+export * from "./KeyPair.ts";
 export * from "./Namespace.ts";
 export { stackRef } from "./Output.ts";
 export type { Output } from "./Output.ts";
@@ -30,14 +31,11 @@ export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
 export * from "./Resource.ts";
 export * as Schema from "./Schema.ts";
-export { Secret } from "./Secret.ts";
 export * as Server from "./Server/index.ts";
 export * as Serverless from "./Serverless/index.ts";
 export { Stack } from "./Stack.ts";
 export * from "./Stage.ts";
 export { inMemoryState, localState } from "./State/index.ts";
-export * from "./Trait.ts";
-export { Variable } from "./Variable.ts";
 
 export * as Construct from "./Construct.ts";
 
@@ -45,6 +43,7 @@ export * as Construct from "./Construct.ts";
 // downstream `.d.ts` emissions (fixes TS2883 in user files).
 export { AuthProviders } from "./Auth/AuthProvider.ts";
 export { Cli } from "./Cli/Cli.ts";
+export type { Dependencies } from "./Dependencies.ts";
 export type * from "./Platform.ts";
 export { Platform } from "./Platform.ts";
 export type { ProviderCollectionLike } from "./Provider.ts";

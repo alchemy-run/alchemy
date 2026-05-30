@@ -42,7 +42,7 @@ test.provider("worker bindings emit Cloudflare Images metadata", (stack) =>
       Effect.gen(function* () {
         return yield* Cloudflare.Worker("ImageWorker", {
           main,
-          bindings: {
+          env: {
             MEDIA: Cloudflare.Images({ name: "IGNORED_BY_DIRECT_BINDING" }),
           },
         });

@@ -17,7 +17,7 @@ const cloudflareServices = Layer.provide(
 );
 
 LocalWorkerProvider().pipe(
-  Layer.provide(localRuntimeServices({ port: 1337 })),
+  Layer.provide(localRuntimeServices()),
   Layer.provide(cloudflareServices),
   RpcServer.launch,
 );

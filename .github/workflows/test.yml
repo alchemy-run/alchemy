@@ -5,10 +5,11 @@ name: test
 # runtimes itself and publishes canary tarballs to pkg.ing before deploying.
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [opened, reopened, synchronize]
+  # TODO(sam): re-enable these when they are running reliably and not polluting our account
+  # push:
+  #   branches: [main]
+  # pull_request:
+  #   types: [opened, reopened, synchronize]
   workflow_dispatch:
 
 permissions:

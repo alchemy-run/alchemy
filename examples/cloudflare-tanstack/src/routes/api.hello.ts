@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import * as Cloudflare from "alchemy/Cloudflare/Bridge";
 import type Backend from "../backend.ts";
 import { env } from "../env.ts";
 
@@ -62,8 +63,6 @@ export const Route = createFileRoute("/api/hello")({
           // option 3 — bind to your effect worker and call rpc method
           case "rpc":
             return trace("GET option 3 (backend.hello rpc)", async () => {
-              // This doesn't work due to a bundling error.
-              const Cloudflare = await import("alchemy/Cloudflare/Bridge");
               // Wrap the raw wire-shape binding into a Promise<T> view that
               // throws on Effect.fail and unwraps stream envelopes.
               const backend = Cloudflare.toRpcAsync<Backend>(env.BACKEND);

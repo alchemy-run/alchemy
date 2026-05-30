@@ -16,7 +16,7 @@ import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
-import { makeRequestEffect } from "./HttpServer.ts";
+import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
 
@@ -130,9 +130,12 @@ export const makeDurableObjectBridge =
                   : Promise.reject(Cause.squash(exit.cause))),
           )
           .finally(() =>
-            Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>
-              this.#state.waitUntil(promise),
-            ),
+            isScopeEjected(scope)
+              ? undefined
+              : Scope.close(scope, Exit.void).pipe(
+                  Effect.runPromise,
+                  (promise) => this.ctx.waitUntil(promise),
+                ),
           );
       }
 

@@ -359,7 +359,7 @@ Add the bucket to the Vite worker's `bindings` map:
 +import { Bucket } from "./src/backend.ts";
 
  const web = yield* Cloudflare.Vite("Website", {
-+  bindings: {
++  env: {
 +    BUCKET: Bucket,
 +  },
  });
@@ -479,7 +479,7 @@ R2 itself.
 ## Bind the Backend as a service
 
 Add `Backend` next to (or instead of) `BUCKET` in the Vite worker's
-bindings:
+`env`:
 
 ```diff lang="typescript"
 // alchemy.run.ts
@@ -487,7 +487,7 @@ bindings:
 +import Backend, { Bucket } from "./src/backend.ts";
 
  const web = yield* Cloudflare.Vite("Website", {
-   bindings: {
+   env: {
      BUCKET: Bucket,
 +    BACKEND: Backend,
    },

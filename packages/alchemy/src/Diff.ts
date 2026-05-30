@@ -133,6 +133,19 @@ const canonicalize = (value: unknown, stripNullish: boolean): unknown => {
   return value;
 };
 
+/**
+ * Collapse bindings that share the same `sid`, keeping the last occurrence.
+ *
+ * The same binding can be recorded more than once on a target resource — e.g.
+ * a KV namespace bound to both a Worker and a Workflow ends up pushed twice to
+ * `stack.bindings[fqn]`. `diffBindings` already collapses these implicitly via
+ * its `Map` keyed by `sid`, so the `reconcile` path never observes duplicates.
+ * Use this helper to give a provider's `diff` handler the same de-duplicated
+ * binding set, keeping plan-time hashing consistent with deploy-time.
+ */
+export const dedupeBindings = <B extends ResourceBinding>(bindings: B[]): B[] =>
+  Array.from(new Map(bindings.map((b) => [b.sid, b])).values());
+
 export const diffBindings = (
   oldBindings: ResourceBinding[],
   newBindings: ResourceBinding[],

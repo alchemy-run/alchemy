@@ -19,6 +19,7 @@ import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { Command, CommandProvider } from "../Build/Command.ts";
 import * as Provider from "../Provider.ts";
+import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as ACM from "./ACM/index.ts";
 import * as ApiGateway from "./ApiGateway/index.ts";
@@ -63,6 +64,7 @@ export const providers = () =>
     Providers,
     Provider.collection([
       Command,
+      KeyPair,
       Random,
       ACM.Certificate,
       ApiGateway.Account,
@@ -571,6 +573,7 @@ export const providers = () =>
     Layer.provideMerge(
       Layer.mergeAll(
         CommandProvider(),
+        KeyPairProvider(),
         RandomProvider(),
         Assets.AssetsProvider(),
       ),
