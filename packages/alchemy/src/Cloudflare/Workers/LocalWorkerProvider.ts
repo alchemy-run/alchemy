@@ -288,7 +288,7 @@ export const LocalWorkerProvider = () =>
           dev: {
             ...props.dev,
             // This is the default. Vite and cloudflare-runtime will retry if unavailable, unless `strictPort` is true.
-            port: props.dev?.port ?? 1337,
+            port: props.dev?.port ?? (props.vite ? 5173 : 1337),
           },
         };
       });

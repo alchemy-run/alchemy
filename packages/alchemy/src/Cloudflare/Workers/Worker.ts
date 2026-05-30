@@ -296,7 +296,7 @@ export interface WorkerProps<
     /**
      * Port the local dev server listens on. If the port is unavailable, the
      * next free port is used unless {@link strictPort} is `true`.
-     * @default 1337
+     * @default 5173 for Vite, 1337 for non-Vite
      */
     port?: number;
     /**
