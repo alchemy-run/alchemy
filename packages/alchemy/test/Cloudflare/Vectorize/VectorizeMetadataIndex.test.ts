@@ -1,11 +1,11 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Test from "@/Test/Vitest";
+import { poll } from "@/Util/poll.ts";
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -41,11 +41,12 @@ test.provider("create and delete a metadata index", (stack) =>
 
     // The metadata index appears in the parent's list once Cloudflare
     // processes the async mutation.
-    const entries = yield* waitForMetadataIndex(
-      accountId,
-      index.indexName,
-      (entries) => entries.some((e) => e.propertyName === "category"),
-    );
+    const entries = yield* poll({
+      description: "metadata index exists with propertyName=category",
+      effect: listMetadataIndexes(accountId, index.indexName),
+      predicate: (entries) =>
+        entries.some((e) => e.propertyName === "category"),
+    });
     expect(entries.find((e) => e.propertyName === "category")?.indexType).toBe(
       "String",
     );
@@ -83,14 +84,13 @@ test.provider("multiple metadata indexes on the same parent coexist", (stack) =>
         return { index };
       }),
     );
-
-    const entries = yield* waitForMetadataIndex(
-      accountId,
-      index.indexName,
-      (entries) =>
+    const entries = yield* poll({
+      description: "metadata index includes category and price",
+      effect: listMetadataIndexes(accountId, index.indexName),
+      predicate: (entries) =>
         entries.some((e) => e.propertyName === "category") &&
         entries.some((e) => e.propertyName === "price"),
-    );
+    });
     expect(entries.find((e) => e.propertyName === "category")?.indexType).toBe(
       "String",
     );
@@ -125,9 +125,11 @@ test.provider(
           return { index };
         }),
       );
-      yield* waitForMetadataIndex(accountId, oldIndex.indexName, (entries) =>
-        entries.some((e) => e.propertyName === "tag"),
-      );
+      yield* poll({
+        description: "metadata index exists with propertyName=tag",
+        effect: listMetadataIndexes(accountId, oldIndex.indexName),
+        predicate: (entries) => entries.some((e) => e.propertyName === "tag"),
+      });
 
       // Re-deploy with different dimensions — the parent replaces, which
       // also replaces the metadata index on the new parent.
@@ -159,9 +161,11 @@ test.provider(
       expect(oldGone).toBe(true);
 
       // The new parent has the metadata index.
-      yield* waitForMetadataIndex(accountId, newIndex.indexName, (entries) =>
-        entries.some((e) => e.propertyName === "tag"),
-      );
+      yield* poll({
+        description: "metadata index exists with propertyName=tag",
+        effect: listMetadataIndexes(accountId, newIndex.indexName),
+        predicate: (entries) => entries.some((e) => e.propertyName === "tag"),
+      });
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -189,9 +193,11 @@ test.provider(
           return { index };
         }),
       );
-      yield* waitForMetadataIndex(accountId, index.indexName, (entries) =>
-        entries.some((e) => e.propertyName === "ns"),
-      );
+      yield* poll({
+        description: "metadata index exists with propertyName=ns",
+        effect: listMetadataIndexes(accountId, index.indexName),
+        predicate: (entries) => entries.some((e) => e.propertyName === "ns"),
+      });
 
       // Simulate Cloudflare's cascading delete: drop the parent directly.
       // On Cloudflare's side this also removes the metadata index.
@@ -224,22 +230,4 @@ const listMetadataIndexes = Effect.fn(function* (
         Effect.succeed([]),
       ),
     );
-});
-
-const waitForMetadataIndex = Effect.fn(function* (
-  accountId: string,
-  indexName: string,
-  predicate: (entries: MetadataEntry[]) => boolean,
-) {
-  return yield* listMetadataIndexes(accountId, indexName).pipe(
-    Effect.filterOrFail(
-      predicate,
-      () => new Error("metadata indexes not in expected state"),
-    ),
-    Effect.retry({
-      schedule: Schedule.spaced("3 seconds").pipe(
-        Schedule.both(Schedule.recurs(20)),
-      ),
-    }),
-  );
 });

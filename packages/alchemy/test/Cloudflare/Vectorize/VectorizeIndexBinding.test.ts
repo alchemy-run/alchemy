@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Vitest";
+import { poll } from "@/Util/poll.ts";
 import { assert, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -66,42 +67,45 @@ test.provider(
 
       // Mutations are async/eventually consistent — poll the query route
       // until all three upserted vectors are visible.
-      const queryBody = yield* HttpClient.get(`${workerUrl}/query`).pipe(
-        Effect.flatMap((res) => res.json),
-        Effect.map((body) => body as { count: number; ids: string[] }),
-        Effect.filterOrFail(
-          (body) => body.count >= 3,
-          () => ({ _tag: "IndexNotUpdated" }) as const,
+      const queryBody = yield* poll({
+        description: "GET /query returns the three upserted vectors",
+        effect: HttpClient.get(`${workerUrl}/query`).pipe(
+          Effect.flatMap(HttpClientResponse.filterStatusOk),
+          Effect.flatMap((res) => res.json),
+          Effect.map((body) => body as { count: number; ids: string[] }),
         ),
-        Effect.retry({
-          while: (e) => e._tag === "IndexNotUpdated",
-          schedule: Schedule.spaced("3 seconds").pipe(
-            Schedule.both(Schedule.recurs(20)),
-          ),
-        }),
-      );
+        predicate: (body) => body.count >= 3,
+      });
       expect(queryBody.count).toBeGreaterThanOrEqual(3);
       // The query vector equals "a" exactly, so it should be the top match.
       expect(queryBody.ids[0]).toBe("a");
 
-      const getRes = yield* HttpClient.get(`${workerUrl}/get`).pipe(
-        Effect.flatMap(HttpClientResponse.filterStatusOk),
-        Effect.flatMap((res) => res.json),
-      );
+      const getRes = yield* poll({
+        description: "GET /get returns the two upserted vectors",
+        effect: HttpClient.get(`${workerUrl}/get`).pipe(
+          Effect.flatMap(HttpClientResponse.filterStatusOk),
+          Effect.flatMap((res) => res.json),
+          Effect.map((body) => body as { ids: string[] }),
+        ),
+        predicate: (body) => body.ids.length === 2,
+      });
       expect(getRes).toEqual({ ids: ["a", "b"] });
 
       // Metadata-filtered query: only the vector tagged `kind: "second"`
       // should come back. The metadata index lives on the parent and was
       // created at deploy time before the upsert, so the filter is valid;
       // poll until Cloudflare indexes the upserted vectors with it.
-      const filteredBody = yield* HttpClient.get(
-        `${workerUrl}/query-filtered`,
-      ).pipe(
-        Effect.flatMap((res) => res.json),
-        Effect.map(
-          (body) => body as { count: number; ids: string[]; kinds: string[] },
+      const filteredBody = yield* poll({
+        description: "GET /query-filtered returns the second vector",
+        effect: HttpClient.get(`${workerUrl}/query-filtered`).pipe(
+          Effect.flatMap(HttpClientResponse.filterStatusOk),
+          Effect.flatMap((res) => res.json),
+          Effect.map(
+            (body) => body as { count: number; ids: string[]; kinds: string[] },
+          ),
         ),
-      );
+        predicate: (body) => body.ids.length === 1 && body.kinds.length === 1,
+      });
       expect(filteredBody.ids).toEqual(["b"]);
       expect(filteredBody.kinds).toEqual(["second"]);
 
