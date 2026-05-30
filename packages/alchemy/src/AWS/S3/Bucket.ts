@@ -1,7 +1,9 @@
 import { Region } from "@distilled.cloud/aws/Region";
 import type { BucketLocationConstraint } from "@distilled.cloud/aws/s3";
 import * as s3 from "@distilled.cloud/aws/s3";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Order from "effect/Order";
 import * as Schedule from "effect/Schedule";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
@@ -475,6 +477,75 @@ export const BucketProvider = () =>
         yield* session.note(`Removed bucket policy: ${bucketName}`);
       });
 
+      // Apply S3 event notification configuration declared via bindings
+      // (e.g. `S3.notifications(bucket).subscribe(...)`). Without this the
+      // binding is recorded in state but never reaches the bucket, so no
+      // events are ever delivered.
+      // Canonical form of the Lambda targets, ignoring S3-assigned `Id`s and
+      // event ordering, so drift detection doesn't churn across deploys.
+      const canonicalLambda = (
+        configs: readonly s3.LambdaFunctionConfiguration[],
+      ) =>
+        JSON.stringify(
+          Arr.map(configs, (c) => ({
+            arn: c.LambdaFunctionArn,
+            events: Arr.sort(c.Events ?? [], Order.String),
+            filter: c.Filter ?? null,
+          })),
+        );
+
+      const syncBucketNotifications = Effect.fnUntraced(function* ({
+        bucketName,
+        bindings,
+        session,
+        operation,
+      }: {
+        bucketName: string;
+        session: ScopedPlanStatusSession;
+        bindings: ResourceBinding<Bucket["Binding"]>[];
+        operation: "create" | "update";
+      }) {
+        const desired = Arr.flatMap(
+          bindings,
+          (binding) =>
+            binding.data.notificationConfiguration
+              ?.LambdaFunctionConfigurations ?? [],
+        );
+
+        // Nothing declared — leave any externally-managed config untouched.
+        if (Arr.isReadonlyArrayEmpty(desired)) return;
+
+        const existing = yield* s3.getBucketNotificationConfiguration({
+          Bucket: bucketName,
+        });
+
+        if (
+          canonicalLambda(existing.LambdaFunctionConfigurations ?? []) ===
+          canonicalLambda(desired)
+        ) {
+          return;
+        }
+
+        yield* Effect.logInfo(
+          `S3 Bucket ${operation}: applying notification configuration to ${bucketName}`,
+        );
+        yield* s3.putBucketNotificationConfiguration({
+          Bucket: bucketName,
+          // Preserve any Topic/Queue/EventBridge config already on the bucket;
+          // only manage the Lambda targets declared through bindings.
+          NotificationConfiguration: {
+            ...existing,
+            LambdaFunctionConfigurations: desired,
+          },
+          // The Lambda invoke permission is created as a separate resource
+          // that may be applied after this bucket reconcile. Skip S3's
+          // synchronous test-invoke so the PUT doesn't fail on ordering;
+          // the permission exists by the time events are delivered.
+          SkipDestinationValidation: true,
+        });
+        yield* session.note(`Updated bucket notifications: ${bucketName}`);
+      });
+
       return {
         stables: ["bucketName", "bucketArn", "region", "accountId"],
         // S3 bucket names are globally unique. `headBucket` succeeds only when
@@ -548,6 +619,13 @@ export const BucketProvider = () =>
           });
 
           yield* syncBucketPolicy({
+            bucketName: resolved.bucketName,
+            bindings,
+            session,
+            operation,
+          });
+
+          yield* syncBucketNotifications({
             bucketName: resolved.bucketName,
             bindings,
             session,
