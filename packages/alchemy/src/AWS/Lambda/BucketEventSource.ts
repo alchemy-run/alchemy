@@ -119,7 +119,7 @@ export const BucketEventSourcePolicyLive = BucketEventSourcePolicy.layer.effect(
     ) {
       if (Lambda.isFunction(host)) {
         yield* Permission(`AWS.Lambda.InvokeFunction(${bucket.LogicalId})`, {
-          action: "lambda.InvokeFunction",
+          action: "lambda:InvokeFunction",
           functionName: host.functionName,
           principal: "s3.amazonaws.com",
           sourceArn: bucket.bucketArn,
