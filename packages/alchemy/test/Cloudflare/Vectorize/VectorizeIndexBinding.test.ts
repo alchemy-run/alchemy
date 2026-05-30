@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 );
 
 /**
- * End-to-end test of `Cloudflare.VectorizeConnection.bind(...)` against a
+ * End-to-end test of `Cloudflare.VectorizeIndex.bind(...)` against a
  * real Cloudflare Worker + Vectorize index.
  *
  * The worker exercises the client surface (`upsert`, `describe`, `query`,
@@ -24,7 +24,7 @@ const logLevel = Effect.provideService(
  * upserting we retry the query/get routes until the vectors are visible.
  */
 test.provider(
-  "VectorizeConnection.bind exercises the client surface",
+  "VectorizeIndex.bind exercises the client surface",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
