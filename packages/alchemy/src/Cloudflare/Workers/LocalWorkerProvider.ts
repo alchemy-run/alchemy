@@ -232,7 +232,19 @@ export const LocalWorkerProvider = () =>
       }) {
         const name = yield* createWorkerName(id, props.name);
         const compatibility = getCompatibility(props);
-        const workerBindings: BindingHook<BindingServices>[] = [];
+        const workerBindings: BindingHook<BindingServices>[] = [
+          Text.local("ALCHEMY_PHASE", "runtime"),
+          Text.local("ALCHEMY_STACK_NAME", stack.name),
+          Text.local("ALCHEMY_STAGE", stack.stage),
+          ...Object.entries(props.env ?? {}).map(([key, value]) => {
+            const unredacted = Redacted.isRedacted(value)
+              ? Redacted.value(value)
+              : value;
+            return typeof unredacted === "string"
+              ? Text.local(key, unredacted)
+              : Json.local(key, unredacted);
+          }),
+        ];
         const durableObjectNamespaces: Record<string, string> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
         for (const { data } of bindings) {
