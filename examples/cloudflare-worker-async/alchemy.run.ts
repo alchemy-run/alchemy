@@ -2,7 +2,6 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import { Config } from "effect";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import type { Counter as CounterClass } from "./src/worker.ts";
 
 export const DB = Cloudflare.D1Database("DB");
@@ -39,7 +38,6 @@ export const Worker = Cloudflare.Worker("Worker", {
     Bucket,
     Queue,
     Counter,
-    SOME_SECRET: Redacted.make("SOME_SECRET"),
   },
 });
 
@@ -52,6 +50,8 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const queue = yield* Queue;
     const worker = yield* Worker;
+    // create a random resource to test redacted storage
+    yield* Alchemy.Random("Random");
 
     // Register the same worker script as a consumer of Queue. The worker's
     // `queue(batch)` handler (see src/worker.ts) receives each message batch.
