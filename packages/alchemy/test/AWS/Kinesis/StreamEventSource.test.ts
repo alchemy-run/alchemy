@@ -36,10 +36,25 @@ describe.sequential("AWS.Kinesis.StreamEventSource", () => {
                   streamArn: string;
                 }>)
               : Effect.fail(
-                  new Error(`Function not ready: ${response.status}`),
+                  new FunctionNotReady(
+                    `Function not ready: ${response.status}`,
+                  ),
                 ),
           ),
-          Effect.retry({ schedule: Schedule.fixed("1 seconds") }),
+          Effect.flatMap((body) =>
+            body.streamName && body.streamArn
+              ? Effect.succeed(body)
+              : Effect.fail(
+                  new FunctionNotReady(
+                    "Function returned empty stream identifiers",
+                  ),
+                ),
+          ),
+          Effect.retry({
+            schedule: Schedule.fixed("1 seconds").pipe(
+              Schedule.both(Schedule.recurs(60)),
+            ),
+          }),
         );
 
         yield* waitForEventSourceMappingEnabled(
@@ -94,3 +109,11 @@ const waitForEventSourceMappingEnabled = Effect.fn(function* (
 class EventSourceMappingNotReady extends Data.TaggedError(
   "EventSourceMappingNotReady",
 ) {}
+
+class FunctionNotReady extends Data.TaggedError("FunctionNotReady")<{
+  message: string;
+}> {
+  constructor(message: string) {
+    super({ message });
+  }
+}

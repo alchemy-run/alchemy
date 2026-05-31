@@ -197,7 +197,7 @@ export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
-  bindings: { Bucket },
+  env: { Bucket },
 });
 ```
 

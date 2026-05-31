@@ -8,7 +8,6 @@ export class AlchemyContext extends EffectContext.Service<
   AlchemyContext,
   {
     dotAlchemy: string;
-    updateStateStore: boolean;
     dev: boolean;
     /**
      * Global default for the {@link import("./AdoptPolicy.ts").AdoptPolicy}

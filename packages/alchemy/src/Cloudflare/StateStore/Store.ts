@@ -1,11 +1,12 @@
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 
+import { pipe } from "effect/Function";
 import type {
   ReplacedResourceState,
   ResourceState,
 } from "../../State/ResourceState.ts";
 import { encodeState } from "../../State/StateEncoding.ts";
-import { pipe } from "effect/Function";
 import * as Secret from "../SecretsStore/Secret.ts";
 import { DurableObjectNamespace } from "../Workers/DurableObjectNamespace.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
@@ -25,11 +26,13 @@ export default class Store extends DurableObjectNamespace<Store>()(
       const doState = yield* DurableObjectState;
       const storage = doState.storage;
 
-      const keyHex = yield* encryptionSecret.get().pipe(Effect.orDie);
+      const keyHex = yield* encryptionSecret
+        .get()
+        .pipe(Effect.map(Redacted.value), Effect.orDie);
       const cryptoKey = yield* Effect.tryPromise(() =>
         crypto.subtle.importKey(
           "raw",
-          hexToBytes(keyHex),
+          Buffer.from(keyHex, "hex"),
           { name: "AES-CTR" },
           false,
           ["encrypt", "decrypt"],
@@ -50,22 +53,31 @@ export default class Store extends DurableObjectNamespace<Store>()(
             ),
           );
           // Frame as a single base64 string: nonce || ciphertext.
-          const framed = allocBytes(counter.byteLength + ct.byteLength);
-          framed.set(counter, 0);
-          framed.set(ct, counter.byteLength);
-          return toB64(framed);
+          return Buffer.concat([counter, ct]).toString("base64");
         }).pipe(Effect.orDie);
 
       const decryptEntry = (entry: string) =>
         Effect.tryPromise(async () => {
-          const framed = fromB64(entry);
-          const counter = framed.slice(0, NONCE_BYTES);
-          const ciphertext = framed.slice(NONCE_BYTES);
-          const pt = await crypto.subtle.decrypt(
-            { name: "AES-CTR", counter, length: 64 },
-            cryptoKey,
-            ciphertext,
-          );
+          const framed = Buffer.from(entry, "base64");
+          const counter = framed.subarray(0, NONCE_BYTES);
+          const ciphertext = framed.subarray(NONCE_BYTES);
+          let pt;
+          try {
+            pt = await crypto.subtle.decrypt(
+              { name: "AES-CTR", counter, length: 64 },
+              cryptoKey,
+              ciphertext,
+            );
+          } catch (error) {
+            // We return undefined here because in 2.0.0-beta.45, we rotated encryption keys unnecessarily.
+            // So, we catch a decryption error here and return undefined instead.
+            // The engine should reconcile, hopefully, but users may lose some data
+            console.error(
+              "Error decrypting entry. Returning undefined instead.",
+              error,
+            );
+            return undefined;
+          }
           return JSON.parse(new TextDecoder().decode(pt)) as ResourceState;
         }).pipe(Effect.orDie);
 
@@ -300,25 +312,3 @@ const parseResourceKey = (
  */
 const allocBytes = (size: number): Uint8Array<ArrayBuffer> =>
   new Uint8Array(new ArrayBuffer(size));
-
-const toB64 = (bytes: Uint8Array): string => {
-  let s = "";
-  for (let i = 0; i < bytes.byteLength; i++)
-    s += String.fromCharCode(bytes[i]!);
-  return btoa(s);
-};
-
-const fromB64 = (s: string): Uint8Array<ArrayBuffer> => {
-  const bin = atob(s);
-  const bytes = allocBytes(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-};
-
-const hexToBytes = (hex: string): Uint8Array<ArrayBuffer> => {
-  const bytes = allocBytes(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-};

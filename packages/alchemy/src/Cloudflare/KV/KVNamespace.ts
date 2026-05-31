@@ -10,6 +10,10 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { KVNamespaceBinding } from "./KVNamespaceBinding.ts";
 
+export const isKVNamespace = (value: unknown): value is KVNamespace =>
+  typeof value === "object" &&
+  (value as any)?.Type === "Cloudflare.KVNamespace";
+
 export type KVNamespaceProps = {
   /**
    * A human-readable string name for the namespace.

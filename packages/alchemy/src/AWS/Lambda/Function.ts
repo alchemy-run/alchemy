@@ -5,8 +5,8 @@ import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { Region } from "@distilled.cloud/aws/Region";
 import type * as lambda from "aws-lambda";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -94,7 +94,44 @@ export interface FunctionProps extends PlatformProps {
     subnetIds: string[];
     securityGroupIds: string[];
   };
+  /**
+   * Maximum execution time before the function is forcibly terminated.
+   * Rounded up to whole seconds.
+   *
+   * @default 3 seconds (AWS Lambda default)
+   */
+  timeout?: Duration.Duration;
 }
+
+/**
+ * Normalize a {@link FunctionProps.timeout} to whole seconds.
+ *
+ * State JSON round-trips flatten a `Duration` to its `toJSON` shape
+ * (`{_id:"Duration",_tag:"Millis"|"Nanos"|"Infinity",...}`), which is not a
+ * valid `Duration.Input`. Reconstruct an input that `Duration.toSeconds`
+ * accepts before delegating.
+ */
+export const toTimeoutSeconds = (
+  timeout: Duration.Duration | undefined,
+): number | undefined => {
+  if (timeout === undefined) return undefined;
+  const json = timeout as {
+    _id?: unknown;
+    _tag?: "Millis" | "Nanos" | "Infinity" | "NegativeInfinity";
+    millis?: number;
+    nanos?: string;
+  };
+  const input: Duration.Input =
+    json._id === "Duration"
+      ? json._tag === "Millis"
+        ? json.millis!
+        : json._tag === "Nanos"
+          ? BigInt(json.nanos!)
+          : "Infinity"
+      : timeout;
+  const seconds = Duration.toSeconds(input);
+  return Number.isFinite(seconds) ? Math.max(1, Math.ceil(seconds)) : undefined;
+};
 
 export interface Function extends Resource<
   FunctionTypeId,
@@ -368,7 +405,9 @@ export const Function: Platform<
       env,
       set: (id: string, output: Output.Output) =>
         Effect.sync(() => {
-          const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          // Key is already canonical (see RuntimeContext.sanitizeKey); store it
+          // verbatim.
+          const key = id;
           // Preserve `Redacted`-ness across the Output → Lambda env var
           // round-trip. `JSON.stringify(Redacted)` would emit the literal
           // string `"<redacted>"` and lose the value, so secrets are
@@ -387,34 +426,35 @@ export const Function: Platform<
           return key;
         }),
       get: <T>(key: string) =>
-        Config.string(key).pipe(
-          Effect.flatMap((val) =>
-            Effect.try({
-              try: () => {
-                const value = JSON.parse(val);
-                if (
-                  value !== null &&
-                  typeof value === "object" &&
-                  (value as { _tag?: unknown })._tag === "Redacted" &&
-                  "value" in (value as object)
-                ) {
-                  return Redacted.make(
-                    (value as { value: unknown }).value,
-                  ) as unknown as T;
-                }
-                return value as T;
-              },
-              catch: () => val, // assume it's just a string
-            }),
-          ),
-          Effect.catch((cause) =>
-            Effect.die(
-              new Error(`Failed to get environment variable: ${key}`, {
-                cause,
-              }),
-            ),
-          ),
-        ),
+        // Read the captured value straight from `process.env`. We must NOT
+        // resolve through `Config.string` here: at runtime the ambient
+        // `ConfigProvider` is the interceptor installed in `Platform.ts`,
+        // whose runtime branch calls back into `ctx.get(key)`. Going through
+        // `Config` would re-enter that interceptor for the same key and
+        // recurse forever, allocating until the Lambda init OOMs. The Worker
+        // runtime reads from `WorkerEnvironment` for the same reason.
+        Effect.sync(() => {
+          // Key is already canonical (see RuntimeContext.sanitizeKey).
+          const val = process.env[key];
+          if (val === undefined) {
+            return undefined;
+          }
+          try {
+            const value = JSON.parse(val);
+            if (
+              typeof value === "object" &&
+              value?._tag === "Redacted" &&
+              "value" in value
+            ) {
+              return Redacted.make(
+                (value as { value: unknown }).value,
+              ) as unknown as T;
+            }
+            return value as T;
+          } catch {
+            return val as unknown as T; // assume it's just a string
+          }
+        }),
       serve: (handler: HttpEffect) =>
         ctx.listen(makeFunctionHttpHandler(handler)),
       listen: ((
@@ -872,6 +912,7 @@ export default await Effect.runPromise(handlerEffect)
               }
             : undefined,
           Tags: tags,
+          Timeout: toTimeoutSeconds(news.timeout),
           VpcConfig: news.vpc
             ? {
                 SubnetIds: news.vpc.subnetIds,
@@ -1121,6 +1162,11 @@ export default await Effect.runPromise(handlerEffect)
             // code changed
             return { action: "update" };
           }
+          if (
+            toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)
+          ) {
+            return { action: "update" };
+          }
         }),
         read: Effect.fnUntraced(function* ({ id, olds, output }) {
           const functionName =
@@ -1161,7 +1207,7 @@ export default await Effect.runPromise(handlerEffect)
           // Reuse the persisted output where we have it (e.g. code hash) so
           // diff doesn't see drift it can't reconstruct from the API.
           const attrs = {
-            ...(output ?? {}),
+            ...output,
             functionArn: fn.FunctionArn,
             functionName: fn.FunctionName,
             functionUrl,
@@ -1185,8 +1231,15 @@ export default await Effect.runPromise(handlerEffect)
             vpc: news.vpc,
           });
 
-          // mock code
-          const code = new TextEncoder().encode("export default () => {}");
+          // Mock code for the pre-created stub. It responds 503 (rather than a
+          // bare 200) so that, during the brief window where the real
+          // code/config update is still `InProgress`, a Function URL hit serves
+          // an honest "not ready" signal instead of a successful-but-empty 200.
+          // Downstream readiness probes already retry on non-200, so they wait
+          // for the real handler to go live without the provider blocking.
+          const code = new TextEncoder().encode(
+            `export default () => ({ statusCode: 503, headers: { "content-type": "application/json" }, body: JSON.stringify({ error: "function initializing" }) })`,
+          );
           const archive = yield* zipCode(code);
           const hash = yield* hashBundle(code);
           yield* createOrUpdateFunction({
@@ -1261,7 +1314,7 @@ export default await Effect.runPromise(handlerEffect)
           yield* session.note(summary({ code }));
 
           return {
-            ...(output ?? {}),
+            ...output,
             functionArn,
             functionName,
             functionUrl: functionUrl as any,

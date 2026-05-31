@@ -32,6 +32,11 @@ export default class RpcCounterObject extends Cloudflare.RpcDurableObjectNamespa
           Stream.fromIterable(
             Array.from({ length: Math.max(0, upto) }, (_, i) => i + 1),
           ),
+        Reset: () =>
+          Effect.gen(function* () {
+            count = 0;
+            yield* state.storage.put("count", 0);
+          }),
       });
 
       return RpcServer.toHttpEffect(CounterRpcs).pipe(

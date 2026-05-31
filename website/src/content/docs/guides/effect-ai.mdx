@@ -1,6 +1,6 @@
 ---
 title: Effect AI
-description: Wire Effect's LanguageModel and Chat services into a Cloudflare Worker or AWS Lambda — read API keys from Alchemy secrets, provide the model layer to your handler, plug in persistence.
+description: Wire Effect's LanguageModel and Chat services into a Cloudflare Worker — read API keys with effect/Config, provide the model layer to your handler, plug in persistence.
 sidebar:
   order: 6
 ---
@@ -52,44 +52,39 @@ Effect.gen(function* () {
 pattern works in a Lambda handler, an HTTP API endpoint, an RPC
 procedure, a Workflow, or any other Effect.
 
-## Read the API key with `Alchemy.Secret`
+## Read the API key with `Config.redacted`
 
 Every upstream provider's client Layer (`OpenAiClient.layer`,
 `AnthropicClient.layer`, …) takes an `apiKey: Redacted<string>`.
-[`Alchemy.Secret`](/guides/secrets) deploys the value as a
-`secret_text` binding (Cloudflare) or environment variable (Lambda)
-and gives you a typed runtime accessor that resolves to exactly that
-`Redacted<string>`:
+[`Config.redacted`](/concepts/secrets) resolved in the Platform's
+Init phase gives you exactly that `Redacted<string>` — and Alchemy
+automatically binds the value as a `secret_text` binding
+(Cloudflare) or environment variable (Lambda) at deploy time:
 
 ```typescript
-import * as Alchemy from "alchemy";
+import * as Config from "effect/Config";
 
-// outer init — registers the binding, returns an accessor
-const openAiKey = yield* Alchemy.Secret("OPENAI_API_KEY");
-
-// inside any Effect that needs the value:
-//   const apiKey = yield* openAiKey  // Redacted<string>
+// outer init — resolves the value AND records the binding
+const apiKey = yield* Config.redacted("OPENAI_API_KEY");
 ```
 
-The 1-arg form reads `OPENAI_API_KEY` from your `ConfigProvider`
-at deploy time. See the [secrets guide](/guides/secrets) for `.env`,
-alternate sources, and the difference vs `Alchemy.Variable`.
+`Config.redacted("OPENAI_API_KEY")` reads `OPENAI_API_KEY` from your
+`ConfigProvider` (e.g. `.env`) at deploy time, records the binding,
+and resolves from that binding again at runtime — one line, both
+phases. See [Concepts › Secrets and Config](/concepts/secrets) for
+the Init/Runtime split, `.env`, and transformations.
 
-The `Redacted<string>` only exists at runtime — that means the model
-Layer can't be built eagerly. Wrap it in `Layer.unwrap` so the
-accessor is resolved when the layer is actually used:
+Because the value is in scope right in Init, the model Layer can be
+built eagerly — no `Layer.unwrap` needed:
 
 ```typescript
 import * as Layer from "effect/Layer";
 
-const languageModel = Layer.unwrap(
-  Effect.gen(function* () {
-    const apiKey = yield* openAiKey;
-    return OpenAiLanguageModel.layer({ model: "gpt-4o-mini" }).pipe(
-      Layer.provide(OpenAiClient.layer({ apiKey })),
-      Layer.provide(FetchHttpClient.layer),
-    );
-  }),
+const languageModel = OpenAiLanguageModel.layer({
+  model: "gpt-4o-mini",
+}).pipe(
+  Layer.provide(OpenAiClient.layer({ apiKey })),
+  Layer.provide(FetchHttpClient.layer),
 );
 ```
 
@@ -100,8 +95,8 @@ Effect HTTP client that every provider's client Layer depends on:
 
 ```typescript
 // src/Worker.ts
-import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { LanguageModel } from "effect/unstable/ai";
@@ -113,16 +108,13 @@ export default Cloudflare.Worker(
   "Worker",
   { main: import.meta.path },
   Effect.gen(function* () {
-    const openAiKey = yield* Alchemy.Secret("OPENAI_API_KEY");
+    const apiKey = yield* Config.redacted("OPENAI_API_KEY");
 
-    const languageModel = Layer.unwrap(
-      Effect.gen(function* () {
-        const apiKey = yield* openAiKey;
-        return OpenAiLanguageModel.layer({ model: "gpt-4o-mini" }).pipe(
-          Layer.provide(OpenAiClient.layer({ apiKey })),
-          Layer.provide(FetchHttpClient.layer),
-        );
-      }),
+    const languageModel = OpenAiLanguageModel.layer({
+      model: "gpt-4o-mini",
+    }).pipe(
+      Layer.provide(OpenAiClient.layer({ apiKey })),
+      Layer.provide(FetchHttpClient.layer),
     );
 
     return {
@@ -136,56 +128,6 @@ export default Cloudflare.Worker(
   }),
 );
 ```
-
-## In an AWS Lambda Function
-
-The only thing that changes is the platform wrapper. The init
-phase, the layer construction, and the way you provide it to the
-handler are identical:
-
-```typescript
-// src/Lambda.ts
-import * as Alchemy from "alchemy";
-import * as AWS from "alchemy/AWS";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { LanguageModel } from "effect/unstable/ai";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { OpenAiClient, OpenAiLanguageModel } from "@effect/ai-openai";
-
-export default AWS.Lambda.Function(
-  "Api",
-  { main: import.meta.path },
-  Effect.gen(function* () {
-    const openAiKey = yield* Alchemy.Secret("OPENAI_API_KEY");
-
-    const languageModel = Layer.unwrap(
-      Effect.gen(function* () {
-        const apiKey = yield* openAiKey;
-        return OpenAiLanguageModel.layer({ model: "gpt-4o-mini" }).pipe(
-          Layer.provide(OpenAiClient.layer({ apiKey })),
-          Layer.provide(FetchHttpClient.layer),
-        );
-      }),
-    );
-
-    return {
-      fetch: Effect.gen(function* () {
-        const response = yield* LanguageModel.generateText({
-          prompt: "Say hello.",
-        }).pipe(Effect.orDie);
-        return yield* HttpServerResponse.json({ text: response.text });
-      }).pipe(Effect.provide(languageModel)),
-    };
-  }),
-);
-```
-
-`Alchemy.Secret("OPENAI_API_KEY")` on Lambda attaches the value as
-an environment variable on the function. Everything downstream of
-the Init phase is platform-independent — the same `languageModel`
-layer would work on a Container or any other Effect platform.
 
 ## Persisting chats
 
@@ -225,32 +167,50 @@ Gateway as a resource and `.bind(Gateway).model({...})` returns a
 `LanguageModel` Layer that proxies Workers AI through the gateway —
 with caching, rate limiting, retries, and a unified request log.
 
-The [AI Gateway tutorial](/tutorial/cloudflare/ai-gateway) walks
-through it end to end. Once you have that `languageModel` Layer it
-slots into the same `Effect.provide(...)` spot as any other
-provider — the rest of your handler doesn't change.
-
-You can also route OpenAI / Anthropic *through* the gateway for the
-same caching and observability:
+Bind the gateway in the Init phase and call `aiGateway.model({...})`
+with a Workers AI model id. It returns a `LanguageModel` Layer
+directly — no API key, no `Layer.unwrap`, since the gateway binding
+handles auth and the URL:
 
 ```typescript
 const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
-const openAiKey = yield* Alchemy.Secret("OPENAI_API_KEY");
 
-const languageModel = Layer.unwrap(
-  Effect.gen(function* () {
-    const apiKey = yield* openAiKey;
-    const apiUrl = yield* aiGateway.getUrl().pipe(Effect.orDie);
-    return OpenAiLanguageModel.layer({ model: "gpt-4o-mini" }).pipe(
-      Layer.provide(OpenAiClient.layer({ apiKey, apiUrl: `${apiUrl}/openai` })),
-      Layer.provide(FetchHttpClient.layer),
-    );
-  }),
-);
+const languageModel = aiGateway.model({
+  client: aiGateway,
+  model: "@cf/meta/llama-3.1-8b-instruct",
+  parameters: { temperature: 0.7, maxTokens: 1024 },
+});
 ```
 
-The model is still GPT, but every request shows up in the AI
-Gateway dashboard alongside your other model traffic.
+That `languageModel` Layer slots into the same `Effect.provide(...)`
+spot as any other provider — the rest of your handler doesn't
+change. Provide `Cloudflare.AiGatewayBindingLive` once at the
+bottom of the Init layer chain so the binding resolves at runtime:
+
+```typescript
+Effect.gen(function* () {
+  const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
+
+  const languageModel = aiGateway.model({
+    client: aiGateway,
+    model: "@cf/meta/llama-3.1-8b-instruct",
+    parameters: { temperature: 0.7, maxTokens: 1024 },
+  });
+
+  return {
+    fetch: Effect.gen(function* () {
+      const response = yield* LanguageModel.generateText({
+        prompt: "Say hello.",
+      }).pipe(Effect.orDie);
+      return yield* HttpServerResponse.json({ text: response.text });
+    }).pipe(Effect.provide(languageModel)),
+  };
+}).pipe(Effect.provide(Cloudflare.AiGatewayBindingLive));
+```
+
+The [AI Gateway tutorial](/tutorial/cloudflare/ai-gateway) walks
+through it end to end — declaring the resource, streaming with
+`streamText`, and tuning caching, rate limits, and DLP.
 
 ## Picking a provider
 
@@ -277,5 +237,5 @@ model })` — is the same.
   conversation history survives restarts and hibernation.
 - [Add a Chat Agent](/tutorial/cloudflare/agent) — persisted
   chat sessions backed by a Durable Object's `state.storage`.
-- [Secrets and env vars](/guides/secrets) — how `Alchemy.Secret`
+- [Secrets and env vars](/guides/secrets) — how `Config.redacted`
   feeds the upstream providers' API keys at deploy and runtime.

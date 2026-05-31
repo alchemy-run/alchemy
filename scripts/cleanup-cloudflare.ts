@@ -1,10 +1,18 @@
 #!/usr/bin/env bun
+
+// @ts-nocheck
 /**
  * Bulk-delete Cloudflare resources in the active Alchemy profile's account.
  *
- * Cleans up: Workers, Hyperdrive configs, D1 databases, Queues, Workflows.
+ * Cleans up: Workers, Hyperdrive configs, D1 databases, Queues, Workflows,
+ * R2 buckets.
  *
- * Workers obey a name filter (alchemy-* are preserved by default). Workers
+ * Workers and R2 buckets obey a name filter (alchemy-* are preserved by
+ * default). R2 buckets can't be deleted while they hold objects or custom
+ * domains, so each victim bucket is first detached from its custom domains
+ * and emptied of objects, then deleted.
+ *
+ * Workers
  * that are queue consumers can't be deleted directly — Cloudflare returns
  * `QueueConsumerConflict`. The script pre-builds a `scriptName → consumers`
  * map by fanning `listConsumers` across every queue, and on conflict
@@ -31,6 +39,7 @@ import {
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as queues from "@distilled.cloud/cloudflare/queues";
+import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import * as Console from "effect/Console";
@@ -68,7 +77,7 @@ const SKIP = new Set(
     .filter((s) => s.length > 0),
 );
 
-const shouldDeleteWorker = (name: string): boolean => {
+const shouldDeleteName = (name: string): boolean => {
   const lower = name.toLowerCase();
   if (DELETE_PATTERNS.some((p) => lower.includes(p))) return true;
   if (!lower.includes(KEEP)) return true;
@@ -128,8 +137,10 @@ const buildConsumerMap = (accountId: string, queueIds: ReadonlyArray<string>) =>
             Effect.sync(() => {
               for (const c of res.result ?? []) {
                 const consumerId = c.consumerId;
-                const script = "script" in c ? c.script : undefined;
-                if (!consumerId || !script) return;
+                // The distilled SDK exposes the consumer's worker as
+                // `scriptName` (from `script_name`), not `script`.
+                const script = c.scriptName ?? undefined;
+                if (!consumerId || !script) continue;
                 const entry = map.get(script) ?? [];
                 entry.push({ queueId, consumerId });
                 map.set(script, entry);
@@ -284,7 +295,7 @@ const cleanupWorkers = (accountId: string, queueIds: ReadonlyArray<string>) =>
       ),
     );
     yield* Console.log(`→ total worker scripts: ${all.length}`);
-    const victims = all.filter(shouldDeleteWorker);
+    const victims = all.filter(shouldDeleteName);
     yield* Console.log(
       `→ workers to delete: ${victims.length} (keep=${JSON.stringify(KEEP)} deleteMatch=${JSON.stringify(DELETE_PATTERNS)})`,
     );
@@ -381,14 +392,186 @@ const listAllWorkflows = (accountId: string) =>
 const cleanupWorkflows = (accountId: string) =>
   Effect.gen(function* () {
     const all = yield* listAllWorkflows(accountId);
+    // `DELETE /workflows/{name}` 400s with `no_deployed_versions` for any
+    // workflow that never had a version deployed — the control plane can't
+    // delete a versionless workflow. Issuing that DELETE is the bad request,
+    // so filter those out up front (check the first page of versions) instead
+    // of firing a doomed delete and swallowing the error.
+    const deletable = yield* Effect.forEach(
+      all,
+      (w) =>
+        workflows.listVersions({ accountId, workflowName: w.name }).pipe(
+          Effect.map((res) => ((res.result?.length ?? 0) > 0 ? [w] : [])),
+          Effect.catchTag("WorkflowNotFound", () => Effect.succeed([])),
+        ),
+      { concurrency: 8 },
+    ).pipe(Effect.map((xs) => xs.flat()));
+    const skipped = all.length - deletable.length;
+    if (skipped > 0) {
+      yield* Console.log(
+        `→ skipping ${skipped} workflow(s) with no deployed versions (not deletable)`,
+      );
+    }
     return yield* driveCleanup(
       "workflows",
-      all,
+      deletable,
       (w) => `${w.name} (${w.id})`,
       (w) =>
         workflows
           .deleteWorkflow({ accountId, workflowName: w.name })
           .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.void)),
+    );
+  });
+
+type R2Jurisdiction = "default" | "eu" | "fedramp";
+
+interface R2BucketRecord {
+  readonly name: string;
+  readonly jurisdiction: R2Jurisdiction;
+}
+
+/**
+ * Walk every R2 bucket in the account. `listBuckets` is cursor-paginated by
+ * bucket name; the distilled SDK exposes the raw method, so page manually with
+ * `startAfter` (lexicographic) until a short page signals the end.
+ */
+const listAllBuckets = (accountId: string) =>
+  Effect.gen(function* () {
+    const out: R2BucketRecord[] = [];
+    let startAfter: string | undefined;
+    for (;;) {
+      const res = yield* r2.listBuckets({
+        accountId,
+        perPage: 1000,
+        startAfter,
+      });
+      const batch = res.buckets ?? [];
+      for (const b of batch) {
+        if (b?.name) {
+          out.push({
+            name: b.name,
+            jurisdiction: (b.jurisdiction ?? "default") as R2Jurisdiction,
+          });
+        }
+      }
+      if (batch.length < 1000) break;
+      startAfter = batch[batch.length - 1]?.name ?? undefined;
+      if (!startAfter) break;
+    }
+    return out;
+  });
+
+/**
+ * R2 refuses to delete a bucket that still has custom domains, event
+ * notification configurations, or objects. Detach every custom domain, remove
+ * every per-queue notification config, drain all objects in 1000-key batches,
+ * then delete the bucket. Each step tolerates a vanished bucket/config so the
+ * cleanup is idempotent.
+ */
+const emptyAndDeleteBucket = (accountId: string, bucket: R2BucketRecord) =>
+  Effect.gen(function* () {
+    const { name: bucketName, jurisdiction } = bucket;
+
+    const domains = yield* r2
+      .listBucketDomainCustoms({ accountId, bucketName, jurisdiction })
+      .pipe(
+        Effect.map((res) => res.domains ?? []),
+        Effect.catchTag("NoSuchBucket", () => Effect.succeed([])),
+      );
+    yield* Effect.forEach(
+      domains,
+      (d) =>
+        r2
+          .deleteBucketDomainCustom({
+            accountId,
+            bucketName,
+            domain: d.domain,
+            jurisdiction,
+          })
+          .pipe(
+            Effect.tap(() =>
+              Console.log(`  ↳ detached domain ${d.domain} from ${bucketName}`),
+            ),
+            Effect.ignore,
+          ),
+      { concurrency: 4, discard: true },
+    );
+
+    const notifications = yield* r2
+      .listBucketEventNotifications({ accountId, bucketName, jurisdiction })
+      .pipe(
+        Effect.map((res) =>
+          (res.queues ?? []).flatMap((q): string[] =>
+            q.queueId ? [q.queueId] : [],
+          ),
+        ),
+        Effect.catchTag("NoSuchBucket", () => Effect.succeed([])),
+        Effect.catchTag("BucketNotFound", () => Effect.succeed([])),
+        Effect.catchTag("NoEventNotificationConfig", () => Effect.succeed([])),
+      );
+    yield* Effect.forEach(
+      notifications,
+      (queueId) =>
+        r2
+          .deleteBucketEventNotification({
+            accountId,
+            bucketName,
+            queueId,
+            jurisdiction,
+          })
+          .pipe(
+            Effect.tap(() =>
+              Console.log(
+                `  ↳ removed notification config (queue ${queueId}) from ${bucketName}`,
+              ),
+            ),
+            Effect.ignore,
+          ),
+      { concurrency: 4, discard: true },
+    );
+
+    yield* r2.listObjects
+      .items({
+        accountId,
+        bucketName,
+        cfR2Jurisdiction: jurisdiction,
+        perPage: 1000,
+      })
+      .pipe(
+        Stream.filter(
+          (o): o is typeof o & { key: string } =>
+            typeof o.key === "string" && o.key !== "",
+        ),
+        Stream.map((o) => o.key),
+        Stream.runForEachArray((chunk) =>
+          r2.deleteObjects({
+            accountId,
+            bucketName,
+            cfR2Jurisdiction: jurisdiction,
+            body: [...chunk],
+          }),
+        ),
+        Effect.catchTag("NoSuchBucket", () => Effect.void),
+      );
+
+    return yield* r2
+      .deleteBucket({ accountId, bucketName, jurisdiction })
+      .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void));
+  });
+
+const cleanupR2 = (accountId: string) =>
+  Effect.gen(function* () {
+    const all = yield* listAllBuckets(accountId);
+    yield* Console.log(`→ total R2 buckets: ${all.length}`);
+    const victims = all.filter((b) => shouldDeleteName(b.name));
+    yield* Console.log(
+      `→ R2 buckets to delete: ${victims.length} (keep=${JSON.stringify(KEEP)} deleteMatch=${JSON.stringify(DELETE_PATTERNS)})`,
+    );
+    return yield* driveCleanup(
+      "r2",
+      victims,
+      (b) => `${b.name} (${b.jurisdiction})`,
+      (b) => emptyAndDeleteBucket(accountId, b),
     );
   });
 
@@ -422,9 +605,13 @@ const program = Effect.gen(function* () {
   if (!SKIP.has("queues")) {
     results.push(yield* cleanupQueues(accountId, queueRecords));
   }
-  // D1 last — workers using it should be gone first.
+  // D1 — workers using it should be gone first.
   if (!SKIP.has("d1")) {
     results.push(yield* cleanupD1(accountId));
+  }
+  // R2 — independent of the above; detaches domains + empties before delete.
+  if (!SKIP.has("r2")) {
+    results.push(yield* cleanupR2(accountId));
   }
 
   yield* Console.log("\n=== summary ===");

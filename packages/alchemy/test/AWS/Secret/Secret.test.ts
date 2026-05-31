@@ -17,9 +17,9 @@ import SecretsTestFunctionLive, {
 } from "./fixtures/handler.ts";
 
 /**
- * `Alchemy.Secret("CONFIG_SECRET", Config.string(...))` resolves against
- * the active `ConfigProvider` at deploy time. The default provider reads
- * from `process.env`, so populate it before `beforeAll(deploy(Stack))`
+ * `Config.redacted("CONFIG_SECRET")` resolves against the active
+ * `ConfigProvider` at deploy time. The default provider reads from
+ * `process.env`, so populate it before `beforeAll(deploy(Stack))`
  * compiles the stack.
  */
 const CONFIG_SECRET_VALUE = "sk-from-aws-config-source-xyz";
@@ -48,7 +48,7 @@ const Stack = Alchemy.Stack(
   }).pipe(Effect.provide(SecretsTestFunctionLive)),
 );
 
-const stack = beforeAll(deploy(Stack), { timeout: 240_000 });
+const stack = beforeAll(deploy(Stack), { timeout: 90_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 60_000 });
 
 // Lambda Function URLs cold-start (DNS, IAM propagation, init) can take
@@ -56,7 +56,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 60_000 });
 // generous retry window for the very first request, then reuse the
 // warm URL for subsequent calls.
 const readinessSchedule = Schedule.fixed("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(75)),
+  Schedule.both(Schedule.recurs(20)),
 );
 
 const getJson = (url: string) =>
@@ -70,7 +70,7 @@ const getJson = (url: string) =>
   );
 
 test(
-  "Alchemy.Secret literal round-trips to Lambda runtime as Redacted<string>",
+  "Config.redacted with literal default round-trips to Lambda runtime as Redacted<string>",
   Effect.gen(function* () {
     const { url } = yield* stack;
     expect(url).toBeTypeOf("string");
@@ -85,11 +85,11 @@ test(
       value: LITERAL_SECRET_VALUE,
     });
   }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 45_000 },
 );
 
 test(
-  "Alchemy.Secret resolved from Config(env) round-trips through Lambda env",
+  "Config.redacted resolved from env round-trips through Lambda env",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");
@@ -103,11 +103,11 @@ test(
       value: CONFIG_SECRET_VALUE,
     });
   }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 45_000 },
 );
 
 test(
-  "Alchemy.Variable string round-trips to Lambda runtime as a string",
+  "Config.string round-trips to Lambda runtime as a string",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");
@@ -118,11 +118,11 @@ test(
     };
     expect(body).toEqual({ type: "string", value: STRING_VAR_VALUE });
   }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 45_000 },
 );
 
 test(
-  "Alchemy.Variable number round-trips to Lambda runtime preserving the number type",
+  "Config.number round-trips to Lambda runtime preserving the number type",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");
@@ -133,11 +133,11 @@ test(
     };
     expect(body).toEqual({ type: "number", value: NUMBER_VAR_VALUE });
   }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 45_000 },
 );
 
 test(
-  "Alchemy.Variable object round-trips to Lambda runtime preserving nested shape",
+  "Config.string with object default round-trips to Lambda runtime preserving nested shape",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const baseUrl = url.replace(/\/+$/, "");
@@ -148,5 +148,5 @@ test(
     };
     expect(body).toEqual({ type: "object", value: OBJECT_VAR_VALUE });
   }).pipe(logLevel),
-  { timeout: 240_000 },
+  { timeout: 45_000 },
 );

@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
-import { STATE_STORE_VERSION } from "@/State/HttpStateApi.ts";
+import { STATE_STORE_VERSION } from "@/Cloudflare/StateStore/Api.ts";
 import { State } from "@/State/State.ts";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";

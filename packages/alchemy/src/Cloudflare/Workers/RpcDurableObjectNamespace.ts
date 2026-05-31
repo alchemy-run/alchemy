@@ -1,9 +1,12 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type * as Scope from "effect/Scope";
-import type { Rpc, RpcClient, RpcGroup } from "effect/unstable/rpc";
-import type * as RpcClientError from "effect/unstable/rpc/RpcClientError";
+import type * as Layer from "effect/Layer";
+import type { Rpc, RpcGroup } from "effect/unstable/rpc";
+import * as RpcClient from "effect/unstable/rpc/RpcClient";
+import * as RpcClientError from "effect/unstable/rpc/RpcClientError";
+import type { Dependencies } from "../../Dependencies.ts";
 import type { HttpEffect } from "../../Http.ts";
+import type { Input } from "../../Input.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import {
   DurableObjectNamespace,
@@ -37,7 +40,7 @@ export interface RpcDurableObjectNamespace<
   ) => Effect.Effect<
     RpcClient.RpcClient<Rpcs, RpcClientError.RpcClientError>,
     never,
-    Scope.Scope | Rpc.MiddlewareClient<Rpcs>
+    Rpc.MiddlewareClient<Rpcs>
   >;
 }
 
@@ -56,8 +59,70 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
   never,
   RpcDurableObjectNamespaceScope
 > {
-  /** Class-based form: `class X extends RpcDurableObjectNamespace<X>()(...)` */
+  /**
+   * Class-based forms: `class Counter extends RpcDurableObjectNamespace<Counter>()(...)`.
+   *
+   * Modular (no impl):
+   * ```ts
+   * class Counter extends RpcDurableObjectNamespace<Counter>()(
+   *   "Counter",
+   *   { schema: CounterRpcs },
+   * ) {}
+   * export const CounterLive = Counter.make(/* impl *\/);
+   * ```
+   * Inline impl:
+   * ```ts
+   * class Counter extends RpcDurableObjectNamespace<Counter>()(
+   *   "Counter",
+   *   { schema: CounterRpcs },
+   *   Effect.gen(function* () { ... }),
+   * ) {}
+   * ```
+   */
   <Self>(): {
+    /** Modular form: separate `static make(impl)` + `static from(scriptName | Worker)`. */
+    <Rpcs extends Rpc.Any>(
+      name: string,
+      props: { readonly schema: RpcGroup.RpcGroup<Rpcs> },
+    ): Effect.Effect<
+      RpcDurableObjectNamespace<Self, Rpcs>,
+      never,
+      WorkerService | Self
+    > & {
+      new (_: never): {};
+      from(
+        scriptName: Input<string>,
+      ): Effect.Effect<
+        RpcDurableObjectNamespace<Self, Rpcs>,
+        never,
+        WorkerService
+      >;
+      from<Req = never>(
+        worker:
+          | Dependencies<Self>
+          | Effect.Effect<Dependencies<Self>, never, Req>,
+      ): Effect.Effect<
+        RpcDurableObjectNamespace<Self, Rpcs>,
+        never,
+        WorkerService | Req
+      >;
+      make<InnerR = never, InitReq = never>(
+        impl: Effect.Effect<
+          Effect.Effect<
+            Effect.Effect<HttpEffect<InnerR>, never, InnerR>,
+            never,
+            DurableObjectServices
+          >,
+          never,
+          InitReq
+        >,
+      ): Layer.Layer<
+        Self,
+        never,
+        WorkerService | Exclude<InitReq | InnerR, DurableObjectServices>
+      >;
+    };
+    /** Inline-impl form. */
     <Rpcs extends Rpc.Any, InnerR = never, InitReq = never>(
       name: string,
       props: { readonly schema: RpcGroup.RpcGroup<Rpcs> },
@@ -181,17 +246,119 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
  * @section Calling the DO from a Worker
  * @example Typed rpc client at the call site
  * `yield* Counter` resolves to a value whose `getByName(id)` returns
- * a typed `RpcClient<CounterRpcs>`. Each rpc method is a typed
- * Effect/Stream factory — no `RpcClient.make` setup needed.
+ * an `Effect<RpcClient<CounterRpcs>>`. Each rpc method is a typed
+ * Effect/Stream factory — no `RpcClient.make` setup needed. Yield
+ * the client inside a per-request `Effect.scoped` handler so it's
+ * freed with the request.
  * ```typescript
  * import Counter from "./counter.ts";
  *
  * Effect.gen(function* () {
  *   const counters = yield* Counter;
- *   yield* counters.getByName("global").setTitle({ title: "Hello" });
- *   const title = yield* counters.getByName("global").getTitle({});
+ *   const client = yield* counters.getByName("global");
+ *   yield* client.setTitle({ title: "Hello" });
+ *   const title = yield* client.getTitle({});
  *   return title;
- * });
+ * }).pipe(Effect.scoped);
+ * ```
+ *
+ * @section Modular form: separate the class from its runtime
+ * @example Class declaration with no impl + `static make(impl)`
+ * The inline class form above bundles the runtime into the class
+ * declaration. The two-arg form `(name, { schema })` declares the
+ * class as a pure tagged identifier; provide the runtime separately
+ * via `Class.make(impl)`. Consumer Workers can import the class for
+ * binding (`Counter.from(HostWorker)`) without pulling the runtime
+ * into their bundle.
+ * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
+ * import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+ * import { CounterRpcs } from "./rpcs.ts";
+ *
+ * export class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
+ *   "Counter",
+ *   { schema: CounterRpcs },
+ * ) {}
+ *
+ * // Only the host script imports this default export.
+ * export default Counter.make(
+ *   Effect.gen(function* () {
+ *     return Effect.gen(function* () {
+ *       const state = yield* Cloudflare.DurableObjectState;
+ *       const handlers = CounterRpcs.toLayer({
+ *         setTitle: ({ title }) => state.storage.put("title", title),
+ *         getTitle: () =>
+ *           Effect.map(state.storage.get<string>("title"), (t) => t ?? ""),
+ *       });
+ *       return RpcServer.toHttpEffect(CounterRpcs).pipe(
+ *         Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
+ *       );
+ *     });
+ *   }),
+ * );
+ * ```
+ *
+ * @section Cross-script binding via `Counter.from(Worker)`
+ * @example Hosting on WorkerA, binding from WorkerB
+ * The host Worker declares `Counter` in its `Deps` (third type
+ * arg of `Worker<Self, Bindings, Deps>` or second of
+ * `RpcWorker<Self, Deps>`) and provides `CounterLive`. Any other
+ * Worker uses `Counter.from(HostWorker)` to bind to the same DO
+ * instances — writes through `HostWorker.getByName(name)` are
+ * visible from `Counter.from(HostWorker).getByName(name)`.
+ * ```typescript
+ * // host worker (declares + provides Counter)
+ * import CounterLive, { Counter } from "./counter.ts";
+ *
+ * export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
+ *   "WorkerA",
+ *   { main: import.meta.filename },
+ * ) {}
+ *
+ * export default WorkerA.make(
+ *   Effect.gen(function* () {
+ *     const counters = yield* Counter; // local host binding
+ *     // ... fetch handler ...
+ *   }).pipe(Effect.provide(CounterLive)),
+ * );
+ *
+ * // consumer worker (binds via .from)
+ * export default class WorkerB extends Cloudflare.Worker<WorkerB>()(
+ *   "WorkerB",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const counters = yield* Counter.from(WorkerA);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const client = yield* counters.getByName("shared");
+ *         yield* client.setTitle({ title: "via WorkerB" });
+ *         return HttpServerResponse.text("ok");
+ *       }).pipe(Effect.scoped),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @example Self-hosted isolated namespace
+ * A Worker that declares `Counter` in its own `Deps` and provides
+ * `CounterLive` hosts its own isolated namespace — instances under
+ * it are separate from any other host's. Use `Counter.from(Self)`
+ * inside the host to be explicit about which script's namespace
+ * you're binding to.
+ * ```typescript
+ * export class WorkerC extends Cloudflare.Worker<WorkerC, {}, Counter>()(
+ *   "WorkerC",
+ *   { main: import.meta.filename },
+ * ) {}
+ *
+ * export default WorkerC.make(
+ *   Effect.gen(function* () {
+ *     const counters = yield* Counter.from(WorkerC); // explicit self
+ *     // ... fetch handler ...
+ *   }).pipe(Effect.provide(CounterLive)),
+ * );
  * ```
  *
  * @section Yielding the surrounding namespace from inside a DO
@@ -202,19 +369,33 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
  * ```typescript
  * Effect.gen(function* () {
  *   const self = yield* Cloudflare.RpcDurableObjectNamespace;
- *   yield* self.getByName("peer-1").setTitle({ title: "Sibling call" });
- * });
+ *   const peer = yield* self.getByName("peer-1");
+ *   yield* peer.setTitle({ title: "Sibling call" });
+ * }).pipe(Effect.scoped);
  * ```
  */
 export const RpcDurableObjectNamespace: RpcDurableObjectNamespaceClass =
   taggedFunction(RpcDurableObjectNamespaceScope, (...args: any[]) => {
-    // Class-form: zero args returns the `(name, props, impl) => …` builder.
+    // Class-form: zero args returns the inner builder. Inner-arg arity
+    // distinguishes modular (`(name, { schema })`, no impl — `static
+    // from`/`static make` provide the runtime) from inline-impl
+    // (`(name, { schema }, impl)`).
     if (args.length === 0) {
-      return (
-        name: string,
-        props: { readonly schema: RpcGroup.RpcGroup<any> },
-        impl: Effect.Effect<Effect.Effect<any>>,
-      ) => build(name, props, impl);
+      return (...inner: any[]) => {
+        if (inner.length === 2) {
+          const [name, props] = inner as [
+            string,
+            { readonly schema: RpcGroup.RpcGroup<any> },
+          ];
+          return buildModular(name, props.schema);
+        }
+        const [name, props, impl] = inner as [
+          string,
+          { readonly schema: RpcGroup.RpcGroup<any> },
+          Effect.Effect<Effect.Effect<any>>,
+        ];
+        return build(name, props, impl);
+      };
     }
     // Descriptor-only form: `(name, { schema })` — no impl.
     if (args.length === 2) {
@@ -239,44 +420,83 @@ export const RpcDurableObjectNamespace: RpcDurableObjectNamespaceClass =
     return build(name, props, impl);
   }) as any;
 
-const build = (
-  name: string,
-  props: { readonly schema: RpcGroup.RpcGroup<any> },
-  impl: Effect.Effect<Effect.Effect<any>>,
-) => {
-  // 1. Wrap the user's HttpEffect-returning inner Effect into the
-  //    `{ fetch }` shape the underlying `DurableObjectNamespace`
-  //    expects. The user constructs `RpcServer.toHttpEffect(schema).pipe(
-  //    Effect.provide(handlers), Effect.provide(layerNdjson))` themselves;
-  //    we just map it to `{ fetch }`.
-  const wrappedImpl = impl.pipe(
+// Wrap a raw `DurableObjectNamespace` so its `getByName` returns a typed
+// Effect `RpcClient` (via `bindEffectRpc`) instead of the built-in
+// method-bridge stub. Used in every branch that produces a yieldable
+// `RpcDurableObjectNamespace` value.
+const rpcWrap = (
+  rawNs: DurableObjectNamespaceType<any>,
+  schema: RpcGroup.RpcGroup<any>,
+): RpcDurableObjectNamespace<any> => {
+  const rpcView = bindEffectRpc(rawNs as any, schema);
+  return Object.assign({}, rawNs, {
+    getByName: rpcView.getByName,
+  }) as unknown as RpcDurableObjectNamespace<any>;
+};
+
+// The user's inner Effect resolves to `Effect<HttpEffect>`; the
+// underlying `DurableObjectNamespace` expects `Effect<{ fetch:
+// HttpEffect }>` (a `DurableObjectShape`). Map through both layers to
+// box the http effect in the `{ fetch }` shape.
+const wrapImpl = (impl: Effect.Effect<Effect.Effect<any>>) =>
+  impl.pipe(
     Effect.map((inner) =>
       inner.pipe(Effect.map((fetch: HttpEffect<any>) => ({ fetch }))),
     ),
   ) as Effect.Effect<Effect.Effect<any>>;
 
-  // 2. Delegate to the underlying `DurableObjectNamespace`. It returns
-  //    an `effectClass` (Effect + iterable constructor) that registers
-  //    binding metadata and produces the alchemy namespace proxy when
-  //    yielded.
-  const underlying = (DurableObjectNamespace as any)()(name, wrappedImpl);
-
-  // Unwrap to a plain Effect so we can `.pipe(Effect.flatMap(...))`
-  // safely (effect-classes are not first-class Effect values).
+const build = (
+  name: string,
+  props: { readonly schema: RpcGroup.RpcGroup<any> },
+  impl: Effect.Effect<Effect.Effect<any>>,
+) => {
+  // Inline-impl class form: delegate to `DurableObjectNamespace`'s
+  // inline class form, then expose the rpc-wrapped view at yield
+  // time. No `static from`/`static make` because the impl is provided
+  // eagerly here (consumers wanting cross-script binding use the
+  // modular form below).
+  const underlying = (DurableObjectNamespace as any)()(name, wrapImpl(impl));
   const underlyingEff: Effect.Effect<
     DurableObjectNamespaceType<any>,
     never,
     any
   > = (underlying as { asEffect(): Effect.Effect<any, never, any> }).asEffect();
-
-  // 3. Layer `bindEffectRpc(rawNs, schema)` so consumers see the
-  //    rpc-bound view at the call site.
   const rpcBound = underlyingEff.pipe(
-    Effect.map((rawNs) => {
-      const rpcView = bindEffectRpc(rawNs as any, props.schema);
-      return Object.assign({}, rawNs, { getByName: rpcView.getByName });
-    }),
+    Effect.map((rawNs) => rpcWrap(rawNs, props.schema)),
   ) as unknown as Effect.Effect<RpcDurableObjectNamespace<any>>;
-
   return effectClass(rpcBound);
+};
+
+const buildModular = (name: string, schema: RpcGroup.RpcGroup<any>) => {
+  // Delegate to `DurableObjectNamespace<Self>()(name)` (no-impl class
+  // form) so we inherit its Self-tag plumbing for free:
+  //   - yielding the class resolves to the live namespace via the tag
+  //     (populated by `static make(impl)`'s Layer)
+  //   - `static from(scriptName | Worker)` registers a foreign-script
+  //     binding on the surrounding worker and yields a fresh handle
+  // We just rpc-wrap each output so consumers see a typed `getByName`.
+  const Underlying: any = (DurableObjectNamespace as any)()(name);
+  const underlyingEff: Effect.Effect<
+    DurableObjectNamespaceType<any>,
+    never,
+    any
+  > = (Underlying as { asEffect(): Effect.Effect<any, never, any> }).asEffect();
+
+  return class extends effectClass(
+    underlyingEff.pipe(
+      Effect.map((rawNs) => rpcWrap(rawNs, schema)),
+    ) as unknown as Effect.Effect<RpcDurableObjectNamespace<any>>,
+  ) {
+    static make = (impl: Effect.Effect<Effect.Effect<any>>) =>
+      Underlying.make(wrapImpl(impl));
+
+    static from = (
+      worker: string | object | Effect.Effect<any, any, any>,
+    ): Effect.Effect<RpcDurableObjectNamespace<any>, any, any> =>
+      Underlying.from(worker).pipe(
+        Effect.map((rawNs: DurableObjectNamespaceType<any>) =>
+          rpcWrap(rawNs, schema),
+        ),
+      );
+  };
 };

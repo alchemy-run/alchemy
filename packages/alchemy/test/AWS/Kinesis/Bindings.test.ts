@@ -1,14 +1,16 @@
 import * as AWS from "@/AWS";
-import { make as makeStack } from "@/Stack";
+import * as Alchemy from "@/index.ts";
 import * as State from "@/State";
 import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { describe } from "vitest";
-import KinesisApiFunctionLive, { KinesisApiFunction } from "./handler.ts";
+import KinesisApiFunctionLive, {
+  KinesisApiFunction,
+  StreamAndConsumer,
+} from "./handler.ts";
 
 const providers = AWS.providers();
 const state = State.localState();
@@ -17,57 +19,79 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state,
 });
 
-const fixtureStack = Effect.gen(function* () {
-  return yield* KinesisApiFunction;
-}).pipe(
-  Effect.provide(KinesisApiFunctionLive),
-  makeStack({ name: "kinesis-bindings", providers, state }),
+const Stack = Alchemy.Stack(
+  "kinesis-bindings",
+  { providers, state },
+  Effect.gen(function* () {
+    // Share one stream/consumer between the deployed function and the stack
+    // outputs so the test can assert the live API responses against the known
+    // names without round-tripping them through the fixture's runtime.
+    const { stream, consumer } = yield* StreamAndConsumer;
+    const fn = yield* KinesisApiFunction;
+    return {
+      url: fn.functionUrl.as<string>(),
+      streamName: stream.streamName.as<string>(),
+      consumerName: consumer.consumerName.as<string>(),
+    };
+  }).pipe(Effect.provide(KinesisApiFunctionLive)),
 );
 
-const readinessPolicy = Schedule.fixed("2 seconds").pipe(
+const stack = beforeAll(deploy(Stack), { timeout: 240_000 });
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 60_000 });
+
+// Lambda Function URLs cold-start (DNS, init) and a fresh role's IAM grants
+// (eventual consistency) can both take a while on the first hit. Retrying on
+// any non-200 lets the first request wait through that window; warm calls
+// return on the first try and never retry.
+const readinessSchedule = Schedule.fixed("2 seconds").pipe(
   Schedule.both(Schedule.recurs(75)),
 );
 
-let baseUrl: string;
-let streamName: string;
-let consumerName: string;
+// Lambda Function URLs come back with a trailing slash (`https://…on.aws/`).
+// Naively concatenating `${baseUrl}${path}` would yield a double slash
+// (`…on.aws//stream`), whose pathname (`//stream`) never matches the fixture's
+// `/stream` route, so every request 404s and the readiness retry spins until
+// the test times out. Strip the trailing slash before joining.
+const urlOf = (baseUrl: string, path: string) =>
+  `${baseUrl.replace(/\/+$/, "")}${path}`;
 
-describe.sequential("Kinesis Bindings", () => {
-  beforeAll(
-    Effect.gen(function* () {
-      yield* destroy(fixtureStack);
-      const deployed = yield* deploy(fixtureStack);
-
-      baseUrl = deployed.functionUrl!.replace(/\/+$/, "");
-
-      yield* HttpClient.get(`${baseUrl}/ready`).pipe(
-        Effect.flatMap((response) =>
-          response.status === 200
-            ? Effect.succeed(response)
-            : Effect.fail(new Error(`Function not ready: ${response.status}`)),
-        ),
-        Effect.tap((response) =>
-          response.json.pipe(
-            Effect.tap((json) => {
-              streamName = (json as any).streamName;
-              consumerName = (json as any).consumerName;
-
-              return Effect.void;
-            }),
-          ),
-        ),
-        Effect.retry({ schedule: readinessPolicy }),
-      );
-    }),
-    { timeout: 120_000 },
+const getJson = (baseUrl: string, path: string) =>
+  HttpClient.get(urlOf(baseUrl, path)).pipe(
+    Effect.flatMap((response) =>
+      response.status === 200
+        ? response.json
+        : Effect.fail(new Error(`Request failed: ${response.status}`)),
+    ),
+    Effect.retry({ schedule: readinessSchedule }),
   );
 
-  afterAll(destroy(fixtureStack), { timeout: 60_000 });
+const postJson = (baseUrl: string, path: string, body: unknown) =>
+  HttpClient.execute(
+    HttpClientRequest.bodyJsonUnsafe(
+      HttpClientRequest.post(urlOf(baseUrl, path)),
+      body,
+    ),
+  ).pipe(
+    Effect.flatMap((response) =>
+      response.status === 200
+        ? response.json
+        : Effect.fail(new Error(`Request failed: ${response.status}`)),
+    ),
+    Effect.retry({ schedule: readinessSchedule }),
+  );
 
+const getFirstShardId = (baseUrl: string) =>
+  getJson(baseUrl, "/shards").pipe(
+    Effect.map((response) => (response as any).Shards?.[0]?.ShardId as string),
+  );
+
+describe.sequential("Kinesis Bindings", () => {
   describe("DescribeAccountSettings", () => {
-    test.provider("returns the account settings payload", (stack) =>
+    test(
+      "returns the account settings payload",
       Effect.gen(function* () {
-        const response = yield* getJson("/account-settings");
+        const { url } = yield* stack;
+        const response = yield* getJson(url, "/account-settings");
         if ((response as any).ok === false) {
           expect((response as any).error).toBeTruthy();
         } else {
@@ -78,9 +102,11 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("DescribeLimits", () => {
-    test.provider("returns shard and stream limits", (stack) =>
+    test(
+      "returns shard and stream limits",
       Effect.gen(function* () {
-        const response = yield* getJson("/limits");
+        const { url } = yield* stack;
+        const response = yield* getJson(url, "/limits");
         if ((response as any).ok === false) {
           expect((response as any).error).toBeTruthy();
         } else {
@@ -91,14 +117,16 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("ListStreams", () => {
-    test.provider("lists the deployed stream", (stack) =>
+    test(
+      "lists the deployed stream",
       Effect.gen(function* () {
         // Kinesis ListStreams is paginated and the alchemy binding wraps
         // the single-page operation. On an account with > 100 streams our
         // brand-new stream may simply not be on page 1. Just verify the
         // binding returns an Array; the specific stream is verified via
         // DescribeStream below.
-        const response = yield* getJson("/streams");
+        const { url } = yield* stack;
+        const response = yield* getJson(url, "/streams");
         const names = (response as any).StreamNames ?? [];
         expect(Array.isArray(names)).toBe(true);
       }),
@@ -106,18 +134,22 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("DescribeStream", () => {
-    test.provider("describes the bound stream", (stack) =>
+    test(
+      "describes the bound stream",
       Effect.gen(function* () {
-        const response = yield* getJson("/stream");
+        const { url, streamName } = yield* stack;
+        const response = yield* getJson(url, "/stream");
         expect((response as any).StreamDescription.StreamName).toBe(streamName);
       }),
     );
   });
 
   describe("DescribeStreamSummary", () => {
-    test.provider("describes the bound stream summary", (stack) =>
+    test(
+      "describes the bound stream summary",
       Effect.gen(function* () {
-        const response = yield* getJson("/stream-summary");
+        const { url, streamName } = yield* stack;
+        const response = yield* getJson(url, "/stream-summary");
         expect((response as any).StreamDescriptionSummary.StreamName).toBe(
           streamName,
         );
@@ -126,9 +158,11 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("GetResourcePolicy", () => {
-    test.provider("returns the stream policy or a structured error", (stack) =>
+    test(
+      "returns the stream policy or a structured error",
       Effect.gen(function* () {
-        const response = yield* getJson("/resource-policy");
+        const { url } = yield* stack;
+        const response = yield* getJson(url, "/resource-policy");
         if ((response as any).ok === false) {
           expect((response as any).error).toBeTruthy();
         } else {
@@ -139,48 +173,54 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("ListShards", () => {
-    test.provider("lists shards for the stream", (stack) =>
+    test(
+      "lists shards for the stream",
       Effect.gen(function* () {
-        const response = yield* getJson("/shards");
+        const { url } = yield* stack;
+        const response = yield* getJson(url, "/shards");
         expect(((response as any).Shards ?? []).length).toBeGreaterThan(0);
       }),
     );
   });
 
   describe("GetShardIterator", () => {
-    test.provider("returns a shard iterator for the first shard", (stack) =>
+    test(
+      "returns a shard iterator for the first shard",
       Effect.gen(function* () {
-        const shardId = yield* getFirstShardId();
-        const response = yield* postJson("/iterator", { shardId });
+        const { url } = yield* stack;
+        const shardId = yield* getFirstShardId(url);
+        const response = yield* postJson(url, "/iterator", { shardId });
         expect((response as any).ShardIterator).toBeTruthy();
       }),
     );
   });
 
   describe("GetRecords", () => {
-    test.provider(
+    test(
       "reads a just-written record through the shard iterator",
-      (stack) =>
-        Effect.gen(function* () {
-          const shardId = yield* getFirstShardId();
-          const marker = `records-${crypto.randomUUID()}`;
-          const response = yield* postJson("/records", {
-            shardId,
-            partitionKey: "records-test",
-            data: marker,
-          });
-          const records = (response as any).records ?? [];
-          expect(records.some((record: any) => record.data === marker)).toBe(
-            true,
-          );
-        }),
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const shardId = yield* getFirstShardId(url);
+        const marker = `records-${crypto.randomUUID()}`;
+        const response = yield* postJson(url, "/records", {
+          shardId,
+          partitionKey: "records-test",
+          data: marker,
+        });
+        const records = (response as any).records ?? [];
+        expect(records.some((record: any) => record.data === marker)).toBe(
+          true,
+        );
+      }),
     );
   });
 
   describe("ListStreamConsumers", () => {
-    test.provider("lists the registered consumer", (stack) =>
+    test(
+      "lists the registered consumer",
       Effect.gen(function* () {
-        const response = yield* getJson("/stream-consumers");
+        const { url, consumerName } = yield* stack;
+        const response = yield* getJson(url, "/stream-consumers");
         const consumers = (response as any).Consumers ?? [];
         expect(
           consumers.some(
@@ -192,9 +232,11 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("DescribeStreamConsumer", () => {
-    test.provider("describes the registered consumer", (stack) =>
+    test(
+      "describes the registered consumer",
       Effect.gen(function* () {
-        const response = yield* getJson("/consumer");
+        const { url, consumerName } = yield* stack;
+        const response = yield* getJson(url, "/consumer");
         expect((response as any).ConsumerDescription.ConsumerName).toBe(
           consumerName,
         );
@@ -203,19 +245,23 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("SubscribeToShard", () => {
-    test.provider("opens a subscribe-to-shard stream", (stack) =>
+    test(
+      "opens a subscribe-to-shard stream",
       Effect.gen(function* () {
-        const shardId = yield* getFirstShardId();
-        const response = yield* postJson("/subscribe", { shardId });
+        const { url } = yield* stack;
+        const shardId = yield* getFirstShardId(url);
+        const response = yield* postJson(url, "/subscribe", { shardId });
         expect((response as any).ok).toBe(true);
       }),
     );
   });
 
   describe("ListTagsForResource", () => {
-    test.provider("lists the stream ownership tags", (stack) =>
+    test(
+      "lists the stream ownership tags",
       Effect.gen(function* () {
-        const response = yield* getJson("/tags");
+        const { url } = yield* stack;
+        const response = yield* getJson(url, "/tags");
         const keys = ((response as any).Tags ?? []).map((tag: any) => tag.Key);
         expect(keys).toContain("alchemy::stack");
         expect(keys).toContain("alchemy::stage");
@@ -226,9 +272,11 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("PutRecord", () => {
-    test.provider("writes a single record", (stack) =>
+    test(
+      "writes a single record",
       Effect.gen(function* () {
-        const response = yield* postJson("/put-record", {
+        const { url } = yield* stack;
+        const response = yield* postJson(url, "/put-record", {
           partitionKey: "put-record",
           data: `put-record-${crypto.randomUUID()}`,
         });
@@ -239,9 +287,11 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("PutRecords", () => {
-    test.provider("writes a batch of records", (stack) =>
+    test(
+      "writes a batch of records",
       Effect.gen(function* () {
-        const response = yield* postJson("/put-records", {
+        const { url } = yield* stack;
+        const response = yield* postJson(url, "/put-records", {
           records: [
             {
               partitionKey: "put-records",
@@ -260,9 +310,11 @@ describe.sequential("Kinesis Bindings", () => {
   });
 
   describe("StreamSink", () => {
-    test.provider("writes records through the sink helper", (stack) =>
+    test(
+      "writes records through the sink helper",
       Effect.gen(function* () {
-        const response = yield* postJson("/sink", {
+        const { url } = yield* stack;
+        const response = yield* postJson(url, "/sink", {
           records: [
             { partitionKey: "sink", data: `sink-1-${crypto.randomUUID()}` },
             { partitionKey: "sink", data: `sink-2-${crypto.randomUUID()}` },
@@ -273,21 +325,3 @@ describe.sequential("Kinesis Bindings", () => {
     );
   });
 });
-
-const getJson = (path: string) =>
-  HttpClient.get(`${baseUrl}${path}`).pipe(
-    Effect.flatMap((response) => response.json),
-  );
-
-const postJson = (path: string, body: unknown) =>
-  HttpClient.execute(
-    HttpClientRequest.bodyJsonUnsafe(
-      HttpClientRequest.post(`${baseUrl}${path}`),
-      body,
-    ),
-  ).pipe(Effect.flatMap((response) => response.json));
-
-const getFirstShardId = () =>
-  getJson("/shards").pipe(
-    Effect.map((response) => (response as any).Shards?.[0]?.ShardId as string),
-  );

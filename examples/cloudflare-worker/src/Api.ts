@@ -30,7 +30,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     },
     assets: "./assets",
     build: {
-      // metafile: true,
+      bundleAnalyzer: true,
     },
   },
   Effect.gen(function* () {

@@ -11,7 +11,9 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
 
-      const container = yield* Cloudflare.start(sandbox);
+      const container = yield* Cloudflare.start(sandbox, {
+        enableInternet: true,
+      });
 
       const sessions = new Map<string, Cloudflare.DurableWebSocket>();
 
