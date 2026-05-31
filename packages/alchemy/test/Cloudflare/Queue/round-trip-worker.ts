@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -67,11 +68,23 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
     // Effect-style queue consumer. The handler delegates to the
     // Counter DO so the test can verify the message landed by
     // polling the DO's snapshot.
-    yield* Cloudflare.messages<QueueMessageBody>(queueResource).subscribe(
-      (stream) =>
-        Stream.runForEach(stream, (msg) =>
-          counters.getByName(msg.body.name).record(msg.body.text),
-        ),
+    //
+    // Mixed `Duration.Input` forms are intentional: the e2e test
+    // exercises that a `Duration` value (`maxWaitTime`) and a
+    // string (`retryDelay: "1 second"`) both type-check at the
+    // `Cloudflare.messages(...)` call site and survive the convert-
+    // and-forward path into Cloudflare's QueueConsumer settings.
+    // Values are kept small so the round-trip latency stays well
+    // under the test's 240s timeout.
+    yield* Cloudflare.messages<QueueMessageBody>(queueResource, {
+      batchSize: 10,
+      maxRetries: 3,
+      maxWaitTime: Duration.millis(500),
+      retryDelay: "1 second",
+    }).subscribe((stream) =>
+      Stream.runForEach(stream, (msg) =>
+        counters.getByName(msg.body.name).record(msg.body.text),
+      ),
     );
 
     return {

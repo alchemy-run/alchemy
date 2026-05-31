@@ -280,11 +280,200 @@ Effect.gen(function* () {
 });
 ```
 
+## Modular form: split the class from its runtime
+
+The single-arg form above bundles the runtime into the class
+declaration. For cross-script binding (one Worker hosts the DO,
+others bind to it) you want the class to be a pure tagged
+identifier so consumers can import it without pulling the runtime
+into their bundle. Use the **two-arg form** — `(name, { schema })`
+with no impl — and provide the runtime via `static make`:
+
+```typescript
+// src/counter.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { CounterRpcs } from "./rpcs.ts";
+
+export class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
+  "Counter",
+  { schema: CounterRpcs },
+) {}
+```
+
+This is just a tagged identifier — both the host and any
+consumer Worker can `import { Counter }` without dragging in
+the runtime.
+
+## Provide the runtime as a Layer
+
+`Counter.make(impl)` returns a `Layer<Counter>` that populates
+the tag with a running instance. Only the host script imports
+this:
+
+```diff lang="typescript"
+// src/counter.ts
+ export class Counter extends Cloudflare.RpcDurableObjectNamespace<Counter>()(
+   "Counter",
+   { schema: CounterRpcs },
+ ) {}
+
++export default Counter.make(
++  Effect.gen(function* () {
++    return Effect.gen(function* () {
++      const state = yield* Cloudflare.DurableObjectState;
++      const handlers = CounterRpcs.toLayer({
++        setTitle: ({ title }) => state.storage.put("title", title),
++        getTitle: () =>
++          Effect.map(state.storage.get<string>("title"), (t) => t ?? ""),
++      });
++      return RpcServer.toHttpEffect(CounterRpcs).pipe(
++        Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerNdjson)),
++      );
++    });
++  }),
++);
+```
+
+The impl shape is identical to the inline form — outer Effect for
+shared deps, inner Effect for per-instance setup, returning the
+piped `RpcServer.toHttpEffect`. The only difference is that
+`Counter.make(...)` returns a `Layer` instead of binding the impl
+to the class declaration.
+
+## Declare the host Worker
+
+The Worker that hosts the DO names it in its third type argument
+(`Worker<Self, Bindings, Deps>` — `Deps` is what the script
+publishes for cross-script binding):
+
+```diff lang="typescript"
+// src/worker.ts
++import { Counter } from "./counter.ts";
+
+-export default class Worker extends Cloudflare.Worker<Worker>()(
++export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
+   "Worker",
+   { main: import.meta.filename },
+-  Effect.gen(function* () {
+-    const counters = yield* Counter;
+-    ...
+-  }),
+ ) {}
+```
+
+`Worker<WorkerA, {}, Counter>` declares that WorkerA publishes
+`Counter` — without this third arg, `Counter.from(WorkerA)` from
+another Worker would be a TypeScript error.
+
+## Provide the runtime from the host
+
+`WorkerA.make(...)` is where the runtime lives. Provide
+`CounterLive` (the default export of `counter.ts`) so the DO class
+actually ships in WorkerA's bundle:
+
+```typescript
+// src/worker.ts
+export default WorkerA.make(
+  Effect.gen(function* () {
+    const counters = yield* Counter;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const id = new URL(request.url).searchParams.get("id") ?? "default";
+        const client = yield* counters.getByName(id);
+        if (request.method === "POST") {
+          const { title } = (yield* request.json) as { title: string };
+          yield* client.setTitle({ title }).pipe(Effect.orDie);
+          return HttpServerResponse.text("ok");
+        }
+        const title = yield* client.getTitle({}).pipe(Effect.orDie);
+        return HttpServerResponse.text(title);
+      }).pipe(Effect.scoped),
+    };
+  }).pipe(Effect.provide(CounterLive)),
+);
+```
+
+`yield* Counter` resolves the tag populated by `CounterLive`.
+Inside the host script this is equivalent to `Counter.from(WorkerA)`
+— see the next section for why the `.from` form is sometimes
+preferred.
+
+## Bind from a second Worker
+
+A second Worker can address the same DO instances by binding to
+WorkerA's namespace — no public URL, no service binding, just
+`Counter.from(WorkerA)`:
+
+```typescript
+// src/workerB.ts
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import { Counter } from "./counter.ts";
+import { WorkerA } from "./worker.ts";
+
+export default class WorkerB extends Cloudflare.Worker<WorkerB>()(
+  "WorkerB",
+  { main: import.meta.filename },
+  Effect.gen(function* () {
+    const counters = yield* Counter.from(WorkerA);
+    return {
+      fetch: Effect.gen(function* () {
+        const stub = yield* counters.getByName("shared");
+        const title = yield* stub.getTitle({}).pipe(Effect.orDie);
+        return HttpServerResponse.text(title);
+      }).pipe(Effect.scoped),
+    };
+  }),
+) {}
+```
+
+`Counter.from(WorkerA)` reads WorkerA's `Deps` to confirm `Counter`
+is part of its contract, then emits a Cloudflare binding with
+`scriptName: "WorkerA"`. Writes through WorkerA's `getByName(name)`
+are visible from WorkerB's `getByName(name)` — same DO instance.
+
+WorkerB never imports `CounterLive`, so Rolldown tree-shakes the
+runtime out of WorkerB's bundle.
+
+## Host an isolated namespace
+
+A Worker can also host its **own** isolated `Counter` namespace
+by declaring `Counter` in its `Deps` and providing `CounterLive`.
+Inside that Worker, use `Counter.from(Self)` to be explicit about
+which script's namespace you're binding to:
+
+```typescript
+// src/workerC.ts
+export class WorkerC extends Cloudflare.Worker<WorkerC, {}, Counter>()(
+  "WorkerC",
+  { main: import.meta.filename },
+) {}
+
+export default WorkerC.make(
+  Effect.gen(function* () {
+    const counters = yield* Counter.from(WorkerC);
+    // ... fetch handler ...
+  }).pipe(Effect.provide(CounterLive)),
+);
+```
+
+Instances under WorkerC are separate from WorkerA's — same class,
+different namespace, completely isolated state.
+
 ## Recap
 
-- `Cloudflare.RpcDurableObjectNamespace<Self>()(...)` is the regular
-  DO class with `props.schema` and an inner Effect that returns a
-  piped `RpcServer.toHttpEffect(schema)` Effect.
+- `Cloudflare.RpcDurableObjectNamespace<Self>()(name, { schema }, impl)`
+  is the inline form — class declaration carries the runtime.
+- `(name, { schema })` (no impl) is the **modular form** — pair it
+  with `Class.make(impl)` so consumer scripts can import the class
+  without bundling the runtime.
+- `Class.from(Worker)` binds to a DO hosted by another script. The
+  host declares the DO in its `Worker<Self, Bindings, Deps>` third
+  type arg so the `.from(...)` call type-checks.
 - `counters.getByName(id)` is `Effect<RpcClient<...>>` — yield it
   inside an `Effect.scoped` per-request handler to get a typed
   client.

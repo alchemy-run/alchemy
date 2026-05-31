@@ -12,18 +12,20 @@ export const deploy = <A>({
   stage,
   dev,
   scope,
+  force,
 }: {
   stack: StackEffect<CompiledStack<A>, Stage | AlchemyContext>;
   stage: string;
   dev?: boolean;
   /** See {@link evalStack} — when set, scoped resources outlive `deploy`. */
   scope?: Scope.Scope;
+  force?: boolean;
 }) =>
   evalStack(
     stack,
     (stack) =>
       Effect.gen(function* () {
-        const plan = yield* Plan.make(stack);
+        const plan = yield* Plan.make(stack, { force });
         const output = yield* Apply.apply(plan);
         return output as Input.Resolve<A>;
       }),

@@ -8,11 +8,8 @@ import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileLive } from "alchemy/Auth/Profile";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
-import { installLocalhostDns } from "alchemy/Util/LocalhostDns";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import packageJson from "../../package.json" with { type: "json" };
-
-installLocalhostDns();
 
 import { checkLatestVersion } from "./checkVersion.ts";
 import { handleCancellation } from "./commands/_shared.ts";

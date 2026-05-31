@@ -190,8 +190,6 @@ export type AiGateway = Resource<
   {
     gatewayId: string;
     accountId: string;
-    accountTag: string | undefined;
-    internalId: string | undefined;
     cacheInvalidateOnUpdate: boolean;
     cacheTtl: number | null;
     collectLogs: boolean;
@@ -328,8 +326,8 @@ export const AiGatewayProvider = () =>
       ): AiGateway["Attributes"] => ({
         gatewayId: gateway.id,
         accountId,
-        accountTag: gateway.accountTag ?? undefined,
-        internalId: gateway.internalId ?? undefined,
+        // accountTag: gateway.accountTag ?? undefined,
+        // internalId: gateway.internalId ?? undefined,
         cacheInvalidateOnUpdate: gateway.cacheInvalidateOnUpdate,
         cacheTtl: nullIfZero(gateway.cacheTtl),
         collectLogs: gateway.collectLogs,
@@ -387,7 +385,6 @@ export const AiGatewayProvider = () =>
           rateLimitingLimit: next.rateLimitingLimit,
           rateLimitingTechnique: next.rateLimitingTechnique,
           authentication: next.authentication,
-          isDefault: next.isDefault,
           logManagement: next.logManagement,
           logManagementStrategy: next.logManagementStrategy,
           logpush: next.logpush,
@@ -413,7 +410,6 @@ export const AiGatewayProvider = () =>
           rateLimitingTechnique: next.rateLimitingTechnique,
           authentication: next.authentication,
           dlp: next.dlp,
-          isDefault: next.isDefault,
           logManagement: next.logManagement,
           logManagementStrategy: next.logManagementStrategy,
           logpush: next.logpush,

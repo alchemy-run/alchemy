@@ -1,4 +1,5 @@
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -18,6 +19,7 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import {
+  dedupeBindings,
   diffBindings,
   havePropsChanged,
   isResolved,
@@ -309,7 +311,11 @@ export const make = <A>(
                   : oldState.props;
 
               const oldBindings = oldState.bindings ?? [];
-              const newBindings = stack.bindings[resource.FQN] ?? [];
+              // Collapse duplicate bindings by sid so the binding set handed to
+              // `diff` matches what `reconcile` receives (see `dedupeBindings`).
+              const newBindings = dedupeBindings(
+                stack.bindings[resource.FQN] ?? [],
+              );
 
               const diff = yield* provider.diff
                 ? provider
@@ -374,6 +380,11 @@ export const make = <A>(
         } else if (Output.isExpr(input)) {
           return yield* resolveOutput(input);
         } else if (Redacted.isRedacted(input)) {
+          return input;
+        } else if (Duration.isDuration(input)) {
+          // Duration is an opaque value; walking its internal `.value`
+          // would destroy the prototype and produce a plain `{ value: ... }`
+          // object that downstream consumers can't interpret.
           return input;
         } else if (Array.isArray(input)) {
           return yield* Effect.all(input.map(resolveInput), {
@@ -627,8 +638,10 @@ export const make = <A>(
             const news = yield* resolveInput(resource.Props);
             const downstream = newDownstreamDependencies[fqn] ?? [];
 
-            const newBindings: ResourceBinding[] = yield* resolveInput(
-              stack.bindings[fqn] ?? [],
+            // Collapse duplicate bindings by sid so the binding set handed to
+            // `diff` matches what `reconcile` receives (see `dedupeBindings`).
+            const newBindings: ResourceBinding[] = dedupeBindings(
+              yield* resolveInput(stack.bindings[fqn] ?? []),
             );
             const persisted = yield* state.get({
               stack: stackName,

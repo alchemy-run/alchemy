@@ -56,7 +56,7 @@ test.provider("create, update settings, replace script, delete", (stack) =>
       queueId: initial.queue.queueId,
       consumerId: initial.consumer.consumerId,
     });
-    expect("script" in live ? live.script : undefined).toEqual(
+    expect("scriptName" in live ? live.scriptName : undefined).toEqual(
       initial.workerA.workerName,
     );
 
@@ -125,9 +125,9 @@ test.provider("create, update settings, replace script, delete", (stack) =>
       queueId: replaced.queue.queueId,
       consumerId: replaced.consumer.consumerId,
     });
-    expect("script" in liveReplaced ? liveReplaced.script : undefined).toEqual(
-      replaced.workerB.workerName,
-    );
+    expect(
+      "scriptName" in liveReplaced ? liveReplaced.scriptName : undefined,
+    ).toEqual(replaced.workerB.workerName);
 
     // The original consumer must be gone after the replace.
     const oldExit = yield* Effect.exit(
@@ -219,7 +219,7 @@ test.provider("recreates consumer after out-of-band delete", (stack) =>
       queueId: recovered.queue.queueId,
       consumerId: recovered.consumer.consumerId,
     });
-    expect("script" in live ? live.script : undefined).toEqual(
+    expect("scriptName" in live ? live.scriptName : undefined).toEqual(
       recovered.worker.workerName,
     );
 
@@ -290,7 +290,7 @@ test.provider("adopts existing consumer after local state loss", (stack) =>
       queueId: adopted.queue.queueId,
       consumerId: adopted.consumer.consumerId,
     });
-    expect("script" in live ? live.script : undefined).toEqual(
+    expect("scriptName" in live ? live.scriptName : undefined).toEqual(
       adopted.worker.workerName,
     );
 

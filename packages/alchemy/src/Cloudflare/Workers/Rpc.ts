@@ -5,7 +5,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -302,30 +301,6 @@ const appendStreamErrors = (s: Stream.Stream<string, unknown>) =>
     ),
   );
 
-/**
- * Drop-in replacement for alchemy's built-in DO RPC namespace, but the
- * wire format is Effect's `RpcSerialization`, which round-trips
- * `Schema.Class` instances cleanly (the built-in bridge `JSON.stringify`s
- * each value and loses class identity).
- *
- * Pair it with `RpcServer.toHttpEffect(group)` on the DO's `fetch`
- * handler; this helper builds the matching client side and exposes the
- * same `namespace.getByName(id)` shape so the call-site looks identical
- * to the built-in bridge:
- *
- * @example
- * ```ts
- * const agents = yield* ChatAgent;
- * const agentsRpc = yield* Cloudflare.bindEffectRpc(agents, AgentRpcs);
- *
- * agentsRpc.getByName(id).sendChat({ threadId, prompt });
- * agentsRpc.getByName(id).getMessages({ threadId });
- * ```
- *
- * The URL passed to `RpcClient.layerProtocolHttp` is a dummy; requests
- * never leave the worker isolate, every one is dispatched through the
- * stub's `.fetch`.
- */
 export const bindEffectRpc = <Rpcs extends Rpc.Any>(
   namespace: { readonly getByName: (id: string) => { readonly fetch: any } },
   group: RpcGroup.RpcGroup<Rpcs>,
@@ -342,12 +317,17 @@ export const bindEffectRpc = <Rpcs extends Rpc.Any>(
   ) => Effect.Effect<
     RpcClient.RpcClient<Rpcs, RpcClientError.RpcClientError>,
     never,
-    Scope.Scope | Rpc.MiddlewareClient<Rpcs>
+    Rpc.MiddlewareClient<Rpcs>
   >;
 } => {
   const serialization = options?.serialization ?? RpcSerialization.layerNdjson;
+
   return {
-    getByName: (id) => {
+    // Wrap the cached `RpcClient` Effect in a chainable Proxy so callers
+    // can `yield* counter.getByName(id).method(args)` directly. The proxy
+    // records the `.method(args)` ops and replays them against the
+    // resolved client when the chain is yielded.
+    getByName: Effect.fnUntraced(function* (id: string) {
       const httpClient = HttpClient.layerMergedContext(
         Effect.sync(() => {
           const stub = namespace.getByName(id);
@@ -357,13 +337,7 @@ export const bindEffectRpc = <Rpcs extends Rpc.Any>(
       const protocol = RpcClient.layerProtocolHttp({
         url: "http://alchemy-rpc/",
       }).pipe(Layer.provide(serialization), Layer.provide(httpClient));
-      return RpcClient.make(group).pipe(
-        Effect.provide(protocol),
-      ) as Effect.Effect<
-        RpcClient.RpcClient<Rpcs, RpcClientError.RpcClientError>,
-        never,
-        Scope.Scope | Rpc.MiddlewareClient<Rpcs>
-      >;
-    },
+      return yield* RpcClient.make(group).pipe(Effect.provide(protocol));
+    }) as any,
   };
 };

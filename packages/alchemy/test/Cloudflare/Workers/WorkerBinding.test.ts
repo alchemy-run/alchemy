@@ -37,7 +37,7 @@ test(
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello from BindingTargetWorker");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );
 
 test(
@@ -52,7 +52,7 @@ test(
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello alice");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );
 
 test(
@@ -67,5 +67,5 @@ test(
     expect(res.status).toBe(200);
     expect(yield* res.text).toBe("hello bob");
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );

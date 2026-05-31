@@ -1,8 +1,9 @@
 {
   "diffEditor.renderSideBySide": false,
-  "js/ts.experimental.useTsgo": false,
-  "typescript.experimental.useTsgo": false,
-  "typescript.tsdk": "node_modules/typescript/lib",
+  "js/ts.experimental.useTsgo": true,
+  "typescript.experimental.useTsgo": true,
+  "typescript.tsdk": "node_modules/@typescript/native-preview/lib",
+  "typescript.native-preview.tsdk": "node_modules/@typescript/native-preview/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "typescript.preferences.importModuleSpecifier": "relative",
   "typescript.preferences.importModuleSpecifierEnding": "js",

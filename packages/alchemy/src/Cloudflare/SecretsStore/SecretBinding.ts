@@ -2,6 +2,7 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
@@ -20,7 +21,7 @@ export class SecretError extends Data.TaggedError("SecretError")<{
  * `SecretsStoreSecret` binding.
  */
 export interface SecretClient extends Effect.Effect<
-  string,
+  Redacted.Redacted<string>,
   SecretError,
   RuntimeContext
 > {
@@ -31,7 +32,7 @@ export interface SecretClient extends Effect.Effect<
   /**
    * Read the current value of the secret.
    */
-  get(): Effect.Effect<string, SecretError, RuntimeContext>;
+  get(): Effect.Effect<Redacted.Redacted<string>, SecretError, RuntimeContext>;
 }
 
 export class SecretBinding extends Binding.Service<
@@ -63,17 +64,16 @@ export const SecretBindingLive = Layer.effect(
             }),
         });
 
-      const getEffect: Effect.Effect<string, SecretError> = raw.pipe(
-        Effect.flatMap((raw) => tryPromise(() => raw.get())),
+      const getEffect = raw.pipe(
+        Effect.flatMap((raw) =>
+          tryPromise(() => raw.get().then(Redacted.make)),
+        ),
       );
 
-      return Object.assign(
-        Effect.suspend(() => getEffect),
-        {
-          raw,
-          get: () => getEffect,
-        },
-      ) as SecretClient;
+      return Object.assign(getEffect, {
+        raw,
+        get: () => getEffect,
+      });
     });
   }),
 );

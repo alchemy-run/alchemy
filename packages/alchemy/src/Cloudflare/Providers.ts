@@ -5,11 +5,12 @@ import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
-import { Command } from "../Build/Command.ts";
-import * as Build from "../Build/index.ts";
-import * as Provider from "../Provider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
+import { Command } from "../Build/Command.ts";
+import * as Build from "../Build/index.ts";
+import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
+import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as Access from "./Access.ts";
 import * as AiGateway from "./AiGateway/index.ts";
@@ -17,6 +18,7 @@ import * as AnalyticsEngine from "./AnalyticsEngine/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
 import * as Artifacts from "./Artifacts/index.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
+import * as BrowserRendering from "./BrowserRendering/index.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Containers from "./Container/index.ts";
 import * as Credentials from "./Credentials.ts";
@@ -29,9 +31,11 @@ import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
 import * as SecretsStore from "./SecretsStore/index.ts";
 import * as Tunnel from "./Tunnel/index.ts";
+import * as Vectorize from "./Vectorize/index.ts";
 import * as VpcService from "./VpcService/index.ts";
 import * as Workers from "./Workers/index.ts";
 import * as Workflows from "./Workers/Workflow.ts";
+import * as Zaraz from "./Zaraz/index.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
@@ -54,6 +58,7 @@ export const providers = () =>
       AiGateway.AiGatewayBindingPolicy,
       AnalyticsEngine.AnalyticsEngineDatasetBindingPolicy,
       Artifacts.ArtifactsBindingPolicy,
+      BrowserRendering.BrowserRenderingBindingPolicy,
       Command,
       Containers.Container,
       D1.D1ConnectionPolicy,
@@ -77,13 +82,18 @@ export const providers = () =>
       SecretsStore.SecretsStore,
       SecretsStore.Secret,
       Tunnel.Tunnel,
+      Vectorize.VectorizeIndexBindingPolicy,
+      Vectorize.VectorizeIndex,
+      Vectorize.VectorizeMetadataIndex,
       VpcService.VpcService,
+      KeyPair,
       Random,
       Workers.BindWorkerPolicy,
       Workers.CronEventSourcePolicy,
       Workers.FetchPolicy,
       Workers.Worker,
       Workflows.WorkflowResource,
+      Zaraz.ZarazConfig,
     ]),
   ).pipe(
     Layer.provide(
@@ -94,6 +104,7 @@ export const providers = () =>
         AiGateway.AiGatewayBindingPolicyLive,
         AnalyticsEngine.AnalyticsEngineDatasetBindingPolicyLive,
         Artifacts.ArtifactsBindingPolicyLive,
+        BrowserRendering.BrowserRenderingBindingPolicyLive,
         Containers.ContainerProvider(),
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
@@ -116,16 +127,24 @@ export const providers = () =>
         SecretsStore.SecretsStoreProvider(),
         SecretsStore.StoreSecretProvider(),
         Tunnel.TunnelProvider(),
+        Vectorize.VectorizeIndexBindingPolicyLive,
+        Vectorize.VectorizeIndexProvider(),
+        Vectorize.VectorizeMetadataIndexProvider(),
         VpcService.VpcServiceProvider(),
         Workers.BindWorkerPolicyLive,
         Workers.CronEventSourcePolicyLive,
         Workers.FetchPolicyLive,
         Workers.WorkerProvider(),
         Workflows.WorkflowProvider(),
+        Zaraz.ZarazConfigProvider(),
       ),
     ),
     Layer.provideMerge(
-      Layer.mergeAll(Build.CommandProvider(), RandomProvider()),
+      Layer.mergeAll(
+        Build.CommandProvider(),
+        KeyPairProvider(),
+        RandomProvider(),
+      ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
@@ -154,19 +173,6 @@ export const providers = () =>
     Layer.orDie,
   );
 
-const isMisleadinglyTaggedTransient = (error: unknown): boolean => {
-  if (!error || typeof error !== "object") return false;
-  const tag = (error as { _tag?: unknown })._tag;
-  const message = ((error as { message?: unknown }).message ?? "") as string;
-  // CF code 10001: "Method not allowed for token" is a real permission
-  // failure (NOT retryable), but the same code is also returned with
-  // message "internal error" during Cloudflare-side hiccups. The two
-  // messages are unambiguously distinct, so we can safely retry only
-  // the internal-error variant.
-  if (tag === "Forbidden" && /internal error/i.test(message)) return true;
-  return false;
-};
-
 const cloudflareRetryFactory: Retry.Factory = (lastError) => {
   const defaults = Retry.makeDefault(lastError);
   return {
@@ -192,4 +198,17 @@ const cloudflareRetryFactory: Retry.Factory = (lastError) => {
       Schedule.both(Schedule.recurs(8)),
     ),
   };
+};
+
+const isMisleadinglyTaggedTransient = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const tag = (error as { _tag?: unknown })._tag;
+  const message = ((error as { message?: unknown }).message ?? "") as string;
+  // CF code 10001: "Method not allowed for token" is a real permission
+  // failure (NOT retryable), but the same code is also returned with
+  // message "internal error" during Cloudflare-side hiccups. The two
+  // messages are unambiguously distinct, so we can safely retry only
+  // the internal-error variant.
+  if (tag === "Forbidden" && /internal error/i.test(message)) return true;
+  return false;
 };

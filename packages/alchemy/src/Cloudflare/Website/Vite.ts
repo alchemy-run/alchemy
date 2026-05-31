@@ -5,14 +5,12 @@ import {
   Worker,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerEnv,
   type WorkerProps,
 } from "../Workers/Worker.ts";
 
 export interface ViteProps<
   Bindings extends WorkerBindingProps = {},
-  Env extends WorkerEnv = {},
-> extends Omit<WorkerProps<Bindings, Env>, "vite" | "main"> {
+> extends Omit<WorkerProps<Bindings>, "vite" | "main"> {
   /**
    * Root directory passed to Vite's `root` option.
    * Defaults to the current working directory (`process.cwd()`).
@@ -111,15 +109,14 @@ export interface ViteProps<
  */
 export const Vite = <
   const Bindings extends WorkerBindingProps = {},
-  const Env extends WorkerEnv = {},
   Req = never,
 >(
   id: string,
   propsEff?:
-    | InputProps<ViteProps<Bindings, Env>>
-    | Effect.Effect<InputProps<ViteProps<Bindings, Env>>, never, Req>,
+    | InputProps<ViteProps<Bindings>>
+    | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
 ) =>
-  Worker<Bindings, Env, WorkerAssetsConfig, Req>(
+  Worker<Bindings, WorkerAssetsConfig, Req>(
     id,
     Effect.map(
       Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),

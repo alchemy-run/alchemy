@@ -21,4 +21,8 @@ export class CounterRpcs extends RpcGroup.make(
     payload: { upto: Schema.Number },
     success: RpcSchema.Stream(Schema.Number, Schema.Never),
   }),
+  Rpc.make("Reset", {
+    payload: {},
+    success: Schema.Void,
+  }),
 ) {}

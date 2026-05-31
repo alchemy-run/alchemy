@@ -1,5 +1,5 @@
-import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -10,6 +10,7 @@ import CronTestWorker from "./fixtures/cron-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
 });
 
 const logLevel = Effect.provideService(
@@ -35,7 +36,7 @@ const Stack = Alchemy.Stack(
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-test(
+test.skipIf(!!process.env.NO_SLOW_TESTS)(
   "deployed worker fires the scheduled handler on its cron trigger",
   Effect.gen(function* () {
     const { url, crons } = yield* stack;

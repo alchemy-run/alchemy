@@ -1,6 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["package.json", "src", "src/**/*.json", "test"],
+  "include": ["package.json", "test"],
+  "exclude": [
+    "test/Local/fixtures/rpc-server-entry.ts",
+    "test/Local/fixtures/rpc-spawner-parent.ts"
+  ],
   "compilerOptions": {
     "composite": true,
     "noEmit": true,

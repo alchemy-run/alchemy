@@ -288,58 +288,72 @@ codec from `layerJson` to `layerNdjson` (newline framing is required):
 
 Use the matching serialization layer in your test client.
 
-## Bonus: scaffold a caller Worker
+## Bonus: call it from another Worker
 
-Once the single-worker flow is solid, a second `RpcWorker` can call
-the first via `Cloudflare.RpcWorker.bind`. Start with a bare class:
+Once the single-worker flow is solid, any other Worker in the same
+account can call it via `Cloudflare.RpcWorker.bind` — no public URL,
+no extra schema. To keep the example focused on the cross-Worker
+call, the caller is a plain `Cloudflare.Worker` with a `fetch`
+handler. Start with a bare class:
 
 ```typescript
 // src/caller.ts
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
-import { CallerRpcs } from "./caller-rpcs.ts";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
-export default class Caller extends Cloudflare.RpcWorker<Caller>()(
+export default class Caller extends Cloudflare.Worker<Caller>()(
   "Caller",
-  { main: import.meta.filename, schema: CallerRpcs },
+  { main: import.meta.filename },
   Effect.gen(function* () {
-    return Effect.succeed(undefined as never);
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text("ok");
+      }),
+    };
   }),
 ) {}
 ```
 
-Same `RpcWorker` shape as before, with its own schema (`CallerRpcs`).
+A regular Worker — same shape as any other `Cloudflare.Worker`.
 
 ## Bind the typed client at init
 
 ```diff lang="typescript"
  import * as Cloudflare from "alchemy/Cloudflare";
  import * as Effect from "effect/Effect";
- import { CallerRpcs } from "./caller-rpcs.ts";
+ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 +import TaskWorker from "./worker.ts";
 
- export default class Caller extends Cloudflare.RpcWorker<Caller>()(
+ export default class Caller extends Cloudflare.Worker<Caller>()(
    "Caller",
-   { main: import.meta.filename, schema: CallerRpcs },
+   { main: import.meta.filename },
    Effect.gen(function* () {
 +    const tasks = yield* Cloudflare.RpcWorker.bind(TaskWorker);
++
+     return {
+       fetch: Effect.gen(function* () {
+         return HttpServerResponse.text("ok");
+       }),
+     };
    }),
  ) {}
 ```
 
-`Cloudflare.RpcWorker.bind(WorkerClass)` registers the service
+`Cloudflare.RpcWorker.bind(TaskWorker)` registers the service
 binding on this Worker so workerd surfaces the stub on `env`, and
 returns a typed `RpcClient` that mirrors `TaskWorker`'s schema.
 
-## Call it from a handler
+## Call it from `fetch`
 
 ```diff lang="typescript"
- Effect.gen(function* () {
-   const tasks = yield* Cloudflare.RpcWorker.bind(TaskWorker);
-+  const handlers = CallerRpcs.toLayer({
-+    proxyGetTask: ({ id }) => tasks.getTask({ id }),
-+  });
- }),
+ return {
+   fetch: Effect.gen(function* () {
++    const task = yield* tasks.getTask({ id: "abc" });
++    return HttpServerResponse.text(task);
+-    return HttpServerResponse.text("ok");
+   }),
+ };
 ```
 
 `tasks.getTask({...})` is just an Effect — fully typed against
@@ -356,23 +370,56 @@ runs the call inside its own scope, and tears the client down with
 the call. The consumer just sees a normal `RpcClient`.
 :::
 
-## Return the piped Effect
+## Modular form: separate the class from its runtime
+
+The inline form above bakes the runtime into the class
+declaration. The **two-arg form** — `(id, props)` with no impl —
+declares the class as a pure tagged identifier and provides the
+runtime via `static make(impl)`:
+
+```typescript
+// src/worker.ts
+export class Worker extends Cloudflare.RpcWorker<Worker>()(
+  "Worker",
+  { main: import.meta.filename, schema: TaskRpcs },
+) {}
+
+export default Worker.make(
+  Effect.gen(function* () {
+    const handlers = TaskRpcs.toLayer({
+      getTask: ({ id }) => Effect.succeed(`task-${id}`),
+    });
+    return RpcServer.toHttpEffect(TaskRpcs).pipe(
+      Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerJson)),
+    );
+  }),
+);
+```
+
+`Worker.make(impl)` returns a `Layer<Worker>`. Consumers import
+the class for type information; only the script that actually
+hosts the Worker imports the default Layer.
+
+## Host a Durable Object for cross-script binding
+
+`RpcWorker<Self, Deps>()` mirrors `Cloudflare.Worker<Self, Bindings, Deps>`
+— the optional second type argument declares DOs the script
+publishes for cross-script binding:
 
 ```diff lang="typescript"
-+import * as Layer from "effect/Layer";
-+import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
++import { Counter } from "./counter.ts";
 
- // ...
-     const handlers = CallerRpcs.toLayer({ /* ... */ });
-+    return RpcServer.toHttpEffect(CallerRpcs).pipe(
-+      Effect.provide(Layer.mergeAll(handlers, RpcSerialization.layerJson)),
-+    );
-   }),
+-export class Worker extends Cloudflare.RpcWorker<Worker>()(
++export class Worker extends Cloudflare.RpcWorker<Worker, Counter>()(
+   "Worker",
+   { main: import.meta.filename, schema: TaskRpcs },
  ) {}
 ```
 
-Same return shape as the original Worker — the caller is itself an
-`RpcWorker` whose `fetch` surface is its own `RpcGroup`.
+With `Counter` declared in `Deps`, any other Worker can write
+`Counter.from(Worker)` and have it type-check — see the
+[RPC Durable Object tutorial](/tutorial/cloudflare/rpc-durable-object)
+for the full cross-script pattern.
 
 ## Recap
 
@@ -380,10 +427,16 @@ Same return shape as the original Worker — the caller is itself an
   [Effect RPC](/guides/effect-rpc) and removes the `{ fetch }`
   wrapper. `props.schema` declares the served `RpcGroup`; the init
   returns the piped `RpcServer.toHttpEffect(schema)` Effect directly.
+- Inline form `(id, props, impl)` bundles the runtime into the
+  class; modular form `(id, props)` + `Class.make(impl)` keeps the
+  class importable without the runtime.
+- `RpcWorker<Self, Deps>()` declares cross-script DOs that
+  consumers can bind to via `Counter.from(Worker)`.
 - A single `Test.make` + `beforeAll(deploy(Stack))` + typed
   `RpcClient.make(TaskRpcs)` gets you an integration test that
   hammers a real `workers.dev` URL.
 - For streaming procedures, switch `layerJson` → `layerNdjson` on
   both ends.
-- `Cloudflare.RpcWorker.bind(WorkerClass)` is the cross-Worker
-  factory: register at init, build fresh clients per request.
+- `Cloudflare.RpcWorker.bind(WorkerClass)` works from any Worker —
+  `RpcWorker` or plain `Cloudflare.Worker` — and gives you a typed
+  client over the in-account service binding.

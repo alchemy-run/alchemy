@@ -101,9 +101,11 @@ const bootstrapCommand = Command.make(
   )(
     Effect.fnUntraced(function* ({ envFile, profile, force, workerName }) {
       const services = yield* cloudflareLayers(envFile, profile);
-      yield* bootstrapCloudflare({ workerName, force }).pipe(
-        Effect.provide(services),
-      );
+      yield* bootstrapCloudflare({
+        workerName,
+        force,
+        profile,
+      }).pipe(Effect.provide(services));
     }),
   ),
 );

@@ -24,7 +24,9 @@ const _gen = Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
 
     // get the container instance
-    const container = yield* Cloudflare.start(sandbox);
+    const container = yield* Cloudflare.start(sandbox, {
+      enableInternet: true,
+    });
 
     container.getTcpPort(1080);
     container.getUser();
@@ -45,7 +47,9 @@ export const Agent2 = Cloudflare.DurableObjectNamespace(
       const state = yield* Cloudflare.DurableObjectState;
 
       // get the container instance
-      const container = yield* Cloudflare.start(sandbox);
+      const container = yield* Cloudflare.start(sandbox, {
+        enableInternet: true,
+      });
 
       container.getTcpPort(1080);
       container.getUser();
@@ -67,7 +71,9 @@ export class Agent3 extends Cloudflare.DurableObjectNamespace<Agent3>()(
       const state = yield* Cloudflare.DurableObjectState;
 
       // get the container instance
-      const container = yield* Cloudflare.start(sandbox);
+      const container = yield* Cloudflare.start(sandbox, {
+        enableInternet: true,
+      });
 
       container.getTcpPort(1080);
       container.getUser();
@@ -89,7 +95,9 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
       const state = yield* Cloudflare.DurableObjectState;
 
       // get the container instance
-      const container = yield* Cloudflare.start(sandbox);
+      const container = yield* Cloudflare.start(sandbox, {
+        enableInternet: true,
+      });
 
       const connection = yield* container.getTcpPort(1080);
 

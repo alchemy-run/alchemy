@@ -1,3 +1,5 @@
+import * as ConfigError from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
@@ -7,14 +9,21 @@ import type { Scope } from "effect/Scope";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { SingleShotGen } from "effect/Utils";
 import type { PolicyLike } from "./Binding.ts";
+import type { Dependencies } from "./Dependencies.ts";
 import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
+import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
 import type { Rpc } from "./Rpc.ts";
-import { RuntimeContext, type BaseRuntimeContext } from "./RuntimeContext.ts";
+import {
+  CurrentRuntimeContext,
+  RuntimeContext,
+  sanitizeKey,
+  type BaseRuntimeContext,
+} from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
 import type { Stack, StackServices } from "./Stack.ts";
 import type { Stage } from "./Stage.ts";
@@ -65,19 +74,19 @@ export interface Platform<
   Type: Resource["Type"];
   Provider: Provider<Resource>;
 
-  <Self, Shape>(): {
+  <Self, Shape, Deps = never>(): {
     <PropsReq = never>(
       id: string,
       props:
         | InputProps<Resource["Props"]>
         | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
     ): Effect.Effect<
-      Resource & Rpc<Self>,
+      Resource & Rpc<Self> & Dependencies<Deps>,
       never,
-      Self | Resource["Providers"] | PropsReq
+      Resource["Providers"] | PropsReq
     > & {
       make<InitReq = never>(
-        impl: Effect.Effect<Shape, never, InitReq>,
+        impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
       ): Layer.Layer<
         Self,
         never,
@@ -98,7 +107,7 @@ export interface Platform<
       props:
         | InputProps<Resource["Props"]>
         | Effect.Effect<Resource["Props"], never, PropsReq>,
-      impl: Effect.Effect<Shape, never, InitReq>,
+      impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
     ): Effect.Effect<
       Resource & Rpc<Self>,
       never,
@@ -119,7 +128,7 @@ export interface Platform<
       Resource["Providers"] | PropsReq
     > & {
       make<InitReq extends Services | PlatformServices = never>(
-        impl: Effect.Effect<Shape, never, InitReq>,
+        impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
       ): Layer.Layer<
         Self,
         never,
@@ -158,7 +167,7 @@ export interface Platform<
     props:
       | InputProps<Resource["Props"]>
       | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
-    impl: Effect.Effect<Shape, never, InitReq>,
+    impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
   ): Effect.Effect<
     Resource & Rpc<Shape>,
     never,
@@ -343,28 +352,66 @@ export const Platform = <
                       }) ?? Effect.die("No serve handler"))
                     : Effect.void,
                 ),
+
                 Effect.provide(
-                  Layer.provideMerge(
-                    Layer.mergeAll(
-                      Layer.succeed(Platform.Platform, runtimeContext),
-                      Layer.succeed(PlatformContext, runtimeContext),
-                      Layer.succeed(RuntimeContext, runtimeContext),
-                      Layer.succeed(resource.Self, instance),
-                      Layer.succeed(Platform.Self, instance),
-                      Layer.succeed(Self, instance),
-                      runtimeContext.planServices
-                        ? Layer.unwrap(
-                            ALCHEMY_PHASE.pipe(
-                              Effect.map((phase) =>
-                                phase === "plan"
-                                  ? runtimeContext.planServices!
-                                  : Layer.empty,
+                  Layer.effect(
+                    ConfigProvider.ConfigProvider,
+                    Effect.gen(function* () {
+                      // a Config Provider that we use to intercept config lookups and bind them to the RuntimeContext
+                      const configProvider =
+                        yield* ConfigProvider.ConfigProvider;
+                      const phase = yield* ALCHEMY_PHASE;
+
+                      return ConfigProvider.make(
+                        Effect.fnUntraced(function* (path) {
+                          const ctx = yield* CurrentRuntimeContext;
+                          // `set`/`get` store keys verbatim, so canonicalize the
+                          // logical config path here (the caller's job) before
+                          // handing it to the RuntimeContext.
+                          const key = sanitizeKey(
+                            path.map((p) => p.toString()).join("_"),
+                          );
+                          const node = yield* configProvider.get(path);
+                          if (phase === "plan" && node) {
+                            // bind it to the RuntimeContext if running in plan phase
+                            const output = Output.literal(node.value);
+                            yield* ctx?.set(key, output) ?? Effect.void;
+                            return node;
+                          } else if (phase === "runtime" && ctx) {
+                            // retrieve from the RuntimeContext if running in runtime phase
+                            const value = yield* ctx.get<string>(key);
+                            if (value) {
+                              return ConfigProvider.makeValue(value as string);
+                            }
+                          }
+                          // fallback to the config provider otherwise
+                          return node;
+                        }),
+                      );
+                    }),
+                  ).pipe(
+                    Layer.provideMerge(
+                      Layer.mergeAll(
+                        Layer.succeed(Platform.Platform, runtimeContext),
+                        Layer.succeed(PlatformContext, runtimeContext),
+                        Layer.succeed(RuntimeContext, runtimeContext),
+                        Layer.succeed(resource.Self, instance),
+                        Layer.succeed(Platform.Self, instance),
+                        Layer.succeed(Self, instance),
+                        runtimeContext.planServices
+                          ? Layer.unwrap(
+                              ALCHEMY_PHASE.pipe(
+                                Effect.map((phase) =>
+                                  phase === "plan"
+                                    ? runtimeContext.planServices!
+                                    : Layer.empty,
+                                ),
                               ),
-                            ),
-                          )
-                        : Layer.empty,
+                            )
+                          : Layer.empty,
+                      ),
                     ),
-                    Layer.succeedContext(outerServices),
+                    Layer.provideMerge(Layer.succeedContext(outerServices)),
                   ),
                 ),
               );

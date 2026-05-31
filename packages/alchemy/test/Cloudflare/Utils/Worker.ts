@@ -43,6 +43,37 @@ export const expectWorkersDevSubdomain = Effect.fn(function* (
 });
 
 /**
+ * Poll Cloudflare's `getScriptSubdomain` until both `enabled` and
+ * `previewsEnabled` match the expected values, then assert. Like
+ * `expectWorkersDevSubdomain`, the subdomain toggle is eventually
+ * consistent with respect to a freshly-completed `putScript` /
+ * `createScriptSubdomain` call, so a same-tick read may still return the
+ * previous value for a second or two. Retries indefinitely with a fixed
+ * cadence; the surrounding test's own timeout bounds the wait.
+ */
+export const expectWorkersDevPreviews = Effect.fn(function* (
+  workerName: string,
+  accountId: string,
+  expected: { enabled: boolean; previewsEnabled: boolean },
+) {
+  const final = yield* workers
+    .getScriptSubdomain({ accountId, scriptName: workerName })
+    .pipe(
+      Effect.flatMap((s) =>
+        s.enabled === expected.enabled &&
+        s.previewsEnabled === expected.previewsEnabled
+          ? Effect.succeed(s)
+          : Effect.fail(
+              `subdomain not yet { enabled: ${expected.enabled}, previewsEnabled: ${expected.previewsEnabled} }`,
+            ),
+      ),
+      Effect.tapError(Effect.logInfo),
+      Effect.retry({ schedule: Schedule.spaced("500 millis") }),
+    );
+  expect(final).toEqual(expected);
+});
+
+/**
  * Look up a worker by name. Returns `undefined` if no script with that
  * name exists in the account.
  */

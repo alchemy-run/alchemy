@@ -8,16 +8,12 @@ import {
   Worker,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
-  type WorkerEnv,
   type WorkerProps,
 } from "../Workers/Worker.ts";
 
-export interface StaticSiteProps<
-  Bindings extends WorkerBindingProps = {},
-  Env extends WorkerEnv = WorkerEnv,
->
+export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
   extends
-    Omit<WorkerProps<Bindings, Env, WorkerAssetsConfig>, "assets">,
+    Omit<WorkerProps<Bindings, WorkerAssetsConfig>, "assets" | "dev">,
     Omit<CommandProps, "env"> {
   /**
    * Optional configuration for static asset routing behavior.
@@ -120,13 +116,12 @@ export type StaticSite = ReturnType<typeof StaticSite>;
  */
 export const StaticSite = <
   const Bindings extends WorkerBindingProps = {},
-  const Env extends WorkerEnv = WorkerEnv,
   Req = never,
 >(
   id: string,
   propsEff:
-    | InputProps<StaticSiteProps<Bindings, Env>>
-    | Effect.Effect<InputProps<StaticSiteProps<Bindings, Env>>, never, Req>,
+    | InputProps<StaticSiteProps<Bindings>>
+    | Effect.Effect<InputProps<StaticSiteProps<Bindings>>, never, Req>,
 ) =>
   Effect.gen(function* () {
     const props = Effect.isEffect(propsEff)
@@ -154,7 +149,7 @@ export const StaticSite = <
       })),
     );
 
-    return yield* Worker<Bindings, Env, WorkerAssetsConfig, Req>(
+    return yield* Worker<Bindings, WorkerAssetsConfig, Req>(
       "Worker",
       Effect.map(props, (props) => ({
         ...props,
@@ -163,6 +158,9 @@ export const StaticSite = <
           hash: build.hash,
           config: props.assetsConfig,
         },
+        // Omit the dev command from WorkerProps since it's different from WorkerProps["dev"].
+        // TODO: we'll need to update this when we add local dev support for StaticSite.
+        dev: undefined,
       })),
     );
   }).pipe(Namespace.push(id));
