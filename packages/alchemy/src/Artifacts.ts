@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
@@ -108,7 +109,8 @@ export const scopedArtifacts = (
 export const provideFreshArtifactStore = <A, E, R>(
   effect: Effect.Effect<A, E, R | ArtifactStore>,
 ): Effect.Effect<A, E, R> =>
-  effect.pipe(
+  pipe(
+    effect,
     Effect.provideServiceEffect(
       ArtifactStore,
       Effect.sync(createArtifactStore),
@@ -125,7 +127,8 @@ export const ensureArtifactStore = <A, E, R>(
   Effect.serviceOption(ArtifactStore).pipe(
     Effect.map(Option.getOrUndefined),
     Effect.flatMap((existing) =>
-      effect.pipe(
+      pipe(
+        effect,
         Effect.provideService(ArtifactStore, existing ?? createArtifactStore()),
       ),
     ),

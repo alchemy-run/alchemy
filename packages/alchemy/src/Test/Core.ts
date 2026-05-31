@@ -1,5 +1,6 @@
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
@@ -105,7 +106,8 @@ export const toEffect = <A>(
   const base = Effect.gen(function* () {
     const cfg = yield* loadConfigProvider(Option.none());
     const configProvider = withProfileOverride(cfg, options.profile);
-    return yield* effect.pipe(
+    return yield* pipe(
+      effect,
       provideFreshArtifactStore,
       Effect.provide(Layer.succeed(ConfigProvider, configProvider)),
     );
@@ -143,7 +145,8 @@ export const withProviders = <A, E, R, ROut>(
   options: MakeOptions<ROut>,
   stackName: string,
 ): Effect.Effect<A, E, Exclude<R, ROut | Stack | Stage>> =>
-  effect.pipe(
+  pipe(
+    effect,
     Effect.provide(options.providers as Layer.Layer<any, never, any>),
     Effect.provide(
       Layer.succeed(Stack, {
