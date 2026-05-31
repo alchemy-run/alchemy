@@ -17,6 +17,7 @@ import { Images } from "../Images/Images.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
 import type { Queue } from "../Queue/Queue.ts";
 import type { R2Bucket } from "../R2/R2Bucket.ts";
+import type { Secret } from "../SecretsStore/Secret.ts";
 import type { VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { Assets } from "./Assets.ts";
 import type { DurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
@@ -52,6 +53,7 @@ export type WorkerBindingResource =
   | Images
   | Hyperdrive
   | VectorizeIndex
+  | Secret
   | Worker
   | DurableObjectNamespaceLike<any>;
 

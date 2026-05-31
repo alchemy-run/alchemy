@@ -54,6 +54,10 @@ export type Secret = Resource<
   Providers
 >;
 
+export const isSecret = (value: unknown): value is Secret =>
+  typeof value === "object" &&
+  (value as any)?.Type === "Cloudflare.SecretsStore.Secret";
+
 /**
  * A single secret stored inside a Cloudflare Secrets Store.
  *
