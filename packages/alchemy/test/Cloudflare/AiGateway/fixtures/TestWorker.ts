@@ -2,9 +2,9 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Gateway } from "./gateway.ts";
+import { Gateway } from "./Gateway.ts";
 
-export default class AiGatewayTestWorker extends Cloudflare.Worker<AiGatewayTestWorker>()(
+export default class TestWorker extends Cloudflare.Worker<TestWorker>()(
   "AiGatewayTestWorker",
   {
     main: import.meta.filename,
