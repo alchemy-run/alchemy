@@ -81,17 +81,28 @@ export const state = () =>
           const httpState = yield* makeCloudflareStateStore({ url, authToken });
           if (matches) {
             return httpState;
-          } else {
-            yield* Clank.info(
-              `Cloudflare State Store '${scriptName}' is out of date ` +
-                `(expected v${expected}, observed v${observed ?? "unknown"}); redeploying...`,
+          } else if (isCI) {
+            return yield* Effect.die(
+              new AuthError({
+                message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
+              }),
             );
-            const stateStoreOptions = yield* deployStateStore({
-              stage: scriptName,
-              state: httpState,
-              force: false,
+          } else {
+            const shouldDeploy = yield* Clank.confirm({
+              message:
+                `Cloudflare State Store '${scriptName}' is out of date ` +
+                `(expected v${expected}, observed v${observed ?? "unknown"})`,
             });
-            return yield* makeCloudflareStateStore(stateStoreOptions);
+            if (shouldDeploy) {
+              const stateStoreOptions = yield* deployStateStore({
+                stage: scriptName,
+                state: httpState,
+                force: false,
+              });
+              return yield* makeCloudflareStateStore(stateStoreOptions);
+            } else {
+              return yield* Effect.die(new Clank.PromptCancelled());
+            }
           }
         });
 
