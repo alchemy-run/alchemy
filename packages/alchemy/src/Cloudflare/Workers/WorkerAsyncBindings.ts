@@ -18,6 +18,7 @@ import { getHyperdriveDevOrigin } from "../Hyperdrive/HyperdriveBinding.ts";
 import { isImages } from "../Images/Images.ts";
 import { isKVNamespace } from "../KV/KVNamespace.ts";
 import { isQueue } from "../Queue/Queue.ts";
+import { isR2Bucket } from "../R2/R2Bucket.ts";
 import { isSecret } from "../SecretsStore/Secret.ts";
 import { isVectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isAssets } from "./Assets.ts";
