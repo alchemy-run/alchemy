@@ -79,6 +79,20 @@ export const state = () =>
           const { matches, expected, observed } =
             yield* checkStateStoreVersion(url);
 
+          if (observed === undefined) {
+            const shouldDeploy = yield* Clank.confirm({
+              message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
+            });
+            if (shouldDeploy) {
+              return yield* bootstrap({
+                workerName: scriptName,
+                profile: profileName,
+              });
+            } else {
+              return yield* Effect.die(new Clank.PromptCancelled());
+            }
+          }
+
           const httpState = yield* ensureAccess({ url, authToken });
           if (matches) {
             return httpState;
@@ -654,6 +668,9 @@ const waitForStateStoreVersion = (url: string) =>
 const checkStateStoreVersion = (url: string) =>
   Effect.gen(function* () {
     const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
+    const isAvailable = yield* Effect.cached(
+      isStateStoreAvailable(STATE_STORE_SCRIPT_NAME),
+    );
     // The /version route may 404 transiently after a fresh deploy
     // while Cloudflare propagates the new script to the edge, and may
     // also surface transport-level blips on cold workers.dev hosts.
@@ -661,6 +678,19 @@ const checkStateStoreVersion = (url: string) =>
     // exhausting that budget do we collapse to `undefined` and let
     // the caller treat it as a version mismatch.
     const result = yield* client.version.getVersion().pipe(
+      Effect.catchTag("HttpClientError", (e) =>
+        // if we get a 404 here, it means we assumed the worker shoudl exist, but it does not
+        // we should do a check to see if it does
+        e.response?.status === 404
+          ? isAvailable.pipe(
+              Effect.flatMap((isAvailable) =>
+                // if the worker is available, then we should assume it was recently created and retry by propagating the error
+                // otherwise, return undefined (we don't know the version, there is no worker)
+                isAvailable ? Effect.fail(e) : Effect.succeed(undefined),
+              ),
+            )
+          : Effect.fail(e),
+      ),
       Effect.retry({
         schedule: Schedule.spaced("250 millis").pipe(
           Schedule.both(Schedule.recurs(40)),
