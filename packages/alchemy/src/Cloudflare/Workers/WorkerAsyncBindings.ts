@@ -65,12 +65,7 @@ type BindingSpec = InputProps<
   Exclude<PutScriptRequest["metadata"]["bindings"], undefined>[number]
 >;
 
-/**
- * Maps a single resolved `env` binding value to the Cloudflare binding
- * metadata shape. Exported for unit testing the per-type mapping.
- * @internal
- */
-export const toBinding = (
+const toBinding = (
   bindingName: string,
   binding: WorkerBindingResource,
 ): BindingSpec | Effect.Effect<BindingSpec> | undefined => {
