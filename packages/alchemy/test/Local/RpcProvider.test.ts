@@ -169,7 +169,6 @@ const useProvider = <A, E, R>(
           Layer.succeed(Stage, defaultStack.stage),
           Layer.succeed(AlchemyContext, {
             dotAlchemy: "/tmp/.alchemy",
-            updateStateStore: false,
             dev: false,
             adopt: false,
           }),
