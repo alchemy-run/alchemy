@@ -39,6 +39,34 @@ export interface HttpStateStoreProps extends HttpStateStoreCredentials {
   ) => HttpClientRequest.HttpClientRequest;
 }
 
+export const checkHttpStateStoreAuth = ({
+  url,
+  authToken,
+}: {
+  url: string;
+  authToken: string;
+}) =>
+  Effect.gen(function* () {
+    const apiClient = yield* HttpApiClient.make(StateApi, {
+      baseUrl: url,
+      transformClient: HttpClient.mapRequest((req) =>
+        req.pipe(HttpClientRequest.bearerToken(authToken)),
+      ),
+    });
+    return yield* apiClient.state.listStacks().pipe(
+      Effect.map(() => true),
+      Effect.catchTag("Unauthorized", () => Effect.succeed(false)),
+      Effect.retry({
+        while: (error) =>
+          error._tag === "HttpClientError" &&
+          !!error.response &&
+          // worker can 404 for a bit on first deploy
+          (error.response.status === 404 || error.response.status >= 500),
+        schedule: Schedule.fixed(200),
+      }),
+    );
+  });
+
 export const makeHttpStateStore = ({
   url,
   authToken,

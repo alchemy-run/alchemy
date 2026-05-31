@@ -24,6 +24,7 @@ import * as Output from "../../Output.ts";
 import * as Alchemy from "../../Stack.ts";
 import { StateApi } from "../../State/HttpStateApi.ts";
 import {
+  checkHttpStateStoreAuth,
   makeHttpStateStore,
   type HttpStateStoreCredentials,
 } from "../../State/HttpStateStore.ts";
@@ -78,7 +79,7 @@ export const state = () =>
           const { matches, expected, observed } =
             yield* checkStateStoreVersion(url);
 
-          const httpState = yield* makeCloudflareStateStore({ url, authToken });
+          const httpState = yield* ensureAccess({ url, authToken });
           if (matches) {
             return httpState;
           } else if (isCI) {
@@ -106,6 +107,27 @@ export const state = () =>
           }
         });
 
+      const ensureAccess = (credentials: HttpStateStoreCredentials) =>
+        Effect.gen(function* () {
+          const isAuth = yield* checkHttpStateStoreAuth(credentials);
+          if (!isAuth) {
+            // our token is wrong, force a refresh
+            yield* Clank.info(
+              `Cloudflare State store authentication failed, refreshing credentials...`,
+            );
+            const credentials = yield* loginWithCloudflare(profileName, true);
+            if (!(yield* checkHttpStateStoreAuth(credentials))) {
+              return yield* Effect.die(
+                new AuthError({
+                  message: `Cloudflare State store authentication failed, after refreshing credentials.`,
+                }),
+              );
+            }
+            return yield* makeCloudflareStateStore(credentials);
+          }
+          return yield* makeCloudflareStateStore(credentials);
+        });
+
       const credentials = yield* credStore.read<HttpStateStoreCredentials>(
         profileName,
         CREDENTIALS_FILE,
@@ -115,7 +137,9 @@ export const state = () =>
       }
       const workerExists = yield* isStateStoreAvailable(scriptName);
       if (workerExists) {
-        return yield* ensureLatest(yield* loginWithCloudflare(false));
+        return yield* ensureLatest(
+          yield* loginWithCloudflare(profileName, false),
+        );
       } else if (isCI) {
         // TODO(sam): do we want to support bootstrapping the state store from CI?
         // for now - just die here
@@ -198,7 +222,11 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
             `Use --force to redeploy.`,
         );
       }
-      const credentials = yield* loginWithCloudflare(force);
+      const credentials = yield* loginWithCloudflare(
+        profileName,
+        // force refresh during
+        true,
+      );
       const { url, authToken } = credentials;
       if (!isCI) {
         // we don't write credentials in CI because the file system is ephemeral
@@ -348,7 +376,7 @@ const deployWithLocalState = ({
       force,
     });
 
-    const { url } = yield* loginWithCloudflare(force);
+    const { url } = yield* loginWithCloudflare(profileName, force);
     const httpState = yield* makeCloudflareStateStore({ url, authToken });
 
     yield* hoistBootstrapStack({
@@ -465,10 +493,9 @@ const hoistBootstrapStack = Effect.fnUntraced(function* ({
  * `CloudflareEnvironment`, `Credentials`, `HttpClient`, and
  * `FileSystem`.
  */
-export const loginWithCloudflare = (force: boolean) =>
+export const loginWithCloudflare = (profileName: string, force: boolean) =>
   Effect.gen(function* () {
     const credStore = yield* CredentialsStore;
-    const profileName = yield* ALCHEMY_PROFILE;
     const isCI = yield* CI;
     const { accountId } = yield* CloudflareEnvironment.CloudflareEnvironment;
 
