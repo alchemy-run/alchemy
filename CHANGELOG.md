@@ -1,3 +1,18 @@
+## v2.0.0-beta.46
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - **vectorize**: Add Vectorize index as a bindable resource &nbsp;-&nbsp; by **David J. Felix** and **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/407 [<samp>(2089d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/2089dbf7)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Use remote state when updating Cloudflare State Store &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/477 [<samp>(a1a81)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a1a811e1)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.45...HEAD)
+
+---
+
 ## v2.0.0-beta.45
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
