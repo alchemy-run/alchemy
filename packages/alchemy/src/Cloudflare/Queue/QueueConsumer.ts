@@ -1,5 +1,4 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
-import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -366,7 +365,6 @@ export const QueueConsumerProvider = () =>
           );
 
           yield* getConsumer({ accountId: acct, queueId, consumerId }).pipe(
-            Effect.tap(Console.log),
             Effect.flatMap((fetched) =>
               toObserved(fetched)?.script === news.scriptName
                 ? Effect.void

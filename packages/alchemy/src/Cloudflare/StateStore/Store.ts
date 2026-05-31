@@ -32,7 +32,7 @@ export default class Store extends DurableObjectNamespace<Store>()(
       const cryptoKey = yield* Effect.tryPromise(() =>
         crypto.subtle.importKey(
           "raw",
-          hexToBytes(keyHex),
+          Buffer.from(keyHex, "hex"),
           { name: "AES-CTR" },
           false,
           ["encrypt", "decrypt"],
@@ -53,17 +53,14 @@ export default class Store extends DurableObjectNamespace<Store>()(
             ),
           );
           // Frame as a single base64 string: nonce || ciphertext.
-          const framed = allocBytes(counter.byteLength + ct.byteLength);
-          framed.set(counter, 0);
-          framed.set(ct, counter.byteLength);
-          return toB64(framed);
+          return Buffer.concat([counter, ct]).toString("base64");
         }).pipe(Effect.orDie);
 
       const decryptEntry = (entry: string) =>
         Effect.tryPromise(async () => {
-          const framed = fromB64(entry);
-          const counter = framed.slice(0, NONCE_BYTES);
-          const ciphertext = framed.slice(NONCE_BYTES);
+          const framed = Buffer.from(entry, "base64");
+          const counter = framed.subarray(0, NONCE_BYTES);
+          const ciphertext = framed.subarray(NONCE_BYTES);
           const pt = await crypto.subtle.decrypt(
             { name: "AES-CTR", counter, length: 64 },
             cryptoKey,
@@ -303,25 +300,3 @@ const parseResourceKey = (
  */
 const allocBytes = (size: number): Uint8Array<ArrayBuffer> =>
   new Uint8Array(new ArrayBuffer(size));
-
-const toB64 = (bytes: Uint8Array): string => {
-  let s = "";
-  for (let i = 0; i < bytes.byteLength; i++)
-    s += String.fromCharCode(bytes[i]!);
-  return btoa(s);
-};
-
-const fromB64 = (s: string): Uint8Array<ArrayBuffer> => {
-  const bin = atob(s);
-  const bytes = allocBytes(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-};
-
-const hexToBytes = (hex: string): Uint8Array<ArrayBuffer> => {
-  const bytes = allocBytes(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-};
