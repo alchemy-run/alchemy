@@ -18,7 +18,7 @@ import { getHyperdriveDevOrigin } from "../Hyperdrive/HyperdriveBinding.ts";
 import { isImages } from "../Images/Images.ts";
 import { isKVNamespace } from "../KV/KVNamespace.ts";
 import { isQueue } from "../Queue/Queue.ts";
-import { isR2Bucket } from "../R2/R2Bucket.ts";
+import { isSecret } from "../SecretsStore/Secret.ts";
 import { isVectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isAssets } from "./Assets.ts";
 import { isDurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
@@ -196,6 +196,13 @@ const toBinding = (
       type: "vectorize",
       name: bindingName,
       indexName: binding.indexName,
+    };
+  } else if (isSecret(binding)) {
+    return {
+      type: "secrets_store_secret",
+      name: bindingName,
+      secretName: binding.secretName,
+      storeId: binding.storeId,
     };
   } else {
     return {
