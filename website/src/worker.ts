@@ -34,7 +34,11 @@ export default {
     if (request.method === "GET" && prefersMarkdown(request)) {
       const mdUrl = toMarkdownUrl(new URL(request.url)).toString();
       const res = await env.ASSETS.fetch(new Request(mdUrl, request));
-      if (res.status !== 404) return withUtf8Charset(res);
+      // Astro's asset server labels `.md` as `application/octet-stream`, which
+      // agents treat as a binary download instead of rendering. Force the
+      // correct text type + charset since this branch only ever serves markdown.
+      if (res.status !== 404)
+        return withContentType(res, "text/markdown; charset=utf-8");
     }
     const res = await env.ASSETS.fetch(request);
     return withUtf8Charset(rewriteCanonicalHost(request, res));
@@ -42,16 +46,20 @@ export default {
 };
 
 /**
- * Astro's static asset server labels `.txt`/`.md` as `text/plain` and
- * `text/markdown` with no charset. UTF-8 bytes (em dashes, arrows in our docs
- * and `llms.txt`) then get decoded as latin-1 by browsers and agents, showing
- * up as mojibake (`â€"`). Stamp `charset=utf-8` on text responses that omit it.
+ * Astro's static asset server labels `.txt` as `text/plain` with no charset.
+ * UTF-8 bytes (em dashes, arrows in our docs and `llms.txt`) then get decoded
+ * as latin-1 by browsers and agents, showing up as mojibake (`â€"`). Stamp
+ * `charset=utf-8` on text responses that omit it.
  */
 const withUtf8Charset = (res: Response): Response => {
   const ct = res.headers.get("content-type");
   if (!ct || !ct.startsWith("text/") || /charset=/i.test(ct)) return res;
+  return withContentType(res, `${ct}; charset=utf-8`);
+};
+
+const withContentType = (res: Response, contentType: string): Response => {
   const next = new Response(res.body, res);
-  next.headers.set("content-type", `${ct}; charset=utf-8`);
+  next.headers.set("content-type", contentType);
   return next;
 };
 
