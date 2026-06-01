@@ -191,6 +191,11 @@ export default defineConfig({
           label: "GitHub",
           href: "https://github.com/alchemy-run/alchemy-effect",
         },
+        {
+          icon: "discord",
+          label: "Discord",
+          href: "https://discord.gg/jwKw8dBJdN",
+        },
       ],
       editLink: {
         baseUrl:

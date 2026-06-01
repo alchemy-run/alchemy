@@ -4,11 +4,12 @@ import Logo from "./Logo.astro";
 
 interface Props {
   /**
-   * Set on the marketing layout, where this nav is the only header and no
-   * Starlight sidebar (hence no floating hamburger) exists. Docs pages render
-   * this as Starlight's `Header` override and leave it unset — there we must
-   * reserve space on the right so the right-aligned controls clear Starlight's
-   * fixed mobile menu button.
+   * Set on the marketing layout, where this nav is the only header and there
+   * is no Starlight sidebar — so the social/theme controls must stay in the top
+   * bar on every viewport. Docs pages render this as Starlight's `Header`
+   * override and leave it unset; there the controls are dropped on mobile
+   * because the floating hamburger menu already exposes them (see the
+   * `.alc-nav--docs` mobile rule below).
    */
   marketing?: boolean;
 }
@@ -225,17 +226,18 @@ const { marketing = false } = Astro.props;
     .alc-nav { gap: 16px; }
   }
   /*
-   * On docs pages Starlight renders a fixed hamburger button in the top-right
-   * (`position: fixed; inset-inline-end: var(--sl-nav-pad-x)`, sized
-   * `--sl-menu-button-size`) below its `md` (50rem) breakpoint. Its right edge
-   * lines up with this nav's right edge, so without a reservation it sits on
-   * top of the theme toggle. Pad the right by the button's footprint plus a
-   * small gap so the controls clear it. Marketing pages have no sidebar (and
-   * thus no hamburger), so this only applies in the docs context.
+   * Docs pages render this nav inside Starlight's fixed `<header>`, which
+   * already reserves room on the right for the floating hamburger button and
+   * shows a mobile menu (with theme select + social icons in its footer) below
+   * the `md` (50rem) breakpoint. Packing GitHub/Discord/theme controls into the
+   * top bar too made it overflow past that reserved area and slide under the
+   * hamburger. Below 50rem we drop those redundant controls — they live in the
+   * hamburger menu — leaving just the brand and the Docs/Blog links. Marketing
+   * pages have no hamburger/menu, so they keep the controls (see `marketing`).
    */
   @media (max-width: 50rem) {
-    .alc-nav--docs {
-      padding-inline-end: calc(var(--sl-menu-button-size, 2rem) + 0.75rem);
+    .alc-nav--docs :is(.alc-nav__link--icon, .alc-nav__theme-toggle) {
+      display: none;
     }
   }
 </style>
