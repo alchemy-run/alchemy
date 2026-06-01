@@ -4,6 +4,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import Stack from "./fixtures/do-rpc/stack.ts";
@@ -60,6 +61,38 @@ test(
     expect(res.status).toBe(200);
     const body = (yield* res.json) as { value: string };
     expect(body.value).toBe("ok");
+  }).pipe(logLevel),
+  { timeout: 60_000 },
+);
+
+// Reproduces the `tick` streaming example from the Durable Objects tutorial:
+// https://v2.alchemy.run/tutorial/cloudflare/durable-objects/
+//
+// The DO exposes `tick(n): Stream<number>` and the Worker forwards it to the
+// HTTP response with `HttpServerResponse.stream`. The client reads the body as
+// newline-delimited integers. With `/tick/5` we expect ["0","1","2","3","4"].
+test(
+  "tick streams sequential values from a durable object (tutorial repro)",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const client = freshConn(yield* HttpClient.HttpClient);
+
+    const lines = yield* client.get(`${url}/tick/5`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? res.stream.pipe(
+              Stream.decodeText,
+              Stream.splitLines,
+              Stream.filter((line) => line.length > 0),
+              Stream.runCollect,
+              Effect.map((chunk) => [...chunk]),
+            )
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
+    );
+
+    expect(lines).toEqual(["0", "1", "2", "3", "4"]);
   }).pipe(logLevel),
   { timeout: 60_000 },
 );

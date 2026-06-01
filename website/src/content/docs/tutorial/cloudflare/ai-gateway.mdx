@@ -265,10 +265,9 @@ in place.
   agnostic, so swapping Workers AI for OpenAI or Anthropic later is
   a layer-level change, not a code-level one.
 
-The natural next step is to give the model **memory**. The [Add a
-Chat Agent](/tutorial/cloudflare/agent) tutorial wraps the same
-`LanguageModel` with `Chat.Service` and stores the conversation in a
-Durable Object's `state.storage`, so every session is resumable
+The natural next step is to give the model **memory** — wrapping the
+same `LanguageModel` with `Chat.Service` and storing the conversation
+in a Durable Object's `state.storage`, so every session is resumable
 across requests, restarts, and hibernation.
 
 For the wider API surface — `generateObject`, `Toolkit`, structured
