@@ -8,9 +8,11 @@ import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
 import {
   buildConditionPayload,
+  collectPolicies,
   conditionFingerprint,
   policyFingerprint,
   resolvePolicies,
+  type ApiTokenBinding,
   type ApiTokenProps,
 } from "./Common.ts";
 
@@ -27,7 +29,7 @@ export type UserApiToken = Resource<
      */
     value: Redacted.Redacted<string>;
   },
-  never,
+  ApiTokenBinding,
   Providers
 >;
 
@@ -59,6 +61,42 @@ export type UserApiToken = Resource<
  *     },
  *   ],
  * });
+ * ```
+ *
+ * @section Attaching Policies via Bindings
+ * @example Let a downstream capability contribute its own policies
+ * A token can be created with no `policies` of its own; the policies are
+ * supplied through its binding contract (see {@link ApiTokenBinding}).
+ * ```typescript
+ * const token = yield* Cloudflare.UserApiToken("scoped-token");
+ *
+ * yield* token.bind("MyCapability", {
+ *   policies: [
+ *     {
+ *       effect: "allow",
+ *       permissionGroups: ["Workers Scripts Read"],
+ *       resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @section Exposing a Token to a Worker
+ * @example Read the token value at runtime
+ * Bind the token's value output in the Worker's Init phase to get a runtime
+ * accessor. Binding it injects a `secret_text` Worker binding; the returned
+ * accessor reads it back (as `Redacted`) at runtime.
+ * ```typescript
+ * // init
+ * const value = yield* token.value; // Accessor<Redacted<string>>
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const apiToken = yield* value; // Redacted<string>
+ *     // ... call the Cloudflare API with `apiToken`
+ *     return HttpServerResponse.text("ok");
+ *   }),
+ * };
  * ```
  */
 export const UserApiToken = Resource<UserApiToken>("Cloudflare.UserApiToken");
@@ -95,14 +133,16 @@ export const UserApiTokenProvider = () =>
 
       return {
         stables: ["tokenId"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news = {}, output }) {
           if (!isResolved(news)) return undefined;
           const oldName = output?.name ?? (yield* resolveName(id, olds?.name));
           const newName = yield* resolveName(id, news.name);
           const oldPolicyFp = policyFingerprint(
             resolvePolicies(olds?.policies ?? []),
           );
-          const newPolicyFp = policyFingerprint(resolvePolicies(news.policies));
+          const newPolicyFp = policyFingerprint(
+            resolvePolicies(news.policies ?? []),
+          );
           const oldCondFp = conditionFingerprint(olds?.condition);
           const newCondFp = conditionFingerprint(news.condition);
           if (
@@ -115,9 +155,16 @@ export const UserApiTokenProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        reconcile: Effect.fn(function* ({ id, news, output }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, output, bindings }) {
           const name = yield* resolveName(id, news.name);
-          const policies = resolvePolicies(news.policies);
+          const collected = collectPolicies(news.policies, bindings);
+          if (collected.length === 0) {
+            return yield* Effect.die(
+              `Cloudflare requires at least one policy on token "${name}". ` +
+                "Pass `policies` or attach them via a binding.",
+            );
+          }
+          const policies = resolvePolicies(collected);
 
           // Observe — fetch current state if we know the token id;
           // Cloudflare reports a deleted token as `TokenNotFound`, which
