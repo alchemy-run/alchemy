@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Vitest";
+import { poll } from "@/Util/poll.ts";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -181,12 +182,21 @@ test(
       }),
     );
 
+    // D1 cross-script reads are eventually consistent: the GET is
+    // idempotent, so retry on *any* failure until WorkerB's replica
+    // catches up to the committed writes. A status retry alone wouldn't
+    // cover a 200 that still reports the stale value, so fail on a
+    // value mismatch too and let the same retry absorb both that and
+    // transient HTTP errors.
     const httpClient = (yield* HttpClient.HttpClient).pipe(withCounterKey(key));
-    const fromB = yield* httpClient
-      .get(`${urlB}/d1`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
-    expect(fromB.status).toBe(200);
-    expect((yield* fromB.json) as { value: number }).toEqual({ value: 2 });
+    const value = yield* httpClient.get(`${urlB}/d1`).pipe(
+      Effect.timeout(requestTimeout),
+      Effect.flatMap((res) => res.json),
+      Effect.map((body) => (body as { value: number }).value),
+      Effect.filterOrFail((value) => value === 2),
+      Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+    );
+    expect(value).toBe(2);
   }).pipe(logLevel),
   { timeout: testTimeout },
 );
@@ -248,8 +258,22 @@ test(
       urlA,
       Effect.gen(function* () {
         const c = yield* RpcClient.make(CounterRpcs);
-        const d1 = yield* c.getD1({ key });
-        const dox = yield* c.getDO({ key });
+        // The writes above (WorkerB → WorkerA's cross-script DO) are
+        // eventually consistent when read back through WorkerA's RPC:
+        // D1 in particular can lag a beat before the second increment
+        // is visible from the reading replica. getD1/getDO are
+        // idempotent, so poll the read pair until both counters settle
+        // rather than reading once and flaking on "expected 1 to be 2".
+        const { d1, dox } = yield* poll({
+          description: "WorkerB writes visible from WorkerA (d1=2, do=1)",
+          effect: Effect.all({
+            d1: c.getD1({ key }),
+            dox: c.getDO({ key }),
+          }),
+          predicate: ({ d1, dox }) => d1.value === 2 && dox.value === 1,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
+        });
         expect(d1.value).toBe(2);
         expect(dox.value).toBe(1);
       }),

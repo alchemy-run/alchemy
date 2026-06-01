@@ -52,16 +52,28 @@ test.provider(
         );
 
       // Fresh workers.dev URLs take a few seconds to start serving 200s.
-      // Retry the upsert until the route handler responds.
+      // The /health gate above only proves the script is *resolvable* —
+      // edge propagation can still transiently 404/500 individual route
+      // hits, so retry upsert/describe (both idempotent) until they hit
+      // the route handler. `filterStatusOk` fails non-2xx so the retry
+      // fires.
+      const readinessRetry = {
+        schedule: Schedule.exponential("500 millis").pipe(
+          Schedule.both(Schedule.recurs(20)),
+        ),
+      } as const;
+
       const upsertRes = yield* HttpClient.post(`${workerUrl}/upsert`).pipe(
         Effect.flatMap(HttpClientResponse.filterStatusOk),
         Effect.flatMap((res) => res.json),
+        Effect.retry(readinessRetry),
       );
       expect(upsertRes).toMatchObject({ mutationId: expect.any(String) });
 
       const describeRes = yield* HttpClient.get(`${workerUrl}/describe`).pipe(
         Effect.flatMap(HttpClientResponse.filterStatusOk),
         Effect.flatMap((res) => res.json),
+        Effect.retry(readinessRetry),
       );
       expect(describeRes).toMatchObject({ dimensions: 32 });
 
