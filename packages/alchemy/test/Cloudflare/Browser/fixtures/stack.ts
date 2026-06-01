@@ -2,33 +2,31 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as pathe from "pathe";
-import BrowserRenderingEffectWorker from "./effect-worker.ts";
+import BrowserEffectWorker from "./effect-worker.ts";
 
 const asyncWorkerMain = pathe.resolve(import.meta.dirname, "async-worker.ts");
 
-const Browser = Cloudflare.BrowserRendering({ name: "BROWSER" });
-
-export const AsyncWorker = Cloudflare.Worker("BrowserRenderingAsyncWorker", {
+export const AsyncWorker = Cloudflare.Worker("BrowserAsyncWorker", {
   main: asyncWorkerMain,
   compatibility: {
     flags: ["nodejs_compat"],
   },
   env: {
-    BROWSER: Browser,
+    BROWSER: Cloudflare.Browser({ name: "BROWSER" }),
   },
 });
 
 export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
 
 export default Alchemy.Stack(
-  "BrowserRenderingBindingStack",
+  "BrowserBindingStack",
   {
     providers: Cloudflare.providers(),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
     const asyncWorker = yield* AsyncWorker;
-    const effectWorker = yield* BrowserRenderingEffectWorker;
+    const effectWorker = yield* BrowserEffectWorker;
 
     return {
       asyncWorkerUrl: asyncWorker.url.as<string>(),

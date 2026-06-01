@@ -1,17 +1,14 @@
 import type * as Effect from "effect/Effect";
 import { SingleShotGen } from "effect/Utils";
-import {
-  BrowserRenderingBinding,
-  type BrowserRenderingClient,
-} from "./BrowserRenderingBinding.ts";
+import { BrowserBinding, type BrowserClient } from "./BrowserBinding.ts";
 
-type BrowserRenderingTypeId = typeof BrowserRenderingTypeId;
-const BrowserRenderingTypeId = "Cloudflare.BrowserRendering" as const;
+type BrowserTypeId = typeof BrowserTypeId;
+const BrowserTypeId = "Cloudflare.Browser" as const;
 
-export type BrowserRenderingProps = {
+export type BrowserProps = {
   /**
-   * Binding name used when `BrowserRendering` is bound from inside a Worker
-   * init phase (`yield* Cloudflare.BrowserRendering(...)`). When passed through
+   * Binding name used when `Browser` is bound from inside a Worker init phase
+   * (`yield* Cloudflare.Browser(...)`). When passed through
    * `Worker({ env: { ... } })`, the object key remains the binding name.
    *
    * @default "BROWSER"
@@ -20,39 +17,34 @@ export type BrowserRenderingProps = {
 };
 
 /**
- * The Effect yielded when a `BrowserRendering` marker is used inside a Worker
- * init phase: it attaches the `browser` binding to the surrounding Worker and
- * resolves to the runtime {@link BrowserRenderingClient}.
+ * The Effect yielded when a `Browser` marker is used inside a Worker init
+ * phase: it attaches the `browser` binding to the surrounding Worker and
+ * resolves to the runtime {@link BrowserClient}.
  */
-type BindEffect = Effect.Effect<
-  BrowserRenderingClient,
-  never,
-  BrowserRenderingBinding
->;
+type BindEffect = Effect.Effect<BrowserClient, never, BrowserBinding>;
 
 /**
  * Marker for a Cloudflare Browser Rendering binding.
  *
  * It is a plain data structure (so it can be declared directly on a Worker's
  * `env`) that is **also** yieldable inside an Effect-native Worker. Yielding it
- * (`yield* Cloudflare.BrowserRendering(...)`) attaches the binding to the
- * surrounding Worker and returns the runtime {@link BrowserRenderingClient} —
- * no separate `.bind(...)` step required.
+ * (`yield* Cloudflare.Browser(...)`) attaches the binding to the surrounding
+ * Worker and returns the runtime {@link BrowserClient} — no separate
+ * `.bind(...)` step required.
  *
  * The divergence is achieved via `[Symbol.iterator]`: the object is not an
  * `Effect` (so `InferEnv` resolves it to the native `Fetcher` in the `env`
  * position), but it is iterable as one when `yield*`-ed.
  */
-export interface BrowserRendering {
-  kind: BrowserRenderingTypeId;
+export interface Browser {
+  kind: BrowserTypeId;
   name: string;
   asEffect(): BindEffect;
-  [Symbol.iterator](): SingleShotGen<BindEffect, BrowserRenderingClient>;
+  [Symbol.iterator](): SingleShotGen<BindEffect, BrowserClient>;
 }
 
-export const isBrowserRendering = (value: unknown): value is BrowserRendering =>
-  typeof value === "object" &&
-  (value as BrowserRendering)?.kind === BrowserRenderingTypeId;
+export const isBrowser = (value: unknown): value is Browser =>
+  typeof value === "object" && (value as Browser)?.kind === BrowserTypeId;
 
 /**
  * A Cloudflare Browser Rendering binding for launching headless browser
@@ -71,12 +63,10 @@ export const isBrowserRendering = (value: unknown): value is BrowserRendering =>
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     // Attaches the binding to this Worker AND returns the runtime client.
- *     const browserRendering = yield* Cloudflare.BrowserRendering({
- *       name: "BROWSER",
- *     });
+ *     const browser = yield* Cloudflare.Browser({ name: "BROWSER" });
  *
  *     return {
- *       fetch: browserRendering.withBrowser(puppeteer, (browser) =>
+ *       fetch: browser.withBrowser(puppeteer, (browser) =>
  *         Effect.gen(function* () {
  *           const page = yield* Effect.tryPromise(() => browser.newPage());
  *           yield* Effect.tryPromise(() => page.goto("https://example.com"));
@@ -85,7 +75,7 @@ export const isBrowserRendering = (value: unknown): value is BrowserRendering =>
  *         }),
  *       ),
  *     };
- *   }).pipe(Effect.provide(Cloudflare.BrowserRenderingBindingLive)),
+ *   }).pipe(Effect.provide(Cloudflare.BrowserBindingLive)),
  * );
  * ```
  *
@@ -95,7 +85,7 @@ export const isBrowserRendering = (value: unknown): value is BrowserRendering =>
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
  *   env: {
- *     BROWSER: Cloudflare.BrowserRendering(),
+ *     BROWSER: Cloudflare.Browser(),
  *   },
  * });
  *
@@ -125,27 +115,26 @@ export const isBrowserRendering = (value: unknown): value is BrowserRendering =>
  *
  * @see https://developers.cloudflare.com/browser-rendering/workers-binding-api/
  */
-export const BrowserRendering: {
-  (props?: BrowserRenderingProps): BrowserRendering;
+export const Browser: {
+  (props?: BrowserProps): Browser;
   /**
-   * Bind an existing `BrowserRendering` marker to the surrounding Worker,
-   * returning the runtime client. Equivalent to `yield* browser` — prefer
-   * yielding the marker directly.
+   * Bind an existing `Browser` marker to the surrounding Worker, returning the
+   * runtime client. Equivalent to `yield* browser` — prefer yielding the marker
+   * directly.
    */
-  bind: typeof BrowserRenderingBinding.bind;
+  bind: typeof BrowserBinding.bind;
 } = Object.assign(
-  (props?: BrowserRenderingProps): BrowserRendering => {
-    const self: BrowserRendering = {
-      kind: BrowserRenderingTypeId,
+  (props?: BrowserProps): Browser => {
+    const self: Browser = {
+      kind: BrowserTypeId,
       name: props?.name ?? "BROWSER",
-      asEffect: () => BrowserRenderingBinding.bind(self),
-      [Symbol.iterator]: () =>
-        new SingleShotGen(BrowserRenderingBinding.bind(self)),
+      asEffect: () => BrowserBinding.bind(self),
+      [Symbol.iterator]: () => new SingleShotGen(BrowserBinding.bind(self)),
     };
     return self;
   },
   {
-    bind: (...args: Parameters<typeof BrowserRenderingBinding.bind>) =>
-      BrowserRenderingBinding.bind(...args),
+    bind: (...args: Parameters<typeof BrowserBinding.bind>) =>
+      BrowserBinding.bind(...args),
   },
 );

@@ -44,7 +44,7 @@ export type GetBindingType<T> =
                           ? RateLimit
                           : T extends Cloudflare.Images
                             ? ImagesBinding
-                            : T extends Cloudflare.BrowserRendering
+                            : T extends Cloudflare.Browser
                               ? Fetcher
                               : T extends Cloudflare.Hyperdrive
                                 ? Hyperdrive
