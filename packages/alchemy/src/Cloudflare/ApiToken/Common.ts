@@ -27,10 +27,20 @@ export type ApiTokenPermissionGroupRef =
   | PermissionGroupName
   | { id: string; meta?: { key?: string; value?: string } };
 
+/**
+ * Value of a resource entry in an {@link ApiTokenPolicy}. Usually `"*"`, but
+ * account-owned tokens must nest zone resources under the account resource —
+ * e.g. `{ "com.cloudflare.api.account.<id>": { "com.cloudflare.api.account.zone.*": "*" } }`
+ * — so a nested object is also allowed.
+ */
+export type ApiTokenResourceScope =
+  | string
+  | { [K in ApiTokenResourceKey]?: string };
+
 export interface ApiTokenPolicy {
   effect: "allow" | "deny";
   permissionGroups: ApiTokenPermissionGroupRef[];
-  resources: { [K in ApiTokenResourceKey]?: string };
+  resources: { [K in ApiTokenResourceKey]?: ApiTokenResourceScope };
 }
 
 export interface ApiTokenCondition {
@@ -116,8 +126,8 @@ export const resolvePermissionGroup = (ref: ApiTokenPermissionGroupRef) => {
 
 const resolveResources = (
   resources: ApiTokenPolicy["resources"],
-): Record<string, string> => {
-  const out: Record<string, string> = {};
+): Record<string, ApiTokenResourceScope> => {
+  const out: Record<string, ApiTokenResourceScope> = {};
   for (const [key, value] of Object.entries(resources)) {
     if (value === undefined) continue;
     out[key] = value;
