@@ -81,6 +81,7 @@ export type Expr<A = any, Req = any> =
   | AllExpr<Expr<A, Req>[]>
   | ApplyExpr<any, A, Req>
   | EffectExpr<any, A, Req>
+  | FlatMapExpr<any, A, Req>
   | LiteralExpr<A>
   | NamedExpr<A, Req>
   | PropExpr<A, keyof A, Req>
@@ -237,6 +238,45 @@ export const mapEffect =
   <A, B, Req2>(fn: (value: A) => Effect.Effect<B, never, Req2>) =>
   <Req>(output: Output<A, Req>): ToOutput<B, Req | Req2> =>
     new EffectExpr(output as Expr<A, Req>, fn) as any;
+
+export const flatMap: {
+  <A, B, Req2>(
+    fn: (value: A) => Output<B, Req2>,
+  ): <Req>(output: Output<A, Req>) => ToOutput<B, Req | Req2>;
+  <A, B, Req, Req2>(
+    output: Output<A, Req>,
+    fn: (value: A) => Output<B, Req2>,
+  ): ToOutput<B, Req | Req2>;
+} = (<A, B, Req, Req2>(
+  ...args:
+    | [fn: (value: A) => Output<B, Req2>]
+    | [output: Output<A, Req>, fn: (value: A) => Output<B, Req2>]
+) =>
+  args.length === 1
+    ? <Req>(output: Output<A, Req>): ToOutput<B, Req | Req2> =>
+        new FlatMapExpr(output as Expr<A, Req>, args[0]) as any
+    : new FlatMapExpr(args[0] as any, args[1])) as any;
+
+export const isFlatMapExpr = <In = any, Out = any, Req = any, Req2 = any>(
+  node: any,
+): node is FlatMapExpr<In, Out, Req, Req2> => node?.kind === "FlatMapExpr";
+
+export class FlatMapExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
+  B,
+  Req | Req2
+> {
+  readonly kind = "FlatMapExpr";
+  constructor(
+    public readonly expr: Expr<A, Req>,
+    public readonly f: (value: A) => Output<B, Req2>,
+  ) {
+    super();
+    return proxy(this);
+  }
+  [inspect](): string {
+    return `${this.expr[inspect]()}.flatMap(${this.f.toString()})`;
+  }
+}
 
 export const isEffectExpr = <In = any, Out = any, Req = any, Req2 = any>(
   node: any,
@@ -461,20 +501,26 @@ function proxy(self: any): any {
             ? target[inspect]
             : isResourceExpr(self) && self.stables && prop in self.stables
               ? self.stables[prop as keyof typeof self.stables]
-              : prop === "apply"
-                ? self[prop]
-                : prop in self
-                  ? typeof self[prop as keyof typeof self] === "function" &&
-                    !("kind" in self)
-                    ? new PropExpr(proxy, prop as never)
-                    : self[prop as keyof typeof self]
-                  : new PropExpr(proxy, prop as never),
+              : prop in self
+                ? typeof self[prop as keyof typeof self] === "function" &&
+                  !("kind" in self)
+                  ? new PropExpr(proxy, prop as never)
+                  : self[prop as keyof typeof self]
+                : new PropExpr(proxy, prop as never),
     apply: (_, thisArg, args) => {
       if (isPropExpr(self)) {
-        if (self.identifier === "apply") {
+        // Method-style combinators on an Output proxy. `map`/`apply` and
+        // `mapEffect`/`effect` are aliases that mirror the standalone
+        // `Output.map` / `Output.mapEffect` / `Output.flatMap` functions.
+        if (self.identifier === "map" || self.identifier === "apply") {
           return new ApplyExpr(self.expr, args[0]);
-        } else if (self.identifier === "effect") {
+        } else if (
+          self.identifier === "mapEffect" ||
+          self.identifier === "effect"
+        ) {
           return new EffectExpr(self.expr, args[0]);
+        } else if (self.identifier === "flatMap") {
+          return new FlatMapExpr(self.expr, args[0]);
         }
       }
       return undefined;
@@ -540,6 +586,11 @@ export const evaluate: <A, Req = never>(
       } else if (isEffectExpr(expr)) {
         // TODO(sam): the same effect shoudl be memoized so that it's not run multiple times
         return yield* expr.f(yield* evaluate(expr.expr, upstream));
+      } else if (isFlatMapExpr(expr)) {
+        // Resolve the source, hand it to `f` to produce a new Output, then
+        // recursively evaluate that Output (flattening one level).
+        const value = yield* evaluate(expr.expr, upstream);
+        return yield* evaluate(expr.f(value), upstream);
       } else if (isAllExpr(expr)) {
         return yield* Effect.all(
           expr.outs.map((out) => evaluate(out, upstream)),
@@ -648,7 +699,12 @@ export const upstream = <E extends Output<any, any>>(expr: E): any => {
     return upstream(expr.expr);
   } else if (isAllExpr(expr)) {
     return Object.assign({}, ...expr.outs.map((out) => upstream(out)));
-  } else if (isEffectExpr(expr) || isApplyExpr(expr) || isNamedExpr(expr)) {
+  } else if (
+    isEffectExpr(expr) ||
+    isApplyExpr(expr) ||
+    isFlatMapExpr(expr) ||
+    isNamedExpr(expr)
+  ) {
     return upstream(expr.expr);
   } else if (Array.isArray(expr)) {
     return expr.map(upstream).reduce(toObject, {});
