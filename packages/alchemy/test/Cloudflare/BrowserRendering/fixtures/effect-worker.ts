@@ -12,17 +12,15 @@ type PuppeteerBrowser = Awaited<ReturnType<(typeof puppeteer)["launch"]>>;
 const cloudflarePuppeteer =
   puppeteer as unknown as BrowserRenderingPuppeteer<PuppeteerBrowser>;
 
-export const Browser = Cloudflare.BrowserRendering({ name: "BROWSER" });
-
 export default class BrowserRenderingEffectWorker extends Cloudflare.Worker<BrowserRenderingEffectWorker>()(
   "BrowserRenderingEffectWorker",
   {
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const browserRendering = yield* Cloudflare.BrowserRendering.bind(
-      yield* Browser,
-    );
+    const browserRendering = yield* Cloudflare.BrowserRendering({
+      name: "BROWSER",
+    });
 
     return {
       fetch: Effect.gen(function* () {
