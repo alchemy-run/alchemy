@@ -1,3 +1,22 @@
+## v2.0.0-beta.47
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - **ai-gateway**: Add LanguageModel + AI Gateway client surface &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/389 [<samp>(51150)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/51150a8c)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**:
+  - Skip evalStack in login and defer State store init to runtime &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/492 [<samp>(949b3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/949b3079)
+- **cloudflare**:
+  - Handle props.env in local workers &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/473 [<samp>(0b779)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/0b779dfe)
+  - Stream RPC return values across durable object boundary &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/478 [<samp>(6811d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6811de57)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.46...HEAD)
+
+---
+
 ## v2.0.0-beta.46
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
