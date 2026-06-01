@@ -34,33 +34,41 @@ export const dnsReadWriteClient = (
  * @binding
  *
  * @section Managing DNS records at runtime
- * @example Full CRUD from a request handler
- * The zone is fixed by `.bind(zone)` — the provisioned token only grants
- * access to that zone, so calls take no `zoneId`. Pass the {@link Zone}
- * resource directly (it's an `Effect`), or a resolved zone value.
+ * @example Full CRUD from inside a Worker
+ * Bind the client in the Worker's Init phase and provide
+ * {@link DnsReadWriteLive}. The zone is fixed by `.bind(zone)` — the
+ * provisioned token only grants access to that zone, so calls take no
+ * `zoneId`. Pass the {@link Zone} resource directly (it's an `Effect`), or
+ * `yield* Zone` for a resolved value.
  * ```typescript
- * // init — bind the Zone resource directly (or `yield* Zone` first)
- * const dns = yield* Cloudflare.DnsReadWrite.bind(Zone);
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
- * return {
- *   fetch: Effect.gen(function* () {
- *     const { result } = yield* dns.createDnsRecord({
- *       type: "A",
- *       name: "app.example.com",
- *       content: "192.0.2.1",
- *       ttl: 1,
- *     });
- *     const record = yield* dns.getDnsRecord(result.id);
- *     yield* dns.deleteDnsRecord(result.id);
- *     return HttpServerResponse.json({ id: record.result.id });
- *   }),
- * };
- * ```
+ * const Zone = Cloudflare.Zone("MyZone", { name: "example.com" });
  *
- * @section Runtime Layer
- * Provide {@link DnsReadWriteLive} in the Worker's runtime layer.
- * ```typescript
- * Effect.provide(Cloudflare.DnsReadWriteLive)
+ * export class DnsWorker extends Cloudflare.Worker<DnsWorker>()(
+ *   "DnsWorker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     // Init phase — bind the full CRUD client scoped to the zone.
+ *     const dns = yield* Cloudflare.DnsReadWrite.bind(Zone);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { result } = yield* dns.createDnsRecord({
+ *           type: "A",
+ *           name: "app.example.com",
+ *           content: "192.0.2.1",
+ *           ttl: 1,
+ *         });
+ *         const record = yield* dns.getDnsRecord(result.id);
+ *         yield* dns.deleteDnsRecord(result.id);
+ *         return yield* HttpServerResponse.json({ id: record.id });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.DnsReadWriteLive)),
+ * ) {}
  * ```
  */
 export class DnsReadWrite extends Binding.Service<

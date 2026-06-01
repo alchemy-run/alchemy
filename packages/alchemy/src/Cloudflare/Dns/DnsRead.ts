@@ -71,27 +71,34 @@ export const dnsReadClient = (
  * @binding
  *
  * @section Reading DNS records at runtime
- * @example Bind a read client scoped to a zone
+ * @example Read records from inside a Worker
+ * Bind the client in the Worker's Init phase and provide {@link DnsReadLive}.
  * The zone is fixed by `.bind(zone)` — the provisioned token only grants
  * access to that zone, so calls take no `zoneId`. Pass the {@link Zone}
- * resource directly (it's an `Effect`), or a resolved zone value.
+ * resource directly (it's an `Effect`), or `yield* Zone` for a resolved value.
  * ```typescript
- * // bind the Zone resource directly
- * const dns = yield* Cloudflare.DnsRead.bind(Zone);
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
- * // or bind a resolved zone value
- * const zone = yield* Zone;
- 
-* const dns = yield* Cloudflare.DnsRead.bind(zone);
+ * const Zone = Cloudflare.Zone("MyZone", { name: "example.com" });
  *
- * const { result } = yield* dns.listDnsRecords({ type: "A" });
- * const record = yield* dns.getDnsRecord(result[0].id);
- * ```
+ * export class DnsReaderWorker extends Cloudflare.Worker<DnsReaderWorker>()(
+ *   "DnsReaderWorker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     // Init phase — bind the read client scoped to the zone.
+ *     const dns = yield* Cloudflare.DnsRead.bind(Zone);
  *
- * @section Runtime Layer
- * Provide {@link DnsReadLive} in the Worker's runtime layer.
- * ```typescript
- * Effect.provide(Cloudflare.DnsReadLive)
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { result } = yield* dns.listDnsRecords({ type: "A" });
+ *         const record = yield* dns.getDnsRecord(result[0].id);
+ *         return yield* HttpServerResponse.json({ id: record.id });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.DnsReadLive)),
+ * ) {}
  * ```
  */
 export class DnsRead extends Binding.Service<

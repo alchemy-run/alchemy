@@ -131,39 +131,46 @@ export const dnsWriteClient = (
  * @binding
  *
  * @section Mutating DNS records at runtime
- * @example Bind a write client scoped to a zone
+ * @example Create, update, and delete records from inside a Worker
+ * Bind the client in the Worker's Init phase and provide {@link DnsWriteLive}.
  * The zone is fixed by `.bind(zone)` — the provisioned token only grants
  * access to that zone, so calls take no `zoneId`. Pass the {@link Zone}
- * resource directly (it's an `Effect`), or a resolved zone value.
+ * resource directly (it's an `Effect`), or `yield* Zone` for a resolved value.
  * ```typescript
- * // bind the Zone resource directly
- * const dns = yield* Cloudflare.DnsWrite.bind(Zone);
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
  *
- * // or bind a resolved zone value
- * const zone = yield* Zone;
- * const dns = yield* Cloudflare.DnsWrite.bind(zone);
- * ```
+ * const Zone = Cloudflare.Zone("MyZone", { name: "example.com" });
  *
- * @example Create a record
- * ```typescript
- * const { result } = yield* dns.createDnsRecord({
- *   type: "A",
- *   name: "app.example.com",
- *   content: "192.0.2.1",
- *   ttl: 1,
- *   proxied: true,
- * });
- * ```
+ * export class DnsWriterWorker extends Cloudflare.Worker<DnsWriterWorker>()(
+ *   "DnsWriterWorker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     // Init phase — bind the write client scoped to the zone.
+ *     const dns = yield* Cloudflare.DnsWrite.bind(Zone);
  *
- * @example Update and delete a record
- * ```typescript
- * yield* dns.updateDnsRecord(recordId, {
- *   type: "A",
- *   name: "app.example.com",
- *   content: "192.0.2.2",
- *   ttl: 1,
- * });
- * yield* dns.deleteDnsRecord(recordId);
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const { result } = yield* dns.createDnsRecord({
+ *           type: "A",
+ *           name: "app.example.com",
+ *           content: "192.0.2.1",
+ *           ttl: 1,
+ *           proxied: true,
+ *         });
+ *         yield* dns.updateDnsRecord(result.id, {
+ *           type: "A",
+ *           name: "app.example.com",
+ *           content: "192.0.2.2",
+ *           ttl: 1,
+ *         });
+ *         yield* dns.deleteDnsRecord(result.id);
+ *         return yield* HttpServerResponse.json({ id: result.id });
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.DnsWriteLive)),
+ * ) {}
  * ```
  *
  * @example Apply a batch of changes atomically
@@ -172,12 +179,6 @@ export const dnsWriteClient = (
  *   posts: [{ type: "A", name: "a.example.com", content: "192.0.2.1", ttl: 1 }],
  *   deletes: [{ id: oldRecordId }],
  * });
- * ```
- *
- * @section Runtime Layer
- * Provide {@link DnsWriteLive} in the Worker's runtime layer.
- * ```typescript
- * Effect.provide(Cloudflare.DnsWriteLive)
  * ```
  */
 export class DnsWrite extends Binding.Service<
