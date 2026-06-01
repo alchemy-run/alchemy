@@ -238,7 +238,10 @@ export default defineConfig({
           autogenerate: { directory: "providers", collapsed: true },
         },
       ],
-      plugins: [starlightBlog()],
+      // starlight-blog feeds this many posts into the sidebar's "Recent"
+      // group, which `src/blog-sidebar.ts` re-buckets into Releases/Posts.
+      // We want every post listed, so set it effectively unlimited.
+      plugins: [starlightBlog({ recentPostCount: Number.MAX_SAFE_INTEGER })],
       routeMiddleware: ["./src/blog-sidebar.ts"],
     }),
     mdx(),
