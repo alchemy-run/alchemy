@@ -2,6 +2,7 @@ import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Array from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Equivalence from "effect/Equivalence";
+import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -13,9 +14,8 @@ export type ZoneType = "full" | "partial" | "secondary" | "internal";
 export type ZoneStatus = "initializing" | "pending" | "active" | "moved";
 
 /**
- * Common shape returned by both a managed {@link Zone} resource and an
- * {@link importZone} lookup — anything that needs to point at a Cloudflare
- * Zone can accept this.
+ * Common shape returned by a managed {@link Zone} resource — anything that
+ * needs to point at a Cloudflare Zone can accept this.
  */
 export type ZoneAttributes = {
   zoneId: string;
@@ -82,48 +82,21 @@ export type Zone = Resource<
  * yield* Cloudflare.Zone("MyZone", { name: "example.com" }).pipe(destroy());
  * ```
  *
- * @section Importing an existing Zone
- * @example Look up by name or id
+ * @section Adopting an existing Zone
+ * @example Take over a zone that already exists in Cloudflare
  * ```typescript
- * const zone = yield* Cloudflare.importZone("example.com");
+ * import { adopt } from "alchemy/AdoptPolicy";
+ * // A zone carries no ownership markers, so the engine refuses to take over a
+ * // pre-existing zone unless you opt in with `adopt(true)`.
+ * const zone = yield* Cloudflare.Zone("MyZone", {
+ *   name: "example.com",
+ * }).pipe(adopt(true));
  * // zone.zoneId, zone.nameServers, zone.accountId, ...
  * ```
  */
 export const Zone = Resource<Zone>("Cloudflare.Zone", {
   defaultRemovalPolicy: "retain",
 });
-
-/** @internal — shape a distilled zones API result into `ZoneAttributes`. */
-export const toZoneAttributes = (
-  result: {
-    id: string;
-    name: string;
-    account: { id?: string | null };
-    type?: ZoneType | null;
-    status?: ZoneStatus | null;
-    paused?: boolean | null;
-    nameServers: ReadonlyArray<string>;
-    originalNameServers?: ReadonlyArray<string> | null;
-    vanityNameServers?: ReadonlyArray<string> | null;
-  },
-  fallbackAccountId: string,
-): ZoneAttributes => ({
-  zoneId: result.id,
-  name: result.name,
-  accountId: result.account.id ?? fallbackAccountId,
-  type: (result.type ?? "full") as ZoneType,
-  status: (result.status ?? undefined) as ZoneStatus | undefined,
-  paused: result.paused ?? false,
-  nameServers: [...result.nameServers],
-  originalNameServers: result.originalNameServers
-    ? [...result.originalNameServers]
-    : undefined,
-  vanityNameServers: result.vanityNameServers
-    ? [...result.vanityNameServers]
-    : undefined,
-});
-
-const stringArrayEq = Array.makeEquivalence(Equivalence.String);
 
 export const ZoneProvider = () =>
   Provider.effect(
@@ -157,17 +130,23 @@ export const ZoneProvider = () =>
         }),
         read: Effect.fn(function* ({ output, olds }) {
           const name = output?.name ?? olds?.name;
+          // Owned path: we have persisted state (our own zoneId) — refresh it.
           if (output?.zoneId) {
             const result = yield* get({ zoneId: output.zoneId }).pipe(
               Effect.catch(() => Effect.succeed(undefined)),
             );
             if (result) return toZoneAttributes(result, accountId);
           }
+          // Adoption path: no state of our own, but a zone with this name
+          // already exists in the cloud. Cloudflare zones carry no ownership
+          // markers we can inspect, so we cannot prove we created it — brand
+          // it `Unowned` so the engine refuses to take over unless `adopt` is
+          // set.
           if (name) {
             const match = yield* findZoneByName({ accountId, name });
             if (!match) return undefined;
             const result = yield* get({ zoneId: match.id });
-            return toZoneAttributes(result, accountId);
+            return Unowned(toZoneAttributes(result, accountId));
           }
           return undefined;
         }),
@@ -228,3 +207,35 @@ export const ZoneProvider = () =>
       };
     }),
   );
+
+/** @internal — shape a distilled zones API result into `ZoneAttributes`. */
+export const toZoneAttributes = (
+  result: {
+    id: string;
+    name: string;
+    account: { id?: string | null };
+    type?: ZoneType | null;
+    status?: ZoneStatus | null;
+    paused?: boolean | null;
+    nameServers: ReadonlyArray<string>;
+    originalNameServers?: ReadonlyArray<string> | null;
+    vanityNameServers?: ReadonlyArray<string> | null;
+  },
+  fallbackAccountId: string,
+): ZoneAttributes => ({
+  zoneId: result.id,
+  name: result.name,
+  accountId: result.account.id ?? fallbackAccountId,
+  type: (result.type ?? "full") as ZoneType,
+  status: (result.status ?? undefined) as ZoneStatus | undefined,
+  paused: result.paused ?? false,
+  nameServers: [...result.nameServers],
+  originalNameServers: result.originalNameServers
+    ? [...result.originalNameServers]
+    : undefined,
+  vanityNameServers: result.vanityNameServers
+    ? [...result.vanityNameServers]
+    : undefined,
+});
+
+const stringArrayEq = Array.makeEquivalence(Equivalence.String);

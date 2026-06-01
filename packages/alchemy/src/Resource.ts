@@ -301,6 +301,7 @@ export function Resource<R extends ResourceLike>(
       options?: { stage?: string; stack?: string },
     ): Effect.Effect<R> =>
       Effect.succeed(Output.of(makeRef<R>(id, options)) as unknown as R),
+
     Type: type,
     Provider: ProviderTag,
     Self: self,
