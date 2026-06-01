@@ -23,6 +23,7 @@ import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Containers from "./Container/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as D1 from "./D1/index.ts";
+import * as Dns from "./Dns/index.ts";
 import * as Email from "./Email/index.ts";
 import * as Hyperdrive from "./Hyperdrive/index.ts";
 import * as Images from "./Images/index.ts";
@@ -65,6 +66,9 @@ export const providers = () =>
       Containers.Container,
       D1.D1ConnectionPolicy,
       D1.D1Database,
+      Dns.DnsReadPolicy,
+      Dns.DnsReadWritePolicy,
+      Dns.DnsWritePolicy,
       Email.EmailAddress,
       Email.EmailRouting,
       Email.EmailRule,
@@ -115,6 +119,9 @@ export const providers = () =>
         Containers.ContainerProvider(),
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
+        Dns.DnsReadPolicyLive,
+        Dns.DnsReadWritePolicyLive,
+        Dns.DnsWritePolicyLive,
         Email.EmailAddressProvider(),
         Email.EmailRoutingProvider(),
         Email.EmailRuleProvider(),
