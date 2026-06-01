@@ -174,7 +174,6 @@ handles auth and the URL:
 const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
 
 const languageModel = aiGateway.model({
-  client: aiGateway,
   model: "@cf/meta/llama-3.1-8b-instruct",
   parameters: { temperature: 0.7, maxTokens: 1024 },
 });
@@ -190,7 +189,6 @@ Effect.gen(function* () {
   const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
 
   const languageModel = aiGateway.model({
-    client: aiGateway,
     model: "@cf/meta/llama-3.1-8b-instruct",
     parameters: { temperature: 0.7, maxTokens: 1024 },
   });

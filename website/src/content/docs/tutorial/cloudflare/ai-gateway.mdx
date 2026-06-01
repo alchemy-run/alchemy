@@ -107,7 +107,6 @@ that satisfies Effect's standard AI service.
      const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
 +
 +    const languageModel = aiGateway.model({
-+      client: aiGateway,
 +      model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 +      parameters: { temperature: 0.7, maxTokens: 1024 },
 +    });
