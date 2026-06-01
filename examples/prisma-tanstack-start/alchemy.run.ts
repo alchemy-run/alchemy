@@ -9,6 +9,7 @@ const projectName = process.env.PRISMA_PROJECT ?? `${serviceName}-project-100`;
 const message =
   process.env.TANSTACK_MESSAGE ?? "hello from TanStack Start on Prisma Compute";
 const devPort = Number(process.env.PRISMA_TANSTACK_DEV_PORT ?? "3000");
+const customDomainHostname = process.env.PRISMA_TANSTACK_DOMAIN;
 
 export default Alchemy.Stack(
   "PrismaTanstackStart",
@@ -120,6 +121,13 @@ export default Alchemy.Stack(
       destroyOldVersion: true,
     });
 
+    const customDomain = customDomainHostname
+      ? yield* Prisma.CustomDomain("CustomDomain", {
+          computeService: app.computeServiceId,
+          hostname: customDomainHostname,
+        })
+      : undefined;
+
     return {
       projectId: project.projectId,
       branchId: branch.branchId,
@@ -129,6 +137,10 @@ export default Alchemy.Stack(
       computeServiceId: app.computeServiceId,
       computeVersionId: app.computeVersionId,
       url: app.url,
+      customDomainId: customDomain?.customDomainId,
+      customDomainHostname: customDomain?.hostname,
+      customDomainStatus: customDomain?.status,
+      customDomainDnsRecords: customDomain?.dnsRecords,
     };
   }),
 );

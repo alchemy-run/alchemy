@@ -52,6 +52,7 @@ const expectedManagementApiRoutes = [
   "DELETE /v1/compute-services/versions/{versionId}",
   "DELETE /v1/connections/{id}",
   "DELETE /v1/databases/{databaseId}",
+  "DELETE /v1/domains/{domainId}",
   "DELETE /v1/environment-variables/{envVarId}",
   "DELETE /v1/integrations/{id}",
   "DELETE /v1/projects/{id}",
@@ -61,6 +62,7 @@ const expectedManagementApiRoutes = [
   "GET /v1/branches/{branchId}",
   "GET /v1/compute-services",
   "GET /v1/compute-services/{computeServiceId}",
+  "GET /v1/compute-services/{computeServiceId}/domains",
   "GET /v1/compute-services/{computeServiceId}/versions",
   "GET /v1/compute-services/versions/{versionId}",
   "GET /v1/compute-services/versions/{versionId}/logs",
@@ -71,10 +73,12 @@ const expectedManagementApiRoutes = [
   "GET /v1/databases/{databaseId}/backups",
   "GET /v1/databases/{databaseId}/connections",
   "GET /v1/databases/{databaseId}/usage",
+  "GET /v1/domains/{domainId}",
   "GET /v1/environment-variables",
   "GET /v1/environment-variables/{envVarId}",
   "GET /v1/integrations",
   "GET /v1/integrations/{id}",
+  "GET /v1/me",
   "GET /v1/projects",
   "GET /v1/projects/{id}",
   "GET /v1/projects/{projectId}/branches",
@@ -98,6 +102,7 @@ const expectedManagementApiRoutes = [
   "PATCH /v1/environment-variables/{envVarId}",
   "PATCH /v1/projects/{id}",
   "POST /v1/compute-services",
+  "POST /v1/compute-services/{computeServiceId}/domains",
   "POST /v1/compute-services/{computeServiceId}/promote",
   "POST /v1/compute-services/{computeServiceId}/versions",
   "POST /v1/compute-services/versions/{versionId}/start",
@@ -107,6 +112,7 @@ const expectedManagementApiRoutes = [
   "POST /v1/databases",
   "POST /v1/databases/{databaseId}/connections",
   "POST /v1/databases/{targetDatabaseId}/restore",
+  "POST /v1/domains/{domainId}/retry",
   "POST /v1/environment-variables",
   "POST /v1/projects",
   "POST /v1/projects/{id}/transfer",
@@ -132,6 +138,7 @@ const concreteRouteTemplates = new Map([
   ],
   ["DELETE /v1/connections/connection-1", "DELETE /v1/connections/{id}"],
   ["DELETE /v1/databases/database-1", "DELETE /v1/databases/{databaseId}"],
+  ["DELETE /v1/domains/domain-1", "DELETE /v1/domains/{domainId}"],
   [
     "DELETE /v1/environment-variables/env-1",
     "DELETE /v1/environment-variables/{envVarId}",
@@ -152,6 +159,10 @@ const concreteRouteTemplates = new Map([
   [
     "GET /v1/compute-services/service-1",
     "GET /v1/compute-services/{computeServiceId}",
+  ],
+  [
+    "GET /v1/compute-services/service-1/domains",
+    "GET /v1/compute-services/{computeServiceId}/domains",
   ],
   [
     "GET /v1/compute-services/service-1/versions",
@@ -177,6 +188,7 @@ const concreteRouteTemplates = new Map([
     "GET /v1/databases/database-1/usage",
     "GET /v1/databases/{databaseId}/usage",
   ],
+  ["GET /v1/domains/domain-1", "GET /v1/domains/{domainId}"],
   ["GET /v1/environment-variables", "GET /v1/environment-variables"],
   [
     "GET /v1/environment-variables/env-1",
@@ -184,6 +196,7 @@ const concreteRouteTemplates = new Map([
   ],
   ["GET /v1/integrations", "GET /v1/integrations"],
   ["GET /v1/integrations/integration-1", "GET /v1/integrations/{id}"],
+  ["GET /v1/me", "GET /v1/me"],
   ["GET /v1/projects", "GET /v1/projects"],
   ["GET /v1/projects/project-1", "GET /v1/projects/{id}"],
   [
@@ -229,6 +242,10 @@ const concreteRouteTemplates = new Map([
   ["PATCH /v1/projects/project-1", "PATCH /v1/projects/{id}"],
   ["POST /v1/compute-services", "POST /v1/compute-services"],
   [
+    "POST /v1/compute-services/service-1/domains",
+    "POST /v1/compute-services/{computeServiceId}/domains",
+  ],
+  [
     "POST /v1/compute-services/service-1/promote",
     "POST /v1/compute-services/{computeServiceId}/promote",
   ],
@@ -258,6 +275,7 @@ const concreteRouteTemplates = new Map([
     "POST /v1/databases/database-1/restore",
     "POST /v1/databases/{targetDatabaseId}/restore",
   ],
+  ["POST /v1/domains/domain-1/retry", "POST /v1/domains/{domainId}/retry"],
   ["POST /v1/environment-variables", "POST /v1/environment-variables"],
   ["POST /v1/projects", "POST /v1/projects"],
   ["POST /v1/projects/project-1/transfer", "POST /v1/projects/{id}/transfer"],
@@ -1123,6 +1141,7 @@ describe("PrismaClient", () => {
         Effect.gen(function* () {
           yield* client.listWorkspaces({ limit: 1 });
           yield* client.getWorkspace("workspace-1");
+          yield* client.getCurrentPrincipal();
           yield* client.listRegions({ product: "postgres" });
           yield* client.listPostgresRegions();
           yield* client.listAccelerateRegions();
@@ -1204,6 +1223,13 @@ describe("PrismaClient", () => {
           });
           yield* client.deleteComputeService("service-1");
           yield* client.promoteComputeService("service-1", "version-1");
+          yield* client.listComputeServiceDomains("service-1");
+          yield* client.createComputeServiceDomain("service-1", {
+            hostname: "api.example.com",
+          });
+          yield* client.getCustomDomain("domain-1");
+          yield* client.deleteCustomDomain("domain-1");
+          yield* client.retryCustomDomain("domain-1");
 
           yield* client.listComputeVersions({ computeServiceId: "service-1" });
           yield* client.listServiceComputeVersions("service-1", { limit: 1 });
@@ -1273,6 +1299,7 @@ describe("PrismaClient", () => {
           ).toEqual([
             ["GET", "/v1/workspaces?limit=1"],
             ["GET", "/v1/workspaces/workspace-1"],
+            ["GET", "/v1/me"],
             ["GET", "/v1/regions?product=postgres"],
             ["GET", "/v1/regions/postgres"],
             ["GET", "/v1/regions/accelerate"],
@@ -1315,6 +1342,11 @@ describe("PrismaClient", () => {
             ["PATCH", "/v1/compute-services/service-1"],
             ["DELETE", "/v1/compute-services/service-1"],
             ["POST", "/v1/compute-services/service-1/promote"],
+            ["GET", "/v1/compute-services/service-1/domains"],
+            ["POST", "/v1/compute-services/service-1/domains"],
+            ["GET", "/v1/domains/domain-1"],
+            ["DELETE", "/v1/domains/domain-1"],
+            ["POST", "/v1/domains/domain-1/retry"],
             ["GET", "/v1/versions?computeServiceId=service-1"],
             ["GET", "/v1/compute-services/service-1/versions?limit=1"],
             ["GET", "/v1/versions/version-1"],
@@ -1351,8 +1383,8 @@ describe("PrismaClient", () => {
           expect(routeInventoryFrom(captured)).toEqual(
             expectedManagementApiRoutes,
           );
-          expect(expectedManagementApiRoutes).toHaveLength(71);
-          expect(captured[10]?.bodyJson).toEqual({
+          expect(expectedManagementApiRoutes).toHaveLength(77);
+          expect(captured[11]?.bodyJson).toEqual({
             recipientAccessToken: "recipient-token",
           });
           const restoreRequest = captured.find(
@@ -1406,6 +1438,15 @@ describe("PrismaClient", () => {
           );
           expect(promoteRequest?.bodyJson).toEqual({
             versionId: "version-1",
+          });
+
+          const createDomainRequest = captured.find(
+            (request) =>
+              request.method === "POST" &&
+              request.pathname === "/v1/compute-services/service-1/domains",
+          );
+          expect(createDomainRequest?.bodyJson).toEqual({
+            hostname: "api.example.com",
           });
 
           const createVersionRequest = captured.find(

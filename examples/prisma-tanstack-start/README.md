@@ -13,6 +13,7 @@ Prisma Compute managed by Alchemy.
 - A Prisma Compute service.
 - A single Compute version built from TanStack Start's `.output` artifact.
 - Runtime env vars for database URLs, Prisma resource IDs, and app config.
+- An optional Prisma Compute custom domain when `PRISMA_TANSTACK_DOMAIN` is set.
 - A Prisma Next contract in `src/prisma/contract.prisma`.
 - Generated Prisma Next artifacts in `src/prisma/contract.json` and
   `src/prisma/contract.d.ts`.
@@ -74,6 +75,15 @@ bun run deploy
 ```
 
 `PRISMA_API_TOKEN` also works. The deploy output prints the Compute URL.
+
+To attach a custom domain during deploy, set:
+
+```sh
+export PRISMA_TANSTACK_DOMAIN="app.example.com"
+bun run deploy
+```
+
+The stack output includes the custom domain status and DNS records to configure.
 
 ## Check It
 

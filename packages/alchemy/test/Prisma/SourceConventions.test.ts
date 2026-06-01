@@ -60,6 +60,7 @@ const documentedResources = [
   "ComputeService",
   "ComputeVersion",
   "Connection",
+  "CustomDomain",
   "Database",
   "EnvironmentVariable",
   "Project",

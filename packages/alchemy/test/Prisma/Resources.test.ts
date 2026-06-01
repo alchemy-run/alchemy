@@ -20,6 +20,10 @@ import {
   connectionUrl,
 } from "@/Prisma/Connection";
 import {
+  CustomDomain as PrismaCustomDomain,
+  CustomDomainProvider,
+} from "@/Prisma/CustomDomain";
+import {
   Database as PrismaDatabase,
   DatabaseProvider,
 } from "@/Prisma/Database";
@@ -170,6 +174,19 @@ const makeClient = () => {
       calls.push(["listBranches", { projectId, query }]);
       return Effect.succeed([]);
     },
+    getBranch: (id: string) => {
+      calls.push(["getBranch", id]);
+      return Effect.succeed({
+        id,
+        type: "branch",
+        url: `https://api.prisma.test/v1/branches/${id}`,
+        gitName: "main",
+        isDefault: true,
+        createdAt,
+        updatedAt,
+        project: resourceRef("projects", "project-1", "app"),
+      });
+    },
     createBranch: (projectId: string, input: unknown) => {
       calls.push(["createBranch", { projectId, input }]);
       return Effect.succeed({
@@ -202,6 +219,21 @@ const makeClient = () => {
         createdAt,
       });
     },
+    getComputeService: (id: string) => {
+      calls.push(["getComputeService", id]);
+      return Effect.succeed({
+        id,
+        type: "compute-service",
+        url: `https://api.prisma.test/v1/compute-services/${id}`,
+        name: "api",
+        region: { id: "us-east-1", name: "US East" },
+        projectId: "project-1",
+        branchId: "branch-1",
+        latestVersionId: "version-1",
+        serviceEndpointDomain: "service-1.prisma.build",
+        createdAt,
+      });
+    },
     createServiceComputeVersion: (computeServiceId: string, input: unknown) => {
       calls.push(["createServiceComputeVersion", { computeServiceId, input }]);
       return Effect.succeed({
@@ -210,6 +242,35 @@ const makeClient = () => {
         url: "https://api.prisma.test/v1/versions/version-1",
         foundryVersionId: "foundry-1",
         uploadUrl: null,
+      });
+    },
+    listComputeServiceDomains: (computeServiceId: string) => {
+      calls.push(["listComputeServiceDomains", computeServiceId]);
+      return Effect.succeed([]);
+    },
+    createComputeServiceDomain: (computeServiceId: string, input: unknown) => {
+      calls.push(["createComputeServiceDomain", { computeServiceId, input }]);
+      return Effect.succeed({
+        id: "domain-1",
+        type: "custom-domain",
+        url: "https://api.prisma.test/v1/domains/domain-1",
+        hostname: "api.example.com",
+        computeServiceId,
+        status: "pending_dns",
+        providerStatus: "pending_dns",
+        failureReason: null,
+        failureCategory: null,
+        certExpiresAt: null,
+        dnsRecords: [
+          {
+            type: "CNAME",
+            name: "api.example.com",
+            value: "service-1.prisma.build",
+            ttl: null,
+          },
+        ],
+        createdAt,
+        updatedAt,
       });
     },
     getComputeVersion: (id: string) => {
@@ -278,6 +339,7 @@ const providerLayer = (client: PrismaManagementClient) =>
     BranchProvider(),
     ComputeServiceProvider(),
     ComputeVersionProvider(),
+    CustomDomainProvider(),
     EnvironmentVariableProvider(),
     SourceRepositoryProvider(),
   ).pipe(Layer.provide(Layer.succeed(PrismaClient, client)));
@@ -2022,6 +2084,128 @@ describe("Prisma resource providers", () => {
     },
   );
 
+  it.effect("reconciles a Prisma custom domain through the client", () => {
+    const { client, calls } = makeClient();
+
+    return Effect.gen(function* () {
+      const domainProvider = yield* PrismaCustomDomain.Provider;
+      const domain = yield* domainProvider.reconcile(
+        reconcileInput("CustomDomain", {
+          computeService: "service-1",
+          hostname: "api.example.com",
+        }),
+      );
+
+      expect(domain.customDomainId).toBe("domain-1");
+      expect(domain.hostname).toBe("api.example.com");
+      expect(domain.computeServiceId).toBe("service-1");
+      expect(domain.providerStatus).toBe("pending_dns");
+      expect(domain.dnsRecords[0]?.type).toBe("CNAME");
+      expect(calls).toEqual([
+        ["listComputeServiceDomains", "service-1"],
+        ["getComputeService", "service-1"],
+        ["getBranch", "branch-1"],
+        [
+          "createComputeServiceDomain",
+          {
+            computeServiceId: "service-1",
+            input: { hostname: "api.example.com" },
+          },
+        ],
+      ]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
+  it.effect("normalizes Prisma custom domain hostnames when matching", () => {
+    const { client, calls } = makeClient();
+    Object.assign(client, {
+      listComputeServiceDomains: (computeServiceId: string) =>
+        Effect.sync(() => {
+          calls.push(["listComputeServiceDomains", computeServiceId]);
+          return [
+            {
+              id: "domain-1",
+              type: "custom-domain" as const,
+              url: "https://api.prisma.test/v1/domains/domain-1",
+              hostname: "api.example.com",
+              computeServiceId,
+              status: "pending_dns" as const,
+              providerStatus: "pending",
+              failureReason: null,
+              failureCategory: null,
+              certExpiresAt: null,
+              dnsRecords: [
+                {
+                  type: "CNAME" as const,
+                  name: "api.example.com",
+                  value: "service-1.prisma.build",
+                  ttl: null,
+                },
+              ],
+              createdAt,
+              updatedAt,
+            },
+          ];
+        }),
+    });
+
+    return Effect.gen(function* () {
+      const domainProvider = yield* PrismaCustomDomain.Provider;
+      const domain = yield* domainProvider.reconcile(
+        reconcileInput("CustomDomain", {
+          computeService: "service-1",
+          hostname: "API.EXAMPLE.COM.",
+        }),
+      );
+
+      expect(domain.customDomainId).toBe("domain-1");
+      expect(domain.hostname).toBe("api.example.com");
+      expect(calls).toEqual([["listComputeServiceDomains", "service-1"]]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
+  it.effect("rejects Prisma custom domains on non-default branches", () => {
+    const { client, calls } = makeClient();
+    Object.assign(client, {
+      getBranch: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["getBranch", id]);
+          return {
+            id,
+            type: "branch" as const,
+            url: `https://api.prisma.test/v1/branches/${id}`,
+            gitName: "preview",
+            isDefault: false,
+            createdAt,
+            updatedAt,
+            project: resourceRef("projects", "project-1", "app"),
+          };
+        }),
+    });
+
+    return Effect.gen(function* () {
+      const domainProvider = yield* PrismaCustomDomain.Provider;
+      const error = yield* domainProvider
+        .reconcile(
+          reconcileInput("CustomDomain", {
+            computeService: "service-1",
+            hostname: "api.example.com",
+          }),
+        )
+        .pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(
+        "custom domains can only be attached to Compute services on the default Branch",
+      );
+      expect(calls).toEqual([
+        ["listComputeServiceDomains", "service-1"],
+        ["getComputeService", "service-1"],
+        ["getBranch", "branch-1"],
+      ]);
+    }).pipe(Effect.provide(providerLayer(client)));
+  });
+
   it.effect(
     "starts a direct compute version only after observing status",
     () => {
@@ -3613,6 +3797,10 @@ describe("Prisma resource providers", () => {
         Effect.sync(() => {
           calls.push(["deleteComputeService", id]);
         }),
+      deleteCustomDomain: (id: string) =>
+        Effect.sync(() => {
+          calls.push(["deleteCustomDomain", id]);
+        }),
       getEnvironmentVariable: (id: string) =>
         Effect.sync(() => {
           calls.push(["getEnvironmentVariable", id]);
@@ -3647,6 +3835,7 @@ describe("Prisma resource providers", () => {
       const branchProvider = yield* PrismaBranch.Provider;
       const serviceProvider = yield* PrismaComputeService.Provider;
       const versionProvider = yield* PrismaComputeVersion.Provider;
+      const domainProvider = yield* PrismaCustomDomain.Provider;
       const envProvider = yield* PrismaEnvironmentVariable.Provider;
       const repoProvider = yield* PrismaSourceRepository.Provider;
 
@@ -3658,6 +3847,9 @@ describe("Prisma resource providers", () => {
       );
       yield* repoProvider.delete(
         deleteInput("SourceRepository", { sourceRepositoryId: "repo-1" }),
+      );
+      yield* domainProvider.delete(
+        deleteInput("CustomDomain", { customDomainId: "domain-1" }),
       );
       yield* envProvider.delete(
         deleteInput("EnvironmentVariable", { environmentVariableId: "env-1" }),
@@ -3688,6 +3880,7 @@ describe("Prisma resource providers", () => {
         ["deleteComputeServiceVersion", "version-1"],
         ["deleteComputeService", "service-1"],
         ["deleteSourceRepository", "repo-1"],
+        ["deleteCustomDomain", "domain-1"],
         ["getEnvironmentVariable", "env-1"],
         ["deleteEnvironmentVariable", "env-1"],
         ["getBranch", "branch-1"],

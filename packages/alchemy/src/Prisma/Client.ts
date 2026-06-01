@@ -23,6 +23,9 @@ import type {
   ComputeVersionLogsQuery,
   ComputeVersionLogsRequest,
   ConnectionCreateInput,
+  CurrentPrincipal,
+  CustomDomain,
+  CustomDomainCreateInput,
   DataResponse,
   Database,
   DatabaseConnection,
@@ -59,6 +62,18 @@ import type {
 } from "./Types.ts";
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE" | "PUT";
+
+type ApiCustomDomain = Omit<CustomDomain, "providerStatus"> & {
+  foundryStatus: string;
+};
+
+const normalizeCustomDomain = ({
+  foundryStatus,
+  ...domain
+}: ApiCustomDomain): CustomDomain => ({
+  ...domain,
+  providerStatus: foundryStatus,
+});
 
 export class PrismaApiError extends Data.TaggedError("PrismaApiError")<{
   method: Method;
@@ -99,6 +114,10 @@ export interface PrismaManagementClient {
   getWorkspace(
     id: string,
   ): Effect.Effect<Workspace, PrismaApiError | PrismaApiDecodeError>;
+  getCurrentPrincipal(): Effect.Effect<
+    CurrentPrincipal,
+    PrismaApiError | PrismaApiDecodeError
+  >;
   listRegions(
     query?: RegionListQuery,
   ): Effect.Effect<Region[], PrismaApiError | PrismaApiDecodeError>;
@@ -247,6 +266,22 @@ export interface PrismaManagementClient {
     PromoteComputeServiceResult,
     PrismaApiError | PrismaApiDecodeError
   >;
+  listComputeServiceDomains(
+    computeServiceId: string,
+  ): Effect.Effect<CustomDomain[], PrismaApiError | PrismaApiDecodeError>;
+  createComputeServiceDomain(
+    computeServiceId: string,
+    input: CustomDomainCreateInput,
+  ): Effect.Effect<CustomDomain, PrismaApiError | PrismaApiDecodeError>;
+  getCustomDomain(
+    id: string,
+  ): Effect.Effect<CustomDomain, PrismaApiError | PrismaApiDecodeError>;
+  deleteCustomDomain(
+    id: string,
+  ): Effect.Effect<void, PrismaApiError | PrismaApiDecodeError>;
+  retryCustomDomain(
+    id: string,
+  ): Effect.Effect<CustomDomain, PrismaApiError | PrismaApiDecodeError>;
   listComputeVersions(
     query?: ComputeVersionListQuery,
   ): Effect.Effect<
@@ -494,6 +529,8 @@ export const requestBody = <T>(response: DataResponse<T>): T => response.data;
 const isRetryableStatus = (status: number) =>
   status === 0 || status === 408 || status === 429 || status >= 500;
 
+const isMutation = (method: Method) => method !== "GET";
+
 const isRetryablePost = (path: string) =>
   path.endsWith("/start") ||
   path.endsWith("/stop") ||
@@ -609,28 +646,34 @@ function makePrismaClient(): Effect.Effect<
         Effect.gen(function* () {
           const url = yield* buildUrl(path, options?.query);
           const req = makeRequest(method, url, options);
-          const res = yield* http.execute(req).pipe(
-            Effect.mapError(
-              (e) =>
-                new PrismaApiError({
-                  method,
-                  path,
-                  status: 0,
-                  message: e instanceof Error ? e.message : String(e),
-                }),
-            ),
-          );
-          const text = yield* res.text.pipe(Effect.orElseSucceed(() => ""));
-          if (res.status < 200 || res.status >= 300) {
+          const response = Effect.gen(function* () {
+            const res = yield* http.execute(req).pipe(
+              Effect.mapError(
+                (e) =>
+                  new PrismaApiError({
+                    method,
+                    path,
+                    status: 0,
+                    message: e instanceof Error ? e.message : String(e),
+                  }),
+              ),
+            );
+            const text = yield* res.text.pipe(Effect.orElseSucceed(() => ""));
+            return { status: res.status, text };
+          });
+          const { status, text } = yield* isMutation(method)
+            ? response.pipe(Effect.uninterruptible)
+            : response;
+          if (status < 200 || status >= 300) {
             return yield* new PrismaApiError({
               method,
               path,
-              status: res.status,
-              message: parseErrorMessage(text) ?? `HTTP ${res.status}`,
+              status,
+              message: parseErrorMessage(text) ?? `HTTP ${status}`,
               body: text,
             });
           }
-          if (res.status === 204 || text.length === 0) {
+          if (status === 204 || text.length === 0) {
             return undefined as T;
           }
           return yield* Effect.try({
@@ -673,6 +716,7 @@ function makePrismaClient(): Effect.Effect<
 
       listWorkspaces: (query) => paginate<Workspace>("/v1/workspaces", query),
       getWorkspace: (id) => data<Workspace>("GET", `/v1/workspaces/${id}`),
+      getCurrentPrincipal: () => data<CurrentPrincipal>("GET", "/v1/me"),
       listRegions: (query) => data<Region[]>("GET", "/v1/regions", { query }),
       listPostgresRegions: () => data<Region[]>("GET", "/v1/regions/postgres"),
       listAccelerateRegions: () =>
@@ -784,6 +828,25 @@ function makePrismaClient(): Effect.Effect<
           "POST",
           `/v1/compute-services/${id}/promote`,
           { body: { versionId } },
+        ),
+      listComputeServiceDomains: (computeServiceId) =>
+        paginate<ApiCustomDomain>(
+          `/v1/compute-services/${computeServiceId}/domains`,
+        ).pipe(Effect.map((domains) => domains.map(normalizeCustomDomain))),
+      createComputeServiceDomain: (computeServiceId, input) =>
+        data<ApiCustomDomain>(
+          "POST",
+          `/v1/compute-services/${computeServiceId}/domains`,
+          { body: input },
+        ).pipe(Effect.map(normalizeCustomDomain)),
+      getCustomDomain: (id) =>
+        data<ApiCustomDomain>("GET", `/v1/domains/${id}`).pipe(
+          Effect.map(normalizeCustomDomain),
+        ),
+      deleteCustomDomain: (id) => request<void>("DELETE", `/v1/domains/${id}`),
+      retryCustomDomain: (id) =>
+        data<ApiCustomDomain>("POST", `/v1/domains/${id}/retry`).pipe(
+          Effect.map(normalizeCustomDomain),
         ),
 
       listComputeVersions: (query) =>

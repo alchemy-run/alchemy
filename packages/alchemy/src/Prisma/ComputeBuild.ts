@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import type { PlatformError } from "effect/PlatformError";
 import type { Scope } from "effect/Scope";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { runBuildCommand } from "../Build/Command.ts";
@@ -65,6 +66,11 @@ interface BuildStrategy {
   ) => Effect.Effect<ComputeBuildArtifact, unknown, BuildServices>;
 }
 
+interface DirectoryEntry {
+  name: string;
+  type: "Directory" | "File" | "SymbolicLink" | "Other";
+}
+
 type BuildServices =
   | ChildProcessSpawner
   | FileSystem.FileSystem
@@ -122,6 +128,7 @@ const strategies: readonly BuildStrategy[] = [
         entrypoint: "server.js",
         defaultPort: 3000,
         allowNestedEntrypoint: true,
+        extrasRelativeToEntrypoint: true,
         missingOutputMessage:
           'Next.js build did not produce standalone output. Add output: "standalone" to your next.config file.',
         extras: [
@@ -243,6 +250,7 @@ const buildFramework = Effect.fn(function* (options: {
   allowNestedEntrypoint?: boolean;
   requiredFile?: string;
   missingOutputMessage: string;
+  extrasRelativeToEntrypoint?: boolean;
   extras?: ReadonlyArray<{ from: string; to: string }>;
 }) {
   const fs = yield* FileSystem.FileSystem;
@@ -268,21 +276,10 @@ const buildFramework = Effect.fn(function* (options: {
 
   const temp = yield* makeTempArtifactDir();
   const build = Effect.gen(function* () {
-    yield* fs.copy(
+    yield* copyDirectoryPreserveSymlinks(
       path.join(options.appPath, options.sourceDir),
       temp.artifactDir,
-      { overwrite: true },
     );
-    for (const extra of options.extras ?? []) {
-      const extraSource = path.join(options.appPath, extra.from);
-      if (yield* directoryExists(extraSource)) {
-        const extraTarget = path.join(temp.artifactDir, extra.to);
-        yield* fs.makeDirectory(path.dirname(extraTarget), {
-          recursive: true,
-        });
-        yield* fs.copy(extraSource, extraTarget, { overwrite: true });
-      }
-    }
     yield* materializeBunNodeModuleAliases(
       temp.artifactDir,
       path.join(options.appPath, options.sourceDir),
@@ -292,6 +289,16 @@ const buildFramework = Effect.fn(function* (options: {
       options.entrypoint,
       options.allowNestedEntrypoint ?? false,
     );
+    const extrasBaseDir = options.extrasRelativeToEntrypoint
+      ? path.dirname(path.join(temp.artifactDir, entrypoint))
+      : temp.artifactDir;
+    for (const extra of options.extras ?? []) {
+      const extraSource = path.join(options.appPath, extra.from);
+      if (yield* directoryExists(extraSource)) {
+        const extraTarget = path.join(extrasBaseDir, extra.to);
+        yield* copyDirectoryPreserveSymlinks(extraSource, extraTarget);
+      }
+    }
     return {
       directory: temp.artifactDir,
       entrypoint,
@@ -304,6 +311,68 @@ const buildFramework = Effect.fn(function* (options: {
     Effect.catch((error) =>
       temp.cleanup.pipe(Effect.andThen(Effect.fail(error))),
     ),
+  );
+});
+
+const copyDirectoryPreserveSymlinks: (
+  sourceDir: string,
+  targetDir: string,
+) => Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> =
+  Effect.fn(function* (sourceDir, targetDir) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    yield* fs.makeDirectory(targetDir, { recursive: true });
+
+    const entries = (yield* readDirectoryEntries(sourceDir)).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    for (const entry of entries) {
+      const source = path.join(sourceDir, entry.name);
+      const target = path.join(targetDir, entry.name);
+      if (entry.type === "SymbolicLink") {
+        const symlinkTarget = (yield* fs.readLink(source)).replaceAll(
+          "\\",
+          "/",
+        );
+        yield* fs.remove(target, { recursive: true, force: true });
+        yield* fs.symlink(symlinkTarget, target);
+        continue;
+      }
+
+      if (entry.type === "Directory") {
+        yield* copyDirectoryPreserveSymlinks(source, target);
+      } else if (entry.type === "File") {
+        const stat = yield* fs.stat(source);
+        yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+        yield* fs.copyFile(source, target);
+        yield* fs.chmod(target, stat.mode & 0o777);
+      }
+    }
+  });
+
+const readDirectoryEntries = Effect.fn(function* (directory: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const names = yield* fs.readDirectory(directory);
+  return yield* Effect.forEach(names, (name) =>
+    Effect.gen(function* () {
+      const file = path.join(directory, name);
+      const isSymlink = yield* fs.readLink(file).pipe(
+        Effect.as(true),
+        Effect.catch(() => Effect.succeed(false)),
+      );
+      if (isSymlink) {
+        return { name, type: "SymbolicLink" } satisfies DirectoryEntry;
+      }
+      const stat = yield* fs.stat(file);
+      return {
+        name,
+        type:
+          stat.type === "Directory" || stat.type === "File"
+            ? stat.type
+            : "Other",
+      } satisfies DirectoryEntry;
+    }),
   );
 });
 
@@ -380,14 +449,15 @@ const resolveFrameworkEntrypoint = Effect.fn(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  if (!allowNested || (yield* fs.exists(path.join(artifactDir, entrypoint)))) {
+  if (!allowNested) {
     return entrypoint;
   }
 
   const entrypointFile = path.basename(entrypoint);
   const candidates = (yield* fs.readDirectory(artifactDir, { recursive: true }))
+    .map((file) => file.replaceAll("\\", "/"))
     .filter((file) => {
-      const parts = file.split(/[\\/]/);
+      const parts = file.split("/");
       return (
         path.basename(file) === entrypointFile &&
         !parts.includes("node_modules") &&
@@ -399,7 +469,14 @@ const resolveFrameworkEntrypoint = Effect.fn(function* (
       return depth === 0 ? a.localeCompare(b) : depth;
     });
 
-  if (candidates[0]) return candidates[0];
+  if (candidates.length === 1) return candidates[0]!;
+  if (candidates.length > 1) {
+    return yield* Effect.fail(
+      new Error(
+        `Next.js standalone output has multiple ${entrypointFile} files (${candidates.join(", ")}). Cannot determine the application entrypoint.`,
+      ),
+    );
+  }
 
   return yield* Effect.fail(
     new Error(

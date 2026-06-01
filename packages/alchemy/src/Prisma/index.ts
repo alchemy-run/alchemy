@@ -8,6 +8,7 @@ export * from "./ComputeLifecycle.ts";
 export * from "./ComputeService.ts";
 export * from "./ComputeVersion.ts";
 export * from "./Connection.ts";
+export * from "./CustomDomain.ts";
 export * from "./Database.ts";
 export * from "./EnvironmentVariable.ts";
 export * from "./Operations.ts";

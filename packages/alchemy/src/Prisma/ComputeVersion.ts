@@ -92,7 +92,7 @@ export interface ComputeVersion extends Resource<
      */
     computeServiceId: string;
     /**
-     * Underlying Foundry version ID.
+     * Provider version ID returned by the Prisma Management API.
      */
     foundryVersionId: string;
     /**
@@ -231,15 +231,20 @@ export const uploadArtifact = (
 ) =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
-    const res = yield* http.execute(
-      HttpClientRequest.put(uploadUrl).pipe(
-        HttpClientRequest.bodyUint8Array(artifact, contentType),
-      ),
-    );
-    if (res.status < 200 || res.status >= 300) {
+    const response = yield* Effect.gen(function* () {
+      const res = yield* http.execute(
+        HttpClientRequest.put(uploadUrl).pipe(
+          HttpClientRequest.bodyUint8Array(artifact, contentType),
+        ),
+      );
       const body = yield* res.text.pipe(Effect.orElseSucceed(() => ""));
+      return { status: res.status, body };
+    }).pipe(Effect.uninterruptible);
+    if (response.status < 200 || response.status >= 300) {
       return yield* Effect.fail(
-        new Error(`Prisma artifact upload failed (${res.status}): ${body}`),
+        new Error(
+          `Prisma artifact upload failed (${response.status}): ${response.body}`,
+        ),
       );
     }
   });

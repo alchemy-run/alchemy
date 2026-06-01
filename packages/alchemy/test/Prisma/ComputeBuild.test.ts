@@ -116,6 +116,7 @@ describe("Prisma Compute auto-build", () => {
           "printf 'nested next server' > .next/standalone/examples/prisma-nextjs/server.js",
           "printf 'dependency server' > .next/standalone/node_modules/pkg/server.js",
           "printf 'next static' > .next/static/app.js",
+          "printf 'next public' > public/asset.txt",
           "",
         ].join("\n"),
       );
@@ -132,9 +133,68 @@ describe("Prisma Compute auto-build", () => {
           path.join(artifact.directory, artifact.entrypoint),
         ),
       ).toBe("nested next server");
+      expect(
+        yield* fs.readFileString(
+          path.join(
+            artifact.directory,
+            "examples",
+            "prisma-nextjs",
+            ".next",
+            "static",
+            "app.js",
+          ),
+        ),
+      ).toBe("next static");
+      expect(
+        yield* fs.readFileString(
+          path.join(
+            artifact.directory,
+            "examples",
+            "prisma-nextjs",
+            "public",
+            "asset.txt",
+          ),
+        ),
+      ).toBe("next public");
 
       yield* artifact.cleanup;
       expect(yield* fs.exists(artifact.directory)).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("rejects ambiguous Next.js standalone entrypoints", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-next-ambiguous-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const nextBin = path.join(binDir, "next");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { next: "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(
+        nextBin,
+        [
+          "#!/bin/sh",
+          "mkdir -p .next/standalone/apps/web .next/standalone/apps/admin",
+          "printf 'web server' > .next/standalone/apps/web/server.js",
+          "printf 'admin server' > .next/standalone/apps/admin/server.js",
+          "",
+        ].join("\n"),
+      );
+      yield* fs.chmod(nextBin, 0o755);
+
+      const error = yield* runComputeAutoBuild({
+        appPath: root,
+        framework: "nextjs",
+      }).pipe(Effect.flip);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("multiple server.js files");
     }).pipe(Effect.provide(PlatformServices)),
   );
 

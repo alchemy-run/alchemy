@@ -13,6 +13,8 @@ interface TarEntry {
   name: string;
   body: string;
   mode: number;
+  type: string;
+  linkname: string;
 }
 
 const readString = (buffer: Uint8Array, start: number, length: number) => {
@@ -37,6 +39,8 @@ const parseTar = (buffer: Uint8Array) => {
       name: prefix ? `${prefix}/${name}` : name,
       body: new TextDecoder().decode(body),
       mode: Number.parseInt(readString(header, 100, 8).trim() || "0", 8),
+      type: readString(header, 156, 1) || "0",
+      linkname: readString(header, 157, 100),
     });
     offset = bodyStart + size + ((512 - (size % 512)) % 512);
   }
@@ -123,7 +127,7 @@ describe("createComputeArchive", () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
-  it.effect("follows symlinks that stay inside the artifact root", () =>
+  it.effect("preserves symlinks that stay inside the artifact root", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -139,14 +143,18 @@ describe("createComputeArchive", () => {
         entrypoint: "server.ts",
       });
       const entries = parseTar(yield* Effect.sync(() => gunzipSync(archive)));
-      const byName = new Map(entries.map((entry) => [entry.name, entry.body]));
+      const byName = new Map(entries.map((entry) => [entry.name, entry]));
 
-      expect(byName.get("bundle/link.ts")).toBe("real file");
+      expect(byName.get("bundle/link.ts")).toMatchObject({
+        type: "2",
+        linkname: "real.ts",
+      });
+      expect(byName.get("bundle/real.ts")?.body).toBe("real file");
     }).pipe(Effect.provide(PlatformServices)),
   );
 
   it.effect(
-    "follows symlinked directories that stay inside the artifact root",
+    "preserves symlinked directories that stay inside the artifact root",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -165,11 +173,14 @@ describe("createComputeArchive", () => {
           entrypoint: "server.ts",
         });
         const entries = parseTar(yield* Effect.sync(() => gunzipSync(archive)));
-        const byName = new Map(
-          entries.map((entry) => [entry.name, entry.body]),
-        );
+        const byName = new Map(entries.map((entry) => [entry.name, entry]));
 
-        expect(byName.get("bundle/linked/nested.ts")).toBe("nested");
+        expect(byName.get("bundle/linked")).toMatchObject({
+          type: "2",
+          linkname: "real",
+        });
+        expect(byName.get("bundle/real/nested.ts")?.body).toBe("nested");
+        expect(byName.has("bundle/linked/nested.ts")).toBe(false);
       }).pipe(Effect.provide(PlatformServices)),
   );
 

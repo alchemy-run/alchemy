@@ -12,6 +12,10 @@ runtime path:
 - `Prisma.Compute(..., Effect.gen(...))`
 - `Prisma.Connection.bind(Connection)` inside the deployed runtime
 
+`alchemy.run.ts` only wires the stack together. The Prisma data resources live
+in `src/Database.ts`, and the Effect-native Compute service lives in
+`src/Api.ts`.
+
 The deployed service responds on `/` and `/api/health` with JSON showing the
 bound database and connection IDs.
 

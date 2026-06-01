@@ -21,6 +21,13 @@ interface TarEntry {
   name: string;
   body: Uint8Array;
   mode: number;
+  type?: "file" | "symlink";
+  linkname?: string;
+}
+
+interface DirectoryEntry {
+  name: string;
+  type: "Directory" | "File" | "SymbolicLink" | "Other";
 }
 
 /**
@@ -60,27 +67,13 @@ export const createComputeArchive = Effect.fn(function* ({
     );
   }
   yield* resolvePathWithinRoot(realRoot, entrypointPath);
-  const names = (yield* fs.readDirectory(root, { recursive: true }))
-    .map((name) => name.replaceAll("\\", "/"))
-    .filter((name) => name.length > 0)
-    .sort();
-
   const entries: TarEntry[] = [];
-  for (const name of names) {
-    const file = path.join(root, name);
-    const stat = yield* fs.stat(file);
-    if (stat.type !== "File") continue;
-    yield* resolvePathWithinRoot(realRoot, file);
-    entries.push({
-      name: `bundle/${name}`,
-      body: yield* fs.readFile(file),
-      mode: stat.mode & 0o777,
-    });
-  }
+  yield* addDirectoryEntries(entries, realRoot, root, "bundle");
 
   entries.push({
     name: "compute.manifest.json",
     mode: 0o644,
+    type: "file",
     body: yield* Effect.sync(() =>
       new TextEncoder().encode(
         JSON.stringify(
@@ -96,6 +89,59 @@ export const createComputeArchive = Effect.fn(function* ({
   });
 
   return yield* Effect.sync(() => gzipSync(createTar(entries)));
+});
+
+const addDirectoryEntries: (
+  entries: TarEntry[],
+  realRoot: string,
+  directory: string,
+  tarPrefix: string,
+) => Effect.Effect<
+  void,
+  PlatformError | Error,
+  FileSystem.FileSystem | Path.Path
+> = Effect.fn(function* (entries, realRoot, directory, tarPrefix) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const names = (yield* readDirectoryEntries(directory))
+    .filter((entry) => entry.name.length > 0)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const entry of names) {
+    const name = entry.name.replaceAll("\\", "/");
+    const file = path.join(directory, name);
+    const tarName = `${tarPrefix}/${name}`;
+    if (entry.type === "SymbolicLink") {
+      const symlinkTarget = (yield* fs.readLink(file)).replaceAll("\\", "/");
+      const linkname = yield* resolveArchiveSymlinkTarget(
+        realRoot,
+        file,
+        symlinkTarget,
+      );
+      entries.push({
+        name: tarName,
+        body: new Uint8Array(0),
+        mode: 0o777,
+        type: "symlink",
+        linkname,
+      });
+      continue;
+    }
+
+    if (entry.type === "Directory") {
+      yield* resolvePathWithinRoot(realRoot, file);
+      yield* addDirectoryEntries(entries, realRoot, file, tarName);
+    } else if (entry.type === "File") {
+      const stat = yield* fs.stat(file);
+      yield* resolvePathWithinRoot(realRoot, file);
+      entries.push({
+        name: tarName,
+        body: yield* fs.readFile(file),
+        mode: stat.mode & 0o777,
+        type: "file",
+      });
+    }
+  }
 });
 
 export const normalizeEntrypoint = (entrypoint: string) =>
@@ -136,6 +182,52 @@ const resolvePathWithinRoot = Effect.fn(function* (
   return realCandidate;
 });
 
+const readDirectoryEntries = Effect.fn(function* (directory: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const names = yield* fs.readDirectory(directory);
+  return yield* Effect.forEach(names, (name) =>
+    Effect.gen(function* () {
+      const file = path.join(directory, name);
+      const isSymlink = yield* fs.readLink(file).pipe(
+        Effect.as(true),
+        Effect.catch(() => Effect.succeed(false)),
+      );
+      if (isSymlink) {
+        return { name, type: "SymbolicLink" } satisfies DirectoryEntry;
+      }
+      const stat = yield* fs.stat(file);
+      return {
+        name,
+        type:
+          stat.type === "Directory" || stat.type === "File"
+            ? stat.type
+            : "Other",
+      } satisfies DirectoryEntry;
+    }),
+  );
+});
+
+const resolveArchiveSymlinkTarget = Effect.fn(function* (
+  realRoot: string,
+  symlinkPath: string,
+  target: string,
+) {
+  const path = yield* Path.Path;
+  const symlinkDir = path.dirname(symlinkPath);
+  const targetPath = path.isAbsolute(target)
+    ? target
+    : path.resolve(symlinkDir, target);
+  yield* resolvePathWithinRoot(realRoot, targetPath);
+
+  if (!path.isAbsolute(target)) {
+    return target.replaceAll("\\", "/");
+  }
+
+  const relative = path.relative(symlinkDir, targetPath);
+  return (relative.length === 0 ? "." : relative).replaceAll("\\", "/");
+});
+
 const createTar = (entries: TarEntry[]) => {
   const chunks: Uint8Array[] = [];
   for (const entry of entries) {
@@ -159,7 +251,8 @@ const createHeader = (entry: TarEntry) => {
   writeOctal(header, 124, 12, entry.body.length);
   writeOctal(header, 136, 12, 0);
   header.fill(0x20, 148, 156);
-  writeString(header, 156, 1, "0");
+  writeString(header, 156, 1, entry.type === "symlink" ? "2" : "0");
+  if (entry.linkname) writeString(header, 157, 100, entry.linkname);
   writeString(header, 257, 6, "ustar");
   writeString(header, 263, 2, "00");
   writeString(header, 265, 32, "alchemy");

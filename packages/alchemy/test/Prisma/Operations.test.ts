@@ -16,6 +16,7 @@ export type PrismaOperationCoverage = [
 const expectedOperationHelpers = [
   "listWorkspaces",
   "getWorkspace",
+  "getCurrentPrincipal",
   "listRegions",
   "listPostgresRegions",
   "listAccelerateRegions",
@@ -55,6 +56,11 @@ const expectedOperationHelpers = [
   "updateComputeService",
   "deleteComputeService",
   "promoteComputeService",
+  "listComputeServiceDomains",
+  "createComputeServiceDomain",
+  "getCustomDomain",
+  "deleteCustomDomain",
+  "retryCustomDomain",
   "listComputeVersions",
   "listServiceComputeVersions",
   "getComputeVersion",
@@ -107,6 +113,7 @@ describe("Prisma operation helpers", () => {
     return Effect.gen(function* () {
       yield* Prisma.listWorkspaces({ limit: 1 });
       yield* Prisma.getWorkspace("workspace-1");
+      yield* Prisma.getCurrentPrincipal();
       yield* Prisma.listRegions({ product: "postgres" });
       yield* Prisma.listPostgresRegions();
       yield* Prisma.listAccelerateRegions();
@@ -178,6 +185,13 @@ describe("Prisma operation helpers", () => {
       });
       yield* Prisma.deleteComputeService("service-1");
       yield* Prisma.promoteComputeService("service-1", "version-1");
+      yield* Prisma.listComputeServiceDomains("service-1");
+      yield* Prisma.createComputeServiceDomain("service-1", {
+        hostname: "api.example.com",
+      });
+      yield* Prisma.getCustomDomain("domain-1");
+      yield* Prisma.deleteCustomDomain("domain-1");
+      yield* Prisma.retryCustomDomain("domain-1");
 
       yield* Prisma.listComputeVersions({ computeServiceId: "service-1" });
       yield* Prisma.listServiceComputeVersions("service-1", { limit: 1 });

@@ -48,6 +48,23 @@ export interface Workspace {
   createdAt: string;
 }
 
+export interface CurrentPrincipal {
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+  } | null;
+  workspace: {
+    id: string;
+    name: string;
+  } | null;
+  credential: {
+    type: "oauth" | "service_token" | "management_token";
+    id: string | null;
+    name: string | null;
+  };
+}
+
 export interface Region {
   id: string;
   type: "region";
@@ -366,6 +383,49 @@ export interface ComputeVersionLogsRequest {
 
 export interface PromoteComputeServiceResult {
   serviceEndpointDomain: string;
+  reassignedDomains: number;
+}
+
+export type CustomDomainStatus =
+  | "pending_dns"
+  | "verifying"
+  | "verified_routing_blocked"
+  | "provisioning_tls"
+  | "active"
+  | "failed"
+  | "removing";
+
+export type CustomDomainFailureCategory =
+  | "dns"
+  | "acme"
+  | "storage"
+  | "unknown";
+
+export interface CustomDomainDnsRecord {
+  type: "CNAME";
+  name: string;
+  value: string;
+  ttl: number | null;
+}
+
+export interface CustomDomain {
+  id: string;
+  type: "custom-domain";
+  url: string;
+  hostname: string;
+  computeServiceId: string;
+  status: CustomDomainStatus;
+  providerStatus: string;
+  failureReason: string | null;
+  failureCategory: CustomDomainFailureCategory | null;
+  certExpiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  dnsRecords: CustomDomainDnsRecord[];
+}
+
+export interface CustomDomainCreateInput {
+  hostname: string;
 }
 
 export type EnvironmentVariableClass = "production" | "preview";

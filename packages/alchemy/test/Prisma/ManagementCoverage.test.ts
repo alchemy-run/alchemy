@@ -81,6 +81,16 @@ const lifecycleResources = [
     ],
   },
   {
+    name: "CustomDomain",
+    resource: Prisma.CustomDomain,
+    routes: [
+      "GET /v1/compute-services/{computeServiceId}/domains",
+      "POST /v1/compute-services/{computeServiceId}/domains",
+      "GET /v1/domains/{domainId}",
+      "DELETE /v1/domains/{domainId}",
+    ],
+  },
+  {
     name: "EnvironmentVariable",
     resource: Prisma.EnvironmentVariable,
     routes: [
@@ -115,6 +125,8 @@ const operationOnlyRoutes = [
   "POST /v1/compute-services/versions/{versionId}/start",
   "POST /v1/compute-services/versions/{versionId}/stop",
   "GET /v1/compute-services/versions/{versionId}/logs",
+  "POST /v1/domains/{domainId}/retry",
+  "GET /v1/me",
   "GET /v1/workspaces",
   "GET /v1/workspaces/{id}",
   "GET /v1/regions",
@@ -257,7 +269,7 @@ describe("Prisma Management API coverage", () => {
       if (!(yield* fs.exists(referenceApiPath))) return;
 
       const source = yield* fs.readFileString(referenceApiPath);
-      expect(expectedManagementApiRoutes).toHaveLength(71);
+      expect(expectedManagementApiRoutes).toHaveLength(77);
       expect(managementApiRoutesFromOpenApiTypes(source)).toEqual(
         expectedManagementApiRoutes,
       );

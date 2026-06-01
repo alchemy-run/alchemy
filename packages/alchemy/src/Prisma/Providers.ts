@@ -20,6 +20,7 @@ import {
   ConnectionBindingPolicyLive,
   ConnectionProvider,
 } from "./Connection.ts";
+import { CustomDomain, CustomDomainProvider } from "./CustomDomain.ts";
 import { Database, DatabaseProvider } from "./Database.ts";
 import {
   EnvironmentVariable,
@@ -109,6 +110,7 @@ export const providers = () =>
       Compute,
       ComputeService,
       ComputeVersion,
+      CustomDomain,
       ConnectionBindingPolicy,
       EnvironmentVariable,
       SourceRepository,
@@ -131,6 +133,7 @@ const devProviderLayer = () =>
     ComputeDevProvider(),
     computeServiceDevProvider(),
     computeVersionDevProvider(),
+    customDomainDevProvider(),
     ConnectionBindingPolicyLive,
     environmentVariableDevProvider(),
     sourceRepositoryDevProvider(),
@@ -311,6 +314,28 @@ const computeVersionDevProvider = () =>
     createdAt: DEV_TIMESTAMP,
   }));
 
+const customDomainDevProvider = () =>
+  devProvider(CustomDomain, ["customDomainId"], ({ id, news }) => ({
+    customDomainId: devId("custom-domain", id),
+    hostname: news.hostname,
+    computeServiceId: attrOrString(news.computeService, "computeServiceId"),
+    status: "active",
+    providerStatus: "active",
+    failureReason: null,
+    failureCategory: null,
+    certExpiresAt: null,
+    dnsRecords: [
+      {
+        type: "CNAME" as const,
+        name: news.hostname,
+        value: "localhost",
+        ttl: null,
+      },
+    ],
+    createdAt: DEV_TIMESTAMP,
+    updatedAt: DEV_TIMESTAMP,
+  }));
+
 const environmentVariableDevProvider = () =>
   devProvider(
     EnvironmentVariable,
@@ -355,6 +380,7 @@ const liveProviderLayer = () =>
     ComputeProvider(),
     ComputeServiceProvider(),
     ComputeVersionProvider(),
+    CustomDomainProvider(),
     ConnectionBindingPolicyLive,
     EnvironmentVariableProvider(),
     SourceRepositoryProvider(),

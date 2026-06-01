@@ -9,6 +9,7 @@ import type {
   ComputeServiceUpdateInput,
   ComputeVersionCreateInput,
   ConnectionCreateInput,
+  CustomDomainCreateInput,
   DatabaseCreateInput,
   DatabaseUpdateInput,
   EnvironmentVariableCreateInput,
@@ -35,6 +36,8 @@ export const listWorkspaces = (query?: {
 }) => withClient((client) => client.listWorkspaces(query));
 export const getWorkspace = (id: string) =>
   withClient((client) => client.getWorkspace(id));
+export const getCurrentPrincipal = () =>
+  withClient((client) => client.getCurrentPrincipal());
 
 export const listRegions = (query?: { product?: "postgres" | "accelerate" }) =>
   withClient((client) => client.listRegions(query));
@@ -161,6 +164,21 @@ export const deleteComputeService = (id: string) =>
   withClient((client) => client.deleteComputeService(id));
 export const promoteComputeService = (id: string, versionId: string) =>
   withClient((client) => client.promoteComputeService(id, versionId));
+export const listComputeServiceDomains = (computeServiceId: string) =>
+  withClient((client) => client.listComputeServiceDomains(computeServiceId));
+export const createComputeServiceDomain = (
+  computeServiceId: string,
+  input: CustomDomainCreateInput,
+) =>
+  withClient((client) =>
+    client.createComputeServiceDomain(computeServiceId, input),
+  );
+export const getCustomDomain = (id: string) =>
+  withClient((client) => client.getCustomDomain(id));
+export const deleteCustomDomain = (id: string) =>
+  withClient((client) => client.deleteCustomDomain(id));
+export const retryCustomDomain = (id: string) =>
+  withClient((client) => client.retryCustomDomain(id));
 
 export const listComputeVersions = (query?: {
   cursor?: string | null;
