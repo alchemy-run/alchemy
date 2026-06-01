@@ -380,7 +380,6 @@ export const Platform = <
                             // retrieve from the RuntimeContext if running in runtime phase
                             const value =
                               yield* ctx.get<Redacted.Redacted<string>>(key);
-                            console.log("value", value);
                             if (value) {
                               return ConfigProvider.makeValue(
                                 Redacted.value(value),
