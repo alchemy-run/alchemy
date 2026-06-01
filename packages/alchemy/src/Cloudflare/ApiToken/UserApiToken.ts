@@ -121,13 +121,17 @@ export const UserApiTokenProvider = () =>
         tokenData: {
           id?: string | null;
           name?: string | null;
-          status?: "active" | "disabled" | "expired" | null;
+          // Distilled widened generated string enums to open unions (`string & {}`).
+          status?: string | null;
         },
         value: Redacted.Redacted<string>,
       ): UserApiTokenAttributes => ({
         tokenId: tokenData.id ?? "",
         name: tokenData.name ?? "",
-        status: tokenData.status ?? "active",
+        status: (tokenData.status ?? "active") as
+          | "active"
+          | "disabled"
+          | "expired",
         value,
       });
 

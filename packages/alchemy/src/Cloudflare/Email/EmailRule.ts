@@ -88,16 +88,16 @@ const normalize = (
     name?: string | null;
     enabled?: boolean | null;
     priority?: number | null;
+    // Distilled widened generated string enums to open unions (`string & {}`);
+    // the runtime values are still the known variants, narrowed below.
     matchers?:
       | {
-          type: "all" | "literal";
-          field?: "to" | null;
+          type: string;
+          field?: string | null;
           value?: string | null;
         }[]
       | null;
-    actions?:
-      | { type: "drop" | "forward" | "worker"; value?: string[] | null }[]
-      | null;
+    actions?: { type: string; value?: string[] | null }[] | null;
   },
   zoneId: string,
 ) => ({

@@ -254,12 +254,29 @@ export const ZoneProvider = () =>
 
           // 2. Ensure — create if missing.
           if (!zoneId) {
-            const created = yield* create({
+            zoneId = yield* create({
               account: { id: accountId },
               name: news.name,
               type: news.type ?? "full",
-            });
-            zoneId = created.id;
+            }).pipe(
+              Effect.map((created) => created.id),
+              // A concurrent deploy (or a prior crashed run) may have created
+              // the zone between our observe and create — recover by resolving
+              // its id rather than failing the reconcile.
+              Effect.catchTag("ZoneAlreadyExists", () =>
+                findZoneByName({ accountId, name: news.name }).pipe(
+                  Effect.flatMap((match) =>
+                    match
+                      ? Effect.succeed(match.id)
+                      : Effect.fail(
+                          new Error(
+                            `Cloudflare reported zone ${news.name} already exists but it could not be found`,
+                          ),
+                        ),
+                  ),
+                ),
+              ),
+            );
           }
 
           // 3. Sync — apply mutable settings (type/paused/vanity NS).
@@ -287,12 +304,8 @@ export const ZoneProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           if (!output.zoneId) return;
           yield* del({ zoneId: output.zoneId }).pipe(
-            Effect.catch((error: unknown) => {
-              // Zone already gone — idempotent delete.
-              const status = (error as { status?: number }).status;
-              if (status === 404) return Effect.void;
-              return Effect.fail(error);
-            }),
+            // Zone already gone — idempotent delete.
+            Effect.catchTag("InvalidZoneIdentifier", () => Effect.void),
           );
         }),
       };
