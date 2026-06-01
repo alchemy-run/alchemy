@@ -223,17 +223,46 @@ export const makeRpcStub = <Shape>(
         return target[prop];
       }
       return (...args: any[]) =>
-        Effect.gen(function* () {
-          const stub = isLazy
-            ? yield* stubSource as Effect.Effect<any>
-            : stubSource;
-          return yield* Effect.tryPromise({
-            try: () => (stub as any)[prop](...args),
-            catch: (cause) => new RpcCallError({ method: String(prop), cause }),
-          }).pipe(Effect.flatMap(decodeRpcResult));
-        });
+        asEffectOrStream(
+          Effect.gen(function* () {
+            const stub = isLazy
+              ? yield* stubSource as Effect.Effect<any>
+              : stubSource;
+            return yield* Effect.tryPromise({
+              try: () => (stub as any)[prop](...args),
+              catch: (cause) =>
+                new RpcCallError({ method: String(prop), cause }),
+            }).pipe(Effect.flatMap(decodeRpcResult));
+          }),
+        );
     },
   }) as Shape;
+};
+
+// Effect's internal Stream brand. `Stream.isStream` recognises a value by
+// this property and reads its `channel`. A `makeRpcStub` method can't know
+// synchronously whether the remote method returns a value or a `Stream`
+// (the call is async), yet its declared type mirrors the DO `Shape`
+// verbatim — value methods are typed `Effect<A>`, streaming methods `Stream<A>`.
+// We satisfy BOTH by handing back the call `Effect` augmented with the Stream
+// brand + channel, so the single return value can be `yield*`-ed / `.pipe`d as
+// an Effect (value methods, e.g. `stub.put(k, v).pipe(Effect.orDie)`) AND piped
+// through `Stream.*` combinators (streaming methods, e.g.
+// `stub.tick(n).pipe(Stream.map(...))`).
+const StreamTypeId = "~effect/Stream";
+
+const asEffectOrStream = (
+  call: Effect.Effect<unknown, unknown>,
+): Effect.Effect<unknown, unknown> => {
+  const streamForm = Stream.unwrap(
+    Effect.map(call, (value) =>
+      Stream.isStream(value) ? value : Stream.succeed(value),
+    ),
+  );
+  return Object.assign(call, {
+    [StreamTypeId]: streamForm[StreamTypeId],
+    channel: streamForm.channel,
+  });
 };
 
 export const toRpcStream = (stream: Stream.Stream<any, any, any>) =>
