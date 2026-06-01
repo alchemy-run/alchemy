@@ -1,3 +1,19 @@
+## v2.0.0-beta.49
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: DNS record bindings &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/511 [<samp>(fafc9)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/fafc9e9c)
+- **output**: Add flatMap and method-style combinators &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/512 [<samp>(00234)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/002343f0)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Don't unwrap unredacted values &nbsp;-&nbsp; by **sam** [<samp>(f4ef0)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f4ef0381)
+- **cloudflare**: Ensure all yielded Config in a Worker to use secret_text &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/510 [<samp>(38c62)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/38c62b6b)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.48...HEAD)
+
+---
+
 ## v2.0.0-beta.48
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
