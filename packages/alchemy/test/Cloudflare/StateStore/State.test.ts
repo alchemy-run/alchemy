@@ -1,5 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
-import { STATE_STORE_VERSION } from "@/State/HttpStateApi.ts";
+import { STATE_STORE_VERSION } from "@/Cloudflare/StateStore/Api.ts";
 import { State } from "@/State/State.ts";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
@@ -73,7 +73,7 @@ const replacedState = (fqn: string) => ({
 test(
   "getVersion returns the current STATE_STORE_VERSION",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const version = yield* store.getVersion();
     expect(version).toBe(STATE_STORE_VERSION);
   }),
@@ -83,7 +83,7 @@ test(
 test(
   "DELETE /state/stacks/:stack wipes the test namespace (cleanup)",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     yield* store.deleteStack({ stack: STACK });
     const fqns = yield* store.list({ stack: STACK, stage: STAGE });
     expect(fqns).toEqual([]);
@@ -94,7 +94,7 @@ test(
 test(
   "PUT /resources/:fqn (setState) persists a resource",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const fqn = "stack/scope/resource-a";
     const value = sampleState(fqn, "inst-a");
     const echoed = yield* store.set({
@@ -112,7 +112,7 @@ test(
 test(
   "GET /resources/:fqn (getState) reads back the persisted value",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const fqn = "stack/scope/resource-a";
     const got = yield* store.get({ stack: STACK, stage: STAGE, fqn });
     expect(got).toBeDefined();
@@ -125,7 +125,7 @@ test(
 test(
   "GET /resources/:fqn returns undefined for a missing fqn",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const got = yield* store.get({
       stack: STACK,
       stage: STAGE,
@@ -139,7 +139,7 @@ test(
 test(
   "GET /resources (listResources) returns the FQNs in the stage",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const fqnB = "stack/scope/resource-b";
     yield* store.set({
       stack: STACK,
@@ -159,7 +159,7 @@ test(
 test(
   "GET /stacks (listStacks) includes the registered test stack",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const stacks = yield* store.listStacks();
     expect(stacks).toContain(STACK);
   }),
@@ -169,7 +169,7 @@ test(
 test(
   "GET /stacks/:stack/stages (listStages) includes the test stage",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const stages = yield* store.listStages(STACK);
     expect([...stages]).toContain(STAGE);
   }),
@@ -179,7 +179,7 @@ test(
 test(
   "PUT /output (setStackOutput) persists a stack output",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const out = yield* store.setOutput({
       stack: STACK,
       stage: STAGE,
@@ -193,7 +193,7 @@ test(
 test(
   "GET /output (getStackOutput) reads back the persisted output",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const out = yield* store.getOutput({ stack: STACK, stage: STAGE });
     expect(out).toEqual({ url: "https://example.com", count: 42 });
   }),
@@ -203,7 +203,7 @@ test(
 test(
   "GET /output returns undefined for an un-deployed stage",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const out = yield* store.getOutput({
       stack: STACK,
       stage: "never-deployed",
@@ -216,7 +216,7 @@ test(
 test(
   "GET /replaced-resources (getReplacedResources) returns status===replaced rows",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const fqn = "stack/scope/resource-replaced";
     yield* store.set({
       stack: STACK,
@@ -237,7 +237,7 @@ test(
 test(
   "DELETE /resources/:fqn (deleteState) removes a single resource",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const fqn = "stack/scope/resource-a";
     yield* store.delete({ stack: STACK, stage: STAGE, fqn });
     const got = yield* store.get({ stack: STACK, stage: STAGE, fqn });
@@ -251,7 +251,7 @@ test(
 test(
   "DELETE /stacks/:stack?stage=... clears one stage but leaves the stack registered",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     yield* store.deleteStack({ stack: STACK, stage: STAGE });
     const fqns = yield* store.list({ stack: STACK, stage: STAGE });
     expect(fqns).toEqual([]);
@@ -267,7 +267,7 @@ test(
 test(
   "DELETE /stacks/:stack (no stage) removes the stack from listStacks",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     yield* store.deleteStack({ stack: STACK });
     const stacks = yield* store.listStacks();
     expect(stacks).not.toContain(STACK);
@@ -285,7 +285,7 @@ test(
 test(
   "setState 100x sequential — surfaces transient failures",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const stack = STACK;
     const stage = `${STAGE}-stress-seq`;
     const fqn = "stack/scope/stress-seq";
@@ -324,7 +324,7 @@ test(
 test(
   "setState 100x concurrent — surfaces racy transient failures",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const stack = STACK;
     const stage = `${STAGE}-stress-par`;
 
@@ -369,7 +369,7 @@ test(
 test(
   "GET+PUT interleaved 30x5 — engine traffic pattern",
   Effect.gen(function* () {
-    const store = yield* State;
+    const store = yield* yield* State;
     const stack = STACK;
     const stage = `${STAGE}-interleaved`;
 

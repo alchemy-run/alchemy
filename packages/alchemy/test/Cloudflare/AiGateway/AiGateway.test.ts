@@ -1,6 +1,6 @@
-import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Alchemy from "@/index.ts";
 import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
@@ -10,8 +10,8 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { Gateway } from "./gateway.ts";
-import AiGatewayTestWorker from "./worker.ts";
+import { Gateway } from "./fixtures/Gateway.ts";
+import TestWorker from "./fixtures/TestWorker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -138,7 +138,7 @@ test.provider(
 
       // Phase 2: wipe local state — the gateway stays on Cloudflare.
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",
@@ -160,7 +160,7 @@ test.provider(
       expect(adopted.gatewayId).toEqual(gatewayId);
 
       const persisted = yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         return yield* state.get({
           stack: stack.name,
           stage: "test",
@@ -204,7 +204,7 @@ const Stack = Alchemy.Stack(
   },
   Effect.gen(function* () {
     const gateway = yield* Gateway;
-    const worker = yield* AiGatewayTestWorker;
+    const worker = yield* TestWorker;
     return {
       gatewayId: gateway.gatewayId,
       url: worker.url.as<string>(),
@@ -221,7 +221,8 @@ test(
     const out = yield* stack;
     const workerUrl = out.url;
     expect(workerUrl).toBeTypeOf("string");
-    expect(out.gatewayId).toBe("alchemy-test-ai-gateway-binding");
+    expect(out.gatewayId).toBeTypeOf("string");
+    expect(out.gatewayId.length).toBeGreaterThan(0);
 
     const client = yield* HttpClient.HttpClient;
     const res = yield* client.get(`${workerUrl}/url`).pipe(

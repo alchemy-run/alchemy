@@ -79,9 +79,6 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
     const putRecords = yield* AWS.Kinesis.PutRecords.bind(stream);
     const sink = yield* AWS.Kinesis.StreamSink.bind(stream);
 
-    const streamName = yield* stream.streamName;
-    const consumerName = yield* consumer.consumerName;
-
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -89,11 +86,7 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
         const pathname = url.pathname;
 
         if (request.method === "GET" && pathname === "/ready") {
-          return yield* HttpServerResponse.json({
-            ok: true,
-            streamName: yield* streamName,
-            consumerName: yield* consumerName,
-          });
+          return yield* HttpServerResponse.json({ ok: true });
         }
 
         if (request.method === "GET" && pathname === "/account-settings") {
@@ -312,7 +305,10 @@ export const KinesisApiFunctionLive = KinesisApiFunction.make(
       ),
     ),
   ),
-);
+  // Re-merge so the deploying Stack can `yield* StreamAndConsumer` and expose
+  // the stream/consumer names as deploy-time outputs. Reusing the same
+  // `StreamAndConsumerLive` reference keeps it a single shared stream/consumer.
+).pipe(Layer.provideMerge(StreamAndConsumerLive));
 
 export default KinesisApiFunctionLive;
 

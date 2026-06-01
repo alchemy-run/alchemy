@@ -144,6 +144,13 @@ A state store is just an Effect `Layer` that provides the `State`
 service. If the built-in stores don't fit, you can back one with
 Postgres, S3, Redis, DynamoDB, or any other backend.
 
+The `State` service holds an `Effect<StateService>` — a deferred
+initializer — rather than a `StateService` directly. Wrap your
+builder in `Effect.cached` so the backend is only contacted on first
+use and the result is reused afterwards. This keeps commands that
+provide the layer but never read state (like `alchemy login`) from
+connecting to your backend or prompting for credentials.
+
 See [Writing a Custom State Store](/guides/custom-state-store) for
 a walkthrough of the `StateService` interface, an end-to-end
 implementation, and references to the built-in stores you can copy

@@ -283,6 +283,29 @@ export interface WorkerProps<
    * options used to build this Worker. See {@link Bundle.BundleExtraOptions}.
    */
   build?: Bundle.BundleExtraOptions;
+  /**
+   * Options for the local dev server that runs this Worker under `alchemy dev`.
+   * Each Worker is served on its own port.
+   */
+  dev?: {
+    /**
+     * Host the local dev server binds to.
+     * @default "localhost"
+     */
+    host?: string;
+    /**
+     * Port the local dev server listens on. If the port is unavailable, the
+     * next free port is used unless {@link strictPort} is `true`.
+     * @default 1337
+     */
+    port?: number;
+    /**
+     * When `true`, fail instead of falling back to another port if {@link port}
+     * is already in use.
+     * @default false
+     */
+    strictPort?: boolean;
+  };
 }
 
 export type Worker<Bindings extends WorkerBindings = any> = Resource<
@@ -1670,13 +1693,17 @@ export const LiveWorkerProvider = () =>
           // Cloudflare's script registry is eventually consistent — for the
           // first few hundred ms after `putScript` returns, POST /subdomain
           // can still get back `WorkerNotFound` (a generic "unknown error"
-          // body). Bigger uploads race harder. Retry the subdomain toggle on
-          // that specific tag with a short exponential backoff; same pattern
-          // we use elsewhere in this provider for DO-namespace propagation.
+          // body), or a bare 500 surfaced as `InternalServerError` /
+          // `UnknownCloudflareError` (code 10013). Bigger uploads race harder.
+          // Retry the subdomain toggle on those transient tags with a short
+          // exponential backoff; same pattern we use elsewhere in this
+          // provider for DO-namespace propagation and for `putScript` itself.
           yield* setWorkerSubdomain(name, desiredSubdomainEnabled).pipe(
             Effect.retry({
               while: (error: { _tag?: string }) =>
-                error?._tag === "WorkerNotFound",
+                error?._tag === "WorkerNotFound" ||
+                error?._tag === "InternalServerError" ||
+                error?._tag === "UnknownCloudflareError",
               schedule: Schedule.exponential(200).pipe(
                 Schedule.both(Schedule.recurs(15)),
               ),

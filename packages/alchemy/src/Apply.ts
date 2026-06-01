@@ -138,7 +138,7 @@ export const apply = <P extends Plan>(
   Effect.gen(function* () {
     const cli = yield* Cli;
     const session = yield* cli.startApplySession(plan);
-    const state = yield* State;
+    const state = yield* yield* State;
     const stack = yield* Stack;
     const stage = yield* Stage;
     const stackName = stack.name;
@@ -280,7 +280,24 @@ const executePlan = Effect.fnUntraced(function* (
     Effect.all(
       fqns
         .filter((fqn) => fqn in ready)
-        .map((fqn) => Deferred.await(ready[fqn])),
+        .map((fqn) =>
+          // Non-cycle upstreams must be observed at their TERMINAL output
+          // (`readyStable`), not their early precreate signal (`ready`). This
+          // is what makes a failed upstream actually interrupt its downstream:
+          // a resource with `precreate` resolves `ready` before its real
+          // `reconcile` runs, so a downstream waiting on `ready` would proceed
+          // (and even finish) even though the upstream's reconcile later
+          // failed. Waiting on `readyStable` means the downstream's
+          // `waitForDeps` short-circuits with the upstream's failure cause.
+          //
+          // Cycle members are the exception: peers in an SCC depend on each
+          // other, so they must rendezvous on the early `ready`/precreate
+          // signal to break the deadlock. Phase 3 (`converge`) re-runs them
+          // against final outputs once the cycle settles.
+          plan.cycleMembers.has(fqn)
+            ? Deferred.await(ready[fqn])
+            : Deferred.await(readyStable[fqn]),
+        ),
       { concurrency: "unbounded" },
     );
 
@@ -1380,7 +1397,7 @@ const collectGarbage = Effect.fnUntraced(function* (
   plan: Plan,
   session: PlanStatusSession,
 ) {
-  const state = yield* State;
+  const state = yield* yield* State;
   const stack = yield* Stack;
   const stackName = stack.name;
   const stage = yield* Stage;

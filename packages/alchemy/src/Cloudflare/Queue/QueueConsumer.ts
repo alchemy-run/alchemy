@@ -118,11 +118,11 @@ type ObservedConsumer = {
 
 const toObserved = (c: {
   consumerId?: string | null;
-  script?: string | null;
+  scriptName?: string | null;
   type?: "worker" | "http_pull" | null;
 }): ObservedConsumer | undefined =>
   c.consumerId && c.type === "worker"
-    ? { consumerId: c.consumerId, script: c.script ?? undefined }
+    ? { consumerId: c.consumerId, script: c.scriptName ?? undefined }
     : undefined;
 
 export const QueueConsumerProvider = () =>
@@ -364,6 +364,21 @@ export const QueueConsumerProvider = () =>
             }),
           );
 
+          yield* getConsumer({ accountId: acct, queueId, consumerId }).pipe(
+            Effect.flatMap((fetched) =>
+              toObserved(fetched)?.script === news.scriptName
+                ? Effect.void
+                : Effect.fail("ScriptUnbound" as const),
+            ),
+            Effect.catchTag("ConsumerNotFound", () =>
+              Effect.fail("ScriptUnbound" as const),
+            ),
+            Effect.retry({
+              while: (e) => e === "ScriptUnbound",
+              schedule: queueHandlerReadinessSchedule,
+            }),
+          );
+
           return {
             consumerId,
             queueId,
@@ -415,8 +430,9 @@ export const QueueConsumerProvider = () =>
                 consumerId: fetched.consumerId!,
                 queueId: output.queueId,
                 scriptName:
-                  ("script" in fetched && typeof fetched.script === "string"
-                    ? fetched.script
+                  ("scriptName" in fetched &&
+                  typeof fetched.scriptName === "string"
+                    ? fetched.scriptName
                     : output.scriptName) ?? output.scriptName,
                 accountId: output.accountId,
               };

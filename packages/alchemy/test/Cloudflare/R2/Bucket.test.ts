@@ -32,10 +32,10 @@ test.provider("create and delete bucket with default props", (stack) =>
     expect(bucket.storageClass).toEqual("Standard");
     expect(bucket.jurisdiction).toEqual("default");
 
-    const actualBucket = yield* r2.getBucket({
+    const actualBucket = yield* getBucketWhenReady(
+      bucket.bucketName,
       accountId,
-      bucketName: bucket.bucketName,
-    });
+    );
     expect(actualBucket.name).toEqual(bucket.bucketName);
 
     yield* stack.destroy();
@@ -59,10 +59,10 @@ test.provider("create, update, delete bucket", (stack) =>
       }),
     );
 
-    const actualBucket = yield* r2.getBucket({
+    const actualBucket = yield* getBucketWhenReady(
+      bucket.bucketName,
       accountId,
-      bucketName: bucket.bucketName,
-    });
+    );
     expect(actualBucket.name).toEqual(bucket.bucketName);
     expect(actualBucket.storageClass).toEqual("Standard");
 
@@ -75,10 +75,10 @@ test.provider("create, update, delete bucket", (stack) =>
       }),
     );
 
-    const actualUpdatedBucket = yield* r2.getBucket({
+    const actualUpdatedBucket = yield* getBucketWhenReady(
+      updatedBucket.bucketName,
       accountId,
-      bucketName: updatedBucket.bucketName,
-    });
+    );
     expect(actualUpdatedBucket.name).toEqual(updatedBucket.bucketName);
     expect(actualUpdatedBucket.storageClass).toEqual("InfrequentAccess");
 
@@ -115,7 +115,7 @@ test.provider(
 
       // Phase 2: wipe local state — the bucket stays on Cloudflare.
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",
@@ -137,7 +137,7 @@ test.provider(
       expect(adopted.bucketName).toEqual(bucketName);
 
       const persisted = yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         return yield* state.get({
           stack: stack.name,
           stage: "test",
@@ -293,6 +293,22 @@ test.provider("lifecycle rules are added, updated, and removed", (stack) =>
     yield* waitForBucketToBeDeleted(initial.bucketName, accountId);
   }).pipe(logLevel),
 );
+
+// R2 bucket creates are eventually consistent — a read immediately after
+// deploy can briefly return NoSuchBucket until the bucket propagates.
+const getBucketWhenReady = Effect.fn(function* (
+  bucketName: string,
+  accountId: string,
+) {
+  return yield* r2.getBucket({ accountId, bucketName }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "NoSuchBucket",
+      schedule: Schedule.exponential("200 millis").pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
+    }),
+  );
+});
 
 const waitForBucketToBeDeleted = Effect.fn(function* (
   bucketName: string,

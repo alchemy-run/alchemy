@@ -70,13 +70,14 @@ export const CredentialsStoreLive = Layer.effect(
       credentials: T,
     ): Effect.Effect<void, PlatformError> => {
       const filePath = credentialsFilePath(profile, provider);
-      return fs
-        .makeDirectory(path.dirname(filePath), { recursive: true })
-        .pipe(
-          Effect.flatMap(() =>
-            fs.writeFileString(filePath, JSON.stringify(credentials, null, 2)),
-          ),
-        );
+      return fs.makeDirectory(path.dirname(filePath), { recursive: true }).pipe(
+        Effect.flatMap(() => {
+          return fs.writeFileString(
+            filePath,
+            JSON.stringify(credentials, null, 2),
+          );
+        }),
+      );
     };
 
     const remove_ = (profile: string, provider: string): Effect.Effect<void> =>

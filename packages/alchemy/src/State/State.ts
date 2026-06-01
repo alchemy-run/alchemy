@@ -1,8 +1,8 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 import type { ActionState } from "./ActionState.ts";
+import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
 
 /**
  * Anything persistable under an FQN. Resources are discriminated by status
@@ -23,9 +23,10 @@ export class StateStoreError extends Data.TaggedError("StateStoreError")<{
   cause?: Error;
 }> {}
 
-export class State extends Context.Service<State, StateService>()(
-  "alchemy/State",
-) {}
+export class State extends Context.Service<
+  State,
+  Effect.Effect<StateService>
+>()("alchemy/State") {}
 
 /**
  * State service interface.

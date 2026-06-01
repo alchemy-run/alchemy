@@ -23,12 +23,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const stack = beforeAll(deploy(Stack));
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
-
-const rpcWorkerStack = beforeAll(deploy(RpcWorkerStack));
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(RpcWorkerStack));
-
 // Cap exponential backoff at 3s so retries stay bounded when CF edge is
 // slow (otherwise the geometric blow-up dominates wall time).
 const readinessSchedule = Schedule.exponential("500 millis").pipe(
@@ -57,6 +51,48 @@ const rpcClientLayer = (url: string) =>
     ),
   );
 
+const readinessRetries = 15;
+
+// The `*DO` RPC handlers forward to the Durable Object via `getByName(...)`.
+// On a freshly-deployed worker the DO-namespace binding hasn't propagated to
+// every Cloudflare edge yet, so the first calls fail with `Worker not found.`.
+// The worker fixture wraps the DO call in `Effect.orDie` / `Stream.orDie`, so
+// that error arrives at the client as a DEFECT — and `Effect.retry` does not
+// retry defects. Promote defects to failures so the readiness retry can absorb
+// the transient binding-propagation error (a genuine bug would simply keep
+// failing until the retry budget is exhausted).
+const retryReadyN =
+  (times: number) =>
+  <A, E, R>(eff: Effect.Effect<A, E, R>) =>
+    eff.pipe(
+      Effect.catchDefect((defect) => Effect.fail(defect)),
+      Effect.retry({ schedule: readinessSchedule, times }),
+    );
+
+const retryReady = retryReadyN(readinessRetries);
+
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+
+// Gate the deploy on the worker→DO binding having propagated to the edge:
+// hit both the unary and streaming `*DO` paths once, retrying through the
+// transient `Worker not found.` window, so individual tests can call the
+// `*DO` RPCs directly without each having to re-implement the readiness retry.
+const rpcWorkerStack = beforeAll(
+  deploy(RpcWorkerStack).pipe(
+    Effect.tap((outputs) =>
+      Effect.gen(function* () {
+        const c = yield* RpcClient.make(RpcWorkerWorkerRpcs);
+        yield* c.PingDO({ message: "warmup" }).pipe(retryReady);
+        yield* c.CountDO({ upto: 1 }).pipe(Stream.runCollect, retryReady);
+      }).pipe(Effect.scoped, Effect.provide(rpcClientLayer(outputs.url))),
+    ),
+    // just give it some extra time to propagate
+    Effect.tap(Effect.sleep("5 seconds")),
+  ),
+);
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(RpcWorkerStack));
+
 test(
   "RpcDurableObjectNamespace: Increment / Get round-trip via Worker",
   Effect.gen(function* () {
@@ -78,7 +114,7 @@ test(
     const got = (yield* getRes.json) as { count: number };
     expect(got.count).toBe(3);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );
 
 test(
@@ -104,7 +140,7 @@ test(
     expect(beta.count).toBe(1);
     expect(gamma.count).toBe(0);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );
 
 test(
@@ -122,7 +158,7 @@ test(
     const lines = body.split("\n").filter((l) => l.length > 0);
     expect(lines).toEqual(["1", "2", "3", "4"]);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );
 
 test(
@@ -132,18 +168,14 @@ test(
 
     yield* Effect.gen(function* () {
       const c = yield* RpcClient.make(RpcWorkerWorkerRpcs);
-      const ping = yield* c
-        .Ping({ message: "hi" })
-        .pipe(Effect.retry({ times: 5 }));
+      const ping = yield* c.Ping({ message: "hi" }).pipe(retryReady);
       expect(ping.echo).toBe("hi");
 
-      const pingDO = yield* c
-        .PingDO({ message: "via DO" })
-        .pipe(Effect.retry({ times: 5 }));
+      const pingDO = yield* c.PingDO({ message: "via DO" }).pipe(retryReady);
       expect(pingDO.echo).toBe("via DO");
     }).pipe(Effect.scoped, Effect.provide(rpcClientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );
 
 test(
@@ -176,7 +208,7 @@ test(
     const final = (yield* finalRes.json) as { count: number };
     expect(final.count).toBe(N + 1);
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );
 
 test(
@@ -207,7 +239,7 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(rpcClientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );
 
 test(
@@ -222,13 +254,9 @@ test(
       const results = yield* Effect.forEach(
         Array.from({ length: N }, (_, i) => i),
         (i) =>
-          c.PingDO({ message: `m-${i}` }).pipe(
-            Effect.timeout("10 seconds"),
-            Effect.retry({
-              schedule: readinessSchedule,
-              times: 3,
-            }),
-          ),
+          c
+            .PingDO({ message: `m-${i}` })
+            .pipe(Effect.timeout("10 seconds"), retryReadyN(5)),
         { concurrency: 16 },
       );
 
@@ -238,7 +266,7 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(rpcClientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );
 
 test(
@@ -253,14 +281,13 @@ test(
       const results = yield* Effect.forEach(
         Array.from({ length: N }, (_, i) => i),
         (i) =>
-          c.CountDO({ upto: 3 + (i % 3) }).pipe(
-            Stream.runCollect,
-            Effect.timeout("10 seconds"),
-            Effect.retry({
-              schedule: readinessSchedule,
-              times: 3,
-            }),
-          ),
+          c
+            .CountDO({ upto: 3 + (i % 3) })
+            .pipe(
+              Stream.runCollect,
+              Effect.timeout("10 seconds"),
+              retryReadyN(5),
+            ),
         { concurrency: 16 },
       );
 
@@ -272,5 +299,5 @@ test(
       }
     }).pipe(Effect.scoped, Effect.provide(rpcClientLayer(url)));
   }).pipe(logLevel),
-  { timeout: 180_000 },
+  { timeout: 30_000 },
 );

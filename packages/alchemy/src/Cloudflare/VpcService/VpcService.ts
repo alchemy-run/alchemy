@@ -77,7 +77,7 @@ export declare namespace VpcService {
 export type VpcServiceAttributes = {
   serviceId: string;
   serviceName: string;
-  serviceType: "http";
+  serviceType: "http" | "tcp";
   httpPort: number | undefined;
   httpsPort: number | undefined;
   host: VpcService.Host;
@@ -262,7 +262,7 @@ export const formatVpcService = (
   service: {
     serviceId?: string | null;
     name: string;
-    type: "http";
+    type: "http" | "tcp";
     createdAt?: string | null;
     updatedAt?: string | null;
     httpPort?: number | null;

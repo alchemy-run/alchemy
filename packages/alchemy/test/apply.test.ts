@@ -31,7 +31,7 @@ import {
 const { test } = Test.make({ providers: TestLayers() });
 
 const getState = Effect.fn(function* <S = ResourceState>(resourceId: string) {
-  const state = yield* State;
+  const state = yield* yield* State;
   const stk = yield* Stack;
   return (yield* state.get({
     stack: stk.name,
@@ -40,7 +40,7 @@ const getState = Effect.fn(function* <S = ResourceState>(resourceId: string) {
   })) as S;
 });
 const listState = Effect.fn(function* () {
-  const state = yield* State;
+  const state = yield* yield* State;
   const stk = yield* Stack;
   return yield* state.list({ stack: stk.name, stage: stk.stage });
 });
@@ -1085,6 +1085,80 @@ describe("prop-flow convergence", () => {
 
         expect(terminal("A")).toEqual(["updated"]);
         expect(terminal("B")).toEqual(["updated"]);
+      }),
+  );
+
+  // Regression: a resource with `precreate` (e.g. Cloudflare Worker) resolves
+  // its early `ready` signal before its real `reconcile` runs. A non-cyclic
+  // downstream must still wait for the upstream's TERMINAL output, so that an
+  // upstream `reconcile` failure interrupts the downstream instead of letting
+  // it proceed off the precreate stub. Before the fix the downstream raced
+  // ahead on the precreate identifier and fully created itself even though the
+  // upstream failed.
+  test.provider(
+    "precreate upstream reconcile failure interrupts non-cyclic downstream (stable id dep)",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = Effect.gen(function* () {
+          const A = yield* PhasedTarget("A", {
+            desired: "a-value",
+            replaceKey: "v1",
+          });
+          // B depends on A.stableId — a value already available from A's
+          // precreate stub — yet must still be gated on A's reconcile.
+          const B = yield* TestResource("B", {
+            string: A.stableId,
+          });
+          return { A, B };
+        });
+
+        yield* program.pipe(stack.deploy, hook(failOn("A", "create")));
+
+        // A's reconcile failed after committing "creating".
+        expect((yield* getState("A"))?.status).toEqual("creating");
+        // B must NOT have reached its own reconcile. It may have committed an
+        // intermediate "creating" while waiting on deps, but it must never be
+        // "created" — that would mean the upstream failure was ignored.
+        expect((yield* getState("B"))?.status).not.toEqual("created");
+
+        // Recovery deploy converges both.
+        const output = yield* program.pipe(stack.deploy);
+        expectConvergedStatus((yield* getState("A"))?.status);
+        expectConvergedStatus((yield* getState("B"))?.status);
+        expect(output.B.string).toEqual("stable:v1");
+      }),
+  );
+
+  test.provider(
+    "precreate upstream reconcile failure interrupts non-cyclic downstream (value dep)",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = Effect.gen(function* () {
+          const A = yield* PhasedTarget("A", {
+            desired: "a-value",
+            replaceKey: "v1",
+          });
+          const B = yield* TestResource("B", {
+            string: A.value,
+          });
+          const C = yield* TestResource("C", {
+            string: B.string,
+          });
+          return { A, B, C };
+        });
+
+        yield* program.pipe(stack.deploy, hook(failOn("A", "create")));
+
+        expect((yield* getState("A"))?.status).toEqual("creating");
+        expect((yield* getState("B"))?.status).not.toEqual("created");
+        // Transitive downstream never starts either.
+        expectNotStarted(yield* getState("C"));
+
+        const output = yield* program.pipe(stack.deploy);
+        expectConvergedStatus((yield* getState("A"))?.status);
+        expectConvergedStatus((yield* getState("B"))?.status);
+        expectConvergedStatus((yield* getState("C"))?.status);
+        expect(output.C.string).toEqual("a-value");
       }),
   );
 });
@@ -4233,7 +4307,7 @@ describe("Redacted props/outputs survive deploy", () => {
 describe("stack output persistence", () => {
   const getStackOutput = (stack: string, stage: string) =>
     Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
       return yield* state.getOutput({ stack, stage });
     });
 

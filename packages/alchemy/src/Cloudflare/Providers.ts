@@ -5,12 +5,12 @@ import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
-import { Command } from "../Build/Command.ts";
-import * as Build from "../Build/index.ts";
-import * as Provider from "../Provider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
+import { Command } from "../Build/Command.ts";
+import * as Build from "../Build/index.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
+import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as Access from "./Access.ts";
 import * as AiGateway from "./AiGateway/index.ts";
@@ -31,6 +31,7 @@ import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
 import * as SecretsStore from "./SecretsStore/index.ts";
 import * as Tunnel from "./Tunnel/index.ts";
+import * as Vectorize from "./Vectorize/index.ts";
 import * as VpcService from "./VpcService/index.ts";
 import * as Workers from "./Workers/index.ts";
 import * as Workflows from "./Workers/Workflow.ts";
@@ -82,6 +83,9 @@ export const providers = () =>
       SecretsStore.SecretsStore,
       SecretsStore.Secret,
       Tunnel.Tunnel,
+      Vectorize.VectorizeIndexBindingPolicy,
+      Vectorize.VectorizeIndex,
+      Vectorize.VectorizeMetadataIndex,
       VpcService.VpcService,
       KeyPair,
       Random,
@@ -125,6 +129,9 @@ export const providers = () =>
         SecretsStore.SecretsStoreProvider(),
         SecretsStore.StoreSecretProvider(),
         Tunnel.TunnelProvider(),
+        Vectorize.VectorizeIndexBindingPolicyLive,
+        Vectorize.VectorizeIndexProvider(),
+        Vectorize.VectorizeMetadataIndexProvider(),
         VpcService.VpcServiceProvider(),
         Workers.BindWorkerPolicyLive,
         Workers.CronEventSourcePolicyLive,
@@ -169,19 +176,6 @@ export const providers = () =>
     Layer.orDie,
   );
 
-const isMisleadinglyTaggedTransient = (error: unknown): boolean => {
-  if (!error || typeof error !== "object") return false;
-  const tag = (error as { _tag?: unknown })._tag;
-  const message = ((error as { message?: unknown }).message ?? "") as string;
-  // CF code 10001: "Method not allowed for token" is a real permission
-  // failure (NOT retryable), but the same code is also returned with
-  // message "internal error" during Cloudflare-side hiccups. The two
-  // messages are unambiguously distinct, so we can safely retry only
-  // the internal-error variant.
-  if (tag === "Forbidden" && /internal error/i.test(message)) return true;
-  return false;
-};
-
 const cloudflareRetryFactory: Retry.Factory = (lastError) => {
   const defaults = Retry.makeDefault(lastError);
   return {
@@ -207,4 +201,17 @@ const cloudflareRetryFactory: Retry.Factory = (lastError) => {
       Schedule.both(Schedule.recurs(8)),
     ),
   };
+};
+
+const isMisleadinglyTaggedTransient = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const tag = (error as { _tag?: unknown })._tag;
+  const message = ((error as { message?: unknown }).message ?? "") as string;
+  // CF code 10001: "Method not allowed for token" is a real permission
+  // failure (NOT retryable), but the same code is also returned with
+  // message "internal error" during Cloudflare-side hiccups. The two
+  // messages are unambiguously distinct, so we can safely retry only
+  // the internal-error variant.
+  if (tag === "Forbidden" && /internal error/i.test(message)) return true;
+  return false;
 };

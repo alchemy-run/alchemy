@@ -19,6 +19,7 @@ import { isImages } from "../Images/Images.ts";
 import { isKVNamespace } from "../KV/KVNamespace.ts";
 import { isQueue } from "../Queue/Queue.ts";
 import { isR2Bucket } from "../R2/R2Bucket.ts";
+import { isVectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isAssets } from "./Assets.ts";
 import { isDurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
@@ -147,7 +148,7 @@ const toBinding = (
   } else if (isD1Database(binding)) {
     return {
       type: "d1",
-      id: binding.databaseId,
+      databaseId: binding.databaseId,
       name: bindingName,
     };
   } else if (isR2Bucket(binding)) {
@@ -189,6 +190,12 @@ const toBinding = (
       type: "service",
       name: bindingName,
       service: binding.workerName,
+    };
+  } else if (isVectorizeIndex(binding)) {
+    return {
+      type: "vectorize",
+      name: bindingName,
+      indexName: binding.indexName,
     };
   } else {
     return {

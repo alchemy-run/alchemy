@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { asEffect } from ".//Util/types.ts";
+import { isAction, type ActionLike } from "./Action.ts";
 import {
   AdoptPolicy,
   OwnedBySomeoneElse,
@@ -19,6 +20,7 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import {
+  dedupeBindings,
   diffBindings,
   havePropsChanged,
   isResolved,
@@ -40,19 +42,18 @@ import {
 } from "./Resource.ts";
 import { type StackSpec } from "./Stack.ts";
 import {
+  isActionState,
   State,
+  type ActionState,
   type CreatedResourceState,
   type CreatingResourceState,
-  isActionState,
   type RanActionState,
   type ReplacedResourceState,
   type ReplacingResourceState,
   type ResourceState,
-  type ActionState,
   type UpdatedResourceState,
   type UpdatingReourceState,
 } from "./State/index.ts";
-import { isAction, type ActionLike } from "./Action.ts";
 import { hashInput } from "./Util/hash.ts";
 import { findCycleMembers } from "./Util/scc.ts";
 
@@ -235,7 +236,7 @@ export const make = <A>(
 ): Effect.Effect<Plan<A>, never, State> =>
   // @ts-expect-error
   Effect.gen(function* () {
-    const state = yield* State;
+    const state = yield* yield* State;
 
     const resources = Object.values(stack.resources);
     const actions = Object.values(stack.actions ?? {});
@@ -310,7 +311,11 @@ export const make = <A>(
                   : oldState.props;
 
               const oldBindings = oldState.bindings ?? [];
-              const newBindings = stack.bindings[resource.FQN] ?? [];
+              // Collapse duplicate bindings by sid so the binding set handed to
+              // `diff` matches what `reconcile` receives (see `dedupeBindings`).
+              const newBindings = dedupeBindings(
+                stack.bindings[resource.FQN] ?? [],
+              );
 
               const diff = yield* provider.diff
                 ? provider
@@ -633,8 +638,10 @@ export const make = <A>(
             const news = yield* resolveInput(resource.Props);
             const downstream = newDownstreamDependencies[fqn] ?? [];
 
-            const newBindings: ResourceBinding[] = yield* resolveInput(
-              stack.bindings[fqn] ?? [],
+            // Collapse duplicate bindings by sid so the binding set handed to
+            // `diff` matches what `reconcile` receives (see `dedupeBindings`).
+            const newBindings: ResourceBinding[] = dedupeBindings(
+              yield* resolveInput(stack.bindings[fqn] ?? []),
             );
             const persisted = yield* state.get({
               stack: stackName,

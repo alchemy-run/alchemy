@@ -588,7 +588,7 @@ describe("AWS.DynamoDB.Table", () => {
 
         // Phase 2: wipe local state — the table stays in DynamoDB.
         yield* Effect.gen(function* () {
-          const state = yield* State;
+          const state = yield* yield* State;
           yield* state.delete({
             stack: stack.name,
             stage: "test",
@@ -642,7 +642,7 @@ describe("AWS.DynamoDB.Table", () => {
 
         // Wipe state for "Original"; table stays in DynamoDB.
         yield* Effect.gen(function* () {
-          const state = yield* State;
+          const state = yield* yield* State;
           yield* state.delete({
             stack: stack.name,
             stage: "test",

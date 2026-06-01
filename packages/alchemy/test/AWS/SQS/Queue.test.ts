@@ -224,7 +224,7 @@ test.provider(
 
       // Wipe state — queue stays in SQS.
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",
@@ -263,7 +263,7 @@ test.provider(
       );
 
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",
@@ -304,9 +304,14 @@ const waitForFunctionReady = (url: string) =>
         ? (response.json as Effect.Effect<{ queueUrl: string }>)
         : Effect.fail(new FunctionNotReady()),
     ),
-    Effect.map((json: any) => ({
-      queueUrl: json.queueUrl as string,
-    })),
+    // A freshly-deployed function can briefly serve a 200 before its captured
+    // env vars (the queue URL) have finished propagating, so treat a missing
+    // queueUrl as "not ready yet" and keep polling.
+    Effect.flatMap((json: any) =>
+      typeof json?.queueUrl === "string"
+        ? Effect.succeed({ queueUrl: json.queueUrl as string })
+        : Effect.fail(new FunctionNotReady()),
+    ),
     Effect.retry({
       while: (error) => error._tag === "FunctionNotReady",
       schedule: Schedule.fixed("2 seconds").pipe(

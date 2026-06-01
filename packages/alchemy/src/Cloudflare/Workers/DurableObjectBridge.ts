@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 
 import { HttpServerResponse } from "effect/unstable/http";
 import type {
@@ -16,7 +17,7 @@ import {
   DurableObjectState,
   fromDurableObjectState,
 } from "./DurableObjectState.ts";
-import { makeRequestEffect } from "./HttpServer.ts";
+import { isScopeEjected, makeRequestEffect } from "./HttpServer.ts";
 import { fromWebSocket } from "./WebSocket.ts";
 import { getWorkerExport, handleRpcExit } from "./WorkerBridge.ts";
 
@@ -89,7 +90,15 @@ export const makeDurableObjectBridge =
               this.#execute((instance) => {
                 const method = instance[prop as keyof DurableObjectShape];
                 if (typeof method === "function") {
-                  return (method as any)(...args);
+                  const result = (method as any)(...args);
+                  // A streaming RPC method returns a `Stream` directly rather
+                  // than an `Effect`. Lift it into the success channel so the
+                  // resulting `Exit.value` is the `Stream` and `handleRpcExit`
+                  // can encode it as a stream envelope instead of trying to run
+                  // it as an effect.
+                  return Stream.isStream(result)
+                    ? Effect.succeed(result)
+                    : result;
                 } else if (Effect.isEffect(method)) {
                   return method;
                 } else {
@@ -130,9 +139,12 @@ export const makeDurableObjectBridge =
                   : Promise.reject(Cause.squash(exit.cause))),
           )
           .finally(() =>
-            Scope.close(scope, Exit.void).pipe(Effect.runPromise, (promise) =>
-              this.#state.waitUntil(promise),
-            ),
+            isScopeEjected(scope)
+              ? undefined
+              : Scope.close(scope, Exit.void).pipe(
+                  Effect.runPromise,
+                  (promise) => this.ctx.waitUntil(promise),
+                ),
           );
       }
 

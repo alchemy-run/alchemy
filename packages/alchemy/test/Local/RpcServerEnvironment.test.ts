@@ -17,7 +17,6 @@ const sampleEnv: RpcServerEnvironment = {
   envFile: undefined,
   alchemyContext: {
     dotAlchemy: "/tmp/.alchemy",
-    updateStateStore: false,
     dev: true,
     adopt: false,
   },

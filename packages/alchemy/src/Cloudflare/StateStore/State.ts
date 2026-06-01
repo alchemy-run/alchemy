@@ -8,9 +8,9 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
 import crypto from "node:crypto";
-import * as Output from "../../Output.ts";
 
 import * as Config from "effect/Config";
+import { isHttpClientError } from "effect/unstable/http/HttpClientError";
 import { adopt } from "../../AdoptPolicy.ts";
 import { AuthError } from "../../Auth/AuthProvider.ts";
 import {
@@ -20,16 +20,14 @@ import {
 import { ALCHEMY_PROFILE, ProfileLive } from "../../Auth/Profile.ts";
 import * as Cloudflare from "../../Cloudflare/Providers.ts";
 import { deploy } from "../../Deploy.ts";
+import * as Output from "../../Output.ts";
 import * as Alchemy from "../../Stack.ts";
 import { StateApi } from "../../State/HttpStateApi.ts";
 import {
+  checkHttpStateStoreAuth,
   makeHttpStateStore,
   type HttpStateStoreCredentials,
 } from "../../State/HttpStateStore.ts";
-import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
-import * as Credentials from "../Credentials.ts";
-
-import { AlchemyContext } from "../../AlchemyContext.ts";
 import { makeLocalState } from "../../State/LocalState.ts";
 import { State, type StateService } from "../../State/State.ts";
 import {
@@ -39,315 +37,150 @@ import {
 import * as Clank from "../../Util/Clank.ts";
 import * as Access from "../Access.ts";
 import { CloudflareAuth } from "../Auth/AuthProvider.ts";
+import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
+import * as Credentials from "../Credentials.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
 import Api, { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
-import { AuthTokenSecretName, TokenValue } from "./Token.ts";
+import { AuthToken, AuthTokenSecretName, TokenValue } from "./Token.ts";
+
+const CI = Config.boolean("CI").pipe(Config.withDefault(false));
 
 /** Filename used for stored credentials under the profile directory. */
 const CREDENTIALS_FILE = "cloudflare-state-store";
-
-/**
- * SHA-256 hex digest of the Cloudflare account ID. Used as a stable
- * pseudonymous identifier on telemetry spans so the dashboard can
- * count distinct state-store deployments without leaking the raw
- * accountId. Mirrors the `alchemy.git.origin_hash` pattern in
- * `Telemetry/Attributes.ts`.
- */
-const hashAccountId = (accountId: string) =>
-  Effect.sync(() =>
-    crypto.createHash("sha256").update(accountId).digest("hex"),
-  );
-
-/**
- * Best-effort Cloudflare-account-hash annotation on the current span.
- * Resolves the accountId from {@link CloudflareEnvironment} and
- * attaches `alchemy.cloudflare.account_hash` to whichever span is
- * active. Silently no-ops if the environment isn't resolvable so
- * State-store layer construction still succeeds in degraded paths.
- *
- * `noTrack` controls whether the hash is attached:
- *   - `true`  — never annotate (caller-level opt-out).
- *   - `false` — always annotate, regardless of env.
- *   - `undefined` — fall back to the `NO_TRACK` env var; default off.
- */
-const annotateAccountHash = (noTrack?: boolean) =>
-  Effect.gen(function* () {
-    if (noTrack === true) return;
-    if (noTrack === undefined) {
-      const fromEnv = yield* Config.boolean("NO_TRACK").pipe(
-        Config.withDefault(false),
-      );
-      if (fromEnv) return;
-    }
-    const env = yield* Effect.serviceOption(
-      CloudflareEnvironment.CloudflareEnvironment,
-    );
-    if (env._tag !== "Some") return;
-    const hash = yield* hashAccountId(env.value.accountId);
-    yield* Effect.annotateCurrentSpan("alchemy.cloudflare.account_hash", hash);
-  }).pipe(Effect.catch(() => Effect.void));
-
-export interface BootstrapOptions {
-  /**
-   * The name of the script to use for the state store.
-   * @default "alchemy-state-store"
-   */
-  workerName?: string;
-  /**
-   * Re-run the deploy even if the worker already exists in Cloudflare.
-   *
-   * Without this flag, an already-deployed worker is **adopted**: the
-   * auth-token secret is re-fetched via an edge probe and the local
-   * credentials file is refreshed, but no new code is uploaded. With
-   * `force: true` the full deploy runs again, redeploying the worker
-   * code and reconciling every resource in place.
-   */
-  force?: boolean;
-}
-
-/**
- * Manually bootstrap (or repair) the Cloudflare-hosted HTTP State
- * Store. Used by `alchemy bootstrap cloudflare`.
- *
- * The flow mirrors what {@link state} does on first use, but is
- * exposed as a standalone effect so users can trigger it (or recover
- * from a partially-failed previous deploy) explicitly:
- *
- *   1. Resume any in-progress local `CloudflareStateStore` stack.
- *   2. If the worker already exists in Cloudflare and `force` is not
- *      set, adopt it: read the auth token via an edge-preview probe
- *      and persist credentials.
- *   3. Otherwise run the full deploy with adoption enabled, sync local
- *      state into the deployed store, persist credentials, and delete
- *      the local stack.
- */
-export const bootstrap = (options: BootstrapOptions = {}) =>
-  Effect.gen(function* () {
-    const isCI = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-    const profileName = yield* ALCHEMY_PROFILE;
-    const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
-    const force = options.force ?? false;
-    yield* Effect.annotateCurrentSpan({
-      "alchemy.state_store.script_name": scriptName,
-      "alchemy.state_store.profile": profileName,
-      "alchemy.state_store.force": force,
-      "alchemy.state_store.ci": isCI,
-    });
-    yield* annotateAccountHash();
-
-    const localState = yield* makeLocalState();
-    const hasLocalStack = yield* Effect.map(
-      localState.listStages("CloudflareStateStore"),
-      (stages) => stages.includes(scriptName),
-    );
-
-    if (hasLocalStack) {
-      yield* Clank.info(
-        `Resuming Cloudflare State Store '${scriptName}' deployment...`,
-      );
-      yield* finishBootstrap({ scriptName, profileName, localState, isCI });
-      yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
-      return;
-    }
-
-    const { accountId } = yield* CloudflareEnvironment.CloudflareEnvironment;
-    const workerExists = yield* workers
-      .getScriptSetting({ accountId, scriptName })
-      .pipe(
-        Effect.map((setting) => setting !== undefined),
-        Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
-      );
-
-    if (workerExists && !force) {
-      yield* Clank.info(
-        `Worker '${scriptName}' already exists; adopting and refreshing credentials. ` +
-          `Use --force to redeploy.`,
-      );
-      const credentials = yield* loginWithCloudflare();
-      if (!isCI) {
-        const store = yield* CredentialsStore;
-        yield* store.write<HttpStateStoreCredentials>(
-          profileName,
-          CREDENTIALS_FILE,
-          credentials,
-        );
-      }
-      yield* redeployIfStale({
-        scriptName,
-        profileName,
-        localState,
-        isCI,
-        url: credentials.url,
-      });
-      yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
-      return;
-    }
-
-    if (workerExists) {
-      yield* Clank.info(
-        `Forcing redeploy of Cloudflare State Store '${scriptName}'...`,
-      );
-    } else {
-      yield* Clank.info(`Deploying Cloudflare State Store '${scriptName}'...`);
-    }
-
-    yield* finishBootstrap({ scriptName, profileName, localState, isCI });
-    yield* Clank.success(`Cloudflare State Store '${scriptName}' is ready.`);
-  }).pipe(
-    Effect.withSpan("state_store.bootstrap", {
-      attributes: {
-        "alchemy.state_store.op": "bootstrap",
-        "alchemy.state_store.script_name":
-          options.workerName ?? STATE_STORE_SCRIPT_NAME,
-      },
-    }),
-  );
 
 export const state = () =>
   Layer.effect(
     State,
     Effect.gen(function* () {
-      const isCI = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-      const alchemyContext = yield* AlchemyContext;
-      const profileName = yield* ALCHEMY_PROFILE;
-      const store = yield* CredentialsStore;
-      const credentials = yield* store.read<HttpStateStoreCredentials>(
-        profileName,
-        CREDENTIALS_FILE,
-      );
-
+      const isCI = yield* CI;
       const scriptName = STATE_STORE_SCRIPT_NAME;
-      yield* Effect.annotateCurrentSpan({
-        "alchemy.state_store.script_name": scriptName,
-        "alchemy.state_store.profile": profileName,
-        "alchemy.state_store.ci": isCI,
-      });
-      yield* annotateAccountHash(
-        yield* Config.boolean("NO_TRACK").pipe(Config.withDefault(false)),
-      );
+      const profileName = yield* ALCHEMY_PROFILE;
+      const localStage = `${profileName}_${scriptName}`;
+      const credStore = yield* CredentialsStore;
+      const context = yield* Effect.context<Effect.Services<typeof init>>();
 
-      // The bootstrap of the Cloudflare State Store is only considered
-      // successful once two invariants hold:
-      //   1. the worker has been deployed and the credentials persisted
-      //   2. the local CloudflareStateStore stack has been synced into
-      //      the HTTP store and removed from disk
-      //
-      // If a previous run failed anywhere between deploying the worker
-      // and deleting the local stack (e.g. the worker got created but
-      // sync/credential-write/delete never ran) we will detect the
-      // leftover local stack here and resume the bootstrap. This loop
-      // re-runs deploy (idempotent over already-applied resources) and
-      // finishes the sync/credential/cleanup steps until both
-      // invariants are satisfied.
-      const localState = yield* makeLocalState();
-
-      const hasLocalStack = yield* Effect.map(
-        localState.listStages("CloudflareStateStore"),
-        (stages) => stages.includes(scriptName),
-      );
-
-      if (hasLocalStack) {
-        yield* Clank.info(
-          `Resuming Cloudflare State Store '${scriptName}' deployment...`,
-        );
-        return yield* finishBootstrap({
-          scriptName,
-          profileName,
-          localState,
-          isCI,
-        });
-      }
-
-      if (credentials) {
-        // We have local credentials. Before trusting them, verify
-        // the deployed worker is on the version this CLI was built
-        // against. If it isn't, `redeployIfStale` runs the idempotent
-        // bootstrap flow and short-circuits with the freshly-deployed
-        // store.
-        const fresh = yield* redeployIfStale({
-          scriptName,
-          profileName,
-          localState,
-          isCI,
-          url: credentials.url,
-        });
-        if (fresh) return fresh;
-
-        const httpState = yield* makeCloudflareStateStore(credentials);
-
-        if (alchemyContext.updateStateStore) {
-          yield* deployStateStore(scriptName, httpState);
+      const init = Effect.gen(function* () {
+        if (yield* hasLocalStack(localStage)) {
+          // if there's still a local stack, then we need to finish the bootstrap
+          // TODO(sam): what if the local stack was
+          return yield* deployWithLocalState({
+            scriptName,
+            profileName,
+            isCI,
+            force: false,
+          });
         }
 
-        return httpState;
-      }
+        const ensureLatest = ({
+          url,
+          authToken,
+        }: {
+          url: string;
+          authToken: string;
+        }) =>
+          Effect.gen(function* () {
+            const { matches, expected, observed } =
+              yield* checkStateStoreVersion(url);
 
-      // our profile does not contain a reference to the state store, let's try and resolve it
-      const { accountId } = yield* CloudflareEnvironment.CloudflareEnvironment;
-      const workerExists = yield* workers
-        .getScriptSetting({
-          accountId,
-          scriptName,
-        })
-        .pipe(
-          Effect.map((setting) => setting !== undefined),
-          Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
+            if (observed === undefined) {
+              const shouldDeploy = yield* Clank.confirm({
+                message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
+              });
+              if (shouldDeploy) {
+                return yield* bootstrap({
+                  workerName: scriptName,
+                  profile: profileName,
+                });
+              } else {
+                return yield* Effect.die(new Clank.PromptCancelled());
+              }
+            }
+
+            const httpState = yield* ensureAccess({ url, authToken });
+            if (matches) {
+              return httpState;
+            } else if (isCI) {
+              return yield* Effect.die(
+                new AuthError({
+                  message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
+                }),
+              );
+            } else {
+              const shouldDeploy = yield* Clank.confirm({
+                message:
+                  `Cloudflare State Store '${scriptName}' is out of date ` +
+                  `(expected v${expected}, observed v${observed ?? "unknown"})`,
+              });
+              if (shouldDeploy) {
+                const stateStoreOptions = yield* deployStateStore({
+                  stage: scriptName,
+                  state: httpState,
+                  force: false,
+                });
+                return yield* makeCloudflareStateStore(stateStoreOptions);
+              } else {
+                return yield* Effect.die(new Clank.PromptCancelled());
+              }
+            }
+          });
+
+        const ensureAccess = (credentials: HttpStateStoreCredentials) =>
+          Effect.gen(function* () {
+            const isAuth = yield* checkHttpStateStoreAuth(credentials);
+            if (!isAuth) {
+              // our token is wrong, force a refresh
+              yield* Clank.info(
+                `Cloudflare State store authentication failed, refreshing credentials...`,
+              );
+              const credentials = yield* loginWithCloudflare(profileName, true);
+              if (!(yield* checkHttpStateStoreAuth(credentials))) {
+                return yield* Effect.die(
+                  new AuthError({
+                    message: `Cloudflare State store authentication failed, after refreshing credentials.`,
+                  }),
+                );
+              }
+              return yield* makeCloudflareStateStore(credentials);
+            }
+            return yield* makeCloudflareStateStore(credentials);
+          });
+
+        const credentials = yield* credStore.read<HttpStateStoreCredentials>(
+          profileName,
+          CREDENTIALS_FILE,
         );
-
-      if (workerExists) {
-        // it exists, so fetch the secret token
-        const credentials = yield* loginWithCloudflare();
-        if (!isCI) {
-          yield* store.write<HttpStateStoreCredentials>(
-            profileName,
-            CREDENTIALS_FILE,
-            credentials,
+        if (credentials) {
+          return yield* ensureLatest(credentials);
+        }
+        const workerExists = yield* isStateStoreAvailable(scriptName);
+        if (workerExists) {
+          return yield* ensureLatest(
+            yield* loginWithCloudflare(profileName, false),
+          );
+        } else if (isCI) {
+          // TODO(sam): do we want to support bootstrapping the state store from CI?
+          // for now - just die here
+          return yield* Effect.die(
+            new AuthError({
+              message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
+            }),
+          );
+        } else {
+          return yield* Clank.confirm({
+            message:
+              "Cloudflare State Store not found. Do you want to deploy it?",
+          }).pipe(
+            Effect.flatMap((shouldDeploy) =>
+              shouldDeploy
+                ? bootstrap()
+                : Effect.die(new Clank.PromptCancelled()),
+            ),
           );
         }
+      }).pipe(recordStateStoreInit, Effect.orDie);
 
-        const fresh = yield* redeployIfStale({
-          scriptName,
-          profileName,
-          localState,
-          isCI,
-          url: credentials.url,
-        });
-        if (fresh) return fresh;
-
-        const httpState = yield* makeCloudflareStateStore(credentials);
-
-        if (alchemyContext.updateStateStore) {
-          yield* deployStateStore(scriptName, httpState);
-        }
-
-        return httpState;
-      }
-
-      if (isCI) {
-        // TODO(sam): do we want to support bootstrapping the state store from CI?
-        // for now - just die here
-        return yield* Effect.die(
-          new AuthError({
-            message: `State store not found for script ${scriptName}. Deploy the state store first.`,
-          }),
-        );
-      }
-
-      const shouldDeploy = yield* Clank.confirm({
-        message: "Cloudflare State Store not found. Do you want to deploy it?",
-      });
-
-      if (!shouldDeploy) {
-        return yield* Effect.die(new Clank.PromptCancelled());
-      }
-
-      return yield* finishBootstrap({
-        scriptName,
-        profileName,
-        localState,
-        isCI,
-      });
-    }).pipe(recordStateStoreInit, Effect.orDie),
+      return yield* Effect.cached(init.pipe(Effect.provideContext(context)));
+    }),
   ).pipe(
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
@@ -358,133 +191,137 @@ export const state = () =>
     Layer.orDie,
   );
 
-const makeCloudflareStateStore = Effect.fnUntraced(function* ({
-  url,
-  authToken,
-}: {
-  url: string;
-  authToken: string;
-}) {
-  const access = yield* Access.Access;
-  const accessHeaders = yield* access.getAccessHeaders(new URL(url).host);
-  return yield* makeHttpStateStore({
-    url,
-    authToken,
-    transformClient: HttpClientRequest.setHeaders(accessHeaders),
-    id: "cloudflare-http",
-  });
-});
+export interface BootstrapOptions {
+  /** @default "alchemy-state-store" */
+  workerName?: string;
+  /** @default false */
+  force?: boolean;
+  /** @default "default" */
+  profile?: string;
+}
 
-/**
- * Non-destructively copy every resource in the
- * `CloudflareStateStore/<scriptName>` stack from `source` into
- * `destination`, leaving every other stack in `destination` untouched.
- *
- * This intentionally does not delete anything from `destination`: at
- * bootstrap time the destination is the user's live remote state
- * store, and removing entries that happen to be missing locally would
- * be catastrophic.
- */
-const hoistBootstrapStack = Effect.fnUntraced(function* (
-  source: StateService,
-  destination: StateService,
-  scriptName: string,
-) {
-  const stack = "CloudflareStateStore";
-  const stage = scriptName;
-  const fqns = yield* source.list({ stack, stage });
-  yield* Effect.annotateCurrentSpan({
-    "alchemy.state_store.stack": stack,
-    "alchemy.state_store.stage": stage,
-    "alchemy.state_store.resources.count": fqns.length,
-  });
-  yield* Effect.forEach(
-    fqns,
-    Effect.fnUntraced(function* (fqn) {
-      const value = yield* source.get({ stack, stage, fqn });
-      if (value) {
-        yield* destination.set({ stack, stage, fqn, value });
-      }
-    }),
-    { concurrency: "unbounded" },
-  );
-}, Effect.withSpan("state_store.hoist_bootstrap_stack"));
-
-/**
- * Finish (or resume) the bootstrap of the Cloudflare State Store using
- * the provided local state as the source of truth. This is idempotent
- * and safe to re-run: any resources already applied during a previous
- * partial run will be reconciled, the local stack will be synced into
- * the deployed HTTP store, credentials persisted, and finally the
- * local stack removed - which is what marks the bootstrap as complete.
- */
-const finishBootstrap = ({
-  scriptName,
-  profileName,
-  localState,
-  isCI,
-}: {
-  scriptName: string;
-  profileName: string;
-  localState: StateService;
-  isCI: boolean;
-}) =>
+export const bootstrap = (options: BootstrapOptions = {}) =>
   Effect.gen(function* () {
-    yield* deployStateStore(scriptName, localState);
-
-    // Don't trust the `authToken` returned by `deploy(...)`: when
-    // adoption kicks in (the Secrets Store secret already existed),
-    // the locally-generated `Random` value won't match the value
-    // actually persisted in Cloudflare, and any HTTP call to the
-    // worker would 401. Re-read the live token from the deployed
-    // worker via the same edge-preview probe `loginWithCloudflare`
-    // uses, so the credentials we persist always reflect what is
-    // actually deployed. `loginWithCloudflare` also persists the
-    // credentials file (skipping the write in CI), so we don't need
-    // to do that explicitly here.
-    const { url, authToken } = yield* loginWithCloudflare();
-    const httpState = yield* makeCloudflareStateStore({ url, authToken });
-    // `profileName` is intentionally unused here — `loginWithCloudflare`
-    // resolves it itself. Reference it to keep the surrounding API
-    // explicit and to avoid an unused-parameter lint.
-    void profileName;
-    void isCI;
-
-    // Copy the freshly-deployed CloudflareStateStore stack into the
-    // remote store. We deliberately do NOT call `syncState` here:
-    // syncState is a *mirror* that deletes everything in the
-    // destination that is not in the source, which would wipe every
-    // user stack in the remote store on any subsequent bootstrap
-    // (resume / --force / partial-failure recovery), since by that
-    // point local state only contains the bootstrap stack itself.
-    yield* hoistBootstrapStack(localState, httpState, scriptName);
-
-    yield* localState.deleteStack({
-      stack: "CloudflareStateStore",
-      stage: scriptName,
+    const isCI = yield* CI;
+    const profileName = options.profile ?? (yield* ALCHEMY_PROFILE);
+    const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
+    const force = options.force ?? false;
+    const localStage = `${profileName}_${scriptName}`;
+    yield* Effect.annotateCurrentSpan({
+      "alchemy.state_store.script_name": scriptName,
+      "alchemy.state_store.profile": profileName,
+      "alchemy.state_store.force": force,
+      "alchemy.state_store.ci": isCI,
     });
+    yield* annotateAccountHash();
 
-    return httpState;
+    if (yield* hasLocalStack(localStage)) {
+      // if there's a local stack still, we can assume we did not finish hoisting it, so finish that
+      yield* Clank.info(
+        `Resuming Cloudflare State Store '${scriptName}' deployment...`,
+      );
+      // resume deployment
+      return yield* deployWithLocalState({
+        scriptName,
+        profileName,
+        isCI,
+        force,
+      }).pipe(
+        Effect.tap(() =>
+          Clank.success(`Cloudflare State Store '${scriptName}' is ready.`),
+        ),
+      );
+    }
+
+    const workerExists = yield* isStateStoreAvailable(scriptName);
+    if (workerExists) {
+      // this is a regular update, let's check if it needs an update and refresh credentials
+      if (!force) {
+        yield* Clank.info(
+          `Worker '${scriptName}' already exists; adopting and refreshing credentials. ` +
+            `Use --force to redeploy.`,
+        );
+      }
+      const credentials = yield* loginWithCloudflare(
+        profileName,
+        // force refresh during
+        true,
+      );
+      const { url, authToken } = credentials;
+      if (!isCI) {
+        // we don't write credentials in CI because the file system is ephemeral
+        const store = yield* CredentialsStore;
+        yield* store.write<HttpStateStoreCredentials>(
+          profileName,
+          CREDENTIALS_FILE,
+          credentials,
+        );
+      }
+      const { matches, expected, observed } =
+        yield* checkStateStoreVersion(url);
+      const httpState = yield* makeCloudflareStateStore({ url, authToken });
+      if (!matches || force) {
+        if (matches && force) {
+          yield* Clank.info(
+            `Cloudflare State Store '${scriptName}' is up to date; force redeploying...`,
+          );
+        } else {
+          yield* Clank.info(
+            `Cloudflare State Store '${scriptName}' is out of date ` +
+              `(expected v${expected}, observed v${observed ?? "unknown"}); redeploying...`,
+          );
+        }
+        return yield* makeCloudflareStateStore(
+          yield* deployStateStore({
+            stage: scriptName,
+            state: httpState,
+            force,
+          }),
+        );
+      } else {
+        return httpState;
+      }
+    } else {
+      // fresh deploy - deploy from local for the first time
+      yield* Clank.info(`Deploying Cloudflare State Store '${scriptName}'...`);
+      return yield* deployWithLocalState({
+        scriptName,
+        profileName,
+        isCI,
+        force,
+      }).pipe(
+        Effect.tap(() =>
+          Clank.success(`Cloudflare State Store '${scriptName}' is ready.`),
+        ),
+      );
+    }
   }).pipe(
-    Effect.withSpan("state_store.finish_bootstrap", {
+    Effect.withSpan("state_store.bootstrap", {
       attributes: {
-        "alchemy.state_store.op": "finish_bootstrap",
-        "alchemy.state_store.script_name": scriptName,
-        "alchemy.state_store.profile": profileName,
-        "alchemy.state_store.ci": isCI,
+        "alchemy.state_store.op": "bootstrap",
+        "alchemy.state_store.script_name":
+          options.workerName ?? STATE_STORE_SCRIPT_NAME,
       },
     }),
   );
 
-const deployStateStore = (scriptName: string, state?: StateService) =>
+const deployStateStore = ({
+  stage,
+  state,
+  force,
+}: {
+  stage: string;
+  state: StateService;
+  force?: boolean;
+}) =>
   Effect.gen(function* () {
     yield* annotateAccountHash();
-    const localState = state ?? (yield* makeLocalState());
     // deploy it with local state (which we will then hoist into the Cloudflare state store)
-    const stateLayer = Layer.succeed(State, localState);
+    const stateLayer = Layer.succeed(State, Effect.succeed(state));
     const { url, authToken } = yield* deploy({
       // use the script name as the stage name (so the user can have multiple state stores)
-      stage: scriptName,
+      stage,
+      force,
       stack: Alchemy.Stack(
         "CloudflareStateStore",
         {
@@ -494,6 +331,7 @@ const deployStateStore = (scriptName: string, state?: StateService) =>
         Effect.gen(function* () {
           const token = yield* TokenValue;
           const api = yield* Api;
+          yield* AuthToken; // make sure it's in the Secrets Store
 
           // Surface the bearer token so tests and clients can authenticate
           // after deploy. The underlying value lives in the Cloudflare
@@ -514,6 +352,9 @@ const deployStateStore = (scriptName: string, state?: StateService) =>
       // TODO(sam): we should not need to do this, but types do complain. fix deploy
       Effect.provide(stateLayer),
     );
+
+    yield* writeCredentials(url, authToken);
+
     // Cloudflare's worker upload is eventually consistent: the deploy
     // call returns as soon as the script upload is accepted, but the
     // edge can keep serving the previous version for several seconds
@@ -524,16 +365,137 @@ const deployStateStore = (scriptName: string, state?: StateService) =>
     // observe stale data or trip the staleness check and recurse into
     // another redeploy.
     yield* waitForStateStoreVersion(url);
-    return { url, authToken, localState };
+    return { url, authToken };
   }).pipe(
     Effect.withSpan("state_store.deploy", {
       attributes: {
-        "alchemy.state_store.script_name": scriptName,
         "alchemy.state_store.op": "deploy",
       },
     }),
     recordStateStoreOp("deploy"),
   );
+
+const deployWithLocalState = ({
+  scriptName,
+  isCI,
+  force,
+  profileName,
+}: {
+  scriptName: string;
+  isCI: boolean;
+  force: boolean;
+  profileName: string;
+}) =>
+  Effect.gen(function* () {
+    const localState = yield* makeLocalState();
+    const localStage = `${profileName}_${scriptName}`;
+    const remoteStage = scriptName;
+    const { authToken } = yield* deployStateStore({
+      stage: localStage,
+      state: localState,
+      force,
+    });
+
+    const { url } = yield* loginWithCloudflare(profileName, force);
+    const httpState = yield* makeCloudflareStateStore({ url, authToken });
+
+    yield* hoistBootstrapStack({
+      source: {
+        state: localState,
+        stage: localStage,
+      },
+      destination: {
+        state: httpState,
+        stage: remoteStage,
+      },
+    });
+
+    yield* localState.deleteStack({
+      stack: "CloudflareStateStore",
+      stage: localStage,
+    });
+
+    return httpState;
+  }).pipe(
+    Effect.withSpan("state_store.finish_bootstrap", {
+      attributes: {
+        "alchemy.state_store.op": "finish_bootstrap",
+        "alchemy.state_store.ci": isCI,
+      },
+    }),
+  );
+
+// check if there's a local stack that wasn't properly hoisted
+const hasLocalStack = (stage: string) =>
+  Effect.gen(function* () {
+    const localState = yield* makeLocalState();
+    return yield* Effect.map(
+      localState.listStages("CloudflareStateStore"),
+      // key off the profile name to avoid conflicts with other profiles
+      (stages) => stages.includes(stage),
+    );
+  });
+
+/**
+ * Non-destructively copy every resource in the
+ * `CloudflareStateStore/<scriptName>` stack from `source` into
+ * `destination`, leaving every other stack in `destination` untouched.
+ *
+ * This intentionally does not delete anything from `destination`: at
+ * bootstrap time the destination is the user's live remote state
+ * store, and removing entries that happen to be missing locally would
+ * be catastrophic.
+ */
+const hoistBootstrapStack = Effect.fnUntraced(function* ({
+  source,
+  destination,
+}: {
+  source: {
+    state: StateService;
+    stage: string;
+  };
+  destination: {
+    state: StateService;
+    stage: string;
+  };
+}) {
+  const stack = "CloudflareStateStore";
+  const fqns = yield* source.state.list({ stack, stage: source.stage });
+  yield* Effect.annotateCurrentSpan({
+    "alchemy.state_store.stack": stack,
+    "alchemy.state_store.stage": source.stage,
+    "alchemy.state_store.resources.count": fqns.length,
+  });
+  yield* Effect.forEach(
+    fqns,
+    Effect.fnUntraced(function* (fqn) {
+      const value = yield* source.state.get({
+        stack,
+        stage: source.stage,
+        fqn,
+      });
+      if (value) {
+        yield* destination.state
+          .set({
+            stack,
+            stage: destination.stage,
+            fqn,
+            value,
+          })
+          .pipe(
+            Effect.retry({
+              while: (error) =>
+                isHttpClientError(error.cause) &&
+                // worker can 404 for a bit on first deploy, retry these
+                error.cause.response?.status === 404,
+              schedule: Schedule.fixed(200),
+            }),
+          );
+      }
+    }),
+    { concurrency: "unbounded" },
+  );
+}, Effect.withSpan("state_store.hoist_bootstrap_stack"));
 
 /**
  * Log in to a Cloudflare-deployed HTTP state-store.
@@ -551,11 +513,22 @@ const deployStateStore = (scriptName: string, state?: StateService) =>
  * `CloudflareEnvironment`, `Credentials`, `HttpClient`, and
  * `FileSystem`.
  */
-export const loginWithCloudflare = () =>
+export const loginWithCloudflare = (profileName: string, force: boolean) =>
   Effect.gen(function* () {
-    const isCI = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-    const profileName = yield* ALCHEMY_PROFILE;
+    const credStore = yield* CredentialsStore;
+    const isCI = yield* CI;
     const { accountId } = yield* CloudflareEnvironment.CloudflareEnvironment;
+
+    if (!force) {
+      // try and read from the cached credentials first if not forcing (force will always refresh)
+      const credentials = yield* credStore.read<HttpStateStoreCredentials>(
+        profileName,
+        CREDENTIALS_FILE,
+      );
+      if (credentials) {
+        return credentials;
+      }
+    }
 
     // 1. Locate the single Secrets Store on the account.
     const stores = yield* SecretsStore.listStores({ accountId });
@@ -569,15 +542,7 @@ export const loginWithCloudflare = () =>
       );
     }
 
-    // 2. Fetch the auth-token value via an edge-preview worker.
-    //    We piggy-back on the already-deployed state-store script so the
-    //    `cf-workers-preview-token` header has a real workers.dev route to
-    //    swap onto. Uploading the probe under a brand-new script name fails
-    //    on accounts where that script has never been deployed (or where
-    //    workers.dev preview URLs are off by default — the post-2024
-    //    Cloudflare default for new accounts) because the host doesn't
-    //    resolve and Cloudflare's edge serves a 400 HTML error page
-    //    instead of routing to the preview.
+    // 2. Fetch the auth-token from Secrets Store with a temporary edge-preview worker
     const authToken = yield* readSecretViaEdge(
       STATE_STORE_SCRIPT_NAME,
       store.id,
@@ -598,7 +563,6 @@ export const loginWithCloudflare = () =>
     if (!isCI) {
       // 4. Persist credentials. The profile entry is managed by
       //    `loadOrConfigure` when this is invoked through `configure`.
-      const credStore = yield* CredentialsStore;
       yield* credStore
         .write<HttpStateStoreCredentials>(profileName, CREDENTIALS_FILE, {
           url,
@@ -641,79 +605,33 @@ export const loginWithCloudflare = () =>
     }),
   );
 
-const isWorkersPreviewConfigurationError = (error: unknown) =>
-  error instanceof EdgeSessionError &&
-  (error.message.includes("Invalid Workers Preview configuration") ||
-    error.message.includes("Error 1031"));
+const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
+  Effect.gen(function* () {
+    // otherwise, the remote one might exist
+    const { accountId } = yield* CloudflareEnvironment.CloudflareEnvironment;
+    return yield* workers.getScriptSetting({ accountId, scriptName }).pipe(
+      Effect.map((setting) => setting !== undefined),
+      Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
+    );
+  });
 
-/**
- * Run {@link finishBootstrap} iff the worker at `url` fails the
- * version probe; otherwise resolve to `undefined`. Centralises the
- * "is the deployed worker still compatible?" guard used by every
- * code path that already has a presumably-valid worker URL.
- */
-const redeployIfStale = ({
+const makeCloudflareStateStore = Effect.fnUntraced(function* ({
   url,
-  scriptName,
-  profileName,
-  localState,
-  isCI,
+  authToken,
 }: {
   url: string;
-  scriptName: string;
-  profileName: string;
-  localState: StateService;
-  isCI: boolean;
-}) =>
-  Effect.gen(function* () {
-    const { matches, expected, observed } = yield* checkStateStoreVersion(url);
-    if (matches) return undefined;
-    yield* Clank.info(
-      `Cloudflare State Store '${scriptName}' is out of date ` +
-        `(expected v${expected}, observed v${observed ?? "unknown"}); redeploying...`,
-    );
-    return yield* finishBootstrap({
-      scriptName,
-      profileName,
-      localState,
-      isCI,
-    });
-  }).pipe(
-    Effect.withSpan("state_store.redeploy_if_stale", {
-      attributes: {
-        "alchemy.state_store.op": "redeploy_if_stale",
-        "alchemy.state_store.script_name": scriptName,
-        "alchemy.state_store.url": url,
-      },
-    }),
-  );
+  authToken: string;
+}) {
+  const access = yield* Access.Access;
+  const accessHeaders = yield* access.getAccessHeaders(new URL(url).host);
+  return yield* makeHttpStateStore({
+    url,
+    authToken,
+    transformClient: HttpClientRequest.setHeaders(accessHeaders),
+    id: "cloudflare-http",
+  });
+});
 
-/**
- * Probe the deployed worker's `/version` endpoint and decide whether
- * it satisfies the current {@link STATE_STORE_VERSION} contract.
- *
- * Reuses the same typed {@link StateApi} client the rest of the store
- * speaks, just without the bearer-token transform — the `/version`
- * route is intentionally unauthenticated so we can probe it before
- * trusting any locally-cached credentials.
- *
- * Returns `true` only on a successful response carrying the matching
- * version. Any failure (404 from a pre-`/version` deploy, transport
- * error, schema mismatch, version mismatch) collapses to `false`,
- * since the caller's response in every case is the same: fall
- * through to the idempotent bootstrap flow.
- */
-/**
- * Block until the worker at `url` reports the {@link STATE_STORE_VERSION}
- * this CLI was built against, with bounded exponential retry. Used
- * post-deploy to wait out Cloudflare's edge cache so any subsequent
- * read or write goes to the new worker.
- *
- * Failures (transport errors, 404 from a pre-`/version` build, schema
- * mismatch, version mismatch) all collapse to "not ready yet" and are
- * retried; once the budget is exhausted we surface a hard failure
- * since continuing would talk to the wrong worker.
- */
 class StateStoreVersionNotReady extends Error {
   readonly _tag = "StateStoreVersionNotReady";
   constructor(
@@ -756,6 +674,9 @@ const waitForStateStoreVersion = (url: string) =>
 const checkStateStoreVersion = (url: string) =>
   Effect.gen(function* () {
     const client = yield* HttpApiClient.make(StateApi, { baseUrl: url });
+    const isAvailable = yield* Effect.cached(
+      isStateStoreAvailable(STATE_STORE_SCRIPT_NAME),
+    );
     // The /version route may 404 transiently after a fresh deploy
     // while Cloudflare propagates the new script to the edge, and may
     // also surface transport-level blips on cold workers.dev hosts.
@@ -763,6 +684,19 @@ const checkStateStoreVersion = (url: string) =>
     // exhausting that budget do we collapse to `undefined` and let
     // the caller treat it as a version mismatch.
     const result = yield* client.version.getVersion().pipe(
+      Effect.catchTag("HttpClientError", (e) =>
+        // if we get a 404 here, it means we assumed the worker shoudl exist, but it does not
+        // we should do a check to see if it does
+        e.response?.status === 404
+          ? isAvailable.pipe(
+              Effect.flatMap((isAvailable) =>
+                // if the worker is available, then we should assume it was recently created and retry by propagating the error
+                // otherwise, return undefined (we don't know the version, there is no worker)
+                isAvailable ? Effect.fail(e) : Effect.succeed(undefined),
+              ),
+            )
+          : Effect.fail(e),
+      ),
       Effect.retry({
         schedule: Schedule.spaced("250 millis").pipe(
           Schedule.both(Schedule.recurs(40)),
@@ -870,3 +804,63 @@ const readSecretViaEdge = (
       },
     }),
   );
+
+const writeCredentials = (url: string, authToken: string) =>
+  Effect.gen(function* () {
+    const profileName = yield* ALCHEMY_PROFILE;
+    const credStore = yield* CredentialsStore;
+    yield* credStore.write<HttpStateStoreCredentials>(
+      profileName,
+      CREDENTIALS_FILE,
+      {
+        url,
+        authToken,
+      },
+    );
+  });
+
+const isWorkersPreviewConfigurationError = (error: unknown) =>
+  error instanceof EdgeSessionError &&
+  (error.message.includes("Invalid Workers Preview configuration") ||
+    error.message.includes("Error 1031"));
+
+/**
+ * SHA-256 hex digest of the Cloudflare account ID. Used as a stable
+ * pseudonymous identifier on telemetry spans so the dashboard can
+ * count distinct state-store deployments without leaking the raw
+ * accountId. Mirrors the `alchemy.git.origin_hash` pattern in
+ * `Telemetry/Attributes.ts`.
+ */
+const hashAccountId = (accountId: string) =>
+  Effect.sync(() =>
+    crypto.createHash("sha256").update(accountId).digest("hex"),
+  );
+
+/**
+ * Best-effort Cloudflare-account-hash annotation on the current span.
+ * Resolves the accountId from {@link CloudflareEnvironment} and
+ * attaches `alchemy.cloudflare.account_hash` to whichever span is
+ * active. Silently no-ops if the environment isn't resolvable so
+ * State-store layer construction still succeeds in degraded paths.
+ *
+ * `noTrack` controls whether the hash is attached:
+ *   - `true`  — never annotate (caller-level opt-out).
+ *   - `false` — always annotate, regardless of env.
+ *   - `undefined` — fall back to the `NO_TRACK` env var; default off.
+ */
+const annotateAccountHash = (noTrack?: boolean) =>
+  Effect.gen(function* () {
+    if (noTrack === true) return;
+    if (noTrack === undefined) {
+      const fromEnv = yield* Config.boolean("NO_TRACK").pipe(
+        Config.withDefault(false),
+      );
+      if (fromEnv) return;
+    }
+    const env = yield* Effect.serviceOption(
+      CloudflareEnvironment.CloudflareEnvironment,
+    );
+    if (env._tag !== "Some") return;
+    const hash = yield* hashAccountId(env.value.accountId);
+    yield* Effect.annotateCurrentSpan("alchemy.cloudflare.account_hash", hash);
+  }).pipe(Effect.catch(() => Effect.void));

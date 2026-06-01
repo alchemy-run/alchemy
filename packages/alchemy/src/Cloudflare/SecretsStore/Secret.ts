@@ -1,4 +1,5 @@
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -100,9 +101,6 @@ export const StoreSecretProvider = () =>
       const getStoreSecret = yield* secretsStore.getStoreSecret;
       const listStoreSecrets = secretsStore.listStoreSecrets;
 
-      const arraysEqual = (a: string[], b: string[]) =>
-        a.length === b.length && a.every((v, i) => v === b[i]);
-
       return {
         stables: ["secretId", "secretName", "storeId", "accountId"],
         diff: Effect.fn(function* ({ id, olds = {} as any, news, output }) {
@@ -117,7 +115,7 @@ export const StoreSecretProvider = () =>
           const oldValue = olds.value ? Redacted.value(olds.value) : undefined;
           const newValue = Redacted.value(news.value);
           if (oldValue !== newValue) {
-            return { action: "replace" } as const;
+            return { action: "update" } as const;
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output }) {
@@ -212,49 +210,22 @@ export const StoreSecretProvider = () =>
             observed = existing;
           }
 
-          // Sync — `listStoreSecrets` does not surface scopes, so we
-          // can't reliably diff them. Issue PATCH only when we have a
-          // record of prior props (`output`) and a difference is
-          // visible; otherwise issue an unconditional PATCH on the
-          // adoption / first-create path so scopes and comment converge.
-          const oldScopes = output ? resolveScopes(output.scopes) : undefined;
-          const scopesChanged = !oldScopes || !arraysEqual(scopes, oldScopes);
-          const commentChanged =
-            !output ||
-            (output.comment ?? undefined) !== (news.comment ?? undefined);
-          if (scopesChanged || commentChanged) {
-            const patched = yield* patchStoreSecret({
-              accountId,
-              storeId,
-              secretId: observed.id,
-              scopes: scopesChanged ? scopes : undefined,
-              comment: commentChanged ? news.comment : undefined,
-            }).pipe(
-              Effect.catchTag("SecretNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-            if (patched) {
-              return {
-                secretId: observed.id,
-                secretName: observed.name,
-                storeId: observed.storeId,
-                accountId,
-                status: patched.status,
-                scopes,
-                comment: patched.comment ?? undefined,
-              };
-            }
-          }
-
+          const patched = yield* patchStoreSecret({
+            accountId,
+            storeId,
+            secretId: observed.id,
+            scopes,
+            comment: news.comment,
+            value: Redacted.value(news.value),
+          });
           return {
             secretId: observed.id,
             secretName: observed.name,
             storeId: observed.storeId,
             accountId,
-            status: observed.status,
+            status: patched.status,
             scopes,
-            comment: news.comment ?? observed.comment ?? undefined,
+            comment: patched.comment ?? undefined,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -263,6 +234,8 @@ export const StoreSecretProvider = () =>
             storeId: output.storeId,
             secretId: output.secretId,
           }).pipe(
+            Effect.tap(() => Effect.log(`deleted ${output.secretId}`)),
+            Effect.tapError(Console.log),
             Effect.catchTag("SecretNotFound", () => Effect.void),
             Effect.catchTag("StoreNotFound", () => Effect.void),
             Effect.catchTag("NotFound", () => Effect.void),
