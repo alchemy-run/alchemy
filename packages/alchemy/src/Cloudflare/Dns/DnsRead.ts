@@ -13,6 +13,7 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import {
   authorizeDns,
+  type DnsBindOptions,
   type DnsToken,
   makeDnsClient,
   makeDnsPolicyLive,
@@ -63,12 +64,19 @@ export const dnsReadClient = (token: DnsToken): DnsReadClient => {
  *
  * @binding
  *
- * @section Reading DNS records at runtime
- * @example Bind the read client
+ * @section Reading DNS records across all zones
+ * @example Bind a token scoped to every zone in the account
  * ```typescript
  * const dns = yield* Cloudflare.DnsRead.bind();
  * ```
  *
+ * @section Reading DNS records in a specific zone
+ * @example Bind a token scoped to a single zone
+ * ```typescript
+ * const dns = yield* Cloudflare.DnsRead.bind({ zoneId });
+ * ```
+ *
+ * @section Reading records
  * @example List and get records
  * ```typescript
  * const { result } = yield* dns.listDnsRecords(zoneId, { type: "A" });
@@ -83,7 +91,7 @@ export const dnsReadClient = (token: DnsToken): DnsReadClient => {
  */
 export class DnsRead extends Binding.Service<
   DnsRead,
-  () => Effect.Effect<DnsReadClient>
+  (options?: DnsBindOptions) => Effect.Effect<DnsReadClient>
 >()("Cloudflare.DnsRead") {}
 
 /**
@@ -92,7 +100,7 @@ export class DnsRead extends Binding.Service<
  */
 export class DnsReadPolicy extends Binding.Policy<
   DnsReadPolicy,
-  (token: AccountApiToken) => Effect.Effect<void>
+  (token: AccountApiToken, zoneId: string | undefined) => Effect.Effect<void>
 >()("Cloudflare.DnsRead") {}
 
 /** Runtime layer for {@link DnsRead}. */

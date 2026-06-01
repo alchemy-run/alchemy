@@ -3,6 +3,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import {
+  type DnsBindOptions,
   type DnsToken,
   makeDnsClient,
   makeDnsPolicyLive,
@@ -29,8 +30,20 @@ export const dnsReadWriteClient = (token: DnsToken): DnsReadWriteClient => ({
  *
  * @binding
  *
- * @section Managing DNS records at runtime
- * @example Create, read, and delete a record from a request handler
+ * @section Managing DNS records across all zones
+ * @example Bind a token scoped to every zone in the account
+ * ```typescript
+ * const dns = yield* Cloudflare.DnsReadWrite.bind();
+ * ```
+ *
+ * @section Managing DNS records in a specific zone
+ * @example Bind a token scoped to a single zone
+ * ```typescript
+ * const dns = yield* Cloudflare.DnsReadWrite.bind({ zoneId });
+ * ```
+ *
+ * @section Full CRUD from a request handler
+ * @example Create, read, and delete a record
  * ```typescript
  * // init
  * const dns = yield* Cloudflare.DnsReadWrite.bind();
@@ -58,7 +71,7 @@ export const dnsReadWriteClient = (token: DnsToken): DnsReadWriteClient => ({
  */
 export class DnsReadWrite extends Binding.Service<
   DnsReadWrite,
-  () => Effect.Effect<DnsReadWriteClient>
+  (options?: DnsBindOptions) => Effect.Effect<DnsReadWriteClient>
 >()("Cloudflare.DnsReadWrite") {}
 
 /**
@@ -67,7 +80,7 @@ export class DnsReadWrite extends Binding.Service<
  */
 export class DnsReadWritePolicy extends Binding.Policy<
   DnsReadWritePolicy,
-  (token: AccountApiToken) => Effect.Effect<void>
+  (token: AccountApiToken, zoneId: string | undefined) => Effect.Effect<void>
 >()("Cloudflare.DnsReadWrite") {}
 
 /** Runtime layer for {@link DnsReadWrite}. */

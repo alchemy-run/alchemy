@@ -22,6 +22,7 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import {
   authorizeDns,
+  type DnsBindOptions,
   type DnsToken,
   makeDnsClient,
   makeDnsPolicyLive,
@@ -124,10 +125,16 @@ export const dnsWriteClient = (token: DnsToken): DnsWriteClient => {
  *
  * @binding
  *
- * @section Mutating DNS records at runtime
- * @example Bind the write client
+ * @section Mutating DNS records across all zones
+ * @example Bind a token scoped to every zone in the account
  * ```typescript
  * const dns = yield* Cloudflare.DnsWrite.bind();
+ * ```
+ *
+ * @section Mutating DNS records in a specific zone
+ * @example Bind a token scoped to a single zone
+ * ```typescript
+ * const dns = yield* Cloudflare.DnsWrite.bind({ zoneId });
  * ```
  *
  * @example Create a record
@@ -168,7 +175,7 @@ export const dnsWriteClient = (token: DnsToken): DnsWriteClient => {
  */
 export class DnsWrite extends Binding.Service<
   DnsWrite,
-  () => Effect.Effect<DnsWriteClient>
+  (options?: DnsBindOptions) => Effect.Effect<DnsWriteClient>
 >()("Cloudflare.DnsWrite") {}
 
 /**
@@ -177,7 +184,7 @@ export class DnsWrite extends Binding.Service<
  */
 export class DnsWritePolicy extends Binding.Policy<
   DnsWritePolicy,
-  (token: AccountApiToken) => Effect.Effect<void>
+  (token: AccountApiToken, zoneId: string | undefined) => Effect.Effect<void>
 >()("Cloudflare.DnsWrite") {}
 
 /** Runtime layer for {@link DnsWrite}. */
