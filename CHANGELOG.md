@@ -1,3 +1,29 @@
+## v2.0.0-beta.48
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cli**:
+  - Add cloudflare create-token command &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/496 [<samp>(ab886)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ab8864fe)
+- **cloudflare**:
+  - Zone &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/493 [<samp>(38b2f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/38b2f0a8)
+  - Rename BrowserRendering to Browser &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/503 [<samp>(1a62d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1a62d247)
+  - Tunnel Bindings &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/508 [<samp>(86bcf)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/86bcf260)
+  - **browser**: Yieldable BrowserRendering marker &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/498 [<samp>(05283)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/052832a8)
+  - **images**: Yieldable Images binding &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/501 [<samp>(46c15)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/46c158a6)
+  - **ratelimit**: Add RateLimit binding &nbsp;-&nbsp; by **Alex** and **sam** in https://github.com/alchemy-run/alchemy-effect/issues/238 [<samp>(eb8f5)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/eb8f5efc)
+  - **workers**: Yieldable DynamicWorkerLoader marker &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/505 [<samp>(362fc)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/362fcdff)
+- **docs**:
+  - Add Bindings section and refocus Providers on lifecycle interface &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/502 [<samp>(a5fc3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a5fc3412)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - **zone**: Use ZoneAlreadyExists tag; bump distilled 0.22.3 &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/507 [<samp>(d948f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d948f304)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.47...HEAD)
+
+---
+
 ## v2.0.0-beta.47
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
