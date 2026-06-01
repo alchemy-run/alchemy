@@ -383,9 +383,12 @@ alchemy cloudflare bootstrap --force
 
 ### `cloudflare create-token`
 
-Mint a Cloudflare API token (`POST /user/tokens`) without leaving the
-terminal. Useful for creating the `CLOUDFLARE_API_TOKEN` you hand to CI,
-or a broad local token for `alchemy deploy`.
+Mint a Cloudflare API token (`POST /user/tokens`) from the CLI. Useful
+for creating the `CLOUDFLARE_API_TOKEN` you hand to CI, or a broad local
+token for `alchemy deploy`. You'll be pointed to
+[your Cloudflare profile](https://dash.cloudflare.com/profile/api-tokens)
+once to grab your Global API Key (unless it's already in the environment);
+everything else happens in the terminal.
 
 ```sh
 alchemy cloudflare create-token [options]
