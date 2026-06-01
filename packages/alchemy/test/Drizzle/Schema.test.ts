@@ -38,7 +38,7 @@ const stageWorkspace = (initialSource: string) =>
   });
 
 const getStatus = Effect.fn(function* (fqn: string) {
-  const state = yield* State;
+  const state = yield* yield* State;
   const stk = yield* Stack.Stack;
   const s = yield* state.get({ stack: stk.name, stage: stk.stage, fqn });
   return s?.status;

@@ -549,7 +549,7 @@ export const evaluate: <A, Req = never>(
       } else if (isNamedExpr(expr)) {
         return yield* evaluate(expr.expr, upstream);
       } else if (isRefExpr(expr)) {
-        const state = yield* State.State;
+        const state = yield* yield* State.State;
         const stack = expr.stack ?? (yield* Stack).name;
         const stage = expr.stage ?? (yield* Stage);
         const resource = yield* state.get({
@@ -572,7 +572,7 @@ export const evaluate: <A, Req = never>(
         // task's output value, otherwise undefined.
         return (resource as any).attr ?? (resource as any).output;
       } else if (isStackRefExpr(expr)) {
-        const state = yield* State.State;
+        const state = yield* yield* State.State;
         const stack = expr.stack;
         const stage = expr.stage ?? (yield* Stage);
         const output = yield* state.getOutput({ stack, stage });

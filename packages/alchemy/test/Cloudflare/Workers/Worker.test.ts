@@ -505,7 +505,7 @@ describe.concurrent("Cloudflare.Worker", () => {
         // Cloudflare. From the next deploy's perspective this looks like a
         // fresh state store that has never seen this resource.
         yield* Effect.gen(function* () {
-          const state = yield* State;
+          const state = yield* yield* State;
           yield* state.delete({
             stack: stack.name,
             stage: "test",
@@ -531,7 +531,7 @@ describe.concurrent("Cloudflare.Worker", () => {
         expect(adopted.workerName).toEqual(physicalName);
 
         const persisted = yield* Effect.gen(function* () {
-          const state = yield* State;
+          const state = yield* yield* State;
           return yield* state.get({
             stack: stack.name,
             stage: "test",
@@ -578,7 +578,7 @@ describe.concurrent("Cloudflare.Worker", () => {
 
       // Wipe state for the "Original" entry; the worker stays on Cloudflare.
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",

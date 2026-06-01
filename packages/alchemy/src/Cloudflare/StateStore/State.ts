@@ -57,124 +57,130 @@ export const state = () =>
       const profileName = yield* ALCHEMY_PROFILE;
       const localStage = `${profileName}_${scriptName}`;
       const credStore = yield* CredentialsStore;
-      if (yield* hasLocalStack(localStage)) {
-        // if there's still a local stack, then we need to finish the bootstrap
-        // TODO(sam): what if the local stack was
-        return yield* deployWithLocalState({
-          scriptName,
-          profileName,
-          isCI,
-          force: false,
-        });
-      }
+      const context = yield* Effect.context<Effect.Services<typeof init>>();
 
-      const ensureLatest = ({
-        url,
-        authToken,
-      }: {
-        url: string;
-        authToken: string;
-      }) =>
-        Effect.gen(function* () {
-          const { matches, expected, observed } =
-            yield* checkStateStoreVersion(url);
+      const init = Effect.gen(function* () {
+        if (yield* hasLocalStack(localStage)) {
+          // if there's still a local stack, then we need to finish the bootstrap
+          // TODO(sam): what if the local stack was
+          return yield* deployWithLocalState({
+            scriptName,
+            profileName,
+            isCI,
+            force: false,
+          });
+        }
 
-          if (observed === undefined) {
-            const shouldDeploy = yield* Clank.confirm({
-              message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
-            });
-            if (shouldDeploy) {
-              return yield* bootstrap({
-                workerName: scriptName,
-                profile: profileName,
+        const ensureLatest = ({
+          url,
+          authToken,
+        }: {
+          url: string;
+          authToken: string;
+        }) =>
+          Effect.gen(function* () {
+            const { matches, expected, observed } =
+              yield* checkStateStoreVersion(url);
+
+            if (observed === undefined) {
+              const shouldDeploy = yield* Clank.confirm({
+                message: `Cloudflare State Store '${scriptName}' is not available. Do you want to deploy it?`,
               });
-            } else {
-              return yield* Effect.die(new Clank.PromptCancelled());
+              if (shouldDeploy) {
+                return yield* bootstrap({
+                  workerName: scriptName,
+                  profile: profileName,
+                });
+              } else {
+                return yield* Effect.die(new Clank.PromptCancelled());
+              }
             }
-          }
 
-          const httpState = yield* ensureAccess({ url, authToken });
-          if (matches) {
-            return httpState;
-          } else if (isCI) {
-            return yield* Effect.die(
-              new AuthError({
-                message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
-              }),
-            );
-          } else {
-            const shouldDeploy = yield* Clank.confirm({
-              message:
-                `Cloudflare State Store '${scriptName}' is out of date ` +
-                `(expected v${expected}, observed v${observed ?? "unknown"})`,
-            });
-            if (shouldDeploy) {
-              const stateStoreOptions = yield* deployStateStore({
-                stage: scriptName,
-                state: httpState,
-                force: false,
-              });
-              return yield* makeCloudflareStateStore(stateStoreOptions);
-            } else {
-              return yield* Effect.die(new Clank.PromptCancelled());
-            }
-          }
-        });
-
-      const ensureAccess = (credentials: HttpStateStoreCredentials) =>
-        Effect.gen(function* () {
-          const isAuth = yield* checkHttpStateStoreAuth(credentials);
-          if (!isAuth) {
-            // our token is wrong, force a refresh
-            yield* Clank.info(
-              `Cloudflare State store authentication failed, refreshing credentials...`,
-            );
-            const credentials = yield* loginWithCloudflare(profileName, true);
-            if (!(yield* checkHttpStateStoreAuth(credentials))) {
+            const httpState = yield* ensureAccess({ url, authToken });
+            if (matches) {
+              return httpState;
+            } else if (isCI) {
               return yield* Effect.die(
                 new AuthError({
-                  message: `Cloudflare State store authentication failed, after refreshing credentials.`,
+                  message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
                 }),
               );
+            } else {
+              const shouldDeploy = yield* Clank.confirm({
+                message:
+                  `Cloudflare State Store '${scriptName}' is out of date ` +
+                  `(expected v${expected}, observed v${observed ?? "unknown"})`,
+              });
+              if (shouldDeploy) {
+                const stateStoreOptions = yield* deployStateStore({
+                  stage: scriptName,
+                  state: httpState,
+                  force: false,
+                });
+                return yield* makeCloudflareStateStore(stateStoreOptions);
+              } else {
+                return yield* Effect.die(new Clank.PromptCancelled());
+              }
+            }
+          });
+
+        const ensureAccess = (credentials: HttpStateStoreCredentials) =>
+          Effect.gen(function* () {
+            const isAuth = yield* checkHttpStateStoreAuth(credentials);
+            if (!isAuth) {
+              // our token is wrong, force a refresh
+              yield* Clank.info(
+                `Cloudflare State store authentication failed, refreshing credentials...`,
+              );
+              const credentials = yield* loginWithCloudflare(profileName, true);
+              if (!(yield* checkHttpStateStoreAuth(credentials))) {
+                return yield* Effect.die(
+                  new AuthError({
+                    message: `Cloudflare State store authentication failed, after refreshing credentials.`,
+                  }),
+                );
+              }
+              return yield* makeCloudflareStateStore(credentials);
             }
             return yield* makeCloudflareStateStore(credentials);
-          }
-          return yield* makeCloudflareStateStore(credentials);
-        });
+          });
 
-      const credentials = yield* credStore.read<HttpStateStoreCredentials>(
-        profileName,
-        CREDENTIALS_FILE,
-      );
-      if (credentials) {
-        return yield* ensureLatest(credentials);
-      }
-      const workerExists = yield* isStateStoreAvailable(scriptName);
-      if (workerExists) {
-        return yield* ensureLatest(
-          yield* loginWithCloudflare(profileName, false),
+        const credentials = yield* credStore.read<HttpStateStoreCredentials>(
+          profileName,
+          CREDENTIALS_FILE,
         );
-      } else if (isCI) {
-        // TODO(sam): do we want to support bootstrapping the state store from CI?
-        // for now - just die here
-        return yield* Effect.die(
-          new AuthError({
-            message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
-          }),
-        );
-      } else {
-        return yield* Clank.confirm({
-          message:
-            "Cloudflare State Store not found. Do you want to deploy it?",
-        }).pipe(
-          Effect.flatMap((shouldDeploy) =>
-            shouldDeploy
-              ? bootstrap()
-              : Effect.die(new Clank.PromptCancelled()),
-          ),
-        );
-      }
-    }).pipe(recordStateStoreInit, Effect.orDie),
+        if (credentials) {
+          return yield* ensureLatest(credentials);
+        }
+        const workerExists = yield* isStateStoreAvailable(scriptName);
+        if (workerExists) {
+          return yield* ensureLatest(
+            yield* loginWithCloudflare(profileName, false),
+          );
+        } else if (isCI) {
+          // TODO(sam): do we want to support bootstrapping the state store from CI?
+          // for now - just die here
+          return yield* Effect.die(
+            new AuthError({
+              message: `Cloudflare State store not found. Run 'alchemy bootstrap cloudflare --profile <your-ci-profile>' to deploy it first.`,
+            }),
+          );
+        } else {
+          return yield* Clank.confirm({
+            message:
+              "Cloudflare State Store not found. Do you want to deploy it?",
+          }).pipe(
+            Effect.flatMap((shouldDeploy) =>
+              shouldDeploy
+                ? bootstrap()
+                : Effect.die(new Clank.PromptCancelled()),
+            ),
+          );
+        }
+      }).pipe(recordStateStoreInit, Effect.orDie);
+
+      return yield* Effect.cached(init.pipe(Effect.provideContext(context)));
+    }),
   ).pipe(
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
@@ -311,7 +317,7 @@ const deployStateStore = ({
   Effect.gen(function* () {
     yield* annotateAccountHash();
     // deploy it with local state (which we will then hoist into the Cloudflare state store)
-    const stateLayer = Layer.succeed(State, state);
+    const stateLayer = Layer.succeed(State, Effect.succeed(state));
     const { url, authToken } = yield* deploy({
       // use the script name as the stage name (so the user can have multiple state stores)
       stage,

@@ -336,7 +336,7 @@ const layer = postgresState({
 describe("postgresState", () => {
   it("round-trips a resource", () =>
     Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
 
       yield* state.set({
         stack: "Test",
