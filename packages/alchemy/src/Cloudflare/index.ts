@@ -24,3 +24,4 @@ export * from "./Website/index.ts";
 export * from "./Workers/index.ts";
 export * from "./Workers/RpcAsync.ts";
 export * from "./Zaraz/index.ts";
+export * from "./Zone/index.ts";

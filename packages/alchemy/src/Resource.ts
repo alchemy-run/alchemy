@@ -135,6 +135,20 @@ export type Resource<
     [attr in keyof Attributes]-?: Output.Output<Attributes[attr], never>;
   };
 
+export interface ResourceOptions {
+  /**
+   * Default removal policy for this resource type when the caller has not
+   * explicitly provided one via `RemovalPolicy` / `destroy()` / `retain()`.
+   *
+   * Useful for resources that wrap unrecoverable real-world identifiers
+   * (DNS zones, customer accounts, etc.) where the safe default is to
+   * leave the cloud object alone on stack destroy.
+   *
+   * @default "destroy"
+   */
+  defaultRemovalPolicy?: RemovalPolicy["Service"];
+}
+
 /**
  * Creates a resource constructor for a concrete resource type.
  *
@@ -145,7 +159,9 @@ export type Resource<
  */
 export function Resource<R extends ResourceLike>(
   type: R["Type"],
+  options?: ResourceOptions,
 ): ResourceClass<R> {
+  const defaultRemovalPolicy = options?.defaultRemovalPolicy ?? "destroy";
   type Props = Input<R["Props"]>;
   const self = Self<R>(type);
   const constructor = (
@@ -228,7 +244,7 @@ export function Resource<R extends ResourceLike>(
         Props: props,
         Provider: ProviderTag as Provider<any>,
         RemovalPolicy: yield* Effect.serviceOption(RemovalPolicy).pipe(
-          Effect.map(Option.getOrElse(() => "destroy" as const)),
+          Effect.map(Option.getOrElse(() => defaultRemovalPolicy)),
         ),
         bind,
         toString(this: typeof target) {
@@ -285,6 +301,7 @@ export function Resource<R extends ResourceLike>(
       options?: { stage?: string; stack?: string },
     ): Effect.Effect<R> =>
       Effect.succeed(Output.of(makeRef<R>(id, options)) as unknown as R),
+
     Type: type,
     Provider: ProviderTag,
     Self: self,
