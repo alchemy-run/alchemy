@@ -673,7 +673,7 @@ Notes:
 - Cloudflare D1Connection — [worker fixture](./packages/alchemy/test/Cloudflare/D1/d1-worker.ts) + [test](./packages/alchemy/test/Cloudflare/D1/D1Binding.test.ts)
 - Cloudflare Workflow — [workflow fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/test-workflow.ts) + [worker fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/workflow-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/Workflow.test.ts)
 - Cloudflare Cron Trigger — [worker + DO fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/cron-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/CronEventSource.test.ts) (cron handler writes to a DO; test polls a fetch route with `Effect.repeat` until the scheduled handler fires)
-- Cloudflare Images — [worker fixture](./packages/alchemy/test/Cloudflare/Images/images-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Images/Images.test.ts)
+- Cloudflare Images — [effect fixture](./packages/alchemy/test/Cloudflare/Images/fixtures/effect-worker.ts) + [async fixture](./packages/alchemy/test/Cloudflare/Images/fixtures/async-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Images/Images.test.ts)
 - AWS Lambda (DynamoDB bindings) — [Lambda fixture](./packages/alchemy/test/AWS/DynamoDB/handler.ts) + [test](./packages/alchemy/test/AWS/DynamoDB/Bindings.test.ts) (one `describe("<BindingName>")` per binding, all driving the same deployed Lambda)
 
 # Spec-Driven Service Bring-Up

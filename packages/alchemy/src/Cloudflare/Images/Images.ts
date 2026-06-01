@@ -1,14 +1,15 @@
-import * as Effect from "effect/Effect";
-import { ImagesBinding } from "./ImagesBinding.ts";
+import type * as Effect from "effect/Effect";
+import { SingleShotGen } from "effect/Utils";
+import { ImagesBinding, type ImagesClient } from "./ImagesBinding.ts";
 
 type ImagesTypeId = typeof ImagesTypeId;
 const ImagesTypeId = "Cloudflare.Images" as const;
 
 export type ImagesProps = {
   /**
-   * Binding name used when `Cloudflare.Images.bind(images)` attaches Images
-   * from inside a Worker init phase. When Images is passed through
-   * `Worker({ bindings: { ... } })`, the object key remains the binding name.
+   * Binding name used when `Images` is bound from inside a Worker init phase
+   * (`yield* Cloudflare.Images(...)`). When passed through
+   * `Worker({ env: { ... } })`, the object key remains the binding name.
    *
    * @default "IMAGES"
    */
@@ -16,17 +17,31 @@ export type ImagesProps = {
 };
 
 /**
+ * The Effect yielded when an `Images` marker is used inside a Worker init
+ * phase: it attaches the `images` binding to the surrounding Worker and
+ * resolves to the runtime {@link ImagesClient}.
+ */
+type BindEffect = Effect.Effect<ImagesClient, never, ImagesBinding>;
+
+/**
  * Marker for a Cloudflare Images binding.
  *
- * Images bindings are configured directly on Workers and do not have a
- * standalone provisioning API. The Worker provider sees this object in
- * `bindings: { ... }` and emits the corresponding `{ type: "images" }`
- * metadata binding to the script.
+ * It is a plain data structure (so it can be declared directly on a Worker's
+ * `env`) that is **also** yieldable inside an Effect-native Worker. Yielding it
+ * (`yield* Cloudflare.Images(...)`) attaches the binding to the surrounding
+ * Worker and returns the runtime {@link ImagesClient} — no separate `.bind(...)`
+ * step required.
+ *
+ * The divergence is achieved via `[Symbol.iterator]`: the object is not an
+ * `Effect` (so `InferEnv` resolves it to the native `ImagesBinding` in the
+ * `env` position), but it is iterable as one when `yield*`-ed.
  */
-export type Images = {
+export interface Images {
   kind: ImagesTypeId;
   name: string;
-};
+  asEffect(): BindEffect;
+  [Symbol.iterator](): SingleShotGen<BindEffect, ImagesClient>;
+}
 
 export const isImages = (value: unknown): value is Images =>
   typeof value === "object" &&
@@ -44,12 +59,6 @@ export const isImages = (value: unknown): value is Images =>
  * .draw(...).output(...)`. The runtime conversion to Cloudflare's
  * `ReadableStream` is handled internally.
  *
- * @section Declaring Images
- * @example
- * ```typescript
- * const Pipeline = yield* Cloudflare.Images({ name: "PIPELINE" });
- * ```
- *
  * @section Effect-style Worker (recommended)
  * @example Read image format and dimensions from the request body
  * ```typescript
@@ -57,8 +66,8 @@ export const isImages = (value: unknown): value is Images =>
  *
  * Cloudflare.Worker("ImageWorker", { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const pipeline = yield* Pipeline;
- *     const images = yield* Cloudflare.Images.bind(pipeline);
+ *     // Attaches the binding to this Worker AND returns the runtime client.
+ *     const images = yield* Cloudflare.Images({ name: "PIPELINE" });
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const request = yield* HttpServerRequest;
@@ -85,7 +94,7 @@ export const isImages = (value: unknown): value is Images =>
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
- *   bindings: { MEDIA: Pipeline },
+ *   env: { MEDIA: Cloudflare.Images({ name: "PIPELINE" }) },
  * });
  *
  * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
@@ -101,19 +110,23 @@ export const isImages = (value: unknown): value is Images =>
  * @see https://developers.cloudflare.com/images/transform-images/bindings/
  */
 export const Images: {
-  (props?: ImagesProps): Effect.Effect<Images>;
+  (props?: ImagesProps): Images;
   /**
-   * Bind Cloudflare Images to the surrounding Worker, returning an
-   * Effect-native client with access to the native Workers runtime binding.
+   * Bind an existing `Images` marker to the surrounding Worker, returning the
+   * Effect-native client. Equivalent to `yield* images` — prefer yielding the
+   * marker directly.
    */
   bind: typeof ImagesBinding.bind;
 } = Object.assign(
-  Effect.fn(function* (props?: ImagesProps) {
-    return {
+  (props?: ImagesProps): Images => {
+    const self: Images = {
       kind: ImagesTypeId,
       name: props?.name ?? "IMAGES",
-    } satisfies Images;
-  }),
+      asEffect: () => ImagesBinding.bind(self),
+      [Symbol.iterator]: () => new SingleShotGen(ImagesBinding.bind(self)),
+    };
+    return self;
+  },
   {
     bind: (...args: Parameters<typeof ImagesBinding.bind>) =>
       ImagesBinding.bind(...args),
