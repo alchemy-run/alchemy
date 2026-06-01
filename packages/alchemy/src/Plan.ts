@@ -424,6 +424,15 @@ export const make = <A>(
         } else if (Output.isEffectExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr);
           return Output.hasOutputs(upstream) ? expr : yield* expr.f(upstream);
+        } else if (Output.isFlatMapExpr(expr)) {
+          const upstream = yield* resolveOutput(expr.expr);
+          // Source still unresolved -> keep the flatMap intact for a later pass.
+          // Otherwise run `f` to produce the next Output and resolve into it.
+          return Output.hasOutputs(upstream)
+            ? expr
+            : yield* resolveOutput(
+                Output.asOutput(expr.f(upstream)) as Output.Expr<any>,
+              );
         } else if (Output.isAllExpr(expr)) {
           return yield* Effect.all(expr.outs.map(resolveOutput), {
             concurrency: "unbounded",

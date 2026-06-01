@@ -213,6 +213,23 @@ describe("basic operations", () => {
           return B.string;
         }).pipe(stack.deploy),
       ).toEqual("TEST-STRING-NEW");
+
+      expect(
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", {
+            string: "test-string",
+            stringArray: ["test-string-array"],
+          });
+          const B = yield* TestResource("B", {
+            string: A.string.pipe(
+              Output.flatMap((string) =>
+                Output.literal(string.toUpperCase() + "-FLAT"),
+              ),
+            ),
+          });
+          return B.string;
+        }).pipe(stack.deploy),
+      ).toEqual("TEST-STRING-FLAT");
     }),
   );
 
