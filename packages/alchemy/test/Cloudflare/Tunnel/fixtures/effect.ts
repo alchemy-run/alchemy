@@ -20,7 +20,6 @@ export default class TunnelEffectWorker extends Cloudflare.Worker<TunnelEffectWo
   "TunnelEffectWorker",
   {
     main: import.meta.filename,
-    compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   },
   Effect.gen(function* () {
     const read = yield* Cloudflare.TunnelRead.bind();

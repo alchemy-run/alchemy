@@ -18,7 +18,6 @@ export default class DnsEffectWorker extends Cloudflare.Worker<DnsEffectWorker>(
   "DnsEffectWorker",
   {
     main: import.meta.filename,
-    compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   },
   Effect.gen(function* () {
     const dns = yield* Cloudflare.DnsReadWrite.bind(Zone);

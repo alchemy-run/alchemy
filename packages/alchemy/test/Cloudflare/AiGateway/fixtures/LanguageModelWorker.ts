@@ -44,8 +44,6 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
   "LanguageModelTestWorker",
   {
     main: import.meta.filename,
-    subdomain: { enabled: true, previewsEnabled: false },
-    compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   },
   Effect.gen(function* () {
     const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
