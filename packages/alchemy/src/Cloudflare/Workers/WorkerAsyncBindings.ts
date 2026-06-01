@@ -41,9 +41,13 @@ export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
       // Bindings can be passed as a plain resource value, an Effect that
       // yields a resource, or an effect-class (e.g. a `Cloudflare.Worker`
       // class). Resolve the yieldable forms before deriving binding metadata.
-      const binding = isYieldableEffectLike(bindingEff)
-        ? ((yield* bindingEff as Effect.Effect<unknown>) as WorkerBindingResource)
-        : bindingEff;
+      // Avoid yielding outputs as this requires `RuntimeContext`;
+      // allow the engine to resolve them instead.
+      const binding = (
+        isYieldableEffectLike(bindingEff) && !Output.isOutput(bindingEff)
+          ? yield* bindingEff as Effect.Effect<unknown>
+          : bindingEff
+      ) as WorkerBindingResource;
 
       const bindingMeta: InputProps<WorkerBinding> | undefined =
         yield* asEffect(toBinding(bindingName, binding));
