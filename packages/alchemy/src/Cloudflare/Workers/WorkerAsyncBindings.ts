@@ -23,6 +23,7 @@ import { isRateLimit } from "../RateLimit/RateLimit.ts";
 import { isVectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isAssets } from "./Assets.ts";
 import { isDurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
+import { isDynamicWorkerLoader } from "./DynamicWorkerLoader.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import { isWorker, type Worker, type WorkerProps } from "./Worker.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
@@ -205,6 +206,11 @@ const toBinding = (
       name: bindingName,
       indexName: binding.indexName,
     };
+  } else if (isDynamicWorkerLoader(binding)) {
+    return {
+      type: "worker_loader",
+      name: bindingName,
+    } as any;
   } else {
     return {
       type: "json",

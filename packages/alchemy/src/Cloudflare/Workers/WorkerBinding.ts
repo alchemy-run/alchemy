@@ -21,6 +21,7 @@ import type { RateLimit } from "../RateLimit/RateLimit.ts";
 import type { VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { Assets } from "./Assets.ts";
 import type { DurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
+import type { DynamicWorkerLoader } from "./DynamicWorkerLoader.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
 
@@ -55,6 +56,7 @@ export type WorkerBindingResource =
   | Hyperdrive
   | VectorizeIndex
   | Worker
+  | DynamicWorkerLoader
   | DurableObjectNamespaceLike<any>;
 
 export type WorkerBindings = {
