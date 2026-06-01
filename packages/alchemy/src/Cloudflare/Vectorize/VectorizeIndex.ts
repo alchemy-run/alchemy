@@ -253,7 +253,8 @@ const toAttributes = (
 ): VectorizeIndexAttributes => ({
   indexName: index.name ?? name,
   dimensions: index.config?.dimensions,
-  metric: index.config?.metric,
+  // Distilled widened generated string enums to open unions (`string & {}`).
+  metric: index.config?.metric as DistanceMetric | undefined,
   description: index.description ?? undefined,
   accountId,
   createdOn: index.createdOn ?? undefined,

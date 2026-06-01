@@ -121,16 +121,14 @@ test.provider(
           type: "full",
         })
         .pipe(
-          Effect.catchIf(
-            (e) => /already exists/i.test(String(e)),
-            () =>
-              findZoneByName({ accountId, name: TEST_ZONE }).pipe(
-                Effect.flatMap((match) =>
-                  match
-                    ? Effect.succeed(match)
-                    : Effect.die(new Error(`zone ${TEST_ZONE} not found`)),
-                ),
+          Effect.catchTag("ZoneAlreadyExists", () =>
+            findZoneByName({ accountId, name: TEST_ZONE }).pipe(
+              Effect.flatMap((match) =>
+                match
+                  ? Effect.succeed(match)
+                  : Effect.die(new Error(`zone ${TEST_ZONE} not found`)),
               ),
+            ),
           ),
         );
 

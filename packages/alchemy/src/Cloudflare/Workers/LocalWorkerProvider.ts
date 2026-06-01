@@ -595,8 +595,19 @@ const toRuntimeAssets = (
     directory: "directory" in assets ? assets.directory : assets.path,
     headers: assets.config?.headers,
     redirects: assets.config?.redirects,
-    htmlHandling: assets.config?.htmlHandling,
-    notFoundHandling: assets.config?.notFoundHandling,
+    // Distilled widened generated string enums to open unions (`string & {}`);
+    // the API only ever returns the known variants here.
+    htmlHandling: assets.config?.htmlHandling as
+      | "none"
+      | "auto-trailing-slash"
+      | "force-trailing-slash"
+      | "drop-trailing-slash"
+      | undefined,
+    notFoundHandling: assets.config?.notFoundHandling as
+      | "none"
+      | "404-page"
+      | "single-page-application"
+      | undefined,
     runWorkerFirst: assets.config?.runWorkerFirst,
     serveDirectly: assets.config?.serveDirectly,
   };
