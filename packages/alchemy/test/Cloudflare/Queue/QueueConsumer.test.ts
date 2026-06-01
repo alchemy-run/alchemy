@@ -258,7 +258,7 @@ test.provider("adopts existing consumer after local state loss", (stack) =>
     // Wipe just the QueueConsumer entry — Queue and Worker stay so the
     // redeploy reuses the same queueId / scriptName.
     yield* Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
       yield* state.delete({
         stack: stack.name,
         stage: "test",
@@ -335,7 +335,7 @@ test.provider(
       );
 
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",

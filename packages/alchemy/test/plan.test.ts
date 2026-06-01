@@ -4,8 +4,8 @@ import { dedupeBindings } from "@/Diff";
 import type { Input, InputProps } from "@/Input";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
-import type { ResourceBinding } from "@/Resource";
 import { UnsatisfiedResourceCycle } from "@/Plan";
+import type { ResourceBinding } from "@/Resource";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import {
@@ -64,7 +64,7 @@ const resolveStackId = Effect.gen(function* () {
 const seed = (resources: Record<string, ResourceState>) =>
   Effect.gen(function* () {
     const { name, stage } = yield* resolveStackId;
-    const state = yield* State;
+    const state = yield* yield* State;
     for (const [fqn, value] of Object.entries(resources)) {
       yield* state.set({ stack: name, stage, fqn, value });
     }
@@ -950,7 +950,7 @@ test.provider(
   "binding removals do not keep reappearing after apply",
   (scratch) =>
     Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
       yield* state.set({
         stack: scratch.name,
         stage: TEST_STAGE,
@@ -2561,7 +2561,7 @@ describe("engine-level adoption", () => {
       // can't detect from `props` alone.
       expect(plan.resources.Adopted!.action).toBe("update");
 
-      const state = yield* State;
+      const state = yield* yield* State;
       const persisted = yield* state.get({
         stack: TEST_STACK,
         stage: TEST_STAGE,
@@ -2591,7 +2591,7 @@ describe("engine-level adoption", () => {
       // foreign-owned to subsequent deploys).
       expect(plan.resources.Adopted!.action).toBe("update");
 
-      const state = yield* State;
+      const state = yield* yield* State;
       const persisted = yield* state.get({
         stack: TEST_STACK,
         stage: TEST_STAGE,
@@ -2671,7 +2671,7 @@ describe("RefExpr resolution", () => {
     resources: Record<string, ResourceState>,
   ) =>
     Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
       for (const [fqn, value] of Object.entries(resources)) {
         yield* state.set({ stack, stage, fqn, value });
       }
@@ -2776,7 +2776,7 @@ describe("RefExpr resolution", () => {
 describe("StackRefExpr resolution", () => {
   const setStackOutput = (stack: string, stage: string, value: unknown) =>
     Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
       yield* state.setOutput({ stack, stage, value });
     });
 

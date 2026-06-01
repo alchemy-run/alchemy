@@ -138,7 +138,7 @@ test.provider(
 
       // Phase 2: wipe local state — the gateway stays on Cloudflare.
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",
@@ -160,7 +160,7 @@ test.provider(
       expect(adopted.gatewayId).toEqual(gatewayId);
 
       const persisted = yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         return yield* state.get({
           stack: stack.name,
           stage: "test",

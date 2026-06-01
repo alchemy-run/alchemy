@@ -127,7 +127,7 @@ test.provider(
 
       // Wipe state — the role stays in IAM.
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",
@@ -177,7 +177,7 @@ test.provider(
       );
 
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",
