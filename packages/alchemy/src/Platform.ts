@@ -66,11 +66,7 @@ export interface Platform<
   MainShape,
   RuntimeContext extends BaseRuntimeContext,
   BaseShape = {},
-> extends Effect.Effect<
-  Resource & RuntimeContext,
-  never,
-  Services | PlatformServices
-> {
+> extends Effect.Effect<Resource & RuntimeContext, never, Resource> {
   Type: Resource["Type"];
   Provider: Provider<Resource>;
 
@@ -91,7 +87,7 @@ export interface Platform<
         Self,
         never,
         | Resource["Providers"]
-        | Exclude<PropsReq | InitReq, Services | PlatformServices>
+        | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
       >;
       new (_: never): MakeShape<Shape, BaseShape>;
       of(shape: Shape & MainShape): MakeShape<Shape, BaseShape>;
@@ -101,7 +97,7 @@ export interface Platform<
     <
       Shape extends MainShape,
       PropsReq = never,
-      InitReq extends Services | PlatformServices = never,
+      InitReq extends Services | PlatformServices | Resource = never,
     >(
       id: string,
       props:
@@ -113,7 +109,7 @@ export interface Platform<
       never,
       | Resource["Providers"]
       | PropsReq
-      | Exclude<InitReq, Services | PlatformServices>
+      | Exclude<InitReq, Services | PlatformServices | Resource>
     > & {
       new (_: never): MakeShape<Shape, BaseShape>;
     };
@@ -127,23 +123,23 @@ export interface Platform<
       never,
       Resource["Providers"] | PropsReq
     > & {
-      make<InitReq extends Services | PlatformServices = never>(
+      make<InitReq extends Services | PlatformServices | Resource = never>(
         impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
       ): Layer.Layer<
         Self,
         never,
         | Resource["Providers"]
-        | Exclude<PropsReq | InitReq, Services | PlatformServices>
+        | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
       >;
       new (_: never): MakeShape<Shape, BaseShape>;
-    } & (<InitReq extends Services | PlatformServices = never>(
+    } & (<InitReq extends Services | PlatformServices | Resource = never>(
         impl: Effect.Effect<Shape, never, InitReq>,
       ) => Effect.Effect<
         Resource & Rpc<Self>,
         never,
         | Resource["Providers"]
         | PropsReq
-        | Exclude<InitReq, Services | PlatformServices>
+        | Exclude<InitReq, Services | PlatformServices | Resource>
       >);
   };
   // <PropsReq = never, InitReq extends Services | PlatformServices = never>(

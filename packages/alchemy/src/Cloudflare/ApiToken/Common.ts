@@ -52,10 +52,11 @@ export type ApiTokenProps = {
    */
   accountId?: string;
   /**
-   * Access policies attached to the token. At least one policy is required
-   * by Cloudflare.
+   * Access policies attached to the token. Cloudflare requires at least one
+   * policy on a token; if you omit `policies` here, the policies must instead
+   * be contributed by bindings (see {@link ApiTokenBinding}).
    */
-  policies: ApiTokenPolicy[];
+  policies?: ApiTokenPolicy[];
   /** ISO 8601 expiration timestamp. */
   expiresOn?: string;
   /** ISO 8601 "not before" timestamp. */
@@ -63,6 +64,34 @@ export type ApiTokenProps = {
   /** Optional usage conditions (e.g. IP allowlist). */
   condition?: ApiTokenCondition;
 };
+
+/**
+ * Binding contract for {@link AccountApiToken} / {@link UserApiToken}.
+ *
+ * A binding contributes additional access policies to the token. This lets a
+ * downstream resource (e.g. a runtime capability that needs to call a specific
+ * Cloudflare API) create a token and attach exactly the policies it requires,
+ * without the token's owner having to enumerate them up front.
+ *
+ * Binding-contributed policies are merged with any `policies` passed directly
+ * as props; the union must contain at least one policy.
+ */
+export type ApiTokenBinding = {
+  /** Access policies to attach to the token. */
+  policies?: ApiTokenPolicy[];
+};
+
+/**
+ * Collect the policies a token should be created with: those passed directly
+ * as props, plus those contributed by bindings.
+ */
+export const collectPolicies = (
+  props: ApiTokenPolicy[] | undefined,
+  bindings: { data: ApiTokenBinding }[],
+): ApiTokenPolicy[] => [
+  ...(props ?? []),
+  ...bindings.flatMap((binding) => binding.data.policies ?? []),
+];
 
 export type ResolvedPolicy = {
   effect: "allow" | "deny";
