@@ -1,15 +1,18 @@
-import * as Effect from "effect/Effect";
-import { BrowserRenderingBinding } from "./BrowserRenderingBinding.ts";
+import type * as Effect from "effect/Effect";
+import { SingleShotGen } from "effect/Utils";
+import {
+  BrowserRenderingBinding,
+  type BrowserRenderingClient,
+} from "./BrowserRenderingBinding.ts";
 
 type BrowserRenderingTypeId = typeof BrowserRenderingTypeId;
 const BrowserRenderingTypeId = "Cloudflare.BrowserRendering" as const;
 
 export type BrowserRenderingProps = {
   /**
-   * Binding name used when `Cloudflare.BrowserRendering.bind(browser)` attaches
-   * Browser Rendering from inside a Worker init phase. When Browser Rendering
-   * is passed through `Worker({ bindings: { ... } })`, the object key remains
-   * the binding name.
+   * Binding name used when `BrowserRendering` is bound from inside a Worker
+   * init phase (`yield* Cloudflare.BrowserRendering(...)`). When passed through
+   * `Worker({ env: { ... } })`, the object key remains the binding name.
    *
    * @default "BROWSER"
    */
@@ -17,17 +20,35 @@ export type BrowserRenderingProps = {
 };
 
 /**
+ * The Effect yielded when a `BrowserRendering` marker is used inside a Worker
+ * init phase: it attaches the `browser` binding to the surrounding Worker and
+ * resolves to the runtime {@link BrowserRenderingClient}.
+ */
+type BindEffect = Effect.Effect<
+  BrowserRenderingClient,
+  never,
+  BrowserRenderingBinding
+>;
+
+/**
  * Marker for a Cloudflare Browser Rendering binding.
  *
- * Browser Rendering bindings are configured directly on Workers and do not
- * have a standalone provisioning API. The Worker provider sees this object in
- * `bindings: { ... }` and emits the corresponding `{ type: "browser" }`
- * metadata binding to the script.
+ * It is a plain data structure (so it can be declared directly on a Worker's
+ * `env`) that is **also** yieldable inside an Effect-native Worker. Yielding it
+ * (`yield* Cloudflare.BrowserRendering(...)`) attaches the binding to the
+ * surrounding Worker and returns the runtime {@link BrowserRenderingClient} —
+ * no separate `.bind(...)` step required.
+ *
+ * The divergence is achieved via `[Symbol.iterator]`: the object is not an
+ * `Effect` (so `InferEnv` resolves it to the native `Fetcher` in the `env`
+ * position), but it is iterable as one when `yield*`-ed.
  */
-export type BrowserRendering = {
+export interface BrowserRendering {
   kind: BrowserRenderingTypeId;
   name: string;
-};
+  asEffect(): BindEffect;
+  [Symbol.iterator](): SingleShotGen<BindEffect, BrowserRenderingClient>;
+}
 
 export const isBrowserRendering = (value: unknown): value is BrowserRendering =>
   typeof value === "object" &&
@@ -45,15 +66,14 @@ export const isBrowserRendering = (value: unknown): value is BrowserRendering =>
  * import puppeteer from "@cloudflare/puppeteer";
  * import * as Effect from "effect/Effect";
  *
- * const Browser = Cloudflare.BrowserRendering({ name: "BROWSER" });
- *
  * Cloudflare.Worker(
  *   "BrowserWorker",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const browserRendering = yield* Cloudflare.BrowserRendering.bind(
- *       yield* Browser,
- *     );
+ *     // Attaches the binding to this Worker AND returns the runtime client.
+ *     const browserRendering = yield* Cloudflare.BrowserRendering({
+ *       name: "BROWSER",
+ *     });
  *
  *     return {
  *       fetch: browserRendering.withBrowser(puppeteer, (browser) =>
@@ -69,18 +89,12 @@ export const isBrowserRendering = (value: unknown): value is BrowserRendering =>
  * );
  * ```
  *
- * @section Declaring Browser Rendering
- * @example
- * ```typescript
- * const Browser = yield* Cloudflare.BrowserRendering({ name: "BROWSER" });
- * ```
- *
  * @section Worker binding metadata
  * @example
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
- *   bindings: {
+ *   env: {
  *     BROWSER: Cloudflare.BrowserRendering(),
  *   },
  * });
@@ -112,19 +126,24 @@ export const isBrowserRendering = (value: unknown): value is BrowserRendering =>
  * @see https://developers.cloudflare.com/browser-rendering/workers-binding-api/
  */
 export const BrowserRendering: {
-  (props?: BrowserRenderingProps): Effect.Effect<BrowserRendering>;
+  (props?: BrowserRenderingProps): BrowserRendering;
   /**
-   * Bind Browser Rendering to the surrounding Worker, returning a small client
-   * with access to the native Workers runtime binding.
+   * Bind an existing `BrowserRendering` marker to the surrounding Worker,
+   * returning the runtime client. Equivalent to `yield* browser` — prefer
+   * yielding the marker directly.
    */
   bind: typeof BrowserRenderingBinding.bind;
 } = Object.assign(
-  Effect.fn(function* (props?: BrowserRenderingProps) {
-    return {
+  (props?: BrowserRenderingProps): BrowserRendering => {
+    const self: BrowserRendering = {
       kind: BrowserRenderingTypeId,
       name: props?.name ?? "BROWSER",
-    } satisfies BrowserRendering;
-  }),
+      asEffect: () => BrowserRenderingBinding.bind(self),
+      [Symbol.iterator]: () =>
+        new SingleShotGen(BrowserRenderingBinding.bind(self)),
+    };
+    return self;
+  },
   {
     bind: (...args: Parameters<typeof BrowserRenderingBinding.bind>) =>
       BrowserRenderingBinding.bind(...args),
