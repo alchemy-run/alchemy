@@ -42,7 +42,6 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(() => {
         );
 
         expect(database).toMatchObject({
-          kind: "postgresql",
           id: expect.any(String),
           name: expect.any(String),
           organization: expect.any(String),
@@ -103,7 +102,6 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(() => {
         );
 
         expect(database).toMatchObject({
-          kind: "postgresql",
           id: expect.any(String),
           name,
           organization: expect.any(String),
@@ -193,7 +191,6 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(() => {
 
         expect(database).toMatchObject({
           name,
-          kind: "postgresql",
           defaultBranch,
         });
 
@@ -239,7 +236,6 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(() => {
         );
 
         expect(database).toMatchObject({
-          kind: "postgresql",
           id: expect.any(String),
           name,
           arch: "arm",
