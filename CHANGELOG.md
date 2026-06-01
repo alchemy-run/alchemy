@@ -1,3 +1,15 @@
+## v2.0.0-beta.50
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Worker/vite port conflict in dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/513 [<samp>(f7b9e)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f7b9ecc5)
+  - `RuntimeContext` dependency when binding output values &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/514 [<samp>(d136f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d136fb54)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.49...HEAD)
+
+---
+
 ## v2.0.0-beta.49
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
