@@ -16,7 +16,7 @@ describe("syncState", () => {
         const sourceB = resource("resource-b", { value: "source-b" });
         const destinationA = resource("resource-a", { value: "destination-a" });
 
-        const source = InMemoryService({
+        const source = yield* InMemoryService({
           app: {
             dev: {
               "resource-a": sourceA,
@@ -24,7 +24,7 @@ describe("syncState", () => {
             },
           },
         });
-        const destination = InMemoryService({
+        const destination = yield* InMemoryService({
           app: {
             dev: {
               "resource-a": destinationA,
@@ -45,14 +45,14 @@ describe("syncState", () => {
     "deletes resources from destination when they are absent from source",
     () =>
       Effect.gen(function* () {
-        const source = InMemoryService({
+        const source = yield* InMemoryService({
           app: {
             dev: {
               "resource-a": resource("resource-a", { value: "source-a" }),
             },
           },
         });
-        const destination = InMemoryService({
+        const destination = yield* InMemoryService({
           app: {
             dev: {
               "resource-a": resource("resource-a", { value: "destination-a" }),
