@@ -11,45 +11,51 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
+import type { Zone } from "../Zone/Zone.ts";
 import {
   authorizeDns,
-  type DnsBindOptions,
   type DnsToken,
   makeDnsClient,
   makeDnsPolicyLive,
 } from "./DnsBinding.ts";
 
-/** List-records request, minus the zone id (passed positionally). */
+/** List-records request, minus the zone id (bound at `.bind(zone)` time). */
 export type ListRecordsRequestInput = Omit<ListRecordsRequest, "zoneId">;
 
 /**
  * Read-only DNS record operations. Backed by the `DNS Read` permission group.
+ * The zone is fixed when the client is bound, so no `zoneId` is passed per call.
  */
 export interface DnsReadClient {
   /** Fetch a single DNS record by id. */
   getDnsRecord(
-    zoneId: string,
     dnsRecordId: string,
   ): Effect.Effect<GetRecordResponse, GetRecordError, RuntimeContext>;
-  /** List the DNS records in a zone. */
+  /** List the DNS records in the bound zone. */
   listDnsRecords(
-    zoneId: string,
     request?: ListRecordsRequestInput,
   ): Effect.Effect<ListRecordsResponse, ListRecordsError, RuntimeContext>;
 }
 
-/** Build the read-only client over a bound token. */
-export const dnsReadClient = (token: DnsToken): DnsReadClient => {
+/** Build the read-only client over a bound token and zone id. */
+export const dnsReadClient = (
+  token: DnsToken,
+  zoneId: Effect.Effect<string>,
+): DnsReadClient => {
   const authorize = authorizeDns(token);
   return {
     getDnsRecord: Effect.fn("Cloudflare.Dns.getDnsRecord")(
-      function* (zoneId, dnsRecordId) {
-        return yield* authorize(dns.getRecord({ zoneId, dnsRecordId }));
+      function* (dnsRecordId) {
+        return yield* authorize(
+          dns.getRecord({ zoneId: yield* zoneId, dnsRecordId }),
+        );
       },
     ),
     listDnsRecords: Effect.fn("Cloudflare.Dns.listDnsRecords")(
-      function* (zoneId, request) {
-        return yield* authorize(dns.listRecords({ zoneId, ...request }));
+      function* (request) {
+        return yield* authorize(
+          dns.listRecords({ zoneId: yield* zoneId, ...request }),
+        );
       },
     ),
   };
@@ -58,29 +64,28 @@ export const dnsReadClient = (token: DnsToken): DnsReadClient => {
 /**
  * Binding that lets a Worker read Cloudflare DNS records at runtime.
  *
- * Creates a scoped {@link AccountApiToken} with only the `DNS Read` permission
- * (across all zones in the account) and binds its value into the Worker so
- * runtime code can authenticate.
+ * Creates a least-privilege {@link AccountApiToken} with only the `DNS Read`
+ * permission, scoped to the single zone passed to `bind`, and binds its value
+ * into the Worker so runtime code can authenticate.
  *
  * @binding
  *
- * @section Reading DNS records across all zones
- * @example Bind a token scoped to every zone in the account
+ * @section Reading DNS records at runtime
+ * @example Bind a read client scoped to a zone
+ * The zone is fixed by `.bind(zone)` — the provisioned token only grants
+ * access to that zone, so calls take no `zoneId`. Pass the {@link Zone}
+ * resource directly (it's an `Effect`), or a resolved zone value.
  * ```typescript
- * const dns = yield* Cloudflare.DnsRead.bind();
- * ```
+ * // bind the Zone resource directly
+ * const dns = yield* Cloudflare.DnsRead.bind(Zone);
  *
- * @section Reading DNS records in a specific zone
- * @example Bind a token scoped to a single zone
- * ```typescript
- * const dns = yield* Cloudflare.DnsRead.bind({ zoneId });
- * ```
+ * // or bind a resolved zone value
+ * const zone = yield* Zone;
+ 
+* const dns = yield* Cloudflare.DnsRead.bind(zone);
  *
- * @section Reading records
- * @example List and get records
- * ```typescript
- * const { result } = yield* dns.listDnsRecords(zoneId, { type: "A" });
- * const record = yield* dns.getDnsRecord(zoneId, result[0].id);
+ * const { result } = yield* dns.listDnsRecords({ type: "A" });
+ * const record = yield* dns.getDnsRecord(result[0].id);
  * ```
  *
  * @section Runtime Layer
@@ -91,7 +96,7 @@ export const dnsReadClient = (token: DnsToken): DnsReadClient => {
  */
 export class DnsRead extends Binding.Service<
   DnsRead,
-  (options?: DnsBindOptions) => Effect.Effect<DnsReadClient>
+  (zone: Zone) => Effect.Effect<DnsReadClient>
 >()("Cloudflare.DnsRead") {}
 
 /**
@@ -100,7 +105,7 @@ export class DnsRead extends Binding.Service<
  */
 export class DnsReadPolicy extends Binding.Policy<
   DnsReadPolicy,
-  (token: AccountApiToken, zoneId: string | undefined) => Effect.Effect<void>
+  (token: AccountApiToken, zone: Zone) => Effect.Effect<void>
 >()("Cloudflare.DnsRead") {}
 
 /** Runtime layer for {@link DnsRead}. */

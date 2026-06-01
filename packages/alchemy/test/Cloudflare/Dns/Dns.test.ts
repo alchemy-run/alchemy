@@ -55,7 +55,7 @@ test(
 
     const client = yield* HttpClient.HttpClient;
     const res = yield* client
-      .get(`${effectUrl}/dns?zoneId=${zoneId}&name=${encodeURIComponent(name)}`)
+      .get(`${effectUrl}/dns?name=${encodeURIComponent(name)}`)
       .pipe(
         // Retry only while the worker is still cold-starting (not yet live).
         // Once it responds 200 or 500 the handler ran, so stop and inspect.

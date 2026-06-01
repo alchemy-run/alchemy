@@ -2,8 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
+import type { Zone } from "../Zone/Zone.ts";
 import {
-  type DnsBindOptions,
   type DnsToken,
   makeDnsClient,
   makeDnsPolicyLive,
@@ -14,50 +14,44 @@ import { dnsWriteClient, type DnsWriteClient } from "./DnsWrite.ts";
 /** Combined read + write DNS record operations. */
 export interface DnsReadWriteClient extends DnsReadClient, DnsWriteClient {}
 
-/** Build the combined read + write client over a bound token. */
-export const dnsReadWriteClient = (token: DnsToken): DnsReadWriteClient => ({
-  ...dnsReadClient(token),
-  ...dnsWriteClient(token),
+/** Build the combined read + write client over a bound token and zone id. */
+export const dnsReadWriteClient = (
+  token: DnsToken,
+  zoneId: Effect.Effect<string>,
+): DnsReadWriteClient => ({
+  ...dnsReadClient(token, zoneId),
+  ...dnsWriteClient(token, zoneId),
 });
 
 /**
  * Binding that lets a Worker perform the full Cloudflare DNS record CRUD
  * surface at runtime.
  *
- * Creates a scoped {@link AccountApiToken} with both the `DNS Read` and `DNS
- * Write` permissions (across all zones in the account) and binds its value into
- * the Worker so runtime code can authenticate.
+ * Creates a least-privilege {@link AccountApiToken} with both the `DNS Read`
+ * and `DNS Write` permissions, scoped to the single zone passed to `bind`, and
+ * binds its value into the Worker so runtime code can authenticate.
  *
  * @binding
  *
- * @section Managing DNS records across all zones
- * @example Bind a token scoped to every zone in the account
+ * @section Managing DNS records at runtime
+ * @example Full CRUD from a request handler
+ * The zone is fixed by `.bind(zone)` — the provisioned token only grants
+ * access to that zone, so calls take no `zoneId`. Pass the {@link Zone}
+ * resource directly (it's an `Effect`), or a resolved zone value.
  * ```typescript
- * const dns = yield* Cloudflare.DnsReadWrite.bind();
- * ```
- *
- * @section Managing DNS records in a specific zone
- * @example Bind a token scoped to a single zone
- * ```typescript
- * const dns = yield* Cloudflare.DnsReadWrite.bind({ zoneId });
- * ```
- *
- * @section Full CRUD from a request handler
- * @example Create, read, and delete a record
- * ```typescript
- * // init
- * const dns = yield* Cloudflare.DnsReadWrite.bind();
+ * // init — bind the Zone resource directly (or `yield* Zone` first)
+ * const dns = yield* Cloudflare.DnsReadWrite.bind(Zone);
  *
  * return {
  *   fetch: Effect.gen(function* () {
- *     const { result } = yield* dns.createDnsRecord(zoneId, {
+ *     const { result } = yield* dns.createDnsRecord({
  *       type: "A",
  *       name: "app.example.com",
  *       content: "192.0.2.1",
  *       ttl: 1,
  *     });
- *     const record = yield* dns.getDnsRecord(zoneId, result.id);
- *     yield* dns.deleteDnsRecord(zoneId, result.id);
+ *     const record = yield* dns.getDnsRecord(result.id);
+ *     yield* dns.deleteDnsRecord(result.id);
  *     return HttpServerResponse.json({ id: record.result.id });
  *   }),
  * };
@@ -71,7 +65,7 @@ export const dnsReadWriteClient = (token: DnsToken): DnsReadWriteClient => ({
  */
 export class DnsReadWrite extends Binding.Service<
   DnsReadWrite,
-  (options?: DnsBindOptions) => Effect.Effect<DnsReadWriteClient>
+  (zone: Zone) => Effect.Effect<DnsReadWriteClient>
 >()("Cloudflare.DnsReadWrite") {}
 
 /**
@@ -80,7 +74,7 @@ export class DnsReadWrite extends Binding.Service<
  */
 export class DnsReadWritePolicy extends Binding.Policy<
   DnsReadWritePolicy,
-  (token: AccountApiToken, zoneId: string | undefined) => Effect.Effect<void>
+  (token: AccountApiToken, zone: Zone) => Effect.Effect<void>
 >()("Cloudflare.DnsReadWrite") {}
 
 /** Runtime layer for {@link DnsReadWrite}. */

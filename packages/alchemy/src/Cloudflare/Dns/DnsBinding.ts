@@ -6,12 +6,13 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
+import { type HttpClient } from "effect/unstable/http/HttpClient";
 import type * as Binding from "../../Binding.ts";
+import * as Output from "../../Output.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import type { ApiTokenPermissionGroupRef } from "../ApiToken/Common.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { Zone } from "../Zone/Zone.ts";
 
 /**
  * Runtime accessor for a DNS binding's token, obtained by binding the
@@ -23,15 +24,6 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 export interface DnsToken {
   /** The token's plaintext value (injected as a `secret_text` binding). */
   value: Effect.Effect<Redacted.Redacted<string>>;
-}
-
-/** Options for binding a DNS runtime client. */
-export interface DnsBindOptions {
-  /**
-   * Restrict the provisioned token to a single zone. When omitted, the token
-   * is scoped to all zones in the account.
-   */
-  zoneId?: string;
 }
 
 /**
@@ -66,67 +58,66 @@ export const authorizeDns =
     );
 
 /**
- * Shared runtime body for a DNS binding: create a scoped token, attach the
- * (narrow) policy, bind the token's value into the Worker, then build the
- * client. Pass the result to `Layer.effect(<Binding>, ...)`.
+ * Shared runtime body for a DNS binding: create a token scoped to the requested
+ * zone, attach the (narrow) policy, bind the token's value and the zone's id
+ * into the Worker, then build the client. Pass the result to
+ * `Layer.effect(<Binding>, ...)`.
+ *
+ * The zone's `zoneId` is bound into the Worker at init time, so the resulting
+ * client closes over it and callers never pass it per request — the
+ * provisioned token only grants access to that one zone anyway.
  */
 export const makeDnsClient = <C>(
   Policy: Binding.Policy<
     any,
     any,
-    (token: AccountApiToken, zoneId: string | undefined) => Effect.Effect<void>
+    (token: AccountApiToken, zone: Zone) => Effect.Effect<void>
   >,
   tokenId: string,
-  makeClient: (token: DnsToken) => C,
+  makeClient: (token: DnsToken, zoneId: Effect.Effect<string>) => C,
 ) =>
   Effect.gen(function* () {
     const Token = yield* AccountApiToken;
     const attach = yield* Policy;
 
-    return Effect.fn(function* (options?: DnsBindOptions) {
+    return Effect.fn(function* (zone: Zone) {
       const token = yield* Token(tokenId);
-      yield* attach(token, options?.zoneId);
-      return makeClient(yield* bindDnsToken(token));
+      yield* attach(token, zone);
+      const zoneId = yield* zone.zoneId;
+      return makeClient(yield* bindDnsToken(token), zoneId);
     });
   });
 
 /**
  * Build the deploy-time policy layer for a DNS binding: attach an allow policy
- * with the given permission groups, scoped either to a single zone or to all
- * zones in the account.
- *
- * A specific `zoneId` scopes directly to that zone
- * (`com.cloudflare.api.account.zone.<id>`). Otherwise the all-zones wildcard is
- * nested under the account resource, as account-owned tokens require:
- * `{ <account>: { "com.cloudflare.api.account.zone.*": "*" } }`.
+ * with the given permission groups, scoped to the requested zone
+ * (`com.cloudflare.api.account.zone.<zoneId>`).
  */
 export const makeDnsPolicyLive = <Self, Id extends string>(
   Policy: Binding.Policy<
     Self,
     Id,
-    (token: AccountApiToken, zoneId: string | undefined) => Effect.Effect<void>
+    (token: AccountApiToken, zone: Zone) => Effect.Effect<void>
   >,
   sid: string,
   permissionGroups: ApiTokenPermissionGroupRef[],
 ) =>
-  Policy.layer.effect(
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      return (_host, token, zoneId) =>
-        token.bind(sid, {
-          policies: [
-            {
-              effect: "allow",
-              permissionGroups,
-              resources: zoneId
-                ? { [`com.cloudflare.api.account.zone.${zoneId}`]: "*" }
-                : {
-                    [`com.cloudflare.api.account.${accountId}`]: {
-                      "com.cloudflare.api.account.zone.*": "*",
-                    },
-                  },
-            },
-          ],
-        });
+  Policy.layer.succeed((_host, token, zone) =>
+    token.bind`${sid}(${zone})`({
+      policies: [
+        {
+          effect: "allow",
+          permissionGroups,
+          resources: zone.zoneId.pipe(
+            Output.flatMap(
+              (zoneId) =>
+                Output.interpolate`com.cloudflare.api.account.zone.${zoneId}`,
+            ),
+            Output.map((zoneId) => ({
+              [zoneId]: "*",
+            })),
+          ),
+        },
+      ],
     }),
   );
