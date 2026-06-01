@@ -20,6 +20,7 @@ import {
   DeletedBindingRegressionTarget,
   DurationResource,
   Function,
+  KindStablesResource,
   PhasedTarget,
   StaticStablesResource,
   TestLayers,
@@ -231,6 +232,30 @@ describe("basic operations", () => {
         }).pipe(stack.deploy),
       ).toEqual("TEST-STRING-FLAT");
     }),
+  );
+
+  test.provider(
+    "should apply downstream resources when a stable kind shadows an output discriminator",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* KindStablesResource("Database", {
+          value: "v1",
+        }).pipe(stack.deploy);
+
+        const output = yield* Effect.gen(function* () {
+          const database = yield* KindStablesResource("Database", {
+            value: "v2",
+          });
+          const role = yield* KindStablesResource("Role", {
+            value: "role",
+            upstream: database,
+          });
+          return { database, role };
+        }).pipe(stack.deploy);
+
+        expect(output.database.value).toBe("v2");
+        expect(output.role.upstreamKind).toBe("postgresql");
+      }),
   );
 
   test.provider(

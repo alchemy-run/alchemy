@@ -553,6 +553,51 @@ export const staticStablesResourceProvider = () =>
     }),
   });
 
+// KindStablesResource - reproduces providers whose stable output attributes
+// include a `kind` field, such as PlanetScale databases.
+
+export type KindStablesResourceProps = {
+  value: string;
+  upstream?: KindStablesResource;
+};
+
+export interface KindStablesResource extends Resource<
+  "Test.KindStablesResource",
+  KindStablesResourceProps,
+  {
+    kind: "postgresql";
+    value: string;
+    upstreamKind: "postgresql" | undefined;
+  }
+> {}
+
+export const KindStablesResource = Resource<KindStablesResource>(
+  "Test.KindStablesResource",
+);
+
+export const kindStablesResourceProvider = () =>
+  Provider.succeed(KindStablesResource, {
+    stables: ["kind"],
+    diff: Effect.fn(function* ({ news, olds }) {
+      if (!isResolved(news)) return undefined;
+      if (news.value !== olds?.value) {
+        return { action: "update" };
+      }
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ news }) {
+      const upstream = news.upstream as
+        | KindStablesResource["Attributes"]
+        | undefined;
+      return {
+        kind: "postgresql",
+        value: news.value,
+        upstreamKind: upstream?.kind,
+      };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 export type PhasedTargetProps = {
   desired: string;
   replaceKey?: string;
@@ -742,6 +787,7 @@ export const TestLayers = () =>
     artifactProbeProvider(),
     testResourceProvider(),
     staticStablesResourceProvider(),
+    kindStablesResourceProvider(),
     phasedTargetProvider(),
     noPrecreateBindingTargetProvider(),
     durationResourceProvider(),

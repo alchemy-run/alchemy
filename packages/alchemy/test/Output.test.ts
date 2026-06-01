@@ -174,6 +174,14 @@ describe("Output.evaluate", () => {
         }),
       ),
     );
+
+    it("classifies resource expressions when a stable kind shadows the discriminator", () => {
+      const src = fakeResource("Test.Database", "Database");
+      const expr = new Output.ResourceExpr(src, { kind: "postgresql" });
+
+      expect((expr as any).kind).toBe("postgresql");
+      expect(Output.isResourceExpr(expr)).toBe(true);
+    });
   });
 
   describe("PropExpr", () => {

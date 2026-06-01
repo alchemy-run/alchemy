@@ -28,6 +28,7 @@ import {
   BindingTarget,
   Bucket,
   Function,
+  KindStablesResource,
   NoPrecreateBindingTarget,
   Queue,
   TestLayers,
@@ -275,6 +276,46 @@ test(
         "empty object",
       ),
     });
+  }),
+);
+
+test(
+  "plan downstream resources when a stable kind shadows an output discriminator",
+  Effect.gen(function* () {
+    yield* seed({
+      Database: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "Database",
+        fqn: "Database",
+        namespace: undefined,
+        resourceType: "Test.KindStablesResource",
+        status: "created",
+        props: {
+          value: "v1",
+        },
+        attr: {
+          kind: "postgresql",
+          value: "v1",
+          upstreamKind: undefined,
+        },
+        bindings: [],
+        downstream: [],
+      },
+    });
+
+    const plan = yield* Effect.gen(function* () {
+      const database = yield* KindStablesResource("Database", {
+        value: "v2",
+      });
+      yield* KindStablesResource("Role", {
+        value: "role",
+        upstream: database,
+      });
+    }).pipe(makePlan);
+
+    expect(plan.resources.Database!.action).toBe("update");
+    expect(plan.resources.Role!.action).toBe("create");
   }),
 );
 

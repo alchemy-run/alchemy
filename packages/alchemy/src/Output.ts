@@ -72,6 +72,8 @@ export type ToOutput<A, Req = never> = [Extract<A, object>] extends [never]
 
 export const ExprSymbol = Symbol.for("alchemy/Expr");
 
+const exprKind = (node: any): unknown => node?.[ExprSymbol]?.kind ?? node?.kind;
+
 export const isExpr = (value: any): value is Expr<any> =>
   value &&
   (typeof value === "object" || typeof value === "function") &&
@@ -145,7 +147,7 @@ export type ArrayExpr<A extends any[], Req = any> = Output<A, Req> & {
 
 export const isResourceExpr = <Value = any, Req = any>(
   node: Expr<Value, Req> | any,
-): node is ResourceExpr<Value, Req> => node?.kind === "ResourceExpr";
+): node is ResourceExpr<Value, Req> => exprKind(node) === "ResourceExpr";
 
 export class ResourceExpr<Value, Req = never> extends BaseExpr<Value, Req> {
   readonly kind = "ResourceExpr";
@@ -163,7 +165,7 @@ export class ResourceExpr<Value, Req = never> extends BaseExpr<Value, Req> {
 
 export const isPropExpr = <A = any, Prop extends keyof A = keyof A, Req = any>(
   node: any,
-): node is PropExpr<A, Prop, Req> => node?.kind === "PropExpr";
+): node is PropExpr<A, Prop, Req> => exprKind(node) === "PropExpr";
 
 export class PropExpr<
   A = any,
@@ -186,7 +188,7 @@ export class PropExpr<
 export const literal = <A>(value: A) => new LiteralExpr(value);
 
 export const isLiteralExpr = <A = any>(node: any): node is LiteralExpr<A> =>
-  node?.kind === "LiteralExpr";
+  exprKind(node) === "LiteralExpr";
 
 export class LiteralExpr<A> extends BaseExpr<A, never> {
   readonly kind = "LiteralExpr";
@@ -217,7 +219,7 @@ export const map: {
 //Output.ApplyExpr<any, any, ResourceLike, any>
 export const isApplyExpr = <In = any, Out = any, Req = any>(
   node: Output<Out, Req>,
-): node is ApplyExpr<In, Out, Req> => node?.kind === "ApplyExpr";
+): node is ApplyExpr<In, Out, Req> => exprKind(node) === "ApplyExpr";
 
 export class ApplyExpr<A, B, Req = never> extends BaseExpr<B, Req> {
   readonly kind = "ApplyExpr";
@@ -259,7 +261,7 @@ export const flatMap: {
 
 export const isFlatMapExpr = <In = any, Out = any, Req = any, Req2 = any>(
   node: any,
-): node is FlatMapExpr<In, Out, Req, Req2> => node?.kind === "FlatMapExpr";
+): node is FlatMapExpr<In, Out, Req, Req2> => exprKind(node) === "FlatMapExpr";
 
 export class FlatMapExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
   B,
@@ -280,7 +282,7 @@ export class FlatMapExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
 
 export const isEffectExpr = <In = any, Out = any, Req = any, Req2 = any>(
   node: any,
-): node is EffectExpr<In, Out, Req, Req2> => node?.kind === "EffectExpr";
+): node is EffectExpr<In, Out, Req, Req2> => exprKind(node) === "EffectExpr";
 
 export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
   B,
@@ -301,7 +303,7 @@ export class EffectExpr<A, B, Req = never, Req2 = never> extends BaseExpr<
 
 export const isNamedExpr = <A = any, Req = any>(
   node: any,
-): node is NamedExpr<A, Req> => node?.kind === "NamedExpr";
+): node is NamedExpr<A, Req> => exprKind(node) === "NamedExpr";
 
 /**
  * Wraps another `Expr` and overrides its `toString()` / inspect output.
@@ -352,7 +354,7 @@ type Tuple<
 
 export const isAllExpr = <Outs extends Expr[] = Expr[]>(
   node: any,
-): node is AllExpr<Outs> => node?.kind === "AllExpr";
+): node is AllExpr<Outs> => exprKind(node) === "AllExpr";
 
 export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
   readonly kind = "AllExpr";
@@ -366,7 +368,7 @@ export class AllExpr<Outs extends Expr[]> extends BaseExpr<Outs> {
 }
 
 export const isRefExpr = <A = any>(node: any): node is RefExpr<A> =>
-  node?.kind === "RefExpr";
+  exprKind(node) === "RefExpr";
 
 export class RefExpr<A> extends BaseExpr<A, never> {
   readonly kind = "RefExpr";
@@ -384,7 +386,7 @@ export class RefExpr<A> extends BaseExpr<A, never> {
 }
 
 export const isStackRefExpr = <A = any>(node: any): node is StackRefExpr<A> =>
-  node?.kind === "StackRefExpr";
+  exprKind(node) === "StackRefExpr";
 
 /**
  * A reference to the persisted output of a Stack at `(stack, stage)`.
