@@ -382,7 +382,9 @@ export const Platform = <
                               yield* ctx.get<Redacted.Redacted<string>>(key);
                             if (value) {
                               return ConfigProvider.makeValue(
-                                Redacted.value(value),
+                                Redacted.isRedacted(value)
+                                  ? Redacted.value(value)
+                                  : value,
                               );
                             }
                           }
