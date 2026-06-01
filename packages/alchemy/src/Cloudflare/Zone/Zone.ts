@@ -6,6 +6,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { stripNullFields } from "../../Util/data.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { findZoneByName } from "./lookup.ts";
@@ -13,20 +14,110 @@ import { findZoneByName } from "./lookup.ts";
 export type ZoneType = "full" | "partial" | "secondary" | "internal";
 export type ZoneStatus = "initializing" | "pending" | "active" | "moved";
 
+/** Metadata about the zone (Cloudflare `meta`). */
+export type ZoneMeta = {
+  /** @deprecated Always `false`. */
+  cdnOnly: boolean | undefined;
+  /** Number of allowed custom certificates. */
+  customCertificateQuota: number | undefined;
+  /** @deprecated Always `true`. */
+  dnsOnly: boolean | undefined;
+  /** Whether the zone is on Cloudflare's Foundation DNS plan. */
+  foundationDns: boolean | undefined;
+  /** Number of allowed Page Rules. */
+  pageRuleQuota: number | undefined;
+  /** Whether the zone has been flagged for phishing. */
+  phishingDetected: boolean | undefined;
+  /** Onboarding step the zone is currently on. */
+  step: number | undefined;
+};
+
+/** The owner of the zone (Cloudflare `owner`). */
+export type ZoneOwner = {
+  /** Owner identifier. */
+  id: string | undefined;
+  /** Owner name. */
+  name: string | undefined;
+  /** Owner type (e.g. `user`, `organization`). */
+  type: string | undefined;
+};
+
+/** An organizational unit (tenant) the zone belongs to. */
+export type ZoneTenant = {
+  /** Tenant identifier. */
+  id: string | undefined;
+  /** Tenant name. */
+  name: string | undefined;
+};
+
+/** The immediate parent organizational unit of the zone. */
+export type ZoneTenantUnit = {
+  /** Tenant unit identifier. */
+  id: string | undefined;
+};
+
 /**
  * Common shape returned by a managed {@link Zone} resource — anything that
  * needs to point at a Cloudflare Zone can accept this.
+ *
+ * Mirrors Cloudflare's zone object. `zoneId` and `accountId` are Alchemy's
+ * flattened identifiers (Cloudflare exposes these as `id` and `account.id`);
+ * every other field keeps Cloudflare's own (camelCased) name.
  */
 export type ZoneAttributes = {
+  /** Zone identifier (Cloudflare `id`). Stable across updates. */
   zoneId: string;
+  /** The fully-qualified domain name (e.g. `example.com`). */
   name: string;
+  /** Identifier of the account the zone belongs to (Cloudflare `account.id`). */
   accountId: string;
+  /** Name of the account the zone belongs to (Cloudflare `account.name`). */
+  accountName: string | undefined;
+  /**
+   * Zone type. A full zone hosts its DNS at Cloudflare; a partial zone is a
+   * partner/CNAME setup.
+   */
   type: ZoneType;
+  /** The zone status on Cloudflare. */
   status: ZoneStatus | undefined;
+  /**
+   * Whether the zone is DNS-only (Cloudflare's proxy/security features
+   * disabled).
+   */
   paused: boolean;
+  /** The name servers Cloudflare assigns to the zone. */
   nameServers: string[];
+  /** The original name servers before the domain moved to Cloudflare. */
   originalNameServers: string[] | undefined;
+  /** Custom (vanity) name servers. Business/Enterprise plans only. */
   vanityNameServers: string[] | undefined;
+  /** The last time proof of ownership was detected and the zone activated. */
+  activatedOn: string | undefined;
+  /** When the zone was created. */
+  createdOn: string;
+  /**
+   * The interval (in seconds) until development mode expires (positive) or
+   * since it last expired (negative). `0` if never enabled.
+   */
+  developmentMode: number;
+  /** When the zone was last modified. */
+  modifiedOn: string;
+  /** The DNS host at the time of switching to Cloudflare. */
+  originalDnshost: string | undefined;
+  /** The registrar for the domain at the time of switching to Cloudflare. */
+  originalRegistrar: string | undefined;
+  /** Allows the customer to use a custom apex (tenants-only configuration). */
+  cnameSuffix: string | undefined;
+  /** Verification key for partial zone setup. */
+  verificationKey: string | undefined;
+  /** Metadata about the zone. */
+  meta: ZoneMeta;
+  /** The owner of the zone. */
+  owner: ZoneOwner;
+  /** The root organizational unit (tenant) the zone belongs to. */
+  tenant: ZoneTenant | undefined;
+  /** The immediate parent organizational unit of the zone. */
+  tenantUnit: ZoneTenantUnit | undefined;
 };
 
 export type ZoneProps = {
@@ -210,32 +301,36 @@ export const ZoneProvider = () =>
 
 /** @internal — shape a distilled zones API result into `ZoneAttributes`. */
 export const toZoneAttributes = (
-  result: {
-    id: string;
-    name: string;
-    account: { id?: string | null };
-    type?: ZoneType | null;
-    status?: ZoneStatus | null;
-    paused?: boolean | null;
-    nameServers: ReadonlyArray<string>;
-    originalNameServers?: ReadonlyArray<string> | null;
-    vanityNameServers?: ReadonlyArray<string> | null;
-  },
+  result: zones.GetZoneResponse,
   fallbackAccountId: string,
-): ZoneAttributes => ({
-  zoneId: result.id,
-  name: result.name,
-  accountId: result.account.id ?? fallbackAccountId,
-  type: (result.type ?? "full") as ZoneType,
-  status: (result.status ?? undefined) as ZoneStatus | undefined,
-  paused: result.paused ?? false,
-  nameServers: [...result.nameServers],
-  originalNameServers: result.originalNameServers
-    ? [...result.originalNameServers]
-    : undefined,
-  vanityNameServers: result.vanityNameServers
-    ? [...result.vanityNameServers]
-    : undefined,
-});
+): ZoneAttributes => {
+  // Cloudflare returns `null` for absent fields; drop them so every optional
+  // attribute is simply `undefined` (matching `ZoneAttributes`).
+  const z = stripNullFields(result);
+  return {
+    zoneId: z.id,
+    name: z.name,
+    accountId: z.account.id ?? fallbackAccountId,
+    accountName: z.account.name,
+    type: z.type ?? "full",
+    status: z.status,
+    paused: z.paused ?? false,
+    nameServers: z.nameServers,
+    originalNameServers: z.originalNameServers,
+    vanityNameServers: z.vanityNameServers,
+    activatedOn: z.activatedOn,
+    createdOn: z.createdOn,
+    developmentMode: z.developmentMode,
+    modifiedOn: z.modifiedOn,
+    originalDnshost: z.originalDnshost,
+    originalRegistrar: z.originalRegistrar,
+    cnameSuffix: z.cnameSuffix,
+    verificationKey: z.verificationKey,
+    meta: z.meta,
+    owner: z.owner,
+    tenant: z.tenant,
+    tenantUnit: z.tenantUnit,
+  } as ZoneAttributes;
+};
 
 const stringArrayEq = Array.makeEquivalence(Equivalence.String);

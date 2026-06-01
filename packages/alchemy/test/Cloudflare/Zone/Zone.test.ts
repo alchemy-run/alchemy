@@ -40,8 +40,34 @@ test.provider(
       expect(zone.name).toBe(TEST_ZONE);
       expect(zone.accountId).toBe(accountId);
 
+      // The mapped attributes should match what the Cloudflare API reports,
+      // with the API's `null`s normalized to `undefined`.
       const live = yield* zones.getZone({ zoneId: zone.zoneId });
-      expect(live.id).toBe(zone.zoneId);
+      expect(zone.zoneId).toBe(live.id);
+      expect(zone.name).toBe(live.name);
+      expect(zone.accountName).toBe(live.account.name ?? undefined);
+      expect(zone.type).toBe(live.type ?? "full");
+      expect(zone.status).toBe(live.status ?? undefined);
+      expect(zone.paused).toBe(live.paused ?? false);
+      expect(zone.nameServers).toEqual(live.nameServers);
+      expect(zone.originalNameServers).toEqual(
+        live.originalNameServers ?? undefined,
+      );
+      expect(zone.vanityNameServers).toEqual(
+        live.vanityNameServers ?? undefined,
+      );
+      expect(zone.activatedOn).toBe(live.activatedOn ?? undefined);
+      expect(zone.createdOn).toBe(live.createdOn);
+      expect(zone.modifiedOn).toBe(live.modifiedOn);
+      expect(zone.developmentMode).toBe(live.developmentMode);
+      expect(zone.originalDnshost).toBe(live.originalDnshost ?? undefined);
+      expect(zone.originalRegistrar).toBe(live.originalRegistrar ?? undefined);
+      expect(zone.cnameSuffix).toBe(live.cnameSuffix ?? undefined);
+      expect(zone.verificationKey).toBe(live.verificationKey ?? undefined);
+      expect(zone.owner.id).toBe(live.owner.id ?? undefined);
+      expect(zone.meta.foundationDns).toBe(
+        live.meta.foundationDns ?? undefined,
+      );
 
       yield* stack.destroy();
 
