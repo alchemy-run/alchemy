@@ -17,6 +17,7 @@ import { Images } from "../Images/Images.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
 import type { Queue } from "../Queue/Queue.ts";
 import type { R2Bucket } from "../R2/R2Bucket.ts";
+import type { RateLimit } from "../RateLimit/RateLimit.ts";
 import type { VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { Assets } from "./Assets.ts";
 import type { DurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
@@ -48,6 +49,7 @@ export type WorkerBindingResource =
   | AnalyticsEngineDataset
   | SendEmail
   | Artifacts
+  | RateLimit
   | BrowserRendering
   | Images
   | Hyperdrive

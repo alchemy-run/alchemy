@@ -19,6 +19,7 @@ import { isImages } from "../Images/Images.ts";
 import { isKVNamespace } from "../KV/KVNamespace.ts";
 import { isQueue } from "../Queue/Queue.ts";
 import { isR2Bucket } from "../R2/R2Bucket.ts";
+import { isRateLimit } from "../RateLimit/RateLimit.ts";
 import { isVectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isAssets } from "./Assets.ts";
 import { isDurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
@@ -129,6 +130,13 @@ const toBinding = (
       type: "analytics_engine",
       name: bindingName,
       dataset: binding.dataset,
+    };
+  } else if (isRateLimit(binding)) {
+    return {
+      type: "ratelimit",
+      name: bindingName,
+      namespaceId: binding.namespaceId,
+      simple: binding.simple,
     };
   } else if (isSendEmail(binding)) {
     return {
