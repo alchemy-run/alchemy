@@ -1,9 +1,22 @@
 ---
 import Search from "@astrojs/starlight/components/Search.astro";
 import Logo from "./Logo.astro";
+
+interface Props {
+  /**
+   * Set on the marketing layout, where this nav is the only header and no
+   * Starlight sidebar (hence no floating hamburger) exists. Docs pages render
+   * this as Starlight's `Header` override and leave it unset — there we must
+   * reserve space on the right so the right-aligned controls clear Starlight's
+   * fixed mobile menu button.
+   */
+  marketing?: boolean;
+}
+
+const { marketing = false } = Astro.props;
 ---
 
-<nav class="alc-nav">
+<nav class:list={["alc-nav", { "alc-nav--docs": !marketing }]}>
   <a href="/" class="alc-nav__brand">
     <Logo />
   </a>
@@ -210,6 +223,20 @@ import Logo from "./Logo.astro";
   }
   @media (max-width: 640px) {
     .alc-nav { gap: 16px; }
+  }
+  /*
+   * On docs pages Starlight renders a fixed hamburger button in the top-right
+   * (`position: fixed; inset-inline-end: var(--sl-nav-pad-x)`, sized
+   * `--sl-menu-button-size`) below its `md` (50rem) breakpoint. Its right edge
+   * lines up with this nav's right edge, so without a reservation it sits on
+   * top of the theme toggle. Pad the right by the button's footprint plus a
+   * small gap so the controls clear it. Marketing pages have no sidebar (and
+   * thus no hamburger), so this only applies in the docs context.
+   */
+  @media (max-width: 50rem) {
+    .alc-nav--docs {
+      padding-inline-end: calc(var(--sl-menu-button-size, 2rem) + 0.75rem);
+    }
   }
 </style>
 
