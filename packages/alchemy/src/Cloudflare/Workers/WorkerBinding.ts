@@ -9,7 +9,7 @@ import { isYieldableEffectLike } from "../../Util/effect.ts";
 import type { AiGateway } from "../AiGateway/AiGateway.ts";
 import { AnalyticsEngineDataset } from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
 import { Artifacts } from "../Artifacts/Artifacts.ts";
-import { BrowserRendering } from "../BrowserRendering/BrowserRendering.ts";
+import { Browser } from "../Browser/Browser.ts";
 import type { D1Database } from "../D1/D1Database.ts";
 import { SendEmail } from "../Email/SendEmail.ts";
 import { Hyperdrive } from "../Hyperdrive/Hyperdrive.ts";
@@ -50,7 +50,7 @@ export type WorkerBindingResource =
   | SendEmail
   | Artifacts
   | RateLimit
-  | BrowserRendering
+  | Browser
   | Images
   | Hyperdrive
   | VectorizeIndex

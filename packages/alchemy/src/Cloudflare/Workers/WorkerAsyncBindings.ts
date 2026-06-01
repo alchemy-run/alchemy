@@ -10,7 +10,7 @@ import { asEffect } from "../../Util/types.ts";
 import { isAiGateway } from "../AiGateway/AiGateway.ts";
 import { isAnalyticsEngineDataset } from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
 import { isArtifacts } from "../Artifacts/Artifacts.ts";
-import { isBrowserRendering } from "../BrowserRendering/BrowserRendering.ts";
+import { isBrowser } from "../Browser/Browser.ts";
 import { isD1Database } from "../D1/D1Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
 import { isHyperdrive } from "../Hyperdrive/Hyperdrive.ts";
@@ -120,7 +120,7 @@ const toBinding = (
       type: "images",
       name: bindingName,
     };
-  } else if (isBrowserRendering(binding)) {
+  } else if (isBrowser(binding)) {
     return {
       type: "browser",
       name: bindingName,
