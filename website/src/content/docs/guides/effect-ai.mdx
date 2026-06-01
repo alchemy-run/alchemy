@@ -151,14 +151,12 @@ durable. Pick the one that matches your platform:
 
 | Platform | Backing |
 | --- | --- |
-| Cloudflare Worker + Durable Object | [`Cloudflare.DurableObjectChatPersistence`](/tutorial/cloudflare/agent) — bytes live in `state.storage`, one DO instance per session |
+| Cloudflare Worker + Durable Object | `Cloudflare.DurableObjectChatPersistence` — bytes live in `state.storage`, one DO instance per session |
 | Any platform, in-memory (tests) | `Persistence.layerBackingMemory` — lost on restart |
 | Anything else (KV, R2, DynamoDB, …) | Implement `BackingPersistence` against your store |
 
 The `Chat.Persistence` API and handler code never change — only the
-backing layer does. See the
-[Add a Chat Agent](/tutorial/cloudflare/agent) tutorial for the
-end-to-end DO setup.
+backing layer does.
 
 ## Cloudflare AI Gateway
 
@@ -232,7 +230,5 @@ model })` — is the same.
 - [Add an AI Gateway](/tutorial/cloudflare/ai-gateway) — wire
   Workers AI behind a Cloudflare AI Gateway with caching and
   streaming.
-- [Add a Chat Agent](/tutorial/cloudflare/agent) — persisted
-  chat sessions backed by a Durable Object's `state.storage`.
 - [Secrets and env vars](/guides/secrets) — how `Config.redacted`
   feeds the upstream providers' API keys at deploy and runtime.
