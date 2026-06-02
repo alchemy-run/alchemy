@@ -714,7 +714,10 @@ export const make = <A>(
                 .pipe(providePlanScope(fqn, adoptInstanceId));
               if (readResult !== undefined) {
                 const isUnowned = Unowned.is(readResult);
-                if (isUnowned && !(yield* shouldAdopt)) {
+                // A resource-scoped `adopt(...)` (captured on the resource at
+                // registration) overrides the stack/CLI default.
+                const adoptThis = resource.Adopt ?? (yield* shouldAdopt);
+                if (isUnowned && !adoptThis) {
                   return yield* new OwnedBySomeoneElse({
                     message:
                       `Cannot adopt resource '${fqn}' (${resource.Type}): ` +
@@ -1229,6 +1232,7 @@ export const make = <A>(
                     Binding: undefined!,
                     Provider: Provider(resourceType),
                     RemovalPolicy: oldState.removalPolicy,
+                    Adopt: undefined,
                     RuntimeContext: undefined!,
                     Providers: undefined,
                   } as ResourceLike,

@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { pipeArguments, type Pipeable } from "effect/Pipeable";
 import { SingleShotGen } from "effect/Utils";
+import { AdoptPolicy } from "./AdoptPolicy.ts";
 import { toFqn } from "./FQN.ts";
 import type { Input, InputProps } from "./Input.ts";
 import { CurrentNamespace, type NamespaceNode } from "./Namespace.ts";
@@ -106,6 +107,12 @@ export interface ResourceLike<
    * Removal Policy of the Resource.
    */
   RemovalPolicy: RemovalPolicy["Service"];
+  /**
+   * Per-resource adoption policy captured from the ambient {@link AdoptPolicy}
+   * at registration time (e.g. via `.pipe(adopt(true))`). `undefined` means no
+   * resource-scoped override — the planner falls back to the stack/CLI default.
+   */
+  Adopt: boolean | undefined;
   /** @internal phantom */
   Attributes: Attributes;
   /** @internal phantom */
@@ -245,6 +252,9 @@ export function Resource<R extends ResourceLike>(
         Provider: ProviderTag as Provider<any>,
         RemovalPolicy: yield* Effect.serviceOption(RemovalPolicy).pipe(
           Effect.map(Option.getOrElse(() => defaultRemovalPolicy)),
+        ),
+        Adopt: yield* Effect.serviceOption(AdoptPolicy).pipe(
+          Effect.map(Option.getOrUndefined),
         ),
         bind,
         toString(this: typeof target) {
