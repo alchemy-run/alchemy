@@ -26,6 +26,7 @@ export default {
         CONFIG_STR: env.CONFIG_STR,
         CONFIG_NUM: env.CONFIG_NUM,
         CONFIG_REDACTED: env.CONFIG_REDACTED,
+        VERSION_METADATA: env.CF_VERSION_METADATA,
       }),
       { headers: { "content-type": "application/json" } },
     );
