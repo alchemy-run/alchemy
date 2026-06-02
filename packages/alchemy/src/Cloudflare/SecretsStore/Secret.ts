@@ -54,6 +54,10 @@ export type Secret = Resource<
   Providers
 >;
 
+export const isSecret = (value: unknown): value is Secret =>
+  typeof value === "object" &&
+  (value as any)?.Type === "Cloudflare.SecretsStore.Secret";
+
 export type SecretStatus = "pending" | "active" | "deleted";
 
 // Distilled widened generated string enums to open unions (`string & {}`); the
