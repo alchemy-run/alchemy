@@ -18,7 +18,6 @@
     "docs:check": "bun run --filter ./website docs:check",
     "build": "bun tsc -b && bun run --filter ./website --filter './packages/*' build",
     "build:packages": "bun tsc -b && bun run --filter './packages/*' build",
-    "bump": "bun ./scripts/release/bump.ts",
     "clean:shallow": "rm -rf alchemy/*.tgz && bun tsc -b --clean",
     "clean": "git clean -fqdx -e .env",
     "dev": "tsc -b -w & bun run --filter alchemy dev",
