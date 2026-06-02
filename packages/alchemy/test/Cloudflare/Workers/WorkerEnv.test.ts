@@ -86,6 +86,23 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
   );
 
   test(
+    "effect worker resolves the yielded VersionMetadata binding",
+    Effect.gen(function* () {
+      const { effectUrl } = yield* stack;
+
+      const body = yield* expectUrlContains(`${effectUrl}/version`, '"id"', {
+        timeout: "60 seconds",
+        label: "effect env-worker /version",
+      });
+      expect(JSON.parse(body)).toEqual({
+        id: expect.any(String),
+        tag: expect.any(String),
+        timestamp: expect.any(String),
+      });
+    }).pipe(logLevel),
+  );
+
+  test(
     "effect worker round-trips Config.xxx bindings captured in Init",
     Effect.gen(function* () {
       const { effectUrl } = yield* stack;

@@ -44,6 +44,10 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
     const configNum = yield* Config.number("CONFIG_NUM");
     const configRedactedInit = yield* Config.redacted("CONFIG_REDACTED_INIT");
 
+    // Yieldable binding form — attaches the `version_metadata` binding to
+    // this Worker and returns a deferred accessor resolved at runtime.
+    const versionMetadata = yield* Cloudflare.VersionMetadata();
+
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -67,6 +71,11 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
           });
         }
 
+        if (pathname === "/version") {
+          const { id, tag, timestamp } = yield* versionMetadata;
+          return yield* HttpServerResponse.json({ id, tag, timestamp });
+        }
+
         if (pathname === "/config") {
           return yield* HttpServerResponse.json({
             CONFIG_STR: configStr,
@@ -81,5 +90,5 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
         return HttpServerResponse.text("ok");
       }),
     };
-  }),
+  }).pipe(Effect.provide(Cloudflare.VersionMetadataBindingLive)),
 ) {}

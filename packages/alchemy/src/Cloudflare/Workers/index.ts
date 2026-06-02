@@ -17,6 +17,7 @@ export * from "./RpcDurableObjectNamespace.ts";
 export * from "./RpcWorker.ts";
 export * from "./ScheduledEvents.ts";
 export * from "./VersionMetadata.ts";
+export * from "./VersionMetadataBinding.ts";
 export * from "./WebSocket.ts";
 export * from "./Worker.ts";
 export * from "./WorkerBinding.ts";
