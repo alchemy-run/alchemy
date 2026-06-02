@@ -504,7 +504,6 @@ describe("Prisma Compute", () => {
       Effect.provide(
         Layer.succeed(AlchemyContext, {
           dotAlchemy: ".alchemy",
-          updateStateStore: false,
           dev: true,
           adopt: false,
         }),

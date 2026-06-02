@@ -1,5 +1,4 @@
 import * as Lambda from "@/AWS/Lambda";
-import * as Alchemy from "@/index.ts";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -41,28 +40,32 @@ export const SecretsTestFunctionLive = SecretsTestFunction.make(
     // Secret from a literal — `Alchemy.Secret` coerces the literal to
     // `Redacted` and the Lambda runtime accessor rebuilds the wrapper
     // from the JSON marker stored in env.
-    const literalSecret = yield* Alchemy.Secret(
-      "LITERAL_SECRET",
-      LITERAL_SECRET_VALUE,
+    const literalSecret = yield* Config.redacted("LITERAL_SECRET").pipe(
+      Config.withDefault(Redacted.make(LITERAL_SECRET_VALUE)),
     );
 
     // Secret from a `Config` — resolved against the active
-    // `ConfigProvider` (process.env) at deploy time.
-    const configSecret = yield* Alchemy.Secret(
-      "CONFIG_SECRET",
-      Config.string(CONFIG_SECRET_ENV_KEY),
-    );
+    // `ConfigProvider` (process.env) at deploy time. The test populates
+    // `process.env[CONFIG_SECRET_ENV_KEY]` before deploying, so source
+    // from that same key (not a hard-coded literal).
+    const configSecret = yield* Config.redacted(CONFIG_SECRET_ENV_KEY);
 
     // Plain string variable — string round-trip.
-    const stringVar = yield* Alchemy.Variable("STRING_VAR", STRING_VAR_VALUE);
+    const stringVar = yield* Config.string("STRING_VAR").pipe(
+      Config.withDefault(STRING_VAR_VALUE),
+    );
 
     // Number variable — non-string values JSON.stringify on `set` and
     // JSON.parse on the runtime accessor, so the accessor returns the
     // original number.
-    const numberVar = yield* Alchemy.Variable("NUMBER_VAR", NUMBER_VAR_VALUE);
+    const numberVar = yield* Config.number("NUMBER_VAR").pipe(
+      Config.withDefault(NUMBER_VAR_VALUE),
+    );
 
     // Object variable — same JSON round-trip as above for nested data.
-    const objectVar = yield* Alchemy.Variable("OBJECT_VAR", OBJECT_VAR_VALUE);
+    const objectVar = yield* Config.string("OBJECT_VAR").pipe(
+      Config.withDefault(OBJECT_VAR_VALUE),
+    );
 
     return {
       fetch: Effect.gen(function* () {
@@ -74,38 +77,33 @@ export const SecretsTestFunctionLive = SecretsTestFunction.make(
           case "/ready":
             return HttpServerResponse.text("ok");
           case "/secret/literal": {
-            const value = yield* literalSecret;
             return yield* HttpServerResponse.json({
-              isRedacted: Redacted.isRedacted(value),
-              value: Redacted.value(value),
+              isRedacted: Redacted.isRedacted(literalSecret),
+              value: Redacted.value(literalSecret),
             });
           }
           case "/secret/config": {
-            const value = yield* configSecret;
             return yield* HttpServerResponse.json({
-              isRedacted: Redacted.isRedacted(value),
-              value: Redacted.value(value),
+              isRedacted: Redacted.isRedacted(configSecret),
+              value: Redacted.value(configSecret),
             });
           }
           case "/var/string": {
-            const value = yield* stringVar;
             return yield* HttpServerResponse.json({
-              type: typeof value,
-              value,
+              type: typeof stringVar,
+              value: stringVar,
             });
           }
           case "/var/number": {
-            const value = yield* numberVar;
             return yield* HttpServerResponse.json({
-              type: typeof value,
-              value,
+              type: typeof numberVar,
+              value: numberVar,
             });
           }
           case "/var/object": {
-            const value = yield* objectVar;
             return yield* HttpServerResponse.json({
-              type: typeof value,
-              value,
+              type: typeof objectVar,
+              value: objectVar,
             });
           }
           default:

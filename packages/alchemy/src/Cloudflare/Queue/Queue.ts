@@ -10,6 +10,9 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { QueueBinding } from "./QueueBinding.ts";
 
+export const isQueue = (value: unknown): value is Queue =>
+  typeof value === "object" && (value as any)?.Type === "Cloudflare.Queue";
+
 export type QueueProps = {
   /**
    * Name of the queue. If omitted, a unique name will be generated.

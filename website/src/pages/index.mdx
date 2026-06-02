@@ -33,18 +33,18 @@ export const STACK_SRC = `export default Alchemy.Stack(
     const Sessions = yield* Cloudflare.KVNamespace("Sessions");
     const api = yield* Cloudflare.Worker("Api", {
       main: "./src/worker.ts",
-      bindings: { Photos, Sessions },
+      env: { Photos, Sessions },
     });
     return { url: api.url };
   }),
 );`;
 
-export const ASYNC_RUN_SRC = `// alchemy.run.ts — declare resources, attach as bindings.
+export const ASYNC_RUN_SRC = `// alchemy.run.ts — declare resources, attach via env.
 export const Bucket = Cloudflare.R2Bucket("Bucket");
 
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
-  bindings: { Bucket },
+  env: { Bucket },
 });
 
 export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;`;

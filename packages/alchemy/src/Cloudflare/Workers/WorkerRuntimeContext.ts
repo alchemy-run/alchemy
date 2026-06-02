@@ -33,17 +33,12 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
     get: (key: string) =>
       Effect.serviceOption(WorkerEnvironment).pipe(
         Effect.map(Option.getOrUndefined),
-        Effect.flatMap((env) =>
-          env
-            ? Effect.succeed(env[key])
-            : Effect.die("WorkerEnvironment not found"),
-        ),
-        Effect.flatMap((value) =>
-          value
-            ? Effect.succeed(value)
-            : Effect.die(`Environment variable '${key}' not found`),
-        ),
+        // Key is already canonical (see RuntimeContext.sanitizeKey).
+        Effect.map((env) => env?.[key]),
         Effect.map((json) => {
+          if (json === undefined) {
+            return undefined;
+          }
           try {
             const value = JSON.parse(json);
             // The `set` path serializes Redacted values as
@@ -53,10 +48,9 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
             // and rebuild the Redacted wrapper. Plain values pass
             // through unchanged.
             if (
-              value !== null &&
               typeof value === "object" &&
-              (value as { _tag?: unknown })._tag === "Redacted" &&
-              "value" in (value as object)
+              value?._tag === "Redacted" &&
+              "value" in value
             ) {
               return Redacted.make((value as { value: unknown }).value);
             }
@@ -66,9 +60,8 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
           }
         }),
       ) as any,
-    set: (id: string, output: Output.Output) =>
+    set: (key: string, output: Output.Output) =>
       Effect.sync(() => {
-        const key = id.replaceAll(/[^a-zA-Z0-9]/g, "_");
         // Preserve `Redacted`-ness across the Output → env → Cloudflare
         // binding boundary so the put-worker loop can deploy secrets via
         // `secret_text` instead of leaking them as `plain_text`. The JSON

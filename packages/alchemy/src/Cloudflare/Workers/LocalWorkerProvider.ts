@@ -1,5 +1,4 @@
 import {
-  layerLocalProxy,
   layerRuntime,
   Runtime,
   RuntimeError,
@@ -13,30 +12,38 @@ import {
 } from "@distilled.cloud/cloudflare-runtime";
 import {
   Ai,
+  AnalyticsEngine,
   Artifacts,
   Assets,
   Browser,
   D1,
   Data,
+  DispatchNamespace,
   DurableObjectNamespace,
   Hyperdrive,
   Images,
   Json,
   KvNamespace,
+  MtlsCertificate,
+  Pipelines,
   R2Bucket,
+  RateLimit,
+  SendEmail,
   Service,
   Text,
+  Vectorize,
   VersionMetadata,
   WasmModule,
   WorkerLoader,
+  Workflows,
 } from "@distilled.cloud/cloudflare-runtime/bindings";
-import * as LocalProxy from "@distilled.cloud/cloudflare-runtime/proxy/LocalProxy";
+import * as WorkerProxy from "@distilled.cloud/cloudflare-runtime/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Hash from "effect/Hash";
-import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
@@ -45,11 +52,10 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
-import { InstanceId } from "../../InstanceId.ts";
+import { isResolved } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
-import { Stage } from "../../Stage.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { getCompatibility } from "./Compatibility.ts";
@@ -69,23 +75,20 @@ export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidat
   },
 ) {}
 
-export const localRuntimeServices = (options: { port?: number } = {}) =>
+export const localRuntimeServices = () =>
   RpcProvider.providerServicesEffect(
     Effect.gen(function* () {
       const { accountId } = yield* CloudflareEnvironment;
       const { dotAlchemy } = yield* AlchemyContext;
       const path = yield* Path.Path;
-      return Layer.merge(
-        layerRuntime({
-          api: {
-            accountId,
-          },
-          storage: {
-            directory: path.join(dotAlchemy, "local"),
-          },
-        }),
-        layerLocalProxy(options.port ?? 0),
-      );
+      return layerRuntime({
+        api: {
+          accountId,
+        },
+        storage: {
+          directory: path.join(dotAlchemy, "local"),
+        },
+      });
     }),
   );
 
@@ -108,7 +111,49 @@ export const LocalWorkerProvider = () =>
       const runtime = yield* Runtime;
       const stack = yield* Stack;
       const path = yield* Path.Path;
-      const localProxy = yield* LocalProxy.LocalProxy;
+      const workerProxy = yield* WorkerProxy.WorkerProxy;
+      const proxyInstances = new Map<
+        string,
+        {
+          serverOptions: WorkerConfig["dev"];
+          instance: WorkerProxy.WorkerProxyInstance;
+          scope: Scope.Closeable;
+        }
+      >();
+
+      const startProxy = Effect.fn(function* (
+        id: string,
+        serverOptions: WorkerConfig["dev"],
+      ) {
+        const scope = yield* Scope.fork(rootScope);
+        const instance = yield* workerProxy
+          .serve(serverOptions)
+          .pipe(Scope.provide(scope));
+        proxyInstances.set(id, { serverOptions, instance, scope });
+        return instance;
+      });
+
+      const stopProxy = Effect.fn(function* (id: string) {
+        const existing = proxyInstances.get(id);
+        if (existing) {
+          yield* Scope.close(existing.scope, Exit.void);
+          proxyInstances.delete(id);
+        }
+      });
+
+      const maybeStartProxy = Effect.fn(function* (
+        id: string,
+        serverOptions: WorkerConfig["dev"],
+      ) {
+        const existing = proxyInstances.get(id);
+        if (existing) {
+          if (Equal.equals(existing.serverOptions, serverOptions)) {
+            return existing.instance;
+          }
+          yield* stopProxy(id);
+        }
+        return yield* startProxy(id, serverOptions);
+      });
 
       const toRuntimeModules = Effect.fn(function* (
         bundle: Bundle.BundleOutput,
@@ -150,9 +195,10 @@ export const LocalWorkerProvider = () =>
       const serveScoped = Effect.fnUntraced(function* (
         worker: WorkerConfig,
         bundle: Bundle.BundleOutput,
+        proxy: WorkerProxy.WorkerProxyInstance,
       ) {
         const scope = yield* Effect.scope.pipe(Effect.flatMap(Scope.fork));
-        const address = yield* runtime
+        const url = yield* runtime
           .start({
             name: worker.name,
             compatibilityDate: worker.compatibility.date,
@@ -171,28 +217,34 @@ export const LocalWorkerProvider = () =>
           yield* Effect.forkDetach(Scope.close(previous, Exit.void));
         }
         workerdScopes.set(worker.id, scope);
-        yield* localProxy.setLocalAddress(worker.id, address);
-        return address;
+        yield* proxy.set(url);
+        return url;
       });
 
       const buildConfig = Effect.fn(function* ({
         id,
         props,
         bindings,
-        instanceId,
       }: {
         id: string;
         props: WorkerProps;
         bindings: ResourceBinding<Worker["Binding"]>[];
-        instanceId: string;
       }) {
-        const name = yield* createWorkerName(id, props.name).pipe(
-          Effect.provideService(Stack, stack),
-          Effect.provideService(Stage, stack.stage),
-          Effect.provideService(InstanceId, instanceId),
-        );
+        const name = yield* createWorkerName(id, props.name);
         const compatibility = getCompatibility(props);
-        const workerBindings: BindingHook<BindingServices>[] = [];
+        const workerBindings: BindingHook<BindingServices>[] = [
+          Text.local("ALCHEMY_PHASE", "runtime"),
+          Text.local("ALCHEMY_STACK_NAME", stack.name),
+          Text.local("ALCHEMY_STAGE", stack.stage),
+          ...Object.entries(props.env ?? {}).map(([key, value]) => {
+            const unredacted = Redacted.isRedacted(value)
+              ? Redacted.value(value)
+              : value;
+            return typeof unredacted === "string"
+              ? Text.local(key, unredacted)
+              : Json.local(key, unredacted);
+          }),
+        ];
         const durableObjectNamespaces: Record<string, string> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
         for (const { data } of bindings) {
@@ -227,16 +279,6 @@ export const LocalWorkerProvider = () =>
             }
           }
         }
-        for (const [key, value] of Object.entries(props.env ?? {})) {
-          if (value === undefined) continue;
-          if (Redacted.isRedacted(value)) {
-            workerBindings.push(Text.binding(key, Redacted.value(value)));
-          } else if (typeof value === "string") {
-            workerBindings.push(Text.binding(key, value));
-          } else {
-            workerBindings.push(Json.binding(key, value));
-          }
-        }
         return {
           id,
           name,
@@ -244,6 +286,7 @@ export const LocalWorkerProvider = () =>
           workerBindings,
           durableObjectNamespaces,
           hyperdrives,
+          env: props.env,
           bundleOptions: {
             id,
             main: props.main!,
@@ -255,20 +298,30 @@ export const LocalWorkerProvider = () =>
             extraOptions: props.build,
           } satisfies WorkerBundleOptions,
           assets: props.assets,
+          dev: {
+            ...props.dev,
+            // This is the default. Vite and cloudflare-runtime will retry if unavailable, unless `strictPort` is true.
+            port: props.dev?.port ?? 1337,
+          },
         };
       });
 
       type WorkerConfig = Effect.Success<ReturnType<typeof buildConfig>>;
 
-      const runServer = Effect.fnUntraced(function* (worker: WorkerConfig) {
+      const runWorker = Effect.fnUntraced(function* (worker: WorkerConfig) {
         let start = Date.now();
         let status: "start" | "update" = "start";
+        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
         yield* bundler.watch(worker.bundleOptions).pipe(
           Stream.tap((event) => {
             if (event._tag === "Start") {
               start = Date.now();
               if (status === "update") {
-                return Effect.log(`[${worker.id}] Rebuilding`);
+                return Effect.all([
+                  Effect.log(`[${worker.id}] Rebuilding`),
+                  // This tells the proxy to queue requests until the updated worker is ready.
+                  Effect.forkChild(proxy.unset()),
+                ]);
               }
             } else if (event._tag === "Error") {
               return Effect.logError(
@@ -284,7 +337,7 @@ export const LocalWorkerProvider = () =>
               : Result.failVoid,
           ),
           Stream.mapEffect((bundle) =>
-            serveScoped(worker, bundle).pipe(
+            serveScoped(worker, bundle, proxy).pipe(
               Effect.exit,
               Effect.tap((exit) => {
                 if (exit._tag === "Success") {
@@ -305,6 +358,36 @@ export const LocalWorkerProvider = () =>
           Stream.runDrain,
           Effect.forkScoped,
         );
+        return proxy.url;
+      });
+
+      const runVite = Effect.fnUntraced(function* (
+        worker: WorkerConfig,
+        rootDir: string | undefined,
+      ) {
+        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        yield* proxy.unset().pipe(Effect.forkChild);
+        const devServer = yield* Vite.viteDev(
+          rootDir,
+          worker.env ?? {},
+          {
+            compatibilityDate: worker.compatibility.date,
+            compatibilityFlags: worker.compatibility.flags,
+            worker: {
+              name: worker.name,
+              bindings: worker.workerBindings,
+              durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
+                worker.durableObjectNamespaces,
+              ),
+              hyperdrives: worker.hyperdrives,
+              assets: toRuntimeAssets(worker.assets),
+            },
+            context,
+          },
+          { port: 0 },
+        );
+        yield* proxy.set(new URL(devServer.resolvedUrls!.local[0]));
+        return proxy.url;
       });
 
       const rootScope = yield* Effect.scope;
@@ -327,35 +410,12 @@ export const LocalWorkerProvider = () =>
         id: string;
         props: WorkerProps;
         bindings: ResourceBinding<Worker["Binding"]>[];
-        instanceId: string;
       }) {
-        const { id, props, bindings } = options;
+        const { props, bindings } = options;
         const config = yield* buildConfig(options);
-        const url = yield* localProxy.registerWorker(id);
-        if (props.vite) {
-          const devServer = yield* Vite.viteDev(
-            props.vite.rootDir,
-            props.env ?? {},
-            {
-              compatibilityDate: config.compatibility.date,
-              compatibilityFlags: config.compatibility.flags,
-              worker: {
-                name: config.name,
-                bindings: config.workerBindings,
-                durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
-                  config.durableObjectNamespaces,
-                ),
-                hyperdrives: config.hyperdrives,
-                assets: toRuntimeAssets(config.assets),
-              },
-              context,
-            },
-          );
-          const localAddress = devServer.resolvedUrls!.local[0].slice(0, -1);
-          yield* localProxy.setLocalAddress(id, localAddress);
-        } else {
-          yield* runServer(config);
-        }
+        const url = yield* (
+          props.vite ? runVite(config, props.vite.rootDir) : runWorker(config)
+        ).pipe(Effect.map((url) => url.toString()));
         return {
           workerId: config.name,
           workerName: config.name,
@@ -363,7 +423,7 @@ export const LocalWorkerProvider = () =>
           url,
           tags: [],
           durableObjectNamespaces: config.durableObjectNamespaces,
-          domains: [],
+          domains: [url],
           crons: Array.from(
             new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
           ),
@@ -372,21 +432,25 @@ export const LocalWorkerProvider = () =>
       });
 
       return {
-        diff: Effect.fn(function* ({ id, news, newBindings, instanceId }) {
+        diff: Effect.fn(function* ({ id, news, newBindings, output }) {
+          if (!isResolved(news) || !isResolved(newBindings)) return undefined;
           const options = {
             id,
             props: news,
             bindings: newBindings,
-            instanceId,
           };
           const hash = Hash.structure(options);
+          if (instances.get(options.id)?.hash === hash) {
+            return { action: "noop" };
+          }
+          const name = yield* createWorkerName(id, news.name);
           return {
-            action:
-              instances.get(options.id)?.hash === hash ? "noop" : "update",
+            action: "update",
+            stables: output?.workerName === name ? ["workerName"] : undefined,
           };
         }),
-        reconcile: Effect.fn(function* ({ id, news, bindings, instanceId }) {
-          const options = { id, props: news, bindings, instanceId };
+        reconcile: Effect.fn(function* ({ id, news, bindings }) {
+          const options = { id, props: news, bindings };
           const hash = Hash.structure(options);
           const existing = instances.get(options.id);
           if (existing) {
@@ -441,69 +505,86 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "ai":
       return Ai.remote(b.name);
     case "analytics_engine":
-      return yield* unsupported();
+      return AnalyticsEngine.local(b.name, b.dataset);
     case "artifacts":
-      return Artifacts.binding(b.name, b.namespace);
+      return Artifacts.remote(b.name, b.namespace);
     case "assets":
-      return Assets.binding(b.name);
+      return Assets.local(b.name);
     case "browser":
-      return Browser.binding(b.name);
+      return Browser.remote(b.name);
     case "d1":
-      return D1.remote(b.name, b.id);
+      return D1.remote(b.name, b.databaseId);
     case "data_blob":
-      return Data.binding(b.name, Buffer.from(b.part));
+      return Data.local(b.name, Buffer.from(b.part));
     case "dispatch_namespace":
-      return yield* unsupported();
+      return DispatchNamespace.remote({
+        binding: b.name,
+        namespace: b.namespace,
+      });
     case "durable_object_namespace":
       return DurableObjectNamespace.local({
-        name: b.name,
-        className: b.className!,
+        binding: b.name,
+        className: b.className,
         scriptName: b.scriptName,
       });
     case "hyperdrive":
-      return Hyperdrive.binding(b.name, b.id);
+      return Hyperdrive.local(b.name, b.id);
     case "images":
       return Images.remote(b.name);
     case "inherit":
       return yield* unsupported();
     case "json":
-      return Json.binding(b.name, b.json);
+      return Json.local(b.name, b.json);
     case "kv_namespace":
       return KvNamespace.remote(b.name, b.namespaceId);
     case "mtls_certificate":
-      return yield* unsupported();
+      return MtlsCertificate.remote(b.name, b.certificateId);
     case "pipelines":
-      return yield* unsupported();
+      return Pipelines.remote(b.name, b.pipeline);
     case "plain_text":
-      return Text.binding(b.name, b.text);
+      return Text.local(b.name, b.text);
     case "queue":
       return yield* unsupported();
     case "r2_bucket":
       return R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
     case "ratelimit":
-      return yield* unsupported();
+      return RateLimit.local({
+        binding: b.name,
+        simple: b.simple,
+        namespaceId: b.namespaceId,
+      });
     case "secret_key":
       return yield* unsupported();
     case "secret_text":
-      return Text.binding(b.name, b.text);
+      return Text.local(b.name, b.text);
     case "secrets_store_secret":
       return yield* unsupported();
     case "send_email":
-      return yield* unsupported();
+      return SendEmail.remote({
+        binding: b.name,
+        destinationAddress: b.destinationAddress,
+        allowedDestinationAddresses: b.allowedDestinationAddresses,
+        allowedSenderAddresses: b.allowedSenderAddresses,
+      });
     case "service":
-      return Service.local({ name: b.name, scriptName: b.service });
+      return Service.local({ binding: b.name, scriptName: b.service });
     case "text_blob":
-      return Data.binding(b.name, Buffer.from(b.part));
+      return Data.local(b.name, Buffer.from(b.part));
     case "vectorize":
-      return yield* unsupported();
+      return Vectorize.remote(b.name, b.indexName);
     case "version_metadata":
-      return VersionMetadata.binding(b.name);
+      return VersionMetadata.local(b.name);
     case "wasm_module":
-      return WasmModule.binding(b.name, Buffer.from(b.part));
+      return WasmModule.local(b.name, Buffer.from(b.part));
     case "worker_loader":
-      return WorkerLoader.binding(b.name);
+      return WorkerLoader.local(b.name);
     case "workflow":
-      return yield* unsupported();
+      return Workflows.local({
+        binding: b.name,
+        workflowName: b.workflowName,
+        className: b.className,
+        scriptName: b.scriptName,
+      });
     default:
       return yield* unsupported();
   }
@@ -522,8 +603,19 @@ const toRuntimeAssets = (
     directory: "directory" in assets ? assets.directory : assets.path,
     headers: assets.config?.headers,
     redirects: assets.config?.redirects,
-    htmlHandling: assets.config?.htmlHandling,
-    notFoundHandling: assets.config?.notFoundHandling,
+    // Distilled widened generated string enums to open unions (`string & {}`);
+    // the API only ever returns the known variants here.
+    htmlHandling: assets.config?.htmlHandling as
+      | "none"
+      | "auto-trailing-slash"
+      | "force-trailing-slash"
+      | "drop-trailing-slash"
+      | undefined,
+    notFoundHandling: assets.config?.notFoundHandling as
+      | "none"
+      | "404-page"
+      | "single-page-application"
+      | undefined,
     runWorkerFirst: assets.config?.runWorkerFirst,
     serveDirectly: assets.config?.serveDirectly,
   };

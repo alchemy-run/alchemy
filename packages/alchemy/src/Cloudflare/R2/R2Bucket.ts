@@ -9,8 +9,11 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type * as Cloudflare from "../Providers.ts";
-import * as Zone from "../Zone.ts";
+import * as Zone from "../Zone/index.ts";
 import { R2BucketBinding } from "./R2BucketBinding.ts";
+
+export const isR2Bucket = (value: unknown): value is R2Bucket =>
+  typeof value === "object" && (value as any)?.Type === "Cloudflare.R2Bucket";
 
 export type R2BucketName = string;
 
@@ -520,6 +523,10 @@ export const R2BucketProvider = () =>
                       while: isNoSuchBucket,
                       schedule: r2BucketEndpointConsistencySchedule,
                     }),
+                    Effect.retry({
+                      while: isDomainInUseConflict,
+                      schedule: r2CustomDomainConflictSchedule,
+                    }),
                   );
                   return toCustomDomainAttributes({ ...created, zoneId });
                 }
@@ -677,8 +684,11 @@ export const R2BucketProvider = () =>
 
           const attrs = {
             bucketName: observed.name!,
-            storageClass: observed.storageClass ?? "Standard",
-            jurisdiction: observed.jurisdiction ?? "default",
+            // Distilled widened generated string enums to open unions.
+            storageClass: (observed.storageClass ??
+              "Standard") as R2Bucket.StorageClass,
+            jurisdiction: (observed.jurisdiction ??
+              "default") as R2Bucket.Jurisdiction,
             location: normalizeLocation(observed.location),
             accountId: acct,
           };
@@ -731,8 +741,11 @@ export const R2BucketProvider = () =>
           }).pipe(
             Effect.map((bucket) => ({
               bucketName: bucket.name!,
-              storageClass: bucket.storageClass ?? "Standard",
-              jurisdiction: bucket.jurisdiction ?? "default",
+              // Distilled widened generated string enums to open unions.
+              storageClass: (bucket.storageClass ??
+                "Standard") as R2Bucket.StorageClass,
+              jurisdiction: (bucket.jurisdiction ??
+                "default") as R2Bucket.Jurisdiction,
               location: normalizeLocation(bucket.location),
               accountId: acct,
               domains: output?.domains ?? [],
@@ -753,13 +766,15 @@ const r2BucketEndpointConsistencySchedule = Schedule.exponential(100).pipe(
   Schedule.both(Schedule.recurs(5)),
 );
 
+// Distilled widened generated string enums to open unions (`string & {}`); the
+// API only ever returns the known variants, narrowed in `toCustomDomainAttributes`.
 type CustomDomainResponse = {
   domain: string;
   zoneId?: string | null;
   enabled?: boolean | null;
   ciphers?: string[] | null;
-  minTLS?: "1.0" | "1.1" | "1.2" | "1.3" | null;
-  status?: R2Bucket.CustomDomain["status"];
+  minTLS?: string | null;
+  status?: { ownership: string; ssl: string } | null;
 };
 
 const toCustomDomainAttributes = (
@@ -769,8 +784,8 @@ const toCustomDomainAttributes = (
   zoneId: domain.zoneId ?? undefined,
   enabled: domain.enabled ?? true,
   ciphers: domain.ciphers ?? undefined,
-  minTLS: domain.minTLS ?? undefined,
-  status: domain.status,
+  minTLS: (domain.minTLS ?? undefined) as R2Bucket.CustomDomain["minTLS"],
+  status: (domain.status ?? undefined) as R2Bucket.CustomDomain["status"],
 });
 
 const sameCustomDomainConfig = (
@@ -842,3 +857,22 @@ const isNoSuchBucket = (error: unknown): boolean =>
   error !== null &&
   "_tag" in error &&
   (error as { _tag: unknown })._tag === "NoSuchBucket";
+
+// Cloudflare keys a custom domain to a single bucket at the zone level. After a
+// domain is deleted, re-attaching the same hostname can transiently 409 with
+// "Domain already in use" until the prior association is fully released. Treat
+// that narrow conflict as eventual consistency and retry it on create.
+const isDomainInUseConflict = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  "_tag" in error &&
+  (error as { _tag: unknown })._tag === "Conflict" &&
+  "message" in error &&
+  typeof (error as { message: unknown }).message === "string" &&
+  (error as { message: string }).message.toLowerCase().includes("in use");
+
+// Releasing a custom domain after delete can lag a few seconds, so give the
+// conflict a longer, bounded budget than the bucket-endpoint lag above.
+const r2CustomDomainConflictSchedule = Schedule.spaced("2 seconds").pipe(
+  Schedule.both(Schedule.recurs(8)),
+);

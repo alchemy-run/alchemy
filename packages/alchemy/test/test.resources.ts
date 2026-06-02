@@ -1,11 +1,12 @@
 import { Artifacts } from "@/Artifacts";
 import { isResolved } from "@/Diff.ts";
 import * as Provider from "@/Provider.ts";
-import { Resource } from "@/Resource";
+import { Resource, type ResourceBinding } from "@/Resource";
 import * as State from "@/State/index";
 import { isUnknown } from "@/Util/unknown";
 import * as Context from "effect/Context";
 import { Data } from "effect";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -134,8 +135,14 @@ export const bindingTargetProvider = () =>
     BindingTarget,
     Effect.gen(function* () {
       return {
-        diff: Effect.fn(function* ({ news = {}, olds = {} }) {
+        diff: Effect.fn(function* ({ id, news = {}, olds = {}, newBindings }) {
           if (!isResolved(news)) return undefined;
+          const hooks = Option.getOrUndefined(
+            yield* Effect.serviceOption(TestResourceHooks),
+          );
+          if (hooks?.diff && isResolved(newBindings)) {
+            yield* hooks.diff(id, newBindings as ResourceBinding[]);
+          }
           const n = news as BindingTargetProps;
           const o = olds as BindingTargetProps;
           if (n.replaceString !== o.replaceString) {
@@ -324,6 +331,15 @@ export class TestResourceHooks extends Context.Service<
     create?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
     update?: (id: string, props: TestResourceProps) => Effect.Effect<void, any>;
     delete?: (id: string) => Effect.Effect<void, any>;
+    /**
+     * If provided, invoked from a binding-aware provider's `diff` with the
+     * exact `newBindings` array the engine handed it. Lets a test assert what
+     * the plan stage observes (e.g. that duplicates were collapsed by sid).
+     */
+    diff?: (
+      id: string,
+      newBindings: ResourceBinding[],
+    ) => Effect.Effect<void, any>;
     /**
      * If provided, the read hook is invoked for the resource's `read` lifecycle
      * operation. Return:
@@ -537,6 +553,51 @@ export const staticStablesResourceProvider = () =>
     }),
   });
 
+// KindStablesResource - reproduces providers whose stable output attributes
+// include a `kind` field, such as PlanetScale databases.
+
+export type KindStablesResourceProps = {
+  value: string;
+  upstream?: KindStablesResource;
+};
+
+export interface KindStablesResource extends Resource<
+  "Test.KindStablesResource",
+  KindStablesResourceProps,
+  {
+    kind: "postgresql";
+    value: string;
+    upstreamKind: "postgresql" | undefined;
+  }
+> {}
+
+export const KindStablesResource = Resource<KindStablesResource>(
+  "Test.KindStablesResource",
+);
+
+export const kindStablesResourceProvider = () =>
+  Provider.succeed(KindStablesResource, {
+    stables: ["kind"],
+    diff: Effect.fn(function* ({ news, olds }) {
+      if (!isResolved(news)) return undefined;
+      if (news.value !== olds?.value) {
+        return { action: "update" };
+      }
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ news }) {
+      const upstream = news.upstream as
+        | KindStablesResource["Attributes"]
+        | undefined;
+      return {
+        kind: "postgresql",
+        value: news.value,
+        upstreamKind: upstream?.kind,
+      };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 export type PhasedTargetProps = {
   desired: string;
   replaceKey?: string;
@@ -671,6 +732,50 @@ export const noPrecreateBindingTargetProvider = () =>
     delete: Effect.fn(function* () {}),
   });
 
+// DurationResource — exercises Duration round-tripping through state.
+// Input Duration must arrive at reconcile as a real Duration object (so the
+// resolver doesn't shred its prototype); output Duration must re-hydrate from
+// state on a subsequent deploy as a real Duration object too.
+
+export type DurationResourceProps = {
+  timeout: Duration.Duration;
+};
+
+export interface DurationResource extends Resource<
+  "Test.DurationResource",
+  DurationResourceProps,
+  {
+    /** Echoes the input Duration so we can assert what reconcile observed. */
+    observedTimeout: Duration.Duration;
+    /** Authoritative Duration the provider produces; persisted to state. */
+    computedTimeout: Duration.Duration;
+  }
+> {}
+
+export const DurationResource = Resource<DurationResource>(
+  "Test.DurationResource",
+);
+
+export const durationResourceProvider = () =>
+  Provider.succeed(DurationResource, {
+    diff: Effect.fn(function* ({ news }) {
+      if (!isResolved(news)) return undefined;
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ news }) {
+      // If `news.timeout` was shredded by the resolver into a plain object,
+      // these calls would throw or produce nonsense. The test asserts the
+      // numeric output so a regression surfaces as a failed assertion.
+      const observed = news.timeout;
+      const computed = Duration.millis(Duration.toMillis(observed) + 1_000);
+      return {
+        observedTimeout: observed,
+        computedTimeout: computed,
+      };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 // Layers
 export const TestLayers = () =>
   Layer.mergeAll(
@@ -682,8 +787,10 @@ export const TestLayers = () =>
     artifactProbeProvider(),
     testResourceProvider(),
     staticStablesResourceProvider(),
+    kindStablesResourceProvider(),
     phasedTargetProvider(),
     noPrecreateBindingTargetProvider(),
+    durationResourceProvider(),
   );
 
 export const InMemoryTestLayers = () =>

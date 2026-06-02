@@ -135,7 +135,7 @@ describe("AWS.SNS.Topic", () => {
 
         // Wipe state — the topic stays in SNS.
         yield* Effect.gen(function* () {
-          const state = yield* State;
+          const state = yield* yield* State;
           yield* state.delete({
             stack: stack.name,
             stage: "test",
@@ -173,7 +173,7 @@ describe("AWS.SNS.Topic", () => {
         );
 
         yield* Effect.gen(function* () {
-          const state = yield* State;
+          const state = yield* yield* State;
           yield* state.delete({
             stack: stack.name,
             stage: "test",

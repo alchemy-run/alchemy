@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { SingleShotGen } from "effect/Utils";
+import type { Input } from "./Input.ts";
 import * as Namespace from "./Namespace.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import { tryFindProviderByType } from "./Provider.ts";
@@ -42,7 +43,10 @@ type BindParameters<
   Parameters extends any[],
   Req = never,
 > = Parameters extends [infer First, ...infer Rest]
-  ? [First | Effect.Effect<First, never, Req>, ...BindParameters<Rest, Req>]
+  ? [
+      Input<First> | Effect.Effect<First, never, Req>,
+      ...BindParameters<Rest, Req>,
+    ]
   : [];
 
 /**

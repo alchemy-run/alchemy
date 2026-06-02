@@ -1,9 +1,16 @@
+import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import type { Scope } from "effect/Scope";
+import * as Stream from "effect/Stream";
+import { InstanceId } from "../InstanceId.ts";
 import type { Platform } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
 import type { ResourceClass, ResourceLike } from "../Resource.ts";
+import { Stack } from "../Stack.ts";
+import { Stage } from "../Stage.ts";
 import { RpcProviderProxy } from "./RpcProviderProxy.ts";
 
 /**
@@ -69,9 +76,46 @@ export const effect = <
     cls,
     Effect.gen(function* () {
       const client = yield* Effect.serviceOption(RpcProviderProxy);
-      if (client._tag === "None") return yield* eff;
+      const stack = yield* Stack;
+
+      if (client._tag === "None") {
+        const provider = yield* eff;
+        return new Proxy(provider, {
+          get: (target, prop) => {
+            const value = (target as any)[prop];
+            if (!Predicate.isFunction(value)) return value;
+            return (...args: any[]) => {
+              const result = value(...args);
+              const services = Layer.mergeAll(
+                layerFallback(Stack, stack),
+                layerFallback(Stage, stack.stage),
+                Predicate.hasProperty(args[0], "instanceId") &&
+                  Predicate.isString(args[0].instanceId)
+                  ? layerFallback(InstanceId, args[0].instanceId)
+                  : Layer.empty,
+              );
+              return result.pipe(
+                Stream.isStream(result)
+                  ? Stream.provide(services)
+                  : Effect.provide(services),
+              );
+            };
+          },
+        });
+      }
       return yield* client.value.get(serverEntryUrl, cls.Type);
     }),
+  );
+
+const layerFallback = <I, S>(
+  service: Context.Key<I, S>,
+  defaultValue: NoInfer<S>,
+) =>
+  Layer.effect(
+    service,
+    Effect.serviceOption(service).pipe(
+      Effect.map(Option.getOrElse(() => defaultValue)),
+    ),
   );
 
 /**

@@ -11,7 +11,7 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-describe("AWS.Kinesis.Stream", () => {
+describe.skipIf(!!process.env.NO_SLOW_TESTS)("AWS.Kinesis.Stream", () => {
   test.provider(
     "create and delete stream with default props",
     (stack) =>
@@ -570,7 +570,7 @@ describe("AWS.Kinesis.Stream", () => {
 
         // Wipe state — the stream stays in Kinesis.
         yield* Effect.gen(function* () {
-          const state = yield* State;
+          const state = yield* yield* State;
           yield* state.delete({
             stack: stack.name,
             stage: "test",
@@ -609,7 +609,7 @@ describe("AWS.Kinesis.Stream", () => {
         );
 
         yield* Effect.gen(function* () {
-          const state = yield* State;
+          const state = yield* yield* State;
           yield* state.delete({
             stack: stack.name,
             stage: "test",

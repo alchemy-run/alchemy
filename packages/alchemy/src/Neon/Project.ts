@@ -136,7 +136,7 @@ const findProjectByName = (name: string) =>
   Effect.gen(function* () {
     const matches: ListProjectsOutput["projects"][number][] = [];
     let cursor: string | undefined;
-    do {
+    while (true) {
       const page = yield* listProjects({
         search: name,
         ...(cursor !== undefined ? { cursor } : {}),
@@ -144,8 +144,21 @@ const findProjectByName = (name: string) =>
       for (const p of page.projects) {
         if (p.name === name) matches.push(p);
       }
-      cursor = page.pagination?.cursor;
-    } while (cursor);
+      const nextCursor = page.pagination?.cursor;
+      // Neon returns a `pagination.cursor` on every response — it's the
+      // `created_at` of the last row, not a "has next page" flag — so we
+      // can't loop on cursor presence alone or we spin forever re-fetching
+      // empty/identical pages. Stop once a page comes back empty or the
+      // cursor stops advancing.
+      if (
+        page.projects.length === 0 ||
+        nextCursor === undefined ||
+        nextCursor === cursor
+      ) {
+        break;
+      }
+      cursor = nextCursor;
+    }
     return matches;
   });
 

@@ -40,7 +40,6 @@ const samplePayload = (
   serverEntryUrl,
   alchemyContext: {
     dotAlchemy: "/tmp/.alchemy",
-    updateStateStore: false,
     dev: true,
     adopt: false,
   },

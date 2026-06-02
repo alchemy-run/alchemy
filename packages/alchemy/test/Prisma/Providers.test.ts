@@ -9,7 +9,6 @@ import * as Redacted from "effect/Redacted";
 
 const devAlchemyContext = Layer.succeed(AlchemyContext, {
   dotAlchemy: ".alchemy-test",
-  updateStateStore: false,
   dev: true,
   adopt: false,
 });
@@ -42,6 +41,7 @@ describe("Prisma providers", () => {
         Prisma.Compute.Type,
         Prisma.ComputeService.Type,
         Prisma.ComputeVersion.Type,
+        Prisma.CustomDomain.Type,
         Prisma.EnvironmentVariable.Type,
         Prisma.SourceRepository.Type,
       ];
@@ -53,6 +53,7 @@ describe("Prisma providers", () => {
         [Prisma.Compute.Type, ["computeServiceId"]],
         [Prisma.ComputeService.Type, ["computeServiceId"]],
         [Prisma.ComputeVersion.Type, ["computeVersionId"]],
+        [Prisma.CustomDomain.Type, ["customDomainId"]],
         [Prisma.EnvironmentVariable.Type, ["environmentVariableId"]],
         [Prisma.SourceRepository.Type, ["sourceRepositoryId"]],
       ]);

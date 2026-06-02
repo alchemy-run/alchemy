@@ -2,6 +2,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -15,9 +16,13 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   // dev: true,
 });
 
-const stack = beforeAll(deploy(Stack));
+// This stack deploys a Container (Sandbox) whose image build + push can take
+// well over the default 120s hook budget, so give deploy/destroy more room.
+const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
 
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
+  timeout: 600_000,
+});
 
 test(
   "integ",
@@ -126,7 +131,7 @@ test(
     // unwraps `Redacted.value(secret)` and embeds it in the returned
     // `processed` payload.
     const output = lastStatus!.output as { secret?: string } | undefined;
-    expect(output?.secret).toBe(WORKFLOW_SECRET_VALUE);
+    expect(output?.secret).toBe(Redacted.value(WORKFLOW_SECRET_VALUE));
   }),
   { timeout: 120_000 },
 );

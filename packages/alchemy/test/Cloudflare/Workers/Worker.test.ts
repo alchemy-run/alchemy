@@ -10,13 +10,13 @@ import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import {
   expectWorkerExists,
+  expectWorkersDevPreviews,
   expectWorkersDevSubdomain,
   findWorker,
   getWorkerTags,
@@ -505,7 +505,7 @@ describe.concurrent("Cloudflare.Worker", () => {
         // Cloudflare. From the next deploy's perspective this looks like a
         // fresh state store that has never seen this resource.
         yield* Effect.gen(function* () {
-          const state = yield* State;
+          const state = yield* yield* State;
           yield* state.delete({
             stack: stack.name,
             stage: "test",
@@ -531,7 +531,7 @@ describe.concurrent("Cloudflare.Worker", () => {
         expect(adopted.workerName).toEqual(physicalName);
 
         const persisted = yield* Effect.gen(function* () {
-          const state = yield* State;
+          const state = yield* yield* State;
           return yield* state.get({
             stack: stack.name,
             stage: "test",
@@ -578,7 +578,7 @@ describe.concurrent("Cloudflare.Worker", () => {
 
       // Wipe state for the "Original" entry; the worker stays on Cloudflare.
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",
@@ -716,49 +716,148 @@ describe.concurrent("Cloudflare.Worker", () => {
       }).pipe(logLevel),
   );
 
-  // Cloudflare supports `json` env bindings — number, boolean, array,
-  // object — that arrive in the worker as the parsed JS value rather
-  // than a string. Redacted strings still go via `secret_text`.
-  test.provider("env supports non-string values via json bindings", (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+  // Drift regression: if something external (a previous failed deploy,
+  // a Cloudflare dashboard toggle, the bootstrap path in `loginWithCloudflare`)
+  // leaves the workers.dev subdomain in `enabled: true, previewsEnabled: false`,
+  // a redeploy must observe `previewsEnabled` and flip it back on. The
+  // pre-fix reconciler diffed only `enabled` against desired, so it
+  // skipped the API call and let the drift persist.
+  test.provider(
+    "redeploy re-enables previewsEnabled when externally disabled",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const worker = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Worker("EnvJsonWorker", {
-            main: pathe.resolve(import.meta.dirname, "fixtures/env-worker.ts"),
-            url: true,
-            subdomain: { enabled: true, previewsEnabled: true },
-            compatibility: { date: "2024-01-01" },
-            env: {
-              STR: "hello",
-              NUM: 42,
-              BOOL: true,
-              OBJ: { nested: { value: "ok" }, count: 7 },
-              ARR: [1, 2, 3],
-              SECRET: Redacted.make("shh"),
-            },
-          });
-        }),
-      );
+        // Deploy with different compatibility dates to force the update.
+        const deploy = (date: string) =>
+          stack.deploy(
+            Cloudflare.Worker("SubdomainPreviewsDriftWorker", {
+              main,
+              compatibility: { date },
+            }),
+          );
 
-      expect(worker.url).toBeDefined();
-      const body = yield* expectUrlContains(worker.url!, '"STR":"hello"', {
-        timeout: "60 seconds",
-        label: "env-worker response",
-      });
-      expect(JSON.parse(body)).toEqual({
-        STR: "hello",
-        NUM: 42,
-        BOOL: true,
-        OBJ: { nested: { value: "ok" }, count: 7 },
-        ARR: [1, 2, 3],
-      });
+        const v1 = yield* deploy("2026-01-01");
+        yield* expectWorkersDevPreviews(v1.workerName, accountId, {
+          enabled: true,
+          previewsEnabled: true,
+        });
 
-      yield* stack.destroy();
-      yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
-    }).pipe(logLevel),
+        // Simulate external drift: leave `enabled: true` but turn
+        // `previewsEnabled` off out-of-band.
+        yield* workers.createScriptSubdomain({
+          accountId,
+          scriptName: v1.workerName,
+          enabled: true,
+          previewsEnabled: false,
+        });
+        const drifted = yield* workers.getScriptSubdomain({
+          accountId,
+          scriptName: v1.workerName,
+        });
+        expect(drifted).toEqual({ enabled: true, previewsEnabled: false });
+
+        const v2 = yield* deploy("2026-01-02");
+        expect(v2.workerName).toEqual(v1.workerName);
+        yield* expectWorkersDevPreviews(v2.workerName, accountId, {
+          enabled: true,
+          previewsEnabled: true,
+        });
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+      }).pipe(logLevel),
+  );
+
+  // `domains` should reflect the workers.dev URL when the subdomain is
+  // enabled and be empty when it isn't. `worker.url` is just `domains[0]`,
+  // so the two must stay in lockstep across deploys.
+  test.provider(
+    "domains reflects the workers.dev subdomain and tracks url",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const deploy = (url: boolean) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Worker("DomainsWorker", {
+                main,
+                url,
+                compatibility: { date: "2024-01-01" },
+              });
+            }),
+          );
+
+        const enabled = yield* deploy(true);
+        expect(enabled.domains).toHaveLength(1);
+        expect(enabled.domains[0]).toMatch(/\.workers\.dev$/);
+        expect(enabled.url).toEqual(enabled.domains[0]);
+
+        const disabled = yield* deploy(false);
+        expect(disabled.domains).toEqual([]);
+        expect(disabled.url).toBeUndefined();
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(enabled.workerName, accountId);
+      }).pipe(logLevel),
+  );
+
+  // When custom domains are attached, they come first in `domains` (in
+  // the order the user provided them), followed by the workers.dev URL
+  // when the subdomain is enabled. `worker.url` is `domains[0]`, so the
+  // custom domain wins.
+  const customDomainZone = process.env.CLOUDFLARE_TEST_WORKER_DOMAIN_ZONE_NAME;
+  test.provider.skipIf(!customDomainZone)(
+    "domains puts custom domains before workers.dev and url is the first",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* CloudflareEnvironment;
+        const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
+        const domainA = `alchemy-worker-a-${suffix}.${customDomainZone}`;
+        const domainB = `alchemy-worker-b-${suffix}.${customDomainZone}`;
+
+        yield* stack.destroy();
+
+        const worker = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("CustomDomainWorker", {
+              main,
+              domain: [domainA, domainB],
+              compatibility: { date: "2024-01-01" },
+            });
+          }),
+        );
+
+        expect(worker.domains.slice(0, 2)).toEqual([
+          `https://${domainA}`,
+          `https://${domainB}`,
+        ]);
+        expect(worker.domains[2]).toMatch(/\.workers\.dev$/);
+        expect(worker.url).toEqual(`https://${domainA}`);
+
+        // Reorder — `domains[0]` should follow.
+        const swapped = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Worker("CustomDomainWorker", {
+              main,
+              domain: [domainB, domainA],
+              compatibility: { date: "2024-01-01" },
+            });
+          }),
+        );
+        expect(swapped.domains.slice(0, 2)).toEqual([
+          `https://${domainB}`,
+          `https://${domainA}`,
+        ]);
+        expect(swapped.url).toEqual(`https://${domainB}`);
+
+        yield* stack.destroy();
+        yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+      }).pipe(logLevel),
   );
 });

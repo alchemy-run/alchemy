@@ -120,6 +120,33 @@ export type Tunnel = Resource<
  *   ],
  * });
  * ```
+ *
+ * @section Managing Tunnels at Runtime
+ * The `Tunnel` resource manages a single, statically-declared tunnel as part of
+ * a stack. To create, read, update, or delete tunnels *on the fly* from inside
+ * a deployed Worker, bind one of the runtime tunnel clients instead. Each
+ * provisions a least-privilege {@link AccountApiToken} and injects it into the
+ * Worker:
+ *
+ * - {@link TunnelRead} — read-only (`get`, `list`, `getToken`,
+ *   `getConfiguration`); scoped to `Cloudflare Tunnel Read`.
+ * - {@link TunnelWrite} — mutating (`create`, `update`, `delete`,
+ *   `putConfiguration`); scoped to `Cloudflare Tunnel Write`.
+ * - {@link TunnelReadWrite} — the full CRUD surface; scoped to both.
+ *
+ * @example Create a tunnel on demand from a Worker
+ * ```typescript
+ * // init
+ * const tunnels = yield* Cloudflare.TunnelReadWrite.bind();
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const tunnel = yield* tunnels.create({ name: "on-demand-tunnel" });
+ *     const token = yield* tunnels.getToken(tunnel.id!);
+ *     return HttpServerResponse.json({ id: tunnel.id, token });
+ *   }),
+ * };
+ * ```
  */
 export const Tunnel = Resource<Tunnel>("Cloudflare.Tunnel");
 

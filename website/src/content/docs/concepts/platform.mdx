@@ -153,8 +153,8 @@ export default Cloudflare.Worker(
 ```
 
 **Async style** — handlers are standard `async fetch` functions.
-Bindings are passed as `bindings: { ... }` props on the resource and
-typed via `InferEnv`:
+Bindings are declared on the resource's `env` prop and typed via
+`InferEnv`:
 
 ```typescript
 // alchemy.run.ts
@@ -162,7 +162,7 @@ export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
 
 export const Worker = Cloudflare.Worker("Worker", {
   main: "./src/worker.ts",
-  bindings: { Bucket },
+  env: { Bucket },
 });
 ```
 

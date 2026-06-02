@@ -348,7 +348,7 @@ test.provider(
 
       // Wipe state — bucket stays in S3.
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",

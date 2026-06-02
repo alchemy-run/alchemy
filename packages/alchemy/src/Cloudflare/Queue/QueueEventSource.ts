@@ -1,6 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -8,6 +9,7 @@ import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import type { FunctionContext } from "../../Serverless/Function.ts";
+import * as DurationUtil from "../../Util/Duration.ts";
 import { isWorker, isWorkerEvent } from "../Workers/Worker.ts";
 import type { Queue } from "./Queue.ts";
 import { QueueConsumer } from "./QueueConsumer.ts";
@@ -25,13 +27,36 @@ export interface MessagesProps {
   maxConcurrency?: number;
   /** Maximum delivery attempts before dead-lettering. */
   maxRetries?: number;
-  /** Wait time, in ms, before flushing a partial batch. */
-  maxWaitTimeMs?: number;
-  /** Backoff, in seconds, applied to a retry. */
-  retryDelay?: number;
+  /**
+   * Wait time before flushing a partial batch. Rounded up to whole
+   * milliseconds when forwarded to Cloudflare.
+   */
+  maxWaitTime?: Duration.Input;
+  /**
+   * Backoff applied to a retry. Rounded up to whole seconds when
+   * forwarded to Cloudflare.
+   */
+  retryDelay?: Duration.Input;
   /** Optional dead-letter queue name. */
   deadLetterQueue?: string;
 }
+
+/**
+ * Convert a {@link MessagesProps} (with `Duration.Input` time fields)
+ * into the numeric settings shape Cloudflare's `QueueConsumer` API
+ * expects. `maxWaitTime` is rounded up to whole milliseconds and
+ * `retryDelay` to whole seconds.
+ *
+ * Exposed for testing and for callers that want to mirror the
+ * conversion when wiring `QueueConsumer` directly.
+ */
+export const toConsumerSettings = (props: MessagesProps) => ({
+  batchSize: props.batchSize,
+  maxConcurrency: props.maxConcurrency,
+  maxRetries: props.maxRetries,
+  maxWaitTimeMs: DurationUtil.toMillis(props.maxWaitTime),
+  retryDelay: DurationUtil.toSeconds(props.retryDelay),
+});
 
 /**
  * A single queue message handed to the subscribe handler. Mirrors
@@ -63,12 +88,15 @@ export type QueueMessage<Body = unknown> = cf.Message<Body>;
  * @example
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Duration from "effect/Duration";
  * import * as Effect from "effect/Effect";
  * import * as Stream from "effect/Stream";
  *
  * yield* Cloudflare.messages<MyEvent>(queueResource, {
  *   batchSize: 25,
  *   maxRetries: 3,
+ *   maxWaitTime: "5 seconds",
+ *   retryDelay: Duration.seconds(30),
  * }).subscribe((stream) =>
  *   Stream.runForEach(stream, (msg) =>
  *     Effect.log(`event ${msg.body.id}`),
@@ -148,7 +176,7 @@ export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.succeed(
       yield* QueueConsumer(`${queue.LogicalId}Consumer`, {
         queueId: queue.queueId,
         scriptName: host.workerName,
-        settings: props,
+        settings: toConsumerSettings(props),
         deadLetterQueue: props.deadLetterQueue,
       });
     })) as unknown as (

@@ -115,6 +115,33 @@ Cloudflare applies the consumer's `maxRetries` and `retryDelay`
 before dead-lettering. For finer control, call `msg.ack()` /
 `msg.retry()` per message inside the handler.
 
+## Tune batching and backoff
+
+`messages(queue, props)` accepts a settings object. Time fields are
+`Duration.Input` — any of these are accepted:
+
+```typescript
+maxWaitTime: Duration.seconds(5)   // a Duration value
+maxWaitTime: 5_000                 // a number of milliseconds
+maxWaitTime: "5 seconds"           // a "<number> <unit>" string
+retryDelay: "1 second"             // singular and plural units both work
+```
+
+```diff lang="typescript"
++import * as Duration from "effect/Duration";
+
+- Cloudflare.messages<QueueMessageBody>(queueResource).subscribe(
++ Cloudflare.messages<QueueMessageBody>(queueResource, {
++   batchSize: 25,
++   maxRetries: 3,
++   maxWaitTime: "5 seconds",
++   retryDelay: Duration.seconds(30),
++ }).subscribe(
+```
+
+`maxWaitTime` is rounded up to whole milliseconds and `retryDelay`
+to whole seconds when forwarded to Cloudflare.
+
 ## Provide the runtime layer
 
 `messages(...).subscribe(...)` is a `Context.Service` call —

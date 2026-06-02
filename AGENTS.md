@@ -673,7 +673,7 @@ Notes:
 - Cloudflare D1Connection — [worker fixture](./packages/alchemy/test/Cloudflare/D1/d1-worker.ts) + [test](./packages/alchemy/test/Cloudflare/D1/D1Binding.test.ts)
 - Cloudflare Workflow — [workflow fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/test-workflow.ts) + [worker fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/workflow-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/Workflow.test.ts)
 - Cloudflare Cron Trigger — [worker + DO fixture](./packages/alchemy/test/Cloudflare/Workers/fixtures/cron-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Workers/CronEventSource.test.ts) (cron handler writes to a DO; test polls a fetch route with `Effect.repeat` until the scheduled handler fires)
-- Cloudflare Images — [worker fixture](./packages/alchemy/test/Cloudflare/Images/images-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Images/Images.test.ts)
+- Cloudflare Images — [effect fixture](./packages/alchemy/test/Cloudflare/Images/fixtures/effect-worker.ts) + [async fixture](./packages/alchemy/test/Cloudflare/Images/fixtures/async-worker.ts) + [test](./packages/alchemy/test/Cloudflare/Images/Images.test.ts)
 - AWS Lambda (DynamoDB bindings) — [Lambda fixture](./packages/alchemy/test/AWS/DynamoDB/handler.ts) + [test](./packages/alchemy/test/AWS/DynamoDB/Bindings.test.ts) (one `describe("<BindingName>")` per binding, all driving the same deployed Lambda)
 
 # Spec-Driven Service Bring-Up
@@ -852,3 +852,31 @@ Example PR description (BAD — do not do this):
 ### Summary                  ← no, summary needs no heading
 Persist the user's theme...
 ```
+
+# Blog / Release Notes Conventions
+
+Release blog posts live in `website/src/content/docs/blog/` named
+`YYYY-MM-DD-beta-NN.md` (date = the release date).
+
+**Frontmatter `title` format:** `<version> - <short title>`, e.g.
+`2.0.0-beta.45 - Config & RPC Workers`. The title renders in the
+blog TOC sidebar, so the descriptive suffix must be short — a few
+words that fit neatly on one line. Lead with the version so the
+list stays sorted and scannable.
+
+Writing style (match the existing beta posts, e.g.
+[beta.41](./website/src/content/docs/blog/2026-05-20-beta-41.md),
+[beta.44](./website/src/content/docs/blog/2026-05-22-beta-44.md)):
+
+- **Lean, concise, zero-fluff.** Illustrate each new
+  feature/fix and link to the relevant docs/tutorials/guides.
+- Read each PR in the release's changelog to understand what
+  actually changed before writing.
+- Lead with the headline features (one `##` heading each, with a
+  short code snippet or `diff`), then fold the long tail into an
+  `## Also in this release` bullet list.
+- Put breaking changes in a `:::caution` callout at the top.
+- Cite PRs inline as `([#NNN](…/pull/NNN))` and credit external
+  contributors by name.
+- End with a `## Where to go next` list of doc links plus the
+  CHANGELOG and compare links.

@@ -5,12 +5,15 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { listSqlFiles, readSqlFile } from "../../Sql/SqlFile.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { cloneD1Database } from "./D1Clone.ts";
 import { importD1Database } from "./D1Import.ts";
 import { applyMigrations } from "./D1Migrations.ts";
-import { listSqlFiles, readSqlFile } from "../../Sql/SqlFile.ts";
+
+export const isD1Database = (value: unknown): value is D1Database =>
+  typeof value === "object" && (value as any)?.Type === "Cloudflare.D1Database";
 
 export type Jurisdiction = "default" | "eu" | "fedramp";
 export type PrimaryLocationHint =
@@ -329,7 +332,10 @@ export const DatabaseProvider = () =>
                 databaseId: db.uuid ?? output.databaseId,
                 databaseName: db.name ?? output.databaseName,
                 jurisdiction: output.jurisdiction,
-                readReplication: db.readReplication ?? undefined,
+                // Distilled widened generated string enums to open unions.
+                readReplication: (db.readReplication ?? undefined) as
+                  | { mode: "auto" | "disabled" }
+                  | undefined,
                 accountId: output.accountId,
                 migrationsDir: output.migrationsDir,
                 migrationsTable: output.migrationsTable,
@@ -372,7 +378,8 @@ export const DatabaseProvider = () =>
             | {
                 uuid?: string | null;
                 name?: string | null;
-                readReplication?: { mode: "auto" | "disabled" } | null;
+                // Distilled widened generated string enums to open unions.
+                readReplication?: { mode: string } | null;
               }
             | undefined;
           if (output?.databaseId) {

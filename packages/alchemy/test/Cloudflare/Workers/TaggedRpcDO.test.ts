@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Vitest";
+import { poll } from "@/Util/poll.ts";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -24,10 +25,7 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const stack = beforeAll(deploy(Stack));
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
-
-const testTimeout = 180_000;
+const testTimeout = 30_000;
 const requestTimeout = "5 seconds";
 // Fresh `*.workers.dev` URLs propagate through the edge over a few seconds —
 // the first requests routinely return 404 / 500 before the script is
@@ -80,8 +78,15 @@ const rpcClientLayer = (url: string) =>
   );
 
 // Drive a typed `RpcClient<CounterRpcs>` body against WorkerA's URL.
-// Each call gets its own scope (so the client is freed promptly) and
-// rides `readinessRetry` to absorb cold-start edge propagation.
+// Each call gets its own scope (so the client is freed promptly).
+//
+// NOTE: `withRpcA` deliberately does NOT retry the body. The bodies below
+// perform non-idempotent D1/DO increments, and a body-level retry would
+// re-apply a mutation whose server-side write already committed but whose
+// response failed transiently (the classic "expected 2 to be 1" flake).
+// Readiness is instead handled idempotently: each test runs a retried
+// `resetA`/`resetHttp` first (which also warms the edge), and the `beforeAll`
+// gate below settles propagation before any test runs.
 type RpcRequirements =
   | RpcClient.Protocol
   | RpcSerialization.RpcSerialization
@@ -89,7 +94,6 @@ type RpcRequirements =
 const withRpcA = <A, E, R>(url: string, body: Effect.Effect<A, E, R>) =>
   body.pipe(
     Effect.tapError((e) => Effect.logError("withRpcA error", e)),
-    Effect.retry(readinessRetry),
     Effect.scoped,
     Effect.provide(rpcClientLayer(url)),
   ) as Effect.Effect<A, E, Exclude<R, RpcRequirements>>;
@@ -100,6 +104,8 @@ const resetHttp = (url: string, key: string) =>
     yield* requestUntilReady(client.post(`${url}/reset`));
   });
 
+// `reset` is idempotent, so it's safe to retry — this doubles as the
+// per-test readiness gate for WorkerA's RPC edge.
 const resetA = (url: string, key: string) =>
   withRpcA(
     url,
@@ -107,7 +113,28 @@ const resetA = (url: string, key: string) =>
       const c = yield* RpcClient.make(CounterRpcs);
       yield* c.reset({ key });
     }),
-  );
+  ).pipe(Effect.retry(readinessRetry));
+
+// Gate the deploy on all three workers' edges being resolvable (via the
+// idempotent reset path), then let propagation settle, so the non-retried
+// increment bodies below don't race cold-start.
+const stack = beforeAll(
+  deploy(Stack).pipe(
+    Effect.tap(({ urlA, urlB, urlC }) =>
+      Effect.all(
+        [
+          resetA(urlA, "warmup"),
+          resetHttp(urlB, "warmup"),
+          resetHttp(urlC, "warmup"),
+        ],
+        { concurrency: "unbounded" },
+      ),
+    ),
+    // just give it some extra time to propagate
+    Effect.tap(Effect.sleep("5 seconds")),
+  ),
+);
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 test(
   "RpcWorker WorkerA exposes the same RPC surface as the underlying DO",
@@ -155,12 +182,21 @@ test(
       }),
     );
 
+    // D1 cross-script reads are eventually consistent: the GET is
+    // idempotent, so retry on *any* failure until WorkerB's replica
+    // catches up to the committed writes. A status retry alone wouldn't
+    // cover a 200 that still reports the stale value, so fail on a
+    // value mismatch too and let the same retry absorb both that and
+    // transient HTTP errors.
     const httpClient = (yield* HttpClient.HttpClient).pipe(withCounterKey(key));
-    const fromB = yield* httpClient
-      .get(`${urlB}/d1`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
-    expect(fromB.status).toBe(200);
-    expect((yield* fromB.json) as { value: number }).toEqual({ value: 2 });
+    const value = yield* httpClient.get(`${urlB}/d1`).pipe(
+      Effect.timeout(requestTimeout),
+      Effect.flatMap((res) => res.json),
+      Effect.map((body) => (body as { value: number }).value),
+      Effect.filterOrFail((value) => value === 2),
+      Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+    );
+    expect(value).toBe(2);
   }).pipe(logLevel),
   { timeout: testTimeout },
 );
@@ -205,9 +241,12 @@ test(
     yield* resetHttp(urlB, key);
 
     const httpClient = (yield* HttpClient.HttpClient).pipe(withCounterKey(key));
+    // These increments are non-idempotent: retrying a request whose write
+    // committed but whose response failed would over-count. The `resetHttp`
+    // above (retried) has already warmed WorkerB's edge, so run them once.
     yield* httpClient
       .post(`${urlB}/d1/increment`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+      .pipe(Effect.timeout(requestTimeout));
     yield* httpClient
       .post(`${urlB}/d1/increment`)
       .pipe(Effect.timeout(requestTimeout));
@@ -219,8 +258,22 @@ test(
       urlA,
       Effect.gen(function* () {
         const c = yield* RpcClient.make(CounterRpcs);
-        const d1 = yield* c.getD1({ key });
-        const dox = yield* c.getDO({ key });
+        // The writes above (WorkerB → WorkerA's cross-script DO) are
+        // eventually consistent when read back through WorkerA's RPC:
+        // D1 in particular can lag a beat before the second increment
+        // is visible from the reading replica. getD1/getDO are
+        // idempotent, so poll the read pair until both counters settle
+        // rather than reading once and flaking on "expected 1 to be 2".
+        const { d1, dox } = yield* poll({
+          description: "WorkerB writes visible from WorkerA (d1=2, do=1)",
+          effect: Effect.all({
+            d1: c.getD1({ key }),
+            dox: c.getDO({ key }),
+          }),
+          predicate: ({ d1, dox }) => d1.value === 2 && dox.value === 1,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
+        });
         expect(d1.value).toBe(2);
         expect(dox.value).toBe(1);
       }),
@@ -250,9 +303,10 @@ test(
     );
 
     const httpClient = (yield* HttpClient.HttpClient).pipe(withCounterKey(key));
+    // Non-idempotent increment — run once (resetHttp above warmed the edge).
     yield* httpClient
       .post(`${urlB}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout), Effect.retry(readinessRetry));
+      .pipe(Effect.timeout(requestTimeout));
 
     // WorkerA sees value 2 (its own + WorkerB's cross-script).
     yield* withRpcA(

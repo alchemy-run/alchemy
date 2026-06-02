@@ -1,15 +1,14 @@
-import * as Output from "@/Output";
+import { Action } from "@/Action";
 import * as Plan from "@/Plan";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import {
-  inMemoryState,
   InMemoryService,
+  inMemoryState,
   State,
-  type RanActionState,
   type ActionState,
+  type RanActionState,
 } from "@/State";
-import { Action } from "@/Action";
 import * as Test from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Context from "effect/Context";
@@ -46,7 +45,7 @@ const resolveStackId = Effect.gen(function* () {
 const seed = (rows: Record<string, ActionState>) =>
   Effect.gen(function* () {
     const { name, stage } = yield* resolveStackId;
-    const state = yield* State;
+    const state = yield* yield* State;
     for (const [fqn, value] of Object.entries(rows)) {
       yield* state.set({ stack: name, stage, fqn, value });
     }
@@ -308,7 +307,7 @@ describe("Apply", () => {
       expect(yield* Ref.get(counter)).toBe(1);
 
       // Persisted state is `ran` with the materialized output.
-      const state = yield* State;
+      const state = yield* yield* State;
       const persisted = yield* state.get({
         stack: stack.name,
         stage: "test",
@@ -415,7 +414,7 @@ describe("Apply", () => {
           }),
         );
 
-        const state = yield* State;
+        const state = yield* yield* State;
         expect(
           yield* state.get({ stack: stack.name, stage: "test", fqn: "Sync" }),
         ).toMatchObject({ kind: "action", status: "ran" });

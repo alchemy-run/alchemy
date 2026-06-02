@@ -11,13 +11,16 @@ import {
 import * as Test from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import { Data, Layer } from "effect";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
   ArtifactProbe,
   BindingTarget,
   DeletedBindingRegressionTarget,
+  DurationResource,
   Function,
+  KindStablesResource,
   PhasedTarget,
   StaticStablesResource,
   TestLayers,
@@ -29,7 +32,7 @@ import {
 const { test } = Test.make({ providers: TestLayers() });
 
 const getState = Effect.fn(function* <S = ResourceState>(resourceId: string) {
-  const state = yield* State;
+  const state = yield* yield* State;
   const stk = yield* Stack;
   return (yield* state.get({
     stack: stk.name,
@@ -38,7 +41,7 @@ const getState = Effect.fn(function* <S = ResourceState>(resourceId: string) {
   })) as S;
 });
 const listState = Effect.fn(function* () {
-  const state = yield* State;
+  const state = yield* yield* State;
   const stk = yield* Stack;
   return yield* state.list({ stack: stk.name, stage: stk.stage });
 });
@@ -211,7 +214,48 @@ describe("basic operations", () => {
           return B.string;
         }).pipe(stack.deploy),
       ).toEqual("TEST-STRING-NEW");
+
+      expect(
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", {
+            string: "test-string",
+            stringArray: ["test-string-array"],
+          });
+          const B = yield* TestResource("B", {
+            string: A.string.pipe(
+              Output.flatMap((string) =>
+                Output.literal(string.toUpperCase() + "-FLAT"),
+              ),
+            ),
+          });
+          return B.string;
+        }).pipe(stack.deploy),
+      ).toEqual("TEST-STRING-FLAT");
     }),
+  );
+
+  test.provider(
+    "should apply downstream resources when a stable kind shadows an output discriminator",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* KindStablesResource("Database", {
+          value: "v1",
+        }).pipe(stack.deploy);
+
+        const output = yield* Effect.gen(function* () {
+          const database = yield* KindStablesResource("Database", {
+            value: "v2",
+          });
+          const role = yield* KindStablesResource("Role", {
+            value: "role",
+            upstream: database,
+          });
+          return { database, role };
+        }).pipe(stack.deploy);
+
+        expect(output.database.value).toBe("v2");
+        expect(output.role.upstreamKind).toBe("postgresql");
+      }),
   );
 
   test.provider(
@@ -1083,6 +1127,80 @@ describe("prop-flow convergence", () => {
 
         expect(terminal("A")).toEqual(["updated"]);
         expect(terminal("B")).toEqual(["updated"]);
+      }),
+  );
+
+  // Regression: a resource with `precreate` (e.g. Cloudflare Worker) resolves
+  // its early `ready` signal before its real `reconcile` runs. A non-cyclic
+  // downstream must still wait for the upstream's TERMINAL output, so that an
+  // upstream `reconcile` failure interrupts the downstream instead of letting
+  // it proceed off the precreate stub. Before the fix the downstream raced
+  // ahead on the precreate identifier and fully created itself even though the
+  // upstream failed.
+  test.provider(
+    "precreate upstream reconcile failure interrupts non-cyclic downstream (stable id dep)",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = Effect.gen(function* () {
+          const A = yield* PhasedTarget("A", {
+            desired: "a-value",
+            replaceKey: "v1",
+          });
+          // B depends on A.stableId — a value already available from A's
+          // precreate stub — yet must still be gated on A's reconcile.
+          const B = yield* TestResource("B", {
+            string: A.stableId,
+          });
+          return { A, B };
+        });
+
+        yield* program.pipe(stack.deploy, hook(failOn("A", "create")));
+
+        // A's reconcile failed after committing "creating".
+        expect((yield* getState("A"))?.status).toEqual("creating");
+        // B must NOT have reached its own reconcile. It may have committed an
+        // intermediate "creating" while waiting on deps, but it must never be
+        // "created" — that would mean the upstream failure was ignored.
+        expect((yield* getState("B"))?.status).not.toEqual("created");
+
+        // Recovery deploy converges both.
+        const output = yield* program.pipe(stack.deploy);
+        expectConvergedStatus((yield* getState("A"))?.status);
+        expectConvergedStatus((yield* getState("B"))?.status);
+        expect(output.B.string).toEqual("stable:v1");
+      }),
+  );
+
+  test.provider(
+    "precreate upstream reconcile failure interrupts non-cyclic downstream (value dep)",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = Effect.gen(function* () {
+          const A = yield* PhasedTarget("A", {
+            desired: "a-value",
+            replaceKey: "v1",
+          });
+          const B = yield* TestResource("B", {
+            string: A.value,
+          });
+          const C = yield* TestResource("C", {
+            string: B.string,
+          });
+          return { A, B, C };
+        });
+
+        yield* program.pipe(stack.deploy, hook(failOn("A", "create")));
+
+        expect((yield* getState("A"))?.status).toEqual("creating");
+        expect((yield* getState("B"))?.status).not.toEqual("created");
+        // Transitive downstream never starts either.
+        expectNotStarted(yield* getState("C"));
+
+        const output = yield* program.pipe(stack.deploy);
+        expectConvergedStatus((yield* getState("A"))?.status);
+        expectConvergedStatus((yield* getState("B"))?.status);
+        expectConvergedStatus((yield* getState("C"))?.status);
+        expect(output.C.string).toEqual("a-value");
       }),
   );
 });
@@ -4231,7 +4349,7 @@ describe("Redacted props/outputs survive deploy", () => {
 describe("stack output persistence", () => {
   const getStackOutput = (stack: string, stage: string) =>
     Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
       return yield* state.getOutput({ stack, stage });
     });
 
@@ -4295,6 +4413,43 @@ describe("stack output persistence", () => {
         }).pipe(stack.deploy);
 
         expect(result).toEqual({ downstream: "shared" });
+      }),
+  );
+});
+
+describe("Duration round-trip through state", () => {
+  test.provider(
+    "input Duration reaches reconcile as a real Duration and output Duration re-hydrates as a real Duration on the next deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        const first = yield* stack.deploy(
+          DurationResource("Timer", { timeout: Duration.seconds(15) }),
+        );
+
+        // Reconcile saw a real Duration: arithmetic worked.
+        expect(Duration.isDuration(first.observedTimeout)).toBe(true);
+        expect(Duration.toMillis(first.observedTimeout)).toBe(15_000);
+        expect(Duration.isDuration(first.computedTimeout)).toBe(true);
+        expect(Duration.toMillis(first.computedTimeout)).toBe(16_000);
+
+        // Second deploy: identical props. The engine reads the previous
+        // output from state. If the Duration weren't revived, `output`
+        // (a plain `{_id,_tag,millis}` shape) would fail `isDuration` and
+        // `Duration.toMillis` would throw.
+        const second = yield* stack.deploy(
+          DurationResource("Timer", { timeout: Duration.seconds(15) }),
+        );
+        expect(Duration.isDuration(second.observedTimeout)).toBe(true);
+        expect(Duration.toMillis(second.observedTimeout)).toBe(15_000);
+        expect(Duration.isDuration(second.computedTimeout)).toBe(true);
+        expect(Duration.toMillis(second.computedTimeout)).toBe(16_000);
+
+        // The persisted state itself should round-trip to a real Duration.
+        const persisted = yield* getState<{
+          attr: DurationResource["Attributes"];
+        }>("Timer");
+        expect(Duration.isDuration(persisted.attr.computedTimeout)).toBe(true);
+        expect(Duration.toMillis(persisted.attr.computedTimeout)).toBe(16_000);
       }),
   );
 });

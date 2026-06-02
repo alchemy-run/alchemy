@@ -32,7 +32,7 @@ export default Alchemy.Stack(
 
     const asyncCaller = yield* Cloudflare.Worker("BindingAsyncCaller", {
       main: asyncCallerMain,
-      bindings: {
+      env: {
         TARGET: target,
       },
     });

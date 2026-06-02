@@ -16,6 +16,18 @@
   color-scheme: light;
 }
 
+/* On phones the 2rem desktop gutter is too generous: the docs header has to
+   fit the brand, the Docs/Blog links, the theme toggle AND the room Starlight
+   reserves on the right for its floating hamburger. Trim it to 1rem below the
+   `md` (50rem) breakpoint. `--sl-nav-pad-x` drives the header padding, the
+   hamburger inset and Starlight's reservation together, so they stay aligned
+   and the toggle clears the hamburger. */
+@media (max-width: 50rem) {
+  :root {
+    --sl-nav-pad-x: 1rem;
+  }
+}
+
 [data-theme="dark"] {
   color-scheme: dark;
 }
