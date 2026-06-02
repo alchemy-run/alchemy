@@ -25,7 +25,7 @@ const Bucket = Cloudflare.R2Bucket("bucket");
 
 export default Cloudflare.Worker(
   "api",
-  { main: import.meta.path },
+  { main: import.meta.filename },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
     return {

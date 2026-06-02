@@ -119,7 +119,7 @@ const HttpPlatformStub = Layer.succeed(HttpPlatform.HttpPlatform, {
 export default class Worker extends Cloudflare.Worker<Worker>()(
   "Api",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
     compatibility: { flags: ["nodejs_compat"], date: "2026-03-17" },
   },
   Effect.gen(function* () {
