@@ -1,9 +1,23 @@
 ---
 import Search from "@astrojs/starlight/components/Search.astro";
 import Logo from "./Logo.astro";
+
+interface Props {
+  /**
+   * Set on the marketing layout, where this nav is the only header and there
+   * is no Starlight sidebar — so every control stays in the top bar on all
+   * viewports. Docs pages render this as Starlight's `Header` override and
+   * leave it unset; there the GitHub/Discord links are dropped on mobile (they
+   * live in the hamburger menu footer) while the theme toggle stays in the top
+   * bar (see the `.alc-nav--docs` mobile rule below).
+   */
+  marketing?: boolean;
+}
+
+const { marketing = false } = Astro.props;
 ---
 
-<nav class="alc-nav">
+<nav class:list={["alc-nav", { "alc-nav--docs": !marketing }]}>
   <a href="/" class="alc-nav__brand">
     <Logo />
   </a>
@@ -210,6 +224,26 @@ import Logo from "./Logo.astro";
   }
   @media (max-width: 640px) {
     .alc-nav { gap: 16px; }
+  }
+  @media (max-width: 480px) {
+    .alc-nav { gap: 12px; }
+  }
+  /*
+   * Docs pages render this nav inside Starlight's fixed `<header>`, which
+   * reserves room on the right for the floating hamburger button and shows a
+   * mobile menu (with theme select + social icons in its footer) below the
+   * `md` (50rem) breakpoint. Packing every control into the top bar too made it
+   * overflow past that reserved area and slide under the hamburger. Below 50rem
+   * we drop just the GitHub/Discord links — they live in the hamburger menu —
+   * but keep the theme toggle in the top bar so it stays one tap away. The
+   * docs gutter is also trimmed on mobile (see `--sl-nav-pad-x` in custom.css)
+   * to make room. Marketing pages have no hamburger/menu, so they keep every
+   * control (see `marketing`).
+   */
+  @media (max-width: 50rem) {
+    .alc-nav--docs .alc-nav__link--icon {
+      display: none;
+    }
   }
 </style>
 
