@@ -1,8 +1,10 @@
 import * as Effect from "effect/Effect";
-import { isResolved } from "../Diff.ts";
+import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Binding from "../Binding.ts";
+import { isResolved } from "../Diff.ts";
 import * as Output from "../Output.ts";
 import * as Provider from "../Provider.ts";
 import { Resource, type ResourceLike } from "../Resource.ts";
@@ -667,9 +669,8 @@ const nullableString = (
 export const ConnectionBindingLive = Layer.effect(
   ConnectionBinding,
   Effect.gen(function* () {
-    const policy = yield* ConnectionBindingPolicy;
-
     return Effect.fn(function* (connection: Connection) {
+      const policy = yield* resolveConnectionBindingPolicy;
       yield* policy(connection);
       const keys = connectionBindingEnvKeys(connection);
       const env = encodedConnectionBindingEnv(connection);
@@ -720,6 +721,33 @@ export class ConnectionBindingPolicy extends Binding.Policy<
   ConnectionBindingPolicy,
   (connection: Connection) => Effect.Effect<void>
 >()("Prisma.Connection") {}
+
+type ConnectionBindingPolicyFn = (
+  connection: Connection,
+) => Effect.Effect<void>;
+
+const ConnectionBindingPolicyService =
+  Context.Service<ConnectionBindingPolicyFn>(ConnectionBindingPolicy.key);
+
+const resolveConnectionBindingPolicy: Effect.Effect<ConnectionBindingPolicyFn> =
+  Effect.gen(function* () {
+    const directPolicy = yield* Effect.serviceOption(
+      ConnectionBindingPolicyService,
+    );
+    const policy = Option.isSome(directPolicy)
+      ? directPolicy
+      : yield* Provider.tryFindProviderByType<typeof ConnectionBindingPolicy>(
+          ConnectionBindingPolicy.key,
+        );
+
+    if (Option.isSome(policy)) {
+      return policy.value;
+    }
+
+    // Do not ask for the host Self here. Prisma.Compute runtime entrypoints
+    // construct binding layers while their own Self layer is still being built.
+    return () => Effect.void;
+  });
 
 export const ConnectionBindingPolicyLive =
   ConnectionBindingPolicy.layer.succeed(

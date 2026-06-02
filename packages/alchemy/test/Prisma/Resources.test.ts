@@ -10,7 +10,6 @@ import {
   ComputeVersionProvider,
 } from "@/Prisma/ComputeVersion";
 import {
-  ConnectionBinding,
   ConnectionBindingLive,
   ConnectionBindingPolicyLive,
   Connection as PrismaConnection,
@@ -609,12 +608,6 @@ describe("Prisma resource providers", () => {
           return Output.evaluate(output, {}) as Effect.Effect<T>;
         },
       };
-      const host = {
-        Type: "Prisma.Compute",
-        LogicalId: "App",
-        FQN: "App",
-        bind: () => Effect.die("runtime should not attach bindings"),
-      };
       const connection = {
         Type: "Prisma.Connection",
         LogicalId: "Connection",
@@ -638,11 +631,8 @@ describe("Prisma resource providers", () => {
         expect(yield* db.connectionId).toBe("connection-1");
         expect(yield* db.databaseUrl).toBe("postgres://runtime");
       }).pipe(
-        // Binding.Policy still appears in the generic layer requirements,
-        // but at runtime the policy lookup is intentionally absent and no-ops.
-        Effect.provide(ConnectionBindingLive as Layer.Layer<ConnectionBinding>),
+        Effect.provide(ConnectionBindingLive),
         Effect.provide(Layer.succeed(RuntimeContext, runtime)),
-        Effect.provide(Layer.succeed(Self, host)),
         Effect.provide(
           Layer.succeed(
             ConfigProvider.ConfigProvider,

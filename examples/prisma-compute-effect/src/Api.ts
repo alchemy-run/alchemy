@@ -19,22 +19,20 @@ const urlReadinessTimeoutSeconds = Number(
 const runtimeEnv = (key: string, fallback: string) =>
   Effect.sync(() => process.env[key] ?? fallback);
 
-const Api = Prisma.Compute(
+export default class Api extends Prisma.Compute<Api>()(
   "Api",
   Effect.gen(function* () {
     const project = yield* Project;
-    const branch = yield* MainBranch;
+    yield* MainBranch;
     return {
       project,
       serviceName,
       regionId: region,
-      branchId: branch.branchId,
+      branchGitName: "main",
       main: import.meta.filename,
       port,
       env: {
         PRISMA_EFFECT_MESSAGE: message,
-        PRISMA_PROJECT_ID: project.projectId,
-        PRISMA_BRANCH_ID: branch.branchId,
       },
       verifyUrl,
       urlReadinessTimeoutSeconds,
@@ -62,8 +60,6 @@ const Api = Prisma.Compute(
           ok: true,
           mode: "effect-native",
           message: yield* runtimeEnv("PRISMA_EFFECT_MESSAGE", message),
-          projectId: yield* runtimeEnv("PRISMA_PROJECT_ID", ""),
-          branchId: yield* runtimeEnv("PRISMA_BRANCH_ID", ""),
           databaseId: yield* db.databaseId,
           connectionId: yield* db.connectionId,
           hasDatabaseUrl: databaseUrl !== undefined,
@@ -73,6 +69,4 @@ const Api = Prisma.Compute(
       }),
     };
   }).pipe(Effect.provide(Prisma.ConnectionBindingLive)),
-);
-
-export default Api;
+) {}

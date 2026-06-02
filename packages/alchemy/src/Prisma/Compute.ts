@@ -1,5 +1,4 @@
 import * as Effect from "effect/Effect";
-import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -23,6 +22,7 @@ import * as Output from "../Output.ts";
 import { Platform, type Main, type PlatformProps } from "../Platform.ts";
 import * as Provider from "../Provider.ts";
 import { Resource, type ResourceBinding } from "../Resource.ts";
+import { RuntimeContext } from "../RuntimeContext.ts";
 import type * as Server from "../Server/index.ts";
 import { Self } from "../Self.ts";
 import { Stack } from "../Stack.ts";
@@ -542,6 +542,7 @@ export const Compute: Platform<
   createRuntimeContext: (id): ComputeRuntimeContext => {
     const runners: Effect.Effect<void, never, unknown>[] = [];
     const env: Record<string, unknown> = {};
+    let runtimeContext: ComputeRuntimeContext;
     const run: Server.ProcessContext["run"] = (effect) =>
       Effect.sync(() => {
         runners.push(effect);
@@ -555,14 +556,18 @@ export const Compute: Platform<
               Effect.map(Option.getOrUndefined),
             );
             if (httpServer) {
-              yield* httpServer.serve(handler);
+              yield* httpServer.serve(
+                handler.pipe(
+                  Effect.provideService(RuntimeContext, runtimeContext),
+                ),
+              );
               yield* Effect.never;
             }
           }).pipe(Effect.catch((error: unknown) => Effect.die(error))),
         );
       });
 
-    return {
+    runtimeContext = {
       Type: ComputeTypeId,
       id,
       env,
@@ -584,31 +589,28 @@ export const Compute: Platform<
           return key;
         }),
       get: <T>(key: string) =>
-        Config.string(key).pipe(
-          Effect.map((value) => {
-            try {
-              const parsed = JSON.parse(value);
-              if (
-                parsed !== null &&
-                typeof parsed === "object" &&
-                (parsed as { _tag?: unknown })._tag === "Redacted" &&
-                "value" in (parsed as object)
-              ) {
-                return Redacted.make((parsed as { value: unknown }).value);
-              }
-              return parsed;
-            } catch {
-              return value;
+        // Runtime ConfigProvider lookups call back into RuntimeContext.get.
+        // Read the process env directly here to avoid re-entering that path.
+        Effect.sync(() => {
+          const value = process.env[key];
+          if (value === undefined) {
+            return undefined;
+          }
+          try {
+            const parsed = JSON.parse(value);
+            if (
+              parsed !== null &&
+              typeof parsed === "object" &&
+              (parsed as { _tag?: unknown })._tag === "Redacted" &&
+              "value" in (parsed as object)
+            ) {
+              return Redacted.make((parsed as { value: string }).value) as T;
             }
-          }),
-          Effect.catch((cause) =>
-            Effect.die(
-              new Error(`Failed to get environment variable: ${key}`, {
-                cause,
-              }),
-            ),
-          ),
-        ) as Effect.Effect<T>,
+            return parsed as T;
+          } catch {
+            return value as T;
+          }
+        }),
       run,
       serve,
       exports: Effect.sync(() => ({
@@ -625,6 +627,7 @@ export const Compute: Platform<
         ),
       })),
     };
+    return runtimeContext;
   },
 });
 
