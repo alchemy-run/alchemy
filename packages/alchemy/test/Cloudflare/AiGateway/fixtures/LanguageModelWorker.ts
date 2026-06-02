@@ -49,12 +49,10 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
     const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
 
     const languageModel = aiGateway.model({
-      client: aiGateway,
       model: MODEL,
       parameters: { temperature: 0.7, maxTokens: 1024 },
     });
     const toolLanguageModel = aiGateway.model({
-      client: aiGateway,
       model: TOOL_MODEL,
       parameters: { temperature: 0.2, maxTokens: 1024 },
     });
