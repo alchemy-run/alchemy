@@ -76,7 +76,11 @@ export interface Platform<
       id: string,
       props:
         | InputProps<Resource["Props"]>
-        | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
+        | Effect.Effect<
+            InputProps<Resource["Props"]>,
+            ConfigError.ConfigError,
+            PropsReq
+          >,
     ): Effect.Effect<
       Resource & Rpc<Self> & Dependencies<Deps>,
       never,
@@ -103,7 +107,7 @@ export interface Platform<
       id: string,
       props:
         | InputProps<Resource["Props"]>
-        | Effect.Effect<Resource["Props"], never, PropsReq>,
+        | Effect.Effect<Resource["Props"], ConfigError.ConfigError, PropsReq>,
       impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
     ): Effect.Effect<
       Resource & Rpc<Self>,
@@ -118,7 +122,11 @@ export interface Platform<
       id: string,
       props:
         | InputProps<Resource["Props"]>
-        | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
+        | Effect.Effect<
+            InputProps<Resource["Props"]>,
+            ConfigError.ConfigError,
+            PropsReq
+          >,
     ): Effect.Effect<
       Resource & Rpc<Self>,
       never,
@@ -134,7 +142,7 @@ export interface Platform<
       >;
       new (_: never): MakeShape<Shape, BaseShape>;
     } & (<InitReq extends Services | PlatformServices | Resource = never>(
-        impl: Effect.Effect<Shape, never, InitReq>,
+        impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
       ) => Effect.Effect<
         Resource & Rpc<Self>,
         never,
