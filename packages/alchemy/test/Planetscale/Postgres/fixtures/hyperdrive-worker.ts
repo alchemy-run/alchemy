@@ -19,8 +19,6 @@ export default class HyperdriveWorker extends Cloudflare.Worker<HyperdriveWorker
   "PlanetscaleHyperdriveWorker",
   {
     main: import.meta.filename,
-    subdomain: { enabled: true },
-    compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   },
   Effect.gen(function* () {
     const conn = yield* Cloudflare.Hyperdrive.bind(Hyperdrive);

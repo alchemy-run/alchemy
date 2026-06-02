@@ -53,8 +53,6 @@ export interface PostgresDatabaseProps extends BaseDatabaseProps {
  * Output attributes of a deployed PostgreSQL PlanetScale database.
  */
 export interface PostgresDatabaseAttributes extends BaseDatabaseAttributes {
-  /** Engine kind discriminator. */
-  kind: "postgresql";
   /** PostgreSQL CPU architecture. */
   arch: "x86" | "arm";
 }
@@ -125,7 +123,7 @@ export const PostgresDatabaseProvider = () =>
       const createBr = yield* ops.createBranch;
 
       return {
-        stables: ["id", "organization", "kind", "region"],
+        stables: ["id", "organization", "region"],
 
         diff: Effect.fn(function* ({ news, olds, output }) {
           if (!isResolved(news)) return undefined;
@@ -222,7 +220,6 @@ export const PostgresDatabaseProvider = () =>
             migrationsTable: output?.migrationsTable ?? olds?.migrationsTable,
             migrationsHashes: output?.migrationsHashes ?? {},
             importHashes: output?.importHashes ?? {},
-            kind: "postgresql" as const,
             clusterSize,
             arch,
             requireApprovalForDeploy: data.require_approval_for_deploy ?? false,
@@ -378,7 +375,6 @@ export const PostgresDatabaseProvider = () =>
             updatedAt: updated.updated_at,
             htmlUrl: updated.html_url,
             region: { slug: updated.region.slug },
-            kind: "postgresql" as const,
             clusterSize: clusterSize,
             migrationsDir: news.migrationsDir,
             migrationsTable: news.migrationsDir ? migrationsTable : undefined,

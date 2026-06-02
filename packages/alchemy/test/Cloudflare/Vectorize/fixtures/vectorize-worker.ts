@@ -30,8 +30,6 @@ export default class VectorizeWorker extends Cloudflare.Worker<VectorizeWorker>(
   "VectorizeEffectWorker",
   {
     main: import.meta.filename,
-    subdomain: { enabled: true },
-    compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   },
   Effect.gen(function* () {
     const index = yield* TestIndex;

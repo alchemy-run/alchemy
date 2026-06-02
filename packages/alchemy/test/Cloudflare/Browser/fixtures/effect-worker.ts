@@ -1,6 +1,6 @@
 import puppeteer from "@cloudflare/puppeteer";
 import * as Cloudflare from "alchemy/Cloudflare";
-import type { BrowserRenderingPuppeteer } from "alchemy/Cloudflare";
+import type { BrowserPuppeteer } from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -10,19 +10,17 @@ const TARGET_URL = "https://example.com";
 type PuppeteerBrowser = Awaited<ReturnType<(typeof puppeteer)["launch"]>>;
 
 const cloudflarePuppeteer =
-  puppeteer as unknown as BrowserRenderingPuppeteer<PuppeteerBrowser>;
+  puppeteer as unknown as BrowserPuppeteer<PuppeteerBrowser>;
 
-export const Browser = Cloudflare.BrowserRendering({ name: "BROWSER" });
-
-export default class BrowserRenderingEffectWorker extends Cloudflare.Worker<BrowserRenderingEffectWorker>()(
-  "BrowserRenderingEffectWorker",
+export default class BrowserEffectWorker extends Cloudflare.Worker<BrowserEffectWorker>()(
+  "BrowserEffectWorker",
   {
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const browserRendering = yield* Cloudflare.BrowserRendering.bind(
-      yield* Browser,
-    );
+    const browser = yield* Cloudflare.Browser({
+      name: "BROWSER",
+    });
 
     return {
       fetch: Effect.gen(function* () {
@@ -31,7 +29,7 @@ export default class BrowserRenderingEffectWorker extends Cloudflare.Worker<Brow
           return HttpServerResponse.text("ok");
         }
 
-        return yield* browserRendering
+        return yield* browser
           .withBrowser(cloudflarePuppeteer, (browser) =>
             Effect.gen(function* () {
               const page = yield* Effect.tryPromise(() => browser.newPage());
@@ -50,5 +48,5 @@ export default class BrowserRenderingEffectWorker extends Cloudflare.Worker<Brow
           );
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.BrowserRenderingBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.BrowserBindingLive)),
 ) {}

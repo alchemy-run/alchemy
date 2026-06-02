@@ -31,7 +31,7 @@ import {
 const { test } = Test.make({ providers: TestLayers() });
 
 const getState = Effect.fn(function* <S = ResourceState>(resourceId: string) {
-  const state = yield* State;
+  const state = yield* yield* State;
   const stk = yield* Stack;
   return (yield* state.get({
     stack: stk.name,
@@ -40,7 +40,7 @@ const getState = Effect.fn(function* <S = ResourceState>(resourceId: string) {
   })) as S;
 });
 const listState = Effect.fn(function* () {
-  const state = yield* State;
+  const state = yield* yield* State;
   const stk = yield* Stack;
   return yield* state.list({ stack: stk.name, stage: stk.stage });
 });
@@ -213,6 +213,23 @@ describe("basic operations", () => {
           return B.string;
         }).pipe(stack.deploy),
       ).toEqual("TEST-STRING-NEW");
+
+      expect(
+        yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", {
+            string: "test-string",
+            stringArray: ["test-string-array"],
+          });
+          const B = yield* TestResource("B", {
+            string: A.string.pipe(
+              Output.flatMap((string) =>
+                Output.literal(string.toUpperCase() + "-FLAT"),
+              ),
+            ),
+          });
+          return B.string;
+        }).pipe(stack.deploy),
+      ).toEqual("TEST-STRING-FLAT");
     }),
   );
 
@@ -4307,7 +4324,7 @@ describe("Redacted props/outputs survive deploy", () => {
 describe("stack output persistence", () => {
   const getStackOutput = (stack: string, stage: string) =>
     Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
       return yield* state.getOutput({ stack, stage });
     });
 

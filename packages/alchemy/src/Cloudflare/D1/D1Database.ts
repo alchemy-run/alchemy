@@ -332,7 +332,10 @@ export const DatabaseProvider = () =>
                 databaseId: db.uuid ?? output.databaseId,
                 databaseName: db.name ?? output.databaseName,
                 jurisdiction: output.jurisdiction,
-                readReplication: db.readReplication ?? undefined,
+                // Distilled widened generated string enums to open unions.
+                readReplication: (db.readReplication ?? undefined) as
+                  | { mode: "auto" | "disabled" }
+                  | undefined,
                 accountId: output.accountId,
                 migrationsDir: output.migrationsDir,
                 migrationsTable: output.migrationsTable,
@@ -375,7 +378,8 @@ export const DatabaseProvider = () =>
             | {
                 uuid?: string | null;
                 name?: string | null;
-                readReplication?: { mode: "auto" | "disabled" } | null;
+                // Distilled widened generated string enums to open unions.
+                readReplication?: { mode: string } | null;
               }
             | undefined;
           if (output?.databaseId) {

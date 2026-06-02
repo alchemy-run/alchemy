@@ -21,9 +21,26 @@ state Alchemy persists and why.
 ## Scaffold the layer
 
 A state store is a `Layer.Layer<State, never, R>` where `R` is any
-ambient services your implementation needs. Start with an empty
-`StateService` so the types compile, then fill it in one method at
-a time.
+ambient services your implementation needs. The `State` service does
+**not** hold a `StateService` directly — it holds an
+`Effect<StateService>` that lazily builds one:
+
+```typescript
+class State extends Context.Service<State, Effect.Effect<StateService>>()(
+  "alchemy/State",
+) {}
+```
+
+This indirection matters. Commands like `alchemy login` provide the
+state layer but never touch state, so a store must not connect to its
+backend (open a DB connection, deploy a worker, prompt for
+credentials) just because the layer was built. Wrapping the builder
+in [`Effect.cached`](https://effect.website/docs/getting-started/control-flow/#caching)
+**defers** initialization until the first `yield* State` and **caches**
+it so subsequent accesses reuse the same `StateService`.
+
+Start with an empty `StateService` so the types compile, then fill it
+in one method at a time.
 
 Create `src/postgres-state.ts`:
 
@@ -38,7 +55,10 @@ export interface PostgresStateProps {
 }
 
 export const postgresState = (props: PostgresStateProps) =>
-  Layer.effect(State, makePostgresState(props));
+  // `Effect.cached` returns an `Effect<Effect<StateService>>`; yielding
+  // it inside `Layer.effect` hands `State` the deferred, memoized
+  // initializer. The body below only runs on first `yield* State`.
+  Layer.effect(State, Effect.cached(makePostgresState(props)));
 
 const makePostgresState = (_props: PostgresStateProps) =>
   Effect.gen(function* () {
@@ -63,13 +83,20 @@ operation. Next we'll wire up the database.
 
 We'll use the [`postgres`](https://github.com/porsager/postgres)
 package and create one schema with a single `state` table keyed by
-`(stack, stage, fqn)`. Acquire the connection inside `Layer.scoped`
-so it's released when the stack tears down:
+`(stack, stage, fqn)`. Acquire the connection with `Effect.acquireRelease`
+so it's released when the stack tears down — this requires a `Scope`,
+so the layer becomes `Layer.scoped`.
+
+Because initialization is deferred, capture the scope at layer-build
+time and provide it to the cached initializer, so the connection's
+release is still tied to the stack's lifetime even though it opens
+lazily on first use:
 
 ```diff lang="typescript"
 // src/postgres-state.ts
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
++import * as Scope from "effect/Scope";
 +import postgres from "postgres";
 import { State, type StateService } from "alchemy/State";
 
@@ -78,8 +105,19 @@ export interface PostgresStateProps {
 }
 
 export const postgresState = (props: PostgresStateProps) =>
--  Layer.effect(State, makePostgresState(props));
-+  Layer.scoped(State, makePostgresState(props));
+-  Layer.effect(State, Effect.cached(makePostgresState(props)));
++  Layer.scoped(
++    State,
++    Effect.gen(function* () {
++      // Capture the layer's scope so the deferred initializer can
++      // register the connection's release on it.
++      const context = yield* Effect.context<Scope.Scope>();
++      const make = makePostgresState(props).pipe(
++        Effect.provideContext(context),
++      );
++      return yield* Effect.cached(make);
++    }),
++  );
 
 const makePostgresState = (props: PostgresStateProps) =>
   Effect.gen(function* () {
@@ -320,7 +358,10 @@ export default Alchemy.Stack(
 ## Test the round-trip
 
 Spin up a throwaway Postgres (Docker, Testcontainers, or a local
-instance) and verify a resource round-trips through your store:
+instance) and verify a resource round-trips through your store. Note
+the double `yield*`: the first resolves the `State` service to its
+`Effect<StateService>` initializer, the second runs it to get the
+`StateService`.
 
 ```typescript
 // test/postgres-state.test.ts
@@ -336,7 +377,7 @@ const layer = postgresState({
 describe("postgresState", () => {
   it("round-trips a resource", () =>
     Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
 
       yield* state.set({
         stack: "Test",

@@ -126,7 +126,10 @@ export const Stack: Context.ServiceClass<
             // by default, reference the stack at the "current" stage of the importer
             Output.stackRef<A>(stackName).pipe(effectClass),
             {
+              stackName,
               stage: createStageProxy(stackName),
+              state: options?.state,
+              providers: options?.providers,
               make: <Req = never>(
                 options: StackProps<NoInfer<Req>>,
                 eff: Effect.Effect<A, ConfigError, Req>,
@@ -141,7 +144,10 @@ export const Stack: Context.ServiceClass<
         }),
         (eff) =>
           Object.assign(eff, {
+            stackName,
             stage: createStageProxy(stackName),
+            state: options?.state,
+            providers: options?.providers,
           }),
       );
     },

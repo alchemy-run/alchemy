@@ -46,6 +46,7 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
         NULL: null,
         OBJ: { nested: { value: "ok" }, count: 7 },
         ARR: [1, 2, 3],
+        OUTPUT_STR: "output-str",
         SECRET_STR: "shh",
         SECRET_JSON: { token: "abc", scopes: ["read", "write"] },
         CONFIG_STR: CONFIG_STR_VALUE,
@@ -72,6 +73,7 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
         NULL: null,
         OBJ: { nested: { value: "ok" }, count: 7 },
         ARR: [1, 2, 3],
+        OUTPUT_STR: "output-str",
         SECRET_STR: "shh",
         SECRET_JSON: { token: "abc", scopes: ["read", "write"] },
       });

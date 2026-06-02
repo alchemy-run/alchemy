@@ -8,8 +8,6 @@ export default class AnalyticsEngineTestWorker extends Cloudflare.Worker<Analyti
   "AnalyticsEngineTestWorker",
   {
     main: import.meta.filename,
-    subdomain: { enabled: true, previewsEnabled: false },
-    compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   },
   Effect.gen(function* () {
     const analytics = yield* Cloudflare.AnalyticsEngineDataset.bind(Dataset);

@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { asEffect } from ".//Util/types.ts";
+import { isAction, type ActionLike } from "./Action.ts";
 import {
   AdoptPolicy,
   OwnedBySomeoneElse,
@@ -41,19 +42,18 @@ import {
 } from "./Resource.ts";
 import { type StackSpec } from "./Stack.ts";
 import {
+  isActionState,
   State,
+  type ActionState,
   type CreatedResourceState,
   type CreatingResourceState,
-  isActionState,
   type RanActionState,
   type ReplacedResourceState,
   type ReplacingResourceState,
   type ResourceState,
-  type ActionState,
   type UpdatedResourceState,
   type UpdatingReourceState,
 } from "./State/index.ts";
-import { isAction, type ActionLike } from "./Action.ts";
 import { hashInput } from "./Util/hash.ts";
 import { findCycleMembers } from "./Util/scc.ts";
 
@@ -236,7 +236,7 @@ export const make = <A>(
 ): Effect.Effect<Plan<A>, never, State> =>
   // @ts-expect-error
   Effect.gen(function* () {
-    const state = yield* State;
+    const state = yield* yield* State;
 
     const resources = Object.values(stack.resources);
     const actions = Object.values(stack.actions ?? {});
@@ -424,6 +424,15 @@ export const make = <A>(
         } else if (Output.isEffectExpr(expr)) {
           const upstream = yield* resolveOutput(expr.expr);
           return Output.hasOutputs(upstream) ? expr : yield* expr.f(upstream);
+        } else if (Output.isFlatMapExpr(expr)) {
+          const upstream = yield* resolveOutput(expr.expr);
+          // Source still unresolved -> keep the flatMap intact for a later pass.
+          // Otherwise run `f` to produce the next Output and resolve into it.
+          return Output.hasOutputs(upstream)
+            ? expr
+            : yield* resolveOutput(
+                Output.asOutput(expr.f(upstream)) as Output.Expr<any>,
+              );
         } else if (Output.isAllExpr(expr)) {
           return yield* Effect.all(expr.outs.map(resolveOutput), {
             concurrency: "unbounded",

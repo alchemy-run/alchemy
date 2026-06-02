@@ -7,6 +7,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import QueueWorker, { Counter, RoundTripQueue } from "./round-trip-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -104,9 +105,16 @@ test.provider(
       // exponential schedule + recurs cap gives Cloudflare ~60s to
       // dispatch and ack — comfortably above the typical 1–5s
       // dispatch latency we saw in practice without flaking.
+      //
+      // GET /count is idempotent, so we retry on *any* failure — not
+      // just CountMismatch. A fresh/hibernating DO can briefly return a
+      // 500 ("Internal Server Error", which isn't valid JSON and would
+      // otherwise surface as a decode error), and edge propagation can
+      // 404 the first calls; both are transient and must be retried.
       const snapshot = yield* HttpClient.get(
         `${baseUrl}/count?name=${encodeURIComponent(name)}`,
       ).pipe(
+        Effect.flatMap(HttpClientResponse.filterStatusOk),
         Effect.flatMap((res) => res.json),
         Effect.flatMap((body) => {
           const snap = body as { count: number; lastBodies: string[] };
@@ -120,7 +128,6 @@ test.provider(
               );
         }),
         Effect.retry({
-          while: (e): e is CountMismatch => e instanceof CountMismatch,
           schedule: Schedule.exponential("500 millis").pipe(
             Schedule.both(Schedule.recurs(40)),
           ),

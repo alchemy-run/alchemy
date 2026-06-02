@@ -28,9 +28,10 @@ function copyMarkdownSources() {
 
         /**
          * @param {string} srcDir
-         * @param {string} relTo
+         * @param {{ lowercase?: boolean }} [opts]
+         * @param {string} [relTo]
          */
-        async function walk(srcDir, relTo = srcDir) {
+        async function walk(srcDir, opts = {}, relTo = srcDir) {
           let entries;
           try {
             entries = await fs.readdir(srcDir, { withFileTypes: true });
@@ -40,29 +41,34 @@ function copyMarkdownSources() {
           for (const entry of entries) {
             const full = path.join(srcDir, entry.name);
             if (entry.isDirectory()) {
-              await walk(full, relTo);
+              await walk(full, opts, relTo);
               continue;
             }
             if (!entry.isFile()) continue;
             const ext = path.extname(entry.name).toLowerCase();
             if (ext !== ".md" && ext !== ".mdx") continue;
-            const rel = path.relative(relTo, full);
-            const target = path.join(
-              outDir,
-              rel.slice(0, rel.length - ext.length) + ".md",
-            );
+            let rel = path.relative(relTo, full);
+            rel = rel.slice(0, rel.length - ext.length) + ".md";
+            // Starlight lowercases doc URLs (e.g. CamelCase source
+            // `providers/AWS/S3/Bucket.md` is served at `/providers/aws/s3/bucket`),
+            // so the raw-markdown copy must live at the lowercased path or the
+            // worker's `/providers/aws/s3/bucket.md` lookup 404s into HTML.
+            if (opts.lowercase) rel = rel.toLowerCase();
+            const target = path.join(outDir, rel);
             await fs.mkdir(path.dirname(target), { recursive: true });
             await fs.copyFile(full, target);
           }
         }
 
         // Docs (Starlight content collection) — preserves nested layout under
-        // /content/docs/ → /<path>.md
+        // /content/docs/ → /<path>.md, lowercased to match Starlight's URLs.
         await walk(
           fileURLToPath(new URL("./src/content/docs/", import.meta.url)),
+          { lowercase: true },
         );
         // Marketing pages (top-level Astro pages) — exposes /<page>.md so
-        // agents can fetch raw MDX via the worker's content negotiation.
+        // agents can fetch raw MDX via the worker's content negotiation. Astro
+        // page routing preserves case, so don't lowercase these.
         await walk(fileURLToPath(new URL("./src/pages/", import.meta.url)));
       },
     },
@@ -232,7 +238,10 @@ export default defineConfig({
           autogenerate: { directory: "providers", collapsed: true },
         },
       ],
-      plugins: [starlightBlog()],
+      // starlight-blog feeds this many posts into the sidebar's "Recent"
+      // group, which `src/blog-sidebar.ts` re-buckets into Releases/Posts.
+      // We want every post listed, so set it effectively unlimited.
+      plugins: [starlightBlog({ recentPostCount: Number.MAX_SAFE_INTEGER })],
       routeMiddleware: ["./src/blog-sidebar.ts"],
     }),
     mdx(),
