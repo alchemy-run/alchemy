@@ -31,6 +31,7 @@ import * as KV from "./KV/index.ts";
 import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
 import * as RateLimit from "./RateLimit/index.ts";
+import * as Ruleset from "./Ruleset/index.ts";
 import * as SecretsStore from "./SecretsStore/index.ts";
 import * as Tunnel from "./Tunnel/index.ts";
 import * as Vectorize from "./Vectorize/index.ts";
@@ -85,6 +86,7 @@ export const providers = () =>
       R2.R2Bucket,
       R2.R2BucketBindingPolicy,
       RateLimit.RateLimitBindingPolicy,
+      Ruleset.Ruleset,
       SecretsStore.SecretBindingPolicy,
       SecretsStore.SecretsStore,
       SecretsStore.Secret,
@@ -138,6 +140,7 @@ export const providers = () =>
         R2.R2BucketBindingPolicyLive,
         R2.R2BucketProvider(),
         RateLimit.RateLimitBindingPolicyLive,
+        Ruleset.RulesetProvider(),
         SecretsStore.SecretBindingPolicyLive,
         SecretsStore.SecretsStoreProvider(),
         SecretsStore.StoreSecretProvider(),

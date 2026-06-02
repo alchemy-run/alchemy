@@ -17,6 +17,7 @@ export * from "./Providers.ts";
 export * from "./Queue/index.ts";
 export * from "./R2/index.ts";
 export * from "./RateLimit/index.ts";
+export * from "./Ruleset/index.ts";
 export * from "./SecretsStore/index.ts";
 export * from "./StateStore/index.ts";
 export * from "./Tunnel/index.ts";
