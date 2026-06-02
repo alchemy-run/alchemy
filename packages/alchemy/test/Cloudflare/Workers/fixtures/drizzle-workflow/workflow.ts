@@ -3,7 +3,7 @@ import * as Drizzle from "@/Drizzle/index.ts";
 import { eq } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Hyperdrive } from "./drizzle-workflow-db.ts";
+import { Hyperdrive } from "./db.ts";
 import { relations, Widgets } from "./schema.ts";
 
 /**

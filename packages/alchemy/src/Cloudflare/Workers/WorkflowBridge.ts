@@ -1,16 +1,17 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import { ExecutionContext } from "../../ExecutionContext.ts";
 import { isScopeEjected } from "./HttpServer.ts";
+import { getWorkerExport } from "./WorkerBridge.ts";
 import {
   WorkflowEvent as WorkflowEventService,
   type WorkflowExport,
   type WorkflowImpl,
   WorkflowStep,
 } from "./Workflow.ts";
-import { getWorkerExport } from "./WorkerBridge.ts";
 
 /**
  * Create a WorkflowBridge class that extends `WorkflowEntrypoint` and
@@ -67,13 +68,20 @@ export const makeWorkflowBridge =
         const scope = Scope.makeUnsafe();
         const exit = await Effect.runPromiseExit(
           fn(event.payload).pipe(
-            Effect.provideService(
-              WorkflowEventService,
-              wrapWorkflowEvent(event),
+            Effect.provide(
+              Layer.succeed(
+                WorkflowEventService,
+                wrapWorkflowEvent(event),
+              ).pipe(
+                Layer.provideMerge(
+                  Layer.succeed(WorkflowStep, wrapWorkflowStep(step)),
+                ),
+                Layer.provideMerge(
+                  Layer.succeed(ExecutionContext, { scope, cache: {} }),
+                ),
+                Layer.provideMerge(Layer.succeed(Scope.Scope, scope)),
+              ),
             ),
-            Effect.provideService(WorkflowStep, wrapWorkflowStep(step)),
-            Effect.provideService(ExecutionContext, { scope, cache: {} }),
-            Effect.provideService(Scope.Scope, scope),
           ) as Effect.Effect<unknown>,
         );
         // Settle the run's resources with its real exit, unless a binding

@@ -2,7 +2,7 @@ import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import DrizzleWorkflow from "./drizzle-workflow.ts";
+import DrizzleWorkflow from "./workflow.ts";
 
 /**
  * Worker that hosts {@link DrizzleWorkflow} and exposes start/status routes so
