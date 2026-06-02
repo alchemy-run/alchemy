@@ -14,72 +14,76 @@ import DynamoDBStreamFunctionLive, {
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-describe.sequential("AWS.DynamoDB.Stream", () => {
-  test.provider(
-    "processes real DynamoDB stream records through Lambda",
-    (stack) =>
-      Effect.gen(function* () {
-        yield* Effect.logInfo(
-          "DynamoDB Stream test: destroying previous resources",
-        );
-        yield* stack.destroy();
+describe
+  .skipIf(!!process.env.NO_SLOW_TESTS)
+  .sequential("AWS.DynamoDB.Stream", () => {
+    test.provider(
+      "processes real DynamoDB stream records through Lambda",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* Effect.logInfo(
+            "DynamoDB Stream test: destroying previous resources",
+          );
+          yield* stack.destroy();
 
-        yield* Effect.logInfo("DynamoDB Stream test: deploying stream fixture");
-        const { table, queue, streamFunction } = yield* stack.deploy(
-          Effect.gen(function* () {
-            const { table, queue } = yield* TableAndQueue;
+          yield* Effect.logInfo(
+            "DynamoDB Stream test: deploying stream fixture",
+          );
+          const { table, queue, streamFunction } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const { table, queue } = yield* TableAndQueue;
 
-            const func = yield* DynamoDBStreamFunction;
+              const func = yield* DynamoDBStreamFunction;
 
-            return { table, queue, streamFunction: func };
-          }).pipe(Effect.provide(DynamoDBStreamFunctionLive)),
-        );
+              return { table, queue, streamFunction: func };
+            }).pipe(Effect.provide(DynamoDBStreamFunctionLive)),
+          );
 
-        const streamState = yield* waitForTableStreamSpecification(
-          table.tableName,
-          {
+          const streamState = yield* waitForTableStreamSpecification(
+            table.tableName,
+            {
+              StreamEnabled: true,
+              StreamViewType: "NEW_AND_OLD_IMAGES",
+            },
+          );
+          expect(streamState.Table?.StreamSpecification).toEqual({
             StreamEnabled: true,
             StreamViewType: "NEW_AND_OLD_IMAGES",
-          },
-        );
-        expect(streamState.Table?.StreamSpecification).toEqual({
-          StreamEnabled: true,
-          StreamViewType: "NEW_AND_OLD_IMAGES",
-        });
-        expect(streamState.Table?.LatestStreamArn).toBeDefined();
+          });
+          expect(streamState.Table?.LatestStreamArn).toBeDefined();
 
-        yield* waitForEventSourceMappingEnabled(
-          streamFunction.functionName,
-          streamState.Table?.LatestStreamArn!,
-        );
+          yield* waitForEventSourceMappingEnabled(
+            streamFunction.functionName,
+            streamState.Table?.LatestStreamArn!,
+          );
 
-        yield* Effect.logInfo(
-          `DynamoDB Stream test: writing item into ${table.tableName}`,
-        );
-        yield* DynamoDB.putItem({
-          TableName: table.tableName,
-          Item: {
-            pk: { S: "stream#1" },
-            sk: { S: "item#1" },
-            data: { S: "payload" },
-          },
-        });
+          yield* Effect.logInfo(
+            `DynamoDB Stream test: writing item into ${table.tableName}`,
+          );
+          yield* DynamoDB.putItem({
+            TableName: table.tableName,
+            Item: {
+              pk: { S: "stream#1" },
+              sk: { S: "item#1" },
+              data: { S: "payload" },
+            },
+          });
 
-        const message = yield* waitForQueueMessage(queue.queueUrl);
-        const body = JSON.parse(message.Body!);
+          const message = yield* waitForQueueMessage(queue.queueUrl);
+          const body = JSON.parse(message.Body!);
 
-        expect(body.eventName).toEqual("INSERT");
-        expect(body.keys.pk.S).toEqual("stream#1");
-        expect(body.keys.sk.S).toEqual("item#1");
-        expect(body.newImage.data.S).toEqual("payload");
-        expect(body.oldImage).toBeUndefined();
+          expect(body.eventName).toEqual("INSERT");
+          expect(body.keys.pk.S).toEqual("stream#1");
+          expect(body.keys.sk.S).toEqual("item#1");
+          expect(body.newImage.data.S).toEqual("payload");
+          expect(body.oldImage).toBeUndefined();
 
-        yield* Effect.logInfo("DynamoDB Stream test: destroying fixture");
-        yield* stack.destroy();
-      }),
-    { timeout: 600_000 },
-  );
-});
+          yield* Effect.logInfo("DynamoDB Stream test: destroying fixture");
+          yield* stack.destroy();
+        }),
+      { timeout: 600_000 },
+    );
+  });
 
 const waitForEventSourceMappingEnabled = Effect.fn(function* (
   functionName: string,

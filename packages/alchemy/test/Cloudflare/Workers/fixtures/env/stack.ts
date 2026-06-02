@@ -1,5 +1,6 @@
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Output from "alchemy/Output";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -18,6 +19,7 @@ export const AsyncWorker = Cloudflare.Worker("EnvAsyncWorker", {
     NULL: null,
     OBJ: { nested: { value: "ok" }, count: 7 },
     ARR: [1, 2, 3],
+    OUTPUT_STR: Output.literal("output-str"),
     SECRET_STR: Redacted.make("shh"),
     SECRET_JSON: Redacted.make({
       token: "abc",

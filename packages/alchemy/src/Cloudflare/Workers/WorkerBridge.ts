@@ -141,8 +141,17 @@ export const makeWorkerBridge = (
                       ),
                     );
                   }
+                  const result = dispatcher(...args);
+                  // A streaming RPC method returns a `Stream` directly rather
+                  // than an `Effect`. Lift it into the success channel so the
+                  // inner effect resolves to the `Stream` and `handleRpcExit`
+                  // can encode it as a stream envelope. Anything else is the
+                  // `Effect` it claims to be (its resolved value may itself be
+                  // a `Stream`, which `handleRpcExit` also handles).
                   return Effect.succeed([
-                    dispatcher(...args) as Effect.Effect<any>,
+                    Stream.isStream(result)
+                      ? Effect.succeed(result)
+                      : (result as Effect.Effect<any>),
                     Context.empty(),
                   ] as const);
                 }),
@@ -274,7 +283,16 @@ export const makeRpcProxy = (
                   ),
                 );
               }
-              return dispatcher(...args) as Effect.Effect<any>;
+              const result = dispatcher(...args);
+              // A streaming RPC method returns a `Stream` directly rather than
+              // an `Effect`. Lift it into the success channel so the resulting
+              // `Exit.value` is the `Stream` and `handleRpcExit` can encode it
+              // as a stream envelope. Anything else is the `Effect` it claims
+              // to be and is run normally (its resolved value may itself be a
+              // `Stream`, which `handleRpcExit` also handles).
+              return Stream.isStream(result)
+                ? Effect.succeed(result)
+                : (result as Effect.Effect<any>);
             }),
             processEvent,
           )

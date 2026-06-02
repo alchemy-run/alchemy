@@ -66,9 +66,6 @@ export interface MySQLDatabaseProps extends BaseDatabaseProps {
  * Output attributes of a deployed MySQL PlanetScale database.
  */
 export interface MySQLDatabaseAttributes extends BaseDatabaseAttributes {
-  /** Engine kind discriminator. */
-  kind: "mysql";
-
   /**
    * Whether to copy migration data to new branches and in deploy requests.
    */
@@ -177,7 +174,7 @@ export const MySQLDatabaseProvider = () =>
       const createBr = yield* ops.createBranch;
 
       return {
-        stables: ["id", "organization", "kind", "region"],
+        stables: ["id", "organization", "region"],
 
         diff: Effect.fn(function* ({ news, olds, output }) {
           if (!isResolved(news)) return undefined;
@@ -249,7 +246,6 @@ export const MySQLDatabaseProvider = () =>
                   output?.migrationsTable ?? olds?.migrationsTable,
                 migrationsHashes: output?.migrationsHashes ?? {},
                 importHashes: output?.importHashes ?? {},
-                kind: "mysql" as const,
                 clusterSize: output?.clusterSize ?? "",
                 requireApprovalForDeploy:
                   data.require_approval_for_deploy ?? false,
@@ -415,7 +411,6 @@ export const MySQLDatabaseProvider = () =>
             updatedAt: updated.updated_at,
             htmlUrl: updated.html_url,
             region: { slug: updated.region.slug },
-            kind: "mysql" as const,
             clusterSize,
             migrationsDir: news.migrationsDir,
             migrationsTable: news.migrationsDir ? migrationsTable : undefined,

@@ -46,7 +46,7 @@ export type Secret = Resource<
     secretName: string;
     storeId: string;
     accountId: string;
-    status: "pending" | "active" | "deleted";
+    status: SecretStatus;
     scopes: string[];
     comment: string | undefined;
   },
@@ -57,6 +57,12 @@ export type Secret = Resource<
 export const isSecret = (value: unknown): value is Secret =>
   typeof value === "object" &&
   (value as any)?.Type === "Cloudflare.SecretsStore.Secret";
+
+export type SecretStatus = "pending" | "active" | "deleted";
+
+// Distilled widened generated string enums to open unions (`string & {}`); the
+// API only ever returns the known variants, so narrow at the boundary.
+const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
 
 /**
  * A single secret stored inside a Cloudflare Secrets Store.
@@ -136,7 +142,7 @@ export const StoreSecretProvider = () =>
                 id: string;
                 name: string;
                 storeId: string;
-                status: "pending" | "active" | "deleted";
+                status: string;
                 comment?: string | null;
               }
             | undefined;
@@ -192,7 +198,7 @@ export const StoreSecretProvider = () =>
                 secretName: secret.name,
                 storeId: secret.storeId,
                 accountId,
-                status: secret.status,
+                status: asSecretStatus(secret.status),
                 scopes,
                 comment: secret.comment ?? undefined,
               };
@@ -227,7 +233,7 @@ export const StoreSecretProvider = () =>
             secretName: observed.name,
             storeId: observed.storeId,
             accountId,
-            status: patched.status,
+            status: asSecretStatus(patched.status),
             scopes,
             comment: patched.comment ?? undefined,
           };
@@ -257,7 +263,7 @@ export const StoreSecretProvider = () =>
                 secretName: secret.name,
                 storeId: secret.storeId,
                 accountId: output.accountId,
-                status: secret.status,
+                status: asSecretStatus(secret.status),
                 scopes: output.scopes,
                 comment: secret.comment ?? undefined,
               })),
@@ -290,7 +296,7 @@ export const StoreSecretProvider = () =>
             secretName: match.name,
             storeId: match.storeId,
             accountId: olds.store.accountId,
-            status: match.status,
+            status: asSecretStatus(match.status),
             scopes: resolveScopes(olds.scopes),
             comment: match.comment ?? undefined,
           });

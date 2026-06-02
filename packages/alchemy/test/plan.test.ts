@@ -4,8 +4,8 @@ import { dedupeBindings } from "@/Diff";
 import type { Input, InputProps } from "@/Input";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
-import type { ResourceBinding } from "@/Resource";
 import { UnsatisfiedResourceCycle } from "@/Plan";
+import type { ResourceBinding } from "@/Resource";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import {
@@ -28,6 +28,7 @@ import {
   BindingTarget,
   Bucket,
   Function,
+  KindStablesResource,
   NoPrecreateBindingTarget,
   Queue,
   TestLayers,
@@ -64,7 +65,7 @@ const resolveStackId = Effect.gen(function* () {
 const seed = (resources: Record<string, ResourceState>) =>
   Effect.gen(function* () {
     const { name, stage } = yield* resolveStackId;
-    const state = yield* State;
+    const state = yield* yield* State;
     for (const [fqn, value] of Object.entries(resources)) {
       yield* state.set({ stack: name, stage, fqn, value });
     }
@@ -275,6 +276,46 @@ test(
         "empty object",
       ),
     });
+  }),
+);
+
+test(
+  "plan downstream resources when a stable kind shadows an output discriminator",
+  Effect.gen(function* () {
+    yield* seed({
+      Database: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "Database",
+        fqn: "Database",
+        namespace: undefined,
+        resourceType: "Test.KindStablesResource",
+        status: "created",
+        props: {
+          value: "v1",
+        },
+        attr: {
+          kind: "postgresql",
+          value: "v1",
+          upstreamKind: undefined,
+        },
+        bindings: [],
+        downstream: [],
+      },
+    });
+
+    const plan = yield* Effect.gen(function* () {
+      const database = yield* KindStablesResource("Database", {
+        value: "v2",
+      });
+      yield* KindStablesResource("Role", {
+        value: "role",
+        upstream: database,
+      });
+    }).pipe(makePlan);
+
+    expect(plan.resources.Database!.action).toBe("update");
+    expect(plan.resources.Role!.action).toBe("create");
   }),
 );
 
@@ -950,7 +991,7 @@ test.provider(
   "binding removals do not keep reappearing after apply",
   (scratch) =>
     Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
       yield* state.set({
         stack: scratch.name,
         stage: TEST_STAGE,
@@ -1977,6 +2018,32 @@ describe("Outputs should resolve to old values", () => {
   );
 
   subtest(
+    "string.flatMap(() => Output.literal(undefined))",
+    (A) => ({
+      string: A.string.pipe(Output.flatMap(() => Output.literal(undefined))),
+    }),
+    {
+      string: undefined,
+    },
+  );
+
+  subtest(
+    "string.flatMap(string => A.stringArray.map(([first]) => first))",
+    (A) => ({
+      string: A.string.pipe(
+        Output.flatMap(() =>
+          A.stringArray.pipe(
+            Output.map((stringArray) => stringArray[0]!.toUpperCase()),
+          ),
+        ),
+      ),
+    }),
+    {
+      string: "TEST-STRING",
+    },
+  );
+
+  subtest(
     "stringArray[0].toUpperCase()",
     (A) => ({
       string: A.stringArray.pipe(
@@ -2128,6 +2195,15 @@ describe("stable properties should not cause downstream changes", () => {
     (A) => ({
       string: A.stableString.pipe(
         Output.mapEffect((string) => Effect.succeed(string.toUpperCase())),
+      ),
+    }),
+  );
+
+  subtest(
+    "A.stableString.flatMap((string) => Output.literal(string.toUpperCase()))",
+    (A) => ({
+      string: A.stableString.pipe(
+        Output.flatMap((string) => Output.literal(string.toUpperCase())),
       ),
     }),
   );
@@ -2561,7 +2637,7 @@ describe("engine-level adoption", () => {
       // can't detect from `props` alone.
       expect(plan.resources.Adopted!.action).toBe("update");
 
-      const state = yield* State;
+      const state = yield* yield* State;
       const persisted = yield* state.get({
         stack: TEST_STACK,
         stage: TEST_STAGE,
@@ -2591,7 +2667,7 @@ describe("engine-level adoption", () => {
       // foreign-owned to subsequent deploys).
       expect(plan.resources.Adopted!.action).toBe("update");
 
-      const state = yield* State;
+      const state = yield* yield* State;
       const persisted = yield* state.get({
         stack: TEST_STACK,
         stage: TEST_STAGE,
@@ -2671,7 +2747,7 @@ describe("RefExpr resolution", () => {
     resources: Record<string, ResourceState>,
   ) =>
     Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
       for (const [fqn, value] of Object.entries(resources)) {
         yield* state.set({ stack, stage, fqn, value });
       }
@@ -2776,7 +2852,7 @@ describe("RefExpr resolution", () => {
 describe("StackRefExpr resolution", () => {
   const setStackOutput = (stack: string, stage: string, value: unknown) =>
     Effect.gen(function* () {
-      const state = yield* State;
+      const state = yield* yield* State;
       yield* state.setOutput({ stack, stage, value });
     });
 

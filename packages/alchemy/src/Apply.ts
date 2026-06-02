@@ -138,7 +138,7 @@ export const apply = <P extends Plan>(
   Effect.gen(function* () {
     const cli = yield* Cli;
     const session = yield* cli.startApplySession(plan);
-    const state = yield* State;
+    const state = yield* yield* State;
     const stack = yield* Stack;
     const stage = yield* Stage;
     const stackName = stack.name;
@@ -1397,7 +1397,7 @@ const collectGarbage = Effect.fnUntraced(function* (
   plan: Plan,
   session: PlanStatusSession,
 ) {
-  const state = yield* State;
+  const state = yield* yield* State;
   const stack = yield* Stack;
   const stackName = stack.name;
   const stage = yield* Stage;

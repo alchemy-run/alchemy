@@ -30,7 +30,7 @@ export const STATE_STORE_SCRIPT_NAME = "alchemy-state-store" as const;
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
-export const STATE_STORE_VERSION = 6 as const;
+export const STATE_STORE_VERSION = 7 as const;
 
 /**
  * Hard-coded OTLP/HTTP endpoints. Point at the public ingest relay

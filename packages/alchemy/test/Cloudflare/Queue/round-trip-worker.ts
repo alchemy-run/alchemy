@@ -57,8 +57,6 @@ export default class QueueWorker extends Cloudflare.Worker<QueueWorker>()(
   "QueueRoundTripWorker",
   {
     main: import.meta.filename,
-    subdomain: { enabled: true },
-    compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   },
   Effect.gen(function* () {
     const counters = yield* Counter;

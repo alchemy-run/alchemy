@@ -40,7 +40,6 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(() => {
       );
 
       expect(database).toMatchObject({
-        kind: "mysql",
         id: expect.any(String),
         name: expect.any(String),
         organization: expect.any(String),
@@ -100,7 +99,6 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(() => {
       );
 
       expect(database).toMatchObject({
-        kind: "mysql",
         id: expect.any(String),
         name: expect.any(String),
         organization: expect.any(String),
@@ -197,7 +195,6 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(() => {
         );
 
         expect(database).toMatchObject({
-          kind: "mysql",
           defaultBranch: "custom",
         });
 

@@ -9,9 +9,11 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import {
   buildConditionPayload,
+  collectPolicies,
   conditionFingerprint,
   policyFingerprint,
   resolvePolicies,
+  type ApiTokenBinding,
   type ApiTokenProps,
 } from "./Common.ts";
 
@@ -30,7 +32,7 @@ export type AccountApiToken = Resource<
     value: Redacted.Redacted<string>;
     accountId: string;
   },
-  never,
+  ApiTokenBinding,
   Providers
 >;
 
@@ -70,6 +72,44 @@ export type AccountApiToken = Resource<
  *   value: token.value,
  * });
  * ```
+ *
+ * @section Attaching Policies via Bindings
+ * @example Let a downstream capability contribute its own policies
+ * A token can be created with no `policies` of its own; the policies are
+ * supplied through its binding contract (see {@link ApiTokenBinding}). This is
+ * how capabilities like {@link CreateTunnel} provision a least-privilege token.
+ * ```typescript
+ * const token = yield* Cloudflare.AccountApiToken("scoped-token");
+ *
+ * yield* token.bind("MyCapability", {
+ *   policies: [
+ *     {
+ *       effect: "allow",
+ *       permissionGroups: ["Cloudflare Tunnel Write"],
+ *       resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @section Exposing a Token to a Worker
+ * @example Read the token value at runtime
+ * Bind the token's outputs in the Worker's Init phase to get runtime
+ * accessors. Binding `token.value` injects it as a `secret_text` Worker
+ * binding; the returned accessor reads it back (as `Redacted`) at runtime.
+ * ```typescript
+ * // init
+ * const value = yield* token.value; // Accessor<Redacted<string>>
+ * const accountId = yield* token.accountId; // Accessor<string>
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     const apiToken = yield* value; // Redacted<string>
+ *     // ... call the Cloudflare API with `apiToken`
+ *     return HttpServerResponse.text("ok");
+ *   }),
+ * };
+ * ```
  */
 export const AccountApiToken = Resource<AccountApiToken>(
   "Cloudflare.AccountApiToken",
@@ -96,21 +136,25 @@ export const AccountApiTokenProvider = () =>
         tokenData: {
           id?: string | null;
           name?: string | null;
-          status?: "active" | "disabled" | "expired" | null;
+          // Distilled widened generated string enums to open unions (`string & {}`).
+          status?: string | null;
         },
         value: Redacted.Redacted<string>,
         accountId: string,
       ): AccountApiTokenAttributes => ({
         tokenId: tokenData.id ?? "",
         name: tokenData.name ?? "",
-        status: tokenData.status ?? "active",
+        status: (tokenData.status ?? "active") as
+          | "active"
+          | "disabled"
+          | "expired",
         value,
         accountId,
       });
 
       return {
         stables: ["tokenId", "accountId"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news = {}, output }) {
           if (!isResolved(news)) return undefined;
           const newAccountId = news.accountId ?? defaultAccountId;
           const oldAccountId =
@@ -123,7 +167,9 @@ export const AccountApiTokenProvider = () =>
           const oldPolicyFp = policyFingerprint(
             resolvePolicies(olds?.policies ?? []),
           );
-          const newPolicyFp = policyFingerprint(resolvePolicies(news.policies));
+          const newPolicyFp = policyFingerprint(
+            resolvePolicies(news.policies ?? []),
+          );
           const oldCondFp = conditionFingerprint(olds?.condition);
           const newCondFp = conditionFingerprint(news.condition);
           if (
@@ -136,10 +182,17 @@ export const AccountApiTokenProvider = () =>
             return { action: "update" } as const;
           }
         }),
-        reconcile: Effect.fn(function* ({ id, news, output }) {
+        reconcile: Effect.fn(function* ({ id, news = {}, output, bindings }) {
           const accountId = news.accountId ?? defaultAccountId;
           const name = yield* resolveName(id, news.name);
-          const policies = resolvePolicies(news.policies);
+          const collected = collectPolicies(news.policies, bindings);
+          if (collected.length === 0) {
+            return yield* Effect.die(
+              `Cloudflare requires at least one policy on token "${name}". ` +
+                "Pass `policies` or attach them via a binding.",
+            );
+          }
+          const policies = resolvePolicies(collected);
 
           // Observe — fetch current state if we already know the token id.
           // Cloudflare reports a deleted token as `InvalidRoute` or

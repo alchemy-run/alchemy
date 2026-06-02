@@ -50,6 +50,8 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const queue = yield* Queue;
     const worker = yield* Worker;
+    // create a random resource to test redacted storage
+    yield* Alchemy.Random("Random");
 
     // Register the same worker script as a consumer of Queue. The worker's
     // `queue(batch)` handler (see src/worker.ts) receives each message batch.

@@ -21,8 +21,6 @@ export default class D1Worker extends Cloudflare.Worker<D1Worker>()(
   "D1EffectWorker",
   {
     main: import.meta.filename,
-    subdomain: { enabled: true },
-    compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   },
   Effect.gen(function* () {
     const database = yield* TestDatabase;

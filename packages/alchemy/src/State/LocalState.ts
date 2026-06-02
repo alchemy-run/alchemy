@@ -10,7 +10,21 @@ import { State, StateStoreError, type StateService } from "./State.ts";
 import { encodeState, reviveState } from "./StateEncoding.ts";
 
 export const localState = () =>
-  Layer.effect(State, makeLocalState().pipe(recordStateStoreInit));
+  Layer.effect(
+    State,
+    Effect.gen(function* () {
+      const context = yield* Effect.context<
+        FileSystem.FileSystem | Path.Path
+      >();
+
+      const make = makeLocalState().pipe(
+        recordStateStoreInit,
+        Effect.provideContext(context),
+      );
+
+      return yield* Effect.cached(make);
+    }),
+  );
 
 export const makeLocalState = () =>
   Effect.gen(function* () {

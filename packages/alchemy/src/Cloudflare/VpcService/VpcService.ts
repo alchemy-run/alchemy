@@ -262,7 +262,9 @@ export const formatVpcService = (
   service: {
     serviceId?: string | null;
     name: string;
-    type: "http" | "tcp";
+    // Distilled widened generated string enums to open unions (`string & {}`);
+    // the API only ever returns the known variants here.
+    type: string;
     createdAt?: string | null;
     updatedAt?: string | null;
     httpPort?: number | null;
@@ -300,7 +302,7 @@ export const formatVpcService = (
   return {
     serviceId: service.serviceId!,
     serviceName: service.name,
-    serviceType: service.type,
+    serviceType: service.type as "http" | "tcp",
     httpPort: service.httpPort ?? undefined,
     httpsPort: service.httpsPort ?? undefined,
     host,

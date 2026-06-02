@@ -4,6 +4,13 @@ import {
 } from "@distilled.cloud/cloudflare/Credentials";
 import * as Effect from "effect/Effect";
 
+/**
+ * Reference to an existing Cloudflare Zone. Accepts:
+ *   - a zone id (32 hex characters),
+ *   - a zone name (`example.com`), or
+ *   - a `{ zoneId, name? }` object (e.g. the output of a `Zone` resource or
+ *     {@link importZone}).
+ */
 export type ZoneReference = string | { zoneId: string; name?: string };
 
 export const isZoneId = (zone: string): boolean => /^[a-f0-9]{32}$/i.test(zone);
@@ -36,19 +43,25 @@ export const resolveZoneId = ({
     );
   });
 
+type ZoneListItem = {
+  id: string;
+  name: string;
+  account: { id?: string | null };
+};
+
 type ZoneListResponse = {
   success: boolean;
   errors?: { message?: string }[];
-  result?: { id: string; name: string; account: { id?: string | null } }[];
+  result?: ZoneListItem[];
 };
 
-const findZoneByName = ({
+export const findZoneByName = ({
   accountId,
   name,
 }: {
   accountId: string;
   name: string;
-}) =>
+}): Effect.Effect<ZoneListItem | undefined, Error, Credentials> =>
   Effect.gen(function* () {
     const credentialsEffect = yield* Credentials;
     const credentials = yield* credentialsEffect;

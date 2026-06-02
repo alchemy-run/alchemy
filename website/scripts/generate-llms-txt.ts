@@ -27,6 +27,8 @@ interface Page {
   title: string;
   description: string;
   draft: boolean;
+  /** `sidebar.order` from frontmatter; `Infinity` when unset. */
+  order: number;
 }
 
 interface Section {
@@ -65,56 +67,19 @@ const SECTIONS: Section[] = [
     heading: "Tutorial — Cloudflare add-ons",
     intro:
       "Standalone tutorials that extend the main tutorial's Worker with a specific Cloudflare feature. Pick the ones that match your use case.",
-    pages: {
-      slugs: [
-        "tutorial/cloudflare/durable-objects",
-        "tutorial/cloudflare/hibernatable-websockets",
-        "tutorial/cloudflare/containers",
-        "tutorial/cloudflare/workflows",
-        "tutorial/cloudflare/vite-spa",
-        "tutorial/cloudflare/ai-gateway",
-      ],
-    },
+    pages: { directory: "tutorial/cloudflare" },
   },
   {
     heading: "Tutorial — AWS",
     intro:
       "End-to-end AWS tutorials. Read the Lambda page first; the others bind storage and event sources to that Lambda.",
-    pages: {
-      slugs: [
-        "tutorial/aws/lambda",
-        "tutorial/aws/s3",
-        "tutorial/aws/s3-events",
-        "tutorial/aws/sqs",
-        "tutorial/aws/kinesis",
-        "tutorial/aws/dynamodb",
-        "tutorial/aws/dynamodb-streams",
-      ],
-    },
+    pages: { directory: "tutorial/aws" },
   },
   {
     heading: "Concepts — the mental model",
     intro:
       "Reference pages explaining what each primitive means and how they fit together. Read these when something in a tutorial feels magical, or before designing a new Stack.",
-    pages: {
-      slugs: [
-        "concepts/resource",
-        "concepts/provider",
-        "concepts/resource-lifecycle",
-        "concepts/stack",
-        "concepts/stages",
-        "concepts/phases",
-        "concepts/platform",
-        "concepts/binding",
-        "concepts/outputs",
-        "concepts/layers",
-        "concepts/state-store",
-        "concepts/profiles",
-        "concepts/local-development",
-        "concepts/observability",
-        "concepts/testing",
-      ],
-    },
+    pages: { directory: "concepts" },
   },
   {
     heading: "Guides — task-oriented",
@@ -124,15 +89,43 @@ const SECTIONS: Section[] = [
   },
 ];
 
-const PROVIDERS_SECTION = `## Providers — auto-generated API reference
+const PROVIDERS_INTRO = `Per-resource API reference, generated from JSDoc on the source \`.ts\` files via \`bun generate:api-reference\`. Each page documents the resource's input properties (with types, defaults, and constraints), output attributes, and Quick Reference / Examples sections derived from \`@section\` / \`@example\` JSDoc tags. Grouped by cloud below.`;
 
-Per-resource API pages live under \`${siteUrl}/providers/{Cloud}/{Resource}\` (e.g. \`/providers/AWS/Bucket\`, \`/providers/Cloudflare/Worker\`). They are generated from JSDoc on the source \`.ts\` files via \`bun generate:api-reference\` and are not checked into git, so this index does not enumerate them. Each page documents:
+/**
+ * Enumerates every generated provider page under `providers/{Cloud}/...`,
+ * grouped by cloud. These pages are produced by `build:reference` (which runs
+ * before this script in the build), so they exist on disk at generation time
+ * even though they are gitignored.
+ */
+async function renderProvidersSection(): Promise<string> {
+  const providersDir = path.join(docsDir, "providers");
+  let clouds: string[];
+  try {
+    const entries = await readdir(providersDir, { withFileTypes: true });
+    clouds = entries
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
+  } catch (err: any) {
+    if (err?.code === "ENOENT") return `## Providers\n\n${PROVIDERS_INTRO}`;
+    throw err;
+  }
 
-- The resource's input properties (props) with types, defaults, and constraints.
-- The resource's output attributes.
-- Quick Reference and Examples sections derived from \`@section\` / \`@example\` JSDoc tags.
-
-To find a specific resource, browse the Providers section in the sidebar at ${siteUrl}, or read the source JSDoc at \`packages/alchemy/src/{Cloud}/{Service}/{Resource}.ts\` in [the repository](https://github.com/alchemy-run/alchemy-effect).`;
+  const blocks: string[] = [`## Providers`, PROVIDERS_INTRO];
+  for (const cloud of clouds) {
+    const slugs = await listSlugs(`providers/${cloud}`);
+    const pages = (await Promise.all(slugs.map(loadPage)))
+      .filter((p) => !p.draft)
+      // Starlight serves provider routes lowercased (e.g. the CamelCase source
+      // `providers/AWS/S3/Bucket.md` is reachable at `/providers/aws/s3/bucket`).
+      .map((p) => ({ ...p, href: p.href.toLowerCase() }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+    if (pages.length === 0) continue;
+    blocks.push(`### ${cloud}`);
+    blocks.push(pages.map(renderPage).join("\n"));
+  }
+  return blocks.join("\n\n");
+}
 
 const HEADER = `# Alchemy
 
@@ -162,6 +155,30 @@ function parseFrontmatter(source: string): Record<string, string> {
   return out;
 }
 
+/**
+ * Extracts the nested `sidebar.order` value from a frontmatter block.
+ * Starlight uses this to order autogenerated sidebar groups; we mirror it
+ * so llms.txt lists pages in the same order the sidebar shows them.
+ * Returns `Infinity` when unset, so unordered pages sort after ordered ones.
+ */
+function parseSidebarOrder(source: string): number {
+  if (!source.startsWith("---")) return Number.POSITIVE_INFINITY;
+  const end = source.indexOf("\n---", 3);
+  if (end === -1) return Number.POSITIVE_INFINITY;
+  const block = source.slice(3, end);
+  const lines = block.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^sidebar:\s*$/.test(lines[i])) continue;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (/^\S/.test(lines[j])) break; // dedented out of the sidebar block
+      const m = lines[j].match(/^\s+order:\s*(-?[\d.]+)\s*$/);
+      if (m) return Number.parseFloat(m[1]);
+    }
+    break;
+  }
+  return Number.POSITIVE_INFINITY;
+}
+
 async function loadPage(slug: string): Promise<Page> {
   const candidates = [`${slug}.mdx`, `${slug}.md`];
   for (const rel of candidates) {
@@ -180,6 +197,7 @@ async function loadPage(slug: string): Promise<Page> {
         title,
         description,
         draft: fm.draft === "true" || (fm.draft as unknown as boolean) === true,
+        order: parseSidebarOrder(source),
       };
     } catch (err: any) {
       if (err?.code !== "ENOENT") throw err;
@@ -196,6 +214,11 @@ async function listSlugs(
   const entries = await readdir(dir, { withFileTypes: true });
   const slugs: string[] = [];
   for (const entry of entries) {
+    const rel = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) {
+      slugs.push(...(await listSlugs(rel, exclude)));
+      continue;
+    }
     if (!entry.isFile()) continue;
     const ext = path.extname(entry.name);
     if (ext !== ".md" && ext !== ".mdx") continue;
@@ -205,6 +228,11 @@ async function listSlugs(
   }
   slugs.sort();
   return slugs;
+}
+
+function byOrderThenTitle(a: Page, b: Page): number {
+  if (a.order !== b.order) return a.order - b.order;
+  return a.title.localeCompare(b.title);
 }
 
 function renderPage(page: Page): string {
@@ -217,6 +245,7 @@ async function main() {
   const parts: string[] = [HEADER];
 
   for (const section of SECTIONS) {
+    const isDirectory = !("slugs" in section.pages);
     const slugs =
       "slugs" in section.pages
         ? section.pages.slugs
@@ -224,13 +253,16 @@ async function main() {
     const pages = (await Promise.all(slugs.map(loadPage))).filter(
       (p) => !p.draft,
     );
+    // Directory sections mirror the sidebar's `sidebar.order` ordering; slug
+    // sections keep the curated order they were declared in.
+    if (isDirectory) pages.sort(byOrderThenTitle);
 
     parts.push(`## ${section.heading}`);
     if (section.intro) parts.push(section.intro);
     parts.push(pages.map(renderPage).join("\n"));
   }
 
-  parts.push(PROVIDERS_SECTION);
+  parts.push(await renderProvidersSection());
 
   const body = parts.join("\n\n") + "\n";
   await writeFile(outFile, body, "utf8");

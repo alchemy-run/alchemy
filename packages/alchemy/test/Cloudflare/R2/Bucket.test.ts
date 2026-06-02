@@ -115,7 +115,7 @@ test.provider(
 
       // Phase 2: wipe local state — the bucket stays on Cloudflare.
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",
@@ -137,7 +137,7 @@ test.provider(
       expect(adopted.bucketName).toEqual(bucketName);
 
       const persisted = yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         return yield* state.get({
           stack: stack.name,
           stage: "test",

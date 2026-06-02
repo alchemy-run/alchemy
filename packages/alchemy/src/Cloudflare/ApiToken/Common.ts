@@ -27,10 +27,20 @@ export type ApiTokenPermissionGroupRef =
   | PermissionGroupName
   | { id: string; meta?: { key?: string; value?: string } };
 
+/**
+ * Value of a resource entry in an {@link ApiTokenPolicy}. Usually `"*"`, but
+ * account-owned tokens must nest zone resources under the account resource —
+ * e.g. `{ "com.cloudflare.api.account.<id>": { "com.cloudflare.api.account.zone.*": "*" } }`
+ * — so a nested object is also allowed.
+ */
+export type ApiTokenResourceScope =
+  | string
+  | { [K in ApiTokenResourceKey]?: string };
+
 export interface ApiTokenPolicy {
   effect: "allow" | "deny";
   permissionGroups: ApiTokenPermissionGroupRef[];
-  resources: { [K in ApiTokenResourceKey]?: string };
+  resources: { [K in ApiTokenResourceKey]?: ApiTokenResourceScope };
 }
 
 export interface ApiTokenCondition {
@@ -52,10 +62,11 @@ export type ApiTokenProps = {
    */
   accountId?: string;
   /**
-   * Access policies attached to the token. At least one policy is required
-   * by Cloudflare.
+   * Access policies attached to the token. Cloudflare requires at least one
+   * policy on a token; if you omit `policies` here, the policies must instead
+   * be contributed by bindings (see {@link ApiTokenBinding}).
    */
-  policies: ApiTokenPolicy[];
+  policies?: ApiTokenPolicy[];
   /** ISO 8601 expiration timestamp. */
   expiresOn?: string;
   /** ISO 8601 "not before" timestamp. */
@@ -63,6 +74,34 @@ export type ApiTokenProps = {
   /** Optional usage conditions (e.g. IP allowlist). */
   condition?: ApiTokenCondition;
 };
+
+/**
+ * Binding contract for {@link AccountApiToken} / {@link UserApiToken}.
+ *
+ * A binding contributes additional access policies to the token. This lets a
+ * downstream resource (e.g. a runtime capability that needs to call a specific
+ * Cloudflare API) create a token and attach exactly the policies it requires,
+ * without the token's owner having to enumerate them up front.
+ *
+ * Binding-contributed policies are merged with any `policies` passed directly
+ * as props; the union must contain at least one policy.
+ */
+export type ApiTokenBinding = {
+  /** Access policies to attach to the token. */
+  policies?: ApiTokenPolicy[];
+};
+
+/**
+ * Collect the policies a token should be created with: those passed directly
+ * as props, plus those contributed by bindings.
+ */
+export const collectPolicies = (
+  props: ApiTokenPolicy[] | undefined,
+  bindings: { data: ApiTokenBinding }[],
+): ApiTokenPolicy[] => [
+  ...(props ?? []),
+  ...bindings.flatMap((binding) => binding.data.policies ?? []),
+];
 
 export type ResolvedPolicy = {
   effect: "allow" | "deny";
@@ -87,8 +126,8 @@ export const resolvePermissionGroup = (ref: ApiTokenPermissionGroupRef) => {
 
 const resolveResources = (
   resources: ApiTokenPolicy["resources"],
-): Record<string, string> => {
-  const out: Record<string, string> = {};
+): Record<string, ApiTokenResourceScope> => {
+  const out: Record<string, ApiTokenResourceScope> = {};
   for (const [key, value] of Object.entries(resources)) {
     if (value === undefined) continue;
     out[key] = value;

@@ -1,6 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
+import type { ConfigError } from "effect/Config";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -708,7 +709,11 @@ export const Worker: Platform<
     id: string,
     props:
       | InputProps<WorkerProps<Bindings, Assets>>
-      | Effect.Effect<InputProps<WorkerProps<Bindings, Assets>>, never, Req>,
+      | Effect.Effect<
+          InputProps<WorkerProps<Bindings, Assets>>,
+          ConfigError,
+          Req
+        >,
   ): Effect.Effect<
     Worker<{
       [binding in keyof NormalizedBindings<
