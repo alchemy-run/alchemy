@@ -11,6 +11,10 @@ const serviceName =
 const message =
   process.env.PRISMA_EFFECT_MESSAGE ??
   "hello from Effect-native Prisma Compute";
+const verifyUrl = process.env.PRISMA_EFFECT_VERIFY_URL !== "false";
+const urlReadinessTimeoutSeconds = Number(
+  process.env.PRISMA_EFFECT_URL_TIMEOUT_SECONDS ?? "60",
+);
 
 const runtimeEnv = (key: string, fallback: string) =>
   Effect.sync(() => process.env[key] ?? fallback);
@@ -32,6 +36,8 @@ const Api = Prisma.Compute(
         PRISMA_PROJECT_ID: project.projectId,
         PRISMA_BRANCH_ID: branch.branchId,
       },
+      verifyUrl,
+      urlReadinessTimeoutSeconds,
       destroyOldVersion: true,
     };
   }),

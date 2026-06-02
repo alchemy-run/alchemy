@@ -1288,6 +1288,109 @@ describe("Prisma Compute", () => {
   });
 
   it.effect(
+    "deletes a newly created Compute service when a later create step fails",
+    () => {
+      const calls: Array<[string, unknown?]> = [];
+      const client = {
+        listProjectComputeServices: (projectId: string, query: unknown) => {
+          calls.push(["listProjectComputeServices", { projectId, query }]);
+          return Effect.succeed([]);
+        },
+        createProjectComputeService: (projectId: string, input: unknown) => {
+          calls.push(["createProjectComputeService", { projectId, input }]);
+          return Effect.succeed({
+            id: "service-1",
+            type: "compute-service" as const,
+            url: "https://api.prisma.test/v1/compute-services/service-1",
+            name: "api",
+            region: { id: "us-east-1", name: "US East" },
+            projectId,
+            branchId: "branch-main",
+            latestVersionId: null,
+            serviceEndpointDomain: "api.prisma.build",
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+        listEnvironmentVariables: () => Effect.succeed([]),
+        createServiceComputeVersion: () => {
+          calls.push(["createServiceComputeVersion"]);
+          return Effect.succeed({
+            id: "version-1",
+            type: "compute-version" as const,
+            url: "https://api.prisma.test/v1/versions/version-1",
+            foundryVersionId: "foundry-1",
+            uploadUrl: null,
+          });
+        },
+        getComputeServiceVersion: (id: string) => {
+          calls.push(["getComputeServiceVersion", id]);
+          return Effect.succeed({
+            id,
+            type: "compute-version" as const,
+            url: `https://api.prisma.test/v1/versions/${id}`,
+            foundryVersionId: "foundry-1",
+            status: "new",
+            previewDomain: null,
+            createdAt: "2026-01-01T00:00:00Z",
+          });
+        },
+        deleteComputeServiceVersion: (id: string) => {
+          calls.push(["deleteComputeServiceVersion", id]);
+          return Effect.void;
+        },
+        listServiceComputeVersions: (computeServiceId: string) => {
+          calls.push(["listServiceComputeVersions", computeServiceId]);
+          return Effect.succeed([]);
+        },
+        deleteComputeService: (id: string) => {
+          calls.push(["deleteComputeService", id]);
+          return Effect.void;
+        },
+      } as unknown as PrismaManagementClient;
+
+      return Effect.gen(function* () {
+        const provider = yield* Compute.Provider;
+        const error = yield* provider
+          .reconcile({
+            id: "App",
+            instanceId: "00000000000000000000000000000000",
+            news: {
+              project: "project-1",
+              serviceName: "api",
+              artifact: "archive-bytes",
+              branchId: "branch-main",
+              start: false,
+              skipPromote: true,
+            },
+            olds: undefined,
+            output: undefined,
+            session: undefined as never,
+            bindings: [],
+          })
+          .pipe(Effect.flip);
+
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toContain(
+          "did not return an upload URL",
+        );
+        expect(calls).toContainEqual([
+          "deleteComputeServiceVersion",
+          "version-1",
+        ]);
+        expect(calls).toContainEqual([
+          "listServiceComputeVersions",
+          "service-1",
+        ]);
+        expect(calls).toContainEqual(["deleteComputeService", "service-1"]);
+      }).pipe(
+        Effect.provide(ComputeProvider()),
+        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(PlatformServices),
+      );
+    },
+  );
+
+  it.effect(
     "deletes created Compute version when artifact upload fails",
     () => {
       const calls: Array<[string, unknown?]> = [];

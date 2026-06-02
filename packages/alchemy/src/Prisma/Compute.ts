@@ -1361,7 +1361,7 @@ const ensureService = Effect.fn(function* (
     });
   }
 
-  return service;
+  return { service, created: createdService };
 });
 
 const ensureSkipCodeUploadCanFork = (
@@ -1697,7 +1697,7 @@ export const ComputeProvider = () =>
               )
             : undefined;
           yield* ensureSkipCodeUploadCanFork(effectiveNews, observedService);
-          const service = yield* ensureService(
+          const ensuredService = yield* ensureService(
             client,
             projectId,
             effectiveNews,
@@ -1712,210 +1712,221 @@ export const ComputeProvider = () =>
               Effect.fail(computeApiUnavailable()),
             ),
           );
-          const deploymentHash = yield* sha256Object({
-            artifact: artifact.hash,
-            branchId: service.branchId,
-          });
-          const previousVersionId = service.latestVersionId ?? null;
-          const previousEnvironmentClass =
-            olds?.envClass ?? output?.environmentClass ?? "production";
-          const environmentClass = effectiveNews.envClass ?? "production";
-          yield* cleanupRemovedComputeEnvironment(
-            client,
-            projectId,
-            previousEnvironmentClass,
-            previousManagedEnv(output?.environmentKeys, olds?.env),
-            environmentClass,
-            effectiveNews.env,
-          );
-          yield* syncComputeEnvironment(
-            client,
-            projectId,
-            environmentClass,
-            effectiveNews.env,
-          );
-
-          let version: ObservedComputeVersion | undefined =
-            output?.computeVersionId && output.artifactHash === deploymentHash
-              ? yield* observeComputeVersion(
-                  client,
-                  output.computeVersionId,
-                ).pipe(
-                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-                )
-              : undefined;
-          let createdVersionId: string | undefined;
-          const cleanupCreatedVersionOnFailure = (
-            versionId: string,
-            error: unknown,
-          ) =>
-            createdVersionId === versionId
-              ? destroyComputeVersion(client, versionId, effectiveNews).pipe(
+          const service = ensuredService.service;
+          const cleanupCreatedServiceOnFailure = (error: unknown) =>
+            ensuredService.created
+              ? destroyComputeService(client, service.id).pipe(
                   Effect.catch(() => Effect.void),
                   Effect.andThen(() => Effect.fail(error)),
                 )
               : Effect.fail(error);
 
-          if (!version) {
-            const created = yield* client.createServiceComputeVersion(
-              service.id,
-              {
-                portMapping: { http: artifact.port },
-                skipCodeUpload: effectiveNews.skipCodeUpload,
-              },
-            );
-            createdVersionId = created.id;
-            const cleanupCreatedVersion = destroyComputeVersion(
+          return yield* Effect.gen(function* () {
+            const deploymentHash = yield* sha256Object({
+              artifact: artifact.hash,
+              branchId: service.branchId,
+            });
+            const previousVersionId = service.latestVersionId ?? null;
+            const previousEnvironmentClass =
+              olds?.envClass ?? output?.environmentClass ?? "production";
+            const environmentClass = effectiveNews.envClass ?? "production";
+            yield* cleanupRemovedComputeEnvironment(
               client,
-              created.id,
-              effectiveNews,
-            ).pipe(Effect.catch(() => Effect.void));
-            if (artifact.bytes !== undefined && !created.uploadUrl) {
-              yield* cleanupCreatedVersion;
+              projectId,
+              previousEnvironmentClass,
+              previousManagedEnv(output?.environmentKeys, olds?.env),
+              environmentClass,
+              effectiveNews.env,
+            );
+            yield* syncComputeEnvironment(
+              client,
+              projectId,
+              environmentClass,
+              effectiveNews.env,
+            );
+
+            let version: ObservedComputeVersion | undefined =
+              output?.computeVersionId && output.artifactHash === deploymentHash
+                ? yield* observeComputeVersion(
+                    client,
+                    output.computeVersionId,
+                  ).pipe(
+                    Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+                  )
+                : undefined;
+            let createdVersionId: string | undefined;
+            const cleanupCreatedVersionOnFailure = (
+              versionId: string,
+              error: unknown,
+            ) =>
+              createdVersionId === versionId
+                ? destroyComputeVersion(client, versionId, effectiveNews).pipe(
+                    Effect.catch(() => Effect.void),
+                    Effect.andThen(() => Effect.fail(error)),
+                  )
+                : Effect.fail(error);
+
+            if (!version) {
+              const created = yield* client.createServiceComputeVersion(
+                service.id,
+                {
+                  portMapping: { http: artifact.port },
+                  skipCodeUpload: effectiveNews.skipCodeUpload,
+                },
+              );
+              createdVersionId = created.id;
+              const cleanupCreatedVersion = destroyComputeVersion(
+                client,
+                created.id,
+                effectiveNews,
+              ).pipe(Effect.catch(() => Effect.void));
+              if (artifact.bytes !== undefined && !created.uploadUrl) {
+                yield* cleanupCreatedVersion;
+                return yield* Effect.fail(
+                  new Error(
+                    "Prisma Compute version creation did not return an upload URL.",
+                  ),
+                );
+              }
+              if (created.uploadUrl && artifact.bytes !== undefined) {
+                yield* uploadArtifact(
+                  created.uploadUrl,
+                  artifact.bytes,
+                  "application/gzip",
+                ).pipe(
+                  Effect.catch((error) =>
+                    cleanupCreatedVersion.pipe(
+                      Effect.andThen(() => Effect.fail(error)),
+                    ),
+                  ),
+                );
+              }
+              version = yield* observeComputeVersion(client, created.id).pipe(
+                Effect.catchIf(isNotFound, () =>
+                  Effect.succeed({
+                    id: created.id,
+                    type: "compute-version" as const,
+                    url: created.url,
+                    foundryVersionId: created.foundryVersionId,
+                    status: "new",
+                    previewDomain: null,
+                    createdAt: undefined,
+                  }),
+                ),
+                Effect.catch((error) =>
+                  cleanupCreatedVersionOnFailure(created.id, error),
+                ),
+              );
+            }
+            if (!version) {
               return yield* Effect.fail(
                 new Error(
-                  "Prisma Compute version creation did not return an upload URL.",
+                  "Prisma Compute version could not be resolved after creation.",
                 ),
               );
             }
-            if (created.uploadUrl && artifact.bytes !== undefined) {
-              yield* uploadArtifact(
-                created.uploadUrl,
-                artifact.bytes,
-                "application/gzip",
-              ).pipe(
-                Effect.catch((error) =>
-                  cleanupCreatedVersion.pipe(
-                    Effect.andThen(() => Effect.fail(error)),
-                  ),
-                ),
-              );
-            }
-            version = yield* observeComputeVersion(client, created.id).pipe(
-              Effect.catchIf(isNotFound, () =>
-                Effect.succeed({
-                  id: created.id,
-                  type: "compute-version" as const,
-                  url: created.url,
-                  foundryVersionId: created.foundryVersionId,
-                  status: "new",
-                  previewDomain: null,
-                  createdAt: undefined,
-                }),
-              ),
-              Effect.catch((error) =>
-                cleanupCreatedVersionOnFailure(created.id, error),
-              ),
-            );
-          }
-          if (!version) {
-            return yield* Effect.fail(
-              new Error(
-                "Prisma Compute version could not be resolved after creation.",
-              ),
-            );
-          }
 
-          if (effectiveNews.start ?? true) {
-            const currentVersion = version;
-            const versionId = currentVersion.id;
-            version = yield* Effect.gen(function* () {
-              if (
-                currentVersion.status !== "running" &&
-                currentVersion.status !== "provisioning"
-              ) {
-                yield* startComputeServiceVersionWithFallback(
+            if (effectiveNews.start ?? true) {
+              const currentVersion = version;
+              const versionId = currentVersion.id;
+              version = yield* Effect.gen(function* () {
+                if (
+                  currentVersion.status !== "running" &&
+                  currentVersion.status !== "provisioning"
+                ) {
+                  yield* startComputeServiceVersionWithFallback(
+                    client,
+                    currentVersion.id,
+                  );
+                }
+                const running = yield* waitForComputeVersionStatus(
                   client,
                   currentVersion.id,
-                );
-              }
-              const running = yield* waitForComputeVersionStatus(
-                client,
-                currentVersion.id,
-                "running",
-                effectiveNews,
-              );
-              yield* waitForDeploymentUrl(
-                toDeploymentUrl(running.previewDomain),
-                effectiveNews,
-              );
-              return running;
-            }).pipe(
-              Effect.catch((error) =>
-                cleanupCreatedVersionOnFailure(versionId, error),
-              ),
-            );
-          }
-
-          let serviceEndpointDomain = service.serviceEndpointDomain;
-          let previousVersionAction:
-            | "stopped"
-            | "destroyed"
-            | "still-active"
-            | null = previousVersionId ? "still-active" : null;
-          if (!(effectiveNews.skipPromote ?? false)) {
-            if (previousVersionId !== version.id) {
-              const promoted = yield* client
-                .promoteComputeService(service.id, version.id)
-                .pipe(
-                  Effect.catch((error) =>
-                    cleanupCreatedVersionOnFailure(version.id, error),
-                  ),
-                );
-              serviceEndpointDomain = promoted.serviceEndpointDomain;
-            }
-            if (previousVersionId && previousVersionId !== version.id) {
-              yield* stopComputeServiceVersionWithFallback(
-                client,
-                previousVersionId,
-              );
-              yield* waitForComputeVersionStatus(
-                client,
-                previousVersionId,
-                "stopped",
-                effectiveNews,
-              ).pipe(
-                Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
-              );
-              previousVersionAction = "stopped";
-              if (effectiveNews.destroyOldVersion ?? false) {
-                yield* destroyComputeVersion(
-                  client,
-                  previousVersionId,
+                  "running",
                   effectiveNews,
                 );
-                previousVersionAction = "destroyed";
+                yield* waitForDeploymentUrl(
+                  toDeploymentUrl(running.previewDomain),
+                  effectiveNews,
+                );
+                return running;
+              }).pipe(
+                Effect.catch((error) =>
+                  cleanupCreatedVersionOnFailure(versionId, error),
+                ),
+              );
+            }
+
+            let serviceEndpointDomain = service.serviceEndpointDomain;
+            let previousVersionAction:
+              | "stopped"
+              | "destroyed"
+              | "still-active"
+              | null = previousVersionId ? "still-active" : null;
+            if (!(effectiveNews.skipPromote ?? false)) {
+              if (previousVersionId !== version.id) {
+                const promoted = yield* client
+                  .promoteComputeService(service.id, version.id)
+                  .pipe(
+                    Effect.catch((error) =>
+                      cleanupCreatedVersionOnFailure(version.id, error),
+                    ),
+                  );
+                serviceEndpointDomain = promoted.serviceEndpointDomain;
+              }
+              if (previousVersionId && previousVersionId !== version.id) {
+                yield* stopComputeServiceVersionWithFallback(
+                  client,
+                  previousVersionId,
+                );
+                yield* waitForComputeVersionStatus(
+                  client,
+                  previousVersionId,
+                  "stopped",
+                  effectiveNews,
+                ).pipe(
+                  Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
+                );
+                previousVersionAction = "stopped";
+                if (effectiveNews.destroyOldVersion ?? false) {
+                  yield* destroyComputeVersion(
+                    client,
+                    previousVersionId,
+                    effectiveNews,
+                  );
+                  previousVersionAction = "destroyed";
+                }
               }
             }
-          }
 
-          const versionUrl = toDeploymentUrl(version.previewDomain);
-          const serviceUrl =
-            toDeploymentUrl(serviceEndpointDomain) ??
-            toDeploymentUrl(version.previewDomain);
-          const promoted = !(effectiveNews.skipPromote ?? false);
-          if (promoted) {
-            yield* waitForDeploymentUrl(serviceUrl, effectiveNews);
-          }
+            const versionUrl = toDeploymentUrl(version.previewDomain);
+            const serviceUrl =
+              toDeploymentUrl(serviceEndpointDomain) ??
+              toDeploymentUrl(version.previewDomain);
+            const promoted = !(effectiveNews.skipPromote ?? false);
+            if (promoted) {
+              yield* waitForDeploymentUrl(serviceUrl, effectiveNews);
+            }
 
-          return {
-            computeServiceId: service.id,
-            computeVersionId: version.id,
-            projectId,
-            serviceName: service.name,
-            regionId: service.region.id,
-            versionEndpointDomain: version.previewDomain ?? undefined,
-            versionUrl,
-            serviceEndpointDomain,
-            url: promoted ? serviceUrl : versionUrl,
-            promoted,
-            previousVersionId,
-            previousVersionAction,
-            environmentKeys: managedEnvKeys(effectiveNews.env),
-            environmentClass,
-            artifactHash: deploymentHash,
-            local: false,
-          };
+            return {
+              computeServiceId: service.id,
+              computeVersionId: version.id,
+              projectId,
+              serviceName: service.name,
+              regionId: service.region.id,
+              versionEndpointDomain: version.previewDomain ?? undefined,
+              versionUrl,
+              serviceEndpointDomain,
+              url: promoted ? serviceUrl : versionUrl,
+              promoted,
+              previousVersionId,
+              previousVersionAction,
+              environmentKeys: managedEnvKeys(effectiveNews.env),
+              environmentClass,
+              artifactHash: deploymentHash,
+              local: false,
+            };
+          }).pipe(Effect.catch(cleanupCreatedServiceOnFailure));
         }),
         delete: Effect.fn(function* ({ olds, output }) {
           if (output.local || isPrismaDevId(output.computeServiceId)) {
