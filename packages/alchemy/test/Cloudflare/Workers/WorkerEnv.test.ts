@@ -52,6 +52,11 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
         CONFIG_STR: CONFIG_STR_VALUE,
         CONFIG_NUM: Number(CONFIG_NUM_VALUE),
         CONFIG_REDACTED: CONFIG_REDACTED_VALUE,
+        VERSION_METADATA: {
+          id: expect.any(String),
+          tag: expect.any(String),
+          timestamp: expect.any(String),
+        },
       });
     }).pipe(logLevel),
   );
