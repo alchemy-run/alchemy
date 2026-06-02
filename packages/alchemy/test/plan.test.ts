@@ -1,4 +1,4 @@
-import { AdoptPolicy, Unowned } from "@/AdoptPolicy";
+import { adopt, AdoptPolicy, Unowned } from "@/AdoptPolicy";
 import * as Construct from "@/Construct";
 import { dedupeBindings } from "@/Diff";
 import type { Input, InputProps } from "@/Input";
@@ -2720,6 +2720,57 @@ describe("engine-level adoption", () => {
 
       expect(plan.resources.Fresh!.action).toBe("create");
       expect(plan.resources.Fresh!.state).toBeUndefined();
+    }),
+  );
+
+  test(
+    "Unowned read result + resource-scoped adopt(true) -> takeover even when the stack default is disabled",
+    Effect.gen(function* () {
+      const plan = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("Adopted", { string: "hello" }).pipe(adopt(true));
+        }),
+        {
+          // Stack/CLI default is OFF — only the per-resource scope opts in.
+          adopt: false,
+          readHook: () => Effect.succeed(Unowned(ownedAttrs)),
+        },
+      );
+
+      expect(plan.resources.Adopted!.action).toBe("update");
+
+      const state = yield* yield* State;
+      const persisted = yield* state.get({
+        stack: TEST_STACK,
+        stage: TEST_STAGE,
+        fqn: "Adopted",
+      });
+      expect(persisted?.status).toBe("created");
+    }),
+  );
+
+  test(
+    "Unowned read result + resource-scoped adopt(false) -> OwnedBySomeoneElse even when the stack default is enabled",
+    Effect.gen(function* () {
+      const exit = yield* makeAdoptPlan(
+        Effect.gen(function* () {
+          yield* TestResource("Foreign", { string: "hello" }).pipe(
+            adopt(false),
+          );
+        }),
+        {
+          // Stack/CLI default is ON, but the resource opts out.
+          adopt: true,
+          readHook: () => Effect.succeed(Unowned(ownedAttrs)),
+        },
+      ).pipe(Effect.exit);
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reason = exit.cause.reasons.find(Cause.isFailReason);
+        expect((reason?.error as any)?._tag).toBe("OwnedBySomeoneElse");
+        expect((reason?.error as any)?.resourceType).toBe("Test.TestResource");
+      }
     }),
   );
 
