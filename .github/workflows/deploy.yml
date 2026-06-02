@@ -11,10 +11,13 @@ on:
       - "bun.lock"
       - ".github/workflows/deploy.yml"
   pull_request:
+    # `labeled` so adding `deploy-website` on an open PR triggers a
+    # deploy without needing another push.
     types:
       - opened
       - reopened
       - synchronize
+      - labeled
       - closed
     paths:
       - "website/**"
@@ -33,7 +36,17 @@ env:
 
 jobs:
   deploy:
-    if: ${{ github.event.action != 'closed' }}
+    # Deploy on push-to-main and `workflow_dispatch` always. On PRs,
+    # require BOTH:
+    #   - the PR is internal (forks can't access bot/Cloudflare secrets
+    #     so `create-github-app-token` would error immediately), AND
+    #   - the PR carries the `deploy-website` label (opt-in — most PRs
+    #     don't need a website preview, so default to skipping).
+    if: >-
+      github.event.action != 'closed' &&
+      (github.event_name != 'pull_request' ||
+       (github.event.pull_request.head.repo.full_name == github.repository &&
+        contains(github.event.pull_request.labels.*.name, 'deploy-website')))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -97,9 +110,9 @@ jobs:
 
   cleanup:
     runs-on: ubuntu-latest
-    if:
-      ${{ github.event_name == 'pull_request' && github.event.action == 'closed'
-      }}
+    if: >-
+      github.event_name == 'pull_request' && github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       pull-requests: write
