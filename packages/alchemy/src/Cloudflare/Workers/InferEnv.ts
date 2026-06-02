@@ -45,7 +45,7 @@ export type GetBindingType<T> =
                           : T extends Cloudflare.Images
                             ? ImagesBinding
                             : T extends Cloudflare.Browser
-                              ? Fetcher
+                              ? BrowserRun
                               : T extends Cloudflare.Hyperdrive
                                 ? Hyperdrive
                                 : T extends Cloudflare.DynamicWorkerLoader
