@@ -1,3 +1,26 @@
+## v2.0.0-beta.51
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - Add Ruleset resource &nbsp;-&nbsp; by **Alex** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/240 [<samp>(93d1c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/93d1cdea)
+  - **ai**: Add DurableObjectChatPersistence layer &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/390 [<samp>(f53a2)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f53a26ff)
+- **core**:
+  - Allow ConfigError on Alchemy.Stack, Worker and Platform effects &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/487 [<samp>(ce201)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ce201070)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Honor resource-scoped adopt(...) in the planner &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/521 [<samp>(5736f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/5736f1c0)
+- **aws**: Deliver S3 bucket notifications to Lambda event sources &nbsp;-&nbsp; by **Andrey Konopkov** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/470 [<samp>(04459)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/04459ee4)
+- **cloudflare**: Support SecretsStore Secret as async binding &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/475 [<samp>(46010)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/46010c82)
+- **core**: Use ExprSymbol to identify Outputs in core to avoid collisions with user data &nbsp;-&nbsp; by **Julius Marminge** in https://github.com/alchemy-run/alchemy-effect/issues/517 [<samp>(c0a6b)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c0a6bd86)
+- **drizzle**: Preserve snapshot lineage &nbsp;-&nbsp; by **Julius Marminge** in https://github.com/alchemy-run/alchemy-effect/issues/519 [<samp>(86d18)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/86d186d8)
+- **planetscale**: Remove kind attribute that collides with output proxy discriminator &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/518 [<samp>(bd12d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/bd12d1c1)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.50...HEAD)
+
+---
+
 ## v2.0.0-beta.50
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
