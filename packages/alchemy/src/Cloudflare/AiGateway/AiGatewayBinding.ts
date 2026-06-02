@@ -76,7 +76,7 @@ export interface AiGatewayClient {
   ): Effect.Effect<Response, AiGatewayError, RuntimeContext>;
 
   model(
-    options: LanguageModelOptions,
+    options: Omit<LanguageModelOptions, "client">,
   ): Layer.Layer<LanguageModel, never, RuntimeContext>;
 }
 
@@ -166,7 +166,7 @@ export const AiGatewayBindingLive = Layer.effect(
           Effect.flatMap((gateway) => tryPromise(() => fn(gateway))),
         );
 
-      return {
+      const self: AiGatewayClient = {
         raw: ai,
         gateway: runtimeGateway,
         id: gatewayIdAccessor,
@@ -175,8 +175,13 @@ export const AiGatewayBindingLive = Layer.effect(
         getLog: (logId) => use((gateway) => gateway.getLog(logId)),
         getUrl: (provider) => use((gateway) => gateway.getUrl(provider)),
         run: (data, options) => use((gateway) => gateway.run(data, options)),
-        model: (options) => makeLanguageModelLayer(options),
+        model: (options) =>
+          makeLanguageModelLayer({
+            ...options,
+            client: self,
+          }),
       } satisfies AiGatewayClient;
+      return self;
     });
   }),
 );
