@@ -320,11 +320,21 @@ reload. Backend resources (R2 buckets, D1 databases, service
 bindings) are the **real** cloud resources — only your application
 code runs locally, so there's no emulation fidelity gap.
 
-The build-time env injection works the same in dev: `VITE_`-prefixed
+The build-time env injection works the same in dev — `VITE_`-prefixed
 entries are inlined as `import.meta.env.<KEY>`, and `Output` values
-like `worker.url.as<string>()` resolve before the dev server starts.
+like `worker.url.as<string>()` resolve before the dev server starts:
 
-Set a fixed port with the worker's `dev` option if `1337` is taken:
+```typescript
+// alchemy.run.ts
+const web = yield* Cloudflare.Vite("Website", {
+  env: {
+    VITE_API_URL: worker.url.as<string>(),
+  },
+});
+```
+
+By default the dev server picks an available port. Set `dev.port`
+only if you want the local URL to stay the same across runs:
 
 ```diff lang="typescript"
 // alchemy.run.ts
