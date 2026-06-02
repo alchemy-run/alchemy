@@ -1,0 +1,30 @@
+name: pr-package
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # `labeled` so adding the `force-ci` label re-triggers the run.
+    types: [opened, synchronize, reopened, closed, labeled]
+
+# Reusable workflows can't widen permissions — the caller must grant
+# `pull-requests: write` (sticky install-instructions comment + cleanup
+# on PR close).
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pr-package:
+    uses: alchemy-run/actions/.github/workflows/pr-package.yml@main
+    with:
+      # `|| true` keeps the cp harmless in packages whose pkg dir is
+      # nested differently or that don't need the root README.
+      build-command: "cp ../../README.md . 2>/dev/null || true; bun run build"
+      packages: |
+        [
+          { "dir": "packages/alchemy",     "name": "alchemy" },
+          { "dir": "packages/better-auth", "name": "@alchemy.run/better-auth" },
+          { "dir": "packages/pr-package",  "name": "@alchemy.run/pr-package" }
+        ]
+    secrets: inherit
