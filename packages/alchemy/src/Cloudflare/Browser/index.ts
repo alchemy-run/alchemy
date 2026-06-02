@@ -6,6 +6,4 @@ export {
   BrowserBindingPolicyLive,
   BrowserError,
   type BrowserClient,
-  type BrowserHandle,
-  type BrowserPuppeteer,
 } from "./BrowserBinding.ts";
