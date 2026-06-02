@@ -24,6 +24,16 @@ export type BucketNotification = {
 export interface NotificationsProps<Events extends S3EventType[]> {
   /** S3 event types to subscribe to. Defaults to all event types. */
   events?: Events;
+  /**
+   * Only deliver events for object keys beginning with this prefix.
+   * Maps to an S3 `prefix` filter rule on the notification configuration.
+   */
+  prefix?: string;
+  /**
+   * Only deliver events for object keys ending with this suffix.
+   * Maps to an S3 `suffix` filter rule on the notification configuration.
+   */
+  suffix?: string;
 }
 
 /**

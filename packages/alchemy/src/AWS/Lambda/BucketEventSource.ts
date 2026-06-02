@@ -113,11 +113,23 @@ export const BucketEventSourcePolicyLive = BucketEventSourcePolicy.layer.effect(
       bucket: Bucket,
       {
         events: Events = ["s3:ObjectCreated:*"],
+        prefix,
+        suffix,
       }: {
         events?: S3EventType[];
+        prefix?: string;
+        suffix?: string;
       } = {},
     ) {
       if (Lambda.isFunction(host)) {
+        const filterRules = [
+          ...(prefix !== undefined
+            ? [{ Name: "prefix" as const, Value: prefix }]
+            : []),
+          ...(suffix !== undefined
+            ? [{ Name: "suffix" as const, Value: suffix }]
+            : []),
+        ];
         yield* Permission(`AWS.Lambda.InvokeFunction(${bucket.LogicalId})`, {
           action: "lambda:InvokeFunction",
           functionName: host.functionName,
@@ -130,6 +142,9 @@ export const BucketEventSourcePolicyLive = BucketEventSourcePolicy.layer.effect(
               {
                 LambdaFunctionArn: host.functionArn,
                 Events,
+                ...(filterRules.length > 0
+                  ? { Filter: { Key: { FilterRules: filterRules } } }
+                  : {}),
               },
             ],
           },
