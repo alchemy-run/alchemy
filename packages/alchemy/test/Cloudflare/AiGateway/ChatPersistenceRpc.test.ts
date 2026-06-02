@@ -52,12 +52,23 @@ const clientLayer = (url: string) =>
     ),
   );
 
-// Fresh `workers.dev` URLs take a few seconds to start serving 200s, so
-// ride the cold-start with a bounded retry.
-const retry = {
-  schedule: Schedule.exponential("500 millis"),
-  times: 10,
-} as const;
+// Cap exponential backoff at 3s so retries stay bounded when the CF edge is
+// slow (otherwise the geometric blow-up dominates wall time).
+const readinessSchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.either(Schedule.spaced("3 seconds")),
+);
+
+// A freshly deployed worker isn't live on every Cloudflare edge yet, so the
+// first RPC calls fail with `Handler does not export a fetch() function.` —
+// which arrives at the client as a DEFECT, and `Effect.retry` does not retry
+// defects. Promote defects to failures so the readiness retry absorbs the
+// transient cold-start error (a genuine bug just keeps failing until the
+// retry budget is exhausted).
+const retryReady = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
+  eff.pipe(
+    Effect.catchDefect((defect) => Effect.fail(defect)),
+    Effect.retry({ schedule: readinessSchedule, times: 15 }),
+  );
 
 test(
   "send round-trips text and turns through the RpcWorker → DO",
@@ -69,7 +80,7 @@ test(
       const client = yield* RpcClient.make(ChatRpcs);
       const result = yield* client
         .send({ id, prompt: "Say the single word 'pong'." })
-        .pipe(Effect.retry(retry));
+        .pipe(retryReady);
 
       expect(typeof result.text).toBe("string");
       expect(result.text.length).toBeGreaterThan(0);
@@ -94,7 +105,7 @@ test(
           id,
           prompt: "Write a short sentence about Effect TS.",
         })
-        .pipe(Stream.runCollect, Effect.retry(retry));
+        .pipe(Stream.runCollect, retryReady);
 
       // The stream parts arrived as decoded `effect/ai` instances (a
       // discriminated union by `type`), not opaque JSON.
@@ -126,14 +137,14 @@ test(
       // appended turn when the stream finalizes.
       yield* client
         .streamMessage({ id, prompt: "My name is Sam. Remember it." })
-        .pipe(Stream.runDrain, Effect.retry(retry));
+        .pipe(Stream.runDrain, retryReady);
 
       // Second turn hits the same DO instance; history is reloaded from
       // `state.storage`, so the model can recall the name and the turn
       // count reflects the restored history (2 from the stream + 2).
       const result = yield* client
         .send({ id, prompt: "What is my name? Answer with just the name." })
-        .pipe(Effect.retry(retry));
+        .pipe(retryReady);
 
       expect(result.text.toLowerCase()).toContain("sam");
       expect(result.turns).toBe(4);

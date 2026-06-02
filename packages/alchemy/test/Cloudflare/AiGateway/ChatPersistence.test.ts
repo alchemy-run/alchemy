@@ -43,10 +43,21 @@ const Stack = Alchemy.Stack(
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-const retry = {
-  schedule: Schedule.exponential("500 millis"),
-  times: 10,
-} as const;
+// Cap exponential backoff at 3s so retries stay bounded when the CF edge is
+// slow (otherwise the geometric blow-up dominates wall time).
+const readinessSchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.either(Schedule.spaced("3 seconds")),
+);
+
+// `filterStatusOk` turns a cold-start non-200 (e.g. a 500 HTML error page)
+// into a retryable failure, and `catchDefect` promotes any cold-start defect
+// (`Handler does not export a fetch() function.`) into a failure too — so the
+// readiness retry absorbs both while the worker propagates to the edge.
+const retryReady = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
+  eff.pipe(
+    Effect.catchDefect((defect) => Effect.fail(defect)),
+    Effect.retry({ schedule: readinessSchedule, times: 15 }),
+  );
 
 test(
   "first turn against a fresh thread persists user + assistant messages",
@@ -59,7 +70,7 @@ test(
       .get(
         `${out.url}/chat?id=${id}&prompt=${encodeURIComponent("Say the single word 'pong'.")}`,
       )
-      .pipe(Effect.retry(retry));
+      .pipe(retryReady);
     expect(res.status).toBe(200);
 
     const body = (yield* res.json) as { text: string; turns: number };
@@ -83,7 +94,7 @@ test(
       .get(
         `${out.url}/chat?id=${id}&prompt=${encodeURIComponent("My name is Sam. Remember it.")}`,
       )
-      .pipe(Effect.retry(retry));
+      .pipe(retryReady);
     expect(r1.status).toBe(200);
     const b1 = (yield* r1.json) as { text: string; turns: number };
     expect(b1.turns).toBe(2);
@@ -95,7 +106,7 @@ test(
       .get(
         `${out.url}/chat?id=${id}&prompt=${encodeURIComponent("What is my name? Answer with just the name.")}`,
       )
-      .pipe(Effect.retry(retry));
+      .pipe(retryReady);
     expect(r2.status).toBe(200);
     const b2 = (yield* r2.json) as { text: string; turns: number };
 
@@ -120,7 +131,7 @@ test(
       .get(
         `${out.url}/chat?id=${idA}&prompt=${encodeURIComponent("My favorite color is teal. Remember it.")}`,
       )
-      .pipe(Effect.retry(retry));
+      .pipe(retryReady);
     expect(ra.status).toBe(200);
     expect(((yield* ra.json) as { turns: number }).turns).toBe(2);
 
@@ -131,7 +142,7 @@ test(
       .get(
         `${out.url}/chat?id=${idB}&prompt=${encodeURIComponent("Say the single word 'pong'.")}`,
       )
-      .pipe(Effect.retry(retry));
+      .pipe(retryReady);
     expect(rb.status).toBe(200);
     expect(((yield* rb.json) as { turns: number }).turns).toBe(2);
   }).pipe(logLevel),

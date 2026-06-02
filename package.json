@@ -53,7 +53,7 @@
     "test:examples": "bun run --filter ./examples/cloudflare-worker --filter ./examples/cloudflare-worker-async --filter ./examples/cloudflare-tanstack --filter ./examples/cloudflare-tanstack-start-solid --filter ./examples/aws-lambda test && bun format",
     "test:smoke": "bun test --only-failures ./test/smoke.test.ts",
     "test:canary": "SMOKE_CANARY=1 bun test --only-failures ./test/smoke.test.ts",
-    "test:fast": "FAST=1 bun run test:live",
+    "test:fast": "NO_SLOW_TESTS=1 FAST=1 bun run test:live",
     "test:live": "bun ./scripts/test.ts",
     "test:local": "LOCAL=1 bun ./scripts/test.ts",
     "test": "bun run test:live",

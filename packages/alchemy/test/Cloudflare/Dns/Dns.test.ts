@@ -57,23 +57,24 @@ test(
     const res = yield* client
       .get(`${effectUrl}/dns?name=${encodeURIComponent(name)}`)
       .pipe(
-        // Retry only while the worker is still cold-starting (not yet live).
-        // Once it responds 200 or 500 the handler ran, so stop and inspect.
+        // A cold-starting or briefly-unhealthy edge returns 5xx — often a
+        // Cloudflare HTML error page, NOT the worker's structured JSON, so we
+        // must never try to parse it. Treat any non-200 as transient and ride
+        // it out: this covers both cold start and eventual-consistency blips
+        // in the scoped API-token propagation the worker depends on.
         Effect.flatMap((res) =>
-          res.status === 200 || res.status === 500
+          res.status === 200
             ? Effect.succeed(res)
             : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
         ),
+        // Cap exponential backoff at 3s so retries stay bounded.
         Effect.retry({
-          schedule: Schedule.exponential("500 millis"),
-          times: 15,
+          schedule: Schedule.exponential("500 millis").pipe(
+            Schedule.either(Schedule.spaced("3 seconds")),
+          ),
+          times: 20,
         }),
       );
-
-    if (res.status !== 200) {
-      const err = yield* res.json;
-      throw new Error(`DNS worker failed: ${JSON.stringify(err)}`);
-    }
 
     const body = (yield* res.json) as {
       id: string;
