@@ -100,6 +100,50 @@ test.provider(
   { timeout: 360_000 },
 );
 
+test.provider(
+  "Vite: class form deploys and serves the built assets",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      const rootDir = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-vite-class-",
+        tempRoot,
+        entries: ["index.html", "package.json", "vite.config.ts", "src"],
+      });
+      const indexPath = path.join(rootDir, "index.html");
+      const memoInclude = ["index.html", "src/**", "package.json"];
+
+      const marker = `vite-class-${Date.now()}`;
+      yield* fs.writeFileString(indexPath, htmlPage(marker));
+
+      const site1 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* class FixVite extends Cloudflare.Vite<FixVite>()(
+            "FixVite",
+            viteProps(rootDir, memoInclude),
+          ) {};
+        }),
+      );
+
+      expect(site1.url).toBeDefined();
+      expect(site1.hash?.input).toBeDefined();
+      yield* expectWorkerExists(site1.workerName, accountId);
+      yield* expectUrlContains(`${site1.url!}/`, marker, {
+        timeout: "120 seconds",
+        label: "class form marker",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
 // ─────────────────────────────────────────────────────────────────────
 // Path-relocation behavior for the vite path
 //

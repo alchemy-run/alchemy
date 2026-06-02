@@ -96,6 +96,48 @@ test.provider(
   { timeout: 360_000 },
 );
 
+test.provider(
+  "StaticSite: class form deploys and serves the built assets",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      const cwd = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-staticsite-class-",
+        entries: ["src", "build.sh"],
+      });
+      const indexPath = path.join(cwd, "src", "index.html");
+
+      const marker = `staticsite-class-${Date.now()}`;
+      yield* fs.writeFileString(indexPath, htmlPage(marker));
+
+      const site1 = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* class FixSite extends Cloudflare.StaticSite<FixSite>()(
+            "FixSite",
+            staticSiteProps(cwd),
+          ) {};
+        }),
+      );
+
+      expect(site1.url).toBeDefined();
+      expect(site1.hash?.assets).toBeDefined();
+      yield* expectWorkerExists(site1.workerName, accountId);
+      yield* expectUrlContains(`${site1.url!}/index.html`, marker, {
+        timeout: "120 seconds",
+        label: "class form marker",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(site1.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
 // ─────────────────────────────────────────────────────────────────────
 // Path-relocation / cross-machine state behavior
 //

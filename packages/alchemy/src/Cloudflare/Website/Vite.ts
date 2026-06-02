@@ -1,13 +1,15 @@
 import * as Effect from "effect/Effect";
 import type { MemoOptions } from "../../Build/Memo.ts";
 import type { InputProps } from "../../Input.ts";
+import { effectClass } from "../../Util/effect.ts";
+import type { Providers } from "../Providers.ts";
 import {
   Worker,
+  type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
 } from "../Workers/Worker.ts";
-
 export interface ViteProps<
   Bindings extends WorkerBindingProps = {},
 > extends Omit<WorkerProps<Bindings>, "vite" | "main"> {
@@ -106,27 +108,67 @@ export interface ViteProps<
  *   },
  * });
  * ```
+ *
+ * @section Class Form
+ * Calling `Vite` with no arguments returns a constructor you can
+ * `extend` to declare the Worker as a named class. The class is both
+ * an `Effect` you can `yield*` to deploy and a type you can reference
+ * elsewhere — useful when other resources need to bind to this Worker.
+ *
+ * @example Declaring a Worker class
+ * ```typescript
+ * class Website extends Cloudflare.Vite<Website>()("Website", {
+ *   compatibility: { flags: ["nodejs_compat"] },
+ * }) {}
+ *
+ * const site = yield* Website;
+ * ```
  */
-export const Vite = <
-  const Bindings extends WorkerBindingProps = {},
-  Req = never,
->(
-  id: string,
-  propsEff?:
-    | InputProps<ViteProps<Bindings>>
-    | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
-) =>
-  Worker<Bindings, WorkerAssetsConfig, Req>(
-    id,
-    Effect.map(
-      Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
-      (props) => ({
-        ...props,
-        main: undefined!,
-        vite: {
-          rootDir: props?.rootDir,
-          memo: props?.memo,
-        },
-      }),
-    ),
-  );
+export const Vite: {
+  <Self>(): {
+    <const Bindings extends WorkerBindingProps = {}, Req = never>(
+      id: string,
+      propsEff?:
+        | InputProps<ViteProps<Bindings>>
+        | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
+    ): Effect.Effect<Self, never, Req | Providers> & {
+      new (): Worker<{
+        [binding in keyof NormalizedBindings<
+          Bindings,
+          WorkerAssetsConfig
+        >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+      }>;
+    };
+  };
+  <const Bindings extends WorkerBindingProps = {}, Req = never>(
+    id: string,
+    propsEff?:
+      | InputProps<ViteProps<Bindings>>
+      | Effect.Effect<InputProps<ViteProps<Bindings>>, never, Req>,
+  ): Effect.Effect<
+    Worker<{
+      [binding in keyof NormalizedBindings<
+        Bindings,
+        WorkerAssetsConfig
+      >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+    }>,
+    never,
+    Req | Providers
+  >;
+} = ((id?: any, propsEff?: any) =>
+  id === undefined
+    ? (id: string, propsEff: any) => effectClass(Vite(id, propsEff))
+    : Worker(
+        id,
+        Effect.map(
+          Effect.isEffect(propsEff) ? propsEff : Effect.succeed(propsEff),
+          (props) => ({
+            ...props,
+            main: undefined!,
+            vite: {
+              rootDir: props?.rootDir,
+              memo: props?.memo,
+            },
+          }),
+        ),
+      )) as any;
