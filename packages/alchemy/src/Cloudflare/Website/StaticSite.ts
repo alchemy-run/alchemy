@@ -3,9 +3,12 @@ import * as Redacted from "effect/Redacted";
 import { Command, type CommandProps } from "../../Build/Command.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
+import { effectClass } from "../../Util/effect.ts";
+import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
+  type NormalizedBindings,
   type WorkerAssetsConfig,
   type WorkerBindingProps,
   type WorkerProps,
@@ -25,7 +28,12 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
   };
 }
 
-export type StaticSite = ReturnType<typeof StaticSite>;
+type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
+  [binding in keyof NormalizedBindings<
+    Bindings,
+    WorkerAssetsConfig
+  >]: NormalizedBindings<Bindings, WorkerAssetsConfig>[binding];
+}>;
 
 /**
  * A Cloudflare Worker that serves static assets built by a shell command.
@@ -113,8 +121,47 @@ export type StaticSite = ReturnType<typeof StaticSite>;
  *   },
  * });
  * ```
+ *
+ * @section Class Form
+ * Calling `StaticSite` with no arguments returns a constructor you can
+ * `extend` to declare the Worker as a named class. The class is both
+ * an `Effect` you can `yield*` to deploy and a type you can reference
+ * elsewhere — useful when other resources need to bind to this Worker.
+ *
+ * @example Declaring a Worker class
+ * ```typescript
+ * class Blog extends Cloudflare.StaticSite<Blog>()("Blog", {
+ *   command: "hugo --minify",
+ *   outdir: "public",
+ *   main: "./src/worker.ts",
+ * }) {}
+ *
+ * const site = yield* Blog;
+ * ```
  */
-export const StaticSite = <
+export const StaticSite: {
+  <Self>(): {
+    <const Bindings extends WorkerBindingProps = {}, Req = never>(
+      id: string,
+      propsEff:
+        | InputProps<StaticSiteProps<Bindings>>
+        | Effect.Effect<InputProps<StaticSiteProps<Bindings>>, never, Req>,
+    ): Effect.Effect<Self, never, Req | Providers> & {
+      new (): StaticSiteWorker<Bindings>;
+    };
+  };
+  <const Bindings extends WorkerBindingProps = {}, Req = never>(
+    id: string,
+    propsEff:
+      | InputProps<StaticSiteProps<Bindings>>
+      | Effect.Effect<InputProps<StaticSiteProps<Bindings>>, never, Req>,
+  ): Effect.Effect<StaticSiteWorker<Bindings>, never, Req | Providers>;
+} = ((id?: any, propsEff?: any) =>
+  id === undefined
+    ? (id: string, propsEff: any) => effectClass(makeStaticSite(id, propsEff))
+    : makeStaticSite(id, propsEff)) as any;
+
+const makeStaticSite = <
   const Bindings extends WorkerBindingProps = {},
   Req = never,
 >(
