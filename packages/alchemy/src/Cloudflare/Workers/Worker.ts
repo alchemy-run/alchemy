@@ -1186,7 +1186,7 @@ export const LiveWorkerProvider = () =>
                           typeof Redacted.value(value) === "string"
                         ? Redacted.value(value)
                         : Config.isConfig(value) || Effect.isEffect(value)
-                          ? yield* value
+                          ? yield* value as Effect.Effect<any>
                           : undefined,
                   ];
                 }),
@@ -1981,7 +1981,7 @@ export const LiveWorkerProvider = () =>
               // @distilled.cloud/cloudflare versions that haven't picked
               // up the patch yet.
               Effect.retry({
-                while: (e: any) =>
+                while: (e) =>
                   e._tag === "InternalServerError" ||
                   e._tag === "UnknownCloudflareError",
                 schedule: Schedule.exponential(1000).pipe(
