@@ -52,6 +52,11 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
         CONFIG_STR: CONFIG_STR_VALUE,
         CONFIG_NUM: Number(CONFIG_NUM_VALUE),
         CONFIG_REDACTED: CONFIG_REDACTED_VALUE,
+        VERSION_METADATA: {
+          id: expect.any(String),
+          tag: expect.any(String),
+          timestamp: expect.any(String),
+        },
       });
     }).pipe(logLevel),
   );
@@ -76,6 +81,23 @@ describe.concurrent("Cloudflare.Worker env bindings", () => {
         OUTPUT_STR: "output-str",
         SECRET_STR: "shh",
         SECRET_JSON: { token: "abc", scopes: ["read", "write"] },
+      });
+    }).pipe(logLevel),
+  );
+
+  test(
+    "effect worker resolves the yielded VersionMetadata binding",
+    Effect.gen(function* () {
+      const { effectUrl } = yield* stack;
+
+      const body = yield* expectUrlContains(`${effectUrl}/version`, '"id"', {
+        timeout: "60 seconds",
+        label: "effect env-worker /version",
+      });
+      expect(JSON.parse(body)).toEqual({
+        id: expect.any(String),
+        tag: expect.any(String),
+        timestamp: expect.any(String),
       });
     }).pipe(logLevel),
   );

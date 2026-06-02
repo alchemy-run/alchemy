@@ -25,6 +25,7 @@ import { isVectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isAssets } from "./Assets.ts";
 import { isDurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
 import { isDynamicWorkerLoader } from "./DynamicWorkerLoader.ts";
+import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import { isWorker, type Worker, type WorkerProps } from "./Worker.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
@@ -217,6 +218,11 @@ const toBinding = (
       name: bindingName,
       secretName: binding.secretName,
       storeId: binding.storeId,
+    };
+  } else if (isVersionMetadata(binding)) {
+    return {
+      type: "version_metadata",
+      name: bindingName,
     };
   } else if (isDynamicWorkerLoader(binding)) {
     return {
