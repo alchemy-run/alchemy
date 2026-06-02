@@ -49,7 +49,7 @@ identifier you can `yield*` from anywhere.
 import * as Cloudflare from "alchemy/Cloudflare";
 
 export class A extends Cloudflare.Worker<A>()("A", {
-  main: import.meta.path,
+  main: import.meta.filename,
 }) {}
 ```
 
@@ -66,7 +66,7 @@ Do the same for `B`. Both files only declare identity at this point.
 import * as Cloudflare from "alchemy/Cloudflare";
 
 export class B extends Cloudflare.Worker<B>()("B", {
-  main: import.meta.path,
+  main: import.meta.filename,
 }) {}
 ```
 
@@ -86,7 +86,7 @@ will dispatch to B's deployed URL at runtime.
 + import { B } from "./B.ts";
 
   export class A extends Cloudflare.Worker<A>()("A", {
-    main: import.meta.path,
+    main: import.meta.filename,
   }) {}
 
 + export default A.make(
@@ -117,7 +117,7 @@ binds it.
 + import { A } from "./A.ts";
 
   export class B extends Cloudflare.Worker<B>()("B", {
-    main: import.meta.path,
+    main: import.meta.filename,
   }) {}
 
 + export default B.make(
@@ -207,7 +207,7 @@ and implementation in one expression:
 ```typescript
 export default Cloudflare.Worker(
   "MyWorker",
-  { main: import.meta.path },
+  { main: import.meta.filename },
   Effect.gen(function* () {
     /* ... */
   }),

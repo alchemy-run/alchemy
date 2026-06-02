@@ -107,7 +107,7 @@ import * as Effect from "effect/Effect";
 
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.path },
+  { main: import.meta.filename },
   Effect.gen(function* () {
     return {};
   }),
@@ -140,7 +140,7 @@ export const Tasks = Cloudflare.R2Bucket("Tasks");
 
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.path },
+  { main: import.meta.filename },
   Effect.gen(function* () {
 +   const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
 
@@ -281,7 +281,7 @@ import { Task, TaskNotFound } from "./task.ts";
 
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.path },
+  { main: import.meta.filename },
   Effect.gen(function* () {
     const tasks = yield* Cloudflare.R2Bucket.bind(Tasks);
 

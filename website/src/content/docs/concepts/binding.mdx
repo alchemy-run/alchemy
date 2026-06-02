@@ -39,7 +39,7 @@ handle:
 ```typescript
 export default Cloudflare.Worker(
   "Worker",
-  { main: import.meta.path },
+  { main: import.meta.filename },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
     return {

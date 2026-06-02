@@ -277,7 +277,7 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  *
  * export default class Api extends Cloudflare.Worker<Api>()(
  *   "Api",
- *   { main: import.meta.path },
+ *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
  *
