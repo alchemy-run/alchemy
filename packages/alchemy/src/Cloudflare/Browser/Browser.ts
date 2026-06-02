@@ -77,32 +77,29 @@ export const isBrowser = (value: unknown): value is Browser =>
  *
  * @section Quick Actions
  * @example Render content, screenshot, PDF, and structured data
- * Each Browser Run quick action is exposed as a named Effect. JSON actions
- * resolve to a `Response`; parse the body with `Effect.promise(() =>
- * res.json())`.
+ * JSON quick actions resolve to their parsed payload; binary actions
+ * (`screenshot`, `pdf`) resolve to a `Stream` of bytes. No `Promise` or
+ * `Response.json()` in sight.
  * ```typescript
- * import type * as cf from "@cloudflare/workers-types";
  * import * as Effect from "effect/Effect";
+ * import * as Stream from "effect/Stream";
  *
  * const browser = yield* Cloudflare.Browser({ name: "BROWSER" });
  * const url = "https://example.com";
  *
- * // HTML content (status + title live in `meta`).
- * const contentRes = yield* browser.content({ url });
- * const content = yield* Effect.promise(
- *   () => contentRes.json() as Promise<cf.BrowserRunContentSuccessResponse>,
- * );
+ * // HTML content — parsed payload, title lives in `meta`.
+ * const content = yield* browser.content({ url });
  * const title = content.meta.title;
  *
  * // Scrape elements by CSS selector.
  * yield* browser.scrape({ url, elements: [{ selector: "h1" }] });
  *
  * // Extract all links.
- * yield* browser.links({ url });
+ * const { result: links } = yield* browser.links({ url });
  *
- * // Binary actions return the raw `Response` (image/png, application/pdf).
- * const png = yield* browser.screenshot({ url });
- * const pdf = yield* browser.pdf({ url });
+ * // Binary actions stream bytes — collect or pipe them.
+ * const png = yield* browser.screenshot({ url }).pipe(Stream.runCollect);
+ * const pdf = yield* browser.pdf({ url }).pipe(Stream.runCollect);
  *
  * // AI-extracted structured data.
  * yield* browser.json({ url, prompt: "Extract the page heading" });

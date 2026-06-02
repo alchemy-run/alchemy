@@ -125,31 +125,27 @@ test(
 );
 
 test(
-  "effect worker captures a screenshot",
+  "effect worker streams a screenshot",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
     const body = (yield* readJson(`${effectWorkerUrl}/screenshot`)) as {
-      status: number;
-      contentType: string | null;
+      bytes: number;
     };
 
-    expect(body.status).toBe(200);
-    expect(body.contentType).toContain("image/");
+    expect(body.bytes).toBeGreaterThan(0);
   }),
   { timeout: 180_000 },
 );
 
 test(
-  "effect worker generates a PDF",
+  "effect worker streams a PDF",
   Effect.gen(function* () {
     const { effectWorkerUrl } = yield* stack;
     const body = (yield* readJson(`${effectWorkerUrl}/pdf`)) as {
-      status: number;
-      contentType: string | null;
+      bytes: number;
     };
 
-    expect(body.status).toBe(200);
-    expect(body.contentType).toContain("application/pdf");
+    expect(body.bytes).toBeGreaterThan(0);
   }),
   { timeout: 180_000 },
 );
