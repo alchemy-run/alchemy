@@ -90,7 +90,7 @@ const withStateService = <A, E>(
     return yield* Effect.gen(function* () {
       const stack = yield* stackEffect;
       return yield* Effect.gen(function* () {
-        const state = yield* State.State;
+        const state = yield* yield* State.State;
         return yield* body(state);
       }).pipe(Effect.provide(stack.services));
     }).pipe(Effect.provide(services));

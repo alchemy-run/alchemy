@@ -10,7 +10,7 @@ import {
 } from "../../Util/data.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { resolveZoneId, type ZoneReference } from "../Zone.ts";
+import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
 import { defineZarazEvents } from "./ZarazEventTypes.ts";
 
 export type ZarazWorkflow = zaraz.GetWorkflowResponse;

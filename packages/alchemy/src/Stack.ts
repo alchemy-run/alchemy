@@ -1,3 +1,4 @@
+import type { ConfigError } from "effect/Config";
 import { ConfigProvider } from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -77,16 +78,16 @@ export const Stack: Context.ServiceClass<
     },
     effect: Effect.Effect<
       NoInfer<A extends object ? InputProps<A> : Input<A>>,
-      never,
+      ConfigError,
       Req
     >,
-  ): Effect.Effect<CompiledStack<A>>;
+  ): Effect.Effect<CompiledStack<A>, ConfigError>;
   <Self>(): {
     <A, Req>(
       stackName: string,
       options: StackProps<NoInfer<Req>>,
-      eff: Effect.Effect<A, never, Req>,
-    ): Effect.Effect<Self> & {
+      eff: Effect.Effect<A, ConfigError, Req>,
+    ): Effect.Effect<Self, ConfigError> & {
       new (_: never): A extends object ? A : {};
       stage: {
         [stage: string]: Effect.Effect<Self>;
@@ -99,8 +100,8 @@ export const Stack: Context.ServiceClass<
       new (_: never): Output.ToOutput<Shape>;
       make: <A, Req>(
         options: StackProps<NoInfer<Req>>,
-        effect: Effect.Effect<A, never, Req>,
-      ) => Effect.Effect<CompiledStack<A>>;
+        effect: Effect.Effect<A, ConfigError, Req>,
+      ) => Effect.Effect<CompiledStack<A>, ConfigError>;
       stage: {
         [stage: string]: Effect.Effect<Self>;
       };
@@ -109,15 +110,15 @@ export const Stack: Context.ServiceClass<
   <A, Req>(
     stackName: string,
     options: StackProps<NoInfer<Req>>,
-    eff: Effect.Effect<A, never, Req | StackServices>,
-  ): Effect.Effect<CompiledStack<A>>;
+    eff: Effect.Effect<A, ConfigError, Req | StackServices>,
+  ): Effect.Effect<CompiledStack<A>, ConfigError>;
 } = Object.assign(
   taggedFunction(
     Context.Service<Stack, Omit<StackSpec, "output">>()("Stack"),
     <A, Req>(
       stackName?: string,
       options?: StackProps<NoInfer<Req>>,
-      eff?: Effect.Effect<A, never, Req>,
+      eff?: Effect.Effect<A, ConfigError, Req>,
     ) => {
       if (!stackName) {
         return (stackName: string) =>
@@ -125,10 +126,13 @@ export const Stack: Context.ServiceClass<
             // by default, reference the stack at the "current" stage of the importer
             Output.stackRef<A>(stackName).pipe(effectClass),
             {
+              stackName,
               stage: createStageProxy(stackName),
+              state: options?.state,
+              providers: options?.providers,
               make: <Req = never>(
                 options: StackProps<NoInfer<Req>>,
-                eff: Effect.Effect<A, never, Req>,
+                eff: Effect.Effect<A, ConfigError, Req>,
               ) => Stack(stackName, options, eff),
             },
           );
@@ -140,7 +144,10 @@ export const Stack: Context.ServiceClass<
         }),
         (eff) =>
           Object.assign(eff, {
+            stackName,
             stage: createStageProxy(stackName),
+            state: options?.state,
+            providers: options?.providers,
           }),
       );
     },

@@ -11,7 +11,7 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-describe("AWS.DynamoDB.Table", () => {
+describe.skipIf(!!process.env.NO_SLOW_TESTS)("AWS.DynamoDB.Table", () => {
   const longGlobalSecondaryIndexStabilization = Schedule.fixed(
     "10 seconds",
   ).pipe(Schedule.both(Schedule.recurs(180)));
@@ -588,7 +588,7 @@ describe("AWS.DynamoDB.Table", () => {
 
         // Phase 2: wipe local state — the table stays in DynamoDB.
         yield* Effect.gen(function* () {
-          const state = yield* State;
+          const state = yield* yield* State;
           yield* state.delete({
             stack: stack.name,
             stage: "test",
@@ -642,7 +642,7 @@ describe("AWS.DynamoDB.Table", () => {
 
         // Wipe state for "Original"; table stays in DynamoDB.
         yield* Effect.gen(function* () {
-          const state = yield* State;
+          const state = yield* yield* State;
           yield* state.delete({
             stack: stack.name,
             stage: "test",

@@ -9,6 +9,10 @@ import type { Providers } from "./Providers.ts";
 
 export type Dialect = "postgres" | "mysql" | "sqlite";
 
+type DrizzleSnapshot = {
+  id?: string;
+};
+
 export type SchemaProps = {
   /**
    * Path to the schema module, relative to the current working directory.
@@ -164,7 +168,10 @@ export const SchemaProvider = () =>
             const exists = yield* fs.exists(snapshotPath);
             if (!exists) continue;
             const text = yield* fs.readFileString(snapshotPath);
-            return { snapshot: JSON.parse(text) as unknown, hash: sha(text) };
+            return {
+              snapshot: JSON.parse(text) as DrizzleSnapshot,
+              hash: sha(text),
+            };
           }
           return undefined;
         });
@@ -181,13 +188,14 @@ export const SchemaProvider = () =>
           const dialect = props.dialect ?? "postgres";
           const kit = yield* loadKit(dialect);
           const schemaModule = yield* loadSchemaModule(props);
+          const prevEntry = yield* readLatestSnapshot(out);
           const cur = yield* Effect.tryPromise({
-            try: () => kit.generateDrizzleJson(schemaModule),
+            try: () =>
+              kit.generateDrizzleJson(schemaModule, prevEntry?.snapshot.id),
             catch: (cause) =>
               new Error(`drizzle-kit generateDrizzleJson failed: ${cause}`),
           });
 
-          const prevEntry = yield* readLatestSnapshot(out);
           // For the initial migration, drizzle-kit needs an *empty* snapshot
           // produced by `generateDrizzleJson({})`, not a bare `{}` — the
           // snapshot has internal fields (`ddl`, etc.) that the differ reads.

@@ -381,6 +381,80 @@ alchemy cloudflare bootstrap --profile staging
 alchemy cloudflare bootstrap --force
 ```
 
+### `cloudflare create-token`
+
+Mint a Cloudflare API token (`POST /user/tokens`) from the CLI. Useful
+for creating the `CLOUDFLARE_API_TOKEN` you hand to CI, or a broad local
+token for `alchemy deploy`. You'll be pointed to
+[your Cloudflare profile](https://dash.cloudflare.com/profile/api-tokens)
+once to grab your Global API Key (unless it's already in the environment);
+everything else happens in the terminal.
+
+```sh
+alchemy cloudflare create-token [options]
+```
+
+This command is **standalone** — it does not use an Alchemy auth
+profile. Cloudflare only mints a token whose permissions the
+authenticating credential is allowed to grant, and OAuth/scoped tokens
+silently produce a token with **zero** permissions. So this command
+always authenticates with your account's **Global API Key**, read from
+`CLOUDFLARE_API_KEY` / `CLOUDFLARE_EMAIL` (or prompted). The key is used
+only to create the token and is never stored.
+
+By default it grants a curated set of permissions covering the services
+Alchemy commonly deploys (Workers, KV, R2, D1, Queues, DNS, etc.). Pass
+`--all-permissions` for a "superuser" token spanning **every** permission
+group your account exposes (after a confirmation prompt).
+
+<Terminal content={`◇  Select a Cloudflare account
+│  My Account
+│
+◇  Token name
+│  alchemy-superuser
+│
+◇  Create a superuser token with all permissions?
+│  Yes
+
+Created Cloudflare API token "alchemy-superuser" (7cb070fe...).
+Granted 360 permission group(s) across 3 policy(ies); token status: active.
+
+cfut_pMtBzTOGHWyFC2RSNvfw8f7p2cc...
+
+Store this value now — Cloudflare only shows it once. Use it as CLOUDFLARE_API_TOKEN.`} />
+
+| Option               | Description                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------- |
+| `--all-permissions`  | Grant every Cloudflare permission group (a "superuser" token). Prompts for confirmation.          |
+| `--name <name>`      | Token name. Prompted (required) if omitted.                                                       |
+| `--account-id <id>`  | Account to scope the token to. If omitted, you'll be prompted to select one.                      |
+| `--env-file <path>`  | Load environment variables (e.g. `CLOUDFLARE_API_KEY`, `CLOUDFLARE_EMAIL`) from a file            |
+
+The permission groups are resolved **live** from your account (so the
+token always uses IDs valid for that account), and the freshly minted
+token is verified against `/user/tokens/verify` before the value is
+printed.
+
+:::note
+The Cloudflare dashboard has a long-standing rendering bug where
+API-created tokens show a **blank** permission summary (and a greyed-out
+"View") on first load. The permissions are applied regardless — the
+`Granted N permission group(s)` line and `token status: active` confirm
+it. To see them in the UI, open the token and click "← Edit token".
+:::
+
+```sh
+# Curated set of permissions for typical Alchemy deploys
+alchemy cloudflare create-token --name ci-token
+
+# Full-access "superuser" token
+alchemy cloudflare create-token --all-permissions --name admin
+
+# Non-interactive: key/email from the environment, explicit account
+CLOUDFLARE_API_KEY=... CLOUDFLARE_EMAIL=you@example.com \
+  alchemy cloudflare create-token --name ci --account-id <account-id>
+```
+
 ### `cloudflare state logs`
 
 Get or tail logs from the `alchemy-state-store` Worker on your

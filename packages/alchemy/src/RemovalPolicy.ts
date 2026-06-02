@@ -17,7 +17,7 @@ export const retain: {
   ): <R, Req2 = never>(
     a: Effect.Effect<R, never, Req2>,
   ) => Effect.Effect<R, never, Req | Req2>;
-} = ((enabled: boolean | Effect.Effect<boolean, never, any>) =>
+} = ((enabled: boolean | Effect.Effect<boolean, never, any> = true) =>
   (eff: Effect.Effect<any, never, any>) =>
     eff.pipe(
       typeof enabled === "boolean"
@@ -39,7 +39,7 @@ export const destroy: {
   ): <R, Req2 = never>(
     a: Effect.Effect<R, never, Req2>,
   ) => Effect.Effect<R, never, Req | Req2>;
-} = ((enabled: boolean | Effect.Effect<boolean, never, any>) =>
+} = ((enabled: boolean | Effect.Effect<boolean, never, any> = true) =>
   (eff: Effect.Effect<any, never, any>) =>
     eff.pipe(
       typeof enabled === "boolean"

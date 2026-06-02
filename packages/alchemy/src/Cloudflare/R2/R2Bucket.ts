@@ -9,7 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type * as Cloudflare from "../Providers.ts";
-import * as Zone from "../Zone.ts";
+import * as Zone from "../Zone/index.ts";
 import { R2BucketBinding } from "./R2BucketBinding.ts";
 
 export const isR2Bucket = (value: unknown): value is R2Bucket =>
@@ -684,8 +684,11 @@ export const R2BucketProvider = () =>
 
           const attrs = {
             bucketName: observed.name!,
-            storageClass: observed.storageClass ?? "Standard",
-            jurisdiction: observed.jurisdiction ?? "default",
+            // Distilled widened generated string enums to open unions.
+            storageClass: (observed.storageClass ??
+              "Standard") as R2Bucket.StorageClass,
+            jurisdiction: (observed.jurisdiction ??
+              "default") as R2Bucket.Jurisdiction,
             location: normalizeLocation(observed.location),
             accountId: acct,
           };
@@ -738,8 +741,11 @@ export const R2BucketProvider = () =>
           }).pipe(
             Effect.map((bucket) => ({
               bucketName: bucket.name!,
-              storageClass: bucket.storageClass ?? "Standard",
-              jurisdiction: bucket.jurisdiction ?? "default",
+              // Distilled widened generated string enums to open unions.
+              storageClass: (bucket.storageClass ??
+                "Standard") as R2Bucket.StorageClass,
+              jurisdiction: (bucket.jurisdiction ??
+                "default") as R2Bucket.Jurisdiction,
               location: normalizeLocation(bucket.location),
               accountId: acct,
               domains: output?.domains ?? [],
@@ -760,13 +766,15 @@ const r2BucketEndpointConsistencySchedule = Schedule.exponential(100).pipe(
   Schedule.both(Schedule.recurs(5)),
 );
 
+// Distilled widened generated string enums to open unions (`string & {}`); the
+// API only ever returns the known variants, narrowed in `toCustomDomainAttributes`.
 type CustomDomainResponse = {
   domain: string;
   zoneId?: string | null;
   enabled?: boolean | null;
   ciphers?: string[] | null;
-  minTLS?: "1.0" | "1.1" | "1.2" | "1.3" | null;
-  status?: R2Bucket.CustomDomain["status"];
+  minTLS?: string | null;
+  status?: { ownership: string; ssl: string } | null;
 };
 
 const toCustomDomainAttributes = (
@@ -776,8 +784,8 @@ const toCustomDomainAttributes = (
   zoneId: domain.zoneId ?? undefined,
   enabled: domain.enabled ?? true,
   ciphers: domain.ciphers ?? undefined,
-  minTLS: domain.minTLS ?? undefined,
-  status: domain.status,
+  minTLS: (domain.minTLS ?? undefined) as R2Bucket.CustomDomain["minTLS"],
+  status: (domain.status ?? undefined) as R2Bucket.CustomDomain["status"],
 });
 
 const sameCustomDomainConfig = (

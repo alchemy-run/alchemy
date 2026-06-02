@@ -40,21 +40,25 @@ export type GetBindingType<T> =
                       ? AnalyticsEngineDataset
                       : T extends Cloudflare.Artifacts
                         ? Artifacts
-                        : T extends Cloudflare.Images
-                          ? ImagesBinding
-                          : T extends Cloudflare.BrowserRendering
-                            ? Fetcher
-                            : T extends Cloudflare.Hyperdrive
-                              ? Hyperdrive
-                              : T extends Cloudflare.DurableObjectNamespaceLike
-                                ? DurableObjectNamespace<
-                                    Exclude<T["Shape"], undefined>
-                                  >
-                                : T extends Redacted<any>
-                                  ? // redacteds are always stored as secret_text, so are always string
-                                    // we JSON.stringify when not a Redacted<string>
-                                    string
-                                  : T;
+                        : T extends Cloudflare.RateLimit
+                          ? RateLimit
+                          : T extends Cloudflare.Images
+                            ? ImagesBinding
+                            : T extends Cloudflare.Browser
+                              ? Fetcher
+                              : T extends Cloudflare.Hyperdrive
+                                ? Hyperdrive
+                                : T extends Cloudflare.DynamicWorkerLoader
+                                  ? Cloudflare.DynamicWorkerLoaderBinding
+                                  : T extends Cloudflare.DurableObjectNamespaceLike
+                                    ? DurableObjectNamespace<
+                                        Exclude<T["Shape"], undefined>
+                                      >
+                                    : T extends Redacted<any>
+                                      ? // redacteds are always stored as secret_text, so are always string
+                                        // we JSON.stringify when not a Redacted<string>
+                                        string
+                                      : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

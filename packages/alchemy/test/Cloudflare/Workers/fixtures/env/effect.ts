@@ -1,4 +1,5 @@
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Output from "alchemy/Output";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -28,6 +29,7 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
       NULL: null,
       OBJ: { nested: { value: "ok" }, count: 7 },
       ARR: [1, 2, 3],
+      OUTPUT_STR: Output.literal("output-str"),
       SECRET_STR: Redacted.make("shh"),
       SECRET_JSON: Redacted.make({ token: "abc", scopes: ["read", "write"] }),
       // Config declared statically on `env` — Alchemy resolves at deploy
@@ -56,6 +58,7 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
             NULL: env.NULL,
             OBJ: env.OBJ,
             ARR: env.ARR,
+            OUTPUT_STR: env.OUTPUT_STR,
             SECRET_STR: env.SECRET_STR,
             SECRET_JSON:
               typeof env.SECRET_JSON === "string"

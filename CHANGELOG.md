@@ -1,3 +1,76 @@
+## v2.0.0-beta.50
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - Worker/vite port conflict in dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/513 [<samp>(f7b9e)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f7b9ecc5)
+  - `RuntimeContext` dependency when binding output values &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/514 [<samp>(d136f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d136fb54)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.49...HEAD)
+
+---
+
+## v2.0.0-beta.49
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: DNS record bindings &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/511 [<samp>(fafc9)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/fafc9e9c)
+- **output**: Add flatMap and method-style combinators &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/512 [<samp>(00234)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/002343f0)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Don't unwrap unredacted values &nbsp;-&nbsp; by **sam** [<samp>(f4ef0)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f4ef0381)
+- **cloudflare**: Ensure all yielded Config in a Worker to use secret_text &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/510 [<samp>(38c62)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/38c62b6b)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.48...HEAD)
+
+---
+
+## v2.0.0-beta.48
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cli**:
+  - Add cloudflare create-token command &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/496 [<samp>(ab886)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ab8864fe)
+- **cloudflare**:
+  - Zone &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/493 [<samp>(38b2f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/38b2f0a8)
+  - Rename BrowserRendering to Browser &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/503 [<samp>(1a62d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1a62d247)
+  - Tunnel Bindings &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/508 [<samp>(86bcf)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/86bcf260)
+  - **browser**: Yieldable BrowserRendering marker &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/498 [<samp>(05283)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/052832a8)
+  - **images**: Yieldable Images binding &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/501 [<samp>(46c15)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/46c158a6)
+  - **ratelimit**: Add RateLimit binding &nbsp;-&nbsp; by **Alex** and **sam** in https://github.com/alchemy-run/alchemy-effect/issues/238 [<samp>(eb8f5)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/eb8f5efc)
+  - **workers**: Yieldable DynamicWorkerLoader marker &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/505 [<samp>(362fc)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/362fcdff)
+- **docs**:
+  - Add Bindings section and refocus Providers on lifecycle interface &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/502 [<samp>(a5fc3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a5fc3412)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**:
+  - **zone**: Use ZoneAlreadyExists tag; bump distilled 0.22.3 &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/507 [<samp>(d948f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d948f304)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.47...HEAD)
+
+---
+
+## v2.0.0-beta.47
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - **ai-gateway**: Add LanguageModel + AI Gateway client surface &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/389 [<samp>(51150)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/51150a8c)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**:
+  - Skip evalStack in login and defer State store init to runtime &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/492 [<samp>(949b3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/949b3079)
+- **cloudflare**:
+  - Handle props.env in local workers &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/473 [<samp>(0b779)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/0b779dfe)
+  - Stream RPC return values across durable object boundary &nbsp;-&nbsp; by **sam** in https://github.com/alchemy-run/alchemy-effect/issues/478 [<samp>(6811d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6811de57)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.46...HEAD)
+
+---
+
 ## v2.0.0-beta.46
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features

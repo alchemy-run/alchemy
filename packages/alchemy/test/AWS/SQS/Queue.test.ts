@@ -224,7 +224,7 @@ test.provider(
 
       // Wipe state — queue stays in SQS.
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",
@@ -263,7 +263,7 @@ test.provider(
       );
 
       yield* Effect.gen(function* () {
-        const state = yield* State;
+        const state = yield* yield* State;
         yield* state.delete({
           stack: stack.name,
           stage: "test",

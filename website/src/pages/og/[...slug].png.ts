@@ -61,94 +61,104 @@ async function readFont(
   );
 }
 
-const fontsPromise = (async () => {
-  const [
-    serif,
-    serifIt,
-    displayLight,
-    displayLightIt,
-    displayReg,
-    displayRegIt,
-    displaySemi,
-    displaySemiIt,
-    tinos,
-    mono,
-    caveat,
-  ] = await Promise.all([
-    readFont("SourceSerif4-Regular.ttf"),
-    readFont("SourceSerif4-It.ttf"),
-    readFont("SourceSerif4Display-Light.ttf"),
-    readFont("SourceSerif4Display-LightIt.ttf"),
-    readFont("SourceSerif4Display-Regular.ttf"),
-    readFont("SourceSerif4Display-It.ttf"),
-    readFont("SourceSerif4Display-Semibold.ttf"),
-    readFont("SourceSerif4Display-SemiboldIt.ttf"),
-    readFont("Tinos-Regular.ttf", true),
-    readFont("JetBrainsMono-Regular.ttf"),
-    readFont("Caveat-Regular.ttf"),
-  ]);
+let fontsPromise: ReturnType<typeof loadFonts> | undefined;
+/** Lazily load (and memoize) the OG fonts on first render. Kept lazy so that
+ * importing this module (e.g. during a `DOCS_FAST` build that emits no OG
+ * images) doesn't eagerly read fonts that haven't been downloaded. */
+function getFonts() {
+  return (fontsPromise ??= loadFonts());
+}
 
-  return [
-    // Text optical-size variant (description, wordmark, etc.).
-    { name: "Source Serif 4", data: serif, weight: 400, style: "normal" },
-    { name: "Source Serif 4", data: serifIt, weight: 400, style: "italic" },
+function loadFonts() {
+  return (async () => {
+    const [
+      serif,
+      serifIt,
+      displayLight,
+      displayLightIt,
+      displayReg,
+      displayRegIt,
+      displaySemi,
+      displaySemiIt,
+      tinos,
+      mono,
+      caveat,
+    ] = await Promise.all([
+      readFont("SourceSerif4-Regular.ttf"),
+      readFont("SourceSerif4-It.ttf"),
+      readFont("SourceSerif4Display-Light.ttf"),
+      readFont("SourceSerif4Display-LightIt.ttf"),
+      readFont("SourceSerif4Display-Regular.ttf"),
+      readFont("SourceSerif4Display-It.ttf"),
+      readFont("SourceSerif4Display-Semibold.ttf"),
+      readFont("SourceSerif4Display-SemiboldIt.ttf"),
+      readFont("Tinos-Regular.ttf", true),
+      readFont("JetBrainsMono-Regular.ttf"),
+      readFont("Caveat-Regular.ttf"),
+    ]);
 
-    // Display optical-size variant for the headline. Carries chunkier
-    // serifs and more stroke contrast at large sizes — matches the
-    // website hero, which uses the variable font's display optical axis
-    // automatically. Light (300) is what the hero renders at ~72px;
-    // Regular (400) is the default fallback.
-    {
-      name: "Source Serif 4 Display",
-      data: displayLight,
-      weight: 300,
-      style: "normal",
-    },
-    {
-      name: "Source Serif 4 Display",
-      data: displayLightIt,
-      weight: 300,
-      style: "italic",
-    },
-    {
-      name: "Source Serif 4 Display",
-      data: displayReg,
-      weight: 400,
-      style: "normal",
-    },
-    {
-      name: "Source Serif 4 Display",
-      data: displayRegIt,
-      weight: 400,
-      style: "italic",
-    },
+    return [
+      // Text optical-size variant (description, wordmark, etc.).
+      { name: "Source Serif 4", data: serif, weight: 400, style: "normal" },
+      { name: "Source Serif 4", data: serifIt, weight: 400, style: "italic" },
 
-    // Semibold (600) approximates the website hero's runtime "Medium"
-    // (500) — Adobe doesn't ship a static Medium Display cut, so we
-    // snap up. Used by the title.
-    {
-      name: "Source Serif 4 Display",
-      data: displaySemi,
-      weight: 600,
-      style: "normal",
-    },
-    {
-      name: "Source Serif 4 Display",
-      data: displaySemiIt,
-      weight: 600,
-      style: "italic",
-    },
+      // Display optical-size variant for the headline. Carries chunkier
+      // serifs and more stroke contrast at large sizes — matches the
+      // website hero, which uses the variable font's display optical axis
+      // automatically. Light (300) is what the hero renders at ~72px;
+      // Regular (400) is the default fallback.
+      {
+        name: "Source Serif 4 Display",
+        data: displayLight,
+        weight: 300,
+        style: "normal",
+      },
+      {
+        name: "Source Serif 4 Display",
+        data: displayLightIt,
+        weight: 300,
+        style: "italic",
+      },
+      {
+        name: "Source Serif 4 Display",
+        data: displayReg,
+        weight: 400,
+        style: "normal",
+      },
+      {
+        name: "Source Serif 4 Display",
+        data: displayRegIt,
+        weight: 400,
+        style: "italic",
+      },
 
-    // Tinos — TNR-equivalent. Used only for the marketing arrow glyph
-    // so the OG matches the website's font stack (which lands on Times
-    // New Roman for U+2192). See OgCard.tsx — this family is opted into
-    // explicitly via fontFamily on individual title spans.
-    { name: "Tinos", data: tinos, weight: 400, style: "normal" },
+      // Semibold (600) approximates the website hero's runtime "Medium"
+      // (500) — Adobe doesn't ship a static Medium Display cut, so we
+      // snap up. Used by the title.
+      {
+        name: "Source Serif 4 Display",
+        data: displaySemi,
+        weight: 600,
+        style: "normal",
+      },
+      {
+        name: "Source Serif 4 Display",
+        data: displaySemiIt,
+        weight: 600,
+        style: "italic",
+      },
 
-    { name: "JetBrains Mono", data: mono, weight: 400, style: "normal" },
-    { name: "Caveat", data: caveat, weight: 400, style: "normal" },
-  ] as const;
-})();
+      // Tinos — TNR-equivalent. Used only for the marketing arrow glyph
+      // so the OG matches the website's font stack (which lands on Times
+      // New Roman for U+2192). See OgCard.tsx — this family is opted into
+      // explicitly via fontFamily on individual title spans.
+      { name: "Tinos", data: tinos, weight: 400, style: "normal" },
+
+      { name: "JetBrains Mono", data: mono, weight: 400, style: "normal" },
+      { name: "Caveat", data: caveat, weight: 400, style: "normal" },
+    ] as const;
+  })();
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Page enumeration
@@ -197,6 +207,11 @@ function classifyDoc(slug: string): { kind: OgCardKind; eyebrow: string } {
 }
 
 export const getStaticPaths: GetStaticPaths = async () => {
+  // `DOCS_FAST=1` (the `docs:check` build target) skips OG image generation —
+  // rendering a satori→resvg PNG per page is the second-most-expensive build
+  // step and is irrelevant to link checking.
+  if (process.env.DOCS_FAST) return [];
+
   const docs = await getCollection("docs");
   const docPaths = docs.map((entry: any) => {
     const slug = (entry as { slug?: string; id?: string }).slug ?? entry.id;
@@ -243,7 +258,7 @@ export const getStaticPaths: GetStaticPaths = async () => {
 
 export const GET: APIRoute = async ({ props }) => {
   const { title, description, kind, eyebrow, date } = props as Entry;
-  const fonts = await fontsPromise;
+  const fonts = await getFonts();
 
   const element = OgCard({ title, description, eyebrow, kind, date });
 

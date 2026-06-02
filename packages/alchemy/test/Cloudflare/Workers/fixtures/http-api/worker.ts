@@ -28,8 +28,6 @@ export default class HttpApiTestWorker extends Cloudflare.Worker<HttpApiTestWork
   "HttpApiTestWorker",
   {
     main: import.meta.filename,
-    subdomain: { enabled: true, previewsEnabled: false },
-    compatibility: { date: "2024-09-23", flags: ["nodejs_compat"] },
   },
   Effect.gen(function* () {
     const tasks = yield* Cloudflare.R2Bucket.bind(Bucket);

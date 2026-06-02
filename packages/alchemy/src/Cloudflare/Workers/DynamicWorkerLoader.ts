@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { SingleShotGen } from "effect/Utils";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import { fromCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
 import { makeRpcStub } from "./Rpc.ts";
@@ -56,10 +57,10 @@ export interface DynamicWorkerInstance extends Fetcher {
 }
 
 /**
- * The handle returned by `DynamicWorker(name)`. Provides a `.load()` method
- * for spinning up isolated dynamic workers at runtime.
+ * The runtime handle obtained by `yield* Cloudflare.DynamicWorkerLoader(name)`.
+ * Provides a `.load()` method for spinning up isolated dynamic workers.
  */
-export type DynamicWorkerLoader = {
+export interface DynamicWorkerLoaderHandle {
   Type: DynamicWorkerTypeId;
   name: string;
   /**
@@ -67,7 +68,57 @@ export type DynamicWorkerLoader = {
    * exposes `.getEntrypoint()` and `.fetch()` for calling into the worker.
    */
   load(options: DynamicWorkerLoadOptions): DynamicWorkerInstance;
-};
+}
+
+/**
+ * The native `worker_loader` runtime binding shape, as seen by an async
+ * (non-Effect) Worker that declares the loader through `env`. `InferEnv` maps
+ * a `DynamicWorkerLoader` marker in `env` to this type.
+ */
+export interface DynamicWorkerLoaderBinding {
+  load(options: DynamicWorkerLoadOptions): {
+    getEntrypoint(name?: string): {
+      fetch(request: Request): Promise<Response>;
+      [method: string]: unknown;
+    };
+  };
+}
+
+/**
+ * The Effect yielded when a `DynamicWorkerLoader` marker is used inside a
+ * Worker init phase: it registers the `worker_loader` binding on the
+ * surrounding Worker and resolves to a {@link DynamicWorkerLoaderHandle}.
+ */
+type BindEffect = ReturnType<typeof bindLoader>;
+
+/**
+ * Marker for a Cloudflare Worker Loader binding.
+ *
+ * It is a plain data structure (so it can be declared directly on a Worker's
+ * `env`) that is **also** yieldable inside an Effect-native Worker. Yielding it
+ * (`yield* Cloudflare.DynamicWorkerLoader(name)`) registers the binding on the
+ * surrounding Worker and returns a {@link DynamicWorkerLoaderHandle} with
+ * `.load()` — no separate `.bind(...)` step required.
+ *
+ * The divergence is achieved via `[Symbol.iterator]`: the object is not an
+ * `Effect` (so `InferEnv` resolves it to the native
+ * {@link DynamicWorkerLoaderBinding} in the `env` position), but it is iterable
+ * as one when `yield*`-ed.
+ */
+export interface DynamicWorkerLoader {
+  kind: DynamicWorkerTypeId;
+  name: string;
+  asEffect(): BindEffect;
+  [Symbol.iterator](): SingleShotGen<BindEffect, DynamicWorkerLoaderHandle>;
+}
+
+export const isDynamicWorkerLoader = (
+  value: unknown,
+): value is DynamicWorkerLoader =>
+  typeof value === "object" &&
+  value !== null &&
+  "kind" in value &&
+  (value as DynamicWorkerLoader).kind === DynamicWorkerTypeId;
 
 /**
  * Load and run ephemeral Workers at runtime from inline JavaScript
@@ -86,14 +137,79 @@ export type DynamicWorkerLoader = {
  * @resource
  *
  * @section Creating a Loader
- * Yield `Cloudflare.DynamicWorkerLoader` in your Worker's init
- * phase to register the binding. The string argument becomes the
- * binding name on the deployed Worker.
+ * Yield `Cloudflare.DynamicWorkerLoader(name)` in your Worker's init
+ * phase to register the binding and get back a runtime handle. The
+ * string argument becomes the binding name on the deployed Worker.
  *
- * @example Registering a loader
+ * @example Registering a loader (effect-native Worker)
  * ```typescript
- * // init
- * const loader = yield* Cloudflare.DynamicWorkerLoader("Loader");
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ * import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+ *
+ * export default class EvalWorker extends Cloudflare.Worker<EvalWorker>()(
+ *   "EvalWorker",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     // Registers the `worker_loader` binding on this Worker and returns the
+ *     // runtime handle in one step — no separate `.bind(...)`.
+ *     const loader = yield* Cloudflare.DynamicWorkerLoader("LOADER");
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const code = yield* request.text;
+ *
+ *         // Spin up an isolated, sandboxed Worker from inline source.
+ *         const worker = loader.load({
+ *           compatibilityDate: "2026-01-28",
+ *           mainModule: "worker.js",
+ *           modules: {
+ *             "worker.js": `export default {
+ *               async fetch(req) {
+ *                 const result = (0, eval)(await req.text());
+ *                 return new Response(String(result));
+ *               }
+ *             }`,
+ *           },
+ *           globalOutbound: null, // block outbound network access
+ *         });
+ *
+ *         // Call the loaded Worker over Effect-native HTTP.
+ *         const response = yield* worker.fetch(
+ *           HttpClientRequest.post("https://worker/").pipe(
+ *             HttpClientRequest.bodyText(code),
+ *           ),
+ *         );
+ *         return HttpServerResponse.fromClientResponse(response);
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ *
+ * @example Declaring on env (async Worker)
+ * ```typescript
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: { LOADER: Cloudflare.DynamicWorkerLoader() },
+ * });
+ *
+ * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
+ *
+ * // worker.ts
+ * export default {
+ *   async fetch(req: Request, env: WorkerEnv) {
+ *     const worker = env.LOADER.load({
+ *       compatibilityDate: "2026-01-28",
+ *       mainModule: "worker.js",
+ *       modules: { "worker.js": "export default { fetch: () => new Response('ok') }" },
+ *     });
+ *     return worker.getEntrypoint().fetch(req);
+ *   },
+ * };
  * ```
  *
  * @section Loading a Worker
@@ -155,7 +271,17 @@ export type DynamicWorkerLoader = {
  * const greeting = yield* api.greet("world");
  * ```
  */
-export const DynamicWorkerLoader = Effect.fnUntraced(function* (name: string) {
+export const DynamicWorkerLoader = (name = "LOADER"): DynamicWorkerLoader => {
+  const self: DynamicWorkerLoader = {
+    kind: DynamicWorkerTypeId,
+    name,
+    asEffect: () => bindLoader(name),
+    [Symbol.iterator]: () => new SingleShotGen(bindLoader(name)),
+  };
+  return self;
+};
+
+const bindLoader = Effect.fnUntraced(function* (name: string) {
   const worker = yield* Worker;
 
   yield* worker.bind`${name}`({
@@ -177,14 +303,14 @@ export const DynamicWorkerLoader = Effect.fnUntraced(function* (name: string) {
     }),
   );
 
-  const self: DynamicWorkerLoader = {
+  const handle: DynamicWorkerLoaderHandle = {
     Type: DynamicWorkerTypeId,
     name,
     load: (options: DynamicWorkerLoadOptions): DynamicWorkerInstance =>
       wrapLoadedWorker(binding.load(options)),
   };
 
-  return self;
+  return handle;
 });
 
 const wrapEntrypoint = <Shape>(raw: any): DynamicWorkerEntrypoint<Shape> =>

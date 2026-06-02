@@ -286,6 +286,7 @@ export const LocalWorkerProvider = () =>
           workerBindings,
           durableObjectNamespaces,
           hyperdrives,
+          env: props.env,
           bundleOptions: {
             id,
             main: props.main!,
@@ -307,7 +308,7 @@ export const LocalWorkerProvider = () =>
 
       type WorkerConfig = Effect.Success<ReturnType<typeof buildConfig>>;
 
-      const runServer = Effect.fnUntraced(function* (worker: WorkerConfig) {
+      const runWorker = Effect.fnUntraced(function* (worker: WorkerConfig) {
         let start = Date.now();
         let status: "start" | "update" = "start";
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
@@ -357,7 +358,36 @@ export const LocalWorkerProvider = () =>
           Stream.runDrain,
           Effect.forkScoped,
         );
-        return proxy.url.toString();
+        return proxy.url;
+      });
+
+      const runVite = Effect.fnUntraced(function* (
+        worker: WorkerConfig,
+        rootDir: string | undefined,
+      ) {
+        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        yield* proxy.unset().pipe(Effect.forkChild);
+        const devServer = yield* Vite.viteDev(
+          rootDir,
+          worker.env ?? {},
+          {
+            compatibilityDate: worker.compatibility.date,
+            compatibilityFlags: worker.compatibility.flags,
+            worker: {
+              name: worker.name,
+              bindings: worker.workerBindings,
+              durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
+                worker.durableObjectNamespaces,
+              ),
+              hyperdrives: worker.hyperdrives,
+              assets: toRuntimeAssets(worker.assets),
+            },
+            context,
+          },
+          { port: 0 },
+        );
+        yield* proxy.set(new URL(devServer.resolvedUrls!.local[0]));
+        return proxy.url;
       });
 
       const rootScope = yield* Effect.scope;
@@ -383,31 +413,9 @@ export const LocalWorkerProvider = () =>
       }) {
         const { props, bindings } = options;
         const config = yield* buildConfig(options);
-        let url: string;
-        if (props.vite) {
-          const devServer = yield* Vite.viteDev(
-            props.vite.rootDir,
-            props.env ?? {},
-            {
-              compatibilityDate: config.compatibility.date,
-              compatibilityFlags: config.compatibility.flags,
-              worker: {
-                name: config.name,
-                bindings: config.workerBindings,
-                durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
-                  config.durableObjectNamespaces,
-                ),
-                hyperdrives: config.hyperdrives,
-                assets: toRuntimeAssets(config.assets),
-              },
-              context,
-            },
-            config.dev,
-          );
-          url = devServer.resolvedUrls!.local[0];
-        } else {
-          url = yield* runServer(config);
-        }
+        const url = yield* (
+          props.vite ? runVite(config, props.vite.rootDir) : runWorker(config)
+        ).pipe(Effect.map((url) => url.toString()));
         return {
           workerId: config.name,
           workerName: config.name,
@@ -595,8 +603,19 @@ const toRuntimeAssets = (
     directory: "directory" in assets ? assets.directory : assets.path,
     headers: assets.config?.headers,
     redirects: assets.config?.redirects,
-    htmlHandling: assets.config?.htmlHandling,
-    notFoundHandling: assets.config?.notFoundHandling,
+    // Distilled widened generated string enums to open unions (`string & {}`);
+    // the API only ever returns the known variants here.
+    htmlHandling: assets.config?.htmlHandling as
+      | "none"
+      | "auto-trailing-slash"
+      | "force-trailing-slash"
+      | "drop-trailing-slash"
+      | undefined,
+    notFoundHandling: assets.config?.notFoundHandling as
+      | "none"
+      | "404-page"
+      | "single-page-application"
+      | undefined,
     runWorkerFirst: assets.config?.runWorkerFirst,
     serveDirectly: assets.config?.serveDirectly,
   };

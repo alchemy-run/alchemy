@@ -174,6 +174,14 @@ describe("Output.evaluate", () => {
         }),
       ),
     );
+
+    it("classifies resource expressions when a stable kind shadows the discriminator", () => {
+      const src = fakeResource("Test.Database", "Database");
+      const expr = new Output.ResourceExpr(src, { kind: "postgresql" });
+
+      expect((expr as any).kind).toBe("postgresql");
+      expect(Output.isResourceExpr(expr)).toBe(true);
+    });
   });
 
   describe("PropExpr", () => {
@@ -278,6 +286,161 @@ describe("Output.evaluate", () => {
             Output.mapEffect((s) => Effect.succeed(s + "c")),
           );
           expect(yield* Output.evaluate(expr, {})).toBe("abc");
+        }),
+      ),
+    );
+  });
+
+  describe("FlatMapExpr (flatMap)", () => {
+    it.effect("flattens an Output returned from the function", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = Output.literal(5).pipe(
+            Output.flatMap((n: number) => Output.literal(n * 2)),
+          );
+          expect(yield* Output.evaluate(expr, {})).toBe(10);
+        }),
+      ),
+    );
+
+    it.effect("supports the data-first form", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = Output.flatMap(Output.literal("a"), (s: string) =>
+            Output.literal(s + "b"),
+          );
+          expect(yield* Output.evaluate(expr, {})).toBe("ab");
+        }),
+      ),
+    );
+
+    it.effect("chains multiple flatMaps", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = Output.literal(1).pipe(
+            Output.flatMap((n: number) => Output.literal(n + 1)),
+            Output.flatMap((n: number) => Output.literal(n * 10)),
+          );
+          expect(yield* Output.evaluate(expr, {})).toBe(20);
+        }),
+      ),
+    );
+
+    it.effect("flatMaps into another resource's output", () =>
+      provideState(
+        Effect.gen(function* () {
+          const a = fakeResource("Test.A", "FA");
+          const b = fakeResource("Test.B", "FB");
+          const expr = (Output.of(a) as any).name.pipe(
+            Output.flatMap(() => (Output.of(b) as any).name),
+          );
+          const result = yield* Output.evaluate(expr, {
+            FA: { name: "a-name" },
+            FB: { name: "b-name" },
+          });
+          expect(result).toBe("b-name");
+        }),
+      ),
+    );
+
+    it.effect("can flatMap into a non-Output literal value", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = Output.literal(3).pipe(
+            Output.flatMap((n: number) => Output.asOutput(n + 1)),
+          );
+          expect(yield* Output.evaluate(expr, {})).toBe(4);
+        }),
+      ),
+    );
+
+    it("tracks only the source expression as upstream", () => {
+      const a = fakeResource("Test.A", "UA");
+      const expr = (Output.of(a) as any).name.pipe(
+        Output.flatMap((s: string) => Output.literal(s)),
+      );
+      expect(Object.keys(Output.upstream(expr))).toEqual(["UA"]);
+    });
+  });
+
+  describe("method-style combinators on a proxied Output", () => {
+    // Resource outputs are Proxies, so `.map(fn)` / `.mapEffect(fn)` /
+    // `.flatMap(fn)` / `.apply(fn)` / `.effect(fn)` must be callable as
+    // methods (not just via `Output.map(output, fn)` / `.pipe(...)`).
+    const resourceOutput = () => {
+      const src = fakeResource<"Test.Bucket", { name: string }>(
+        "Test.Bucket",
+        "M",
+      );
+      return (Output.of(src) as any).name as Output.Output<string>;
+    };
+
+    it.effect(".map(fn) builds an ApplyExpr", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = (resourceOutput() as any).map((s: string) =>
+            s.toUpperCase(),
+          );
+          expect(Output.isApplyExpr(expr)).toBe(true);
+          expect(yield* Output.evaluate(expr, { M: { name: "abc" } })).toBe(
+            "ABC",
+          );
+        }),
+      ),
+    );
+
+    it.effect(".apply(fn) builds an ApplyExpr", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = (resourceOutput() as any).apply((s: string) =>
+            s.toUpperCase(),
+          );
+          expect(Output.isApplyExpr(expr)).toBe(true);
+          expect(yield* Output.evaluate(expr, { M: { name: "abc" } })).toBe(
+            "ABC",
+          );
+        }),
+      ),
+    );
+
+    it.effect(".mapEffect(fn) builds an EffectExpr", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = (resourceOutput() as any).mapEffect((s: string) =>
+            Effect.succeed(s + "!"),
+          );
+          expect(Output.isEffectExpr(expr)).toBe(true);
+          expect(yield* Output.evaluate(expr, { M: { name: "abc" } })).toBe(
+            "abc!",
+          );
+        }),
+      ),
+    );
+
+    it.effect(".effect(fn) builds an EffectExpr", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = (resourceOutput() as any).effect((s: string) =>
+            Effect.succeed(s + "!"),
+          );
+          expect(Output.isEffectExpr(expr)).toBe(true);
+          expect(yield* Output.evaluate(expr, { M: { name: "abc" } })).toBe(
+            "abc!",
+          );
+        }),
+      ),
+    );
+
+    it.effect(".flatMap(fn) builds a FlatMapExpr", () =>
+      provideState(
+        Effect.gen(function* () {
+          const expr = (resourceOutput() as any).flatMap((s: string) =>
+            Output.literal(s + "?"),
+          );
+          expect(Output.isFlatMapExpr(expr)).toBe(true);
+          expect(yield* Output.evaluate(expr, { M: { name: "abc" } })).toBe(
+            "abc?",
+          );
         }),
       ),
     );

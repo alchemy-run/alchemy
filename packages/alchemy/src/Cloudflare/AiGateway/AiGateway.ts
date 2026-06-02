@@ -448,7 +448,8 @@ export const AiGatewayProvider = () =>
         rateLimitingLimit: nullIfZero(gateway.rateLimitingLimit),
         rateLimitingTechnique: gateway.rateLimitingTechnique ?? "fixed",
         authentication: gateway.authentication ?? false,
-        dlp: gateway.dlp ?? undefined,
+        // Distilled widened generated string enums to open unions (`string & {}`).
+        dlp: (gateway.dlp ?? undefined) as AiGatewayDlp | undefined,
         isDefault: gateway.isDefault ?? false,
         logManagement: gateway.logManagement ?? 100_000,
         logManagementStrategy:
