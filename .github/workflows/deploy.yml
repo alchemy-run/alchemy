@@ -33,7 +33,14 @@ env:
 
 jobs:
   deploy:
-    if: ${{ github.event.action != 'closed' }}
+    # Skip on cross-repo (fork) PRs — they can't access the
+    # alchemy-version-bot secrets or the Cloudflare API key, so
+    # `create-github-app-token` errors before anything useful runs.
+    # Internal PRs still get a preview; forks just don't.
+    if: >-
+      github.event.action != 'closed' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -97,9 +104,9 @@ jobs:
 
   cleanup:
     runs-on: ubuntu-latest
-    if:
-      ${{ github.event_name == 'pull_request' && github.event.action == 'closed'
-      }}
+    if: >-
+      github.event_name == 'pull_request' && github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
       pull-requests: write
