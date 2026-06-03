@@ -17,7 +17,7 @@ export type AsyncWorkerEnv = Cloudflare.InferEnv<
   ReturnType<typeof makeAsyncWorker>
 >;
 
-const makeAsyncWorker = (id: string, port: number) =>
+const makeAsyncWorker = (id: string) =>
   Cloudflare.Worker(id, {
     main: "./src/AsyncWorker.ts",
     env: {
@@ -26,9 +26,6 @@ const makeAsyncWorker = (id: string, port: number) =>
       MY_SECRET: Config.redacted("MY_SECRET").pipe(
         Config.withDefault(Redacted.make("my-secret-abc123")),
       ),
-    },
-    dev: {
-      port,
     },
   });
 
@@ -39,17 +36,17 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const asyncWorker = yield* makeAsyncWorker("AsyncWorker", 1337);
+    const asyncWorker = yield* makeAsyncWorker("AsyncWorker");
     const effectWorker = yield* EffectWorker;
 
     // Spawn several additional workers to test concurrency.
     // TODO: Effect.all doesn't work here; Platform needs to be updated to use Effectable.
     const additionalWorkers = [
-      yield* makeAsyncWorker("AdditionalWorker1", 1339),
-      yield* makeAsyncWorker("AdditionalWorker2", 1340),
-      yield* makeAsyncWorker("AdditionalWorker3", 1341),
-      yield* makeAsyncWorker("AdditionalWorker4", 1342),
-      yield* makeAsyncWorker("AdditionalWorker5", 1343),
+      yield* makeAsyncWorker("AdditionalWorker1"),
+      yield* makeAsyncWorker("AdditionalWorker2"),
+      yield* makeAsyncWorker("AdditionalWorker3"),
+      yield* makeAsyncWorker("AdditionalWorker4"),
+      yield* makeAsyncWorker("AdditionalWorker5"),
     ];
 
     return {
