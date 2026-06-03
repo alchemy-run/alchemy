@@ -1,3 +1,4 @@
+import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
@@ -100,7 +101,7 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
       from<Req = never>(
         worker:
           | Dependencies<Self>
-          | Effect.Effect<Dependencies<Self>, never, Req>,
+          | Effect.Effect<Dependencies<Self>, ConfigError, Req>,
       ): Effect.Effect<
         RpcDurableObjectNamespace<Self, Rpcs>,
         never,
@@ -113,7 +114,7 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
             never,
             DurableObjectServices
           >,
-          never,
+          ConfigError,
           InitReq
         >,
       ): Layer.Layer<
@@ -132,7 +133,7 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
           never,
           DurableObjectServices
         >,
-        never,
+        ConfigError,
         InitReq
       >,
     ): Effect.Effect<
@@ -160,7 +161,7 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
         never,
         DurableObjectServices
       >,
-      never,
+      ConfigError,
       InitReq
     >,
   ): Effect.Effect<

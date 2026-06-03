@@ -1,3 +1,4 @@
+import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -107,7 +108,7 @@ export interface RpcWorkerClass extends Effect.Effect<
       make<InnerR = never, InitReq = never>(
         impl: Effect.Effect<
           Effect.Effect<HttpEffect<InnerR>, never, InnerR>,
-          never,
+          ConfigError,
           InitReq
         >,
       ): Layer.Layer<Self, never, Exclude<InitReq | InnerR, never>>;
@@ -118,7 +119,7 @@ export interface RpcWorkerClass extends Effect.Effect<
       props: RpcWorkerProps<Rpcs>,
       impl: Effect.Effect<
         Effect.Effect<HttpEffect<InnerR>, never, InnerR>,
-        never,
+        ConfigError,
         InitReq
       >,
     ): RpcWorkerYieldable<Self, Rpcs, Deps> & {
