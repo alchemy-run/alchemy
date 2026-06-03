@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import { Command, type CommandProps } from "../../Build/Command.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
@@ -23,8 +24,49 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    */
   assetsConfig?: AssetsConfig;
+  /**
+   * Local dev configuration. When `alchemy dev` runs, the build command is
+   * skipped and `command` is spawned instead. Alchemy picks a free port,
+   * passes it via the `PORT` env var, waits for the dev server to start
+   * listening, and proxies the Worker URL at it.
+   *
+   * @example
+   * ```typescript
+   * Cloudflare.StaticSite("App", {
+   *   command: "npm run build",
+   *   outdir: "dist",
+   *   main: "./src/worker.ts",
+   *   dev: { command: "npm run dev" },
+   * });
+   * ```
+   */
   dev?: {
+    /**
+     * Shell command to run as the upstream dev server (e.g. `npm run dev`).
+     * The command must respect the `PORT` env var alchemy passes to it.
+     */
     command: string;
+    /**
+     * Working directory for {@link command}. Defaults to {@link CommandProps.cwd}
+     * (the build command's `cwd`), or `process.cwd()` if neither is set.
+     */
+    cwd?: string;
+    /**
+     * Host the local proxy binds to.
+     * @default "localhost"
+     */
+    host?: string;
+    /**
+     * Port the local proxy listens on.
+     * @default 1337
+     */
+    port?: number;
+    /**
+     * When `true`, fail instead of falling back to another port if {@link port}
+     * is already in use.
+     * @default false
+     */
+    strictPort?: boolean;
   };
 }
 
@@ -144,8 +186,12 @@ export const StaticSite: {
     <const Bindings extends WorkerBindingProps = {}, Req = never>(
       id: string,
       propsEff:
-        | InputProps<StaticSiteProps<Bindings>>
-        | Effect.Effect<InputProps<StaticSiteProps<Bindings>>, never, Req>,
+        | InputProps<StaticSiteProps<Bindings>, "dev">
+        | Effect.Effect<
+            InputProps<StaticSiteProps<Bindings>, "dev">,
+            never,
+            Req
+          >,
     ): Effect.Effect<Self, never, Req | Providers> & {
       new (): StaticSiteWorker<Bindings>;
     };
@@ -153,8 +199,8 @@ export const StaticSite: {
   <const Bindings extends WorkerBindingProps = {}, Req = never>(
     id: string,
     propsEff:
-      | InputProps<StaticSiteProps<Bindings>>
-      | Effect.Effect<InputProps<StaticSiteProps<Bindings>>, never, Req>,
+      | InputProps<StaticSiteProps<Bindings>, "dev">
+      | Effect.Effect<InputProps<StaticSiteProps<Bindings>, "dev">, never, Req>,
   ): Effect.Effect<StaticSiteWorker<Bindings>, never, Req | Providers>;
 } = ((id?: any, propsEff?: any) =>
   id === undefined
@@ -167,47 +213,58 @@ const makeStaticSite = <
 >(
   id: string,
   propsEff:
-    | InputProps<StaticSiteProps<Bindings>>
-    | Effect.Effect<InputProps<StaticSiteProps<Bindings>>, never, Req>,
+    | InputProps<StaticSiteProps<Bindings>, "dev">
+    | Effect.Effect<InputProps<StaticSiteProps<Bindings>, "dev">, never, Req>,
 ) =>
   Effect.gen(function* () {
     const props = Effect.isEffect(propsEff)
       ? propsEff
       : Effect.succeed(propsEff);
+    const { dev: isDevPhase } = yield* AlchemyContext;
 
-    // TODO(sam): local dev/hmr support?
-    const build = yield* Command(
-      "Build",
-      Effect.map(props, (props) => ({
-        command: props.command,
-        cwd: props.cwd,
-        memo: props.memo,
-        outdir: props.outdir,
-        env: props.env
-          ? Object.fromEntries(
-              Object.entries(props.env).flatMap(([k, v]) => {
-                if (v === undefined) return [];
-                if (typeof v === "string" || Redacted.isRedacted(v))
-                  return [[k, v]];
-                return [[k, JSON.stringify(v)]];
-              }),
-            )
+    return yield* Effect.gen(function* () {
+      const resolved = yield* props;
+      const useDevServer = isDevPhase && resolved.dev !== undefined;
+
+      // In dev mode with a dev.command, skip the build entirely — the dev
+      // server handles assets at runtime.
+      const build = useDevServer
+        ? undefined
+        : yield* Command("Build", {
+            command: resolved.command,
+            cwd: resolved.cwd,
+            memo: resolved.memo,
+            outdir: resolved.outdir,
+            env: resolved.env
+              ? Object.fromEntries(
+                  Object.entries(resolved.env).flatMap(([k, v]) => {
+                    if (v === undefined) return [];
+                    if (typeof v === "string" || Redacted.isRedacted(v))
+                      return [[k, v]];
+                    return [[k, JSON.stringify(v)]];
+                  }),
+                )
+              : undefined,
+          });
+
+      return yield* Worker<Bindings, WorkerAssetsConfig, Req>("Worker", {
+        ...resolved,
+        assets: build
+          ? {
+              path: build.outdir,
+              hash: build.hash,
+              config: resolved.assetsConfig,
+            }
           : undefined,
-      })),
-    );
-
-    return yield* Worker<Bindings, WorkerAssetsConfig, Req>(
-      "Worker",
-      Effect.map(props, (props) => ({
-        ...props,
-        assets: {
-          path: build.outdir,
-          hash: build.hash,
-          config: props.assetsConfig,
-        },
-        // Omit the dev command from WorkerProps since it's different from WorkerProps["dev"].
-        // TODO: we'll need to update this when we add local dev support for StaticSite.
-        dev: undefined,
-      })),
-    );
+        dev: useDevServer
+          ? {
+              command: resolved.dev!.command,
+              cwd: resolved.dev!.cwd ?? resolved.cwd,
+              host: resolved.dev!.host,
+              port: resolved.dev!.port,
+              strictPort: resolved.dev!.strictPort,
+            }
+          : undefined,
+      });
+    });
   }).pipe(Namespace.push(id));

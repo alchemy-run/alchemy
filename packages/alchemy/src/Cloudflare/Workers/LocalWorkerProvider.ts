@@ -49,7 +49,10 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { ChildProcess } from "effect/unstable/process";
+import * as net from "node:net";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { isResolved } from "../../Diff.ts";
@@ -65,6 +68,45 @@ import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
+
+const getFreePort = Effect.callback<number>((resume) => {
+  const server = net.createServer();
+  server.unref();
+  server.on("error", (error) => resume(Effect.die(error)));
+  server.listen(0, () => {
+    const address = server.address();
+    const port =
+      typeof address === "object" && address ? address.port : undefined;
+    server.close(() => {
+      if (port === undefined) {
+        resume(Effect.die(new Error("Could not determine free port")));
+      } else {
+        resume(Effect.succeed(port));
+      }
+    });
+  });
+});
+
+const tryConnect = (port: number) =>
+  Effect.callback<void, Error>((resume) => {
+    const socket = net.createConnection({ host: "127.0.0.1", port });
+    socket.once("connect", () => {
+      socket.end();
+      resume(Effect.void);
+    });
+    socket.once("error", (error) => {
+      socket.destroy();
+      resume(Effect.fail(error));
+    });
+  });
+
+const waitForPort = (port: number) =>
+  tryConnect(port).pipe(
+    Effect.retry({
+      schedule: Schedule.spaced("250 millis"),
+      times: 240,
+    }),
+  );
 
 export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
   "WorkerValidationError",
@@ -361,6 +403,40 @@ export const LocalWorkerProvider = () =>
         return proxy.url;
       });
 
+      const runDevCommand = Effect.fnUntraced(function* (
+        worker: WorkerConfig,
+        command: string,
+        cwd: string | undefined,
+      ) {
+        const proxy = yield* maybeStartProxy(worker.id, worker.dev);
+        yield* proxy.unset().pipe(Effect.forkChild);
+        const port = yield* getFreePort;
+        yield* ChildProcess.make(command, [], {
+          shell: true,
+          cwd: cwd ?? process.cwd(),
+          env: {
+            ...process.env,
+            ...Object.fromEntries(
+              Object.entries(worker.env ?? {}).map(([k, v]) => [
+                k,
+                Redacted.isRedacted(v)
+                  ? Redacted.value(v)
+                  : typeof v === "string"
+                    ? v
+                    : JSON.stringify(v),
+              ]),
+            ),
+            PORT: String(port),
+          },
+          stdin: "inherit",
+          stdout: "inherit",
+          stderr: "inherit",
+        });
+        yield* waitForPort(port);
+        yield* proxy.set(new URL(`http://localhost:${port}`));
+        return proxy.url;
+      });
+
       const runVite = Effect.fnUntraced(function* (
         worker: WorkerConfig,
         rootDir: string | undefined,
@@ -414,7 +490,11 @@ export const LocalWorkerProvider = () =>
         const { props, bindings } = options;
         const config = yield* buildConfig(options);
         const url = yield* (
-          props.vite ? runVite(config, props.vite.rootDir) : runWorker(config)
+          props.dev?.command
+            ? runDevCommand(config, props.dev.command, props.dev.cwd)
+            : props.vite
+              ? runVite(config, props.vite.rootDir)
+              : runWorker(config)
         ).pipe(Effect.map((url) => url.toString()));
         return {
           workerId: config.name,
