@@ -17,7 +17,7 @@ export type AsyncWorkerEnv = Cloudflare.InferEnv<
   ReturnType<typeof makeAsyncWorker>
 >;
 
-const makeAsyncWorker = (id: string, port: number) =>
+const makeAsyncWorker = (id: string) =>
   Cloudflare.Worker(id, {
     main: "./src/AsyncWorker.ts",
     env: {
@@ -26,9 +26,6 @@ const makeAsyncWorker = (id: string, port: number) =>
       MY_SECRET: Config.redacted("MY_SECRET").pipe(
         Config.withDefault(Redacted.make("my-secret-abc123")),
       ),
-    },
-    dev: {
-      port,
     },
   });
 
@@ -39,16 +36,16 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const asyncWorker = yield* makeAsyncWorker("AsyncWorker", 1337);
+    const asyncWorker = yield* makeAsyncWorker("AsyncWorker");
     const effectWorker = yield* EffectWorker;
 
     // Spawn several additional workers to test concurrency.
     const additionalWorkers = yield* Effect.all([
-      makeAsyncWorker("AdditionalWorker1", 1339),
-      makeAsyncWorker("AdditionalWorker2", 1340),
-      makeAsyncWorker("AdditionalWorker3", 1341),
-      makeAsyncWorker("AdditionalWorker4", 1342),
-      makeAsyncWorker("AdditionalWorker5", 1343),
+      makeAsyncWorker("AdditionalWorker1"),
+      makeAsyncWorker("AdditionalWorker2"),
+      makeAsyncWorker("AdditionalWorker3"),
+      makeAsyncWorker("AdditionalWorker4"),
+      makeAsyncWorker("AdditionalWorker5"),
     ]);
 
     return {
