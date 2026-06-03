@@ -7,6 +7,7 @@
  */
 
 import * as Layer from "effect/Layer";
+import { asEffect } from "./Util/types.ts";
 
 /**
  * Resolve the user's default-export entrypoint into a `Layer` for the
@@ -14,7 +15,7 @@ import * as Layer from "effect/Layer";
  *
  * `entrypoint` may be any of:
  *   - a `Layer` factory (`{ build: (...) => ... }`) — used as-is
- *   - an effect-class with `asEffect()` (Alchemy `Platform`/`Worker` shape)
+ *   - an Alchemy `Platform`/`Worker` construct (now a real `Effect`)
  *   - a plain `Effect`
  *
  * Centralized so the inline ternary doesn't have to be re-emitted into
@@ -29,10 +30,5 @@ export const makeEntrypointLayer = (
   if (typeof entrypoint?.build === "function") {
     return entrypoint;
   }
-  return Layer.effect(
-    tag,
-    typeof entrypoint?.asEffect === "function"
-      ? entrypoint.asEffect()
-      : entrypoint,
-  );
+  return Layer.effect(tag, asEffect(entrypoint));
 };

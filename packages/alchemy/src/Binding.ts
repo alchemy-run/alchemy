@@ -1,8 +1,8 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Effectable from "effect/Effectable";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { SingleShotGen } from "effect/Utils";
 import type { Input } from "./Input.ts";
 import * as Namespace from "./Namespace.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
@@ -157,7 +157,7 @@ export const Policy =
       ),
     );
 
-    const asEffect = () =>
+    const evaluate = () =>
       Effect.all([Self, Service]).pipe(
         Effect.map(
           ([resource, fn]) =>
@@ -176,44 +176,51 @@ export const Policy =
         ),
       );
     // @ts-expect-error
-    return Object.assign(self, {
-      [Symbol.iterator]() {
-        return new SingleShotGen(asEffect());
-      },
-      asEffect,
-      bind: (...args: any[]) =>
-        asEffect().pipe(Effect.flatMap((fn) => fn(...args))),
-      layer: {
-        succeed: (
-          fn: (
-            self: ResourceLike,
-            ...args: Parameters<Shape>
-          ) => Effect.Effect<void>,
-        ) =>
-          Layer.succeed(
-            self,
-            // @ts-expect-error
-            (...args: Parameters<Shape>) =>
-              Self.use((self) => fn(self as ResourceLike, ...args)),
-          ),
-        effect: (
-          fn: Effect.Effect<
-            (
+    return Object.assign(
+      self,
+      // `self` is a Context tag (already an Effect). Spreading the Effect
+      // prototype retargets `yield* Policy` from the raw tag to the resolved
+      // bind-function while keeping `Effect.isEffect(Policy)` true so
+      // `Effect.all`/`forEach` behave.
+      Effectable.Prototype({
+        label: `Policy<${Identifier}>`,
+        evaluate,
+      }),
+      {
+        bind: (...args: any[]) =>
+          evaluate().pipe(Effect.flatMap((fn) => fn(...args))),
+        layer: {
+          succeed: (
+            fn: (
               self: ResourceLike,
               ...args: Parameters<Shape>
-            ) => Effect.Effect<void>
-          >,
-        ) =>
-          Layer.effect(
-            self,
-            // @ts-expect-error
-            Effect.map(
-              fn,
-              (fn) =>
-                (...args: Parameters<Shape>) =>
-                  Self.use((self) => fn(self as ResourceLike, ...args)),
+            ) => Effect.Effect<void>,
+          ) =>
+            Layer.succeed(
+              self,
+              // @ts-expect-error
+              (...args: Parameters<Shape>) =>
+                Self.use((self) => fn(self as ResourceLike, ...args)),
             ),
-          ),
+          effect: (
+            fn: Effect.Effect<
+              (
+                self: ResourceLike,
+                ...args: Parameters<Shape>
+              ) => Effect.Effect<void>
+            >,
+          ) =>
+            Layer.effect(
+              self,
+              // @ts-expect-error
+              Effect.map(
+                fn,
+                (fn) =>
+                  (...args: Parameters<Shape>) =>
+                    Self.use((self) => fn(self as ResourceLike, ...args)),
+              ),
+            ),
+        },
       },
-    });
+    );
   };

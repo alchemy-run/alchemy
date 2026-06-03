@@ -43,14 +43,13 @@ export default Alchemy.Stack(
     const effectWorker = yield* EffectWorker;
 
     // Spawn several additional workers to test concurrency.
-    // TODO: Effect.all doesn't work here; Platform needs to be updated to use Effectable.
-    const additionalWorkers = [
-      yield* makeAsyncWorker("AdditionalWorker1", 1339),
-      yield* makeAsyncWorker("AdditionalWorker2", 1340),
-      yield* makeAsyncWorker("AdditionalWorker3", 1341),
-      yield* makeAsyncWorker("AdditionalWorker4", 1342),
-      yield* makeAsyncWorker("AdditionalWorker5", 1343),
-    ];
+    const additionalWorkers = yield* Effect.all([
+      makeAsyncWorker("AdditionalWorker1", 1339),
+      makeAsyncWorker("AdditionalWorker2", 1340),
+      makeAsyncWorker("AdditionalWorker3", 1341),
+      makeAsyncWorker("AdditionalWorker4", 1342),
+      makeAsyncWorker("AdditionalWorker5", 1343),
+    ]);
 
     return {
       asyncWorker: asyncWorker.url,

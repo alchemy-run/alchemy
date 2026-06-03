@@ -39,9 +39,10 @@ type BindEffect = Effect.Effect<
  * surrounding Worker and returns a deferred accessor for the runtime
  * {@link import("./VersionMetadataBinding.ts").WorkerVersionMetadata}.
  *
- * The divergence is achieved via `[Symbol.iterator]`: the object is not an
- * `Effect` (so `InferEnv` resolves it to the native version metadata in the
- * `env` position), but it is iterable as one when `yield*`-ed.
+ * The divergence is achieved via `[Symbol.iterator]`: the object is
+ * deliberately not an `Effect` (so `InferEnv` and the Worker `env` resolver
+ * keep it as the native version metadata rather than `yield*`-ing it), but it
+ * is iterable as one when `yield*`-ed.
  */
 export type VersionMetadata = {
   kind: VersionMetadataTypeId;
