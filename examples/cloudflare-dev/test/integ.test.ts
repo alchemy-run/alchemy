@@ -20,10 +20,14 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 test(
   "deploys all workers with URLs",
   Effect.gen(function* () {
-    const { asyncWorker, effectWorker } = yield* stack;
+    const { asyncWorker, effectWorker, additionalWorkers } = yield* stack;
 
     expect(asyncWorker).toBeString();
     expect(effectWorker).toBeString();
+    expect(additionalWorkers).toBeArrayOfSize(5);
+    for (const workerUrl of additionalWorkers) {
+      expect(workerUrl).toBeString();
+    }
   }),
 );
 

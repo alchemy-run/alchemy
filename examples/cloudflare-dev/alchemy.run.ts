@@ -13,18 +13,24 @@ export const Counter = Cloudflare.DurableObjectNamespace<CounterClass>(
   },
 );
 
-export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
+export type AsyncWorkerEnv = Cloudflare.InferEnv<
+  ReturnType<typeof makeAsyncWorker>
+>;
 
-export const AsyncWorker = Cloudflare.Worker("AsyncWorker", {
-  main: "./src/AsyncWorker.ts",
-  env: {
-    COUNTER: Counter,
-    MY_VARIABLE: "my-variable-abc123",
-    MY_SECRET: Config.redacted("MY_SECRET").pipe(
-      Config.withDefault(Redacted.make("my-secret-abc123")),
-    ),
-  },
-});
+const makeAsyncWorker = (id: string, port: number) =>
+  Cloudflare.Worker(id, {
+    main: "./src/AsyncWorker.ts",
+    env: {
+      COUNTER: Counter,
+      MY_VARIABLE: "my-variable-abc123",
+      MY_SECRET: Config.redacted("MY_SECRET").pipe(
+        Config.withDefault(Redacted.make("my-secret-abc123")),
+      ),
+    },
+    dev: {
+      port,
+    },
+  });
 
 export default Alchemy.Stack(
   "CloudflareDev",
@@ -33,12 +39,23 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const asyncWorker = yield* AsyncWorker;
+    const asyncWorker = yield* makeAsyncWorker("AsyncWorker", 1337);
     const effectWorker = yield* EffectWorker;
+
+    // Spawn several additional workers to test concurrency.
+    // TODO: Effect.all doesn't work here; Platform needs to be updated to use Effectable.
+    const additionalWorkers = [
+      yield* makeAsyncWorker("AdditionalWorker1", 1339),
+      yield* makeAsyncWorker("AdditionalWorker2", 1340),
+      yield* makeAsyncWorker("AdditionalWorker3", 1341),
+      yield* makeAsyncWorker("AdditionalWorker4", 1342),
+      yield* makeAsyncWorker("AdditionalWorker5", 1343),
+    ];
 
     return {
       asyncWorker: asyncWorker.url,
       effectWorker: effectWorker.url,
+      additionalWorkers: additionalWorkers.map((worker) => worker.url),
     };
   }),
 );
