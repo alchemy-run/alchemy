@@ -294,6 +294,7 @@ export interface WorkerProps<
    */
   dev?:
     | false
+    | string
     | {
         /**
          * Host the local dev server binds to.

@@ -66,6 +66,10 @@ import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
+type WorkerPropsWithDev = WorkerProps & {
+  dev: Exclude<WorkerProps["dev"], false | string>;
+};
+
 export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
   "WorkerValidationError",
   {
@@ -227,7 +231,7 @@ export const LocalWorkerProvider = () =>
         bindings,
       }: {
         id: string;
-        props: WorkerProps;
+        props: WorkerPropsWithDev;
         bindings: ResourceBinding<Worker["Binding"]>[];
       }) {
         const name = yield* createWorkerName(id, props.name);
@@ -408,7 +412,7 @@ export const LocalWorkerProvider = () =>
 
       const runInstance = Effect.fn(function* (options: {
         id: string;
-        props: WorkerProps;
+        props: WorkerPropsWithDev;
         bindings: ResourceBinding<Worker["Binding"]>[];
       }) {
         const { props, bindings } = options;
@@ -455,7 +459,7 @@ export const LocalWorkerProvider = () =>
           // serving requests. Tear down any prior instance and return a
           // stub Attributes; the resource exists in state but has no
           // running workerd / proxy behind it.
-          if (news.dev === false) {
+          if (news.dev === false || typeof news.dev === "string") {
             const existing = instances.get(id);
             if (existing) {
               yield* Fiber.interrupt(existing.fiber);
@@ -467,7 +471,7 @@ export const LocalWorkerProvider = () =>
               workerId: name,
               workerName: name,
               logpush: undefined,
-              url: undefined,
+              url: news.dev ? news.dev : undefined,
               tags: [],
               durableObjectNamespaces: {},
               accountId,
@@ -475,7 +479,7 @@ export const LocalWorkerProvider = () =>
               crons: news.crons ?? [],
             } satisfies Worker["Attributes"];
           }
-          const options = { id, props: news, bindings };
+          const options = { id, props: news as WorkerPropsWithDev, bindings };
           const hash = Hash.structure(options);
           const existing = instances.get(options.id);
           if (existing) {

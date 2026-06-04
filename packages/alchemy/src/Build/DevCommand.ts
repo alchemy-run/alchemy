@@ -1,11 +1,14 @@
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
 import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
 import { ChildProcess } from "effect/unstable/process";
+import {
+  ChildProcessSpawner,
+  type ChildProcessHandle,
+} from "effect/unstable/process/ChildProcessSpawner";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { isResolved } from "../Diff.ts";
 import * as RpcProvider from "../Local/RpcProvider.ts";
@@ -42,7 +45,9 @@ export interface DevCommandProps {
 export interface DevCommand extends Resource<
   "Cloudflare.DevCommand",
   DevCommandProps,
-  {}
+  {
+    url?: string;
+  }
 > {}
 
 export const DevCommand = Resource<DevCommand>("Cloudflare.DevCommand");
@@ -79,6 +84,7 @@ export const LocalDevCommandProvider = () =>
       import.meta.url,
     ),
     Effect.gen(function* () {
+      const spawner = yield* ChildProcessSpawner;
       // The provider's outer scope lives for the lifetime of the sidecar,
       // which is exactly what we want: child processes get forked into
       // sub-scopes off of this one, so they survive any single user-code
@@ -89,35 +95,39 @@ export const LocalDevCommandProvider = () =>
         string,
         {
           hash: number;
-          fiber: Fiber.Fiber<number, any>;
+          handle: ChildProcessHandle;
           scope: Scope.Closeable;
         }
       >();
 
       const spawn = Effect.fn(function* (props: DevCommandProps) {
-        const child = yield* ChildProcess.make(props.command, [], {
-          shell: true,
-          cwd: props.cwd ?? process.cwd(),
-          env: {
-            ...process.env,
-            ...Object.fromEntries(
-              Object.entries(props.env ?? {}).map(([k, v]) => [
-                k,
-                Redacted.isRedacted(v) ? Redacted.value(v) : v,
-              ]),
-            ),
-          },
-          stdin: "inherit",
-          stdout: "inherit",
-          stderr: "inherit",
-        });
-        return yield* child.exitCode;
+        const [command, ...args] = props.command.split(" ");
+
+        const childProcessHandle = yield* spawner.spawn(
+          ChildProcess.make(command, args, {
+            // shell: true,
+            cwd: props.cwd ?? process.cwd(),
+            env: {
+              ...process.env,
+              ...Object.fromEntries(
+                Object.entries(props.env ?? {}).map(([k, v]) => [
+                  k,
+                  Redacted.isRedacted(v) ? Redacted.value(v) : v,
+                ]),
+              ),
+            },
+            stdin: "inherit",
+            stdout: "inherit",
+            stderr: "inherit",
+          }),
+        );
+        return childProcessHandle;
       });
 
       const stop = Effect.fn(function* (id: string) {
         const existing = instances.get(id);
         if (existing) {
-          yield* Fiber.interrupt(existing.fiber);
+          yield* existing.handle.kill();
           yield* Scope.close(existing.scope, Exit.void);
           instances.delete(id);
         }
@@ -135,27 +145,18 @@ export const LocalDevCommandProvider = () =>
         reconcile: Effect.fn(function* ({ id, news }) {
           const hash = Hash.structure(news);
           const existing = instances.get(id);
+
           if (existing) {
-            if (existing.hash === hash) {
-              yield* Effect.log(
-                `[${id}] dev command unchanged, reusing process`,
-              );
+            if (existing.hash === hash && (yield* existing.handle.isRunning)) {
               return {};
             }
-            yield* Effect.log(
-              `[${id}] dev command changed, restarting process`,
-            );
+
             yield* stop(id);
           }
-          // Fork a fresh sub-scope off the long-lived root scope. The
-          // ChildProcess + its exit fiber are scoped here, so closing
-          // this scope kills the process.
+
           const scope = yield* Scope.fork(rootScope);
-          const fiber = yield* spawn(news).pipe(
-            Effect.forkDetach,
-            Scope.provide(scope),
-          );
-          instances.set(id, { hash, fiber, scope });
+          const handle = yield* spawn(news).pipe(Scope.provide(scope));
+          instances.set(id, { hash, handle, scope });
           return {};
         }),
         delete: Effect.fn(function* ({ id }) {

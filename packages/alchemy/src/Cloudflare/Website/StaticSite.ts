@@ -1,11 +1,12 @@
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { Command, type CommandProps } from "../../Build/Command.ts";
+import { DevCommand } from "../../Build/DevCommand.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import { effectClass } from "../../Util/effect.ts";
-import { DevCommand } from "../DevCommand.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
@@ -52,6 +53,10 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
      * (the build command's `cwd`), or `process.cwd()` if neither is set.
      */
     cwd?: string;
+    /**
+     * Override for the `url` output if alchemy fails to detect it from the stdout of the dev command
+     */
+    url?: string;
   };
 }
 
@@ -214,15 +219,18 @@ const makeStaticSite = <
       // In dev mode with a dev.command, declare a DevCommand resource so
       // the sidecar owns the process lifecycle (survives user-code HMR),
       // skip the build, and tell Worker not to start a local instance.
-      if (useDevServer) {
-        const devCwd =
-          resolved.dev!.cwd ??
-          (typeof resolved.cwd === "string" ? resolved.cwd : undefined);
-        yield* DevCommand("Dev", {
-          command: resolved.dev!.command,
-          cwd: devCwd,
-        });
-      }
+      let devUrl = yield* useDevServer
+        ? DevCommand("Dev", {
+            command: resolved.dev!.command,
+            cwd:
+              resolved.dev!.cwd ??
+              (typeof resolved.cwd === "string" ? resolved.cwd : undefined),
+          }).pipe(
+            Effect.map((d) =>
+              Output.map(d.url, (url) => url ?? resolved.dev?.url ?? false),
+            ),
+          )
+        : Effect.succeed(false as const);
 
       const build = useDevServer
         ? undefined
@@ -263,7 +271,7 @@ const makeStaticSite = <
         // Opt out of the local Worker in dev when the external DevCommand
         // is serving the content. The Worker resource still exists in
         // state with a stub Attributes shape.
-        dev: useDevServer ? false : undefined,
+        dev: useDevServer ? devUrl : undefined,
         script: fallbackScript ?? resolved.script,
       });
     });
