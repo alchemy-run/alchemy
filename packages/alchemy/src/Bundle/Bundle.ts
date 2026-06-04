@@ -63,7 +63,7 @@ export class BundleError extends Schema.TaggedErrorClass<BundleError>()(
   "BundleError",
   {
     message: Schema.String,
-    cause: Schema.optional(Schema.DefectWithStack),
+    cause: Schema.optional(Schema.Defect({ includeStack: true })),
   },
 ) {}
 
