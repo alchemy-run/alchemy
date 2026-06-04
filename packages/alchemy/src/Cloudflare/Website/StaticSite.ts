@@ -243,6 +243,14 @@ const makeStaticSite = <
               : undefined,
           });
 
+      // Pure-static sites don't need a custom Worker entrypoint —
+      // delegate every request straight to the ASSETS binding. Only
+      // injected when the user provided neither `main` nor `script`.
+      const fallbackScript =
+        resolved.main == null && resolved.script == null
+          ? `export default { fetch: (request, env) => env.ASSETS.fetch(request) };`
+          : undefined;
+
       return yield* Worker<Bindings, WorkerAssetsConfig, Req>("Worker", {
         ...resolved,
         assets: build
@@ -256,6 +264,7 @@ const makeStaticSite = <
         // is serving the content. The Worker resource still exists in
         // state with a stub Attributes shape.
         dev: useDevServer ? false : undefined,
+        script: fallbackScript ?? resolved.script,
       });
     });
   }).pipe(Namespace.push(id));

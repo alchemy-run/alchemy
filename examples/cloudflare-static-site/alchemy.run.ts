@@ -3,13 +3,23 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(
-  "CloudflareVite",
+  "CloudflareStatic",
   {
     providers: Cloudflare.providers(),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const worker = yield* Cloudflare.Vite("Website");
+    //fix url when no dev command present
+    const worker = yield* Cloudflare.StaticSite("Website", {
+      command: "zola build",
+      dev: {
+        command: "zola serve",
+      },
+      outdir: "public",
+      assetsConfig: {
+        notFoundHandling: "404-page",
+      },
+    });
 
     return {
       url: worker.url,
