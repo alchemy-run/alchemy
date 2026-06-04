@@ -534,6 +534,7 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
         binding: b.name,
         className: b.className,
         scriptName: b.scriptName,
+        uniqueKey: b.namespaceId,
       });
     case "hyperdrive":
       return Hyperdrive.local(b.name, b.id);
