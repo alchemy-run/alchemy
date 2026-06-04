@@ -21,7 +21,7 @@
   "sideEffects": false,
   "scripts": {
     "dev": "tsdown --watch",
-    "build": "tsc -b && bun bundle",
+    "build": "tsc -b && tsc -b tsconfig.bin.json && bun bundle",
     "bundle": "tsdown",
     "bundle:watch": "tsdown --watch",
     "publish:npm": "cp ../README.md . && bun publish && rm README.md",
