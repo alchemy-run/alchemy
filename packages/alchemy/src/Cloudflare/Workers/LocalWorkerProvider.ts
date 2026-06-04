@@ -257,11 +257,19 @@ export const LocalWorkerProvider = () =>
             ) {
               // Reuse the existing namespace id if it was provided, otherwise generate a new one.
               // `workerd` uses this for the object's storage path, so it must be safe to use as a file name.
-              durableObjectNamespaces[binding.className] =
+              const namespaceId =
                 binding.namespaceId ??
-                encodeURIComponent(`${id}-${binding.className}`);
+                encodeURIComponent(`${name}-${binding.className}`);
+              durableObjectNamespaces[binding.className] = namespaceId;
+              workerBindings.push(
+                yield* toRuntimeBinding({
+                  ...binding,
+                  namespaceId,
+                }),
+              );
+            } else {
+              workerBindings.push(yield* toRuntimeBinding(binding));
             }
-            workerBindings.push(yield* toRuntimeBinding(binding));
           }
           if (data.hyperdrives) {
             for (const [id, origin] of Object.entries(data.hyperdrives)) {
@@ -526,6 +534,9 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
         binding: b.name,
         className: b.className,
         scriptName: b.scriptName,
+        uniqueKey:
+          b.namespaceId ??
+          encodeURIComponent(`${b.scriptName!}-${b.className}`),
       });
     case "hyperdrive":
       return Hyperdrive.local(b.name, b.id);
