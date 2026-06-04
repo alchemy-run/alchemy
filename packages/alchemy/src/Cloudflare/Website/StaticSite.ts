@@ -1,11 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { ChildProcess } from "effect/unstable/process";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { Command, type CommandProps } from "../../Build/Command.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import { effectClass } from "../../Util/effect.ts";
+import { DevCommand } from "../DevCommand.ts";
 import type { Providers } from "../Providers.ts";
 import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
@@ -211,16 +211,17 @@ const makeStaticSite = <
       const resolved = yield* props;
       const useDevServer = isDevPhase && resolved.dev !== undefined;
 
-      // In dev mode with a dev.command, spawn it as a long-lived child
-      // process scoped to the stack and skip the build entirely. The dev
-      // server prints its own URL — alchemy does not proxy it.
+      // In dev mode with a dev.command, declare a DevCommand resource so
+      // the sidecar owns the process lifecycle (survives user-code HMR),
+      // skip the build, and tell Worker not to start a local instance.
       if (useDevServer) {
         const devCwd =
           resolved.dev!.cwd ??
           (typeof resolved.cwd === "string" ? resolved.cwd : undefined);
-        yield* spawnDevServer(resolved.dev!.command, devCwd).pipe(
-          Effect.forkScoped,
-        );
+        yield* DevCommand("Dev", {
+          command: resolved.dev!.command,
+          cwd: devCwd,
+        });
       }
 
       const build = useDevServer
@@ -251,22 +252,10 @@ const makeStaticSite = <
               config: resolved.assetsConfig,
             }
           : undefined,
-        // Worker.dev is a different shape (proxy host/port); StaticSite owns
-        // the dev-server lifecycle directly, so don't forward it.
-        dev: undefined,
+        // Opt out of the local Worker in dev when the external DevCommand
+        // is serving the content. The Worker resource still exists in
+        // state with a stub Attributes shape.
+        dev: useDevServer ? false : undefined,
       });
     });
   }).pipe(Namespace.push(id));
-
-const spawnDevServer = (command: string, cwd: string | undefined) =>
-  Effect.gen(function* () {
-    const child = yield* ChildProcess.make(command, [], {
-      shell: true,
-      cwd: cwd ?? process.cwd(),
-      env: { ...process.env },
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-    });
-    yield* child.exitCode;
-  });

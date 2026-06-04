@@ -3,6 +3,7 @@ import * as RpcServer from "../Local/RpcServer.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Credentials from "./Credentials.ts";
+import { LocalDevCommandProvider } from "./DevCommand.ts";
 import {
   LocalWorkerProvider,
   localRuntimeServices,
@@ -16,7 +17,7 @@ const cloudflareServices = Layer.provide(
   CloudflareAuth,
 );
 
-LocalWorkerProvider().pipe(
+Layer.merge(LocalWorkerProvider(), LocalDevCommandProvider()).pipe(
   Layer.provide(localRuntimeServices()),
   Layer.provide(cloudflareServices),
   RpcServer.launch,

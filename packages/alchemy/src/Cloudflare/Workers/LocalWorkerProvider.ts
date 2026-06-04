@@ -299,9 +299,9 @@ export const LocalWorkerProvider = () =>
           } satisfies WorkerBundleOptions,
           assets: props.assets,
           dev: {
-            ...props.dev,
+            ...(props.dev === false ? undefined : props.dev),
             // This is the default. Vite and cloudflare-runtime will retry if unavailable, unless `strictPort` is true.
-            port: props.dev?.port ?? 1337,
+            port: (props.dev !== false ? props.dev?.port : undefined) ?? 1337,
           },
         };
       });
@@ -450,6 +450,31 @@ export const LocalWorkerProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, bindings }) {
+          // `dev: false` opts out of running a local Worker entirely —
+          // typically because an external dev process (DevCommand) is
+          // serving requests. Tear down any prior instance and return a
+          // stub Attributes; the resource exists in state but has no
+          // running workerd / proxy behind it.
+          if (news.dev === false) {
+            const existing = instances.get(id);
+            if (existing) {
+              yield* Fiber.interrupt(existing.fiber);
+              yield* Scope.close(existing.scope, Exit.void);
+              instances.delete(id);
+            }
+            const name = yield* createWorkerName(id, news.name);
+            return {
+              workerId: name,
+              workerName: name,
+              logpush: undefined,
+              url: undefined,
+              tags: [],
+              durableObjectNamespaces: {},
+              accountId,
+              domains: [],
+              crons: news.crons ?? [],
+            } satisfies Worker["Attributes"];
+          }
           const options = { id, props: news, bindings };
           const hash = Hash.structure(options);
           const existing = instances.get(options.id);
