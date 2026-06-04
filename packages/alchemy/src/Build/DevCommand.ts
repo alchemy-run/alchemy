@@ -1,9 +1,12 @@
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import { ChildProcess } from "effect/unstable/process";
 import {
   ChildProcessSpawner,
@@ -39,18 +42,45 @@ export interface DevCommandProps {
  * child process survives user-code HMR — Alchemy's user process can restart
  * without killing your `npm run dev` server.
  *
- * `DevCommand` has no Attributes — the child writes directly to the user's
- * terminal via inherited stdio.
+ * The child's stdout/stderr are mirrored to the sidecar's terminal so the
+ * user still sees colored dev-server output, and each line is scanned for
+ * the first `http(s)://…` URL. The first match (with ANSI escapes stripped)
+ * is exposed as `url` — useful for surfacing a dev server's local URL back
+ * out to whatever resource declared this `DevCommand`.
  */
 export interface DevCommand extends Resource<
   "Cloudflare.DevCommand",
   DevCommandProps,
   {
+    /**
+     * URL extracted from the first matching stdout/stderr line. Best-effort:
+     * `undefined` if no URL appeared within {@link URL_EXTRACT_TIMEOUT}.
+     */
     url?: string;
   }
 > {}
 
 export const DevCommand = Resource<DevCommand>("Cloudflare.DevCommand");
+
+/**
+ * How long reconcile waits for a URL to appear in the child's output
+ * before giving up and returning `{ url: undefined }`. The child keeps
+ * running either way — this only bounds how long the deploy plan waits.
+ *
+ * Kept small because dev servers (vite, next, zola, …) print their URL
+ * within ~1s, and a long wait here just stalls `alchemy dev` startup
+ * for commands that never produce a URL.
+ */
+const URL_EXTRACT_TIMEOUT = "5 seconds";
+
+// Matches the first plain http(s) URL. Stops at whitespace and at a small
+// set of punctuation typically used to wrap URLs in log output.
+const URL_REGEX = /https?:\/\/[^\s)\],"'`]+/;
+
+// ECMA-262 ANSI/VT100 escape sequences — `Vite`, `Next`, etc. surround the
+// URL with color codes that would otherwise be eaten by the URL regex.
+// eslint-disable-next-line no-control-regex
+const ANSI_REGEX = /\x1b\[[0-9;]*m/g;
 
 /**
  * Live-mode no-op. `DevCommand` resources should only be created in dev mode;
@@ -97,15 +127,24 @@ export const LocalDevCommandProvider = () =>
           hash: number;
           handle: ChildProcessHandle;
           scope: Scope.Closeable;
+          /**
+           * Resolves with the first URL found in the child's output. Stored
+           * on the instance so that no-op reconciles (same hash, process
+           * still running) can await it too — even if the URL hadn't yet
+           * appeared at the previous reconcile.
+           */
+          urlDeferred: Deferred.Deferred<string>;
         }
       >();
 
-      const spawn = Effect.fn(function* (props: DevCommandProps) {
+      const spawn = Effect.fn(function* (
+        props: DevCommandProps,
+        urlDeferred: Deferred.Deferred<string>,
+      ) {
         const [command, ...args] = props.command.split(" ");
 
-        const childProcessHandle = yield* spawner.spawn(
+        const handle = yield* spawner.spawn(
           ChildProcess.make(command, args, {
-            // shell: true,
             cwd: props.cwd ?? process.cwd(),
             env: {
               ...process.env,
@@ -117,11 +156,21 @@ export const LocalDevCommandProvider = () =>
               ),
             },
             stdin: "inherit",
-            stdout: "inherit",
-            stderr: "inherit",
+            // Leave stdout/stderr piped so we can both mirror to the parent
+            // terminal AND parse lines for the first URL.
           }),
         );
-        return childProcessHandle;
+
+        // Mirror + extract on both streams, forked into the current scope so
+        // they're interrupted when the instance scope closes.
+        yield* mirrorAndExtract(handle.stdout, "stdout", urlDeferred).pipe(
+          Effect.forkScoped,
+        );
+        yield* mirrorAndExtract(handle.stderr, "stderr", urlDeferred).pipe(
+          Effect.forkScoped,
+        );
+
+        return handle;
       });
 
       const stop = Effect.fn(function* (id: string) {
@@ -132,6 +181,12 @@ export const LocalDevCommandProvider = () =>
           instances.delete(id);
         }
       });
+
+      const awaitUrl = (deferred: Deferred.Deferred<string>) =>
+        Deferred.await(deferred).pipe(
+          Effect.timeoutOption(URL_EXTRACT_TIMEOUT),
+          Effect.map(Option.getOrUndefined),
+        );
 
       return DevCommand.Provider.of({
         diff: Effect.fn(function* ({ id, news }) {
@@ -148,16 +203,21 @@ export const LocalDevCommandProvider = () =>
 
           if (existing) {
             if (existing.hash === hash && (yield* existing.handle.isRunning)) {
-              return {};
+              const url = yield* awaitUrl(existing.urlDeferred);
+              return { url };
             }
 
             yield* stop(id);
           }
 
           const scope = yield* Scope.fork(rootScope);
-          const handle = yield* spawn(news).pipe(Scope.provide(scope));
-          instances.set(id, { hash, handle, scope });
-          return {};
+          const urlDeferred = yield* Deferred.make<string>();
+          const handle = yield* spawn(news, urlDeferred).pipe(
+            Scope.provide(scope),
+          );
+          instances.set(id, { hash, handle, scope, urlDeferred });
+          const url = yield* awaitUrl(urlDeferred);
+          return { url };
         }),
         delete: Effect.fn(function* ({ id }) {
           yield* stop(id);
@@ -165,6 +225,48 @@ export const LocalDevCommandProvider = () =>
       });
     }),
   );
+
+/**
+ * Drains a child stdout/stderr stream into the matching parent stream while
+ * scanning each completed line for the first URL. Resolves `urlDeferred`
+ * the first time a URL is found (subsequent calls are no-ops).
+ *
+ * Modeled on `idempotent-spawn.ts`'s `extract` hook — single-pass over each
+ * line, ANSI escapes stripped before matching, with a buffer for incomplete
+ * trailing lines across chunk boundaries.
+ */
+const mirrorAndExtract = (
+  source: Stream.Stream<Uint8Array, any>,
+  sink: "stdout" | "stderr",
+  urlDeferred: Deferred.Deferred<string>,
+) =>
+  Effect.gen(function* () {
+    let lineBuffer = "";
+    const decoder = new TextDecoder("utf-8");
+    yield* Stream.runForEach(source, (chunk) =>
+      Effect.sync(() => {
+        // Pass the raw bytes through so terminal colors, cursor moves,
+        // progress bars etc. keep working.
+        process[sink].write(chunk);
+
+        lineBuffer += decoder.decode(chunk, { stream: true });
+        let newlineIdx = lineBuffer.indexOf("\n");
+        while (newlineIdx !== -1) {
+          const line = lineBuffer.slice(0, newlineIdx);
+          lineBuffer = lineBuffer.slice(newlineIdx + 1);
+          newlineIdx = lineBuffer.indexOf("\n");
+          const match = line.replace(ANSI_REGEX, "").match(URL_REGEX);
+          if (match) {
+            // Deferred.doneUnsafe is a synchronous fire-and-forget — first
+            // caller wins, subsequent calls are dropped, which is exactly
+            // what we want for "record the FIRST URL".
+            Deferred.doneUnsafe(urlDeferred, Effect.succeed(match[0]));
+            return;
+          }
+        }
+      }),
+    );
+  });
 
 /**
  * Selects the live or dev DevCommand provider based on `AlchemyContext.dev`.
