@@ -244,6 +244,7 @@ export const LocalWorkerProvider = () =>
               ? Text.local(key, unredacted)
               : Json.local(key, unredacted);
           }),
+          ...(props.assets || props.vite ? [Assets.local("ASSETS")] : []),
         ];
         const durableObjectNamespaces: Record<string, string> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
