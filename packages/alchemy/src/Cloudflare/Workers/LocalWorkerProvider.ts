@@ -259,7 +259,7 @@ export const LocalWorkerProvider = () =>
               // `workerd` uses this for the object's storage path, so it must be safe to use as a file name.
               const namespaceId =
                 binding.namespaceId ??
-                encodeURIComponent(`${id}-${binding.className}`);
+                encodeURIComponent(`${name}-${binding.className}`);
               durableObjectNamespaces[binding.className] = namespaceId;
               workerBindings.push(
                 yield* toRuntimeBinding({
@@ -534,7 +534,9 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
         binding: b.name,
         className: b.className,
         scriptName: b.scriptName,
-        uniqueKey: b.namespaceId,
+        uniqueKey:
+          b.namespaceId ??
+          encodeURIComponent(`${b.scriptName!}-${b.className}`),
       });
     case "hyperdrive":
       return Hyperdrive.local(b.name, b.id);
