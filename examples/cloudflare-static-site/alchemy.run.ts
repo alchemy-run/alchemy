@@ -12,9 +12,10 @@ export default Alchemy.Stack(
     //fix url when no dev command present
     const worker = yield* Cloudflare.StaticSite("Website", {
       command: "zola build",
-      dev: {
-        command: "zola serve",
-      },
+      // dev: {
+      //   command: "zola serve",
+      //   url: "http://localhost:1111",
+      // },
       outdir: "public",
       assetsConfig: {
         notFoundHandling: "404-page",
