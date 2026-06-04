@@ -22,7 +22,7 @@ export default [
   // Bundling inlines those so they stay devDependencies (same rationale as
   // the cli bundle below).
   defineConfig({
-    entry: ["bin/exec.ts"],
+    entry: ["bin/alchemy.ts", "bin/exec.ts"],
     format: ["esm"],
     clean: false,
     shims: true,
