@@ -21,7 +21,7 @@ jobs:
       # build-command runs inside each package's `dir`. Copy the repo-root
       # README into the package (harmless `|| true` where it doesn't apply),
       # then run that package's own build (overriding the default drops it).
-      build-command: "cp ../../README.md . 2>/dev/null || true; cd ../../ && bun run build:packages"
+      build-command: "cp ../../README.md . 2>/dev/null || true; cd ../../ && bun run build"
       packages: |
         [
           { "dir": "packages/alchemy",     "name": "alchemy" },
