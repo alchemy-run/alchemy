@@ -306,17 +306,6 @@ export interface WorkerProps<
      * @default false
      */
     strictPort?: boolean;
-    /**
-     * Optional shell command to run as the upstream dev server (e.g.
-     * `npm run dev`). When set, `alchemy dev` does not bundle the Worker —
-     * instead it spawns this command with a `PORT` env var pointing at a
-     * free port and proxies all requests to `http://localhost:<port>`.
-     */
-    command?: string;
-    /**
-     * Working directory for {@link command}. Defaults to `process.cwd()`.
-     */
-    cwd?: string;
   };
 }
 

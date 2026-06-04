@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { ChildProcess } from "effect/unstable/process";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { Command, type CommandProps } from "../../Build/Command.ts";
 import type { InputProps } from "../../Input.ts";
@@ -26,9 +27,10 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
   assetsConfig?: AssetsConfig;
   /**
    * Local dev configuration. When `alchemy dev` runs, the build command is
-   * skipped and `command` is spawned instead. Alchemy picks a free port,
-   * passes it via the `PORT` env var, waits for the dev server to start
-   * listening, and proxies the Worker URL at it.
+   * skipped and `command` is spawned as a long-lived child process tied to
+   * the stack's scope. Alchemy does not proxy or interpret the process —
+   * the dev server's own URL (e.g. `http://localhost:5173`) is what you
+   * open in the browser.
    *
    * @example
    * ```typescript
@@ -42,8 +44,7 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
    */
   dev?: {
     /**
-     * Shell command to run as the upstream dev server (e.g. `npm run dev`).
-     * The command must respect the `PORT` env var alchemy passes to it.
+     * Shell command to run as the local dev server (e.g. `npm run dev`).
      */
     command: string;
     /**
@@ -51,22 +52,6 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
      * (the build command's `cwd`), or `process.cwd()` if neither is set.
      */
     cwd?: string;
-    /**
-     * Host the local proxy binds to.
-     * @default "localhost"
-     */
-    host?: string;
-    /**
-     * Port the local proxy listens on.
-     * @default 1337
-     */
-    port?: number;
-    /**
-     * When `true`, fail instead of falling back to another port if {@link port}
-     * is already in use.
-     * @default false
-     */
-    strictPort?: boolean;
   };
 }
 
@@ -226,8 +211,18 @@ const makeStaticSite = <
       const resolved = yield* props;
       const useDevServer = isDevPhase && resolved.dev !== undefined;
 
-      // In dev mode with a dev.command, skip the build entirely — the dev
-      // server handles assets at runtime.
+      // In dev mode with a dev.command, spawn it as a long-lived child
+      // process scoped to the stack and skip the build entirely. The dev
+      // server prints its own URL — alchemy does not proxy it.
+      if (useDevServer) {
+        const devCwd =
+          resolved.dev!.cwd ??
+          (typeof resolved.cwd === "string" ? resolved.cwd : undefined);
+        yield* spawnDevServer(resolved.dev!.command, devCwd).pipe(
+          Effect.forkScoped,
+        );
+      }
+
       const build = useDevServer
         ? undefined
         : yield* Command("Build", {
@@ -256,15 +251,22 @@ const makeStaticSite = <
               config: resolved.assetsConfig,
             }
           : undefined,
-        dev: useDevServer
-          ? {
-              command: resolved.dev!.command,
-              cwd: resolved.dev!.cwd ?? resolved.cwd,
-              host: resolved.dev!.host,
-              port: resolved.dev!.port,
-              strictPort: resolved.dev!.strictPort,
-            }
-          : undefined,
+        // Worker.dev is a different shape (proxy host/port); StaticSite owns
+        // the dev-server lifecycle directly, so don't forward it.
+        dev: undefined,
       });
     });
   }).pipe(Namespace.push(id));
+
+const spawnDevServer = (command: string, cwd: string | undefined) =>
+  Effect.gen(function* () {
+    const child = yield* ChildProcess.make(command, [], {
+      shell: true,
+      cwd: cwd ?? process.cwd(),
+      env: { ...process.env },
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    yield* child.exitCode;
+  });
