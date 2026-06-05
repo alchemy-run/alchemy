@@ -4,12 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
-    # `labeled` so adding the `force-ci` label re-triggers the run.
-    types: [opened, synchronize, reopened, closed, labeled]
+    # `labeled` so adding the `force-ci` label re-triggers the run. We
+    # intentionally do NOT listen to `closed` — pr-package tags persist
+    # past PR close so existing install URLs keep resolving.
+    types: [opened, synchronize, reopened, labeled]
 
 # Reusable workflows can't widen permissions — the caller must grant
-# `pull-requests: write` (sticky install-instructions comment + cleanup
-# on PR close).
+# `pull-requests: write` for the sticky install-instructions comment.
 permissions:
   contents: read
   pull-requests: write
