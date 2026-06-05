@@ -271,8 +271,9 @@ test(
             dox: c.getDO({ key }),
           }),
           predicate: ({ d1, dox }) => d1.value === 2 && dox.value === 1,
-          schedule: Schedule.spaced("2 seconds"),
-          times: 10,
+          schedule: Schedule.spaced("2 seconds").pipe(
+            Schedule.both(Schedule.recurs(10)),
+          ),
         });
         expect(d1.value).toBe(2);
         expect(dox.value).toBe(1);
