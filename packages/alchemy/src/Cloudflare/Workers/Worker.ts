@@ -279,26 +279,33 @@ export interface WorkerProps<
   /**
    * Options for the local dev server that runs this Worker under `alchemy dev`.
    * Each Worker is served on its own port.
+   *
+   * Set to `false` to skip starting a local Worker entirely — useful when an
+   * external dev server (e.g. one spawned via `Build.DevCommand`) is
+   * serving the content this Worker would otherwise host.
    */
-  dev?: {
-    /**
-     * Host the local dev server binds to.
-     * @default "localhost"
-     */
-    host?: string;
-    /**
-     * Port the local dev server listens on. If the port is unavailable, the
-     * next free port is used unless {@link strictPort} is `true`.
-     * @default 1337
-     */
-    port?: number;
-    /**
-     * When `true`, fail instead of falling back to another port if {@link port}
-     * is already in use.
-     * @default false
-     */
-    strictPort?: boolean;
-  };
+  dev?:
+    | false
+    | string
+    | {
+        /**
+         * Host the local dev server binds to.
+         * @default "localhost"
+         */
+        host?: string;
+        /**
+         * Port the local dev server listens on. If the port is unavailable,
+         * the next free port is used unless {@link strictPort} is `true`.
+         * @default 1337
+         */
+        port?: number;
+        /**
+         * When `true`, fail instead of falling back to another port if
+         * {@link port} is already in use.
+         * @default false
+         */
+        strictPort?: boolean;
+      };
 }
 
 export type Worker<Bindings extends WorkerBindings = any> = Resource<

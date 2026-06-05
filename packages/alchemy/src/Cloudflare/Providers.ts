@@ -8,6 +8,7 @@ import * as Schedule from "effect/Schedule";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileLive } from "../Auth/Profile.ts";
 import { Command } from "../Build/Command.ts";
+import { DevCommand, DevCommandProvider } from "../Build/DevCommand.ts";
 import * as Build from "../Build/index.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
@@ -67,6 +68,7 @@ export const providers = () =>
       Containers.Container,
       D1.D1ConnectionPolicy,
       D1.D1Database,
+      DevCommand,
       Dns.DnsReadPolicy,
       Dns.DnsReadWritePolicy,
       Dns.DnsWritePolicy,
@@ -122,6 +124,7 @@ export const providers = () =>
         Containers.ContainerProvider(),
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
+        DevCommandProvider(),
         Dns.DnsReadPolicyLive,
         Dns.DnsReadWritePolicyLive,
         Dns.DnsWritePolicyLive,
