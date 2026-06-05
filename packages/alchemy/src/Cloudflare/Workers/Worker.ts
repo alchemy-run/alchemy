@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as crypto from "node:crypto";
@@ -1282,6 +1283,15 @@ export const LiveWorkerProvider = () =>
           })),
         );
 
+      const normalizePrebuiltAssets = (
+        assets: WorkerProps["assets"],
+        output: Worker["Attributes"] | undefined,
+      ) => {
+        if (!Predicate.hasProperty(assets, "hash")) return undefined;
+        const { directory: _, hash, ...config } = assets;
+        return { config, hash, skip: hash === output?.hash?.assets };
+      };
+
       const putWorker = Effect.fnUntraced(function* (
         id: string,
         news: WorkerProps,
@@ -1300,28 +1310,14 @@ export const LiveWorkerProvider = () =>
         // entirely and tell Cloudflare to keep the assets it already
         // has bound to this script. The disk read is the expensive
         // part; the script PUT happens either way.
-        const previousAssetsHash = output?.hash?.assets;
-        const precomputedAssetsHash =
-          news.assets &&
-          typeof news.assets === "object" &&
-          "path" in news.assets &&
-          "hash" in news.assets
-            ? (news.assets.hash as string)
-            : undefined;
-        const assetsConfigFromProps =
-          news.assets &&
-          typeof news.assets === "object" &&
-          "config" in news.assets
-            ? news.assets.config
-            : undefined;
-        const skipAssetsRead =
-          precomputedAssetsHash !== undefined &&
-          precomputedAssetsHash === previousAssetsHash;
+        const prebuiltAssets = normalizePrebuiltAssets(news.assets, output);
         const {
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, news, { skipAssetsRead });
+        } = yield* prepareAssetsAndBundle(id, news, {
+          skipAssetsRead: prebuiltAssets?.skip,
+        });
         // When the caller supplied a precomputed hash (e.g. via
         // `Build.Command`), store *that* hash in output state so the
         // next diff can short-circuit by comparing it directly. The
@@ -1330,7 +1326,7 @@ export const LiveWorkerProvider = () =>
         // build-input hash and will never match it on the next pass.
         const hash = {
           ...preparedHash,
-          assets: precomputedAssetsHash ?? preparedHash.assets,
+          assets: prebuiltAssets?.hash ?? preparedHash.assets,
         } satisfies Worker["Attributes"]["hash"];
         const metadataBindings = bindings.flatMap((b) => b.data.bindings ?? []);
         const expectedDurableObjectClassNames =
@@ -1339,16 +1335,14 @@ export const LiveWorkerProvider = () =>
           | workers.PutScriptRequest["metadata"]["assets"]
           | undefined;
         let keepAssets = false;
-        if (skipAssetsRead) {
+        if (prebuiltAssets?.skip) {
           // Hash matched what's already on Cloudflare: keep the
           // existing asset manifest and skip the upload session.
           yield* Effect.logInfo(
             `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
           );
           keepAssets = true;
-          metadataAssets = assetsConfigFromProps
-            ? { config: assetsConfigFromProps }
-            : undefined;
+          metadataAssets = { config: prebuiltAssets.config };
           metadataBindings.push({
             type: "assets",
             name: "ASSETS",
@@ -1361,7 +1355,7 @@ export const LiveWorkerProvider = () =>
           // disk). In that case still keep the existing manifest and
           // skip the upload session — Cloudflare's content-addressed
           // session would no-op on every byte anyway.
-          if (assets.hash === previousAssetsHash) {
+          if (assets.hash === prebuiltAssets?.hash) {
             yield* Effect.logInfo(
               `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
             );
@@ -1748,12 +1742,9 @@ export const LiveWorkerProvider = () =>
           if (!props.assets) {
             return false;
           }
-          const assetsHash =
-            typeof props.assets === "object" &&
-            "path" in props.assets &&
-            "hash" in props.assets
-              ? (props.assets.hash as string)
-              : undefined;
+          const assetsHash = Predicate.hasProperty(props.assets, "hash")
+            ? props.assets.hash
+            : undefined;
           if (assetsHash === undefined) {
             return true;
           }
@@ -1791,12 +1782,9 @@ export const LiveWorkerProvider = () =>
         // assume the assets changed; `putWorker` will read once,
         // hash, and use `keepAssets` if it turns out nothing actually
         // changed.
-        const assetsHash =
-          typeof props.assets === "object" &&
-          "path" in props.assets &&
-          "hash" in props.assets
-            ? (props.assets.hash as string)
-            : undefined;
+        const assetsHash = Predicate.hasProperty(props.assets, "hash")
+          ? props.assets.hash
+          : undefined;
         if (assetsHash === undefined) {
           return true;
         }
