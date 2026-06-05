@@ -2987,6 +2987,7 @@ describe("Prisma resource providers", () => {
             gitName: "main",
             projectId: "project-1",
             isDefault: false,
+            role: "production",
             createdAt,
             updatedAt,
           },

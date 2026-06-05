@@ -13,6 +13,7 @@ import {
 import * as Output from "@/Output";
 import type { ResourceBinding } from "@/Resource";
 import { PlatformServices } from "@/Util/PlatformServices";
+import type { Branch as ApiBranch } from "@/Prisma/Types";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -26,6 +27,34 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { gunzipSync } from "node:zlib";
 import { WebSocketServer } from "ws";
+
+const testBranch = (
+  id: string,
+  role: "production" | "preview" = "production",
+): ApiBranch => ({
+  id,
+  type: "branch",
+  url: `https://api.prisma.test/v1/branches/${id}`,
+  gitName: id === "branch-main" ? "main" : id,
+  isDefault: role === "production" && id === "branch-main",
+  role,
+  createdAt: "2026-01-01T00:00:00Z",
+  updatedAt: "2026-01-01T00:00:00Z",
+  project: {
+    id: "project-1",
+    url: "https://api.prisma.test/v1/projects/project-1",
+    name: "project",
+  },
+});
+
+const withDefaultBranch = <T extends object>(
+  client: T,
+  role: "production" | "preview" = "production",
+): PrismaManagementClient =>
+  ({
+    getBranch: (id: string) => Effect.succeed(testBranch(id, role)),
+    ...client,
+  }) as unknown as PrismaManagementClient;
 
 describe("Prisma Compute", () => {
   it.effect("rejects destroyOldVersion when promotion is skipped", () => {
@@ -56,7 +85,7 @@ describe("Prisma Compute", () => {
       );
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
 
@@ -87,7 +116,7 @@ describe("Prisma Compute", () => {
       );
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
 
@@ -119,7 +148,7 @@ describe("Prisma Compute", () => {
       );
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
 
@@ -152,7 +181,7 @@ describe("Prisma Compute", () => {
       }
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
 
@@ -219,7 +248,7 @@ describe("Prisma Compute", () => {
       expect(calls).toEqual([["getComputeService", "service-1"]]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
 
@@ -250,7 +279,7 @@ describe("Prisma Compute", () => {
       );
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
 
@@ -285,7 +314,7 @@ describe("Prisma Compute", () => {
       );
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
     );
   });
 
@@ -319,7 +348,7 @@ describe("Prisma Compute", () => {
         );
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       );
     },
   );
@@ -367,7 +396,7 @@ describe("Prisma Compute", () => {
         expect(diff).toEqual({ action: "replace" });
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       );
     },
   );
@@ -415,7 +444,7 @@ describe("Prisma Compute", () => {
         expect(diff).toEqual({ action: "replace" });
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       );
     },
   );
@@ -467,7 +496,7 @@ describe("Prisma Compute", () => {
         expect(diff).toEqual({ action: "update" });
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       );
     },
   );
@@ -578,7 +607,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -658,7 +687,7 @@ describe("Prisma Compute", () => {
         ]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
       );
@@ -738,7 +767,7 @@ describe("Prisma Compute", () => {
         ]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
       );
@@ -856,7 +885,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -988,7 +1017,7 @@ describe("Prisma Compute", () => {
         expect(versionIndex).toBeGreaterThan(updateIndex);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       );
     },
@@ -1124,7 +1153,7 @@ describe("Prisma Compute", () => {
         ).toHaveLength(2);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       );
     },
   );
@@ -1183,7 +1212,7 @@ describe("Prisma Compute", () => {
         expect(calls).toEqual([]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(PlatformServices),
       );
     },
@@ -1282,7 +1311,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(PlatformServices),
     );
   });
@@ -1384,7 +1413,7 @@ describe("Prisma Compute", () => {
         expect(calls).toContainEqual(["deleteComputeService", "service-1"]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(PlatformServices),
       );
     },
@@ -1489,7 +1518,7 @@ describe("Prisma Compute", () => {
         ]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
       );
@@ -1604,7 +1633,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -1711,7 +1740,7 @@ describe("Prisma Compute", () => {
       );
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -1862,7 +1891,7 @@ describe("Prisma Compute", () => {
         ]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
       );
@@ -1973,7 +2002,7 @@ describe("Prisma Compute", () => {
       expect(tarText).toContain("named-handler-ok");
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -2219,7 +2248,7 @@ describe("Prisma Compute", () => {
       expect(calls).toEqual([]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(PlatformServices),
     );
   });
@@ -2344,6 +2373,7 @@ describe("Prisma Compute", () => {
         "createEnvironmentVariable",
         {
           projectId: "project-1",
+          branchId: "branch-main",
           class: "preview",
           key: "DATABASE_URL",
           value: "postgres://bound",
@@ -2353,6 +2383,7 @@ describe("Prisma Compute", () => {
         "createEnvironmentVariable",
         {
           projectId: "project-1",
+          branchId: "branch-main",
           class: "preview",
           key: "SHARED_FLAG",
           value: "from-binding",
@@ -2360,7 +2391,9 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(
+        Layer.succeed(PrismaClient, withDefaultBranch(client, "preview")),
+      ),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -2544,7 +2577,7 @@ describe("Prisma Compute", () => {
         ]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
       );
@@ -2694,7 +2727,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -2800,7 +2833,7 @@ describe("Prisma Compute", () => {
         ]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       );
     },
   );
@@ -2924,7 +2957,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -3077,7 +3110,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -3205,7 +3238,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -3322,7 +3355,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -3386,7 +3419,7 @@ describe("Prisma Compute", () => {
         },
         updateComputeService: (id: string, input: unknown) => {
           calls.push(["updateComputeService", { id, input }]);
-          return Effect.succeed(service);
+          return Effect.succeed({ ...service, branchId: "branch-main" });
         },
         listEnvironmentVariables: (query: unknown) => {
           calls.push(["listEnvironmentVariables", query]);
@@ -3495,7 +3528,7 @@ describe("Prisma Compute", () => {
         ]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
       );
@@ -3795,7 +3828,7 @@ describe("Prisma Compute", () => {
         ]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
       );
@@ -3949,7 +3982,7 @@ describe("Prisma Compute", () => {
         ]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
       );
@@ -4076,7 +4109,7 @@ describe("Prisma Compute", () => {
         ).toHaveLength(1);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
         Effect.provide(PlatformServices),
       );
@@ -4251,7 +4284,7 @@ describe("Prisma Compute", () => {
         expect(calls).toContainEqual(["deleteComputeVersion", "version-1"]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provideService(HttpClient.HttpClient, http),
         Effect.provide(PlatformServices),
       );
@@ -4405,7 +4438,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -4634,7 +4667,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(Layer.succeed(HttpClient.HttpClient, http)),
       Effect.provide(PlatformServices),
     );
@@ -4774,7 +4807,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -4901,7 +4934,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -4996,7 +5029,7 @@ describe("Prisma Compute", () => {
       ]);
     }).pipe(
       Effect.provide(ComputeProvider()),
-      Effect.provide(Layer.succeed(PrismaClient, client)),
+      Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
       Effect.provide(FetchHttpClient.layer),
       Effect.provide(PlatformServices),
     );
@@ -5085,7 +5118,7 @@ describe("Prisma Compute", () => {
         ]);
       }).pipe(
         Effect.provide(ComputeProvider()),
-        Effect.provide(Layer.succeed(PrismaClient, client)),
+        Effect.provide(Layer.succeed(PrismaClient, withDefaultBranch(client))),
         Effect.provide(FetchHttpClient.layer),
         Effect.provide(PlatformServices),
       );
@@ -5139,7 +5172,9 @@ describe("Prisma Compute", () => {
 
         const provider = yield* Compute.Provider.pipe(
           Effect.provide(ComputeProvider()),
-          Effect.provide(Layer.succeed(PrismaClient, client)),
+          Effect.provide(
+            Layer.succeed(PrismaClient, withDefaultBranch(client)),
+          ),
         );
         const lines = yield* provider.tail!({
           id: "App",

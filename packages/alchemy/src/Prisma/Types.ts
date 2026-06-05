@@ -260,6 +260,7 @@ export interface Branch {
   url: string;
   gitName: string;
   isDefault: boolean;
+  role: "production" | "preview";
   createdAt: string;
   updatedAt: string;
   project: ResourceRef;
@@ -446,6 +447,7 @@ export interface EnvironmentVariable {
 
 export interface EnvironmentVariableCreateInput {
   projectId: string;
+  branchId?: string;
   class: EnvironmentVariableClass;
   key: string;
   value: string;

@@ -57,6 +57,10 @@ export interface Branch extends Resource<
      */
     isDefault: boolean;
     /**
+     * Branch role used by Prisma to resolve deploy-time environment variables.
+     */
+    role: "production" | "preview";
+    /**
      * ISO timestamp when the branch was created.
      */
     createdAt: string;
@@ -101,6 +105,7 @@ const attrsFrom = (branch: ApiBranch): Branch["Attributes"] => ({
   gitName: branch.gitName,
   projectId: branch.project.id,
   isDefault: branch.isDefault,
+  role: branch.role,
   createdAt: branch.createdAt,
   updatedAt: branch.updatedAt,
 });

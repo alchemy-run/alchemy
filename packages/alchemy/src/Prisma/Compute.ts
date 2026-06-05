@@ -379,6 +379,11 @@ export interface Compute extends Resource<
      */
     environmentClass?: "production" | "preview";
     /**
+     * Branch ID used for managed preview branch environment overrides, or null
+     * for project-level environment templates.
+     */
+    environmentBranchId?: string | null;
+    /**
      * Fingerprint of the uploaded artifact/reused artifact inputs and the
      * branch attachment that Prisma resolves environment variables from.
      */
@@ -1386,12 +1391,19 @@ const findEnvironmentVariable = (
   projectId: string,
   cls: "production" | "preview",
   key: string,
+  branchId?: string | null,
 ) =>
   client
-    .listEnvironmentVariables({ projectId, class: cls, key, limit: 100 })
+    .listEnvironmentVariables({
+      projectId,
+      class: cls,
+      key,
+      ...(branchId ? { branchId } : {}),
+      limit: 100,
+    })
     .pipe(
       Effect.map((variables: ApiEnvironmentVariable[]) =>
-        variables.find((variable) => variable.branchId === null),
+        variables.find((variable) => variable.branchId === (branchId ?? null)),
       ),
     );
 
@@ -1411,6 +1423,53 @@ const ensureUserManagedEnvironmentVariable = (
     }
   });
 
+interface ComputeEnvironmentScope {
+  class: "production" | "preview";
+  branchId: string | null;
+}
+
+const environmentScope = (
+  cls: "production" | "preview",
+  branchId?: string | null,
+): ComputeEnvironmentScope => ({
+  class: cls,
+  branchId: branchId ?? null,
+});
+
+const sameEnvironmentScope = (
+  left: ComputeEnvironmentScope,
+  right: ComputeEnvironmentScope,
+) => left.class === right.class && left.branchId === right.branchId;
+
+const resolveComputeEnvironmentScope = Effect.fn(function* (
+  client: PrismaManagementClient,
+  service: ApiComputeService,
+  props: ComputeProps,
+) {
+  if (!service.branchId) {
+    return yield* Effect.fail(
+      new Error(
+        "Prisma.Compute requires an attached branch because Compute version creation resolves environment variables from the service branch.",
+      ),
+    );
+  }
+
+  const branch = yield* client.getBranch(service.branchId);
+  const inferredClass = branch.role;
+  if (props.envClass !== undefined && props.envClass !== inferredClass) {
+    return yield* Effect.fail(
+      new Error(
+        `Prisma.Compute envClass '${props.envClass}' does not match attached branch role '${inferredClass}'. Omit envClass to let Alchemy infer the correct environment variable scope.`,
+      ),
+    );
+  }
+
+  return environmentScope(
+    inferredClass,
+    inferredClass === "preview" ? service.branchId : null,
+  );
+});
+
 export const syncComputeEnvironment = Effect.fn(function* (
   client: PrismaManagementClient,
   projectId: string,
@@ -1419,6 +1478,7 @@ export const syncComputeEnvironment = Effect.fn(function* (
     string,
     string | Redacted.Redacted<string> | null | undefined
   > = {},
+  branchId?: string | null,
 ) {
   const synced: string[] = [];
   const deleted: string[] = [];
@@ -1433,6 +1493,7 @@ export const syncComputeEnvironment = Effect.fn(function* (
       projectId,
       cls,
       key,
+      branchId,
     );
     if (variable) {
       yield* ensureUserManagedEnvironmentVariable(variable);
@@ -1452,6 +1513,7 @@ export const syncComputeEnvironment = Effect.fn(function* (
     } else {
       yield* client.createEnvironmentVariable({
         projectId,
+        ...(branchId ? { branchId } : {}),
         class: cls,
         key,
         value,
@@ -1465,7 +1527,7 @@ export const syncComputeEnvironment = Effect.fn(function* (
 const destroyComputeEnvironment = Effect.fn(function* (
   client: PrismaManagementClient,
   projectId: string,
-  cls: "production" | "preview",
+  scope: ComputeEnvironmentScope,
   env: Record<
     string,
     string | Redacted.Redacted<string> | null | undefined
@@ -1477,8 +1539,9 @@ const destroyComputeEnvironment = Effect.fn(function* (
     const variable = yield* findEnvironmentVariable(
       client,
       projectId,
-      cls,
+      scope.class,
       key,
+      scope.branchId,
     ).pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
     if (!variable) continue;
     if (variable.isManagedBySystem) continue;
@@ -1493,11 +1556,11 @@ const destroyComputeEnvironment = Effect.fn(function* (
 const cleanupRemovedComputeEnvironment = Effect.fn(function* (
   client: PrismaManagementClient,
   projectId: string,
-  oldClass: "production" | "preview",
+  oldScope: ComputeEnvironmentScope,
   oldEnv:
     | Record<string, string | Redacted.Redacted<string> | null | undefined>
     | undefined,
-  newClass: "production" | "preview",
+  newScope: ComputeEnvironmentScope,
   newEnv:
     | Record<string, string | Redacted.Redacted<string> | null | undefined>
     | undefined,
@@ -1507,12 +1570,13 @@ const cleanupRemovedComputeEnvironment = Effect.fn(function* (
   const deleted: string[] = [];
   for (const [key, oldValue] of Object.entries(oldValues)) {
     if (oldValue === null) continue;
-    if (oldClass === newClass && key in newValues) continue;
+    if (sameEnvironmentScope(oldScope, newScope) && key in newValues) continue;
     const variable = yield* findEnvironmentVariable(
       client,
       projectId,
-      oldClass,
+      oldScope.class,
       key,
+      oldScope.branchId,
     );
     if (!variable) continue;
     if (variable.isManagedBySystem) continue;
@@ -1667,6 +1731,7 @@ export const ComputeProvider = () =>
             previousVersionAction: output?.previousVersionAction,
             environmentKeys: output?.environmentKeys,
             environmentClass: output?.environmentClass ?? olds.envClass,
+            environmentBranchId: output?.environmentBranchId,
             artifactHash: output?.artifactHash,
             local: false,
           };
@@ -1725,27 +1790,37 @@ export const ComputeProvider = () =>
               : Effect.fail(error);
 
           return yield* Effect.gen(function* () {
+            const currentEnvironmentScope =
+              yield* resolveComputeEnvironmentScope(
+                client,
+                service,
+                effectiveNews,
+              );
             const deploymentHash = yield* sha256Object({
               artifact: artifact.hash,
               branchId: service.branchId,
+              environmentClass: currentEnvironmentScope.class,
+              environmentBranchId: currentEnvironmentScope.branchId,
             });
             const previousVersionId = service.latestVersionId ?? null;
-            const previousEnvironmentClass =
-              olds?.envClass ?? output?.environmentClass ?? "production";
-            const environmentClass = effectiveNews.envClass ?? "production";
+            const previousEnvironmentScope = environmentScope(
+              olds?.envClass ?? output?.environmentClass ?? "production",
+              output?.environmentBranchId,
+            );
             yield* cleanupRemovedComputeEnvironment(
               client,
               projectId,
-              previousEnvironmentClass,
+              previousEnvironmentScope,
               previousManagedEnv(output?.environmentKeys, olds?.env),
-              environmentClass,
+              currentEnvironmentScope,
               effectiveNews.env,
             );
             yield* syncComputeEnvironment(
               client,
               projectId,
-              environmentClass,
+              currentEnvironmentScope.class,
               effectiveNews.env,
+              currentEnvironmentScope.branchId,
             );
 
             let version: ObservedComputeVersion | undefined =
@@ -1925,7 +2000,8 @@ export const ComputeProvider = () =>
               previousVersionId,
               previousVersionAction,
               environmentKeys: managedEnvKeys(effectiveNews.env),
-              environmentClass,
+              environmentClass: currentEnvironmentScope.class,
+              environmentBranchId: currentEnvironmentScope.branchId,
               artifactHash: deploymentHash,
               local: false,
             };
@@ -1943,7 +2019,10 @@ export const ComputeProvider = () =>
           yield* destroyComputeEnvironment(
             client,
             output.projectId,
-            olds?.envClass ?? output.environmentClass ?? "production",
+            environmentScope(
+              olds?.envClass ?? output.environmentClass ?? "production",
+              output.environmentBranchId,
+            ),
             previousManagedEnv(output.environmentKeys, olds?.env),
           );
           yield* destroyComputeService(client, output.computeServiceId);
@@ -2001,6 +2080,7 @@ export const ComputeDevProvider = () =>
             previousVersionAction: undefined,
             environmentKeys: managedEnvKeys(effectiveNews.env),
             environmentClass: effectiveNews.envClass ?? "production",
+            environmentBranchId: null,
             artifactHash: undefined,
             local: true,
           };

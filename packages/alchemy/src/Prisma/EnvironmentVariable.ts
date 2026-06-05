@@ -26,6 +26,10 @@ export interface EnvironmentVariableProps {
    */
   project: string | Project;
   /**
+   * Preview branch ID for a branch override. Omit for project-level templates.
+   */
+  branchId?: string;
+  /**
    * Environment variable class.
    */
   class: "production" | "preview";
@@ -157,12 +161,19 @@ const findVariable = (
   projectId: string,
   cls: "production" | "preview",
   key: string,
+  branchId?: string | null,
 ) =>
   client
-    .listEnvironmentVariables({ projectId, class: cls, key, limit: 100 })
+    .listEnvironmentVariables({
+      projectId,
+      class: cls,
+      key,
+      ...(branchId ? { branchId } : {}),
+      limit: 100,
+    })
     .pipe(
       Effect.map((variables) =>
-        variables.find((variable) => variable.branchId === null),
+        variables.find((variable) => variable.branchId === (branchId ?? null)),
       ),
     );
 
@@ -212,6 +223,7 @@ export const EnvironmentVariableProvider = () =>
             : undefined;
           if (
             concreteIdsChanged(oldProjectId, newProjectId) ||
+            (isResolved(news.branchId) && news.branchId !== olds.branchId) ||
             (isResolved(news.class) && news.class !== olds.class) ||
             (isResolved(news.key) && news.key !== olds.key)
           ) {
@@ -238,7 +250,13 @@ export const EnvironmentVariableProvider = () =>
             : yield* Effect.gen(function* () {
                 const projectId = unresolvedProjectIdOf(olds.project);
                 return projectId
-                  ? yield* findVariable(client, projectId, olds.class, olds.key)
+                  ? yield* findVariable(
+                      client,
+                      projectId,
+                      olds.class,
+                      olds.key,
+                      olds.branchId,
+                    )
                   : undefined;
               });
           return variable
@@ -246,6 +264,13 @@ export const EnvironmentVariableProvider = () =>
             : undefined;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
+          if (news.branchId !== undefined && news.class !== "preview") {
+            return yield* Effect.fail(
+              new Error(
+                'Prisma branch-scoped environment variables must use class: "preview".',
+              ),
+            );
+          }
           yield* validateEnvironmentVariableWrite(news.key, news.value);
           const projectId = yield* resolveProjectId(news.project);
           const variableId = isPrismaDevId(output?.environmentVariableId)
@@ -257,13 +282,20 @@ export const EnvironmentVariableProvider = () =>
                 .pipe(
                   Effect.catchIf(isNotFound, () => Effect.succeed(undefined)),
                 )
-            : yield* findVariable(client, projectId, news.class, news.key);
+            : yield* findVariable(
+                client,
+                projectId,
+                news.class,
+                news.key,
+                news.branchId,
+              );
           const value = redacted(news.value);
           let created = false;
           if (!variable) {
             const result = yield* client
               .createEnvironmentVariable({
                 projectId,
+                ...(news.branchId ? { branchId: news.branchId } : {}),
                 class: news.class,
                 key: news.key,
                 value: Redacted.value(value),
@@ -271,7 +303,13 @@ export const EnvironmentVariableProvider = () =>
               .pipe(
                 Effect.map((variable) => ({ variable, created: true })),
                 Effect.catchIf(isConflict, () =>
-                  findVariable(client, projectId, news.class, news.key).pipe(
+                  findVariable(
+                    client,
+                    projectId,
+                    news.class,
+                    news.key,
+                    news.branchId,
+                  ).pipe(
                     Effect.flatMap((variable) =>
                       variable
                         ? Effect.succeed({ variable, created: false })
