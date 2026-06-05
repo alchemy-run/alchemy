@@ -32,9 +32,8 @@ export interface AssetReadResult {
   hash: string;
 }
 
-export interface AssetsProps {
+export interface AssetsProps extends AssetsConfig {
   directory: string;
-  config?: AssetsConfig;
 }
 
 export type ValidationError =
@@ -103,10 +102,13 @@ const createIgnoreMatcher = (patterns: string[]) => {
   return (file: string) => matcher.ignores(file);
 };
 
-export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
+export const readAssets = Effect.fnUntraced(function* ({
+  directory,
+  ...config
+}: AssetsProps) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const resolvedDirectory = path.resolve(props.directory);
+  const resolvedDirectory = path.resolve(directory);
   const [files, ignore, _headers, _redirects] = yield* Effect.all([
     fs.readDirectory(resolvedDirectory, { recursive: true }),
     maybeReadString(path.join(resolvedDirectory, ".assetsignore")),
@@ -151,7 +153,7 @@ export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
       if (count > MAX_ASSET_COUNT) {
         return yield* new TooManyAssetsError({
           message: `Too many assets (the maximum count is ${MAX_ASSET_COUNT}; this directory has ${count} assets)`,
-          directory: props.directory,
+          directory,
           count,
         });
       }
@@ -176,14 +178,14 @@ export const readAssets = Effect.fnUntraced(function* (props: AssetsProps) {
   // causes both unnecessary re-uploads and `NotFound` failures when
   // the previously-recorded path is gone.
   const hash = yield* sha256Object({
-    config: props.config,
+    config,
     manifest: sortedManifest,
     _headers,
     _redirects,
   });
   return {
-    directory: props.directory,
-    config: props.config,
+    directory,
+    config,
     manifest: sortedManifest,
     _headers,
     _redirects,

@@ -3,6 +3,7 @@ import type { MemoOptions } from "../../Build/Memo.ts";
 import type { InputProps } from "../../Input.ts";
 import { effectClass } from "../../Util/effect.ts";
 import type { Providers } from "../Providers.ts";
+import type { AssetsConfig } from "../Workers/Assets.ts";
 import {
   Worker,
   type NormalizedBindings,
@@ -12,7 +13,7 @@ import {
 } from "../Workers/Worker.ts";
 export interface ViteProps<
   Bindings extends WorkerBindingProps = {},
-> extends Omit<WorkerProps<Bindings>, "vite" | "main"> {
+> extends Omit<WorkerProps<Bindings>, "vite" | "main" | "assets"> {
   /**
    * Root directory passed to Vite's `root` option.
    * Defaults to the current working directory (`process.cwd()`).
@@ -26,6 +27,11 @@ export interface ViteProps<
    * @see {@link MemoOptions}
    */
   memo?: MemoOptions;
+  /**
+   * Optional configuration for static asset routing behavior.
+   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
+   */
+  assets?: AssetsConfig;
 }
 
 /**

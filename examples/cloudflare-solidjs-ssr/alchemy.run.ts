@@ -14,9 +14,7 @@ export default Alchemy.Stack(
         flags: ["nodejs_compat"],
       },
       assets: {
-        config: {
-          runWorkerFirst: true,
-        },
+        runWorkerFirst: true,
       },
     });
 

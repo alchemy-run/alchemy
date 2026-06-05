@@ -22,7 +22,7 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    */
-  assetsConfig?: AssetsConfig;
+  assets?: AssetsConfig;
   dev?: {
     command: string;
   };
@@ -76,7 +76,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * ```
  *
  * @section Asset Configuration
- * Use `assetsConfig` to control how Cloudflare handles routing for
+ * Use `assets` to control how Cloudflare handles routing for
  * your static files — HTML handling, not-found behavior, etc.
  *
  * @example SPA-style routing
@@ -85,7 +85,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *   command: "npm run build",
  *   outdir: "dist",
  *   main: "./src/worker.ts",
- *   assetsConfig: {
+ *   assets: {
  *     htmlHandling: "auto-trailing-slash",
  *     notFoundHandling: "single-page-application",
  *   },
@@ -201,9 +201,9 @@ const makeStaticSite = <
       Effect.map(props, (props) => ({
         ...props,
         assets: {
-          path: build.outdir,
+          directory: build.outdir,
           hash: build.hash,
-          config: props.assetsConfig,
+          ...props.assets,
         },
         // Omit the dev command from WorkerProps since it's different from WorkerProps["dev"].
         // TODO: we'll need to update this when we add local dev support for StaticSite.
