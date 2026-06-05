@@ -1,3 +1,39 @@
+## v2.0.0-beta.52
+
+### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes
+
+- Bump effect to 4.0.0-beta.78 &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/542 [<samp>(80d50)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/80d50a7e)
+- **cloudflare**: Consistent `props.assets` type for Worker, StaticSite, & Vite &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/534 [<samp>(e1ad3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/e1ad34ad)
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - Effect wrapper for Browser quick actions &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/525 [<samp>(e734a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/e734a2f4)
+  - Add Version Metadata binding &nbsp;-&nbsp; by **Alex** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/524 [<samp>(77937)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/77937935)
+  - Class form for Vite and StaticSite &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/527 [<samp>(a195c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a195c93d)
+  - Provide ExecutionContext to Workflow runs &nbsp;-&nbsp; by **Saatvik Arya** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/515 [<samp>(159b9)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/159b9779)
+  - Build.DevServer resource used in Cloudflare.StaticSite &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/537 [<samp>(81415)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/81415133)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Bump @distilled.cloud/* to 0.23.1 &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/539 [<samp>(d0afc)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/d0afc986)
+- **cloudflare**:
+  - Cloudflare.Providers requirement type was any &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(4b0ca)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/4b0caa8d)
+  - Allow ConfigError in RpcWorker and RpcDurableObjectNamespace &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(4e8f4)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/4e8f4e55)
+  - **dev**:
+    - Improve multi-worker reliability in bun &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/535 [<samp>(cd1af)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/cd1aff7a)
+    - Cross-script durable object bindings not working &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/540 [<samp>(40f36)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/40f36355)
+    - Populate assets binding for vite websites &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/547 [<samp>(b1504)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b1504d9d)
+- **core**:
+  - Trigger updates when a Redacted config/secret value changes &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/549 [<samp>(8b9c2)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/8b9c2415)
+  - Honor retain removal policy on replace &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/548 [<samp>(5ac2f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/5ac2f158)
+- **drizzle**:
+  - Expose Schema `out` as a cwd-relative path &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/551 [<samp>(0cf52)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/0cf52bb6)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.51...HEAD)
+
+---
+
 ## v2.0.0-beta.51
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
