@@ -5,15 +5,17 @@ import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
 import * as Schedule from "effect/Schedule";
+import type { HttpClient } from "effect/unstable/http";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { diffTags } from "../../Tags.ts";
+import type { Credentials } from "../Credentials.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type BucketName = string;
@@ -343,18 +345,17 @@ export const BucketProvider = () =>
 
       const fetchBucketTags = (
         bucketName: string,
-      ): Effect.Effect<Record<string, string>, never, any> =>
+      ): Effect.Effect<
+        Record<string, string>,
+        never,
+        Credentials | HttpClient.HttpClient | Region
+      > =>
         s3.getBucketTagging({ Bucket: bucketName }).pipe(
-          Effect.map(
-            (r) =>
-              Object.fromEntries(
-                (r.TagSet ?? []).map((t) => [t.Key!, t.Value!]),
-              ) as Record<string, string>,
+          Effect.map((r) =>
+            Object.fromEntries((r.TagSet ?? []).map((t) => [t.Key!, t.Value!])),
           ),
-          Effect.catchTag("NoSuchTagSet", () =>
-            Effect.succeed({} as Record<string, string>),
-          ),
-          Effect.catch(() => Effect.succeed({} as Record<string, string>)),
+          Effect.catchTag("NoSuchTagSet", () => Effect.succeed({})),
+          Effect.catch(() => Effect.succeed({})),
         );
 
       const syncBucketTags = Effect.fnUntraced(function* ({
