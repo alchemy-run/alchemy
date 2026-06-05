@@ -45,7 +45,7 @@ export type Schema = Resource<
   "Drizzle.Schema",
   SchemaProps,
   {
-    /** Absolute path to the migrations directory. */
+    /** Path to the migrations directory, relative to the current working directory. */
     out: string;
     /**
      * sha256 of the latest snapshot.json. Stable across deploys when the
@@ -116,6 +116,12 @@ export const SchemaProvider = () =>
 
       const resolveOut = (p: SchemaProps) =>
         path.resolve(process.cwd(), p.out ?? "./migrations");
+
+      // The `out` attribute is exposed as a path relative to the current
+      // working directory so that persisted state stays portable across
+      // machines/checkouts. Internal filesystem ops always use the absolute
+      // `resolveOut` form.
+      const relativeOut = (abs: string) => path.relative(process.cwd(), abs);
 
       const resolveSchema = (p: SchemaProps) =>
         path.resolve(process.cwd(), p.schema);
@@ -241,7 +247,7 @@ export const SchemaProvider = () =>
           const migrations = yield* listMigrationDirs(out);
           const latest = yield* readLatestSnapshot(out);
           return {
-            out,
+            out: relativeOut(out),
             snapshotHash: latest?.hash ?? sha(JSON.stringify(cur)),
             migrations,
           };
@@ -267,7 +273,7 @@ export const SchemaProvider = () =>
           const latest = yield* readLatestSnapshot(out);
           const migrations = yield* listMigrationDirs(out);
           return {
-            out,
+            out: relativeOut(out),
             snapshotHash: latest?.hash ?? output.snapshotHash,
             migrations,
           };
