@@ -40,10 +40,9 @@ export default Alchemy.Stack(
     const effectWorker = yield* EffectWorker;
 
     // Spawn several additional workers to test concurrency.
-    const additionalWorkers = yield* Effect.all(
-      Array.from({ length: 5 }, (_, i) =>
-        makeAsyncWorker(`AdditionalWorker${i + 1}`),
-      ),
+    const additionalWorkers = yield* Effect.forEach(
+      Array.from({ length: 5 }),
+      (_, i) => makeAsyncWorker(`AdditionalWorker${i + 1}`),
     );
 
     return {
