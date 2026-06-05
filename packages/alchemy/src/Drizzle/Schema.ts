@@ -1,7 +1,7 @@
-import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as crypto from "node:crypto";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -262,8 +262,9 @@ export const SchemaProvider = () =>
           // `schema.out` as an unresolved Output during plan and cascade
           // into spurious updates of their own.
           const { sqlStatements } = yield* detectDrift(news);
-          if (sqlStatements.length === 0) return undefined;
-          return { action: "update" } as const;
+          return sqlStatements.length > 0 || path.isAbsolute(output.out)
+            ? { action: "update" }
+            : undefined;
         }),
         read: Effect.fn(function* ({ olds, output }) {
           if (!output) return undefined;
