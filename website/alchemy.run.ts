@@ -34,7 +34,7 @@ const Website = Cloudflare.StaticSite(
       date: "2026-04-02",
       flags: ["nodejs_compat"],
     },
-    assetsConfig: {
+    assets: {
       runWorkerFirst: true,
     },
   })),

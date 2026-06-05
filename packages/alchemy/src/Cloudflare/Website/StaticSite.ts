@@ -76,7 +76,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * ```
  *
  * @section Asset Configuration
- * Use `assetsConfig` to control how Cloudflare handles routing for
+ * Use `assets` to control how Cloudflare handles routing for
  * your static files — HTML handling, not-found behavior, etc.
  *
  * @example SPA-style routing
@@ -85,7 +85,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *   command: "npm run build",
  *   outdir: "dist",
  *   main: "./src/worker.ts",
- *   assetsConfig: {
+ *   assets: {
  *     htmlHandling: "auto-trailing-slash",
  *     notFoundHandling: "single-page-application",
  *   },
