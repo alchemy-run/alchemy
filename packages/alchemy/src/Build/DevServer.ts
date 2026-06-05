@@ -18,7 +18,7 @@ import * as RpcProvider from "../Local/RpcProvider.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 
-export interface DevCommandProps {
+export interface DevServerProps {
   /**
    * Shell command to run as a long-lived dev process (e.g. `npm run dev`).
    */
@@ -35,22 +35,21 @@ export interface DevCommandProps {
 
 /**
  * A long-lived shell process scoped to a stack instance, started during
- * `alchemy dev` and torn down on stack teardown or when its `command` / `cwd`
- * / `env` changes.
+ * `alchemy dev`, restarted when inputs are changes.
  *
- * The provider runs inside the dev sidecar (see `Cloudflare/Local.ts`) so the
+ * The provider runs inside the dev sidecar (see `Build/Local.ts`) so the
  * child process survives user-code HMR — Alchemy's user process can restart
- * without killing your `npm run dev` server.
+ * without killing your `npm run dev` server. During deploy this performs a no-op
  *
  * The child's stdout/stderr are mirrored to the sidecar's terminal so the
  * user still sees colored dev-server output, and each line is scanned for
  * the first `http(s)://…` URL. The first match (with ANSI escapes stripped)
  * is exposed as `url` — useful for surfacing a dev server's local URL back
- * out to whatever resource declared this `DevCommand`.
+ * out to whatever resource declared this `DevServer`.
  */
-export interface DevCommand extends Resource<
-  "Cloudflare.DevCommand",
-  DevCommandProps,
+export interface DevServer extends Resource<
+  "Build.DevServer",
+  DevServerProps,
   {
     /**
      * URL extracted from the first matching stdout/stderr line. Best-effort:
@@ -60,7 +59,59 @@ export interface DevCommand extends Resource<
   }
 > {}
 
-export const DevCommand = Resource<DevCommand>("Cloudflare.DevCommand");
+/**
+ * A long-lived shell process scoped to a stack instance, started during
+ * `alchemy dev` and restarted when inputs change. During deploy this is
+ * a no-op — `DevServer` resources only run in dev mode.
+ *
+ * The child process runs inside the dev sidecar so it survives
+ * user-code HMR restarts. Its stdout/stderr are mirrored to the
+ * terminal and scanned for the first `http(s)://…` URL, which is
+ * exposed as the `url` output attribute.
+ *
+ * @resource
+ *
+ * @section Basic Usage
+ * Pass a shell command that starts a long-lived dev server. Alchemy
+ * runs it in the background and extracts the first URL it prints.
+ *
+ * @example Start a Vite dev server
+ * ```typescript
+ * const dev = yield* DevServer("Frontend", {
+ *   command: "npm run dev",
+ * });
+ * console.log(dev.url); // e.g. "http://localhost:5173"
+ * ```
+ *
+ * @section Working Directory
+ * Use `cwd` to run the command in a subdirectory — useful in
+ * monorepos where each package has its own dev server.
+ *
+ * @example Monorepo package
+ * ```typescript
+ * const dev = yield* DevServer("Web", {
+ *   command: "npm run dev",
+ *   cwd: "apps/web",
+ * });
+ * ```
+ *
+ * @section Environment Variables
+ * Extra environment variables are merged on top of `process.env`.
+ * Sensitive values can be wrapped in `Redacted` to keep them out
+ * of logs and state files.
+ *
+ * @example Custom port and env
+ * ```typescript
+ * const dev = yield* DevServer("Api", {
+ *   command: "npm run dev",
+ *   env: {
+ *     PORT: "4000",
+ *     DATABASE_URL: Redacted.make("postgres://..."),
+ *   },
+ * });
+ * ```
+ */
+export const DevServer = Resource<DevServer>("Build.DevServer");
 
 /**
  * How long reconcile waits for a URL to appear in the child's output
@@ -83,14 +134,14 @@ const URL_REGEX = /https?:\/\/[^\s)\],"'`]+/;
 const ANSI_REGEX = /\x1b\[[0-9;]*m/g;
 
 /**
- * Live-mode no-op. `DevCommand` resources should only be created in dev mode;
+ * Live-mode no-op. `DevServer` resources should only be created in dev mode;
  * if one slips into a deploy, this is a noisy no-op rather than a crash.
  */
-export const LiveDevCommandProvider = () =>
+export const LiveDevServerProvider = () =>
   Provider.effect(
-    DevCommand,
+    DevServer,
     Effect.succeed(
-      DevCommand.Provider.of({
+      DevServer.Provider.of({
         diff: () => Effect.succeed({ action: "noop" }),
         reconcile: () => Effect.succeed({}),
         delete: () => Effect.void,
@@ -104,9 +155,9 @@ export const LiveDevCommandProvider = () =>
  * keyed by resource id; on `reconcile`, it diffs the props hash and either
  * reuses the existing process or interrupts + respawns.
  */
-export const LocalDevCommandProvider = () =>
+export const LocalDevServerProvider = () =>
   RpcProvider.effect(
-    DevCommand,
+    DevServer,
     import.meta.resolve(
       // See LocalWorkerProvider — must match the on-disk extension of the
       // sidecar entry file.
@@ -138,7 +189,7 @@ export const LocalDevCommandProvider = () =>
       >();
 
       const spawn = Effect.fn(function* (
-        props: DevCommandProps,
+        props: DevServerProps,
         urlDeferred: Deferred.Deferred<string>,
       ) {
         const [command, ...args] = props.command.split(" ");
@@ -188,7 +239,7 @@ export const LocalDevCommandProvider = () =>
           Effect.map(Option.getOrUndefined),
         );
 
-      return DevCommand.Provider.of({
+      return DevServer.Provider.of({
         diff: Effect.fn(function* ({ id, news }) {
           if (!isResolved(news)) return undefined;
           const hash = Hash.structure(news);
@@ -269,11 +320,11 @@ const mirrorAndExtract = (
   });
 
 /**
- * Selects the live or dev DevCommand provider based on `AlchemyContext.dev`.
+ * Selects the live or dev DevServer provider based on `AlchemyContext.dev`.
  */
-export const DevCommandProvider = () =>
+export const DevServerProvider = () =>
   Layer.unwrap(
     AlchemyContext.useSync((context) =>
-      context.dev ? LocalDevCommandProvider() : LiveDevCommandProvider(),
+      context.dev ? LocalDevServerProvider() : LiveDevServerProvider(),
     ),
   );
