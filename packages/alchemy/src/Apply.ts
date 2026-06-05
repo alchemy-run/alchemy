@@ -1586,7 +1586,9 @@ const collectGarbage = Effect.fnUntraced(function* (
               });
               yield* report("deleted");
             } else {
-              yield* scopedSession.note("Cleaning up replaced resource...");
+              if (!retainOldGeneration) {
+                yield* scopedSession.note("Cleaning up replaced resource...");
+              }
               if (
                 node.old.status === "replacing" ||
                 node.old.status === "replaced"
@@ -1626,7 +1628,11 @@ const collectGarbage = Effect.fnUntraced(function* (
                   removalPolicy: node.removalPolicy,
                 });
               }
-              yield* scopedSession.note("Replaced resource cleanup complete.");
+              yield* scopedSession.note(
+                retainOldGeneration
+                  ? "Replaced resource retained."
+                  : "Replaced resource cleanup complete.",
+              );
             }
           }),
         ));

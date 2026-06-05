@@ -1,4 +1,5 @@
 import * as Alchemy from "alchemy";
+import * as AdoptPolicy from "alchemy/AdoptPolicy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import Backend, { Bucket } from "./src/backend.ts";
@@ -24,9 +25,14 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const backend = yield* Backend;
     const website = yield* Website;
+
+    const zone = yield* Cloudflare.Zone("MyZone", {
+      name: "johnroyal.dev",
+    }).pipe(AdoptPolicy.adopt(true));
     return {
       backendUrl: backend.url.as<string>(),
       websiteUrl: website.url.as<string>(),
+      zoneId: zone.zoneId,
     };
   }),
 );
