@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { Command, type CommandProps } from "../../Build/Command.ts";
-import { DevCommand } from "../../Build/DevCommand.ts";
+import { DevServer } from "../../Build/DevServer.ts";
 import type { InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import { effectClass } from "../../Util/effect.ts";
@@ -221,7 +221,7 @@ const makeStaticSite = <
       // the sidecar owns the process lifecycle (survives user-code HMR),
       // skip the build, and tell Worker not to start a local instance.
       let devUrl = yield* useDevServer
-        ? DevCommand("Dev", {
+        ? DevServer("Dev", {
             command: resolved.dev!.command,
             cwd:
               resolved.dev!.cwd ??

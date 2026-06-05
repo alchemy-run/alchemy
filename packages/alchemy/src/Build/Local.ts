@@ -1,4 +1,4 @@
-import { LocalDevCommandProvider } from "../Build/DevCommand.ts";
+import { LocalDevServerProvider } from "../Build/DevServer.ts";
 import * as RpcServer from "../Local/RpcServer.ts";
 
-LocalDevCommandProvider().pipe(RpcServer.launch);
+LocalDevServerProvider().pipe(RpcServer.launch);

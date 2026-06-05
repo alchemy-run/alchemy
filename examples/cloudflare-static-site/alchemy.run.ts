@@ -17,7 +17,7 @@ export default Alchemy.Stack(
         //   url: "http://localhost:1111",
       },
       outdir: "public",
-      assetsConfig: {
+      assets: {
         notFoundHandling: "404-page",
       },
     });
