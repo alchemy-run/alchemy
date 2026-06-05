@@ -15,15 +15,16 @@ const { test } = Test.make({
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixture");
 const fixtureScript = pathe.join(fixtureDir, "long-running.cjs");
+const urlServerScript = pathe.join(fixtureDir, "url-server.cjs");
 
 // The provider runs `command.split(" ")` and uses `shell: false`, so the
 // fixture path must not contain spaces. The in-repo path doesn't, but a CI
 // clone under e.g. `C:\Program Files\...` would. Fail loudly with a clear
 // message instead of letting the test hang on a misparsed argv.
-if (fixtureScript.includes(" ")) {
+if (fixtureScript.includes(" ") || urlServerScript.includes(" ")) {
   throw new Error(
     `DevCommand test fixture path contains a space, which the provider's ` +
-      `argv split cannot represent: ${fixtureScript}`,
+      `argv split cannot represent: ${fixtureScript} / ${urlServerScript}`,
   );
 }
 
@@ -167,6 +168,128 @@ test.provider(
 
       yield* stack.destroy();
       yield* waitForDeath(second.pid);
+    }),
+  { timeout: 30_000 },
+);
+
+test.provider(
+  "extracts the first URL printed to stdout",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const output = yield* stack.deploy(
+        DevCommand("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "url-stdout",
+            URL_LINE: "Local: http://localhost:5173/",
+          },
+        }),
+      );
+
+      expect(output.url).toBe("http://localhost:5173/");
+
+      const { pid } = yield* waitForPidFile(pidFile, "url-stdout");
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
+    }),
+  { timeout: 30_000 },
+);
+
+test.provider(
+  "extracts a URL printed to stderr",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const output = yield* stack.deploy(
+        DevCommand("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "url-stderr",
+            URL_LINE: "ready - started server on http://127.0.0.1:3000",
+            URL_STREAM: "stderr",
+          },
+        }),
+      );
+
+      expect(output.url).toBe("http://127.0.0.1:3000");
+
+      const { pid } = yield* waitForPidFile(pidFile, "url-stderr");
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
+    }),
+  { timeout: 30_000 },
+);
+
+test.provider(
+  "strips ANSI escapes before matching",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      // Vite-style colored output: "  ➜  Local:   http://localhost:5173/"
+      // with green + cyan SGR sequences around the URL.
+      const ansi = (open: string, body: string) =>
+        `\x1b[${open}m${body}\x1b[0m`;
+      const line = `  ➜  ${ansi("32", "Local:")}   ${ansi("36", "http://localhost:5173/")}`;
+
+      const output = yield* stack.deploy(
+        DevCommand("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "url-ansi",
+            URL_LINE: line,
+          },
+        }),
+      );
+
+      expect(output.url).toBe("http://localhost:5173/");
+
+      const { pid } = yield* waitForPidFile(pidFile, "url-ansi");
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
+    }),
+  { timeout: 30_000 },
+);
+
+test.provider(
+  "returns undefined when no URL is printed within the timeout",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const output = yield* stack.deploy(
+        DevCommand("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "no-url",
+            // URL_LINE intentionally unset — process stays silent so
+            // reconcile waits the full URL_EXTRACT_TIMEOUT and falls back.
+          },
+        }),
+      );
+
+      expect(output.url).toBeUndefined();
+
+      const { pid } = yield* waitForPidFile(pidFile, "no-url");
+      expect(yield* isAlive(pid)).toBe(true);
+
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
     }),
   { timeout: 30_000 },
 );
