@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   pr-package:
-    uses: alchemy-run/actions/.github/workflows/pr-package.yml@main
+    uses: alchemy-run/actions/.github/workflows/pr-package.yml@67b1515cf5774c16a0666f4480d21b03443e6091 # main
     with:
       # `|| true` keeps the cp harmless in packages whose pkg dir is
       # nested differently or that don't need the root README.
