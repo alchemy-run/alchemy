@@ -5,19 +5,19 @@ import * as Redacted from "effect/Redacted";
 describe("Diff", () => {
   describe("havePropsChanged with Redacted values", () => {
     // Config values yielded in a Worker's init phase (e.g.
-    // `yield* Config.string("MY_EFFECT_VARIABLE")`) land in `props.env`
+    // `yield* Config.string("MY_VARIABLE")`) land in `props.env`
     // as `Redacted<string>`. Before unwrapping, every Redacted serialized
     // to the constant mask `"<redacted>"`, so a changed secret was
     // invisible to the diff and the Worker never redeployed.
     test("detects a changed yielded config value in env", () => {
       const olds = {
         env: {
-          MY_EFFECT_VARIABLE: Redacted.make("my-effect-variable-abc1234"),
+          MY_VARIABLE: Redacted.make("my-variable-abc1234"),
         },
       };
       const news = {
         env: {
-          MY_EFFECT_VARIABLE: Redacted.make("my-effect-variable-CHANGED"),
+          MY_VARIABLE: Redacted.make("my-variable-CHANGED"),
         },
       };
       expect(havePropsChanged(olds, news)).toBe(true);
@@ -26,12 +26,12 @@ describe("Diff", () => {
     test("does not flag an unchanged yielded config value", () => {
       const olds = {
         env: {
-          MY_EFFECT_VARIABLE: Redacted.make("my-effect-variable-abc1234"),
+          MY_VARIABLE: Redacted.make("my-variable-abc1234"),
         },
       };
       const news = {
         env: {
-          MY_EFFECT_VARIABLE: Redacted.make("my-effect-variable-abc1234"),
+          MY_VARIABLE: Redacted.make("my-variable-abc1234"),
         },
       };
       expect(havePropsChanged(olds, news)).toBe(false);
