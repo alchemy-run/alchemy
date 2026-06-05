@@ -66,7 +66,7 @@ import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
-type WorkerPropsWithDev = WorkerProps & {
+type WorkerPropsWithDev = Omit<WorkerProps, "dev"> & {
   dev: Exclude<WorkerProps["dev"], false | string>;
 };
 
@@ -303,9 +303,9 @@ export const LocalWorkerProvider = () =>
           } satisfies WorkerBundleOptions,
           assets: props.assets,
           dev: {
-            ...(props.dev === false ? undefined : props.dev),
+            ...props.dev,
             // This is the default. Vite and cloudflare-runtime will retry if unavailable, unless `strictPort` is true.
-            port: (props.dev !== false ? props.dev?.port : undefined) ?? 1337,
+            port: props.dev?.port ?? 1337,
           },
         };
       });
