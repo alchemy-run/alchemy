@@ -1,15 +1,11 @@
 import * as Alchemy from "alchemy";
 import * as Prisma from "alchemy/Prisma";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 
-const serviceName =
-  process.env.PRISMA_TANSTACK_SERVICE ?? "alchemy-prisma-tanstack-start";
-const projectName = process.env.PRISMA_PROJECT ?? `${serviceName}-project-100`;
-const message =
-  process.env.TANSTACK_MESSAGE ?? "hello from TanStack Start on Prisma Compute";
-const devPort = Number(process.env.PRISMA_TANSTACK_DEV_PORT ?? "3000");
-const customDomainHostname = process.env.PRISMA_TANSTACK_DOMAIN;
+const tanstackMessageConfig = (fallback: string) =>
+  Config.string("TANSTACK_MESSAGE").pipe(Effect.orElseSucceed(() => fallback));
 
 export default Alchemy.Stack(
   "PrismaTanstackStart",
@@ -18,12 +14,21 @@ export default Alchemy.Stack(
     state: Alchemy.localState(),
   },
   Effect.gen(function* () {
+    const serviceName = yield* Config.string("PRISMA_TANSTACK_SERVICE").pipe(
+      Effect.orElseSucceed(() => "alchemy-prisma-tanstack-start"),
+    );
+    const customDomainHostname = yield* Config.string(
+      "PRISMA_TANSTACK_DOMAIN",
+    ).pipe(Effect.orElseSucceed(() => undefined));
+
     // Project is the Prisma Console container for everything else in this
     // stack: branches, databases, connections, env vars, and Compute services.
     // `createDatabase: false` keeps the example explicit so the database below
     // is visible as its own Alchemy resource.
     const project = yield* Prisma.Project("Project", {
-      name: projectName,
+      name: yield* Config.string("PRISMA_PROJECT").pipe(
+        Effect.orElseSucceed(() => `${serviceName}-project-100`),
+      ),
       createDatabase: false,
       region: "eu-west-3",
     });
@@ -104,16 +109,18 @@ export default Alchemy.Stack(
       port: 3000,
       env: {
         ...databaseEnv,
-        TANSTACK_MESSAGE: message,
+        TANSTACK_MESSAGE: yield* tanstackMessageConfig(
+          "hello from TanStack Start on Prisma Compute",
+        ),
         PRISMA_PROJECT_ID: project.projectId,
         PRISMA_BRANCH_ID: branch.branchId,
       },
       dev: {
         command: "bun run dev:start",
-        port: devPort,
         env: {
-          TANSTACK_MESSAGE:
-            process.env.TANSTACK_MESSAGE ?? "hello from local alchemy dev",
+          TANSTACK_MESSAGE: yield* tanstackMessageConfig(
+            "hello from local alchemy dev",
+          ),
           TANSTACK_SHARED_FLAG: "local-project-level",
           PRISMA_TANSTACK_PG_POOL_MAX: "1",
         },

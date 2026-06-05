@@ -1,41 +1,36 @@
 import * as Prisma from "alchemy/Prisma";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { Connection, MainBranch, Project, region } from "./Database.ts";
+import {
+  Connection,
+  MainBranch,
+  Project,
+  region,
+  serviceNameConfig,
+} from "./Database.ts";
 
-const port = 3000;
-
-const serviceName =
-  process.env.PRISMA_EFFECT_SERVICE ?? "alchemy-prisma-compute-effect";
-const message =
-  process.env.PRISMA_EFFECT_MESSAGE ??
-  "hello from Effect-native Prisma Compute";
-const verifyUrl = process.env.PRISMA_EFFECT_VERIFY_URL !== "false";
-const urlReadinessTimeoutSeconds = Number(
-  process.env.PRISMA_EFFECT_URL_TIMEOUT_SECONDS ?? "60",
+const messageConfig = Config.string("PRISMA_EFFECT_MESSAGE").pipe(
+  Effect.orElseSucceed(() => "hello from Effect-native Prisma Compute"),
 );
-
-const runtimeEnv = (key: string, fallback: string) =>
-  Effect.sync(() => process.env[key] ?? fallback);
 
 export default class Api extends Prisma.Compute<Api>()(
   "Api",
   Effect.gen(function* () {
     const project = yield* Project;
     yield* MainBranch;
+
     return {
       project,
-      serviceName,
+      serviceName: yield* serviceNameConfig,
       regionId: region,
       branchGitName: "main",
       main: import.meta.filename,
-      port,
+      port: 3000,
       env: {
-        PRISMA_EFFECT_MESSAGE: message,
+        PRISMA_EFFECT_MESSAGE: yield* messageConfig,
       },
-      verifyUrl,
-      urlReadinessTimeoutSeconds,
       destroyOldVersion: true,
     };
   }),
@@ -59,7 +54,7 @@ export default class Api extends Prisma.Compute<Api>()(
         const response = {
           ok: true,
           mode: "effect-native",
-          message: yield* runtimeEnv("PRISMA_EFFECT_MESSAGE", message),
+          message: yield* messageConfig,
           databaseId: yield* db.databaseId,
           connectionId: yield* db.connectionId,
           hasDatabaseUrl: databaseUrl !== undefined,

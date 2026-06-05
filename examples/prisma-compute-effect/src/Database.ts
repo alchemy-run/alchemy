@@ -1,17 +1,27 @@
 import * as Prisma from "alchemy/Prisma";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 
 export const region = "eu-west-3";
 
-const serviceName =
-  process.env.PRISMA_EFFECT_SERVICE ?? "alchemy-prisma-compute-effect";
-const projectName = process.env.PRISMA_PROJECT ?? `${serviceName}-project`;
+export const serviceNameConfig = Config.string("PRISMA_EFFECT_SERVICE").pipe(
+  Effect.orElseSucceed(() => "alchemy-prisma-compute-effect"),
+);
 
-export const Project = Prisma.Project("Project", {
-  name: projectName,
-  createDatabase: false,
-  region,
-});
+export const Project = Prisma.Project(
+  "Project",
+  Effect.gen(function* () {
+    const serviceName = yield* serviceNameConfig;
+
+    return {
+      name: yield* Config.string("PRISMA_PROJECT").pipe(
+        Effect.orElseSucceed(() => `${serviceName}-project`),
+      ),
+      createDatabase: false,
+      region,
+    };
+  }),
+);
 
 export const MainBranch = Prisma.Branch(
   "MainBranch",
