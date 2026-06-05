@@ -25,7 +25,7 @@ const Bucket = Cloudflare.R2Bucket("bucket");
 
 export default Cloudflare.Worker(
   "api",
-  { main: import.meta.path },
+  { main: import.meta.filename },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
     return {
@@ -50,7 +50,7 @@ One `bind()` wires the binding, env var, and typed connection — at deploy time
 - **Same code, every stage.** Local dev, `plan` / `deploy`, smoke tests, and CI all share one mental model.
 
 ```sh
-bun add alchemy effect
+bun add alchemy@next effect@next
 ```
 
 ## Bootstrap with an AI coding agent

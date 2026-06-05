@@ -90,7 +90,7 @@ adjusts accordingly.
 
 ```typescript
 export default Cloudflare.Worker("Worker", {
-  main: import.meta.path,
+  main: import.meta.filename,
   dev: {
     port: 3000,
   },

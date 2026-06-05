@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
 import type { BindingNode } from "./Plan.ts";
@@ -119,6 +120,12 @@ export const deepEqual = (
 
 const canonicalize = (value: unknown, stripNullish: boolean): unknown => {
   if (stripNullish && value == null) return undefined;
+  if (Redacted.isRedacted(value)) {
+    return {
+      _tag: "Redacted",
+      value: Redacted.value(value),
+    };
+  }
   if (Array.isArray(value)) {
     return value.map((v) => canonicalize(v, stripNullish));
   }

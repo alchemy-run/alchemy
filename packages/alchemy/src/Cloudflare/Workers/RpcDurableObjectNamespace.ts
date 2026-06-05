@@ -1,3 +1,4 @@
+import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
@@ -100,7 +101,7 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
       from<Req = never>(
         worker:
           | Dependencies<Self>
-          | Effect.Effect<Dependencies<Self>, never, Req>,
+          | Effect.Effect<Dependencies<Self>, ConfigError, Req>,
       ): Effect.Effect<
         RpcDurableObjectNamespace<Self, Rpcs>,
         never,
@@ -113,7 +114,7 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
             never,
             DurableObjectServices
           >,
-          never,
+          ConfigError,
           InitReq
         >,
       ): Layer.Layer<
@@ -132,7 +133,7 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
           never,
           DurableObjectServices
         >,
-        never,
+        ConfigError,
         InitReq
       >,
     ): Effect.Effect<
@@ -160,7 +161,7 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
         never,
         DurableObjectServices
       >,
-      never,
+      ConfigError,
       InitReq
     >,
   ): Effect.Effect<
@@ -456,11 +457,12 @@ const build = (
   // eagerly here (consumers wanting cross-script binding use the
   // modular form below).
   const underlying = (DurableObjectNamespace as any)()(name, wrapImpl(impl));
-  const underlyingEff: Effect.Effect<
+  // `underlying` is itself an Effect now, no `.asEffect()` hop required.
+  const underlyingEff = underlying as Effect.Effect<
     DurableObjectNamespaceType<any>,
     never,
     any
-  > = (underlying as { asEffect(): Effect.Effect<any, never, any> }).asEffect();
+  >;
   const rpcBound = underlyingEff.pipe(
     Effect.map((rawNs) => rpcWrap(rawNs, props.schema)),
   ) as unknown as Effect.Effect<RpcDurableObjectNamespace<any>>;
@@ -476,11 +478,12 @@ const buildModular = (name: string, schema: RpcGroup.RpcGroup<any>) => {
   //     binding on the surrounding worker and yields a fresh handle
   // We just rpc-wrap each output so consumers see a typed `getByName`.
   const Underlying: any = (DurableObjectNamespace as any)()(name);
-  const underlyingEff: Effect.Effect<
+  // `Underlying` is itself an Effect now, no `.asEffect()` hop required.
+  const underlyingEff = Underlying as Effect.Effect<
     DurableObjectNamespaceType<any>,
     never,
     any
-  > = (Underlying as { asEffect(): Effect.Effect<any, never, any> }).asEffect();
+  >;
 
   return class extends effectClass(
     underlyingEff.pipe(

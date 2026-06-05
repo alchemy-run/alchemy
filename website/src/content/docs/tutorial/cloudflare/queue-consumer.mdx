@@ -59,7 +59,7 @@ import { Queue } from "./Queue.ts";
 
 export default Cloudflare.Worker(
   "Api",
-  { main: import.meta.path },
+  { main: import.meta.filename },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
     const queueResource = yield* Queue;

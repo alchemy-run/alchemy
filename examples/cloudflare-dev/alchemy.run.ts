@@ -13,18 +13,21 @@ export const Counter = Cloudflare.DurableObjectNamespace<CounterClass>(
   },
 );
 
-export type AsyncWorkerEnv = Cloudflare.InferEnv<typeof AsyncWorker>;
+export type AsyncWorkerEnv = Cloudflare.InferEnv<
+  ReturnType<typeof makeAsyncWorker>
+>;
 
-export const AsyncWorker = Cloudflare.Worker("AsyncWorker", {
-  main: "./src/AsyncWorker.ts",
-  env: {
-    COUNTER: Counter,
-    MY_VARIABLE: "my-variable-abc123",
-    MY_SECRET: Config.redacted("MY_SECRET").pipe(
-      Config.withDefault(Redacted.make("my-secret-abc123")),
-    ),
-  },
-});
+const makeAsyncWorker = (id: string) =>
+  Cloudflare.Worker(id, {
+    main: "./src/AsyncWorker.ts",
+    env: {
+      COUNTER: Counter,
+      MY_VARIABLE: "my-variable-abc123",
+      MY_SECRET: Config.redacted("MY_SECRET").pipe(
+        Config.withDefault(Redacted.make("my-secret-abc123")),
+      ),
+    },
+  });
 
 export default Alchemy.Stack(
   "CloudflareDev",
@@ -33,12 +36,19 @@ export default Alchemy.Stack(
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const asyncWorker = yield* AsyncWorker;
+    const asyncWorker = yield* makeAsyncWorker("AsyncWorker");
     const effectWorker = yield* EffectWorker;
+
+    // Spawn several additional workers to test concurrency.
+    const additionalWorkers = yield* Effect.forEach(
+      Array.from({ length: 5 }),
+      (_, i) => makeAsyncWorker(`AdditionalWorker${i + 1}`),
+    );
 
     return {
       asyncWorker: asyncWorker.url,
       effectWorker: effectWorker.url,
+      additionalWorkers: additionalWorkers.map((worker) => worker.url),
     };
   }),
 );

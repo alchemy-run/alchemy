@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as crypto from "node:crypto";
@@ -31,7 +32,6 @@ import {
   readAssets,
   uploadAssets,
   type Assets,
-  type AssetsConfig,
   type AssetsProps,
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
@@ -99,20 +99,12 @@ export const isWorkerEvent = (value: any): value is WorkerEvent =>
  * When hash is provided, it's used directly for diffing instead of computing from directory contents.
  * This is useful when integrating with Build resources that produce a deterministic hash.
  */
-export interface AssetsWithHash {
-  /**
-   * Path to the assets directory.
-   */
-  path: string;
+export interface AssetsWithHash extends AssetsProps {
   /**
    * Pre-computed hash of the assets. When provided, this hash is used for diffing
    * to determine if the worker needs to be redeployed.
    */
   hash: string;
-  /**
-   * Optional assets configuration.
-   */
-  config?: AssetsConfig;
 }
 
 export interface WorkerObservability extends Exclude<
@@ -166,7 +158,7 @@ export type WorkerBindingProps = {
     | Effect.Effect<WorkerBindingResource, any, any>;
 };
 
-type NormalizedBindings<
+export type NormalizedBindings<
   Bindings extends WorkerBindingProps = {},
   AssetsConfig extends WorkerAssetsConfig | undefined = undefined,
 > = {
@@ -287,26 +279,33 @@ export interface WorkerProps<
   /**
    * Options for the local dev server that runs this Worker under `alchemy dev`.
    * Each Worker is served on its own port.
+   *
+   * Set to `false` to skip starting a local Worker entirely — useful when an
+   * external dev server (e.g. one spawned via `Build.DevCommand`) is
+   * serving the content this Worker would otherwise host.
    */
-  dev?: {
-    /**
-     * Host the local dev server binds to.
-     * @default "localhost"
-     */
-    host?: string;
-    /**
-     * Port the local dev server listens on. If the port is unavailable, the
-     * next free port is used unless {@link strictPort} is `true`.
-     * @default 1337
-     */
-    port?: number;
-    /**
-     * When `true`, fail instead of falling back to another port if {@link port}
-     * is already in use.
-     * @default false
-     */
-    strictPort?: boolean;
-  };
+  dev?:
+    | false
+    | string
+    | {
+        /**
+         * Host the local dev server binds to.
+         * @default "localhost"
+         */
+        host?: string;
+        /**
+         * Port the local dev server listens on. If the port is unavailable,
+         * the next free port is used unless {@link strictPort} is `true`.
+         * @default 1337
+         */
+        port?: number;
+        /**
+         * When `true`, fail instead of falling back to another port if
+         * {@link port} is already in use.
+         * @default false
+         */
+        strictPort?: boolean;
+      };
 }
 
 export type Worker<Bindings extends WorkerBindings = any> = Resource<
@@ -1129,15 +1128,9 @@ export const LiveWorkerProvider = () =>
           return undefined;
         }
 
-        if (
-          typeof assets === "object" &&
-          "path" in assets &&
-          "hash" in assets
-        ) {
-          return yield* readAssets({
-            directory: assets.path as string,
-            config: assets.config,
-          });
+        if (typeof assets === "object" && "hash" in assets) {
+          const { hash: _, ...config } = assets;
+          return yield* readAssets(config);
         }
 
         // Handle string path or AssetsProps
@@ -1186,7 +1179,7 @@ export const LiveWorkerProvider = () =>
                           typeof Redacted.value(value) === "string"
                         ? Redacted.value(value)
                         : Config.isConfig(value) || Effect.isEffect(value)
-                          ? yield* value
+                          ? yield* value as Effect.Effect<any>
                           : undefined,
                   ];
                 }),
@@ -1208,11 +1201,10 @@ export const LiveWorkerProvider = () =>
           [
             assetsDirectory
               ? readAssets({
+                  ...(props.assets && typeof props.assets !== "string"
+                    ? props.assets
+                    : undefined),
                   directory: assetsDirectory,
-                  config:
-                    typeof props.assets === "object" && "config" in props.assets
-                      ? props.assets.config
-                      : undefined,
                 })
               : Effect.succeed(undefined),
             serverBundle
@@ -1298,6 +1290,15 @@ export const LiveWorkerProvider = () =>
           })),
         );
 
+      const normalizePrebuiltAssets = (
+        assets: WorkerProps["assets"],
+        output: Worker["Attributes"] | undefined,
+      ) => {
+        if (!Predicate.hasProperty(assets, "hash")) return undefined;
+        const { directory: _, hash, ...config } = assets;
+        return { config, hash, skip: hash === output?.hash?.assets };
+      };
+
       const putWorker = Effect.fnUntraced(function* (
         id: string,
         news: WorkerProps,
@@ -1316,28 +1317,14 @@ export const LiveWorkerProvider = () =>
         // entirely and tell Cloudflare to keep the assets it already
         // has bound to this script. The disk read is the expensive
         // part; the script PUT happens either way.
-        const previousAssetsHash = output?.hash?.assets;
-        const precomputedAssetsHash =
-          news.assets &&
-          typeof news.assets === "object" &&
-          "path" in news.assets &&
-          "hash" in news.assets
-            ? (news.assets.hash as string)
-            : undefined;
-        const assetsConfigFromProps =
-          news.assets &&
-          typeof news.assets === "object" &&
-          "config" in news.assets
-            ? news.assets.config
-            : undefined;
-        const skipAssetsRead =
-          precomputedAssetsHash !== undefined &&
-          precomputedAssetsHash === previousAssetsHash;
+        const prebuiltAssets = normalizePrebuiltAssets(news.assets, output);
         const {
           assets,
           bundle,
           hash: preparedHash,
-        } = yield* prepareAssetsAndBundle(id, news, { skipAssetsRead });
+        } = yield* prepareAssetsAndBundle(id, news, {
+          skipAssetsRead: prebuiltAssets?.skip,
+        });
         // When the caller supplied a precomputed hash (e.g. via
         // `Build.Command`), store *that* hash in output state so the
         // next diff can short-circuit by comparing it directly. The
@@ -1346,7 +1333,7 @@ export const LiveWorkerProvider = () =>
         // build-input hash and will never match it on the next pass.
         const hash = {
           ...preparedHash,
-          assets: precomputedAssetsHash ?? preparedHash.assets,
+          assets: prebuiltAssets?.hash ?? preparedHash.assets,
         } satisfies Worker["Attributes"]["hash"];
         const metadataBindings = bindings.flatMap((b) => b.data.bindings ?? []);
         const expectedDurableObjectClassNames =
@@ -1355,16 +1342,14 @@ export const LiveWorkerProvider = () =>
           | workers.PutScriptRequest["metadata"]["assets"]
           | undefined;
         let keepAssets = false;
-        if (skipAssetsRead) {
+        if (prebuiltAssets?.skip) {
           // Hash matched what's already on Cloudflare: keep the
           // existing asset manifest and skip the upload session.
           yield* Effect.logInfo(
             `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
           );
           keepAssets = true;
-          metadataAssets = assetsConfigFromProps
-            ? { config: assetsConfigFromProps }
-            : undefined;
+          metadataAssets = { config: prebuiltAssets.config };
           metadataBindings.push({
             type: "assets",
             name: "ASSETS",
@@ -1377,7 +1362,7 @@ export const LiveWorkerProvider = () =>
           // disk). In that case still keep the existing manifest and
           // skip the upload session — Cloudflare's content-addressed
           // session would no-op on every byte anyway.
-          if (assets.hash === previousAssetsHash) {
+          if (assets.hash === prebuiltAssets?.hash) {
             yield* Effect.logInfo(
               `Cloudflare Worker update: assets unchanged for ${name}, keeping existing`,
             );
@@ -1764,12 +1749,9 @@ export const LiveWorkerProvider = () =>
           if (!props.assets) {
             return false;
           }
-          const assetsHash =
-            typeof props.assets === "object" &&
-            "path" in props.assets &&
-            "hash" in props.assets
-              ? (props.assets.hash as string)
-              : undefined;
+          const assetsHash = Predicate.hasProperty(props.assets, "hash")
+            ? props.assets.hash
+            : undefined;
           if (assetsHash === undefined) {
             return true;
           }
@@ -1807,12 +1789,9 @@ export const LiveWorkerProvider = () =>
         // assume the assets changed; `putWorker` will read once,
         // hash, and use `keepAssets` if it turns out nothing actually
         // changed.
-        const assetsHash =
-          typeof props.assets === "object" &&
-          "path" in props.assets &&
-          "hash" in props.assets
-            ? (props.assets.hash as string)
-            : undefined;
+        const assetsHash = Predicate.hasProperty(props.assets, "hash")
+          ? props.assets.hash
+          : undefined;
         if (assetsHash === undefined) {
           return true;
         }
@@ -1981,7 +1960,7 @@ export const LiveWorkerProvider = () =>
               // @distilled.cloud/cloudflare versions that haven't picked
               // up the patch yet.
               Effect.retry({
-                while: (e: any) =>
+                while: (e) =>
                   e._tag === "InternalServerError" ||
                   e._tag === "UnknownCloudflareError",
                 schedule: Schedule.exponential(1000).pipe(

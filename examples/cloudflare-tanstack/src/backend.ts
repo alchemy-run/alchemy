@@ -8,7 +8,7 @@ export const Bucket = Cloudflare.R2Bucket("Bucket");
 export default class Backend extends Cloudflare.Worker<Backend>()(
   "Backend",
   {
-    main: import.meta.path,
+    main: import.meta.filename,
   },
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);

@@ -1,11 +1,17 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
+import { ExecutionContext } from "../../ExecutionContext.ts";
+import { isScopeEjected } from "./HttpServer.ts";
+import { getWorkerExport } from "./WorkerBridge.ts";
 import {
   WorkflowEvent as WorkflowEventService,
   type WorkflowExport,
   type WorkflowImpl,
   WorkflowStep,
 } from "./Workflow.ts";
-import { getWorkerExport } from "./WorkerBridge.ts";
 
 /**
  * Create a WorkflowBridge class that extends `WorkflowEntrypoint` and
@@ -52,15 +58,50 @@ export const makeWorkflowBridge =
 
       async run(event: any, step: any): Promise<unknown> {
         const fn = await this.fn;
-        return Effect.runPromise(
+        // Each run-invocation gets a fresh ExecutionContext (scope + cache),
+        // following the same per-invocation-scope pattern as
+        // `WorkerBridge.processEvent`. `task` threads this into every step via
+        // the surrounding body context, so `@binding` helpers that need it
+        // (e.g. `Drizzle.postgres`) resolve their per-run resources inside
+        // workflow steps. The same scope is also provided as the ambient
+        // `Scope` service, matching the Worker and Durable Object bridges.
+        const scope = Scope.makeUnsafe();
+        const exit = await Effect.runPromiseExit(
           fn(event.payload).pipe(
-            Effect.provideService(
-              WorkflowEventService,
-              wrapWorkflowEvent(event),
+            Effect.provide(
+              Layer.succeed(
+                WorkflowEventService,
+                wrapWorkflowEvent(event),
+              ).pipe(
+                Layer.provideMerge(
+                  Layer.succeed(WorkflowStep, wrapWorkflowStep(step)),
+                ),
+                Layer.provideMerge(
+                  Layer.succeed(ExecutionContext, { scope, cache: {} }),
+                ),
+                Layer.provideMerge(Layer.succeed(Scope.Scope, scope)),
+              ),
             ),
-            Effect.provideService(WorkflowStep, wrapWorkflowStep(step)),
           ) as Effect.Effect<unknown>,
         );
+        // Settle the run's resources with its real exit, unless a binding
+        // ejected the scope to outlive the invocation. The workflow runtime has
+        // no `waitUntil` to detach cleanup to, so close inline — a failing
+        // finalizer (e.g. a pg pool `end()` on a dropped connection) is logged
+        // and ignored so it can't mask the run's outcome.
+        if (!isScopeEjected(scope)) {
+          await Scope.close(scope, exit).pipe(
+            Effect.ignoreCause({
+              log: "Warn",
+              message: "Workflow run scope close failed",
+            }),
+            Effect.runPromise,
+          );
+        }
+        if (Exit.isSuccess(exit)) {
+          return exit.value;
+        }
+        throw Cause.squash(exit.cause);
       }
     };
 

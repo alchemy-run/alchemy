@@ -1,7 +1,7 @@
-import * as crypto from "node:crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as crypto from "node:crypto";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -45,7 +45,7 @@ export type Schema = Resource<
   "Drizzle.Schema",
   SchemaProps,
   {
-    /** Absolute path to the migrations directory. */
+    /** Path to the migrations directory, relative to the current working directory. */
     out: string;
     /**
      * sha256 of the latest snapshot.json. Stable across deploys when the
@@ -116,6 +116,12 @@ export const SchemaProvider = () =>
 
       const resolveOut = (p: SchemaProps) =>
         path.resolve(process.cwd(), p.out ?? "./migrations");
+
+      // The `out` attribute is exposed as a path relative to the current
+      // working directory so that persisted state stays portable across
+      // machines/checkouts. Internal filesystem ops always use the absolute
+      // `resolveOut` form.
+      const relativeOut = (abs: string) => path.relative(process.cwd(), abs);
 
       const resolveSchema = (p: SchemaProps) =>
         path.resolve(process.cwd(), p.schema);
@@ -241,7 +247,7 @@ export const SchemaProvider = () =>
           const migrations = yield* listMigrationDirs(out);
           const latest = yield* readLatestSnapshot(out);
           return {
-            out,
+            out: relativeOut(out),
             snapshotHash: latest?.hash ?? sha(JSON.stringify(cur)),
             migrations,
           };
@@ -256,8 +262,12 @@ export const SchemaProvider = () =>
           // `schema.out` as an unresolved Output during plan and cascade
           // into spurious updates of their own.
           const { sqlStatements } = yield* detectDrift(news);
-          if (sqlStatements.length === 0) return undefined;
-          return { action: "update" } as const;
+          // Originally `output.out` was an absolute path, which is not portable.
+          // So, we trigger an update to migrate existing resources.
+          // This is safe because `regenerate` is idempotent.
+          return sqlStatements.length > 0 || path.isAbsolute(output.out)
+            ? { action: "update" }
+            : undefined;
         }),
         read: Effect.fn(function* ({ olds, output }) {
           if (!output) return undefined;
@@ -267,7 +277,7 @@ export const SchemaProvider = () =>
           const latest = yield* readLatestSnapshot(out);
           const migrations = yield* listMigrationDirs(out);
           return {
-            out,
+            out: relativeOut(out),
             snapshotHash: latest?.hash ?? output.snapshotHash,
             migrations,
           };

@@ -66,6 +66,10 @@ import type { WorkerBinding } from "./WorkerBinding.ts";
 import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
+type WorkerPropsWithDev = Omit<WorkerProps, "dev"> & {
+  dev: Exclude<WorkerProps["dev"], false | string>;
+};
+
 export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
   "WorkerValidationError",
   {
@@ -227,7 +231,7 @@ export const LocalWorkerProvider = () =>
         bindings,
       }: {
         id: string;
-        props: WorkerProps;
+        props: WorkerPropsWithDev;
         bindings: ResourceBinding<Worker["Binding"]>[];
       }) {
         const name = yield* createWorkerName(id, props.name);
@@ -244,6 +248,7 @@ export const LocalWorkerProvider = () =>
               ? Text.local(key, unredacted)
               : Json.local(key, unredacted);
           }),
+          ...(props.assets || props.vite ? [Assets.local("ASSETS")] : []),
         ];
         const durableObjectNamespaces: Record<string, string> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
@@ -257,11 +262,19 @@ export const LocalWorkerProvider = () =>
             ) {
               // Reuse the existing namespace id if it was provided, otherwise generate a new one.
               // `workerd` uses this for the object's storage path, so it must be safe to use as a file name.
-              durableObjectNamespaces[binding.className] =
+              const namespaceId =
                 binding.namespaceId ??
-                encodeURIComponent(`${id}-${binding.className}`);
+                encodeURIComponent(`${name}-${binding.className}`);
+              durableObjectNamespaces[binding.className] = namespaceId;
+              workerBindings.push(
+                yield* toRuntimeBinding({
+                  ...binding,
+                  namespaceId,
+                }),
+              );
+            } else {
+              workerBindings.push(yield* toRuntimeBinding(binding));
             }
-            workerBindings.push(yield* toRuntimeBinding(binding));
           }
           if (data.hyperdrives) {
             for (const [id, origin] of Object.entries(data.hyperdrives)) {
@@ -408,7 +421,7 @@ export const LocalWorkerProvider = () =>
 
       const runInstance = Effect.fn(function* (options: {
         id: string;
-        props: WorkerProps;
+        props: WorkerPropsWithDev;
         bindings: ResourceBinding<Worker["Binding"]>[];
       }) {
         const { props, bindings } = options;
@@ -450,7 +463,32 @@ export const LocalWorkerProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, bindings }) {
-          const options = { id, props: news, bindings };
+          // `dev: false` opts out of running a local Worker entirely —
+          // typically because an external dev process (DevCommand) is
+          // serving requests. Tear down any prior instance and return a
+          // stub Attributes; the resource exists in state but has no
+          // running workerd / proxy behind it.
+          if (news.dev === false || typeof news.dev === "string") {
+            const existing = instances.get(id);
+            if (existing) {
+              yield* Fiber.interrupt(existing.fiber);
+              yield* Scope.close(existing.scope, Exit.void);
+              instances.delete(id);
+            }
+            const name = yield* createWorkerName(id, news.name);
+            return {
+              workerId: name,
+              workerName: name,
+              logpush: undefined,
+              url: news.dev || undefined,
+              tags: [],
+              durableObjectNamespaces: {},
+              accountId,
+              domains: [],
+              crons: news.crons ?? [],
+            } satisfies Worker["Attributes"];
+          }
+          const options = { id, props: news as WorkerPropsWithDev, bindings };
           const hash = Hash.structure(options);
           const existing = instances.get(options.id);
           if (existing) {
@@ -526,6 +564,9 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
         binding: b.name,
         className: b.className,
         scriptName: b.scriptName,
+        uniqueKey:
+          b.namespaceId ??
+          encodeURIComponent(`${b.scriptName!}-${b.className}`),
       });
     case "hyperdrive":
       return Hyperdrive.local(b.name, b.id);
@@ -600,24 +641,24 @@ const toRuntimeAssets = (
     };
   }
   return {
-    directory: "directory" in assets ? assets.directory : assets.path,
-    headers: assets.config?.headers,
-    redirects: assets.config?.redirects,
+    directory: assets.directory,
+    headers: assets.headers,
+    redirects: assets.redirects,
     // Distilled widened generated string enums to open unions (`string & {}`);
     // the API only ever returns the known variants here.
-    htmlHandling: assets.config?.htmlHandling as
+    htmlHandling: assets.htmlHandling as
       | "none"
       | "auto-trailing-slash"
       | "force-trailing-slash"
       | "drop-trailing-slash"
       | undefined,
-    notFoundHandling: assets.config?.notFoundHandling as
+    notFoundHandling: assets.notFoundHandling as
       | "none"
       | "404-page"
       | "single-page-application"
       | undefined,
-    runWorkerFirst: assets.config?.runWorkerFirst,
-    serveDirectly: assets.config?.serveDirectly,
+    runWorkerFirst: assets.runWorkerFirst,
+    serveDirectly: assets.serveDirectly,
   };
 };
 

@@ -115,7 +115,7 @@ The naive thing to write looks like this:
 // src/A.ts
 import { B } from "./B.ts";
 
-export const A = Cloudflare.Worker("A", { main: import.meta.path },
+export const A = Cloudflare.Worker("A", { main: import.meta.filename },
   Effect.gen(function* () {
     const b = yield* Cloudflare.Worker.bind(B);
     return { fetch: ... };
@@ -125,7 +125,7 @@ export const A = Cloudflare.Worker("A", { main: import.meta.path },
 // src/B.ts
 import { A } from "./A.ts";
 
-export const B = Cloudflare.Worker("B", { main: import.meta.path },
+export const B = Cloudflare.Worker("B", { main: import.meta.filename },
   Effect.gen(function* () {
     const a = yield* Cloudflare.Worker.bind(A);
     return { fetch: ... };
@@ -166,7 +166,7 @@ that runs only when the Stack provides it.
 import * as Cloudflare from "alchemy/Cloudflare";
 
 export class A extends Cloudflare.Worker<A>()("A", {
-  main: import.meta.path,
+  main: import.meta.filename,
 }) {}
 ```
 
@@ -184,7 +184,7 @@ The runtime piece is a second file-level export:
 + import { B } from "./B.ts";
 
   export class A extends Cloudflare.Worker<A>()("A", {
-    main: import.meta.path,
+    main: import.meta.filename,
   }) {}
 
 + export default A.make(
@@ -219,7 +219,7 @@ For the non-cyclic case Alchemy lets you write the resource
 and its implementation in a single expression:
 
 ```typescript
-export default Cloudflare.Worker("MyWorker", { main: import.meta.path },
+export default Cloudflare.Worker("MyWorker", { main: import.meta.filename },
   Effect.gen(function* () { /* ... */ }),
 );
 ```
@@ -273,7 +273,7 @@ mutually-recursive services, queue-mediated callbacks. For
 everything else, the simple form is still simple:
 
 ```typescript
-export default Cloudflare.Worker("Web", { main: import.meta.path },
+export default Cloudflare.Worker("Web", { main: import.meta.filename },
   Effect.gen(function* () {
     const db = yield* Database;
     return { fetch: /* ... */ };
