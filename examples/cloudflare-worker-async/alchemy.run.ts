@@ -65,6 +65,6 @@ export default Alchemy.Stack(
       },
     });
 
-    return worker.url;
+    return { url: worker.url.as<string>() };
   }),
 );
