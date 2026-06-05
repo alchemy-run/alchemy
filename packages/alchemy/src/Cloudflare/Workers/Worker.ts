@@ -289,7 +289,7 @@ export interface WorkerProps<
    * Each Worker is served on its own port.
    *
    * Set to `false` to skip starting a local Worker entirely — useful when an
-   * external dev server (e.g. one spawned via `Cloudflare.DevCommand`) is
+   * external dev server (e.g. one spawned via `Build.DevCommand`) is
    * serving the content this Worker would otherwise host.
    */
   dev?:
