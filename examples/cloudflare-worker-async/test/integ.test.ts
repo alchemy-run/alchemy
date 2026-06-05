@@ -17,8 +17,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 test(
   "deploys and exposes a url",
   Effect.gen(function* () {
-    const out = (yield* stack) as unknown;
-    const url = typeof out === "string" ? out : (out as { url: string }).url;
+    const { url } = yield* stack;
     expect(url).toBeString();
   }),
 );
@@ -26,8 +25,7 @@ test(
 test(
   "echoes env.API_KEY",
   Effect.gen(function* () {
-    const out = (yield* stack) as unknown;
-    const url = typeof out === "string" ? out : (out as { url: string }).url;
+    const { url } = yield* stack;
 
     const response = yield* HttpClient.get(`${url}/api-key`);
     expect(response.status).toBe(200);
@@ -49,8 +47,7 @@ test(
 test(
   "native queue() handler round-trip",
   Effect.gen(function* () {
-    const out = (yield* stack) as unknown;
-    const url = typeof out === "string" ? out : (out as { url: string }).url;
+    const { url } = yield* stack;
     const text = `hello-${Date.now()}`;
 
     const sendResponse = yield* HttpClient.execute(
