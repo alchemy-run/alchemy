@@ -1,6 +1,7 @@
 import { Cli } from "@/Cli/Cli";
 import * as Construct from "@/Construct";
 import * as Output from "@/Output";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { Stack } from "@/Stack";
 import {
   type ReplacedResourceState,
@@ -1831,6 +1832,166 @@ describe("from replaced state", () => {
         }).pipe(stack.deploy);
         expectConvergedStatus((yield* getState("A"))?.status);
         expect(output).toEqual("another-replacement");
+      }),
+  );
+});
+
+describe("retain removal policy on replace", () => {
+  test.provider(
+    "replace with retain does not delete the old generation",
+    (stack) =>
+      Effect.gen(function* () {
+        const deleted: string[] = [];
+
+        // 1. Create initial resource with a retain removal policy.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v1" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+        }).pipe(stack.deploy);
+
+        const before = yield* getState("A");
+        expect(before?.status).toEqual("created");
+        const oldInstanceId = before?.instanceId;
+
+        // 2. Trigger a replacement (replaceString change). The old generation
+        //    must NOT be deleted because the resource is retained.
+        const output = yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { replaceString: "v2" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+          return A.replaceString;
+        }).pipe(
+          stack.deploy,
+          hook({
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+
+        expect(output).toEqual("v2");
+        // provider.delete must never fire for the retained old generation.
+        expect(deleted).not.toContain("A");
+
+        const after = yield* getState("A");
+        // Resource was genuinely replaced (fresh instance id) and the old
+        // chain drained back to a terminal `created` state.
+        expect(after?.status).toEqual("created");
+        expect(after?.instanceId).not.toEqual(oldInstanceId);
+      }),
+  );
+
+  test.provider(
+    "replace without retain deletes the old generation exactly once",
+    (stack) =>
+      Effect.gen(function* () {
+        const deleted: string[] = [];
+
+        // 1. Create initial resource with the default (destroy) policy.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v1" });
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.status).toEqual("created");
+
+        // 2. Trigger a replacement. The old generation must be deleted since
+        //    the resource is not retained — guards the retain patch against
+        //    disabling normal replacement GC.
+        const output = yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { replaceString: "v2" });
+          return A.replaceString;
+        }).pipe(
+          stack.deploy,
+          hook({
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+
+        expect(output).toEqual("v2");
+        expect(deleted.filter((id) => id === "A")).toHaveLength(1);
+        expect((yield* getState("A"))?.status).toEqual("created");
+      }),
+  );
+
+  test.provider(
+    "nested replacement chain with retain never deletes old generations",
+    (stack) =>
+      Effect.gen(function* () {
+        const deleted: string[] = [];
+
+        // 1. Create with retain.
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v1" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.status).toEqual("created");
+
+        // 2. Trigger a replacement but fail mid-create so a replacement chain
+        //    forms (replacing, with old=created still live).
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v2" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+        }).pipe(
+          stack.deploy,
+          hook({ create: () => Effect.fail(new ResourceFailure()) }),
+        );
+        expect((yield* getState("A"))?.status).toEqual("replacing");
+
+        // 3. Replace again — converges and drains the entire old chain. Every
+        //    old generation must be retained (no provider.delete calls).
+        const output = yield* Effect.gen(function* () {
+          const A = yield* TestResource("A", { replaceString: "v3" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+          return A.replaceString;
+        }).pipe(
+          stack.deploy,
+          hook({
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+
+        expect(output).toEqual("v3");
+        expect(deleted).not.toContain("A");
+        expect((yield* getState("A"))?.status).toEqual("created");
+      }),
+  );
+
+  test.provider(
+    "orphan delete still honors retain (regression guard)",
+    (stack) =>
+      Effect.gen(function* () {
+        const deleted: string[] = [];
+
+        yield* Effect.gen(function* () {
+          yield* TestResource("A", { string: "v1" }).pipe(
+            RemovalPolicy.retain(true),
+          );
+        }).pipe(stack.deploy);
+        expect((yield* getState("A"))?.status).toEqual("created");
+
+        // Destroy removes the resource from the stack (orphan delete). Retain
+        // (persisted in state) must skip provider.delete and just drop state.
+        yield* stack.destroy().pipe(
+          hook({
+            delete: (id) =>
+              Effect.sync(() => {
+                deleted.push(id);
+              }),
+          }),
+        );
+
+        expect(deleted).not.toContain("A");
+        expect(yield* getState("A")).toBeUndefined();
       }),
   );
 });

@@ -13,7 +13,7 @@
     "src"
   ],
   "scripts": {
-    "build": "bun pm pack"
+    "build": "tsc -b"
   },
   "exports": {
     ".": {

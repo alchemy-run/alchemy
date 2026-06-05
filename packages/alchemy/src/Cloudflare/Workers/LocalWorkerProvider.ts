@@ -248,6 +248,7 @@ export const LocalWorkerProvider = () =>
               ? Text.local(key, unredacted)
               : Json.local(key, unredacted);
           }),
+          ...(props.assets || props.vite ? [Assets.local("ASSETS")] : []),
         ];
         const durableObjectNamespaces: Record<string, string> = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
@@ -261,11 +262,19 @@ export const LocalWorkerProvider = () =>
             ) {
               // Reuse the existing namespace id if it was provided, otherwise generate a new one.
               // `workerd` uses this for the object's storage path, so it must be safe to use as a file name.
-              durableObjectNamespaces[binding.className] =
+              const namespaceId =
                 binding.namespaceId ??
-                encodeURIComponent(`${id}-${binding.className}`);
+                encodeURIComponent(`${name}-${binding.className}`);
+              durableObjectNamespaces[binding.className] = namespaceId;
+              workerBindings.push(
+                yield* toRuntimeBinding({
+                  ...binding,
+                  namespaceId,
+                }),
+              );
+            } else {
+              workerBindings.push(yield* toRuntimeBinding(binding));
             }
-            workerBindings.push(yield* toRuntimeBinding(binding));
           }
           if (data.hyperdrives) {
             for (const [id, origin] of Object.entries(data.hyperdrives)) {
@@ -555,6 +564,9 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
         binding: b.name,
         className: b.className,
         scriptName: b.scriptName,
+        uniqueKey:
+          b.namespaceId ??
+          encodeURIComponent(`${b.scriptName!}-${b.className}`),
       });
     case "hyperdrive":
       return Hyperdrive.local(b.name, b.id);
@@ -629,24 +641,24 @@ const toRuntimeAssets = (
     };
   }
   return {
-    directory: "directory" in assets ? assets.directory : assets.path,
-    headers: assets.config?.headers,
-    redirects: assets.config?.redirects,
+    directory: assets.directory,
+    headers: assets.headers,
+    redirects: assets.redirects,
     // Distilled widened generated string enums to open unions (`string & {}`);
     // the API only ever returns the known variants here.
-    htmlHandling: assets.config?.htmlHandling as
+    htmlHandling: assets.htmlHandling as
       | "none"
       | "auto-trailing-slash"
       | "force-trailing-slash"
       | "drop-trailing-slash"
       | undefined,
-    notFoundHandling: assets.config?.notFoundHandling as
+    notFoundHandling: assets.notFoundHandling as
       | "none"
       | "404-page"
       | "single-page-application"
       | undefined,
-    runWorkerFirst: assets.config?.runWorkerFirst,
-    serveDirectly: assets.config?.serveDirectly,
+    runWorkerFirst: assets.runWorkerFirst,
+    serveDirectly: assets.serveDirectly,
   };
 };
 

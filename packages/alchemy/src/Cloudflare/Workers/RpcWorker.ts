@@ -520,9 +520,9 @@ const buildModular = (id: string, props: RpcWorkerProps<any>) => {
   // shape `Cloudflare.Worker` expects, and stash the rpc schema on
   // the class so `RpcWorker.bind(WorkerClass)` can recover it.
   const Underlying: any = (WorkerCtor as any)()(id, workerProps);
-  const klass = class extends effectClass(
-    (Underlying as { asEffect(): Effect.Effect<Worker> }).asEffect(),
-  ) {
+  // `Underlying` is itself an Effect (the no-impl Worker class), so hand it
+  // straight to `effectClass` rather than reaching for a removed `.asEffect()`.
+  const klass = class extends effectClass(Underlying as Effect.Effect<Worker>) {
     static make = (
       impl: Effect.Effect<Effect.Effect<HttpEffect<any>>>,
     ): Layer.Layer<any, never, any> => Underlying.make(wrapImpl(impl));
@@ -554,9 +554,9 @@ const build = (
   // Re-wrap as our own `effectClass` so we can stash the rpc schema
   // on the class for `RpcWorker.bind` to recover later. (Re-using
   // `effectClass` here means `class X extends RpcWorker<X>()(...)`
-  // still works.)
+  // still works.) `underlying` is already an Effect, so pass it directly.
   const klass = effectClass(
-    (underlying as { asEffect(): Effect.Effect<Worker> }).asEffect(),
+    underlying as Effect.Effect<Worker>,
   ) as unknown as Record<symbol, unknown>;
   klass[SchemaSymbol] = schema;
   return klass;

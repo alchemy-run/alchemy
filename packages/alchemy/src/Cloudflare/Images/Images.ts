@@ -32,9 +32,10 @@ type BindEffect = Effect.Effect<ImagesClient, never, ImagesBinding>;
  * Worker and returns the runtime {@link ImagesClient} — no separate `.bind(...)`
  * step required.
  *
- * The divergence is achieved via `[Symbol.iterator]`: the object is not an
- * `Effect` (so `InferEnv` resolves it to the native `ImagesBinding` in the
- * `env` position), but it is iterable as one when `yield*`-ed.
+ * The divergence is achieved via `[Symbol.iterator]`: the object is
+ * deliberately not an `Effect` (so `InferEnv` and the Worker `env` resolver
+ * keep it as the native `ImagesBinding` rather than `yield*`-ing it), but it
+ * is iterable as one when `yield*`-ed.
  */
 export interface Images {
   kind: ImagesTypeId;

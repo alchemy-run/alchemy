@@ -89,7 +89,7 @@ export const unwrapRpcHandlers = <T extends Record<string, any>>(
   ) as RpcUnwrapped<T>;
 };
 
-const serializeError = Schema.encodeSync(Schema.Defect);
+const serializeError = Schema.encodeSync(Schema.Defect());
 
 const wrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
   handler: RpcEffectHandler<Args, Success, Error>,
@@ -107,7 +107,10 @@ const wrapRpcEffectHandler = <Args extends Array<any>, Success, Error>(
         cause: exit.cause.reasons.map((reason): RpcSerializedCause<Error> => {
           switch (reason._tag) {
             case "Fail":
-              return { _tag: "Fail", error: serializeError(reason.error) };
+              return {
+                _tag: "Fail",
+                error: serializeError(reason.error) as Error,
+              };
             case "Die":
               return { _tag: "Die", defect: serializeError(reason.defect) };
             case "Interrupt":

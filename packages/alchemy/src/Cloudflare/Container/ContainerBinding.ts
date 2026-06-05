@@ -18,16 +18,11 @@ export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
 ) {
   const namespace = yield* DurableObjectNamespace;
 
-  const container =
-    "asEffect" in containerEff
-      ? yield* containerEff as any as Effect.Effect<
-          ContainerApplication & Rpc<Shape>
-        >
-      : Effect.isEffect(containerEff)
-        ? yield* containerEff as unknown as Effect.Effect<
-            ContainerApplication & Rpc<Shape>
-          >
-        : containerEff;
+  const container = Effect.isEffect(containerEff)
+    ? yield* containerEff as unknown as Effect.Effect<
+        ContainerApplication & Rpc<Shape>
+      >
+    : containerEff;
 
   yield* container.bind`${namespace}`({
     durableObjects: {

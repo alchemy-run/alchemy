@@ -11,6 +11,9 @@ export class Website extends Cloudflare.Vite<Website>()("Website", {
     BUCKET: Bucket,
     BACKEND: Backend,
   },
+  assets: {
+    runWorkerFirst: true,
+  },
 }) {}
 
 export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
@@ -24,6 +27,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     const backend = yield* Backend;
     const website = yield* Website;
+
     return {
       backendUrl: backend.url.as<string>(),
       websiteUrl: website.url.as<string>(),

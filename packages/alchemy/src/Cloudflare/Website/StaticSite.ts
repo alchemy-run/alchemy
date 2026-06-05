@@ -25,7 +25,8 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    */
-  assetsConfig?: AssetsConfig;
+
+  assets?: AssetsConfig;
   /**
    * Local dev configuration. When `alchemy dev` runs, the build command is
    * skipped and `command` is spawned as a long-lived child process tied to
@@ -108,7 +109,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * ```
  *
  * @section Asset Configuration
- * Use `assetsConfig` to control how Cloudflare handles routing for
+ * Use `assets` to control how Cloudflare handles routing for
  * your static files — HTML handling, not-found behavior, etc.
  *
  * @example SPA-style routing
@@ -117,7 +118,7 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  *   command: "npm run build",
  *   outdir: "dist",
  *   main: "./src/worker.ts",
- *   assetsConfig: {
+ *   assets: {
  *     htmlHandling: "auto-trailing-slash",
  *     notFoundHandling: "single-page-application",
  *   },
@@ -263,9 +264,9 @@ const makeStaticSite = <
         ...resolved,
         assets: build
           ? {
-              path: build.outdir,
+              directory: build.outdir,
               hash: build.hash,
-              config: resolved.assetsConfig,
+              ...resolved.assets,
             }
           : undefined,
         // Opt out of the local Worker in dev when the external DevCommand
