@@ -26,7 +26,10 @@ export const effectClass: {
         // class itself a real Effect — `Effect.isEffect(X)` is true, so
         // `Effect.all([X])` / `Effect.forEach` work — and subclasses
         // (`class Y extends effectClass(impl)`) inherit the protocol statically.
-        Effectable.Prototype({ label: "EffectClass", evaluate: () => impl }),
+        Effectable.Prototype({
+          label: "alchemy/EffectClass",
+          evaluate: () => impl,
+        }),
       ) as unknown as EffectClass<any, any, any, any>)) as any;
 
 export const taggedFunction = <
