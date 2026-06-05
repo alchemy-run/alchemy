@@ -262,6 +262,9 @@ export const SchemaProvider = () =>
           // `schema.out` as an unresolved Output during plan and cascade
           // into spurious updates of their own.
           const { sqlStatements } = yield* detectDrift(news);
+          // Originally `output.out` was an absolute path, which is not portable.
+          // So, we trigger an update to migrate existing resources.
+          // This is safe because `regenerate` is idempotent.
           return sqlStatements.length > 0 || path.isAbsolute(output.out)
             ? { action: "update" }
             : undefined;
