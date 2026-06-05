@@ -12,9 +12,7 @@ export class Website extends Cloudflare.Vite<Website>()("Website", {
     BACKEND: Backend,
   },
   assets: {
-    config: {
-      runWorkerFirst: true,
-    },
+    runWorkerFirst: true,
   },
 }) {}
 

@@ -612,24 +612,24 @@ const toRuntimeAssets = (
     };
   }
   return {
-    directory: "directory" in assets ? assets.directory : assets.path,
-    headers: assets.config?.headers,
-    redirects: assets.config?.redirects,
+    directory: assets.directory,
+    headers: assets.headers,
+    redirects: assets.redirects,
     // Distilled widened generated string enums to open unions (`string & {}`);
     // the API only ever returns the known variants here.
-    htmlHandling: assets.config?.htmlHandling as
+    htmlHandling: assets.htmlHandling as
       | "none"
       | "auto-trailing-slash"
       | "force-trailing-slash"
       | "drop-trailing-slash"
       | undefined,
-    notFoundHandling: assets.config?.notFoundHandling as
+    notFoundHandling: assets.notFoundHandling as
       | "none"
       | "404-page"
       | "single-page-application"
       | undefined,
-    runWorkerFirst: assets.config?.runWorkerFirst,
-    serveDirectly: assets.config?.serveDirectly,
+    runWorkerFirst: assets.runWorkerFirst,
+    serveDirectly: assets.serveDirectly,
   };
 };
 

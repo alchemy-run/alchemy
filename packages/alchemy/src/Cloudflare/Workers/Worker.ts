@@ -31,7 +31,6 @@ import {
   readAssets,
   uploadAssets,
   type Assets,
-  type AssetsConfig,
   type AssetsProps,
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
@@ -99,20 +98,12 @@ export const isWorkerEvent = (value: any): value is WorkerEvent =>
  * When hash is provided, it's used directly for diffing instead of computing from directory contents.
  * This is useful when integrating with Build resources that produce a deterministic hash.
  */
-export interface AssetsWithHash {
-  /**
-   * Path to the assets directory.
-   */
-  path: string;
+export interface AssetsWithHash extends AssetsProps {
   /**
    * Pre-computed hash of the assets. When provided, this hash is used for diffing
    * to determine if the worker needs to be redeployed.
    */
   hash: string;
-  /**
-   * Optional assets configuration.
-   */
-  config?: AssetsConfig;
 }
 
 export interface WorkerObservability extends Exclude<
@@ -1129,15 +1120,9 @@ export const LiveWorkerProvider = () =>
           return undefined;
         }
 
-        if (
-          typeof assets === "object" &&
-          "path" in assets &&
-          "hash" in assets
-        ) {
-          return yield* readAssets({
-            directory: assets.path as string,
-            config: assets.config,
-          });
+        if (typeof assets === "object" && "hash" in assets) {
+          const { hash: _, ...config } = assets;
+          return yield* readAssets(config);
         }
 
         // Handle string path or AssetsProps
@@ -1208,11 +1193,10 @@ export const LiveWorkerProvider = () =>
           [
             assetsDirectory
               ? readAssets({
+                  ...(props.assets && typeof props.assets !== "string"
+                    ? props.assets
+                    : undefined),
                   directory: assetsDirectory,
-                  config:
-                    typeof props.assets === "object" && "config" in props.assets
-                      ? props.assets.config
-                      : undefined,
                 })
               : Effect.succeed(undefined),
             serverBundle

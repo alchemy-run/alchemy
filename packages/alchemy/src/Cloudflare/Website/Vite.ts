@@ -28,16 +28,10 @@ export interface ViteProps<
    */
   memo?: MemoOptions;
   /**
-   * Configure static asset routing behavior.
-   * Note that the `directory` property is omitted because it is inferred from Vite.
+   * Optional configuration for static asset routing behavior.
+   * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
    */
-  assets?: {
-    /**
-     * Optional configuration for static asset routing behavior.
-     * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
-     */
-    config?: AssetsConfig;
-  };
+  assets?: AssetsConfig;
 }
 
 /**
