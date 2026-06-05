@@ -1544,7 +1544,20 @@ const collectGarbage = Effect.fnUntraced(function* (
               });
             }
 
-            if (attr !== undefined) {
+            // Honor `retain` for the old generation of a replacement, mirroring
+            // the orphan-delete path above. Delete-node retain is already
+            // handled with an early return; this guards the replaced
+            // old-generation physical delete.
+            const retainOldGeneration =
+              !isDeleteNode(node) && node.removalPolicy === "retain";
+
+            if (retainOldGeneration) {
+              yield* scopedSession.note(
+                "Retaining replaced resource (removal policy: retain)...",
+              );
+            }
+
+            if (attr !== undefined && !retainOldGeneration) {
               yield* provider
                 .delete({
                   id: logicalId,
