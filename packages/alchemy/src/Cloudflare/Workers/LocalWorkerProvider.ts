@@ -471,7 +471,7 @@ export const LocalWorkerProvider = () =>
               workerId: name,
               workerName: name,
               logpush: undefined,
-              url: news.dev ? news.dev : undefined,
+              url: news.dev || undefined,
               tags: [],
               durableObjectNamespaces: {},
               accountId,
