@@ -265,7 +265,7 @@
       },
     },
     "examples/cloudflare-static-site": {
-      "name": "cloudflare-vite-example",
+      "name": "cloudflare-static-site-example",
       "version": "0.0.0",
       "dependencies": {
         "@distilled.cloud/cloudflare": "catalog:",
@@ -275,7 +275,6 @@
       },
       "devDependencies": {
         "typescript": "catalog:",
-        "vite": "catalog:",
       },
     },
     "examples/cloudflare-tanstack": {
@@ -2093,11 +2092,11 @@
 
     "cloudflare-solid-ssr": ["cloudflare-solid-ssr@workspace:examples/cloudflare-solidjs-ssr"],
 
+    "cloudflare-static-site-example": ["cloudflare-static-site-example@workspace:examples/cloudflare-static-site"],
+
     "cloudflare-tanstack-example": ["cloudflare-tanstack-example@workspace:examples/cloudflare-tanstack"],
 
     "cloudflare-tanstack-start-solid-example": ["cloudflare-tanstack-start-solid-example@workspace:examples/cloudflare-tanstack-start-solid"],
-
-    "cloudflare-vite-example": ["cloudflare-vite-example@workspace:examples/cloudflare-static-site"],
 
     "cloudflare-vue": ["cloudflare-vue@workspace:examples/cloudflare-vue"],
 
