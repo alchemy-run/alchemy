@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
+import * as Effectable from "effect/Effectable";
 import * as Option from "effect/Option";
-import { pipeArguments, type Pipeable } from "effect/Pipeable";
-import { SingleShotGen } from "effect/Utils";
+import type { Pipeable } from "effect/Pipeable";
 import { AdoptPolicy } from "./AdoptPolicy.ts";
 import { toFqn } from "./FQN.ts";
 import type { Input, InputProps } from "./Input.ts";
@@ -287,17 +287,6 @@ export function Resource<R extends ResourceLike>(
   const ProviderTag = Provider(type);
 
   const Service = {
-    [Symbol.iterator]() {
-      return new SingleShotGen(this.asEffect());
-    },
-    pipe() {
-      return pipeArguments(this, arguments);
-    },
-    asEffect() {
-      return Effect.succeed((id: string, props: R["Props"]) =>
-        constructor(id, props),
-      );
-    },
     /**
      * Build a typed reference to a deployed instance of this resource
      * — in the current stack/stage by default, or in another via
@@ -323,6 +312,16 @@ export function Resource<R extends ResourceLike>(
         ? Object.assign(ResourceClass, args[0])
         : constructor(...(args as [string, R["Props"]])),
     Service,
+    // Make the constructor itself a real Effect: `yield* MyResource` resolves
+    // to the constructor function (same as the old `asEffect()`), and
+    // `Effect.isEffect(MyResource)` is now true so `Effect.all`/`forEach` work.
+    Effectable.Prototype({
+      label: `Resource<${type}>`,
+      evaluate: () =>
+        Effect.succeed((id: string, props: R["Props"]) =>
+          constructor(id, props),
+        ),
+    }),
   ) as any;
 
   return ResourceClass;
