@@ -21,6 +21,10 @@ import {
   PostgresDefaultRole,
   PostgresDefaultRoleProvider,
 } from "./Postgres/PostgresDefaultRole.ts";
+import {
+  PostgresLogicalDatabase,
+  PostgresLogicalDatabaseProvider,
+} from "./Postgres/PostgresLogicalDatabase.ts";
 import { PostgresRole, PostgresRoleProvider } from "./Postgres/PostgresRole.ts";
 
 /**
@@ -55,6 +59,7 @@ export const providers = (): Layer.Layer<
       PostgresDatabase,
       MySQLBranch,
       PostgresBranch,
+      PostgresLogicalDatabase,
       MySQLPassword,
       PostgresRole,
       PostgresDefaultRole,
@@ -66,6 +71,7 @@ export const providers = (): Layer.Layer<
         PostgresDatabaseProvider(),
         MySQLBranchProvider(),
         PostgresBranchProvider(),
+        PostgresLogicalDatabaseProvider(),
         MySQLPasswordProvider(),
         PostgresRoleProvider(),
         PostgresDefaultRoleProvider(),
