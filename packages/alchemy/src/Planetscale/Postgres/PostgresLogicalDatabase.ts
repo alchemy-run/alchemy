@@ -21,6 +21,7 @@ import {
 } from "./PostgresLogicalDatabaseClient.ts";
 import type { PostgresOrigin } from "./PostgresOrigin.ts";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 
 const DEFAULT_MIGRATIONS_TABLE = "__alchemy_migrations";
 const DEFAULT_IMPORTS_TABLE = "__alchemy_imports";
@@ -114,30 +115,38 @@ export interface PostgresLogicalDatabaseAttributes {
 }
 
 /**
- * A logical PostgreSQL database created inside a PlanetScale PostgreSQL
- * database branch.
+ * A logical PostgreSQL database created inside an existing
+ * {@link PostgresDatabase}.
  *
- * Use this when one PlanetScale PostgreSQL database/branch should host
- * multiple app databases that each need separate migrations, imports, and app
- * role grants.
+ * Use {@link PostgresDatabase} when you want a PlanetScale PostgreSQL database
+ * cluster. Use this resource when that cluster should contain multiple
+ * PostgreSQL databases, each with separate migrations, imports, and app-role
+ * grants.
  *
  * @section Creating a Logical Database
  * @example Logical database with migrations
  * ```typescript
- * const admin = yield* Planetscale.PostgresRole("Admin", {
+ * const database = yield* Planetscale.PostgresDatabase("Database", {
+ *   clusterSize: "PS_10",
+ * });
+ *
+ * const adminRole = yield* Planetscale.PostgresRole("AdminRole", {
  *   database,
  *   inheritedRoles: ["postgres"],
  * });
  *
- * const app = yield* Planetscale.PostgresRole("App", {
+ * const applicationRole = yield* Planetscale.PostgresRole("ApplicationRole", {
  *   database,
  *   inheritedRoles: [],
  * });
+ * const applicationRoleName = Planetscale.postgresRoleNameFromUsername(
+ *   applicationRole.username,
+ * );
  *
  * const logicalDb = yield* Planetscale.PostgresLogicalDatabase("AppDb", {
  *   name: "app",
- *   adminOrigin: admin.origin,
- *   appRoleName: Planetscale.postgresRoleNameFromUsername(app.username),
+ *   adminOrigin: adminRole.origin,
+ *   appRoleName: applicationRoleName,
  *   migrationsDir: "./migrations",
  * });
  * ```
@@ -147,7 +156,7 @@ export interface PostgresLogicalDatabaseAttributes {
  * ```typescript
  * const logicalDb = yield* Planetscale.PostgresLogicalDatabase("SeededDb", {
  *   name: "seeded",
- *   adminOrigin: admin.origin,
+ *   adminOrigin: adminRole.origin,
  *   importFiles: ["./seed/users.sql"],
  * });
  * ```
@@ -211,20 +220,22 @@ const renameError = (oldName: string, newName: string) =>
       "Database renames can break downstream connection references; perform an explicit manual cutover instead.",
   );
 
-const isObject = (value: unknown): value is Record<PropertyKey, unknown> =>
-  typeof value === "object" && value !== null;
+const isReadablePostgresOrigin = (value: unknown): value is PostgresOrigin => {
+  if (!Predicate.isObject(value)) return false;
 
-const isReadablePostgresOrigin = (value: unknown): value is PostgresOrigin =>
-  isObject(value) &&
-  typeof value.scheme === "string" &&
-  typeof value.host === "string" &&
-  typeof value.port === "number" &&
-  typeof value.user === "string" &&
-  value.password !== undefined;
+  const origin = value as Partial<Record<keyof PostgresOrigin, unknown>>;
+  return (
+    Predicate.isString(origin.scheme) &&
+    Predicate.isString(origin.host) &&
+    Predicate.isNumber(origin.port) &&
+    Predicate.isString(origin.user) &&
+    !Predicate.isUndefined(origin.password)
+  );
+};
 
 const hasReadableLogicalDatabaseProps = (
   value: PostgresLogicalDatabaseProps | undefined,
-) => isObject(value) && isReadablePostgresOrigin(value.adminOrigin);
+) => Predicate.isObject(value) && isReadablePostgresOrigin(value.adminOrigin);
 
 const appRolePrivilegesHash = (privileges: AppRolePrivilegeState | undefined) =>
   privileges?.hash;
