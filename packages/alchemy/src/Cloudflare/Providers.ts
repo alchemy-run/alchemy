@@ -13,7 +13,10 @@ import * as Build from "../Build/index.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
+import * as AccessApp from "./Access/Application.ts";
 import * as Access from "./Access.ts";
+import * as AccessOrg from "./Access/Organization.ts";
+import * as AccessPol from "./Access/Policy.ts";
 import * as AiGateway from "./AiGateway/index.ts";
 import * as AnalyticsEngine from "./AnalyticsEngine/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
@@ -24,6 +27,7 @@ import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Containers from "./Container/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as D1 from "./D1/index.ts";
+import * as Devices from "./Devices/index.ts";
 import * as Dns from "./Dns/index.ts";
 import * as Email from "./Email/index.ts";
 import * as Hyperdrive from "./Hyperdrive/index.ts";
@@ -57,6 +61,9 @@ export const providers = () =>
   Layer.effect(
     Providers,
     Provider.collection([
+      AccessApp.AccessApplication,
+      AccessOrg.AccessOrganization,
+      AccessPol.AccessPolicy,
       ApiToken.AccountApiToken,
       ApiToken.UserApiToken,
       AiGateway.AiGateway,
@@ -69,6 +76,7 @@ export const providers = () =>
       D1.D1ConnectionPolicy,
       D1.D1Database,
       DevServer,
+      Devices.DeviceDefaultProfile,
       Dns.DnsReadPolicy,
       Dns.DnsReadWritePolicy,
       Dns.DnsWritePolicy,
@@ -95,6 +103,7 @@ export const providers = () =>
       Tunnel.Tunnel,
       Tunnel.TunnelReadPolicy,
       Tunnel.TunnelReadWritePolicy,
+      Tunnel.TunnelRoute,
       Tunnel.TunnelWritePolicy,
       Vectorize.VectorizeIndexBindingPolicy,
       Vectorize.VectorizeIndex,
@@ -114,6 +123,9 @@ export const providers = () =>
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
+        AccessApp.AccessApplicationProvider(),
+        AccessOrg.AccessOrganizationProvider(),
+        AccessPol.AccessPolicyProvider(),
         ApiToken.AccountApiTokenProvider(),
         ApiToken.UserApiTokenProvider(),
         AiGateway.AiGatewayProvider(),
@@ -125,6 +137,7 @@ export const providers = () =>
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
         DevServerProvider(),
+        Devices.DeviceDefaultProfileProvider(),
         Dns.DnsReadPolicyLive,
         Dns.DnsReadWritePolicyLive,
         Dns.DnsWritePolicyLive,
@@ -151,6 +164,7 @@ export const providers = () =>
         Tunnel.TunnelProvider(),
         Tunnel.TunnelReadPolicyLive,
         Tunnel.TunnelReadWritePolicyLive,
+        Tunnel.TunnelRouteProvider(),
         Tunnel.TunnelWritePolicyLive,
         Vectorize.VectorizeIndexBindingPolicyLive,
         Vectorize.VectorizeIndexProvider(),
