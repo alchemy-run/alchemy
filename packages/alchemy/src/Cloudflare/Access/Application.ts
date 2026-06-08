@@ -26,6 +26,29 @@ export type AccessApplicationType =
   | "biso"
   | "dash_sso";
 
+/**
+ * A destination that this Access application protects.
+ *
+ * Cloudflare supports three destination flavours:
+ * - `public` — a public hostname/URI you own in Cloudflare (the legacy
+ *   `domain` field on `AccessApplicationProps` covers the simple case).
+ * - `private` — a hostname or CIDR reachable through a Cloudflare Tunnel.
+ *   Traffic from WARP-enrolled devices is intercepted and forwarded
+ *   through the tunnel; identity is enforced before forwarding.
+ * - `via_mcp_server_portal` — routes via a managed MCP server portal.
+ */
+export type AccessApplicationDestination =
+  | { type: "public"; uri: string }
+  | {
+      type: "private";
+      hostname?: string;
+      cidr?: string;
+      l4Protocol?: "tcp" | "udp";
+      portRange?: string;
+      vnetId?: string;
+    }
+  | { type: "via_mcp_server_portal"; mcpServerId: string };
+
 export interface AccessApplicationProps {
   /**
    * The Access application type.
@@ -48,6 +71,25 @@ export interface AccessApplicationProps {
    * `${authDomain}/warp`) and `saas` (Cloudflare uses the OIDC issuer).
    */
   domain?: string;
+  /**
+   * Destinations this application protects. Use for the modern multi-
+   * destination model — required for **Access for private apps** flows
+   * where traffic to a private hostname/CIDR is intercepted by WARP and
+   * routed through a Cloudflare Tunnel, with Access enforcing identity
+   * before the request reaches the upstream service.
+   *
+   * For simple public-hostname apps, set `domain` instead. The two are
+   * not mutually exclusive — Cloudflare treats `domain` as a shorthand
+   * for adding a single `{ type: "public" }` destination.
+   *
+   * @example
+   * ```ts
+   * destinations: [
+   *   { type: "private", hostname: "admin.internal" },
+   * ]
+   * ```
+   */
+  destinations?: ReadonlyArray<AccessApplicationDestination>;
   /**
    * Token TTL for sessions issued by this application. Accepts Go-style
    * duration strings, e.g. `"24h"`, `"720h"`, `"2h45m"`.
@@ -126,6 +168,8 @@ export interface AccessApplicationAttributes {
   aud: string;
   /** Resolved domain. Cloudflare fills this in for `warp`/`saas` apps. */
   domain: string;
+  /** Resolved destinations (echoed back by Cloudflare). */
+  destinations: ReadonlyArray<AccessApplicationDestination> | undefined;
   /** Application type. */
   type: AccessApplicationType;
   /** Display name (resolved). */
@@ -241,6 +285,7 @@ interface ObservedApp {
   readonly name?: string;
   readonly type?: AccessApplicationType;
   readonly domain?: string;
+  readonly destinations?: ReadonlyArray<AccessApplicationDestination>;
   readonly allowedIdps?: ReadonlyArray<string>;
   readonly autoRedirectToIdentity?: boolean;
   readonly appLauncherVisible?: boolean;
@@ -265,6 +310,7 @@ const narrowApp = (raw: {
   name?: string | null;
   type?: AccessApplicationType | null | string;
   domain?: string | null;
+  destinations?: ReadonlyArray<unknown> | null;
   allowedIdps?: ReadonlyArray<string> | null;
   autoRedirectToIdentity?: boolean | null;
   appLauncherVisible?: boolean | null;
@@ -280,6 +326,10 @@ const narrowApp = (raw: {
   type:
     raw.type == null ? undefined : (raw.type as AccessApplicationType),
   domain: undef(raw.domain),
+  destinations:
+    raw.destinations == null
+      ? undefined
+      : (raw.destinations as ReadonlyArray<AccessApplicationDestination>),
   allowedIdps: undefArr(raw.allowedIdps ?? undefined),
   autoRedirectToIdentity: undef(raw.autoRedirectToIdentity),
   appLauncherVisible: undef(raw.appLauncherVisible),
@@ -333,6 +383,7 @@ type RequestPolicy = Exclude<
 
 interface AppMutableBody {
   domain?: string;
+  destinations?: ReadonlyArray<AccessApplicationDestination>;
   type: AccessApplicationType;
   name?: string;
   sessionDuration?: string;
@@ -414,6 +465,9 @@ const buildMutableBody = (
   if (news.type !== "warp" && news.domain !== undefined) {
     body.domain = news.domain;
   }
+  if (news.destinations !== undefined) {
+    body.destinations = news.destinations;
+  }
   if (news.sessionDuration !== undefined) {
     body.sessionDuration = news.sessionDuration;
   }
@@ -492,6 +546,16 @@ const bodyEqualsObserved = (
   if (
     desired.domain !== undefined &&
     desired.domain !== observed.domain
+  ) {
+    return false;
+  }
+  // Same rule for destinations — Cloudflare may echo back an enriched
+  // shape (e.g. server-assigned `vnetId`); we only diff when the caller
+  // explicitly set them.
+  if (
+    desired.destinations !== undefined &&
+    JSON.stringify(desired.destinations) !==
+      JSON.stringify(observed.destinations ?? [])
   ) {
     return false;
   }
@@ -649,6 +713,10 @@ export const AccessApplicationProvider = () =>
               appLauncherVisible: body.appLauncherVisible,
               tags: body.tags === undefined ? undefined : Array.from(body.tags),
               policies: toRequestPolicies(body.policies),
+              destinations:
+                body.destinations === undefined
+                  ? undefined
+                  : Array.from(body.destinations),
             }).pipe(
               // Distilled does not tag Conflict; surface any creation error
               // through the warp-singleton recovery path before re-failing.
@@ -692,6 +760,10 @@ export const AccessApplicationProvider = () =>
               appLauncherVisible: body.appLauncherVisible,
               tags: body.tags === undefined ? undefined : Array.from(body.tags),
               policies: toRequestPolicies(body.policies),
+              destinations:
+                body.destinations === undefined
+                  ? undefined
+                  : Array.from(body.destinations),
             });
             observed = narrowApp(
               updated as Parameters<typeof narrowApp>[0],
@@ -710,6 +782,7 @@ export const AccessApplicationProvider = () =>
             applicationId: observed.id,
             aud: observed.aud,
             domain: observed.domain ?? body.domain ?? "",
+            destinations: observed.destinations ?? body.destinations,
             type: observed.type,
             name: observed.name ?? resolvedName,
             accountId,
@@ -735,6 +808,7 @@ export const AccessApplicationProvider = () =>
             applicationId: observed.id,
             aud: observed.aud,
             domain: observed.domain ?? output.domain,
+            destinations: observed.destinations ?? output.destinations,
             type: observed.type,
             name: observed.name ?? output.name,
             accountId: output.accountId,
