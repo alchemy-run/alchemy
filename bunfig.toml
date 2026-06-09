@@ -1,3 +1,8 @@
 [install]
 minimumReleaseAge = 259200
-minimumReleaseAgeExcludes = ["effect"]
+minimumReleaseAgeExcludes = [
+  "effect",
+  "@distilled.cloud/cloudflare-runtime",
+  "@distilled.cloud/cloudflare-rolldown-plugin",
+  "@distilled.cloud/cloudflare-vite-plugin",
+]
