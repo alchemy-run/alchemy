@@ -18,7 +18,7 @@ export default {
         const instance = (await WebAssembly.instantiate(wasm)) as AddInstance;
         return Response.json({ result: instance.exports.add(3, 4) });
       case "/queue/send": {
-        const body = await request.json();
+        const body = await request.json<QueueMessage["body"]>();
         const queue = await env.MY_QUEUE.send(body);
         return Response.json({ queue });
       }
@@ -33,11 +33,13 @@ export default {
         return new Response(`Hello, world! ${count}`);
     }
   },
-  queue(batch, env) {
-    console.log(batch.messages);
+  async queue(batch, env) {
     const storage = env.QUEUE_STORAGE.getByName("global");
     for (const message of batch.messages) {
-      storage.put(message);
+      await storage.put({
+        id: message.id,
+        body: message.body as QueueMessage["body"],
+      });
     }
   },
 } satisfies ExportedHandler<AsyncWorkerEnv>;
@@ -56,7 +58,13 @@ export class Counter extends DurableObject {
   }
 }
 
-type QueueMessage = Omit<Message, "ack" | "retry">;
+export interface QueueMessage {
+  id: string;
+  body: {
+    text: string;
+    sentAt: number;
+  };
+}
 
 export class QueueStorage extends DurableObject {
   async put(message: QueueMessage) {

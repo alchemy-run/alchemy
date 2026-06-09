@@ -87,7 +87,6 @@ export const LocalWorkerProvider = () =>
     Worker,
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
-      console.log("LocalWorkerProvider");
       const { accountId } = yield* CloudflareEnvironment;
       const bundler = yield* WorkerBundle;
       const runtime = yield* Runtime;

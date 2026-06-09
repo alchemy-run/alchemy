@@ -1,13 +1,15 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
-import { cast, Schema } from "effect";
 import * as Effect from "effect/Effect";
+import { cast } from "effect/Function";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import Stack from "../alchemy.run.ts";
+import type { QueueMessage } from "../src/AsyncWorker.ts";
 import { WORKFLOW_SECRET_VALUE } from "../src/NotifyWorkflow.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -86,30 +88,34 @@ test(
   Effect.gen(function* () {
     const { asyncWorker } = yield* stack;
     const url = asyncWorker!;
-    const body = { text: "hello", now: Date.now() };
+    const body = { text: "hello", sentAt: Date.now() };
     yield* HttpClient.post(new URL("/queue/send", url), {
       body: yield* HttpBody.json(body),
     }).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
     const message = yield* HttpClient.get(new URL("/queue/messages", url)).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.flatMap((res) => res.json),
-      Effect.map(cast<Schema.Json, { messages: Message<typeof body>[] }>),
+      Effect.map(cast<Schema.Json, { messages: Array<QueueMessage> }>),
       Effect.map(({ messages }) =>
-        messages.find((m) => m.body.now === body.now),
+        messages.find((m) => m.body.sentAt === body.sentAt),
       ),
       Effect.filterOrFail(
         (message) => message !== undefined,
         () => ({ _tag: "MessageNotFound" }) as const,
       ),
       Effect.retry({
-        schedule: Schedule.exponential("500 millis"),
-        times: 10,
+        while: (error) => error._tag === "MessageNotFound",
+        schedule: Schedule.spaced("250 millis").pipe(
+          Schedule.both(Schedule.recurs(25)),
+        ),
       }),
     );
-    expect(message).toBeDefined();
-    expect(message.body.text).toBe(body.text);
-    expect(message.body.now).toBe(body.now);
+    expect(message).toMatchObject({
+      id: expect.any(String),
+      body,
+    });
   }),
+  { timeout: 10_000 },
 );
 
 /**

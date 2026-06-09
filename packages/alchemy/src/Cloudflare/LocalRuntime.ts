@@ -43,16 +43,9 @@ const LocalRuntimeStateLive = Layer.succeed(
   }),
 );
 
-export const isLocalId = (id: string | undefined): id is string =>
-  typeof id === "string" && id.startsWith("dev:");
-export const isLiveId = (id: string | undefined): id is string =>
-  typeof id === "string" && !id.startsWith("dev:");
-export const generateLocalId = (): string => `dev:${crypto.randomUUID()}`;
-
 export const localRuntimeServices = () =>
   RpcProvider.providerServicesEffect(
     Effect.gen(function* () {
-      console.log("localRuntimeServices");
       const { accountId } = yield* CloudflareEnvironment;
       const { dotAlchemy } = yield* AlchemyContext;
       const path = yield* Path.Path;
@@ -69,3 +62,9 @@ export const localRuntimeServices = () =>
       );
     }),
   );
+
+export const isLocalId = (id: string | undefined): id is string =>
+  typeof id === "string" && id.startsWith("dev:");
+export const isLiveId = (id: string | undefined): id is string =>
+  typeof id === "string" && !id.startsWith("dev:");
+export const generateLocalId = (): string => `dev:${crypto.randomUUID()}`;

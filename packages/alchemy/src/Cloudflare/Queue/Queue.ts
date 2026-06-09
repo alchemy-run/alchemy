@@ -234,7 +234,6 @@ export const QueueProviderLocal = () =>
     Queue,
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
-      console.log("QueueProviderLocal");
       const { accountId } = yield* CloudflareEnvironment;
       const localRuntimeState = yield* LocalRuntimeState;
       return {
