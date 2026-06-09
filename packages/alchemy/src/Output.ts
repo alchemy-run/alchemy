@@ -1,3 +1,4 @@
+import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -554,7 +555,7 @@ export const evaluate: <A, Req = never>(
   },
 ) => Effect.Effect<
   A,
-  InvalidReferenceError | MissingSourceError,
+  InvalidReferenceError | MissingSourceError | Config.ConfigError,
   State.State | Req
 > = (expr, upstream) =>
   Effect.gen(function* () {
@@ -644,9 +645,12 @@ export const evaluate: <A, Req = never>(
     }
     if (Array.isArray(expr)) {
       return yield* Effect.all(expr.map((item) => evaluate(item, upstream)));
-    } else if (Redacted.isRedacted(expr)) {
-      return expr;
-    } else if (Duration.isDuration(expr)) {
+    } else if (Config.isConfig(expr)) {
+      // Resolve Config against the deploy environment — see resolveInput in
+      // Plan.ts for rationale. `Config.redacted` resolves to a `Redacted`,
+      // which stays opaque via the branch below.
+      return yield* evaluate(yield* expr, upstream);
+    } else if (Duration.isDuration(expr) || Redacted.isRedacted(expr)) {
       // Opaque value — see resolveInput in Plan.ts for rationale.
       return expr;
     } else if (typeof expr === "object" && expr !== null) {

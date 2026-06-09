@@ -1,3 +1,4 @@
+import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -373,18 +374,25 @@ export const make = <A>(
           ));
       });
 
-    const resolveInput = (input: any): Effect.Effect<any> =>
+    const resolveInput = (input: any): Effect.Effect<any, Config.ConfigError> =>
       Effect.gen(function* () {
         if (!input) {
           return input;
         } else if (Output.isExpr(input)) {
           return yield* resolveOutput(input);
-        } else if (Redacted.isRedacted(input)) {
-          return input;
-        } else if (Duration.isDuration(input)) {
-          // Duration is an opaque value; walking its internal `.value`
-          // would destroy the prototype and produce a plain `{ value: ... }`
-          // object that downstream consumers can't interpret.
+        } else if (Config.isConfig(input)) {
+          // Config is a lazy reference to the deploy environment. Resolve it
+          // here so the concrete value flows into diffing/hashing (an opaque
+          // Config hashes the same regardless of the underlying value) and so
+          // providers receive a resolved value instead of a Config object.
+          // `Config.redacted` resolves to a `Redacted`, which stays opaque via
+          // the branch below.
+          return yield* resolveInput(yield* input);
+        } else if (Duration.isDuration(input) || Redacted.isRedacted(input)) {
+          // Opaque values that are resolved downstream. We don't walk them
+          // because it would strip their prototype, resulting in a plain object
+          // that downstream consumers can't interpret. Redacted additionally
+          // stays wrapped to preserve the secrecy boundary.
           return input;
         } else if (Array.isArray(input)) {
           return yield* Effect.all(input.map(resolveInput), {

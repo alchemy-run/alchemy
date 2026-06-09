@@ -1,8 +1,8 @@
 import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
+import type * as Config from "effect/Config";
 import type { ConfigError } from "effect/Config";
-import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -1178,7 +1178,7 @@ export const LiveWorkerProvider = () =>
                       : Redacted.isRedacted(value) &&
                           typeof Redacted.value(value) === "string"
                         ? Redacted.value(value)
-                        : Config.isConfig(value) || Effect.isEffect(value)
+                        : Effect.isEffect(value)
                           ? yield* value as Effect.Effect<any>
                           : undefined,
                   ];

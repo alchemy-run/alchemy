@@ -1,4 +1,5 @@
 import * as Cloudflare from "alchemy/Cloudflare";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -15,6 +16,9 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
   "EffectWorker",
   {
     main: import.meta.filename,
+    dev: {
+      port: Config.number("PORT").pipe(Config.withDefault(1338)),
+    },
   },
   Effect.gen(function* () {
     const kv = yield* Cloudflare.KVNamespace.bind(KV);

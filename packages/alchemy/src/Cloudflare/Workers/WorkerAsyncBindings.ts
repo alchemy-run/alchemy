@@ -1,12 +1,10 @@
 import type { PutScriptRequest } from "@distilled.cloud/cloudflare/workers";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
-import { asEffect } from "../../Util/types.ts";
 import { isAiGateway } from "../AiGateway/AiGateway.ts";
 import { isAnalyticsEngineDataset } from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
 import { isArtifacts } from "../Artifacts/Artifacts.ts";
@@ -51,8 +49,10 @@ export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
           : bindingEff
       ) as WorkerBindingResource;
 
-      const bindingMeta: InputProps<WorkerBinding> | undefined =
-        yield* asEffect(toBinding(bindingName, binding));
+      const bindingMeta: InputProps<WorkerBinding> | undefined = toBinding(
+        bindingName,
+        binding,
+      );
 
       if (bindingMeta) {
         yield* resource.bind`${bindingName}`({
@@ -75,20 +75,14 @@ type BindingSpec = InputProps<
 const toBinding = (
   bindingName: string,
   binding: WorkerBindingResource,
-): BindingSpec | Effect.Effect<BindingSpec> | undefined => {
-  // narrowing to Config<unknown> doesn't work for us, we need any
-  const isConfig: (a: any) => a is Config.Config<any> = Config.isConfig;
-  // narrowing to Redacted<unknown> doesn't work for us, we need any
-  const isRedacted: (a: any) => a is Redacted.Redacted<any> =
-    Redacted.isRedacted;
-
+): BindingSpec => {
   if (typeof binding === "string") {
     return {
       type: "plain_text",
       name: bindingName,
       text: binding,
     };
-  } else if (isRedacted(binding)) {
+  } else if (Redacted.isRedacted(binding)) {
     const val = Redacted.value(binding);
     if (typeof val === "string") {
       return {
@@ -103,14 +97,6 @@ const toBinding = (
         text: JSON.stringify(val),
       };
     }
-  } else if (isConfig(binding)) {
-    return binding.pipe(
-      Effect.flatMap((json) => {
-        const b = toBinding(bindingName, json)!;
-        return Effect.isEffect(b) ? b : Effect.succeed(b);
-      }),
-      Effect.orDie,
-    );
   } else if (isAssets(binding)) {
     return {
       type: "assets",
@@ -228,7 +214,7 @@ const toBinding = (
     return {
       type: "worker_loader",
       name: bindingName,
-    } as any;
+    };
   } else {
     return {
       type: "json",

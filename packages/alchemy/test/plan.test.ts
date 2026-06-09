@@ -18,6 +18,7 @@ import {
 import * as Test from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -2399,6 +2400,59 @@ describe("unresolved plan inputs in diff should conservatively update", () => {
 
       expect(plan.resources.A.action).toBe("create");
       expect(plan.resources.B.action).toBe("update");
+    }),
+  );
+});
+
+describe("Config props are resolved through plan", () => {
+  test(
+    "a Config prop is resolved to its concrete value in the plan",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: Config.succeed("resolved-config-value") as any,
+        });
+      }).pipe(makePlan);
+
+      const node: any = plan.resources.A!;
+      expect(node.action).toBe("create");
+      const props = node.props as TestResourceProps;
+      expect(Config.isConfig(props.string)).toBe(false);
+      expect(props.string).toBe("resolved-config-value");
+    }),
+  );
+
+  test(
+    "a Config resolving to a Redacted keeps it wrapped in the plan",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          string: "x",
+          redacted: Config.succeed(Redacted.make("hunter2")) as any,
+        });
+      }).pipe(makePlan);
+
+      const node: any = plan.resources.A!;
+      expect(node.action).toBe("create");
+      const props = node.props as TestResourceProps;
+      expect(Redacted.isRedacted(props.redacted)).toBe(true);
+      expect(Redacted.value(props.redacted!)).toBe("hunter2");
+    }),
+  );
+
+  test(
+    "a Config nested inside an object prop is resolved in the plan",
+    Effect.gen(function* () {
+      const plan = yield* Effect.gen(function* () {
+        yield* TestResource("A", {
+          object: { string: Config.succeed("nested") as any },
+        });
+      }).pipe(makePlan);
+
+      const node: any = plan.resources.A!;
+      expect(node.action).toBe("create");
+      const props = node.props as TestResourceProps;
+      expect(props.object).toEqual({ string: "nested" });
     }),
   );
 });
