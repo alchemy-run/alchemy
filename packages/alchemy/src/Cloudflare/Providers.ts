@@ -30,6 +30,7 @@ import * as D1 from "./D1/index.ts";
 import * as Devices from "./Devices/index.ts";
 import * as Dns from "./Dns/index.ts";
 import * as Email from "./Email/index.ts";
+import * as GatewayRule from "./Gateway/Rule.ts";
 import * as Hyperdrive from "./Hyperdrive/index.ts";
 import * as Images from "./Images/index.ts";
 import * as KV from "./KV/index.ts";
@@ -84,6 +85,7 @@ export const providers = () =>
       Email.EmailRouting,
       Email.EmailRule,
       Email.SendEmailBindingPolicy,
+      GatewayRule.GatewayRule,
       Hyperdrive.Hyperdrive,
       Hyperdrive.HyperdriveBindingPolicy,
       Images.ImagesBindingPolicy,
@@ -145,6 +147,7 @@ export const providers = () =>
         Email.EmailRoutingProvider(),
         Email.EmailRuleProvider(),
         Email.SendEmailBindingPolicyLive,
+        GatewayRule.GatewayRuleProvider(),
         Hyperdrive.HyperdriveBindingPolicyLive,
         Hyperdrive.HyperdriveProvider(),
         Images.ImagesBindingPolicyLive,

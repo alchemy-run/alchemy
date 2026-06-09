@@ -15,6 +15,7 @@ export * from "./Dns/index.ts";
 export * from "./EdgeSession.ts";
 export * from "./Fetcher.ts";
 export * from "./Email/index.ts";
+export * from "./Gateway/Rule.ts";
 export * from "./Hyperdrive/index.ts";
 export * from "./Images/index.ts";
 export * from "./KV/index.ts";
