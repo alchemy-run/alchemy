@@ -591,7 +591,7 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "plain_text":
       return Text.local(b.name, b.text);
     case "queue":
-      return Queue.binding({
+      return Queue.local({
         binding: b.name,
         queueName: b.queueName,
       });
