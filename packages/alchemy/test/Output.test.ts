@@ -7,6 +7,8 @@ import { inMemoryState } from "@/State/InMemoryState";
 import type { ResourceState } from "@/State/ResourceState";
 import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -96,6 +98,71 @@ describe("Output.evaluate", () => {
           const [result] = yield* Output.evaluate([secret], {});
           expect(Redacted.isRedacted(result)).toBe(true);
           expect(Redacted.value(result)).toBe("hunter2");
+        }),
+      ),
+    );
+  });
+
+  describe("Config", () => {
+    it.effect("resolves a Config value at the top level", () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(Config.succeed(1337), {});
+          expect(result).toBe(1337);
+        }),
+      ),
+    );
+
+    it.effect("resolves a Config value nested inside an object", () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(
+            { port: Config.succeed(8080), host: "localhost" },
+            {},
+          );
+          expect(result).toEqual({ port: 8080, host: "localhost" });
+        }),
+      ),
+    );
+
+    it.effect("resolves a Config value nested inside an array", () =>
+      provideState(
+        Effect.gen(function* () {
+          const [result] = yield* Output.evaluate([Config.succeed(42)], {});
+          expect(result).toBe(42);
+        }),
+      ),
+    );
+
+    it.effect("resolves a Config against the ConfigProvider environment", () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(
+            { port: Config.number("PORT").pipe(Config.withDefault(1337)) },
+            {},
+          ).pipe(
+            Effect.provide(
+              ConfigProvider.layer(
+                ConfigProvider.fromEnv({ env: { PORT: "8080" } }),
+              ),
+            ),
+          );
+          expect(result).toEqual({ port: 8080 });
+        }),
+      ),
+    );
+
+    it.effect("a Config resolving to a Redacted keeps it wrapped", () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(
+            Config.succeed(Redacted.make("hunter2")),
+            {},
+          );
+          expect(Redacted.isRedacted(result)).toBe(true);
+          expect(
+            Redacted.value(result as unknown as Redacted.Redacted<string>),
+          ).toBe("hunter2");
         }),
       ),
     );
