@@ -228,7 +228,7 @@ interface RecordMutableBody {
   name: string;
   type: DnsRecordType;
   content: string;
-  ttl: number | "1";
+  ttl: number;
   proxied?: boolean;
   comment?: string;
   tags?: ReadonlyArray<string>;
@@ -242,7 +242,9 @@ const buildMutableBody = (
   name: news.name,
   type: news.type,
   content: resolvedContent,
-  ttl: news.ttl ?? "1",
+  // Cloudflare rejects the string `"1"` even though distilled types
+  // it as `number | "1"`; the API wants numeric 1 for "automatic".
+  ttl: news.ttl === undefined ? 1 : news.ttl === ("1" as unknown) ? 1 : (news.ttl as number),
   proxied: news.proxied,
   comment: news.comment,
   tags: news.tags,
@@ -271,10 +273,8 @@ const bodyEqualsObserved = (
   observed: ObservedRecord,
 ): boolean => {
   if (desired.content !== observed.content) return false;
-  // CF echoes ttl=1 for "automatic"; both desired forms (`"1"` and `1`)
-  // collapse to numeric 1 here.
-  const desiredTtl = desired.ttl === "1" ? 1 : desired.ttl;
-  if (desiredTtl !== observed.ttl) return false;
+  // CF echoes ttl=1 for "automatic".
+  if (desired.ttl !== observed.ttl) return false;
   if (
     desired.proxied !== undefined &&
     desired.proxied !== (observed.proxied ?? false)
