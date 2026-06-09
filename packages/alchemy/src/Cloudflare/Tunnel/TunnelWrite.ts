@@ -38,7 +38,7 @@ export type UpdateTunnelRequest = Omit<
 >;
 
 /** Tunnel configuration body, minus the account id and tunnel id (positional). */
-export type TunnelConfiguration = NonNullable<
+export type TunnelConfigurationBody = NonNullable<
   PutTunnelCloudflaredConfigurationRequest["config"]
 >;
 
@@ -75,7 +75,7 @@ export interface TunnelWriteClient {
   /** Replace the remotely-managed configuration (ingress rules) for a tunnel. */
   putConfiguration(
     tunnelId: string,
-    config: TunnelConfiguration,
+    config: TunnelConfigurationBody,
   ): Effect.Effect<
     PutTunnelCloudflaredConfigurationResponse,
     PutTunnelCloudflaredConfigurationError,
