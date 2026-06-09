@@ -19,13 +19,13 @@ export default {
         return Response.json({ result: instance.exports.add(3, 4) });
       case "/queue/send": {
         const body = await request.json<QueueMessage["body"]>();
-        const queue = await env.MY_QUEUE.send(body);
+        const queue = await env.QUEUE.send(body);
         return Response.json({ queue });
       }
       case "/queue/messages": {
-        const storage = env.QUEUE_STORAGE.getByName("global");
+        const storage = env.MESSAGES.getByName("global");
         const messages = await storage.list();
-        return Response.json({ messages });
+        return Response.json(messages);
       }
       default:
         const counter = env.COUNTER.getByName("my-counter");
@@ -34,7 +34,7 @@ export default {
     }
   },
   async queue(batch, env) {
-    const storage = env.QUEUE_STORAGE.getByName("global");
+    const storage = env.MESSAGES.getByName("global");
     for (const message of batch.messages) {
       await storage.put({
         id: message.id,
@@ -66,7 +66,7 @@ export interface QueueMessage {
   };
 }
 
-export class QueueStorage extends DurableObject {
+export class QueueMessages extends DurableObject {
   async put(message: QueueMessage) {
     this.ctx.storage.kv.put(message.id, message);
   }

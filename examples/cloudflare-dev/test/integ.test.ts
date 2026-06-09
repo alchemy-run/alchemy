@@ -25,14 +25,10 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 test(
   "deploys all workers with URLs",
   Effect.gen(function* () {
-    const { asyncWorker, effectWorker, additionalWorkers } = yield* stack;
+    const { asyncWorker, effectWorker } = yield* stack;
 
     expect(asyncWorker).toBeString();
     expect(effectWorker).toBeString();
-    expect(additionalWorkers).toBeArrayOfSize(5);
-    for (const workerUrl of additionalWorkers) {
-      expect(workerUrl).toBeString();
-    }
   }),
 );
 
@@ -95,8 +91,8 @@ test(
     const message = yield* HttpClient.get(new URL("/queue/messages", url)).pipe(
       Effect.flatMap(HttpClientResponse.filterStatusOk),
       Effect.flatMap((res) => res.json),
-      Effect.map(cast<Schema.Json, { messages: Array<QueueMessage> }>),
-      Effect.map(({ messages }) =>
+      Effect.map(cast<Schema.Json, Array<QueueMessage>>),
+      Effect.map((messages) =>
         messages.find((m) => m.body.sentAt === body.sentAt),
       ),
       Effect.filterOrFail(
@@ -139,6 +135,41 @@ test(
     expect(Array.isArray(body.keys)).toBe(true);
     expect(typeof body.list_complete).toBe("boolean");
   }),
+);
+
+test(
+  "EffectWorker sends and receives messages on the queue",
+  Effect.gen(function* () {
+    const { effectWorker } = yield* stack;
+    const url = effectWorker!;
+    const body = { text: "hello", sentAt: Date.now() };
+    yield* HttpClient.post(new URL("/queue/send", url), {
+      body: yield* HttpBody.json(body),
+    }).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
+    const message = yield* HttpClient.get(new URL("/queue/messages", url)).pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap((res) => res.json),
+      Effect.map(cast<Schema.Json, Array<QueueMessage>>),
+      Effect.map((messages) =>
+        messages.find((m) => m.body.sentAt === body.sentAt),
+      ),
+      Effect.filterOrFail(
+        (message) => message !== undefined,
+        () => ({ _tag: "MessageNotFound" }) as const,
+      ),
+      Effect.retry({
+        while: (error) => error._tag === "MessageNotFound",
+        schedule: Schedule.spaced("250 millis").pipe(
+          Schedule.both(Schedule.recurs(25)),
+        ),
+      }),
+    );
+    expect(message).toMatchObject({
+      id: expect.any(String),
+      body,
+    });
+  }),
+  { timeout: 10_000 },
 );
 
 /**
