@@ -125,9 +125,15 @@ export const QueueProviderLive = () =>
         );
 
       return {
-        stables: ["queueId", "accountId"],
+        // The `queueId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
+        stables: ["accountId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           if (!isResolved(news)) return undefined;
+          // If the queueId is a `dev:` ID, we need to update to a live one.
+          // The live resource doesn't exist yet, so there's no need to replace even if the name or accountId changed.
+          if (!isLiveId(output?.queueId)) {
+            return { action: "update" };
+          }
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" } as const;
           }
@@ -137,9 +143,6 @@ export const QueueProviderLive = () =>
             : yield* createQueueName(id, olds.name);
           if (name !== oldName) {
             return { action: "replace" } as const;
-          }
-          if (!isLiveId(output?.queueId)) {
-            return { action: "update" };
           }
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
@@ -195,6 +198,8 @@ export const QueueProviderLive = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          // If the queueId is a `dev:` ID, the resource only exists locally, so we don't need to delete it from Cloudflare.
+          if (!isLiveId(output.queueId)) return;
           yield* deleteQueue({
             accountId: output.accountId,
             queueId: output.queueId,
@@ -237,6 +242,7 @@ export const QueueProviderLocal = () =>
       const { accountId } = yield* CloudflareEnvironment;
       const localRuntimeState = yield* LocalRuntimeState;
       return {
+        stables: ["accountId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           if (!output?.queueId) return { action: "update" };
           if (!isResolved(news)) return undefined;
@@ -247,7 +253,10 @@ export const QueueProviderLocal = () =>
           if (name !== oldName || output.accountId !== accountId) {
             return { action: "replace" };
           }
-          return undefined;
+          // If the resource is a noop, add it to the local runtime state so it's available downstream.
+          // We do it here instead of in the reconcile function so it doesn't appear as an update.
+          MutableHashMap.set(localRuntimeState.queues, output.queueId, output);
+          return { action: "noop" };
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.queueId) return undefined;

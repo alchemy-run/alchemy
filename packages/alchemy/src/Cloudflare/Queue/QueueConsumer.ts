@@ -1,5 +1,4 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
-import { Equal } from "effect";
 import * as Effect from "effect/Effect";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
@@ -161,9 +160,15 @@ export const QueueConsumerProviderLive = () =>
         );
 
       return {
-        stables: ["consumerId", "accountId"],
+        // The `consumerId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
+        stables: ["accountId"],
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isResolved(news)) return undefined;
+          // If either contain `dev:` IDs, we need to update to live ones.
+          // The live resource doesn't exist yet, so there's no need to replace even when we otherwise would.
+          if (!isLiveId(output?.queueId) || !isLiveId(output?.consumerId)) {
+            return { action: "update" };
+          }
           if ((output?.accountId ?? accountId) !== accountId) {
             return { action: "replace" } as const;
           }
@@ -171,9 +176,6 @@ export const QueueConsumerProviderLive = () =>
           // to a queue and the API has no "move consumer" verb.
           if (output?.queueId && news.queueId !== output.queueId) {
             return { action: "replace", deleteFirst: true } as const;
-          }
-          if (!isLiveId(output?.queueId) && !isLiveId(output?.consumerId)) {
-            return { action: "update" };
           }
           // Settings / DLQ / script drift is an update. We DON'T
           // escalate scriptName changes to `replace` because the
@@ -405,6 +407,9 @@ export const QueueConsumerProviderLive = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          // If the consumerId is a `dev:` ID, the resource only exists locally, so we don't need to delete it from Cloudflare.
+          if (!isLiveId(output.consumerId)) return;
+
           yield* deleteConsumer({
             accountId: output.accountId,
             queueId: output.queueId,
@@ -492,28 +497,31 @@ export const QueueConsumerProviderLocal = () =>
       const { accountId } = yield* CloudflareEnvironment;
       const localRuntimeState = yield* LocalRuntimeState;
       return {
-        diff: Effect.fn(function* ({ olds, news, output }) {
-          if (
-            !output ||
-            !MutableHashMap.has(
-              localRuntimeState.queueConsumers,
-              output.consumerId,
-            )
-          ) {
-            return { action: "update" };
-          }
+        diff: Effect.fn(function* ({ news, output }) {
+          if (!output) return { action: "update" };
           if (!isResolved(news)) return undefined;
           if (
-            olds.queueId !== news.queueId ||
-            olds.scriptName !== news.scriptName ||
+            output.queueId !== news.queueId ||
             output.accountId !== accountId
           ) {
             return { action: "replace" };
           }
-          if (!Equal.equals(olds.settings, news.settings)) {
+          if (
+            JSON.stringify(output.settings ?? {}) !==
+              JSON.stringify(news.settings ?? {}) ||
+            output.scriptName !== news.scriptName ||
+            output.deadLetterQueue !== news.deadLetterQueue
+          ) {
             return { action: "update" };
           }
-          return undefined;
+          // If the resource is a noop, add it to the local runtime state so it's available downstream.
+          // We do it here instead of in the reconcile function so it doesn't appear as an update.
+          MutableHashMap.set(
+            localRuntimeState.queueConsumers,
+            output.consumerId,
+            output,
+          );
+          return { action: "noop" };
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.consumerId) return undefined;
@@ -528,7 +536,7 @@ export const QueueConsumerProviderLocal = () =>
             queueId: news.queueId,
             scriptName: news.scriptName,
             deadLetterQueue: news.deadLetterQueue,
-            accountId: output?.accountId ?? accountId,
+            accountId,
             settings: news.settings,
           };
           MutableHashMap.set(
