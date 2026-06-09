@@ -39,13 +39,13 @@ import {
   Workflows,
 } from "@distilled.cloud/cloudflare-runtime/bindings";
 import * as WorkerProxy from "@distilled.cloud/cloudflare-runtime/proxy/WorkerProxy";
-import { MutableHashMap } from "effect";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Hash from "effect/Hash";
+import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
