@@ -1,4 +1,4 @@
-import { newWebSocketRpcSession, type RpcStub } from "capnweb";
+import { newWebSocketRpcSession } from "capnweb";
 import * as Cache from "effect/Cache";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
@@ -38,12 +38,11 @@ const make = Effect.fnUntraced(function* (spawnerUrl: string) {
         alchemyContext,
         stack: { name: stack.name, stage: stack.stage },
       };
-      console.log("getSession", spawnerUrl, payload);
       const response = yield* client.post(spawnerUrl, {
         body: yield* HttpBody.json(payload),
       });
       const websocketUrl = yield* response.text;
-      return newWebSocketRpcSession(websocketUrl) as RpcStub<RpcProxyApi>;
+      return newWebSocketRpcSession<RpcProxyApi>(websocketUrl);
     },
     (effect, serverEntryUrl) =>
       Effect.catch(effect, (error) =>
