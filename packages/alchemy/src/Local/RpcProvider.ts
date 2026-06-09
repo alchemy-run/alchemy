@@ -103,7 +103,6 @@ export const effect = <
           },
         });
       }
-      console.log("RpcProvider", serverEntryUrl, cls.Type);
       return yield* client.value.get(serverEntryUrl, cls.Type);
     }),
   );
