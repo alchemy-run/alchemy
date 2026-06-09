@@ -2,8 +2,7 @@
 minimumReleaseAge = 259200
 minimumReleaseAgeExcludes = [
   "effect",
-  "@alchemy.run/node-utils",
-  "@distilled.cloud/cloudflare-rolldown-plugin",
   "@distilled.cloud/cloudflare-runtime",
+  "@distilled.cloud/cloudflare-rolldown-plugin",
   "@distilled.cloud/cloudflare-vite-plugin",
 ]
