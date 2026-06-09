@@ -17,10 +17,27 @@ export default {
       case "/wasm":
         const instance = (await WebAssembly.instantiate(wasm)) as AddInstance;
         return Response.json({ result: instance.exports.add(3, 4) });
+      case "/queue/send": {
+        const body = await request.json();
+        const queue = await env.MY_QUEUE.send(body);
+        return Response.json({ queue });
+      }
+      case "/queue/messages": {
+        const storage = env.QUEUE_STORAGE.getByName("global");
+        const messages = await storage.list();
+        return Response.json({ messages });
+      }
       default:
         const counter = env.COUNTER.getByName("my-counter");
         const count = await counter.increment();
         return new Response(`Hello, world! ${count}`);
+    }
+  },
+  queue(batch, env) {
+    console.log(batch.messages);
+    const storage = env.QUEUE_STORAGE.getByName("global");
+    for (const message of batch.messages) {
+      storage.put(message);
     }
   },
 } satisfies ExportedHandler<AsyncWorkerEnv>;
@@ -36,5 +53,18 @@ export class Counter extends DurableObject {
 
   set counter(value: number) {
     this.ctx.storage.kv.put("counter", value);
+  }
+}
+
+type QueueMessage = Omit<Message, "ack" | "retry">;
+
+export class QueueStorage extends DurableObject {
+  async put(message: QueueMessage) {
+    this.ctx.storage.kv.put(message.id, message);
+  }
+
+  async list(): Promise<QueueMessage[]> {
+    const messages = new Map(this.ctx.storage.kv.list<QueueMessage>());
+    return Array.from(messages.values());
   }
 }

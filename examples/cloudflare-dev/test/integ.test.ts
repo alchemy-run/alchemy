@@ -1,9 +1,12 @@
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
+import { cast, Schema } from "effect";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import Stack from "../alchemy.run.ts";
 import { WORKFLOW_SECRET_VALUE } from "../src/NotifyWorkflow.ts";
 
@@ -75,6 +78,37 @@ test(
       MY_VARIABLE: "my-variable-abc123",
       COUNTER: {},
     });
+  }),
+);
+
+test(
+  "AsyncWorker sends and receives messages on the queue",
+  Effect.gen(function* () {
+    const { asyncWorker } = yield* stack;
+    const url = asyncWorker!;
+    const body = { text: "hello", now: Date.now() };
+    yield* HttpClient.post(new URL("/queue/send", url), {
+      body: yield* HttpBody.json(body),
+    }).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
+    const message = yield* HttpClient.get(new URL("/queue/messages", url)).pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap((res) => res.json),
+      Effect.map(cast<Schema.Json, { messages: Message<typeof body>[] }>),
+      Effect.map(({ messages }) =>
+        messages.find((m) => m.body.now === body.now),
+      ),
+      Effect.filterOrFail(
+        (message) => message !== undefined,
+        () => ({ _tag: "MessageNotFound" }) as const,
+      ),
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis"),
+        times: 10,
+      }),
+    );
+    expect(message).toBeDefined();
+    expect(message.body.text).toBe(body.text);
+    expect(message.body.now).toBe(body.now);
   }),
 );
 

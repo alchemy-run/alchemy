@@ -1,12 +1,21 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
+import { Equal } from "effect";
 import * as Effect from "effect/Effect";
+import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import * as RpcProvider from "../../Local/RpcProvider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  isLiveId,
+  LOCAL_ENTRY_URL,
+  LocalRuntimeState,
+} from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
 // ~60s budget — Worker reconcile uploads typically land in 2–10s,
@@ -31,32 +40,34 @@ export type QueueConsumerProps = {
   /**
    * Consumer settings.
    */
-  settings?: {
-    /**
-     * The maximum number of messages per batch.
-     * @default 10
-     */
-    batchSize?: number;
-    /**
-     * The maximum number of concurrent consumer invocations.
-     */
-    maxConcurrency?: number;
-    /**
-     * The maximum number of retries for a message.
-     * @default 3
-     */
-    maxRetries?: number;
-    /**
-     * The maximum time to wait for a batch to fill, in milliseconds.
-     * @default 5000
-     */
-    maxWaitTimeMs?: number;
-    /**
-     * The number of seconds to wait before retrying a message.
-     */
-    retryDelay?: number;
-  };
+  settings?: QueueConsumerSettings;
 };
+
+export interface QueueConsumerSettings {
+  /**
+   * The maximum number of messages per batch.
+   * @default 10
+   */
+  batchSize?: number;
+  /**
+   * The maximum number of concurrent consumer invocations.
+   */
+  maxConcurrency?: number;
+  /**
+   * The maximum number of retries for a message.
+   * @default 3
+   */
+  maxRetries?: number;
+  /**
+   * The maximum time to wait for a batch to fill, in milliseconds.
+   * @default 5000
+   */
+  maxWaitTimeMs?: number;
+  /**
+   * The number of seconds to wait before retrying a message.
+   */
+  retryDelay?: number;
+}
 
 export type QueueConsumer = Resource<
   "Cloudflare.QueueConsumer",
@@ -66,6 +77,8 @@ export type QueueConsumer = Resource<
     queueId: string;
     scriptName: string;
     accountId: string;
+    deadLetterQueue?: string;
+    settings?: QueueConsumerSettings;
   },
   never,
   Providers
@@ -125,7 +138,7 @@ const toObserved = (c: {
     ? { consumerId: c.consumerId, script: c.scriptName ?? undefined }
     : undefined;
 
-export const QueueConsumerProvider = () =>
+export const QueueConsumerProviderLive = () =>
   Provider.effect(
     QueueConsumer,
     Effect.gen(function* () {
@@ -158,6 +171,9 @@ export const QueueConsumerProvider = () =>
           // to a queue and the API has no "move consumer" verb.
           if (output?.queueId && news.queueId !== output.queueId) {
             return { action: "replace", deleteFirst: true } as const;
+          }
+          if (!isLiveId(output?.queueId) && !isLiveId(output?.consumerId)) {
+            return { action: "update" };
           }
           // Settings / DLQ / script drift is an update. We DON'T
           // escalate scriptName changes to `replace` because the
@@ -196,7 +212,7 @@ export const QueueConsumerProvider = () =>
           // updating it could clobber another team's wiring.
           let observed: ObservedConsumer | undefined;
           let owned = false;
-          if (output?.consumerId) {
+          if (isLiveId(output?.consumerId)) {
             const fetched = yield* getConsumer({
               accountId: acct,
               queueId,
@@ -384,6 +400,8 @@ export const QueueConsumerProvider = () =>
             queueId,
             scriptName: news.scriptName!,
             accountId: acct,
+            deadLetterQueue: news.deadLetterQueue,
+            settings: news.settings,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
@@ -435,6 +453,8 @@ export const QueueConsumerProvider = () =>
                     ? fetched.scriptName
                     : output.scriptName) ?? output.scriptName,
                 accountId: output.accountId,
+                deadLetterQueue: output.deadLetterQueue,
+                settings: output.settings,
               };
             }
           }
@@ -453,6 +473,8 @@ export const QueueConsumerProvider = () =>
                 queueId: output.queueId,
                 scriptName: match.script ?? output.scriptName,
                 accountId: output.accountId,
+                deadLetterQueue: output.deadLetterQueue,
+                settings: output.settings,
               };
             }
           }
@@ -461,3 +483,74 @@ export const QueueConsumerProvider = () =>
       };
     }),
   );
+
+export const QueueConsumerProviderLocal = () =>
+  RpcProvider.effect(
+    QueueConsumer,
+    LOCAL_ENTRY_URL,
+    Effect.gen(function* () {
+      console.log("QueueConsumerProviderLocal");
+      const { accountId } = yield* CloudflareEnvironment;
+      const localRuntimeState = yield* LocalRuntimeState;
+      return {
+        diff: Effect.fn(function* ({ olds, news, output }) {
+          if (
+            !output ||
+            !MutableHashMap.has(
+              localRuntimeState.queueConsumers,
+              output.consumerId,
+            )
+          ) {
+            return { action: "update" };
+          }
+          if (!isResolved(news)) return undefined;
+          if (
+            olds.queueId !== news.queueId ||
+            olds.scriptName !== news.scriptName ||
+            output.accountId !== accountId
+          ) {
+            return { action: "replace" };
+          }
+          if (!Equal.equals(olds.settings, news.settings)) {
+            return { action: "update" };
+          }
+          return undefined;
+        }),
+        read: Effect.fn(function* ({ output }) {
+          if (!output?.consumerId) return undefined;
+          return MutableHashMap.get(
+            localRuntimeState.queueConsumers,
+            output.consumerId,
+          ).pipe(Option.getOrUndefined);
+        }),
+        reconcile: Effect.fn(function* ({ news, output }) {
+          const consumer: QueueConsumer["Attributes"] = {
+            consumerId: output?.consumerId ?? `dev:${crypto.randomUUID()}`,
+            queueId: news.queueId,
+            scriptName: news.scriptName,
+            deadLetterQueue: news.deadLetterQueue,
+            accountId: output?.accountId ?? accountId,
+            settings: news.settings,
+          };
+          MutableHashMap.set(
+            localRuntimeState.queueConsumers,
+            consumer.consumerId,
+            consumer,
+          );
+          return consumer;
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          MutableHashMap.remove(
+            localRuntimeState.queueConsumers,
+            output.consumerId,
+          );
+        }),
+      };
+    }),
+  );
+
+export const QueueConsumerProvider = () =>
+  ProviderLayer.select({
+    local: () => QueueConsumerProviderLocal(),
+    live: () => QueueConsumerProviderLive(),
+  });

@@ -38,6 +38,7 @@ const make = Effect.fnUntraced(function* (spawnerUrl: string) {
         alchemyContext,
         stack: { name: stack.name, stage: stack.stage },
       };
+      console.log("getSession", spawnerUrl, payload);
       const response = yield* client.post(spawnerUrl, {
         body: yield* HttpBody.json(payload),
       });
