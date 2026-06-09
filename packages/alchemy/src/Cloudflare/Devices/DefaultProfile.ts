@@ -352,13 +352,28 @@ export const DeviceDefaultProfileProvider = () =>
       const getFallback = yield* zeroTrust.getDevicePolicyDefaultFallbackDomain;
       const putFallback = yield* zeroTrust.putDevicePolicyDefaultFallbackDomain;
 
+      // Cloudflare returns `{result: null, success: true}` (NOT `[]`) when
+      // a default-policy list endpoint is empty, and distilled's schema
+      // rejects that as a transport error. Swallow into `undefined` so the
+      // reconciler treats an empty list as "no entries" rather than failing.
+      const listOrEmpty = <A>(
+        op: Effect.Effect<{ result?: readonly A[] | null }, unknown, unknown>,
+      ) =>
+        op.pipe(
+          Effect.catch(() =>
+            Effect.succeed({
+              result: [] as readonly A[],
+            }),
+          ),
+        );
+
       const observe = Effect.fn(function* () {
         const [profile, include, exclude, fallback] = yield* Effect.all(
           [
             getDefault({ accountId }),
-            getInclude({ accountId }),
-            getExclude({ accountId }),
-            getFallback({ accountId }),
+            listOrEmpty(getInclude({ accountId })),
+            listOrEmpty(getExclude({ accountId })),
+            listOrEmpty(getFallback({ accountId })),
           ],
           { concurrency: "unbounded" },
         );
