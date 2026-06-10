@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { GitHubCredentials } from "./Credentials.ts";
+import { Octokit } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface VariableProps {
@@ -102,15 +102,10 @@ export interface Variable extends Resource<
  */
 export const Variable = Resource<Variable>("GitHub.Variable");
 
-const getOctokit = Effect.gen(function* () {
-  const creds = yield* GitHubCredentials;
-  return creds.octokit();
-});
-
 export const VariableProvider = () =>
   Provider.succeed(Variable, {
     reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* getOctokit;
+      const octokit = yield* Octokit;
 
       // Observe — `name` is the path identifier for repo variables; ask
       // GitHub directly for the live row. A 404 means it doesn't exist
@@ -162,7 +157,7 @@ export const VariableProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* getOctokit;
+      const octokit = yield* Octokit;
 
       yield* Effect.tryPromise(async () => {
         try {

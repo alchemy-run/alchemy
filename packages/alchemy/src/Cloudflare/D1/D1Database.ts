@@ -1,12 +1,14 @@
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as Effect from "effect/Effect";
 
+import type { HttpClient } from "effect/unstable/http/HttpClient";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { listSqlFiles, readSqlFile } from "../../Sql/SqlFile.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { Credentials } from "../Credentials.ts";
 import type { Providers } from "../Providers.ts";
 import { cloneD1Database } from "./D1Clone.ts";
 import { importD1Database } from "./D1Import.ts";
@@ -247,279 +249,278 @@ export type D1Database = Resource<
 export const D1Database = Resource<D1Database>("Cloudflare.D1Database");
 
 export const DatabaseProvider = () =>
-  Provider.effect(
-    D1Database,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const createDb = yield* d1.createDatabase;
-      const getDb = yield* d1.getDatabase;
-      const patchDb = yield* d1.patchDatabase;
-      const deleteDb = yield* d1.deleteDatabase;
-      const listDbs = yield* d1.listDatabases;
-      // rootDir for resolving relative `importFiles` paths
-      const rootDir = process.cwd();
-
-      const createDatabaseName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          return name ?? (yield* createPhysicalName({ id }));
-        });
-
-      return {
-        stables: ["databaseId", "accountId"],
-        diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
-          if (!isResolved(news)) return undefined;
-          if ((output?.accountId ?? accountId) !== accountId) {
-            return { action: "replace" } as const;
-          }
-          const name = yield* createDatabaseName(id, news.name);
-          const oldName = output?.databaseName
-            ? output.databaseName
-            : yield* createDatabaseName(id, olds.name);
-          const oldJurisdiction =
-            output?.jurisdiction ?? olds.jurisdiction ?? "default";
-          if (
-            oldName !== name ||
-            oldJurisdiction !== (news.jurisdiction ?? "default") ||
-            (olds.primaryLocationHint !== news.primaryLocationHint &&
-              news.primaryLocationHint !== undefined)
-          ) {
-            return { action: "replace" } as const;
-          }
-          const oldReplicationMode =
-            output?.readReplication?.mode ??
-            olds.readReplication?.mode ??
-            "disabled";
-          const newReplicationMode = news.readReplication?.mode ?? "disabled";
-          if (oldReplicationMode !== newReplicationMode) {
-            return { action: "update" } as const;
-          }
-          // Detect migration/import file drift.
-          if (news.migrationsDir) {
-            const newHashes = yield* hashMigrations(news.migrationsDir);
-            const oldHashes = output?.migrationsHashes ?? {};
-            if (!recordsEqual(newHashes, oldHashes)) {
-              return { action: "update" } as const;
-            }
-            if (
-              (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-              (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
-            ) {
-              return { action: "update" } as const;
-            }
-          } else if (
-            output?.migrationsHashes &&
-            Object.keys(output.migrationsHashes).length > 0
-          ) {
-            // migrationsDir was removed but state still tracks migrations: nothing
-            // to do remotely (we never un-apply), but no diff needed either.
-          }
-          if (news.importFiles?.length) {
-            const newHashes = yield* hashImports(news.importFiles, rootDir);
-            const oldHashes = output?.importHashes ?? {};
-            if (!recordsEqual(newHashes, oldHashes)) {
-              return { action: "update" } as const;
-            }
-          }
-          return undefined;
-        }),
-        read: Effect.fn(function* ({ id, output, olds }) {
-          if (output?.databaseId) {
-            return yield* getDb({
-              accountId: output.accountId,
-              databaseId: output.databaseId,
-            }).pipe(
-              Effect.map((db) => ({
-                databaseId: db.uuid ?? output.databaseId,
-                databaseName: db.name ?? output.databaseName,
-                jurisdiction: output.jurisdiction,
-                // Distilled widened generated string enums to open unions.
-                readReplication: (db.readReplication ?? undefined) as
-                  | { mode: "auto" | "disabled" }
-                  | undefined,
-                accountId: output.accountId,
-                migrationsDir: output.migrationsDir,
-                migrationsTable: output.migrationsTable,
-                migrationsHashes: output.migrationsHashes,
-                importHashes: output.importHashes,
-              })),
-              Effect.catchTag("DatabaseNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-          }
-          const name = yield* createDatabaseName(id, olds?.name);
-          const dbs = yield* listDbs({ accountId, name });
-          const match = dbs.result.find((db) => db.name === name);
-          if (match) {
-            return {
-              databaseId: match.uuid!,
-              databaseName: match.name ?? name,
-              jurisdiction: (olds?.jurisdiction ?? "default") as Jurisdiction,
-              readReplication: olds?.readReplication,
-              accountId,
-              migrationsDir: olds?.migrationsDir,
-              migrationsTable: olds?.migrationsTable,
-              migrationsHashes: {},
-              importHashes: {},
-            };
-          }
-          return undefined;
-        }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
-          const name = yield* createDatabaseName(id, news.name);
-          const jurisdiction = news.jurisdiction ?? "default";
-          const acct = output?.accountId ?? accountId;
-
-          // Observe — re-fetch the cached database; fall back to a name
-          // lookup so we recover from out-of-band deletes or partial
-          // state-persistence failures (the create call may have written
-          // the database but lost the result before persist).
-          let observed:
-            | {
-                uuid?: string | null;
-                name?: string | null;
-                // Distilled widened generated string enums to open unions.
-                readReplication?: { mode: string } | null;
-              }
-            | undefined;
-          if (output?.databaseId) {
-            observed = yield* getDb({
-              accountId: acct,
-              databaseId: output.databaseId,
-            }).pipe(
-              Effect.catchTag("DatabaseNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-          }
-          if (!observed) {
-            const dbs = yield* listDbs({ accountId: acct, name });
-            observed = dbs.result.find((db) => db.name === name);
-          }
-
-          // Ensure — create if missing. Cloudflare returns
-          // `InvalidProperty` when a database with the same name already
-          // exists; we tolerate the race by re-listing to find it.
-          let databaseId: string;
-          let databaseName: string;
-          const isFirstCreation = !observed;
-          if (!observed) {
-            const db = yield* createDb({
-              accountId: acct,
-              name,
-              jurisdiction:
-                jurisdiction !== "default" ? jurisdiction : undefined,
-              primaryLocationHint: news.primaryLocationHint,
-            }).pipe(
-              Effect.catchTag("InvalidProperty", () =>
-                Effect.gen(function* () {
-                  const dbs = yield* listDbs({ accountId: acct, name });
-                  const match = dbs.result.find((db) => db.name === name);
-                  if (match) {
-                    return match;
-                  }
-                  return yield* Effect.die(
-                    `Database with name "${name}" already exists but could not be found`,
-                  );
-                }),
-              ),
-            );
-            databaseId = db.uuid!;
-            databaseName = db.name ?? name;
-          } else {
-            databaseId = observed.uuid ?? output!.databaseId;
-            databaseName = observed.name ?? name;
-          }
-
-          // Sync read replication — the only mutable property on the
-          // database resource itself. Always patch with the desired mode
-          // so adoption converges drifted state.
-          const desiredReplicationMode =
-            news.readReplication?.mode ?? "disabled";
-          const observedReplicationMode =
-            observed?.readReplication?.mode ?? "disabled";
-          if (
-            isFirstCreation
-              ? desiredReplicationMode !== "disabled"
-              : observedReplicationMode !== desiredReplicationMode
-          ) {
-            const updated = yield* patchDb({
-              accountId: acct,
-              databaseId,
-              readReplication: { mode: desiredReplicationMode },
-            });
-            databaseId = updated.uuid ?? databaseId;
-            databaseName = updated.name ?? databaseName;
-          }
-
-          // Clone is a one-shot seed performed only on first creation.
-          // Re-running it on an existing database would clobber data.
-          if (isFirstCreation && news.clone) {
-            const sourceId = yield* resolveCloneSource(
-              news.clone,
-              acct,
-              listDbs,
-            );
-            yield* cloneD1Database({
-              accountId: acct,
-              sourceDatabaseId: sourceId,
-              targetDatabaseId: databaseId,
-            });
-          }
-
-          // Sync migrations — `applyMigrations` is itself idempotent (it
-          // skips already-applied entries), so this works for both first
-          // create and ongoing updates.
-          const migrationsTable =
-            news.migrationsTable ??
-            output?.migrationsTable ??
-            DEFAULT_MIGRATIONS_TABLE;
-          const migrationsHashes = news.migrationsDir
-            ? yield* runMigrations(
-                acct,
-                databaseId,
-                news.migrationsDir,
-                migrationsTable,
-              )
-            : isFirstCreation
-              ? {}
-              : (output?.migrationsHashes ?? {});
-
-          // Sync imports — `runImports` skips files whose hash matches
-          // previously-imported state. On first create the previous map
-          // is empty so all listed files import.
-          const importHashes = news.importFiles?.length
-            ? yield* runImports(
-                acct,
-                databaseId,
-                news.importFiles,
-                rootDir,
-                output?.importHashes ?? {},
-              )
-            : {};
-
-          return {
-            databaseId,
-            databaseName,
-            jurisdiction: (output?.jurisdiction ??
-              jurisdiction) as Jurisdiction,
-            readReplication: news.readReplication,
-            accountId: acct,
-            migrationsDir: news.migrationsDir,
-            migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-            migrationsHashes,
-            importHashes,
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteDb({
+  Provider.succeed(D1Database, {
+    stables: ["databaseId", "accountId"],
+    diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!isResolved(news)) return undefined;
+      if ((output?.accountId ?? accountId) !== accountId) {
+        return { action: "replace" } as const;
+      }
+      const name = yield* createDatabaseName(id, news.name);
+      const oldName = output?.databaseName
+        ? output.databaseName
+        : yield* createDatabaseName(id, olds.name);
+      const oldJurisdiction =
+        output?.jurisdiction ?? olds.jurisdiction ?? "default";
+      if (
+        oldName !== name ||
+        oldJurisdiction !== (news.jurisdiction ?? "default") ||
+        (olds.primaryLocationHint !== news.primaryLocationHint &&
+          news.primaryLocationHint !== undefined)
+      ) {
+        return { action: "replace" } as const;
+      }
+      const oldReplicationMode =
+        output?.readReplication?.mode ??
+        olds.readReplication?.mode ??
+        "disabled";
+      const newReplicationMode = news.readReplication?.mode ?? "disabled";
+      if (oldReplicationMode !== newReplicationMode) {
+        return { action: "update" } as const;
+      }
+      // Detect migration/import file drift.
+      if (news.migrationsDir) {
+        const newHashes = yield* hashMigrations(news.migrationsDir);
+        const oldHashes = output?.migrationsHashes ?? {};
+        if (!recordsEqual(newHashes, oldHashes)) {
+          return { action: "update" } as const;
+        }
+        if (
+          (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
+          (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
+        ) {
+          return { action: "update" } as const;
+        }
+      } else if (
+        output?.migrationsHashes &&
+        Object.keys(output.migrationsHashes).length > 0
+      ) {
+        // migrationsDir was removed but state still tracks migrations: nothing
+        // to do remotely (we never un-apply), but no diff needed either.
+      }
+      if (news.importFiles?.length) {
+        const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
+        const oldHashes = output?.importHashes ?? {};
+        if (!recordsEqual(newHashes, oldHashes)) {
+          return { action: "update" } as const;
+        }
+      }
+      return undefined;
+    }),
+    read: Effect.fn(function* ({ id, output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output?.databaseId) {
+        return yield* d1
+          .getDatabase({
             accountId: output.accountId,
             databaseId: output.databaseId,
-          }).pipe(Effect.catchTag("DatabaseNotFound", () => Effect.void));
-        }),
+          })
+          .pipe(
+            Effect.map((db) => ({
+              databaseId: db.uuid ?? output.databaseId,
+              databaseName: db.name ?? output.databaseName,
+              jurisdiction: output.jurisdiction,
+              // Distilled widened generated string enums to open unions.
+              readReplication: (db.readReplication ?? undefined) as
+                | { mode: "auto" | "disabled" }
+                | undefined,
+              accountId: output.accountId,
+              migrationsDir: output.migrationsDir,
+              migrationsTable: output.migrationsTable,
+              migrationsHashes: output.migrationsHashes,
+              importHashes: output.importHashes,
+            })),
+            Effect.catchTag("DatabaseNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+      }
+      const name = yield* createDatabaseName(id, olds?.name);
+      const dbs = yield* d1.listDatabases({ accountId, name });
+      const match = dbs.result.find((db) => db.name === name);
+      if (match) {
+        return {
+          databaseId: match.uuid!,
+          databaseName: match.name ?? name,
+          jurisdiction: (olds?.jurisdiction ?? "default") as Jurisdiction,
+          readReplication: olds?.readReplication,
+          accountId,
+          migrationsDir: olds?.migrationsDir,
+          migrationsTable: olds?.migrationsTable,
+          migrationsHashes: {},
+          importHashes: {},
+        };
+      }
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = yield* createDatabaseName(id, news.name);
+      const jurisdiction = news.jurisdiction ?? "default";
+      const acct = output?.accountId ?? accountId;
+
+      // Observe — re-fetch the cached database; fall back to a name
+      // lookup so we recover from out-of-band deletes or partial
+      // state-persistence failures (the create call may have written
+      // the database but lost the result before persist).
+      let observed:
+        | {
+            uuid?: string | null;
+            name?: string | null;
+            // Distilled widened generated string enums to open unions.
+            readReplication?: { mode: string } | null;
+          }
+        | undefined;
+      if (output?.databaseId) {
+        observed = yield* d1
+          .getDatabase({
+            accountId: acct,
+            databaseId: output.databaseId,
+          })
+          .pipe(
+            Effect.catchTag("DatabaseNotFound", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+      }
+      if (!observed) {
+        const dbs = yield* d1.listDatabases({ accountId: acct, name });
+        observed = dbs.result.find((db) => db.name === name);
+      }
+
+      // Ensure — create if missing. Cloudflare returns
+      // `InvalidProperty` when a database with the same name already
+      // exists; we tolerate the race by re-listing to find it.
+      let databaseId: string;
+      let databaseName: string;
+      const isFirstCreation = !observed;
+      if (!observed) {
+        const db = yield* d1
+          .createDatabase({
+            accountId: acct,
+            name,
+            jurisdiction: jurisdiction !== "default" ? jurisdiction : undefined,
+            primaryLocationHint: news.primaryLocationHint,
+          })
+          .pipe(
+            Effect.catchTag("InvalidProperty", () =>
+              Effect.gen(function* () {
+                const dbs = yield* d1.listDatabases({
+                  accountId: acct,
+                  name,
+                });
+                const match = dbs.result.find((db) => db.name === name);
+                if (match) {
+                  return match;
+                }
+                return yield* Effect.die(
+                  `Database with name "${name}" already exists but could not be found`,
+                );
+              }),
+            ),
+          );
+        databaseId = db.uuid!;
+        databaseName = db.name ?? name;
+      } else {
+        databaseId = observed.uuid ?? output!.databaseId;
+        databaseName = observed.name ?? name;
+      }
+
+      // Sync read replication — the only mutable property on the
+      // database resource itself. Always patch with the desired mode
+      // so adoption converges drifted state.
+      const desiredReplicationMode = news.readReplication?.mode ?? "disabled";
+      const observedReplicationMode =
+        observed?.readReplication?.mode ?? "disabled";
+      if (
+        isFirstCreation
+          ? desiredReplicationMode !== "disabled"
+          : observedReplicationMode !== desiredReplicationMode
+      ) {
+        const updated = yield* d1.patchDatabase({
+          accountId: acct,
+          databaseId,
+          readReplication: { mode: desiredReplicationMode },
+        });
+        databaseId = updated.uuid ?? databaseId;
+        databaseName = updated.name ?? databaseName;
+      }
+
+      // Clone is a one-shot seed performed only on first creation.
+      // Re-running it on an existing database would clobber data.
+      if (isFirstCreation && news.clone) {
+        const sourceId = yield* resolveCloneSource(
+          news.clone,
+          acct,
+          d1.listDatabases,
+        );
+        yield* cloneD1Database({
+          accountId: acct,
+          sourceDatabaseId: sourceId,
+          targetDatabaseId: databaseId,
+        });
+      }
+
+      // Sync migrations — `applyMigrations` is itself idempotent (it
+      // skips already-applied entries), so this works for both first
+      // create and ongoing updates.
+      const migrationsTable =
+        news.migrationsTable ??
+        output?.migrationsTable ??
+        DEFAULT_MIGRATIONS_TABLE;
+      const migrationsHashes = news.migrationsDir
+        ? yield* runMigrations(
+            acct,
+            databaseId,
+            news.migrationsDir,
+            migrationsTable,
+          )
+        : isFirstCreation
+          ? {}
+          : (output?.migrationsHashes ?? {});
+
+      // Sync imports — `runImports` skips files whose hash matches
+      // previously-imported state. On first create the previous map
+      // is empty so all listed files import.
+      const importHashes = news.importFiles?.length
+        ? yield* runImports(
+            acct,
+            databaseId,
+            news.importFiles,
+            yield* rootDir,
+            output?.importHashes ?? {},
+          )
+        : {};
+
+      return {
+        databaseId,
+        databaseName,
+        jurisdiction: (output?.jurisdiction ?? jurisdiction) as Jurisdiction,
+        readReplication: news.readReplication,
+        accountId: acct,
+        migrationsDir: news.migrationsDir,
+        migrationsTable: news.migrationsDir ? migrationsTable : undefined,
+        migrationsHashes,
+        importHashes,
       };
     }),
-  );
+    delete: Effect.fn(function* ({ output }) {
+      yield* d1
+        .deleteDatabase({
+          accountId: output.accountId,
+          databaseId: output.databaseId,
+        })
+        .pipe(Effect.catchTag("DatabaseNotFound", () => Effect.void));
+    }),
+  });
+
+const createDatabaseName = (id: string, name: string | undefined) =>
+  Effect.gen(function* () {
+    return name ?? (yield* createPhysicalName({ id }));
+  });
+
+const rootDir = Effect.sync(() => process.cwd());
 
 /**
  * Resolve a clone source spec into a concrete database UUID. Looks up by
@@ -531,7 +532,11 @@ const resolveCloneSource = (
   listDbs: (input: {
     accountId: string;
     name?: string;
-  }) => Effect.Effect<d1.ListDatabasesResponse, d1.ListDatabasesError, never>,
+  }) => Effect.Effect<
+    d1.ListDatabasesResponse,
+    d1.ListDatabasesError,
+    Credentials | HttpClient
+  >,
 ) =>
   Effect.gen(function* () {
     if ("databaseId" in source && source.databaseId) {

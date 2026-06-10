@@ -73,9 +73,13 @@ export const OpenIDConnectProviderProvider = () =>
   Provider.effect(
     OpenIDConnectProvider,
     Effect.gen(function* () {
-      const { accountId } = yield* AWSEnvironment;
       const oidcArnFromUrl = (url: string) =>
-        `arn:aws:iam::${accountId}:oidc-provider/${url.replace(/^https?:\/\//, "")}`;
+        AWSEnvironment.current.pipe(
+          Effect.map(
+            ({ accountId }) =>
+              `arn:aws:iam::${accountId}:oidc-provider/${url.replace(/^https?:\/\//, "")}`,
+          ),
+        );
 
       const readProvider = Effect.fn(function* (providerArn: string) {
         const response = yield* iam
@@ -100,7 +104,8 @@ export const OpenIDConnectProviderProvider = () =>
         }),
         read: Effect.fn(function* ({ olds, output }) {
           const providerArn =
-            output?.openIDConnectProviderArn ?? oidcArnFromUrl(olds.url);
+            output?.openIDConnectProviderArn ??
+            (yield* oidcArnFromUrl(olds.url));
           const provider = yield* readProvider(providerArn);
           if (!provider?.Url) {
             return undefined;
@@ -120,7 +125,8 @@ export const OpenIDConnectProviderProvider = () =>
           // The OIDC provider's ARN is deterministic from its URL, so we
           // can observe with or without prior output.
           const providerArn =
-            output?.openIDConnectProviderArn ?? oidcArnFromUrl(news.url);
+            output?.openIDConnectProviderArn ??
+            (yield* oidcArnFromUrl(news.url));
 
           // Observe — read the live provider; absent when missing.
           let observed = yield* readProvider(providerArn);

@@ -1,9 +1,8 @@
-import type { Octokit } from "@octokit/rest";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { GitHubCredentials } from "./Credentials.ts";
+import { Octokit } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface SecretProps {
@@ -129,11 +128,6 @@ export interface Secret extends Resource<
  */
 export const Secret = Resource<Secret>("GitHub.Secret");
 
-const getOctokit = Effect.gen(function* () {
-  const creds = yield* GitHubCredentials;
-  return creds.octokit();
-});
-
 async function encryptValue(
   plaintext: string,
   publicKey: string,
@@ -153,8 +147,6 @@ async function encryptValue(
 export const SecretProvider = () =>
   Provider.succeed(Secret, {
     reconcile: Effect.fn(function* ({ news, olds }) {
-      const octokit = yield* getOctokit;
-
       // Observe — there's no API to read a secret's value back, so we can
       // only observe its location (repo vs. environment, environment name).
       // If the location changed, the previous secret is orphaned: delete
@@ -164,7 +156,7 @@ export const SecretProvider = () =>
         const wasEnv = !!olds.environment;
         const isEnv = !!news.environment;
         if (wasEnv !== isEnv || olds.environment !== news.environment) {
-          yield* deleteSecret(octokit, olds);
+          yield* deleteSecret(olds);
         }
       }
 
@@ -173,20 +165,17 @@ export const SecretProvider = () =>
       // value is encrypted client-side with the repo/environment public
       // key, so we re-encrypt and re-upload on every reconcile (Redacted
       // values can't be diffed across runs anyway).
-      yield* upsertSecret(octokit, news);
+      yield* upsertSecret(news);
       return { updatedAt: new Date().toISOString() };
     }),
 
     delete: Effect.fn(function* ({ olds }) {
-      const octokit = yield* getOctokit;
-      yield* deleteSecret(octokit, olds);
+      yield* deleteSecret(olds);
     }),
   });
 
-const upsertSecret = Effect.fn(function* (
-  octokit: Octokit,
-  props: SecretProps,
-) {
+const upsertSecret = Effect.fn(function* (props: SecretProps) {
+  const octokit = yield* Octokit;
   const plaintext = Redacted.value(props.value);
   const isEnv = !!props.environment;
 
@@ -232,10 +221,8 @@ const upsertSecret = Effect.fn(function* (
   });
 });
 
-const deleteSecret = Effect.fn(function* (
-  octokit: Octokit,
-  props: SecretProps,
-) {
+const deleteSecret = Effect.fn(function* (props: SecretProps) {
+  const octokit = yield* Octokit;
   yield* Effect.tryPromise(async () => {
     try {
       if (props.environment) {

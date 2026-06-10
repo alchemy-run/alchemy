@@ -5,7 +5,6 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import {
   createInternalTags,
   createTagsList,
@@ -14,6 +13,7 @@ import {
 } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { PolicyDocument } from "./Policy.ts";
 import {
   parsePolicyDocument,
@@ -431,7 +431,7 @@ export const RoleProvider = () =>
           const liveRole = yield* iam.getRole({ RoleName: roleName });
           const roleArn = (liveRole.Role?.Arn ??
             observedRole.Role?.Arn ??
-            `arn:aws:iam::${(yield* AWSEnvironment).accountId}:role/${roleName}`) as RoleArn;
+            `arn:aws:iam::${(yield* AWSEnvironment.current).accountId}:role/${roleName}`) as RoleArn;
 
           yield* session.note(roleArn);
           return {

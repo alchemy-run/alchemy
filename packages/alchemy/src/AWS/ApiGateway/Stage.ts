@@ -1,13 +1,13 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
+import { AWSEnvironment } from "../Environment.ts";
 import type { RestApi } from "./RestApi.ts";
 import { retryOnApiStatusUpdating, stageArn, syncTags } from "./common.ts";
 
@@ -527,8 +527,6 @@ export const StageProvider = () =>
   Provider.effect(
     StageResource,
     Effect.gen(function* () {
-      const awsRegion = yield* Region;
-
       return {
         stables: ["restApiId", "stageName"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
@@ -557,6 +555,7 @@ export const StageProvider = () =>
           return snapshotStage(s, output.restApiId, s.stageName);
         }),
         reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
+          const { region } = yield* AWSEnvironment.current;
           if (!isResolved(newsIn)) {
             return yield* Effect.die("Stage props were not resolved");
           }
@@ -626,7 +625,7 @@ export const StageProvider = () =>
 
           // Sync tags — observed ↔ desired.
           if (!deepEqual(observedSnapshot.tags, desiredTags)) {
-            const arn = stageArn(awsRegion, restApiId, stageName);
+            const arn = stageArn(region, restApiId, stageName);
             yield* syncTags({
               resourceArn: arn,
               oldTags: observedSnapshot.tags,

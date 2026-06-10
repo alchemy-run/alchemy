@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { AuthError, getAuthProvider } from "../Auth/AuthProvider.ts";
-import { ALCHEMY_PROFILE, Profile } from "../Auth/Profile.ts";
+import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
 import {
   GITHUB_AUTH_PROVIDER_NAME,
   type GitHubAuthConfig,
@@ -19,7 +19,7 @@ export interface GitHubCredentialsService {
 
 export class GitHubCredentials extends Context.Service<
   GitHubCredentials,
-  GitHubCredentialsService
+  Effect.Effect<GitHubCredentialsService>
 >()("GitHub::Credentials") {}
 
 const make = (token: Redacted.Redacted<string>): GitHubCredentialsService => ({
@@ -34,7 +34,9 @@ const make = (token: Redacted.Redacted<string>): GitHubCredentialsService => ({
 export const fromToken = (token: string | Redacted.Redacted<string>) =>
   Layer.succeed(
     GitHubCredentials,
-    make(typeof token === "string" ? Redacted.make(token) : token),
+    Effect.succeed(
+      make(typeof token === "string" ? Redacted.make(token) : token),
+    ),
   );
 
 /**
@@ -42,7 +44,7 @@ export const fromToken = (token: string | Redacted.Redacted<string>) =>
  * `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN` at layer build time.
  */
 export const fromEnv = () =>
-  Layer.effect(
+  Layer.succeed(
     GitHubCredentials,
     Effect.gen(function* () {
       const access = yield* Config.redacted("GITHUB_ACCESS_TOKEN").pipe(
@@ -74,7 +76,7 @@ export const fromAuthProvider = () =>
   Layer.effect(
     GitHubCredentials,
     Effect.gen(function* () {
-      const profile = yield* Profile;
+      const profile = yield* AlchemyProfile;
       const auth = yield* getAuthProvider<
         GitHubAuthConfig,
         GitHubResolvedCredentials
@@ -93,6 +95,8 @@ export const fromAuthProvider = () =>
               message: `Failed to resolve GitHub credentials for profile '${profileName}': ${(e as { message?: string }).message ?? String(e)}`,
             }),
         ),
+        Effect.orDie,
+        Effect.cached,
       );
     }).pipe(Effect.orDie),
   );

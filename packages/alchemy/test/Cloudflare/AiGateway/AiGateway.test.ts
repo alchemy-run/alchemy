@@ -24,7 +24,7 @@ const logLevel = Effect.provideService(
 
 test.provider("create and delete ai gateway with default props", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -58,7 +58,7 @@ test.provider("create and delete ai gateway with default props", (stack) =>
 
 test.provider("create, update, delete ai gateway", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -118,7 +118,7 @@ test.provider(
   "existing ai gateway (matching id) is silently adopted without --adopt",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 

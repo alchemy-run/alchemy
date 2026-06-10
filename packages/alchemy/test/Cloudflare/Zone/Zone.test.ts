@@ -26,7 +26,7 @@ test.provider(
   "create zone retains by default — destroy() opts in to deletion",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const TEST_ZONE = zoneNameFor(accountId, "destroy");
 
       const zone = yield* stack.deploy(
@@ -79,7 +79,7 @@ test.provider(
   "create zone retains by default — survives stack.destroy()",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const TEST_ZONE = zoneNameFor(accountId, "retain");
 
       const zone = yield* stack.deploy(
@@ -108,7 +108,7 @@ test.provider(
   "adoption — existing zone errors without adopt, takes over with adopt(true)",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const TEST_ZONE = zoneNameFor(accountId, "adopt");
 
       // Create the zone out-of-band so the stack has no state of its own for

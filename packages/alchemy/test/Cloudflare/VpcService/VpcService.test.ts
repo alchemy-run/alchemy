@@ -17,7 +17,7 @@ const logLevel = Effect.provideService(
 
 test.provider("create, update, delete vpc service", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -94,7 +94,7 @@ test.provider("create, update, delete vpc service", (stack) =>
 
 test.provider("create vpc service with ipv4 host", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -137,7 +137,7 @@ test.provider("create vpc service with ipv4 host", (stack) =>
 // schema's Schema.Union, so `ipv6` is silently stripped on encode.
 test.provider.skip("create vpc service with dual-stack host", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 

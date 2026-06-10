@@ -36,7 +36,7 @@ const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
 describe.concurrent("Cloudflare.Worker", () => {
   test.provider("create, update, delete worker", (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const s = yield* Stack;
 
       yield* stack.destroy();
@@ -118,7 +118,7 @@ describe.concurrent("Cloudflare.Worker", () => {
 
   test.provider("create, update, delete worker with assets", (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const s = yield* Stack;
 
       yield* stack.destroy();
@@ -231,7 +231,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     "Worker assets: relocating to a fresh path with identical bytes preserves hash and keeps assets",
     (stack) =>
       Effect.gen(function* () {
-        const { accountId } = yield* CloudflareEnvironment;
+        const { accountId } = yield* yield* CloudflareEnvironment;
         const fs = yield* FileSystem.FileSystem;
 
         yield* stack.destroy();
@@ -289,7 +289,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     "Worker assets: editing a file changes the hash and republishes the manifest",
     (stack) =>
       Effect.gen(function* () {
-        const { accountId } = yield* CloudflareEnvironment;
+        const { accountId } = yield* yield* CloudflareEnvironment;
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
 
@@ -350,7 +350,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     "Worker assets: a bundle-only change keeps the asset manifest (hash.assets stable)",
     (stack) =>
       Effect.gen(function* () {
-        const { accountId } = yield* CloudflareEnvironment;
+        const { accountId } = yield* yield* CloudflareEnvironment;
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
 
@@ -413,7 +413,7 @@ describe.concurrent("Cloudflare.Worker", () => {
 
   test.provider("create, update, delete internal worker", (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const s = yield* Stack;
 
       yield* stack.destroy();
@@ -474,7 +474,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     "owned worker (matching alchemy tags) is silently adopted without --adopt",
     (stack) =>
       Effect.gen(function* () {
-        const { accountId } = yield* CloudflareEnvironment;
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
         yield* stack.destroy();
 
@@ -551,7 +551,7 @@ describe.concurrent("Cloudflare.Worker", () => {
 
   test.provider("adopt(true) takes over a foreign-tagged worker", (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
@@ -625,7 +625,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     "url defaults to enabling the workers.dev subdomain on first deploy",
     (stack) =>
       Effect.gen(function* () {
-        const { accountId } = yield* CloudflareEnvironment;
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
         yield* stack.destroy();
 
@@ -650,7 +650,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     "url: false disables the workers.dev subdomain on first deploy",
     (stack) =>
       Effect.gen(function* () {
-        const { accountId } = yield* CloudflareEnvironment;
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
         yield* stack.destroy();
 
@@ -682,7 +682,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     "toggling url between deploys flips the workers.dev subdomain",
     (stack) =>
       Effect.gen(function* () {
-        const { accountId } = yield* CloudflareEnvironment;
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
         yield* stack.destroy();
 
@@ -726,7 +726,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     "redeploy re-enables previewsEnabled when externally disabled",
     (stack) =>
       Effect.gen(function* () {
-        const { accountId } = yield* CloudflareEnvironment;
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
         yield* stack.destroy();
 
@@ -778,7 +778,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     "domains reflects the workers.dev subdomain and tracks url",
     (stack) =>
       Effect.gen(function* () {
-        const { accountId } = yield* CloudflareEnvironment;
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
         yield* stack.destroy();
 
@@ -816,7 +816,7 @@ describe.concurrent("Cloudflare.Worker", () => {
     "domains puts custom domains before workers.dev and url is the first",
     (stack) =>
       Effect.gen(function* () {
-        const { accountId } = yield* CloudflareEnvironment;
+        const { accountId } = yield* yield* CloudflareEnvironment;
         const suffix = process.env.PULL_REQUEST ?? process.env.USER ?? "local";
         const domainA = `alchemy-worker-a-${suffix}.${customDomainZone}`;
         const domainB = `alchemy-worker-b-${suffix}.${customDomainZone}`;

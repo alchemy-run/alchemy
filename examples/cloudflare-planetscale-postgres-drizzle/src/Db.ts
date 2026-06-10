@@ -58,5 +58,6 @@ export const Hyperdrive: Effect.Effect<Cloudflare.Hyperdrive, never, any> =
     const { role } = yield* PlanetscaleDb;
     return yield* Cloudflare.Hyperdrive("app-hyperdrive", {
       origin: role.origin,
+      caching: { disabled: true },
     });
   });

@@ -57,82 +57,80 @@ export type EmailRouting = Resource<
  */
 export const EmailRouting = Resource<EmailRouting>("Cloudflare.EmailRouting");
 
+const resolve = Effect.fnUntraced(function* (zone: ZoneReference) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  return yield* resolveZoneId({
+    accountId,
+    zone,
+    hostname: typeof zone === "string" ? zone : (zone.name ?? ""),
+  });
+});
+
 export const EmailRoutingProvider = () =>
-  Provider.effect(
-    EmailRouting,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const enable = yield* emailRouting.enableEmailRouting;
-      const disable = yield* emailRouting.disableEmailRouting;
-      const get = yield* emailRouting.getEmailRouting;
-
-      const resolve = (zone: ZoneReference) =>
-        resolveZoneId({
-          accountId,
-          zone,
-          hostname: typeof zone === "string" ? zone : (zone.name ?? ""),
-        });
-
+  Provider.succeed(EmailRouting, {
+    stables: ["zoneId", "routingId"],
+    diff: Effect.fn(function* ({ news, output }) {
+      if (!output) return undefined;
+      if (!isResolved(news)) return undefined;
+      const zoneId = yield* resolve(news.zone);
+      if (zoneId !== output.zoneId) {
+        return { action: "replace" } as const;
+      }
+      if ((news.enabled ?? true) !== output.enabled) {
+        return { action: "update" } as const;
+      }
+      return undefined;
+    }),
+    read: Effect.fn(function* ({ output }) {
+      if (!output?.zoneId) return undefined;
+      const result = yield* emailRouting.getEmailRouting({
+        zoneId: output.zoneId,
+      });
       return {
-        stables: ["zoneId", "routingId"],
-        diff: Effect.fn(function* ({ news, output }) {
-          if (!output) return undefined;
-          if (!isResolved(news)) return undefined;
-          const zoneId = yield* resolve(news.zone);
-          if (zoneId !== output.zoneId) {
-            return { action: "replace" } as const;
-          }
-          if ((news.enabled ?? true) !== output.enabled) {
-            return { action: "update" } as const;
-          }
-          return undefined;
-        }),
-        read: Effect.fn(function* ({ output }) {
-          if (!output?.zoneId) return undefined;
-          const result = yield* get({ zoneId: output.zoneId });
-          return {
-            routingId: result.id,
-            zoneId: output.zoneId,
-            name: result.name,
-            enabled: result.enabled,
-            status: (result.status ?? undefined) as
-              | EmailRoutingStatus
-              | undefined,
-          };
-        }),
-        reconcile: Effect.fn(function* ({ news, output }) {
-          const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
-          const desired = news.enabled ?? true;
-
-          if (desired) {
-            const result = yield* enable({ zoneId, body: {} });
-            return {
-              routingId: result.id,
-              zoneId,
-              name: result.name,
-              enabled: result.enabled,
-              status: (result.status ?? undefined) as
-                | EmailRoutingStatus
-                | undefined,
-            };
-          } else {
-            const result = yield* disable({ zoneId, body: {} });
-            return {
-              routingId: result.id,
-              zoneId,
-              name: result.name,
-              enabled: result.enabled,
-              status: (result.status ?? undefined) as
-                | EmailRoutingStatus
-                | undefined,
-            };
-          }
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* disable({ zoneId: output.zoneId, body: {} }).pipe(
-            Effect.catch(() => Effect.void),
-          );
-        }),
+        routingId: result.id,
+        zoneId: output.zoneId,
+        name: result.name,
+        enabled: result.enabled,
+        status: (result.status ?? undefined) as EmailRoutingStatus | undefined,
       };
     }),
-  );
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
+      const desired = news.enabled ?? true;
+
+      if (desired) {
+        const result = yield* emailRouting.enableEmailRouting({
+          zoneId,
+          body: {},
+        });
+        return {
+          routingId: result.id,
+          zoneId,
+          name: result.name,
+          enabled: result.enabled,
+          status: (result.status ?? undefined) as
+            | EmailRoutingStatus
+            | undefined,
+        };
+      } else {
+        const result = yield* emailRouting.disableEmailRouting({
+          zoneId,
+          body: {},
+        });
+        return {
+          routingId: result.id,
+          zoneId,
+          name: result.name,
+          enabled: result.enabled,
+          status: (result.status ?? undefined) as
+            | EmailRoutingStatus
+            | undefined,
+        };
+      }
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* emailRouting
+        .disableEmailRouting({ zoneId: output.zoneId, body: {} })
+        .pipe(Effect.catch(() => Effect.void));
+    }),
+  });

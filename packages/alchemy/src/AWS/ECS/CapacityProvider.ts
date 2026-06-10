@@ -1,5 +1,4 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -200,8 +199,7 @@ export const CapacityProviderProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, session }) {
-          const region = yield* Region;
-          const { accountId } = yield* AWSEnvironment;
+          const { accountId, region } = yield* AWSEnvironment.current;
           const name = yield* toName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };

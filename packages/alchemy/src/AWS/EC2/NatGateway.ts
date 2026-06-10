@@ -1,5 +1,4 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -8,7 +7,6 @@ import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import {
   createAlchemyTagFilters,
   createInternalTags,
@@ -17,6 +15,7 @@ import {
 } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { AllocationId } from "./EIP.ts";
 import type { SubnetId } from "./Subnet.ts";
@@ -165,9 +164,6 @@ export const NatGatewayProvider = () =>
   Provider.effect(
     NatGateway,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const createTags = Effect.fn(function* (
         id: string,
         tags?: Record<string, string>,
@@ -189,7 +185,8 @@ export const NatGatewayProvider = () =>
           ),
         );
 
-      const toAttrs = (gw: ec2.NatGateway): NatGateway["Attributes"] => {
+      const toAttrs = Effect.fnUntraced(function* (gw: ec2.NatGateway) {
+        const { accountId, region } = yield* AWSEnvironment.current;
         const primaryAddress =
           gw.NatGatewayAddresses?.find((a) => a.IsPrimary) ??
           gw.NatGatewayAddresses?.[0];
@@ -223,8 +220,8 @@ export const NatGatewayProvider = () =>
             gw.DeleteTime instanceof Date
               ? gw.DeleteTime.toISOString()
               : (gw.DeleteTime as string | undefined),
-        };
-      };
+        } satisfies NatGateway["Attributes"];
+      });
 
       // Find NAT Gateway by alchemy tags when we don't have the ID
       const findNatGatewayByTags = Effect.fn(function* (id: string) {
@@ -244,13 +241,15 @@ export const NatGatewayProvider = () =>
         read: Effect.fn(function* ({ id, output }) {
           if (output) {
             // We have the NAT Gateway ID, use it directly
-            return toAttrs(yield* describeNatGateway(output.natGatewayId));
+            return yield* toAttrs(
+              yield* describeNatGateway(output.natGatewayId),
+            );
           }
 
           // No output - try to find by tags (recovery from incomplete create)
           const gw = yield* findNatGatewayByTags(id);
           if (gw) {
-            return toAttrs(gw);
+            return yield* toAttrs(gw);
           }
 
           // Not found
@@ -365,7 +364,7 @@ export const NatGatewayProvider = () =>
 
           // Re-read final state.
           const final = yield* describeNatGateway(natGatewayId);
-          return toAttrs(final);
+          return yield* toAttrs(final);
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

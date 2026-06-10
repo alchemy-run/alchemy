@@ -517,7 +517,8 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
   Effect.gen(function* () {
     const credStore = yield* CredentialsStore;
     const isCI = yield* CI;
-    const { accountId } = yield* CloudflareEnvironment.CloudflareEnvironment;
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
 
     if (!force) {
       // try and read from the cached credentials first if not forcing (force will always refresh)
@@ -608,7 +609,8 @@ export const loginWithCloudflare = (profileName: string, force: boolean) =>
 const isStateStoreAvailable = (scriptName: string = "alchemy-state-store") =>
   Effect.gen(function* () {
     // otherwise, the remote one might exist
-    const { accountId } = yield* CloudflareEnvironment.CloudflareEnvironment;
+    const { accountId } =
+      yield* yield* CloudflareEnvironment.CloudflareEnvironment;
     return yield* workers.getScriptSetting({ accountId, scriptName }).pipe(
       Effect.map((setting) => setting !== undefined),
       Effect.catchTag("WorkerNotFound", () => Effect.succeed(false)),
@@ -861,6 +863,6 @@ const annotateAccountHash = (noTrack?: boolean) =>
       CloudflareEnvironment.CloudflareEnvironment,
     );
     if (env._tag !== "Some") return;
-    const hash = yield* hashAccountId(env.value.accountId);
+    const hash = yield* hashAccountId((yield* env.value).accountId);
     yield* Effect.annotateCurrentSpan("alchemy.cloudflare.account_hash", hash);
   }).pipe(Effect.catch(() => Effect.void));

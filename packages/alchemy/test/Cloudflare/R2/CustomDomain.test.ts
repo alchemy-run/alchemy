@@ -38,7 +38,7 @@ const domain3 = zoneName
 
 test.provider("creates, updates, and deletes a bucket custom domain", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -96,7 +96,7 @@ test.provider(
   "creates, updates, and deletes a bucket with multiple custom domains",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 

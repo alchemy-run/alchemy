@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 describe.skip("UserApiToken", () => {
   test.provider("create and delete user token with default props", (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
@@ -55,7 +55,7 @@ describe.skip("UserApiToken", () => {
 
   test.provider("create, update, delete user token", (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 

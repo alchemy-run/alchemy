@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.52",
+  "version": "2.0.0-beta.53",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -326,16 +326,16 @@
   },
   "devDependencies": {
     "@clack/prompts": "^0.11.0",
-    "@cloudflare/workers-types": "catalog:",
     "@cloudflare/puppeteer": "^1.1.0",
+    "@cloudflare/workers-types": "catalog:",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
     "@oxc-project/types": "^0.127.0",
-    "@types/pg": "^8.11.0",
     "@types/aws-lambda": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "^8.11.0",
     "@types/picomatch": "^4.0.0",
     "@types/react": "^19.2.2",
     "@types/ws": "^8.18.1",
@@ -347,6 +347,7 @@
     "tsdown": "^0.15.4",
     "tsx": "^4.20.6",
     "typescript": "catalog:",
+    "uuid": "catalog:",
     "ws": "catalog:"
   },
   "peerDependencies": {

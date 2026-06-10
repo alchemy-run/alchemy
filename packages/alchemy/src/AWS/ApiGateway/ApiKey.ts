@@ -1,4 +1,3 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -7,9 +6,10 @@ import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, hasAlchemyTags, tagRecord } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
+import { AWSEnvironment } from "../Environment.ts";
 import { apiKeyArn, syncTags } from "./common.ts";
 
 export interface ApiKeyProps {
@@ -110,8 +110,6 @@ export const ApiKeyProvider = () =>
   Provider.effect(
     ApiKeyResource,
     Effect.gen(function* () {
-      const awsRegion = yield* Region;
-
       return {
         stables: ["id"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
@@ -144,6 +142,7 @@ export const ApiKeyProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
+          const { region } = yield* AWSEnvironment.current;
           if (!isResolved(newsIn)) {
             return yield* Effect.die("ApiKey props were not resolved");
           }
@@ -246,7 +245,7 @@ export const ApiKeyProvider = () =>
           const observedTags = tagRecord(observed.tags);
           if (!deepEqual(observedTags, desiredTags)) {
             yield* syncTags({
-              resourceArn: apiKeyArn(awsRegion, apiKeyId),
+              resourceArn: apiKeyArn(region, apiKeyId),
               oldTags: observedTags,
               newTags: desiredTags,
             });

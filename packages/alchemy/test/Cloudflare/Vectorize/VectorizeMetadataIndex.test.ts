@@ -19,7 +19,7 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)(
   () => {
     test.provider("create and delete a metadata index", (stack) =>
       Effect.gen(function* () {
-        const { accountId } = yield* CloudflareEnvironment;
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
         yield* stack.destroy();
 
@@ -66,7 +66,7 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)(
       "multiple metadata indexes on the same parent coexist",
       (stack) =>
         Effect.gen(function* () {
-          const { accountId } = yield* CloudflareEnvironment;
+          const { accountId } = yield* yield* CloudflareEnvironment;
 
           yield* stack.destroy();
 
@@ -111,7 +111,7 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)(
       "replacing the parent index also replaces the metadata index",
       (stack) =>
         Effect.gen(function* () {
-          const { accountId } = yield* CloudflareEnvironment;
+          const { accountId } = yield* yield* CloudflareEnvironment;
 
           yield* stack.destroy();
 
@@ -185,7 +185,7 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)(
       "destroy is idempotent when the parent index was deleted out-of-band",
       (stack) =>
         Effect.gen(function* () {
-          const { accountId } = yield* CloudflareEnvironment;
+          const { accountId } = yield* yield* CloudflareEnvironment;
 
           yield* stack.destroy();
 

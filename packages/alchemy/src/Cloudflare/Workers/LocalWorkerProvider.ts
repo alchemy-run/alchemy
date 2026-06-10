@@ -82,12 +82,12 @@ export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidat
 export const localRuntimeServices = () =>
   RpcProvider.providerServicesEffect(
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const getEnv = yield* CloudflareEnvironment;
       const { dotAlchemy } = yield* AlchemyContext;
       const path = yield* Path.Path;
       return layerRuntime({
         api: {
-          accountId,
+          accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
         },
         storage: {
           directory: path.join(dotAlchemy, "local"),
@@ -110,7 +110,6 @@ export const LocalWorkerProvider = () =>
       import.meta.url,
     ),
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
       const bundler = yield* WorkerBundle;
       const runtime = yield* Runtime;
       const stack = yield* Stack;
@@ -424,6 +423,7 @@ export const LocalWorkerProvider = () =>
         props: WorkerPropsWithDev;
         bindings: ResourceBinding<Worker["Binding"]>[];
       }) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
         const { props, bindings } = options;
         const config = yield* buildConfig(options);
         const url = yield* (
@@ -463,6 +463,7 @@ export const LocalWorkerProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, bindings }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
           // `dev: false` opts out of running a local Worker entirely —
           // typically because an external dev process (DevCommand) is
           // serving requests. Tear down any prior instance and return a

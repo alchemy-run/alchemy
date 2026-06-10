@@ -1,7 +1,6 @@
 // required to avoid this error in consumers: "The inferred type of 'Records' cannot be named without a reference to '../../@distilled.cloud/aws/node_modules/@types/aws-lambda'. This is likely not portable. A type annotation is necessary.ts(2742)"
 export type * as lambda from "aws-lambda";
 
-import { Region } from "@distilled.cloud/aws/Region";
 import * as kinesis from "@distilled.cloud/aws/kinesis";
 import type * as lambda from "aws-lambda";
 import * as Effect from "effect/Effect";
@@ -11,7 +10,6 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import {
   createInternalTags,
   diffTags,
@@ -19,6 +17,7 @@ import {
   type Tags,
 } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type StreamRecord = lambda.KinesisStreamRecord;
@@ -424,9 +423,6 @@ export const StreamProvider = () =>
   Provider.effect(
     Stream,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       return {
         stables: ["streamName", "streamArn"],
         read: Effect.fn(function* ({ id, olds, output }) {
@@ -450,6 +446,7 @@ export const StreamProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           yield* assertProvisionedProps(news);
 
           const streamName =

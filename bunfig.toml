@@ -1,3 +1,17 @@
 [install]
 minimumReleaseAge = 259200
-minimumReleaseAgeExcludes = ["effect"]
+minimumReleaseAgeExcludes = [
+  "@distilled.cloud/aws",
+  "@distilled.cloud/axiom",
+  "@distilled.cloud/cloudflare-rolldown-plugin",
+  "@distilled.cloud/cloudflare-rolldown-plugin",
+  "@distilled.cloud/cloudflare-runtime",
+  "@distilled.cloud/cloudflare-runtime",
+  "@distilled.cloud/cloudflare-vite-plugin",
+  "@distilled.cloud/cloudflare-vite-plugin",
+  "@distilled.cloud/cloudflare",
+  "@distilled.cloud/core",
+  "@distilled.cloud/neon",
+  "@distilled.cloud/planetscale",
+  "effect",
+]

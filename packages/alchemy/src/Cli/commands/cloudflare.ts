@@ -565,7 +565,7 @@ const stateLogsCommand = Command.make(
 
       yield* Effect.gen(function* () {
         const { accountId } =
-          yield* CloudflareEnvironment.CloudflareEnvironment;
+          yield* yield* CloudflareEnvironment.CloudflareEnvironment;
         const telemetry = yield* CloudflareLogs;
 
         const formatLine = (line: { timestamp: Date; message: string }) =>

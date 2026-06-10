@@ -163,180 +163,177 @@ export const isHyperdrive = (value: unknown): value is Hyperdrive =>
   value.Type === "Cloudflare.Hyperdrive";
 
 export const HyperdriveProvider = () =>
-  Provider.effect(
-    Hyperdrive,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const createConfig = yield* hyperdrive.createConfig;
-      const getConfig = yield* hyperdrive.getConfig;
-      const updateConfig = yield* hyperdrive.updateConfig;
-      const deleteConfig = yield* hyperdrive.deleteConfig;
-      const listConfigs = yield* hyperdrive.listConfigs;
+  Provider.succeed(Hyperdrive, {
+    // The `hyperdriveId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
+    stables: ["accountId"],
+    diff: Effect.fn(function* ({ id, olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const ctx = yield* AlchemyContext;
+      if (ctx.dev) return undefined;
 
-      const createConfigName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          if (name) return name;
-          return yield* createPhysicalName({ id, lowercase: true });
-        });
+      if (!isResolved(news)) return undefined;
+      if ((output?.accountId ?? accountId) !== accountId) {
+        return { action: "replace" } as const;
+      }
+      const name = yield* createConfigName(id, news.name);
+      const oldName = output?.name
+        ? output.name
+        : yield* createConfigName(id, olds.name);
+      if (oldName !== name) {
+        return { action: "replace" } as const;
+      }
+      if (!isHyperdriveId(output?.hyperdriveId)) {
+        return { action: "update" };
+      }
+    }),
+    read: Effect.fn(function* ({ id, output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const ctx = yield* AlchemyContext;
+      if (ctx.dev) {
+        return output;
+      }
 
-      const findByName = (name: string) =>
-        Effect.gen(function* () {
-          const list = yield* listConfigs({ accountId });
-          return list.result.find((c) => c.name === name);
-        });
-
-      return {
-        // The `hyperdriveId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
-        stables: ["accountId"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
-          const ctx = yield* AlchemyContext;
-          if (ctx.dev) return undefined;
-
-          if (!isResolved(news)) return undefined;
-          if ((output?.accountId ?? accountId) !== accountId) {
-            return { action: "replace" } as const;
-          }
-          const name = yield* createConfigName(id, news.name);
-          const oldName = output?.name
-            ? output.name
-            : yield* createConfigName(id, olds.name);
-          if (oldName !== name) {
-            return { action: "replace" } as const;
-          }
-          if (!isHyperdriveId(output?.hyperdriveId)) {
-            return { action: "update" };
-          }
-        }),
-        read: Effect.fn(function* ({ id, output, olds }) {
-          const ctx = yield* AlchemyContext;
-          if (ctx.dev) {
-            return output;
-          }
-
-          if (isHyperdriveId(output?.hyperdriveId)) {
-            return yield* getConfig({
+      if (isHyperdriveId(output?.hyperdriveId)) {
+        return yield* hyperdrive
+          .getConfig({
+            accountId: output.accountId,
+            hyperdriveId: output.hyperdriveId,
+          })
+          .pipe(
+            Effect.map((c) => ({
+              hyperdriveId: c.id,
+              name: c.name,
               accountId: output.accountId,
-              hyperdriveId: output.hyperdriveId,
-            }).pipe(
-              Effect.map((c) => ({
-                hyperdriveId: c.id,
-                name: c.name,
-                accountId: output.accountId,
-                origin: {
-                  ...c.origin,
-                  password: olds?.origin?.password,
-                } as HyperdriveOrigin,
-                mtls: {
-                  caCertificateId: c.mtls?.caCertificateId ?? undefined,
-                  mtlsCertificateId: c.mtls?.mtlsCertificateId ?? undefined,
-                  sslmode: c.mtls?.sslmode ?? undefined,
-                } as HyperdriveMtls,
-                dev: output?.dev,
-              })),
-              Effect.catchTag("HyperdriveConfigNotFound", () =>
-                Effect.succeed(undefined),
-              ),
-            );
-          }
-          const name = yield* createConfigName(id, olds?.name);
-          const match = yield* findByName(name);
-          if (match) {
-            return {
-              hyperdriveId: match.id,
-              name: match.name,
-              accountId,
               origin: {
-                ...match.origin,
+                ...c.origin,
                 password: olds?.origin?.password,
               } as HyperdriveOrigin,
               mtls: {
-                caCertificateId: match.mtls?.caCertificateId ?? undefined,
-                mtlsCertificateId: match.mtls?.mtlsCertificateId ?? undefined,
-                sslmode: match.mtls?.sslmode ?? undefined,
+                caCertificateId: c.mtls?.caCertificateId ?? undefined,
+                mtlsCertificateId: c.mtls?.mtlsCertificateId ?? undefined,
+                sslmode: c.mtls?.sslmode ?? undefined,
               } as HyperdriveMtls,
               dev: output?.dev,
-            };
-          }
-          return undefined;
-        }),
-        reconcile: Effect.fn(function* ({ id, news, output }) {
-          const name = output?.name ?? (yield* createConfigName(id, news.name));
-
-          const ctx = yield* AlchemyContext;
-          if (ctx.dev) {
-            return {
-              hyperdriveId:
-                output?.hyperdriveId ?? `dev:${crypto.randomUUID()}`,
-              name,
-              accountId: output?.accountId ?? accountId,
-              origin: news.origin,
-              mtls: news.mtls ?? {},
-              dev: news.dev,
-            };
-          }
-
-          const requestBody = {
-            origin: toRequestOrigin(news.origin),
-            caching: news.caching,
-            mtls: news.mtls,
-            originConnectionLimit: news.originConnectionLimit,
-          };
-
-          // Observe + ensure. When we know the hyperdriveId we go straight
-          // to update; otherwise we createConfig and fall back to "find by
-          // name then update" if Cloudflare reports the name is already in
-          // use (race or a cold-start adoption).
-          const synced = isHyperdriveId(output?.hyperdriveId)
-            ? yield* updateConfig({
-                accountId: output.accountId,
-                hyperdriveId: output.hyperdriveId,
-                name: output.name,
-                ...requestBody,
-              })
-            : yield* createConfig({ accountId, name, ...requestBody }).pipe(
-                Effect.catchTag("InvalidHyperdriveConfig", (originalError) =>
-                  Effect.gen(function* () {
-                    const match = yield* findByName(name);
-                    if (!match) {
-                      return yield* Effect.fail(originalError);
-                    }
-                    return yield* updateConfig({
-                      accountId,
-                      hyperdriveId: match.id,
-                      name,
-                      ...requestBody,
-                    });
-                  }),
-                ),
-              );
-
-          return {
-            hyperdriveId: synced.id,
-            name: synced.name,
-            accountId: output?.accountId ?? accountId,
-            origin: news.origin,
-            mtls: news.mtls ?? {},
-            dev: news.dev,
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          if (!isHyperdriveId(output.hyperdriveId)) return;
-
-          yield* deleteConfig({
-            accountId: output.accountId,
-            hyperdriveId: output.hyperdriveId,
-          }).pipe(
-            Effect.catchIf(
-              (e) =>
-                e._tag === "HyperdriveConfigNotFound" ||
-                (e._tag === "CloudflareHttpError" && e.status === 404),
-              () => Effect.void,
+            })),
+            Effect.catchTag("HyperdriveConfigNotFound", () =>
+              Effect.succeed(undefined),
             ),
           );
-        }),
+      }
+      const name = yield* createConfigName(id, olds?.name);
+      const match = yield* findByName(name);
+      if (match) {
+        return {
+          hyperdriveId: match.id,
+          name: match.name,
+          accountId,
+          origin: {
+            ...match.origin,
+            password: olds?.origin?.password,
+          } as HyperdriveOrigin,
+          mtls: {
+            caCertificateId: match.mtls?.caCertificateId ?? undefined,
+            mtlsCertificateId: match.mtls?.mtlsCertificateId ?? undefined,
+            sslmode: match.mtls?.sslmode ?? undefined,
+          } as HyperdriveMtls,
+          dev: output?.dev,
+        };
+      }
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = output?.name ?? (yield* createConfigName(id, news.name));
+
+      const ctx = yield* AlchemyContext;
+      if (ctx.dev) {
+        return {
+          hyperdriveId: output?.hyperdriveId ?? `dev:${crypto.randomUUID()}`,
+          name,
+          accountId: output?.accountId ?? accountId,
+          origin: news.origin,
+          mtls: news.mtls ?? {},
+          dev: news.dev,
+        };
+      }
+
+      const requestBody = {
+        origin: toRequestOrigin(news.origin),
+        caching: news.caching,
+        mtls: news.mtls,
+        originConnectionLimit: news.originConnectionLimit,
+      };
+
+      // Observe + ensure. When we know the hyperdriveId we go straight
+      // to update; otherwise we createConfig and fall back to "find by
+      // name then update" if Cloudflare reports the name is already in
+      // use (race or a cold-start adoption).
+      const synced = isHyperdriveId(output?.hyperdriveId)
+        ? yield* hyperdrive.updateConfig({
+            accountId: output.accountId,
+            hyperdriveId: output.hyperdriveId,
+            name: output.name,
+            ...requestBody,
+          })
+        : yield* hyperdrive
+            .createConfig({ accountId, name, ...requestBody })
+            .pipe(
+              Effect.catchTag("InvalidHyperdriveConfig", (originalError) =>
+                Effect.gen(function* () {
+                  const match = yield* findByName(name);
+                  if (!match) {
+                    return yield* Effect.fail(originalError);
+                  }
+                  return yield* hyperdrive.updateConfig({
+                    accountId,
+                    hyperdriveId: match.id,
+                    name,
+                    ...requestBody,
+                  });
+                }),
+              ),
+            );
+
+      return {
+        hyperdriveId: synced.id,
+        name: synced.name,
+        accountId: output?.accountId ?? accountId,
+        origin: news.origin,
+        mtls: news.mtls ?? {},
+        dev: news.dev,
       };
     }),
-  );
+    delete: Effect.fn(function* ({ output }) {
+      if (!isHyperdriveId(output.hyperdriveId)) return;
+
+      yield* hyperdrive
+        .deleteConfig({
+          accountId: output.accountId,
+          hyperdriveId: output.hyperdriveId,
+        })
+        .pipe(
+          Effect.catchIf(
+            (e) =>
+              e._tag === "HyperdriveConfigNotFound" ||
+              (e._tag === "CloudflareHttpError" && e.status === 404),
+            () => Effect.void,
+          ),
+        );
+    }),
+  });
+
+const createConfigName = (id: string, name: string | undefined) =>
+  Effect.gen(function* () {
+    if (name) return name;
+    return yield* createPhysicalName({ id, lowercase: true });
+  });
+
+const findByName = (name: string) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const list = yield* hyperdrive.listConfigs({ accountId });
+    return list.result.find((c) => c.name === name);
+  });
 
 export const defaultPort = (scheme: HyperdriveScheme): number =>
   scheme === "mysql" ? 3306 : 5432;

@@ -102,108 +102,86 @@ export type Ruleset = Resource<
  */
 export const Ruleset = Resource<Ruleset>("Cloudflare.Ruleset")({});
 
-const isNotFoundError = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  (("status" in error && (error as { status: unknown }).status === 404) ||
-    ("_tag" in error && (error as { _tag: unknown })._tag === "NotFound"));
-
-// A `Zone` prop is resolved to its attributes before a lifecycle op runs, so
-// `zone.zoneId` is normally a plain string even though the `Zone` resource
-// type statically exposes it as an `Output`. During `diff` (plan time) the
-// zone can still be unresolved — e.g. when it's being created in the same
-// deploy — in which case `zoneId` is not yet a string. Callers must treat a
-// non-string result as "not resolved yet".
-const zoneIdOf = (zone: Zone): string | undefined => {
-  const zoneId = (zone as unknown as Partial<ZoneAttributes>).zoneId;
-  return typeof zoneId === "string" ? zoneId : undefined;
-};
-
 export const RulesetProvider = () =>
-  Provider.effect(
-    Ruleset,
-    Effect.gen(function* () {
-      const getPhas = yield* rulesets.getPhasForZone;
-      const putPhas = yield* rulesets.putPhasForZone;
+  Provider.succeed(Ruleset, {
+    stables: ["zoneId", "phase"],
+    diff: Effect.fn(function* ({ id, olds, news, output }) {
+      if (!isResolved(news)) return undefined;
+      const desiredZoneId = zoneIdOf(news.zone);
 
-      const createRulesetName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          return name ?? (yield* createPhysicalName({ id }));
-        });
+      // The desired zone id may still be an unresolved Output (e.g. the
+      // zone is being created in the same deploy). Only make a zone-change
+      // replacement decision once we have a concrete id.
+      if (desiredZoneId !== undefined) {
+        if (output?.zoneId && desiredZoneId !== output.zoneId) {
+          return { action: "replace" } as const;
+        }
+        const oldZoneId = olds.zone ? zoneIdOf(olds.zone) : undefined;
+        if (oldZoneId !== undefined && oldZoneId !== desiredZoneId) {
+          return { action: "replace" } as const;
+        }
+      }
+      if (olds.phase !== news.phase) {
+        return { action: "replace" } as const;
+      }
 
-      return {
-        stables: ["zoneId", "phase"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
-          if (!isResolved(news)) return undefined;
-          const desiredZoneId = zoneIdOf(news.zone);
-
-          // The desired zone id may still be an unresolved Output (e.g. the
-          // zone is being created in the same deploy). Only make a zone-change
-          // replacement decision once we have a concrete id.
-          if (desiredZoneId !== undefined) {
-            if (output?.zoneId && desiredZoneId !== output.zoneId) {
-              return { action: "replace" } as const;
-            }
-            const oldZoneId = olds.zone ? zoneIdOf(olds.zone) : undefined;
-            if (oldZoneId !== undefined && oldZoneId !== desiredZoneId) {
-              return { action: "replace" } as const;
-            }
-          }
-          if (olds.phase !== news.phase) {
-            return { action: "replace" } as const;
-          }
-
-          const oldName =
-            output?.name ?? (yield* createRulesetName(id, olds.name));
-          const name = yield* createRulesetName(id, news.name);
-          if (
-            oldName !== name ||
-            olds.description !== news.description ||
-            !deepEqual(olds.rules, news.rules)
-          ) {
-            return { action: "update" } as const;
-          }
-        }),
-        reconcile: Effect.fn(function* ({ id, news, output }) {
-          const zoneId = output?.zoneId ?? zoneIdOf(news.zone);
-          if (zoneId === undefined) {
-            return yield* Effect.fail(
-              new Error("Cloudflare Ruleset: zone id is not resolved"),
-            );
-          }
-          const name = yield* createRulesetName(id, news.name ?? output?.name);
-          const ruleset = yield* putPhas({
-            zoneId,
-            rulesetPhase: news.phase,
-            name,
-            description: news.description,
-            rules: news.rules,
-          });
-          return toRulesetAttributes(zoneId, ruleset);
-        }),
-        delete: Effect.fn(function* ({ olds, output }) {
-          yield* putPhas({
-            zoneId: output.zoneId,
-            rulesetPhase: olds.phase,
-            name: output.name,
-            description: output.description,
-            rules: [],
-          }).pipe(Effect.catchIf(isNotFoundError, () => Effect.void));
-        }),
-        read: Effect.fn(function* ({ olds, output }) {
-          const zoneId = output?.zoneId ?? zoneIdOf(olds.zone);
-          if (zoneId === undefined) return undefined;
-          return yield* getPhas({
-            zoneId,
-            rulesetPhase: output?.phase ?? olds.phase,
-          }).pipe(
-            Effect.map((ruleset) => toRulesetAttributes(zoneId, ruleset)),
-            Effect.catchIf(isNotFoundError, () => Effect.succeed(undefined)),
-          );
-        }),
-      };
+      const oldName = output?.name ?? (yield* createRulesetName(id, olds.name));
+      const name = yield* createRulesetName(id, news.name);
+      if (
+        oldName !== name ||
+        olds.description !== news.description ||
+        !deepEqual(olds.rules, news.rules)
+      ) {
+        return { action: "update" } as const;
+      }
     }),
-  );
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const zoneId = output?.zoneId ?? zoneIdOf(news.zone);
+      if (zoneId === undefined) {
+        return yield* Effect.fail(
+          new Error("Cloudflare Ruleset: zone id is not resolved"),
+        );
+      }
+      const name = yield* createRulesetName(id, news.name ?? output?.name);
+      const ruleset = yield* rulesets.putPhasForZone({
+        zoneId,
+        rulesetPhase: news.phase,
+        name,
+        description: news.description,
+        rules: news.rules,
+      });
+      return toRulesetAttributes(zoneId, ruleset);
+    }),
+    delete: Effect.fn(function* ({ olds, output }) {
+      yield* rulesets
+        .putPhasForZone({
+          zoneId: output.zoneId,
+          rulesetPhase: olds.phase,
+          name: output.name,
+          description: output.description,
+          rules: [],
+        })
+        .pipe(Effect.catchIf(isNotFoundError, () => Effect.void));
+    }),
+    read: Effect.fn(function* ({ olds, output }) {
+      const zoneId = output?.zoneId ?? zoneIdOf(olds.zone);
+      if (zoneId === undefined) return undefined;
+      return yield* rulesets
+        .getPhasForZone({
+          zoneId,
+          rulesetPhase: output?.phase ?? olds.phase,
+        })
+        .pipe(
+          Effect.map((ruleset) => toRulesetAttributes(zoneId, ruleset)),
+          Effect.catchIf(isNotFoundError, () => Effect.succeed(undefined)),
+        );
+    }),
+  });
+
+const createRulesetName = (id: string, name: string | undefined) =>
+  Effect.gen(function* () {
+    return name ?? (yield* createPhysicalName({ id }));
+  });
 
 export const toRulesetAttributes = (
   zoneId: string,
@@ -221,3 +199,20 @@ export const toRulesetAttributes = (
   lastUpdated: ruleset.lastUpdated,
   version: ruleset.version,
 });
+
+const isNotFoundError = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  (("status" in error && (error as { status: unknown }).status === 404) ||
+    ("_tag" in error && (error as { _tag: unknown })._tag === "NotFound"));
+
+// A `Zone` prop is resolved to its attributes before a lifecycle op runs, so
+// `zone.zoneId` is normally a plain string even though the `Zone` resource
+// type statically exposes it as an `Output`. During `diff` (plan time) the
+// zone can still be unresolved — e.g. when it's being created in the same
+// deploy — in which case `zoneId` is not yet a string. Callers must treat a
+// non-string result as "not resolved yet".
+const zoneIdOf = (zone: Zone): string | undefined => {
+  const zoneId = (zone as unknown as Partial<ZoneAttributes>).zoneId;
+  return typeof zoneId === "string" ? zoneId : undefined;
+};

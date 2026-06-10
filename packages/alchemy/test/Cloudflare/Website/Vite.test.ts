@@ -37,7 +37,7 @@ test.provider(
   "Vite: editing a source file republishes the assets in a single deploy",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
@@ -104,7 +104,7 @@ test.provider(
   "Vite: class form deploys and serves the built assets",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
@@ -161,7 +161,7 @@ test.provider(
   "Vite: relocating rootDir (and deleting the old one) is a no-op when sources are identical",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
@@ -234,7 +234,7 @@ test.provider(
   "Vite: `env` props are inlined as `import.meta.env.*` into the bundle",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 

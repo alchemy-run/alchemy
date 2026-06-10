@@ -17,9 +17,11 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Alchemy.localState(),
 });
 
-const stack = beforeAll(deploy(Stack));
+const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
 
-afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), {
+  timeout: 600_000,
+});
 
 test(
   "worker exposes a URL, hyperdrive id, and planetscale identifiers",
@@ -40,6 +42,12 @@ const getOnce = (url: string) =>
     const response = yield* HttpClient.get(url);
     if (response.status === 404) {
       return yield* Effect.fail(new Error("workers.dev not yet propagated"));
+    }
+    if (response.status >= 500) {
+      const body = yield* response.text;
+      return yield* Effect.fail(
+        new Error(`worker not ready yet (status ${response.status}): ${body}`),
+      );
     }
     return response;
   }).pipe(

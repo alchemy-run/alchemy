@@ -25,7 +25,13 @@ export default class Api extends Cloudflare.Worker<Api>()(
     return {
       fetch: Effect.gen(function* () {
         const connectionString = yield* conn.connectionString;
-        const db = drizzle(Redacted.value(connectionString), {
+        const db = drizzle({
+          connection: {
+            uri: Redacted.value(connectionString),
+            // mysql2's text/binary parsers JIT via `new Function(...)`,
+            // which Cloudflare Workers' isolate disallows.
+            disableEval: true,
+          },
           schema,
           relations,
           mode: "default",
