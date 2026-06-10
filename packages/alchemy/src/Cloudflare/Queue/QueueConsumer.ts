@@ -117,38 +117,6 @@ export const QueueConsumer = Resource<QueueConsumer>(
   "Cloudflare.QueueConsumer",
 );
 
-type ObservedConsumer = {
-  consumerId: string;
-  script: string | undefined;
-};
-
-const toObserved = (c: {
-  consumerId?: string | null;
-  scriptName?: string | null;
-  type?: "worker" | "http_pull" | null;
-}): ObservedConsumer | undefined =>
-  c.consumerId && c.type === "worker"
-    ? { consumerId: c.consumerId, script: c.scriptName ?? undefined }
-    : undefined;
-
-// Cloudflare allows a single Worker consumer per queue, so the
-// first match in the paginated stream is the only one. Using
-// `.items` defeats single-page lookups that would otherwise
-// miss late-arriving consumers under eventual consistency.
-const findWorkerConsumer = (acct: string, queueId: string) =>
-  queues.listConsumers.items({ accountId: acct, queueId }).pipe(
-    Stream.map(toObserved),
-    Stream.filter((c): c is ObservedConsumer => c !== undefined),
-    Stream.runHead,
-    Effect.map(Option.getOrUndefined),
-  );
-
-// ~60s budget — Worker reconcile uploads typically land in 2–10s,
-// but a fresh container/asset deploy can stretch that.
-const queueHandlerReadinessSchedule = Schedule.spaced("2 seconds").pipe(
-  Schedule.both(Schedule.recurs(30)),
-);
-
 export const QueueConsumerProviderLive = () =>
   Provider.succeed(QueueConsumer, {
     // The `consumerId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
@@ -493,6 +461,38 @@ export const QueueConsumerProviderLive = () =>
       return undefined;
     }),
   });
+
+type ObservedConsumer = {
+  consumerId: string;
+  script: string | undefined;
+};
+
+const toObserved = (c: {
+  consumerId?: string | null;
+  scriptName?: string | null;
+  type?: "worker" | "http_pull" | null;
+}): ObservedConsumer | undefined =>
+  c.consumerId && c.type === "worker"
+    ? { consumerId: c.consumerId, script: c.scriptName ?? undefined }
+    : undefined;
+
+// Cloudflare allows a single Worker consumer per queue, so the
+// first match in the paginated stream is the only one. Using
+// `.items` defeats single-page lookups that would otherwise
+// miss late-arriving consumers under eventual consistency.
+const findWorkerConsumer = (acct: string, queueId: string) =>
+  queues.listConsumers.items({ accountId: acct, queueId }).pipe(
+    Stream.map(toObserved),
+    Stream.filter((c): c is ObservedConsumer => c !== undefined),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );
+
+// ~60s budget — Worker reconcile uploads typically land in 2–10s,
+// but a fresh container/asset deploy can stretch that.
+const queueHandlerReadinessSchedule = Schedule.spaced("2 seconds").pipe(
+  Schedule.both(Schedule.recurs(30)),
+);
 
 export const QueueConsumerProviderLocal = () =>
   RpcProvider.effect(
