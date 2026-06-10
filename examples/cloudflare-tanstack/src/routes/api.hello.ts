@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import * as Cloudflare from "alchemy/Cloudflare/Bridge";
 import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type Backend from "../backend.ts";
 import { env } from "../env.ts";
@@ -147,18 +146,7 @@ export const Route = createFileRoute("/api/hello")({
                 Cloudflare.fromCloudflareFetcher(env.BACKEND),
               );
               const res = await client
-                .put(`https://backend/?key=${encodeURIComponent(key)}`, {
-                  headers: request.headers,
-                  body: HttpBody.stream(
-                    Stream.fromReadableStream({
-                      evaluate: () => request.body!,
-                      onError: (error) =>
-                        new Error("Error reading request body", {
-                          cause: error,
-                        }),
-                    }),
-                  ),
-                })
+                .execute(HttpClientRequest.fromWeb(request))
                 .pipe(Effect.runPromise);
               return HttpServerResponse.toWeb(
                 HttpServerResponse.fromClientResponse(res),
