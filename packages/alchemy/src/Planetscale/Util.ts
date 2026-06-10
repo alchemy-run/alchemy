@@ -12,7 +12,7 @@ export const DEFAULT_MIGRATIONS_TABLE = "__alchemy_migrations";
  * been reached. Used internally with `Effect.retry` to drive long-running
  * status waits.
  */
-class NotReady extends Data.TaggedError("Planetscale::NotReady")<{
+export class NotReady extends Data.TaggedError("Planetscale::NotReady")<{
   description: string;
 }> {}
 

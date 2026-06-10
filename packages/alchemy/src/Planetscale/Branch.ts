@@ -1,6 +1,7 @@
 import * as planetscale from "@distilled.cloud/planetscale";
 import { Credentials } from "@distilled.cloud/planetscale/Credentials";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
@@ -156,6 +157,20 @@ export interface BranchMigrationRunners {
 }
 
 const rootDir = Effect.sync(() => process.cwd());
+
+/**
+ * Matches the UnprocessableEntity errors PlanetScale returns when a
+ * branch promotion/demotion races an in-flight cluster resize, e.g.
+ * "Branches with a cluster resize in progress cannot be demoted."
+ */
+const isResizeInProgress = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  (error as { readonly _tag?: unknown })._tag === "UnprocessableEntity" &&
+  typeof (error as { readonly message?: unknown }).message === "string" &&
+  (error as { readonly message: string }).message.includes(
+    "cluster resize in progress",
+  );
 
 /**
  * Build a branch provider for a specific PlanetScale engine. The
@@ -369,17 +384,30 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
       if (opts.expectedKind === "mysql") {
         const desiredProduction = news.isProduction ?? false;
         if (current.production !== desiredProduction) {
+          // A keyspace can report `resizing: false` while the resize
+          // workflow is still finalizing, during which promote/demote is
+          // rejected with an UnprocessableEntity. Retry until it clears.
+          const retryWhileResizing = Effect.retry({
+            while: isResizeInProgress,
+            schedule: Schedule.spaced("5 seconds").pipe(
+              Schedule.both(Schedule.recurs(120)),
+            ),
+          });
           current = desiredProduction
-            ? yield* planetscale.promoteBranch({
-                organization,
-                database: databaseName,
-                branch: branchName,
-              })
-            : yield* planetscale.demoteBranch({
-                organization,
-                database: databaseName,
-                branch: branchName,
-              });
+            ? yield* planetscale
+                .promoteBranch({
+                  organization,
+                  database: databaseName,
+                  branch: branchName,
+                })
+                .pipe(retryWhileResizing)
+            : yield* planetscale
+                .demoteBranch({
+                  organization,
+                  database: databaseName,
+                  branch: branchName,
+                })
+                .pipe(retryWhileResizing);
         }
       }
 

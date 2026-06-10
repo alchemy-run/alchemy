@@ -56,7 +56,7 @@ describe
             region: {
               slug: expect.any(String),
             },
-            clusterSize: "PS_10",
+            clusterSize: "PS_10_AWS_X86",
           });
 
           const branch = yield* Planetscale.waitForBranchReady(
@@ -115,7 +115,7 @@ describe
             region: {
               slug: expect.any(String),
             },
-            clusterSize: "PS_10",
+            clusterSize: "PS_10_AWS_X86",
             defaultBranch: "main",
             requireApprovalForDeploy: false,
             restrictBranchRegion: true,
@@ -247,7 +247,7 @@ describe
             id: expect.any(String),
             name,
             arch: "arm",
-            clusterSize: "PS_10",
+            clusterSize: "PS_10_AWS_ARM",
           });
 
           const branch = yield* Planetscale.waitForBranchReady(
@@ -287,7 +287,7 @@ describe
             }),
           );
 
-          expect(database.migrationsTable).toEqual("planetscale_migrations");
+          expect(database.migrationsTable).toEqual("__alchemy_migrations");
           expect(database.migrationsHashes["0001_create_widgets.sql"]).toEqual(
             expect.any(String),
           );

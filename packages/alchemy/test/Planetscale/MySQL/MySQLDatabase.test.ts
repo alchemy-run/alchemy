@@ -244,7 +244,7 @@ describe
             }),
           );
 
-          expect(database.migrationsTable).toEqual("planetscale_migrations");
+          expect(database.migrationsTable).toEqual("__alchemy_migrations");
           expect(database.migrationsHashes["0001_create_widgets.sql"]).toEqual(
             expect.any(String),
           );
