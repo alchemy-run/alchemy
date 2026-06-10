@@ -1,6 +1,6 @@
 import * as DistilledAuth from "@distilled.cloud/aws/Auth";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
-import * as STS from "@distilled.cloud/aws/STS";
+import * as STS from "@distilled.cloud/aws/sts";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
