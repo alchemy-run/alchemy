@@ -150,6 +150,7 @@ export const Route = createFileRoute("/api/hello")({
                 .pipe(Effect.runPromise);
               return HttpServerResponse.toWeb(
                 HttpServerResponse.fromClientResponse(res),
+                { withoutBody: res.status === 204 },
               );
             });
         }
