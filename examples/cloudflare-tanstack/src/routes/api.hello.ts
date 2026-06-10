@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import * as Cloudflare from "alchemy/Cloudflare/Bridge";
+import * as Cloudflare from "alchemy/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type Backend from "../backend.ts";
 import { env } from "../env.ts";
 
-const VIAS = ["binding", "fetch", "rpc"] as const;
+const VIAS = ["binding", "fetch", "rpc", "http-client"] as const;
 type Via = (typeof VIAS)[number];
 
 const parseRequest = (request: Request): { via: Via; key: string | null } => {
@@ -58,6 +60,20 @@ export const Route = createFileRoute("/api/hello")({
                 status: res.status,
                 headers: res.headers,
               });
+            });
+
+          // option 3 — bind to your effect worker and call http client
+          case "http-client":
+            return trace("GET option 3 (env.BACKEND.httpClient)", async () => {
+              const client = Cloudflare.toHttpClient(
+                Cloudflare.fromCloudflareFetcher(env.BACKEND),
+              );
+              const res = await client
+                .get(`https://backend/?key=${encodeURIComponent(key)}`)
+                .pipe(Effect.runPromise);
+              return HttpServerResponse.toWeb(
+                HttpServerResponse.fromClientResponse(res),
+              );
             });
 
           // option 3 — bind to your effect worker and call rpc method
