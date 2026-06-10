@@ -108,8 +108,6 @@ export const loginCommand = Command.make(
             } else {
               cfg = stored;
             }
-
-            yield* provider.login(profile, cfg);
           }),
         { discard: true },
       );
