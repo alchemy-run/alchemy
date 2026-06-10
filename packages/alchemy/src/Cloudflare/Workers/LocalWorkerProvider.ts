@@ -1,5 +1,4 @@
 import {
-  layerRuntime,
   Runtime,
   RuntimeError,
   type BindingHook,
@@ -8,6 +7,7 @@ import {
   type Module,
   type Assets as RuntimeAssets,
   type DurableObjectNamespace as RuntimeDurableObjectNamespace,
+  type QueueConsumer as RuntimeQueueConsumer,
   type RuntimeServices,
 } from "@distilled.cloud/cloudflare-runtime";
 import {
@@ -26,6 +26,7 @@ import {
   KvNamespace,
   MtlsCertificate,
   Pipelines,
+  Queue,
   R2Bucket,
   RateLimit,
   SendEmail,
@@ -44,19 +45,21 @@ import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Hash from "effect/Hash";
+import * as MutableHashMap from "effect/MutableHashMap";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { AlchemyContext } from "../../AlchemyContext.ts";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import { isResolved } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import * as Vite from "./Vite.ts";
@@ -79,41 +82,16 @@ export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidat
   },
 ) {}
 
-export const localRuntimeServices = () =>
-  RpcProvider.providerServicesEffect(
-    Effect.gen(function* () {
-      const getEnv = yield* CloudflareEnvironment;
-      const { dotAlchemy } = yield* AlchemyContext;
-      const path = yield* Path.Path;
-      return layerRuntime({
-        api: {
-          accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
-        },
-        storage: {
-          directory: path.join(dotAlchemy, "local"),
-        },
-      });
-    }),
-  );
-
 export const LocalWorkerProvider = () =>
   RpcProvider.effect(
     Worker,
-    import.meta.resolve(
-      // `import.meta.resolve(<string>)` is a runtime API — TypeScript's
-      // `rewriteRelativeImportExtensions` does NOT touch the string literal, so
-      // we have to pick the right extension ourselves. `import.meta.url` reflects
-      // the actual on-disk extension of *this* file (`.ts` when loaded from
-      // `src/` under Bun or vitest, `.js` when loaded from the compiled `lib/`
-      // under Node), which is exactly the signal we need.
-      import.meta.url.endsWith(".ts") ? "../Local.ts" : "../Local.js",
-      import.meta.url,
-    ),
+    LOCAL_ENTRY_URL,
     Effect.gen(function* () {
       const bundler = yield* WorkerBundle;
       const runtime = yield* Runtime;
       const stack = yield* Stack;
       const path = yield* Path.Path;
+      const localRuntimeState = yield* LocalRuntimeState;
       const workerProxy = yield* WorkerProxy.WorkerProxy;
       const proxyInstances = new Map<
         string,
@@ -123,6 +101,32 @@ export const LocalWorkerProvider = () =>
           scope: Scope.Closeable;
         }
       >();
+
+      const getQueueConsumers = Effect.fnUntraced(function* (
+        scriptName: string,
+      ) {
+        const consumers: RuntimeQueueConsumer[] = [];
+        for (const consumer of MutableHashMap.values(
+          localRuntimeState.queueConsumers,
+        )) {
+          if (consumer.scriptName === scriptName) {
+            const queue = MutableHashMap.get(
+              localRuntimeState.queues,
+              consumer.queueId,
+            ).pipe(Option.getOrUndefined);
+            if (queue) {
+              consumers.push({
+                queueName: queue.queueName,
+                deadLetterQueue: consumer.deadLetterQueue,
+                ...consumer.settings,
+              });
+            } else {
+              return yield* Effect.die(`Queue ${consumer.queueId} not found`);
+            }
+          }
+        }
+        return consumers;
+      });
 
       const startProxy = Effect.fn(function* (
         id: string,
@@ -211,6 +215,7 @@ export const LocalWorkerProvider = () =>
             durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
               worker.durableObjectNamespaces,
             ),
+            queueConsumers: yield* getQueueConsumers(worker.name),
             modules: yield* toRuntimeModules(bundle),
             assets: toRuntimeAssets(worker.assets),
           })
@@ -392,6 +397,7 @@ export const LocalWorkerProvider = () =>
                 worker.durableObjectNamespaces,
               ),
               hyperdrives: worker.hyperdrives,
+              queueConsumers: yield* getQueueConsumers(worker.name),
               assets: toRuntimeAssets(worker.assets),
             },
             context,
@@ -586,7 +592,10 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
     case "plain_text":
       return Text.local(b.name, b.text);
     case "queue":
-      return yield* unsupported();
+      return Queue.local({
+        binding: b.name,
+        queueName: b.queueName,
+      });
     case "r2_bucket":
       return R2Bucket.remote(b.name, b.bucketName, b.jurisdiction);
     case "ratelimit":

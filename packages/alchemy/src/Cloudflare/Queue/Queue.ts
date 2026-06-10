@@ -1,12 +1,21 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Effect from "effect/Effect";
+import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import * as RpcProvider from "../../Local/RpcProvider.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  generateLocalId,
+  isLiveId,
+  LOCAL_ENTRY_URL,
+  LocalRuntimeState,
+} from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 import { QueueBinding } from "./QueueBinding.ts";
 
@@ -96,12 +105,18 @@ export const Queue = Resource<Queue>("Cloudflare.Queue")({
   bind: QueueBinding.bind,
 });
 
-export const QueueProvider = () =>
+export const QueueProviderLive = () =>
   Provider.succeed(Queue, {
-    stables: ["queueId", "accountId"],
+    // The `queueId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
+    stables: ["accountId"],
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
+      // If the queueId is a `dev:` ID, we need to update to a live one.
+      // The live resource doesn't exist yet, so there's no need to replace even if the name or accountId changed.
+      if (!isLiveId(output?.queueId)) {
+        return { action: "update" };
+      }
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
@@ -171,6 +186,8 @@ export const QueueProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      // If the queueId is a `dev:` ID, the resource only exists locally, so we don't need to delete it from Cloudflare.
+      if (!isLiveId(output.queueId)) return;
       yield* queues
         .deleteQueue({
           accountId: output.accountId,
@@ -228,3 +245,57 @@ const findQueueByName = Effect.fnUntraced(function* (queueName: string) {
     Effect.map(Option.getOrUndefined),
   );
 });
+
+export const QueueProviderLocal = () =>
+  RpcProvider.effect(
+    Queue,
+    LOCAL_ENTRY_URL,
+    Effect.gen(function* () {
+      const localRuntimeState = yield* LocalRuntimeState;
+      return {
+        stables: ["accountId"],
+        diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          if (!output?.queueId) return { action: "update" };
+          if (!isResolved(news)) return undefined;
+          const name = yield* createQueueName(id, news.name);
+          const oldName = output?.queueName
+            ? yield* createQueueName(id, olds.name)
+            : yield* createQueueName(id, olds.name);
+          if (name !== oldName || output.accountId !== accountId) {
+            return { action: "replace" };
+          }
+          // If the resource is a noop, add it to the local runtime state so it's available downstream.
+          // We do it here instead of in the reconcile function so it doesn't appear as an update.
+          MutableHashMap.set(localRuntimeState.queues, output.queueId, output);
+          return { action: "noop" };
+        }),
+        read: Effect.fn(function* ({ output }) {
+          if (!output?.queueId) return undefined;
+          return MutableHashMap.get(
+            localRuntimeState.queues,
+            output.queueId,
+          ).pipe(Option.getOrUndefined);
+        }),
+        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const queue: Queue["Attributes"] = {
+            queueId: output?.queueId ?? generateLocalId(),
+            queueName: yield* createQueueName(id, news.name),
+            accountId: output?.accountId ?? accountId,
+          };
+          MutableHashMap.set(localRuntimeState.queues, queue.queueId, queue);
+          return queue;
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          MutableHashMap.remove(localRuntimeState.queues, output.queueId);
+        }),
+      };
+    }),
+  );
+
+export const QueueProvider = () =>
+  ProviderLayer.select({
+    local: () => QueueProviderLocal(),
+    live: () => QueueProviderLive(),
+  });

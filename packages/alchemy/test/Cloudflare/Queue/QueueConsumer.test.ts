@@ -1,6 +1,8 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { generateLocalId, isLiveId } from "@/Cloudflare/LocalRuntime";
 import { State } from "@/State";
+import type { CreatedResourceState } from "@/State/ResourceState";
 import * as Test from "@/Test/Vitest";
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import { expect } from "@effect/vitest";
@@ -391,4 +393,146 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+);
+
+/**
+ * Suppressed delete: a consumer that only ever existed in dev (its
+ * persisted `consumerId` is a `dev:` mock id) has no Cloudflare
+ * counterpart. Destroying it must NOT issue a `deleteConsumer` against
+ * Cloudflare — the `dev:` ids are not valid and the request URL would be
+ * malformed. The live provider's `delete` short-circuits on the non-live
+ * id, so destroy succeeds and the state row is removed cleanly.
+ */
+test.provider("suppresses deletion of a dev-only consumer", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const devQueueId = generateLocalId();
+    const devConsumerId = generateLocalId();
+
+    yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      yield* state.set({
+        stack: stack.name,
+        stage: "test",
+        fqn: "Consumer",
+        value: {
+          kind: "resource",
+          status: "created",
+          resourceType: "Cloudflare.QueueConsumer",
+          namespace: undefined,
+          fqn: "Consumer",
+          logicalId: "Consumer",
+          instanceId: "00000000000000000000000000000002",
+          providerVersion: 0,
+          bindings: [],
+          downstream: [],
+          props: {
+            queueId: devQueueId,
+            scriptName: "dev-worker",
+          },
+          attr: {
+            consumerId: devConsumerId,
+            queueId: devQueueId,
+            scriptName: "dev-worker",
+            accountId,
+          },
+        } satisfies CreatedResourceState,
+      });
+    });
+
+    // Destroy must not attempt a (malformed) live delete against the dev ids.
+    const exit = yield* Effect.exit(stack.destroy());
+    expect(Exit.isSuccess(exit)).toBe(true);
+
+    // The dev-only resource is removed from state.
+    const persisted = yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      return yield* state.get({
+        stack: stack.name,
+        stage: "test",
+        fqn: "Consumer",
+      });
+    });
+    expect(persisted).toBeUndefined();
+  }).pipe(logLevel),
+);
+
+/**
+ * Promotion: a consumer whose persisted `consumerId` is a `dev:` mock id
+ * must be promoted to a real Cloudflare consumer on a live deploy.
+ *
+ * We first deploy a real queue + worker + consumer, then rewrite the
+ * persisted consumer's `consumerId` back to a `dev:` id (leaving the
+ * `queueId` live — in a real dev→live transition the upstream Queue is
+ * promoted first, so the consumer's queue ref is already a live id while
+ * its own id is still the dev one it was minted with). On redeploy the
+ * live provider's `diff` sees the `dev:` consumerId and returns `update`
+ * (not `noop`), so `reconcile` runs, re-observes the live consumer, and
+ * the persisted id is healed back to the real one.
+ */
+test.provider("promotes a dev consumer to a live consumer on deploy", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const buildStack = Effect.gen(function* () {
+      const queue = yield* Cloudflare.Queue("Q");
+      const worker = yield* Cloudflare.Worker("Worker", {
+        main,
+        compatibility: { date: "2024-01-01" },
+      });
+      const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+        queueId: queue.queueId,
+        scriptName: worker.workerName,
+        settings: { batchSize: 5 },
+      });
+      return { queue, worker, consumer };
+    });
+
+    const initial = yield* stack.deploy(buildStack);
+    expect(isLiveId(initial.consumer.consumerId)).toBe(true);
+
+    // Rewrite the persisted consumerId back to a dev id, simulating a
+    // consumer that was minted in `alchemy dev`. The queueId stays live.
+    const devConsumerId = generateLocalId();
+    yield* Effect.gen(function* () {
+      const state = yield* yield* State;
+      const current = (yield* state.get({
+        stack: stack.name,
+        stage: "test",
+        fqn: "Consumer",
+      })) as CreatedResourceState;
+      yield* state.set({
+        stack: stack.name,
+        stage: "test",
+        fqn: "Consumer",
+        value: {
+          ...current,
+          attr: { ...current.attr, consumerId: devConsumerId },
+        },
+      });
+    });
+
+    const promoted = yield* stack.deploy(buildStack);
+
+    // The dev id was promoted back to the real, live consumer id.
+    expect(isLiveId(promoted.consumer.consumerId)).toBe(true);
+    expect(promoted.consumer.consumerId).not.toEqual(devConsumerId);
+    expect(promoted.consumer.consumerId).toEqual(initial.consumer.consumerId);
+
+    const live = yield* queues.getConsumer({
+      accountId,
+      queueId: promoted.queue.queueId,
+      consumerId: promoted.consumer.consumerId,
+    });
+    expect("scriptName" in live ? live.scriptName : undefined).toEqual(
+      promoted.worker.workerName,
+    );
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );

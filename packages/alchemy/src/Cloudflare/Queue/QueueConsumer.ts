@@ -1,12 +1,20 @@
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Effect from "effect/Effect";
+import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
+import * as RpcProvider from "../../Local/RpcProvider.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  isLiveId,
+  LOCAL_ENTRY_URL,
+  LocalRuntimeState,
+} from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
 export type QueueConsumerProps = {
@@ -25,32 +33,34 @@ export type QueueConsumerProps = {
   /**
    * Consumer settings.
    */
-  settings?: {
-    /**
-     * The maximum number of messages per batch.
-     * @default 10
-     */
-    batchSize?: number;
-    /**
-     * The maximum number of concurrent consumer invocations.
-     */
-    maxConcurrency?: number;
-    /**
-     * The maximum number of retries for a message.
-     * @default 3
-     */
-    maxRetries?: number;
-    /**
-     * The maximum time to wait for a batch to fill, in milliseconds.
-     * @default 5000
-     */
-    maxWaitTimeMs?: number;
-    /**
-     * The number of seconds to wait before retrying a message.
-     */
-    retryDelay?: number;
-  };
+  settings?: QueueConsumerSettings;
 };
+
+export interface QueueConsumerSettings {
+  /**
+   * The maximum number of messages per batch.
+   * @default 10
+   */
+  batchSize?: number;
+  /**
+   * The maximum number of concurrent consumer invocations.
+   */
+  maxConcurrency?: number;
+  /**
+   * The maximum number of retries for a message.
+   * @default 3
+   */
+  maxRetries?: number;
+  /**
+   * The maximum time to wait for a batch to fill, in milliseconds.
+   * @default 5000
+   */
+  maxWaitTimeMs?: number;
+  /**
+   * The number of seconds to wait before retrying a message.
+   */
+  retryDelay?: number;
+}
 
 export type QueueConsumer = Resource<
   "Cloudflare.QueueConsumer",
@@ -60,6 +70,8 @@ export type QueueConsumer = Resource<
     queueId: string;
     scriptName: string;
     accountId: string;
+    deadLetterQueue?: string;
+    settings?: QueueConsumerSettings;
   },
   never,
   Providers
@@ -116,12 +128,19 @@ const findWorkerConsumer = (acct: string, queueId: string) =>
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
   );
-export const QueueConsumerProvider = () =>
+
+export const QueueConsumerProviderLive = () =>
   Provider.succeed(QueueConsumer, {
-    stables: ["consumerId", "accountId"],
+    // The `consumerId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
+    stables: ["accountId"],
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
+      // If either contain `dev:` IDs, we need to update to live ones.
+      // The live resource doesn't exist yet, so there's no need to replace even when we otherwise would.
+      if (!isLiveId(output?.queueId) || !isLiveId(output?.consumerId)) {
+        return { action: "update" };
+      }
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
@@ -167,7 +186,7 @@ export const QueueConsumerProvider = () =>
       // updating it could clobber another team's wiring.
       let observed: ObservedConsumer | undefined;
       let owned = false;
-      if (output?.consumerId) {
+      if (isLiveId(output?.consumerId)) {
         const fetched = yield* queues
           .getConsumer({
             accountId: acct,
@@ -365,9 +384,14 @@ export const QueueConsumerProvider = () =>
         queueId,
         scriptName: news.scriptName!,
         accountId: acct,
+        deadLetterQueue: news.deadLetterQueue,
+        settings: news.settings,
       };
     }),
     delete: Effect.fn(function* ({ output }) {
+      // If the consumerId is a `dev:` ID, the resource only exists locally, so we don't need to delete it from Cloudflare.
+      if (!isLiveId(output.consumerId)) return;
+
       yield* queues
         .deleteConsumer({
           accountId: output.accountId,
@@ -421,6 +445,8 @@ export const QueueConsumerProvider = () =>
                 ? fetched.scriptName
                 : output.scriptName) ?? output.scriptName,
             accountId: output.accountId,
+            deadLetterQueue: output.deadLetterQueue,
+            settings: output.settings,
           };
         }
       }
@@ -439,6 +465,8 @@ export const QueueConsumerProvider = () =>
             queueId: output.queueId,
             scriptName: match.script ?? output.scriptName,
             accountId: output.accountId,
+            deadLetterQueue: output.deadLetterQueue,
+            settings: output.settings,
           };
         }
       }
@@ -465,3 +493,77 @@ const toObserved = (c: {
 const queueHandlerReadinessSchedule = Schedule.spaced("2 seconds").pipe(
   Schedule.both(Schedule.recurs(30)),
 );
+
+export const QueueConsumerProviderLocal = () =>
+  RpcProvider.effect(
+    QueueConsumer,
+    LOCAL_ENTRY_URL,
+    Effect.gen(function* () {
+      const localRuntimeState = yield* LocalRuntimeState;
+      return {
+        diff: Effect.fn(function* ({ news, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          if (!output) return { action: "update" };
+          if (!isResolved(news)) return undefined;
+          if (
+            output.queueId !== news.queueId ||
+            output.accountId !== accountId
+          ) {
+            return { action: "replace" };
+          }
+          if (
+            JSON.stringify(output.settings ?? {}) !==
+              JSON.stringify(news.settings ?? {}) ||
+            output.scriptName !== news.scriptName ||
+            output.deadLetterQueue !== news.deadLetterQueue
+          ) {
+            return { action: "update" };
+          }
+          // If the resource is a noop, add it to the local runtime state so it's available downstream.
+          // We do it here instead of in the reconcile function so it doesn't appear as an update.
+          MutableHashMap.set(
+            localRuntimeState.queueConsumers,
+            output.consumerId,
+            output,
+          );
+          return { action: "noop" };
+        }),
+        read: Effect.fn(function* ({ output }) {
+          if (!output?.consumerId) return undefined;
+          return MutableHashMap.get(
+            localRuntimeState.queueConsumers,
+            output.consumerId,
+          ).pipe(Option.getOrUndefined);
+        }),
+        reconcile: Effect.fn(function* ({ news, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const consumer: QueueConsumer["Attributes"] = {
+            consumerId: output?.consumerId ?? `dev:${crypto.randomUUID()}`,
+            queueId: news.queueId,
+            scriptName: news.scriptName,
+            deadLetterQueue: news.deadLetterQueue,
+            accountId,
+            settings: news.settings,
+          };
+          MutableHashMap.set(
+            localRuntimeState.queueConsumers,
+            consumer.consumerId,
+            consumer,
+          );
+          return consumer;
+        }),
+        delete: Effect.fn(function* ({ output }) {
+          MutableHashMap.remove(
+            localRuntimeState.queueConsumers,
+            output.consumerId,
+          );
+        }),
+      };
+    }),
+  );
+
+export const QueueConsumerProvider = () =>
+  ProviderLayer.select({
+    local: () => QueueConsumerProviderLocal(),
+    live: () => QueueConsumerProviderLive(),
+  });

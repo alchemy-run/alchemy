@@ -29,6 +29,7 @@ import * as Email from "./Email/index.ts";
 import * as Hyperdrive from "./Hyperdrive/index.ts";
 import * as Images from "./Images/index.ts";
 import * as KV from "./KV/index.ts";
+import { localRuntimeServices } from "./LocalRuntime.ts";
 import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
 import * as RateLimit from "./RateLimit/index.ts";
@@ -173,6 +174,7 @@ export const providers = () =>
         RandomProvider(),
       ),
     ),
+    Layer.provideMerge(localRuntimeServices()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
     Layer.provideMerge(CloudflareAuth),

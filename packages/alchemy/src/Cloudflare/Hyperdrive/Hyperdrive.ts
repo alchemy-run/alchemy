@@ -9,6 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { generateLocalId, isLiveId } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 import { HyperdriveBinding } from "./HyperdriveBinding.ts";
 
@@ -182,7 +183,7 @@ export const HyperdriveProvider = () =>
       if (oldName !== name) {
         return { action: "replace" } as const;
       }
-      if (!isHyperdriveId(output?.hyperdriveId)) {
+      if (!isLiveId(output?.hyperdriveId)) {
         return { action: "update" };
       }
     }),
@@ -193,7 +194,7 @@ export const HyperdriveProvider = () =>
         return output;
       }
 
-      if (isHyperdriveId(output?.hyperdriveId)) {
+      if (isLiveId(output?.hyperdriveId)) {
         return yield* hyperdrive
           .getConfig({
             accountId: output.accountId,
@@ -248,7 +249,7 @@ export const HyperdriveProvider = () =>
       const ctx = yield* AlchemyContext;
       if (ctx.dev) {
         return {
-          hyperdriveId: output?.hyperdriveId ?? `dev:${crypto.randomUUID()}`,
+          hyperdriveId: output?.hyperdriveId ?? generateLocalId(),
           name,
           accountId: output?.accountId ?? accountId,
           origin: news.origin,
@@ -268,7 +269,7 @@ export const HyperdriveProvider = () =>
       // to update; otherwise we createConfig and fall back to "find by
       // name then update" if Cloudflare reports the name is already in
       // use (race or a cold-start adoption).
-      const synced = isHyperdriveId(output?.hyperdriveId)
+      const synced = isLiveId(output?.hyperdriveId)
         ? yield* hyperdrive.updateConfig({
             accountId: output.accountId,
             hyperdriveId: output.hyperdriveId,
@@ -304,7 +305,7 @@ export const HyperdriveProvider = () =>
       };
     }),
     delete: Effect.fn(function* ({ output }) {
-      if (!isHyperdriveId(output.hyperdriveId)) return;
+      if (!isLiveId(output.hyperdriveId)) return;
 
       yield* hyperdrive
         .deleteConfig({
@@ -340,9 +341,6 @@ export const defaultPort = (scheme: HyperdriveScheme): number =>
 
 const unwrap = (v: string | Redacted.Redacted<string>): string =>
   Redacted.isRedacted(v) ? Redacted.value(v) : v;
-
-const isHyperdriveId = (maybeId: string | undefined): maybeId is string =>
-  typeof maybeId === "string" && !maybeId.startsWith("dev:");
 
 /**
  * Build the request body shape that the distilled `createConfig`/`updateConfig`
