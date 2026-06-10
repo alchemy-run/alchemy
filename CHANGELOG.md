@@ -1,3 +1,26 @@
+## v2.0.0-beta.53
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Lazily evaluate auth providers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/567 [<samp>(390a6)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/390a6db4)
+- **aws**:
+  - Actually use AWS Auth provider &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/574 [<samp>(73e62)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/73e62cc1)
+  - **s3**: Narrow bucket tag requirements &nbsp;-&nbsp; by **Kilian Cirera Sant** in https://github.com/alchemy-run/alchemy-effect/issues/555 [<samp>(26796)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/26796939)
+- **cli**:
+  - Always refresh credentials on alchemy login &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/575 [<samp>(75f04)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/75f04495)
+  - Avoid login after configure &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(8ee28)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/8ee2837b)
+- **cloudflare**:
+  - Vite handles require of node built-ins incorrectly &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/556 [<samp>(1010a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1010a5c3)
+  - Use named import for @alchemy.run/node-utils/ignore &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/572 [<samp>(e2926)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/e29265c3)
+  - Race condition with >1 workflow in alchemy dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/573 [<samp>(6cc94)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6cc9429d)
+  - Handle NoSuchBucket eventual consistency when updating bucket domain &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(448ba)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/448ba756)
+- **core**:
+  - Resolve Config values in input props &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/566 [<samp>(aa584)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/aa5844f5)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.52...HEAD)
+
+---
+
 ## v2.0.0-beta.52
 
 ### &nbsp;&nbsp;&nbsp;🚨 Breaking Changes

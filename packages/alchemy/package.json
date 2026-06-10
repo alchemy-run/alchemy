@@ -1,6 +1,6 @@
 {
   "name": "alchemy",
-  "version": "2.0.0-beta.52",
+  "version": "2.0.0-beta.53",
   "homepage": "https://alchemy.run",
   "license": "Apache-2.0",
   "author": "Sam Goodwin <sam@alchemy.run>",
@@ -347,7 +347,7 @@
     "tsdown": "^0.15.4",
     "tsx": "^4.20.6",
     "typescript": "catalog:",
-    "uuid": "^14.0.0",
+    "uuid": "catalog:",
     "ws": "catalog:"
   },
   "peerDependencies": {
