@@ -1,5 +1,6 @@
 import { AlchemyContext } from "@/AlchemyContext.ts";
 import { AuthProviders } from "@/Auth/AuthProvider.ts";
+import { ProfileLive } from "@/Auth/Profile.ts";
 import * as AWS from "@/AWS";
 import { Stack } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
@@ -38,8 +39,11 @@ it.live(
               ALCHEMY_PROFILE: `non-existent-${uuidv4()}`,
             }),
           ),
-          NodeServices.layer,
-          FetchHttpClient.layer,
+          ProfileLive,
+        ).pipe(
+          Layer.provideMerge(
+            Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer),
+          ),
         ),
       ),
     ),

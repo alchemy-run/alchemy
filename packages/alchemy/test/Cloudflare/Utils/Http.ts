@@ -1,3 +1,4 @@
+import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -110,6 +111,7 @@ export const expectUrlContains = (
   const label = options.label ?? "url";
 
   return fetchOnce(url, marker).pipe(
+    Effect.tapError(Console.log),
     Effect.retry({
       // Cap individual sleeps at 8s so very long timeouts still
       // sample at a reasonable rate near the end of the budget.

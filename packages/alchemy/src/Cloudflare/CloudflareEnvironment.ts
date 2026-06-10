@@ -1,5 +1,4 @@
 import * as Config from "effect/Config";
-import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -46,7 +45,6 @@ export const fromProfile = () =>
       // provider name (`Cloudflare`); only runs `configure` (and persists the
       // result) if no stored config exists.
       return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
-        Effect.tap(() => Console.log("FOO")),
         Effect.flatMap((config) =>
           auth.read(profileName, config as CloudflareAuthConfig),
         ),
