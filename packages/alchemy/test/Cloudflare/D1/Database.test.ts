@@ -21,7 +21,7 @@ const logLevel = Effect.provideService(
 
 test.provider("create and delete database with default props", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -48,7 +48,7 @@ test.provider("create and delete database with default props", (stack) =>
 
 test.provider("create, update, delete database", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -90,7 +90,7 @@ test.provider("create, update, delete database", (stack) =>
 
 test.provider("applies migrations from migrationsDir", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const migrationsDir = yield* fs.makeTempDirectory({
@@ -178,7 +178,7 @@ test.provider("applies migrations from migrationsDir", (stack) =>
 
 test.provider("applies migrations using a custom migrationsTable", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const migrationsDir = yield* fs.makeTempDirectory({
@@ -217,7 +217,7 @@ test.provider(
   "migrates legacy 2-column migration table to wrangler schema",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const migrationsDir = yield* fs.makeTempDirectory({
@@ -306,7 +306,7 @@ test.provider(
 
 test.provider("imports SQL files via importFiles", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const dir = yield* fs.makeTempDirectory({
@@ -352,7 +352,7 @@ test.provider("imports SQL files via importFiles", (stack) =>
 
 test.provider("clones a database by databaseId", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const dir = yield* fs.makeTempDirectory({
@@ -403,7 +403,7 @@ test.provider("clones a database by databaseId", (stack) =>
 
 test.provider("clones a database by name lookup", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const dir = yield* fs.makeTempDirectory({
@@ -455,7 +455,7 @@ test.provider(
   "clones a database by passing the source resource directly",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const dir = yield* fs.makeTempDirectory({
@@ -558,7 +558,7 @@ test.provider(
   "existing database (matching name) is silently adopted without --adopt",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 

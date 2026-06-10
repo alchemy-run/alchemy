@@ -1,8 +1,8 @@
-import { Octokit } from "@octokit/rest";
 import * as Effect from "effect/Effect";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { dedent } from "../Util/dedent.ts";
+import { Octokit } from "./Octokit.ts";
 import * as GitHub from "./Providers.ts";
 
 export interface CommentProps {
@@ -37,12 +37,6 @@ export interface CommentProps {
    * @default false
    */
   allowDelete?: boolean;
-
-  /**
-   * GitHub API token. If not provided, falls back to
-   * `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN` environment variables.
-   */
-  token?: string;
 }
 
 export interface Comment extends Resource<
@@ -149,22 +143,11 @@ export interface Comment extends Resource<
  */
 export const Comment = Resource<Comment>("GitHub.Comment");
 
-function resolveToken(props: CommentProps): string | undefined {
-  return (
-    props.token ?? process.env.GITHUB_ACCESS_TOKEN ?? process.env.GITHUB_TOKEN
-  );
-}
-
-function createClient(props: CommentProps): Octokit {
-  return new Octokit({ auth: resolveToken(props) });
-}
-
 export const CommentProvider = () =>
   Provider.succeed(Comment, {
     stables: ["commentId"],
-
     reconcile: Effect.fn(function* ({ news, output }) {
-      const octokit = createClient(news);
+      const octokit = yield* Octokit;
       const body = dedent(news.body);
 
       // Observe — GitHub assigns `comment_id` server-side. Probe for live
@@ -230,7 +213,7 @@ export const CommentProvider = () =>
         return;
       }
 
-      const octokit = createClient(olds);
+      const octokit = yield* Octokit;
 
       yield* Effect.tryPromise(async () => {
         try {

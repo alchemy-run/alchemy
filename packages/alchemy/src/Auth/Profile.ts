@@ -32,12 +32,12 @@ export class AlchemyConfig extends Context.Service<
   {
     version: typeof CONFIG_VERSION;
     profiles: {
-      [profileName: string]: AlchemyProfile;
+      [profileName: string]: AlchemyProfileProviders;
     };
   }
 >()("Alchemy::Profiles") {}
 
-export interface AlchemyProfile {
+export interface AlchemyProfileProviders {
   [providerName: string]: {
     /**
      * The method used to login to the provider. Different providers may use different methods, but common ones are:
@@ -64,7 +64,7 @@ const emptyConfig = (): AlchemyConfig["Service"] => ({
  * {@link ProfileLive} when the layer is built, freeing call sites from
  * having to thread `FileSystem` through their own Effects.
  *
- * Use {@link Profile} directly when you need profile helpers — yield it
+ * Use {@link AlchemyProfile} directly when you need profile helpers — yield it
  * from your `Effect.gen` and call its methods (each has `R = never`).
  */
 export interface ProfileService {
@@ -74,10 +74,10 @@ export interface ProfileService {
   ) => Effect.Effect<void, PlatformError>;
   readonly getProfile: (
     name: string,
-  ) => Effect.Effect<AlchemyProfile | undefined>;
+  ) => Effect.Effect<AlchemyProfileProviders | undefined>;
   readonly setProfile: (
     name: string,
-    profile: AlchemyProfile,
+    profile: AlchemyProfileProviders,
   ) => Effect.Effect<void, PlatformError>;
   readonly deleteProfile: (
     name: string,
@@ -89,19 +89,20 @@ export interface ProfileService {
   ) => Effect.Effect<Config, AuthError | PlatformError>;
 }
 
-export class Profile extends Context.Service<Profile, ProfileService>()(
-  "Alchemy::Profile",
-) {}
+export class AlchemyProfile extends Context.Service<
+  AlchemyProfile,
+  ProfileService
+>()("Alchemy::Profile") {}
 
 /**
- * Layer that builds the {@link Profile} service. Captures the
+ * Layer that builds the {@link AlchemyProfile} service. Captures the
  * {@link FileSystem.FileSystem} dependency at layer-build time, so any
- * Effect that yields {@link Profile} ends up with `R = Profile` (no
+ * Effect that yields {@link AlchemyProfile} ends up with `R = Profile` (no
  * `FileSystem` leak). Provide this once at the top of your runtime
  * (alongside `PlatformServices` / `NodeContext`).
  */
 export const ProfileLive = Layer.effect(
-  Profile,
+  AlchemyProfile,
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
 
@@ -136,7 +137,7 @@ export const ProfileLive = Layer.effect(
     const getProfile = (name: string) =>
       readConfig.pipe(Effect.map((config) => config.profiles[name]));
 
-    const setProfile = (name: string, profile: AlchemyProfile) =>
+    const setProfile = (name: string, profile: AlchemyProfileProviders) =>
       readConfig.pipe(
         Effect.tap((config) =>
           Effect.sync(() => (config.profiles[name] = profile)),

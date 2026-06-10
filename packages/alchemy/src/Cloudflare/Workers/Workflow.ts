@@ -491,9 +491,6 @@ export const WorkflowProvider = () =>
     WorkflowResource,
     Effect.gen(function* () {
       const ctx = yield* AlchemyContext;
-      const { accountId } = yield* CloudflareEnvironment;
-      const putWorkflow = yield* workflows.putWorkflow;
-      const deleteWorkflow = yield* workflows.deleteWorkflow;
 
       return WorkflowResource.Provider.of({
         // The `workflowId` is no longer marked as stable because if you start in dev mode, the ID will change on first deploy.
@@ -505,6 +502,7 @@ export const WorkflowProvider = () =>
           }
         }),
         reconcile: Effect.fnUntraced(function* ({ news, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
           const acct = output?.accountId ?? accountId;
           yield* Effect.logInfo(
             `Cloudflare Workflow reconcile: ${news.workflowName}`,
@@ -522,7 +520,7 @@ export const WorkflowProvider = () =>
           // payloads converge to the same state and a missing workflow is
           // created on the spot. There is no separate observe step needed
           // — the API is naturally reconciler-shaped.
-          const result = yield* putWorkflow({
+          const result = yield* workflows.putWorkflow({
             accountId: acct,
             workflowName: news.workflowName,
             className: news.className,
@@ -540,10 +538,12 @@ export const WorkflowProvider = () =>
           yield* Effect.logInfo(
             `Cloudflare Workflow delete: ${output.workflowName}`,
           );
-          yield* deleteWorkflow({
-            accountId: output.accountId,
-            workflowName: output.workflowName,
-          }).pipe(Effect.catchTag("WorkflowNotFound", () => Effect.void));
+          yield* workflows
+            .deleteWorkflow({
+              accountId: output.accountId,
+              workflowName: output.workflowName,
+            })
+            .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.void));
         }),
       });
     }),

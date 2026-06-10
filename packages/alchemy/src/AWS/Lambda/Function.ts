@@ -153,7 +153,7 @@ export interface Function extends Resource<
   Providers
 > {}
 
-export type FunctionServices = Credentials | Region;
+export type FunctionServices = Credentials | Region | AWSEnvironment;
 
 export type FunctionShape = Main<FunctionServices>;
 
@@ -456,6 +456,7 @@ export const Function: Platform<
           }
         }),
       serve: (handler: HttpEffect) =>
+        // @ts-ignore
         ctx.listen(makeFunctionHttpHandler(handler)),
       listen: ((
         handler:
@@ -500,8 +501,7 @@ export const FunctionProvider = () =>
     Function,
     Effect.gen(function* () {
       const stack = yield* Stack;
-      const { accountId } = yield* AWSEnvironment;
-      const region = yield* Region;
+
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const alchemyEnv = {
@@ -530,6 +530,7 @@ export const FunctionProvider = () =>
 
       const createNames = (id: string, functionName: string | undefined) =>
         Effect.gen(function* () {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const roleName = yield* createRoleName(id);
           const policyName = yield* createPolicyName(id);
           const fn = yield* createFunctionName(id, functionName);
@@ -663,7 +664,6 @@ export const FunctionProvider = () =>
         id: string,
         props: FunctionProps,
       ) {
-        const handler = props.handler ?? "default";
         const sourcemap = props.build?.output?.sourcemap ?? true;
         const uploadSourceMap = props.uploadSourceMap ?? true;
 
@@ -885,10 +885,10 @@ export default await Effect.runPromise(handlerEffect)
           if (assets) {
             const key = yield* assets.uploadAsset(hash, archive);
             yield* Effect.logDebug(
-              `Using S3 for code: s3://${assets.bucketName}/${key}`,
+              `Using S3 for code: s3://${yield* assets.bucketName}/${key}`,
             );
             return {
-              S3Bucket: assets.bucketName,
+              S3Bucket: yield* assets.bucketName,
               S3Key: key,
             } as const;
           } else {
@@ -1220,6 +1220,7 @@ export default await Effect.runPromise(handlerEffect)
         }),
 
         precreate: Effect.fnUntraced(function* ({ id, news, session }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const { roleName, functionName, roleArn } = yield* createNames(
             id,
             news.functionName,
@@ -1381,9 +1382,10 @@ export default await Effect.runPromise(handlerEffect)
           return null as any;
         }),
         tail: ({ output }) => {
-          const logGroupArn = `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${output.functionName}`;
-
           const runTailSession = Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+
+            const logGroupArn = `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${output.functionName}`;
             const response = yield* logs.startLiveTail({
               logGroupIdentifiers: [logGroupArn],
             });

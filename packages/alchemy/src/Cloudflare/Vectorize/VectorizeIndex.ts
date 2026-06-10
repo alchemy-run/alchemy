@@ -140,111 +140,90 @@ export const isVectorizeIndex = (value: unknown): value is VectorizeIndex =>
   Predicate.hasProperty(value, "Type") && value.Type === VectorizeIndexTypeId;
 
 export const VectorizeIndexProvider = () =>
-  Provider.effect(
-    VectorizeIndex,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const createIndex = yield* vectorize.createIndex;
-      const getIndex = yield* vectorize.getIndex;
-      const deleteIndex = yield* vectorize.deleteIndex;
-
-      const createIndexName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          return name ?? (yield* createPhysicalName({ id, lowercase: true }));
-        });
-
-      const buildConfig = (
-        news: VectorizeIndexProps,
-      ): vectorize.CreateIndexRequest["config"] =>
-        news.preset !== undefined
-          ? // `VectorizePreset` is intentionally open (`| (string & {})`) so
-            // new Cloudflare presets aren't blocked by stale types. The
-            // distilled type is the strict-at-release-time union; cast
-            // through for the API call.
-            ({
-              preset: news.preset as never,
-            } as vectorize.CreateIndexRequest["config"])
-          : {
-              dimensions: news.dimensions!,
-              metric: news.metric ?? DEFAULT_METRIC,
-            };
-
-      return {
-        stables: ["indexName", "accountId"],
-        diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
-          if (!isResolved(news)) return undefined;
-          if ((output?.accountId ?? accountId) !== accountId) {
-            return { action: "replace" } as const;
-          }
-          const name = yield* createIndexName(id, news.name);
-          const oldName = output?.indexName
-            ? output.indexName
-            : yield* createIndexName(id, olds.name);
-          if (
-            oldName !== name ||
-            (news.preset ?? undefined) !== (olds.preset ?? undefined) ||
-            (news.dimensions ?? undefined) !== (olds.dimensions ?? undefined) ||
-            (news.metric ?? DEFAULT_METRIC) !==
-              (olds.metric ?? DEFAULT_METRIC) ||
-            (news.description ?? undefined) !== (olds.description ?? undefined)
-          ) {
-            return { action: "replace" } as const;
-          }
-          return undefined;
-        }),
-        read: Effect.fn(function* ({ id, output, olds }) {
-          const acct = output?.accountId ?? accountId;
-          const name =
-            output?.indexName ?? (yield* createIndexName(id, olds?.name));
-          return yield* getIndex({ accountId: acct, indexName: name }).pipe(
-            Effect.map((index) => toAttributes(index, name, acct)),
-            Effect.catchTag(["NotFound", "Gone"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
-        }),
-        reconcile: Effect.fn(function* ({ id, news = {} }) {
-          const indexName = yield* createIndexName(id, news.name);
-
-          // Observe — read the live index by name. The name is the stable
-          // identifier; fall back through a NotFound to the create path so
-          // we recover from out-of-band deletes or partial state-persistence.
-          let observed = yield* getIndex({
-            accountId,
-            indexName,
-          }).pipe(
-            Effect.catchTag(["NotFound", "Gone"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
-
-          // Ensure — create if missing. Cloudflare returns 409 Conflict when
-          // an index with the same name already exists; tolerate the race by
-          // re-reading it.
-          if (!observed) {
-            observed = yield* createIndex({
-              accountId,
-              name: indexName,
-              config: buildConfig(news),
-              description: news.description,
-            }).pipe(
-              Effect.catchTag("IndexAlreadyExists", () =>
-                getIndex({ accountId, indexName }),
-              ),
-            );
-          }
-
-          return toAttributes(observed, indexName, accountId);
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteIndex({
-            accountId: output.accountId,
-            indexName: output.indexName,
-          }).pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.void));
-        }),
-      };
+  Provider.succeed(VectorizeIndex, {
+    stables: ["indexName", "accountId"],
+    diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!isResolved(news)) return undefined;
+      if ((output?.accountId ?? accountId) !== accountId) {
+        return { action: "replace" } as const;
+      }
+      const name = yield* createIndexName(id, news.name);
+      const oldName = output?.indexName
+        ? output.indexName
+        : yield* createIndexName(id, olds.name);
+      if (
+        oldName !== name ||
+        (news.preset ?? undefined) !== (olds.preset ?? undefined) ||
+        (news.dimensions ?? undefined) !== (olds.dimensions ?? undefined) ||
+        (news.metric ?? DEFAULT_METRIC) !== (olds.metric ?? DEFAULT_METRIC) ||
+        (news.description ?? undefined) !== (olds.description ?? undefined)
+      ) {
+        return { action: "replace" } as const;
+      }
+      return undefined;
     }),
-  );
+    read: Effect.fn(function* ({ id, output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const acct = output?.accountId ?? accountId;
+      const name =
+        output?.indexName ?? (yield* createIndexName(id, olds?.name));
+      return yield* vectorize
+        .getIndex({ accountId: acct, indexName: name })
+        .pipe(
+          Effect.map((index) => toAttributes(index, name, acct)),
+          Effect.catchTag(["NotFound", "Gone"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {} }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const indexName = yield* createIndexName(id, news.name);
+
+      // Observe — read the live index by name. The name is the stable
+      // identifier; fall back through a NotFound to the create path so
+      // we recover from out-of-band deletes or partial state-persistence.
+      let observed = yield* vectorize
+        .getIndex({
+          accountId,
+          indexName,
+        })
+        .pipe(
+          Effect.catchTag(["NotFound", "Gone"], () =>
+            Effect.succeed(undefined),
+          ),
+        );
+
+      // Ensure — create if missing. Cloudflare returns 409 Conflict when
+      // an index with the same name already exists; tolerate the race by
+      // re-reading it.
+      if (!observed) {
+        observed = yield* vectorize
+          .createIndex({
+            accountId,
+            name: indexName,
+            config: buildConfig(news),
+            description: news.description,
+          })
+          .pipe(
+            Effect.catchTag("IndexAlreadyExists", () =>
+              vectorize.getIndex({ accountId, indexName }),
+            ),
+          );
+      }
+
+      return toAttributes(observed, indexName, accountId);
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* vectorize
+        .deleteIndex({
+          accountId: output.accountId,
+          indexName: output.indexName,
+        })
+        .pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.void));
+    }),
+  });
 
 const toAttributes = (
   index: vectorize.GetIndexResponse | vectorize.CreateIndexResponse,
@@ -260,3 +239,24 @@ const toAttributes = (
   createdOn: index.createdOn ?? undefined,
   modifiedOn: index.modifiedOn ?? undefined,
 });
+
+const createIndexName = (id: string, name: string | undefined) =>
+  Effect.gen(function* () {
+    return name ?? (yield* createPhysicalName({ id, lowercase: true }));
+  });
+
+const buildConfig = (
+  news: VectorizeIndexProps,
+): vectorize.CreateIndexRequest["config"] =>
+  news.preset !== undefined
+    ? // `VectorizePreset` is intentionally open (`| (string & {})`) so
+      // new Cloudflare presets aren't blocked by stale types. The
+      // distilled type is the strict-at-release-time union; cast
+      // through for the API call.
+      ({
+        preset: news.preset as never,
+      } as vectorize.CreateIndexRequest["config"])
+    : {
+        dimensions: news.dimensions!,
+        metric: news.metric ?? DEFAULT_METRIC,
+      };

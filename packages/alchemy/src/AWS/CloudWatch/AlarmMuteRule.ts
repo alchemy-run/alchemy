@@ -1,11 +1,10 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { createManagedTags, createName, retryConcurrent } from "./common.ts";
 
@@ -66,14 +65,16 @@ export const AlarmMuteRuleProvider = () =>
   Provider.effect(
     AlarmMuteRule,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const createMuteRuleName = (id: string, props: { name?: string } = {}) =>
         createName(id, props.name, 255);
 
       const alarmMuteRuleArn = (name: string) =>
-        `arn:aws:cloudwatch:${region}:${accountId}:alarm-mute-rule:${name}` as AlarmMuteRuleArn;
+        AWSEnvironment.current.pipe(
+          Effect.map(
+            (env) =>
+              `arn:aws:cloudwatch:${env.region}:${env.accountId}:alarm-mute-rule:${name}` as AlarmMuteRuleArn,
+          ),
+        );
 
       const readAlarmMuteRule = Effect.fn(function* (name: string) {
         const output = yield* cloudwatch
@@ -139,7 +140,7 @@ export const AlarmMuteRuleProvider = () =>
             }),
           );
 
-          yield* session.note(alarmMuteRuleArn(name));
+          yield* session.note(yield* alarmMuteRuleArn(name));
 
           const state = yield* readAlarmMuteRule(name);
           if (!state) {

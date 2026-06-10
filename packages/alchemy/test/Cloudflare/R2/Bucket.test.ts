@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 
 test.provider("create and delete bucket with default props", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -46,7 +46,7 @@ test.provider("create and delete bucket with default props", (stack) =>
 
 test.provider("create, update, delete bucket", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -95,7 +95,7 @@ test.provider(
   "existing bucket (matching name) is silently adopted without --adopt",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
@@ -154,7 +154,7 @@ test.provider(
 
 test.provider("destroying a bucket empties its objects first", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -207,7 +207,7 @@ test.provider("destroying a bucket empties its objects first", (stack) =>
 
 test.provider("lifecycle rules are added, updated, and removed", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 

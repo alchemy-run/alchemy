@@ -4,7 +4,6 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
@@ -23,7 +22,6 @@ import {
   createInternalTags,
   diffTags,
 } from "../../Tags.ts";
-import { Assets } from "../Assets.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -259,7 +257,11 @@ export interface Instance extends Resource<
   Providers
 > {}
 
-export type InstanceServices = ServerHost | Credentials | Region;
+export type InstanceServices =
+  | ServerHost
+  | Credentials
+  | Region
+  | AWSEnvironment;
 
 export type InstanceShape = Main<InstanceServices>;
 
@@ -315,27 +317,24 @@ export const InstanceProvider = () =>
   Provider.effect(
     Instance,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
       const stack = yield* Stack;
       const stage = yield* Stage;
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-      const assets = (yield* Effect.serviceOption(Assets)).pipe(
-        Option.getOrUndefined,
-      );
 
       const toInstanceArn = (instanceId: InstanceId) =>
-        `arn:aws:ec2:${region}:${accountId}:instance/${instanceId}` as InstanceArn;
+        AWSEnvironment.current.pipe(
+          Effect.map(
+            (env) =>
+              `arn:aws:ec2:${env.region}:${env.accountId}:instance/${instanceId}` as InstanceArn,
+          ),
+        );
 
       const hosted = createEc2HostedSupport({
-        accountId,
-        region,
         stackName: stack.name,
         stage,
         fs,
         virtualEntryPlugin,
-        assets,
         resourceType: "EC2.Instance",
       });
 
@@ -387,34 +386,36 @@ export const InstanceProvider = () =>
             .map((tag) => [tag.Key, tag.Value]),
         );
 
-      const toAttributes = (
+      const toAttributes = Effect.fnUntraced(function* (
         instance: ec2.Instance,
-      ): Instance["Attributes"] => ({
-        instanceId: instance.InstanceId as InstanceId,
-        instanceArn: toInstanceArn(instance.InstanceId as InstanceId),
-        imageId: instance.ImageId!,
-        instanceType: String(instance.InstanceType ?? ""),
-        state: instance.State?.Name ?? "unknown",
-        vpcId: instance.VpcId as VpcId | undefined,
-        subnetId: instance.SubnetId as SubnetId | undefined,
-        availabilityZone: instance.Placement?.AvailabilityZone,
-        securityGroupIds: (instance.SecurityGroups ?? [])
-          .map((group) => group.GroupId)
-          .filter((value): value is string => Boolean(value)),
-        privateIpAddress: instance.PrivateIpAddress,
-        publicIpAddress: instance.PublicIpAddress,
-        privateDnsName: instance.PrivateDnsName,
-        publicDnsName: instance.PublicDnsName,
-        keyName: instance.KeyName,
-        instanceProfileArn: instance.IamInstanceProfile?.Arn,
-        instanceProfileId: instance.IamInstanceProfile?.Id,
-        instanceProfileName: undefined,
-        sourceDestCheck: instance.SourceDestCheck,
-        launchTime:
-          instance.LaunchTime instanceof Date
-            ? instance.LaunchTime.toISOString()
-            : (instance.LaunchTime as string | undefined),
-        tags: toTagRecord(instance.Tags),
+      ) {
+        return {
+          instanceId: instance.InstanceId as InstanceId,
+          instanceArn: yield* toInstanceArn(instance.InstanceId as InstanceId),
+          imageId: instance.ImageId!,
+          instanceType: String(instance.InstanceType ?? ""),
+          state: instance.State?.Name ?? "unknown",
+          vpcId: instance.VpcId as VpcId | undefined,
+          subnetId: instance.SubnetId as SubnetId | undefined,
+          availabilityZone: instance.Placement?.AvailabilityZone,
+          securityGroupIds: (instance.SecurityGroups ?? [])
+            .map((group) => group.GroupId)
+            .filter((value): value is string => Boolean(value)),
+          privateIpAddress: instance.PrivateIpAddress,
+          publicIpAddress: instance.PublicIpAddress,
+          privateDnsName: instance.PrivateDnsName,
+          publicDnsName: instance.PublicDnsName,
+          keyName: instance.KeyName,
+          instanceProfileArn: instance.IamInstanceProfile?.Arn,
+          instanceProfileId: instance.IamInstanceProfile?.Id,
+          instanceProfileName: undefined,
+          sourceDestCheck: instance.SourceDestCheck,
+          launchTime:
+            instance.LaunchTime instanceof Date
+              ? instance.LaunchTime.toISOString()
+              : (instance.LaunchTime as string | undefined),
+          tags: toTagRecord(instance.Tags),
+        } satisfies Instance["Attributes"];
       });
 
       const describeInstance = (instanceId: string) =>
@@ -625,7 +626,7 @@ export const InstanceProvider = () =>
             : yield* findInstanceByTags(id);
           return instance
             ? {
-                ...toAttributes(instance),
+                ...(yield* toAttributes(instance)),
                 instanceProfileName: output?.instanceProfileName,
                 roleArn: output?.roleArn,
                 roleName: output?.roleName,
@@ -813,7 +814,7 @@ export const InstanceProvider = () =>
           // Re-read final state so attributes reflect the post-sync cloud.
           const final = yield* describeInstance(instanceId);
           return {
-            ...toAttributes(final),
+            ...(yield* toAttributes(final)),
             instanceProfileName:
               runtime.instanceProfileName ?? output?.instanceProfileName,
             roleArn: runtime.roleArn ?? output?.roleArn,

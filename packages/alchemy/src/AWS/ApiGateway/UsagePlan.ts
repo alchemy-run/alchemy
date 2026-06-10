@@ -1,13 +1,13 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, tagRecord } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
+import { AWSEnvironment } from "../Environment.ts";
 import { syncTags, usagePlanArn } from "./common.ts";
 
 export interface UsagePlanProps {
@@ -234,8 +234,6 @@ export const UsagePlanProvider = () =>
   Provider.effect(
     UsagePlanResource,
     Effect.gen(function* () {
-      const awsRegion = yield* Region;
-
       return {
         stables: ["id"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
@@ -266,6 +264,7 @@ export const UsagePlanProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
+          const { region } = yield* AWSEnvironment.current;
           if (!isResolved(newsIn)) {
             return yield* Effect.die("UsagePlan props were not resolved");
           }
@@ -333,7 +332,7 @@ export const UsagePlanProvider = () =>
           const observedTags = tagRecord(observed.tags);
           if (!deepEqual(observedTags, desiredTags)) {
             yield* syncTags({
-              resourceArn: usagePlanArn(awsRegion, planId),
+              resourceArn: usagePlanArn(region, planId),
               oldTags: observedTags,
               newTags: desiredTags,
             });

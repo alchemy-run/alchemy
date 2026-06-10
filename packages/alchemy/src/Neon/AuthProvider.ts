@@ -9,7 +9,7 @@ import {
 } from "../Auth/AuthProvider.ts";
 import { CredentialsStore, displayRedacted } from "../Auth/Credentials.ts";
 import { getEnvRedacted, retryOnce } from "../Auth/Env.ts";
-import { Profile } from "../Auth/Profile.ts";
+import { AlchemyProfile } from "../Auth/Profile.ts";
 import * as Clank from "../Util/Clank.ts";
 
 export const NEON_AUTH_PROVIDER_NAME = "Neon";
@@ -54,7 +54,7 @@ export const NeonAuth = AuthProviderLayer<
 >()(
   NEON_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
-    const profiles = yield* Profile;
+    const profiles = yield* AlchemyProfile;
     const store = yield* CredentialsStore;
 
     const loginStored = Effect.fnUntraced(function* (profileName: string) {

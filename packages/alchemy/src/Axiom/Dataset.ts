@@ -167,7 +167,7 @@ export const DatasetProvider = () =>
   Provider.effect(
     Dataset,
     Effect.gen(function* () {
-      const { apiBaseUrl } = yield* Credentials;
+      const { apiBaseUrl } = yield* yield* Credentials;
       const create = yield* Axiom.createDataset;
       const update = yield* Axiom.updateDataset;
       const get = yield* Axiom.getDataset;

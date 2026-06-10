@@ -14,29 +14,11 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { listSqlFiles, readSqlFile } from "../Sql/SqlFile.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
 import { type Project, waitForOperations } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
-import { listSqlFiles, readSqlFile } from "../Sql/SqlFile.ts";
-
-const findBranchByName = (projectId: string, name: string) =>
-  Effect.gen(function* () {
-    const matches: ListProjectBranchesOutput["branches"][number][] = [];
-    let cursor: string | undefined;
-    do {
-      const page = yield* listProjectBranches({
-        project_id: projectId,
-        search: name,
-        ...(cursor !== undefined ? { cursor } : {}),
-      });
-      for (const b of page.branches) {
-        if (b.name === name) matches.push(b);
-      }
-      cursor = page.pagination?.next;
-    } while (cursor);
-    return matches;
-  });
 
 const DEFAULT_MIGRATIONS_TABLE = "neon_migrations";
 
@@ -207,6 +189,269 @@ export type Branch = Resource<
  */
 export const Branch = Resource<Branch>("Neon.Branch");
 
+export const BranchProvider = () =>
+  Provider.succeed(Branch, {
+    stables: ["branchId", "projectId"],
+    diff: Effect.fn(function* ({ id, olds, news, output }) {
+      if (!isResolved(news)) return undefined;
+      if (
+        news.parentLsn !== undefined &&
+        output?.parentLsn !== news.parentLsn
+      ) {
+        return { action: "replace" } as const;
+      }
+      if (
+        news.parentTimestamp !== undefined &&
+        output?.parentTimestamp !== news.parentTimestamp
+      ) {
+        return { action: "replace" } as const;
+      }
+      if (
+        output?.initSource !== undefined &&
+        output.initSource !== (news.initSource ?? "parent-data")
+      ) {
+        return { action: "replace" } as const;
+      }
+      const newName = yield* createBranchName(id, news.name);
+      const oldName = output?.branchName
+        ? output.branchName
+        : yield* createBranchName(id, olds.name);
+      if (
+        newName !== oldName ||
+        (news.protected ?? false) !== (output?.protected ?? false) ||
+        (news.expiresAt ?? undefined) !== (output?.expiresAt ?? undefined)
+      ) {
+        return { action: "update" } as const;
+      }
+      if (news.migrationsDir) {
+        const newHashes = yield* hashMigrations(news.migrationsDir);
+        if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
+          return { action: "update" } as const;
+        }
+        if (
+          (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
+          (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
+        ) {
+          return { action: "update" } as const;
+        }
+      }
+      if (news.importFiles?.length) {
+        const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
+        if (!recordsEqual(newHashes, output?.importHashes ?? {})) {
+          return { action: "update" } as const;
+        }
+      }
+      return undefined;
+    }),
+    read: Effect.fn(function* ({ id, output, olds }) {
+      if (output?.branchId) {
+        return yield* getProjectBranch({
+          project_id: output.projectId,
+          branch_id: output.branchId,
+        }).pipe(
+          Effect.map(({ branch }) => ({
+            ...output,
+            branchName: branch.name,
+            protected: branch.protected,
+            default: branch.default,
+            expiresAt: branch.expires_at,
+          })),
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        );
+      }
+      if (!olds?.project) return undefined;
+      const projectId = resolveProjectId(olds.project as BranchSource);
+      const name = yield* createBranchName(id, olds.name);
+      const matches = yield* findBranchByName(projectId, name);
+      const match = matches[0];
+      if (!match) return undefined;
+      const dbs = yield* listProjectBranchDatabases({
+        project_id: projectId,
+        branch_id: match.id,
+      });
+      const db = dbs.databases[0];
+      if (!db) return undefined;
+      const conn = yield* fetchConnection(
+        projectId,
+        match.id,
+        db.name,
+        db.owner_name,
+      );
+      return {
+        branchId: match.id,
+        branchName: match.name,
+        projectId,
+        parentBranchId: match.parent_id,
+        parentLsn: match.parent_lsn,
+        parentTimestamp: match.parent_timestamp,
+        initSource: match.init_source as
+          | "schema-only"
+          | "parent-data"
+          | undefined,
+        protected: match.protected,
+        default: match.default,
+        expiresAt: match.expires_at,
+        databaseName: db.name,
+        roleName: db.owner_name,
+        connectionUri: conn.uri,
+        pooledConnectionUri: conn.pooled,
+        origin: parsePostgresOrigin(conn.uri),
+        migrationsDir: olds?.migrationsDir,
+        migrationsTable: olds?.migrationsTable,
+        migrationsHashes: {},
+        importHashes: {},
+      };
+    }),
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const newName = yield* createBranchName(id, news.name);
+
+      // Ensure — when no prior output exists we create the branch;
+      // otherwise sync the mutable scalar fields on the existing
+      // branch via updateProjectBranch.
+      const branchInfo = output
+        ? yield* updateProjectBranch({
+            project_id: output.projectId,
+            branch_id: output.branchId,
+            branch: {
+              name: newName !== output.branchName ? newName : undefined,
+              protected: news.protected,
+              expires_at: news.expiresAt ?? null,
+            },
+          }).pipe(
+            Effect.map((r) => ({
+              branchId: output.branchId,
+              branchName: r.branch.name,
+              projectId: output.projectId,
+              parentBranchId: output.parentBranchId,
+              parentLsn: output.parentLsn,
+              parentTimestamp: output.parentTimestamp,
+              initSource: output.initSource,
+              protected: r.branch.protected,
+              default: output.default,
+              expiresAt: r.branch.expires_at,
+              databaseName: output.databaseName,
+              roleName: output.roleName,
+              connectionUri: output.connectionUri,
+              pooledConnectionUri: output.pooledConnectionUri,
+              origin: output.origin,
+            })),
+          )
+        : yield* Effect.gen(function* () {
+            const projectId = resolveProjectId(news.project as BranchSource);
+            const parentBranchId = yield* resolveParentBranchId(
+              news.parentBranch as ParentBranchSource | undefined,
+              projectId,
+            );
+            const created = yield* createProjectBranch({
+              project_id: projectId,
+              branch: {
+                name: newName,
+                parent_id: parentBranchId,
+                parent_lsn: news.parentLsn,
+                parent_timestamp: news.parentTimestamp,
+                init_source: news.initSource,
+                protected: news.protected,
+                expires_at: news.expiresAt,
+              },
+              endpoints: buildEndpoints(news.endpoints),
+            });
+            yield* waitForOperations(created.operations);
+
+            const db = created.databases[0];
+            if (!db) {
+              return yield* Effect.die(
+                `Neon branch ${created.branch.id} created with no databases`,
+              );
+            }
+            const conn = yield* fetchConnection(
+              projectId,
+              created.branch.id,
+              db.name,
+              db.owner_name,
+            );
+            return {
+              branchId: created.branch.id,
+              branchName: created.branch.name,
+              projectId: created.branch.project_id,
+              parentBranchId: created.branch.parent_id,
+              parentLsn: created.branch.parent_lsn,
+              parentTimestamp: created.branch.parent_timestamp,
+              initSource: created.branch.init_source as
+                | "schema-only"
+                | "parent-data"
+                | undefined,
+              protected: created.branch.protected,
+              default: created.branch.default,
+              expiresAt: created.branch.expires_at,
+              databaseName: db.name,
+              roleName: db.owner_name,
+              connectionUri: conn.uri,
+              pooledConnectionUri: conn.pooled,
+              origin: parsePostgresOrigin(conn.uri),
+            };
+          });
+
+      const connectionUri = Redacted.make(branchInfo.connectionUri);
+      const migrationsTable =
+        news.migrationsTable ??
+        output?.migrationsTable ??
+        DEFAULT_MIGRATIONS_TABLE;
+      const migrationsHashes = news.migrationsDir
+        ? yield* runMigrations(
+            connectionUri,
+            news.migrationsDir,
+            migrationsTable,
+          )
+        : (output?.migrationsHashes ?? {});
+      const importHashes = news.importFiles?.length
+        ? yield* runImports(
+            connectionUri,
+            news.importFiles,
+            yield* rootDir,
+            output?.importHashes ?? {},
+          )
+        : {};
+
+      return {
+        ...branchInfo,
+        migrationsDir: news.migrationsDir,
+        migrationsTable: news.migrationsDir ? migrationsTable : undefined,
+        migrationsHashes,
+        importHashes,
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* deleteProjectBranch({
+        project_id: output.projectId,
+        branch_id: output.branchId,
+      }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+    }),
+  });
+
+const rootDir = Effect.sync(() => process.cwd());
+const createBranchName = (id: string, name: string | undefined) =>
+  Effect.gen(function* () {
+    return name ?? (yield* createPhysicalName({ id }));
+  });
+
+const findBranchByName = (projectId: string, name: string) =>
+  Effect.gen(function* () {
+    const matches: ListProjectBranchesOutput["branches"][number][] = [];
+    let cursor: string | undefined;
+    do {
+      const page = yield* listProjectBranches({
+        project_id: projectId,
+        search: name,
+        ...(cursor !== undefined ? { cursor } : {}),
+      });
+      for (const b of page.branches) {
+        if (b.name === name) matches.push(b);
+      }
+      cursor = page.pagination?.next;
+    } while (cursor);
+    return matches;
+  });
+
 const resolveProjectId = (source: BranchSource): string => {
   if ("projectId" in source && source.projectId) {
     return source.projectId as unknown as string;
@@ -278,259 +523,6 @@ const fetchConnection = (
     });
     return { uri: direct.uri, pooled: pooled.uri };
   });
-
-export const BranchProvider = () =>
-  Provider.effect(
-    Branch,
-    Effect.gen(function* () {
-      const rootDir = process.cwd();
-
-      const createBranchName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          return name ?? (yield* createPhysicalName({ id }));
-        });
-
-      return {
-        stables: ["branchId", "projectId"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
-          if (!isResolved(news)) return undefined;
-          if (
-            news.parentLsn !== undefined &&
-            output?.parentLsn !== news.parentLsn
-          ) {
-            return { action: "replace" } as const;
-          }
-          if (
-            news.parentTimestamp !== undefined &&
-            output?.parentTimestamp !== news.parentTimestamp
-          ) {
-            return { action: "replace" } as const;
-          }
-          if (
-            output?.initSource !== undefined &&
-            output.initSource !== (news.initSource ?? "parent-data")
-          ) {
-            return { action: "replace" } as const;
-          }
-          const newName = yield* createBranchName(id, news.name);
-          const oldName = output?.branchName
-            ? output.branchName
-            : yield* createBranchName(id, olds.name);
-          if (
-            newName !== oldName ||
-            (news.protected ?? false) !== (output?.protected ?? false) ||
-            (news.expiresAt ?? undefined) !== (output?.expiresAt ?? undefined)
-          ) {
-            return { action: "update" } as const;
-          }
-          if (news.migrationsDir) {
-            const newHashes = yield* hashMigrations(news.migrationsDir);
-            if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-              return { action: "update" } as const;
-            }
-            if (
-              (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-              (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
-            ) {
-              return { action: "update" } as const;
-            }
-          }
-          if (news.importFiles?.length) {
-            const newHashes = yield* hashImports(news.importFiles, rootDir);
-            if (!recordsEqual(newHashes, output?.importHashes ?? {})) {
-              return { action: "update" } as const;
-            }
-          }
-          return undefined;
-        }),
-        read: Effect.fn(function* ({ id, output, olds }) {
-          if (output?.branchId) {
-            return yield* getProjectBranch({
-              project_id: output.projectId,
-              branch_id: output.branchId,
-            }).pipe(
-              Effect.map(({ branch }) => ({
-                ...output,
-                branchName: branch.name,
-                protected: branch.protected,
-                default: branch.default,
-                expiresAt: branch.expires_at,
-              })),
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-            );
-          }
-          if (!olds?.project) return undefined;
-          const projectId = resolveProjectId(olds.project as BranchSource);
-          const name = yield* createBranchName(id, olds.name);
-          const matches = yield* findBranchByName(projectId, name);
-          const match = matches[0];
-          if (!match) return undefined;
-          const dbs = yield* listProjectBranchDatabases({
-            project_id: projectId,
-            branch_id: match.id,
-          });
-          const db = dbs.databases[0];
-          if (!db) return undefined;
-          const conn = yield* fetchConnection(
-            projectId,
-            match.id,
-            db.name,
-            db.owner_name,
-          );
-          return {
-            branchId: match.id,
-            branchName: match.name,
-            projectId,
-            parentBranchId: match.parent_id,
-            parentLsn: match.parent_lsn,
-            parentTimestamp: match.parent_timestamp,
-            initSource: match.init_source as
-              | "schema-only"
-              | "parent-data"
-              | undefined,
-            protected: match.protected,
-            default: match.default,
-            expiresAt: match.expires_at,
-            databaseName: db.name,
-            roleName: db.owner_name,
-            connectionUri: conn.uri,
-            pooledConnectionUri: conn.pooled,
-            origin: parsePostgresOrigin(conn.uri),
-            migrationsDir: olds?.migrationsDir,
-            migrationsTable: olds?.migrationsTable,
-            migrationsHashes: {},
-            importHashes: {},
-          };
-        }),
-        reconcile: Effect.fn(function* ({ id, news, output }) {
-          const newName = yield* createBranchName(id, news.name);
-
-          // Ensure — when no prior output exists we create the branch;
-          // otherwise sync the mutable scalar fields on the existing
-          // branch via updateProjectBranch.
-          const branchInfo = output
-            ? yield* updateProjectBranch({
-                project_id: output.projectId,
-                branch_id: output.branchId,
-                branch: {
-                  name: newName !== output.branchName ? newName : undefined,
-                  protected: news.protected,
-                  expires_at: news.expiresAt ?? null,
-                },
-              }).pipe(
-                Effect.map((r) => ({
-                  branchId: output.branchId,
-                  branchName: r.branch.name,
-                  projectId: output.projectId,
-                  parentBranchId: output.parentBranchId,
-                  parentLsn: output.parentLsn,
-                  parentTimestamp: output.parentTimestamp,
-                  initSource: output.initSource,
-                  protected: r.branch.protected,
-                  default: output.default,
-                  expiresAt: r.branch.expires_at,
-                  databaseName: output.databaseName,
-                  roleName: output.roleName,
-                  connectionUri: output.connectionUri,
-                  pooledConnectionUri: output.pooledConnectionUri,
-                  origin: output.origin,
-                })),
-              )
-            : yield* Effect.gen(function* () {
-                const projectId = resolveProjectId(
-                  news.project as BranchSource,
-                );
-                const parentBranchId = yield* resolveParentBranchId(
-                  news.parentBranch as ParentBranchSource | undefined,
-                  projectId,
-                );
-                const created = yield* createProjectBranch({
-                  project_id: projectId,
-                  branch: {
-                    name: newName,
-                    parent_id: parentBranchId,
-                    parent_lsn: news.parentLsn,
-                    parent_timestamp: news.parentTimestamp,
-                    init_source: news.initSource,
-                    protected: news.protected,
-                    expires_at: news.expiresAt,
-                  },
-                  endpoints: buildEndpoints(news.endpoints),
-                });
-                yield* waitForOperations(created.operations);
-
-                const db = created.databases[0];
-                if (!db) {
-                  return yield* Effect.die(
-                    `Neon branch ${created.branch.id} created with no databases`,
-                  );
-                }
-                const conn = yield* fetchConnection(
-                  projectId,
-                  created.branch.id,
-                  db.name,
-                  db.owner_name,
-                );
-                return {
-                  branchId: created.branch.id,
-                  branchName: created.branch.name,
-                  projectId: created.branch.project_id,
-                  parentBranchId: created.branch.parent_id,
-                  parentLsn: created.branch.parent_lsn,
-                  parentTimestamp: created.branch.parent_timestamp,
-                  initSource: created.branch.init_source as
-                    | "schema-only"
-                    | "parent-data"
-                    | undefined,
-                  protected: created.branch.protected,
-                  default: created.branch.default,
-                  expiresAt: created.branch.expires_at,
-                  databaseName: db.name,
-                  roleName: db.owner_name,
-                  connectionUri: conn.uri,
-                  pooledConnectionUri: conn.pooled,
-                  origin: parsePostgresOrigin(conn.uri),
-                };
-              });
-
-          const connectionUri = Redacted.make(branchInfo.connectionUri);
-          const migrationsTable =
-            news.migrationsTable ??
-            output?.migrationsTable ??
-            DEFAULT_MIGRATIONS_TABLE;
-          const migrationsHashes = news.migrationsDir
-            ? yield* runMigrations(
-                connectionUri,
-                news.migrationsDir,
-                migrationsTable,
-              )
-            : (output?.migrationsHashes ?? {});
-          const importHashes = news.importFiles?.length
-            ? yield* runImports(
-                connectionUri,
-                news.importFiles,
-                rootDir,
-                output?.importHashes ?? {},
-              )
-            : {};
-
-          return {
-            ...branchInfo,
-            migrationsDir: news.migrationsDir,
-            migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-            migrationsHashes,
-            importHashes,
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteProjectBranch({
-            project_id: output.projectId,
-            branch_id: output.branchId,
-          }).pipe(Effect.catchTag("NotFound", () => Effect.void));
-        }),
-      };
-    }),
-  );
 
 const runMigrations = (
   connectionUri: Redacted.Redacted<string>,

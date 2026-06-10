@@ -27,7 +27,7 @@ const baseOrigin = {
 
 test.provider.skip("create and delete hyperdrive with default props", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -58,7 +58,7 @@ test.provider.skip("create and delete hyperdrive with default props", (stack) =>
 
 test.provider.skip("create, update, delete hyperdrive", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 

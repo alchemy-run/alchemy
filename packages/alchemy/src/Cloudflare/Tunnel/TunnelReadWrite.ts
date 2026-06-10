@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
+import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import {
   makeTunnelClient,
@@ -61,7 +62,11 @@ export const readWriteClient = (token: TunnelToken): TunnelReadWriteClient => ({
  */
 export class TunnelReadWrite extends Binding.Service<
   TunnelReadWrite,
-  () => Effect.Effect<TunnelReadWriteClient, never, Worker>
+  () => Effect.Effect<
+    TunnelReadWriteClient,
+    never,
+    Worker | CloudflareEnvironment
+  >
 >()("Cloudflare.TunnelReadWrite") {}
 
 /**
@@ -71,7 +76,7 @@ export class TunnelReadWrite extends Binding.Service<
  */
 export class TunnelReadWritePolicy extends Binding.Policy<
   TunnelReadWritePolicy,
-  (token: AccountApiToken) => Effect.Effect<void>
+  (token: AccountApiToken) => Effect.Effect<void, never, CloudflareEnvironment>
 >()("Cloudflare.TunnelReadWrite") {}
 
 /** Runtime layer for {@link TunnelReadWrite}. */

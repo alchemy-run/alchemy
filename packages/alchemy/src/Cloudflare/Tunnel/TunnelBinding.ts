@@ -68,7 +68,9 @@ export const makeTunnelClient = <C>(
   Policy: Binding.Policy<
     any,
     any,
-    (token: AccountApiToken) => Effect.Effect<void>
+    (
+      token: AccountApiToken,
+    ) => Effect.Effect<void, never, CloudflareEnvironment>
   >,
   makeClient: (token: TunnelToken) => C,
 ) =>
@@ -92,23 +94,28 @@ export const makeTunnelPolicyLive = <Self, Id extends string>(
   Policy: Binding.Policy<
     Self,
     Id,
-    (token: AccountApiToken) => Effect.Effect<void>
+    (
+      token: AccountApiToken,
+    ) => Effect.Effect<void, never, CloudflareEnvironment>
   >,
   sid: string,
   permissionGroups: ApiTokenPermissionGroupRef[],
 ) =>
-  Policy.layer.effect(
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      return (_host, token) =>
+  Policy.layer.succeed((_host, token) =>
+    CloudflareEnvironment.pipe(
+      Effect.flatMap((env) => env),
+      Effect.flatMap(({ accountId }) =>
         token.bind(sid, {
           policies: [
             {
               effect: "allow",
               permissionGroups,
-              resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
+              resources: {
+                [`com.cloudflare.api.account.${accountId}`]: "*",
+              },
             },
           ],
-        });
-    }),
+        }),
+      ),
+    ),
   );

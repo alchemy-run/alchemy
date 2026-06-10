@@ -1,14 +1,13 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type LogGroupName = string;
@@ -65,9 +64,6 @@ export const LogGroupProvider = () =>
   Provider.effect(
     LogGroup,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const toLogGroupName = (
         id: string,
         props: { logGroupName?: string } = {},
@@ -109,6 +105,7 @@ export const LogGroupProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const logGroupName =
             output?.logGroupName ?? (yield* toLogGroupName(id, news));
           const arn = (output?.logGroupArn ??

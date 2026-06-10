@@ -250,7 +250,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(() => {
         // Destroy the stack — both retained, so neither should be removed.
         yield* stack.destroy();
 
-        const { organization } = yield* Planetscale.Credentials;
+        const { organization } = yield* yield* Planetscale.Credentials;
 
         // Database should still exist and be ready.
         const liveDb = yield* Planetscale.waitForDatabaseReady(

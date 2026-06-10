@@ -260,8 +260,8 @@ export const BucketProvider = () =>
         id: string;
         news: BucketProps;
       }) {
-        const region = yield* Region;
-        const { accountId } = yield* AWSEnvironment;
+        const { region } = yield* AWSEnvironment.current;
+        const { accountId } = yield* AWSEnvironment.current;
         const bucketName = yield* createBucketName(id, news);
 
         yield* Effect.logInfo(
@@ -556,8 +556,7 @@ export const BucketProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const bucketName =
             output?.bucketName ?? (yield* createBucketName(id, olds ?? {}));
-          const region = yield* Region;
-          const { accountId } = yield* AWSEnvironment;
+          const { accountId, region } = yield* AWSEnvironment.current;
           const exists = yield* s3.headBucket({ Bucket: bucketName }).pipe(
             Effect.map(() => true),
             Effect.catchTag("NotFound", () => Effect.succeed(false)),

@@ -151,180 +151,146 @@ export type Tunnel = Resource<
 export const Tunnel = Resource<Tunnel>("Cloudflare.Tunnel");
 
 export const TunnelProvider = () =>
-  Provider.effect(
-    Tunnel,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const createTunnel = yield* zeroTrust.createTunnelCloudflared;
-      const getTunnel = yield* zeroTrust.getTunnelCloudflared;
-      const deleteTunnel = yield* zeroTrust.deleteTunnelCloudflared;
-      const putConfiguration =
-        yield* zeroTrust.putTunnelCloudflaredConfiguration;
-      const getToken = yield* zeroTrust.getTunnelCloudflaredToken;
-      const listTunnels = zeroTrust.listTunnels;
+  Provider.succeed(Tunnel, {
+    stables: ["tunnelId", "accountTag", "accountId"],
+    diff: Effect.fn(function* ({ id, olds = {}, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!isResolved(news)) return undefined;
+      if ((output?.accountId ?? accountId) !== accountId) {
+        return { action: "replace" } as const;
+      }
+      const name = yield* createTunnelName(id, news.name);
+      const oldName = output?.tunnelName
+        ? output.tunnelName
+        : yield* createTunnelName(id, olds.name);
+      if (name !== oldName) {
+        return { action: "replace" } as const;
+      }
+      const oldSecret = olds.tunnelSecret
+        ? Redacted.value(olds.tunnelSecret)
+        : undefined;
+      const newSecret = news.tunnelSecret
+        ? Redacted.value(news.tunnelSecret)
+        : undefined;
+      if (oldSecret !== newSecret) {
+        return { action: "replace" } as const;
+      }
+      if (
+        (olds.configSrc ?? "cloudflare") !== (news.configSrc ?? "cloudflare")
+      ) {
+        return { action: "replace" } as const;
+      }
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = yield* createTunnelName(id, news.name);
+      const configSrc = news.configSrc ?? output?.configSrc ?? "cloudflare";
+      const tunnelSecret = news.tunnelSecret
+        ? Redacted.value(news.tunnelSecret)
+        : undefined;
+      const acct = output?.accountId ?? accountId;
 
-      const createTunnelName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          if (name) return name;
-          return yield* createPhysicalName({ id });
-        });
+      // Observe — re-fetch the cached tunnel; fall back to a name
+      // lookup so we recover from out-of-band deletes or partial
+      // state-persistence failures.
+      let observed:
+        | {
+            id?: string | null;
+            name?: string | null;
+            accountTag?: string | null;
+            createdAt?: string | null;
+            deletedAt?: string | null;
+          }
+        | undefined;
+      if (output?.tunnelId) {
+        observed = yield* zeroTrust
+          .getTunnelCloudflared({
+            accountId: acct,
+            tunnelId: output.tunnelId,
+          })
+          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+      }
+      if (!observed) {
+        observed = yield* findTunnelByName(name);
+      }
 
-      const writeConfiguration = (
-        tunnelId: string,
-        ingress: Tunnel.IngressRule[] | undefined,
-        originRequest: Tunnel.OriginRequestConfig | undefined,
-      ) =>
-        Effect.gen(function* () {
-          if (!ingress && !originRequest) return;
-          yield* putConfiguration({
-            accountId,
-            tunnelId,
-            config: { ingress, originRequest },
-          });
-        });
-
-      const findTunnelByName = (name: string) =>
-        listTunnels
-          .items({
-            accountId,
+      // Ensure — create if missing. Cloudflare rejects a duplicate
+      // name with a generic error; tolerate by adopting the
+      // existing tunnel when the caller opted into adoption.
+      if (!observed || !observed.id) {
+        observed = yield* zeroTrust
+          .createTunnelCloudflared({
+            accountId: acct,
             name,
-            isDeleted: false,
-            tunTypes: ["cfd_tunnel"],
+            configSrc,
+            tunnelSecret,
           })
           .pipe(
-            Stream.filter((t) => t.name === name && !t.deletedAt),
-            Stream.runHead,
-            Effect.map(Option.getOrUndefined),
+            Effect.catch((err) =>
+              Effect.gen(function* () {
+                if (!news.adopt) return yield* Effect.fail(err);
+                const existing = yield* findTunnelByName(name);
+                if (!existing || !existing.id) {
+                  return yield* Effect.fail(err);
+                }
+                return existing;
+              }),
+            ),
           );
+      }
+
+      // Sync — when the tunnel is managed in Cloudflare, push the
+      // desired ingress + originRequest configuration. The PUT is
+      // idempotent: equal payloads converge to the same state, so we
+      // always push to apply drift.
+      if (configSrc !== "local") {
+        yield* writeConfiguration(
+          observed.id!,
+          news.ingress,
+          news.originRequest,
+        );
+      }
+
+      const token = yield* zeroTrust.getTunnelCloudflaredToken({
+        accountId: acct,
+        tunnelId: observed.id!,
+      });
 
       return {
-        stables: ["tunnelId", "accountTag", "accountId"],
-        diff: Effect.fn(function* ({ id, olds = {}, news, output }) {
-          if (!isResolved(news)) return undefined;
-          if ((output?.accountId ?? accountId) !== accountId) {
-            return { action: "replace" } as const;
-          }
-          const name = yield* createTunnelName(id, news.name);
-          const oldName = output?.tunnelName
-            ? output.tunnelName
-            : yield* createTunnelName(id, olds.name);
-          if (name !== oldName) {
-            return { action: "replace" } as const;
-          }
-          const oldSecret = olds.tunnelSecret
-            ? Redacted.value(olds.tunnelSecret)
-            : undefined;
-          const newSecret = news.tunnelSecret
-            ? Redacted.value(news.tunnelSecret)
-            : undefined;
-          if (oldSecret !== newSecret) {
-            return { action: "replace" } as const;
-          }
-          if (
-            (olds.configSrc ?? "cloudflare") !==
-            (news.configSrc ?? "cloudflare")
-          ) {
-            return { action: "replace" } as const;
-          }
-        }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
-          const name = yield* createTunnelName(id, news.name);
-          const configSrc = news.configSrc ?? output?.configSrc ?? "cloudflare";
-          const tunnelSecret = news.tunnelSecret
-            ? Redacted.value(news.tunnelSecret)
-            : undefined;
-          const acct = output?.accountId ?? accountId;
-
-          // Observe — re-fetch the cached tunnel; fall back to a name
-          // lookup so we recover from out-of-band deletes or partial
-          // state-persistence failures.
-          let observed:
-            | {
-                id?: string | null;
-                name?: string | null;
-                accountTag?: string | null;
-                createdAt?: string | null;
-                deletedAt?: string | null;
-              }
-            | undefined;
-          if (output?.tunnelId) {
-            observed = yield* getTunnel({
-              accountId: acct,
-              tunnelId: output.tunnelId,
-            }).pipe(Effect.catch(() => Effect.succeed(undefined)));
-          }
-          if (!observed) {
-            observed = yield* findTunnelByName(name);
-          }
-
-          // Ensure — create if missing. Cloudflare rejects a duplicate
-          // name with a generic error; tolerate by adopting the
-          // existing tunnel when the caller opted into adoption.
-          if (!observed || !observed.id) {
-            observed = yield* createTunnel({
-              accountId: acct,
-              name,
-              configSrc,
-              tunnelSecret,
-            }).pipe(
-              Effect.catch((err) =>
-                Effect.gen(function* () {
-                  if (!news.adopt) return yield* Effect.fail(err);
-                  const existing = yield* findTunnelByName(name);
-                  if (!existing || !existing.id) {
-                    return yield* Effect.fail(err);
-                  }
-                  return existing;
-                }),
-              ),
-            );
-          }
-
-          // Sync — when the tunnel is managed in Cloudflare, push the
-          // desired ingress + originRequest configuration. The PUT is
-          // idempotent: equal payloads converge to the same state, so we
-          // always push to apply drift.
-          if (configSrc !== "local") {
-            yield* writeConfiguration(
-              observed.id!,
-              news.ingress,
-              news.originRequest,
-            );
-          }
-
-          const token = yield* getToken({
-            accountId: acct,
-            tunnelId: observed.id!,
-          });
-
-          return {
-            tunnelId: observed.id!,
-            tunnelName: observed.name ?? name,
-            accountTag: observed.accountTag ?? undefined,
-            accountId: acct,
-            createdAt: observed.createdAt ?? undefined,
-            deletedAt: observed.deletedAt ?? undefined,
-            configSrc,
-            token: Redacted.make(token),
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteTunnel({
+        tunnelId: observed.id!,
+        tunnelName: observed.name ?? name,
+        accountTag: observed.accountTag ?? undefined,
+        accountId: acct,
+        createdAt: observed.createdAt ?? undefined,
+        deletedAt: observed.deletedAt ?? undefined,
+        configSrc,
+        token: Redacted.make(token),
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* zeroTrust
+        .deleteTunnelCloudflared({
+          accountId: output.accountId,
+          tunnelId: output.tunnelId,
+        })
+        .pipe(Effect.catch(() => Effect.void));
+    }),
+    read: Effect.fn(function* ({ id, output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output?.tunnelId) {
+        return yield* zeroTrust
+          .getTunnelCloudflared({
             accountId: output.accountId,
             tunnelId: output.tunnelId,
-          }).pipe(Effect.catch(() => Effect.void));
-        }),
-        read: Effect.fn(function* ({ id, output, olds }) {
-          if (output?.tunnelId) {
-            return yield* getTunnel({
-              accountId: output.accountId,
-              tunnelId: output.tunnelId,
-            }).pipe(
-              Effect.flatMap((t) =>
-                getToken({
+          })
+          .pipe(
+            Effect.flatMap((t) =>
+              zeroTrust
+                .getTunnelCloudflaredToken({
                   accountId: output.accountId,
                   tunnelId: output.tunnelId,
-                }).pipe(
+                })
+                .pipe(
                   Effect.map((token) => ({
                     tunnelId: t.id ?? output.tunnelId,
                     tunnelName: t.name ?? output.tunnelName,
@@ -340,30 +306,65 @@ export const TunnelProvider = () =>
                     token: Redacted.make(token),
                   })),
                 ),
-              ),
-              Effect.catch(() => Effect.succeed(undefined)),
-            );
-          }
-          const name = yield* createTunnelName(id, olds?.name);
-          const existing = yield* findTunnelByName(name);
-          if (!existing || !existing.id) return undefined;
-          const token = yield* getToken({
-            accountId,
-            tunnelId: existing.id,
-          });
-          return {
-            tunnelId: existing.id,
-            tunnelName: existing.name ?? name,
-            accountTag: existing.accountTag ?? undefined,
-            accountId,
-            createdAt: existing.createdAt ?? undefined,
-            deletedAt: existing.deletedAt ?? undefined,
-            configSrc: ((
-              existing as { configSrc?: "cloudflare" | "local" | null }
-            ).configSrc ?? "cloudflare") as "cloudflare" | "local",
-            token: Redacted.make(token),
-          };
-        }),
+            ),
+            Effect.catch(() => Effect.succeed(undefined)),
+          );
+      }
+      const name = yield* createTunnelName(id, olds?.name);
+      const existing = yield* findTunnelByName(name);
+      if (!existing || !existing.id) return undefined;
+
+      const token = yield* zeroTrust.getTunnelCloudflaredToken({
+        accountId,
+        tunnelId: existing.id,
+      });
+      return {
+        tunnelId: existing.id,
+        tunnelName: existing.name ?? name,
+        accountTag: existing.accountTag ?? undefined,
+        accountId,
+        createdAt: existing.createdAt ?? undefined,
+        deletedAt: existing.deletedAt ?? undefined,
+        configSrc: ((existing as { configSrc?: "cloudflare" | "local" | null })
+          .configSrc ?? "cloudflare") as "cloudflare" | "local",
+        token: Redacted.make(token),
       };
     }),
-  );
+  });
+
+const createTunnelName = (id: string, name: string | undefined) =>
+  Effect.gen(function* () {
+    if (name) return name;
+    return yield* createPhysicalName({ id });
+  });
+
+const writeConfiguration = (
+  tunnelId: string,
+  ingress: Tunnel.IngressRule[] | undefined,
+  originRequest: Tunnel.OriginRequestConfig | undefined,
+) =>
+  Effect.gen(function* () {
+    if (!ingress && !originRequest) return;
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    yield* zeroTrust.putTunnelCloudflaredConfiguration({
+      accountId,
+      tunnelId,
+      config: { ingress, originRequest },
+    });
+  });
+
+const findTunnelByName = Effect.fnUntraced(function* (name: string) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  return yield* zeroTrust.listTunnels
+    .items({
+      accountId,
+      name,
+      isDeleted: false,
+      tunTypes: ["cfd_tunnel"],
+    })
+    .pipe(
+      Stream.filter((t) => t.name === name && !t.deletedAt),
+      Stream.runHead,
+      Effect.map(Option.getOrUndefined),
+    );
+});

@@ -17,6 +17,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
+import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import {
   authorizeWith,
@@ -168,7 +169,7 @@ export const writeClient = (token: TunnelToken): TunnelWriteClient => {
  */
 export class TunnelWrite extends Binding.Service<
   TunnelWrite,
-  () => Effect.Effect<TunnelWriteClient, never, Worker>
+  () => Effect.Effect<TunnelWriteClient, never, Worker | CloudflareEnvironment>
 >()("Cloudflare.TunnelWrite") {}
 
 /**
@@ -177,7 +178,7 @@ export class TunnelWrite extends Binding.Service<
  */
 export class TunnelWritePolicy extends Binding.Policy<
   TunnelWritePolicy,
-  (token: AccountApiToken) => Effect.Effect<void>
+  (token: AccountApiToken) => Effect.Effect<void, never, CloudflareEnvironment>
 >()("Cloudflare.TunnelWrite") {}
 
 /** Runtime layer for {@link TunnelWrite}. */

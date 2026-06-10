@@ -447,8 +447,7 @@ You should favor getting the region/account INSIDE the lifecycle operations inst
 
 ```ts
 reconcile: Effect.fn(function* ({ id, news, output, session }) {
-  const region = yield* Region;
-  const accountId = yield* Account;
+  const { accountId, region } = yield* AWSEnvironment.current;
 });
 ```
 

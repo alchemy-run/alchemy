@@ -354,23 +354,10 @@ export const ContainerProvider = () =>
     Container,
     Effect.gen(function* () {
       const stack = yield* Stack;
-      const { accountId } = yield* CloudflareEnvironment;
       const { dotAlchemy } = yield* AlchemyContext;
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-      const createContainerApplication =
-        yield* Containers.createContainerApplication;
-      const updateContainerApplication =
-        yield* Containers.updateContainerApplication;
-      const deleteContainerApplication =
-        yield* Containers.deleteContainerApplication;
-      const getContainerApplication = yield* Containers.getContainerApplication;
-      const listContainerApplications =
-        yield* Containers.listContainerApplications;
-      const createContainerRegistryCredentials =
-        yield* Containers.createContainerRegistryCredentials;
-      const createContainerApplicationRollout =
-        yield* Containers.createContainerApplicationRollout;
+
       const telemetry = yield* CloudflareLogs;
 
       const createApplicationName = (id: string, name: string | undefined) =>
@@ -385,7 +372,9 @@ export const ContainerProvider = () =>
         });
 
       const findApplicationByName = Effect.fnUntraced(function* (name: string) {
-        return yield* listContainerApplications({ accountId }).pipe(
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        return yield* Containers.listContainerApplications({ accountId }).pipe(
           Effect.map((apps) => apps.find((app) => app.name === name)),
         );
       });
@@ -393,7 +382,9 @@ export const ContainerProvider = () =>
       const findApplicationByNamespace = Effect.fnUntraced(function* (
         namespaceId: string,
       ) {
-        return yield* listContainerApplications({ accountId }).pipe(
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        return yield* Containers.listContainerApplications({ accountId }).pipe(
           Effect.map((apps) =>
             apps.find((app) => app.durableObjects?.namespaceId === namespaceId),
           ),
@@ -433,6 +424,8 @@ export const ContainerProvider = () =>
             new Error("Container requires a `main` entrypoint."),
           );
         }
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
         const runtime = props.runtime ?? "bun";
         const { files, hash: bundleHash } = yield* bundleProgram({
           id,
@@ -641,6 +634,8 @@ await Effect.runPromise(serverEffect).catch((err) => {
         imageRef: string,
         session?: { note: (message: string) => Effect.Effect<void> },
       ) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
         const runtime = props.runtime ?? "bun";
 
         yield* Effect.logInfo(
@@ -687,12 +682,13 @@ await Effect.runPromise(serverEffect).catch((err) => {
         }
 
         const registryId = props.registryId ?? "registry.cloudflare.com";
-        const credentials = yield* createContainerRegistryCredentials({
-          accountId,
-          registryId,
-          permissions: ["pull", "push"],
-          expirationMinutes: 60,
-        });
+        const credentials =
+          yield* Containers.createContainerRegistryCredentials({
+            accountId,
+            registryId,
+            permissions: ["pull", "push"],
+            expirationMinutes: 60,
+          });
         const username = credentials.username ?? (credentials as any).user;
         if (!username) {
           return yield* Effect.fail(
@@ -718,6 +714,8 @@ await Effect.runPromise(serverEffect).catch((err) => {
         configuration: ContainerApplication.Configuration;
         rollout: ContainerApplication.Rollout | undefined;
       }) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
         const strategy = rollout?.strategy ?? "immediate";
         const stepPercentage =
           strategy === "immediate" ? 100 : (rollout?.stepPercentage ?? 25);
@@ -725,7 +723,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
         yield* retryForContainerApplicationReadiness(
           "rollout",
           applicationId,
-          createContainerApplicationRollout({
+          Containers.createContainerApplicationRollout({
             accountId,
             applicationId,
             description:
@@ -759,6 +757,8 @@ await Effect.runPromise(serverEffect).catch((err) => {
           | undefined;
         session: { note: (message: string) => Effect.Effect<void> };
       }) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
         const describeError = (error: unknown) => {
           if (error instanceof Error) {
             return JSON.stringify(
@@ -816,7 +816,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
           });
         });
 
-        const application = yield* createContainerApplication({
+        const application = yield* Containers.createContainerApplication({
           accountId,
           name,
           instances: news.instances ?? 1,
@@ -890,6 +890,8 @@ await Effect.runPromise(serverEffect).catch((err) => {
         existing: ContainerApplication["Attributes"];
         session: { note: (message: string) => Effect.Effect<void> };
       }) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
         yield* Effect.logInfo(
           `Cloudflare Container update: preparing ${existing.applicationName}`,
         );
@@ -909,7 +911,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
         const application = yield* retryForContainerApplicationReadiness(
           "update",
           existing.applicationId,
-          updateContainerApplication({
+          Containers.updateContainerApplication({
             accountId,
             applicationId: existing.applicationId,
             instances: news.instances ?? 1,
@@ -972,6 +974,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
           if (!isResolved(news) || !isResolved(newBindings)) {
             return undefined;
           }
+          const { accountId } = yield* yield* CloudflareEnvironment;
 
           const name = yield* createApplicationName(id, news.name);
           const oldName = output?.applicationName
@@ -1061,7 +1064,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
           // persistence failures.
           let existing: ContainerApplication["Attributes"] | undefined;
           if (output?.applicationId) {
-            existing = yield* getContainerApplication({
+            existing = yield* Containers.getContainerApplication({
               accountId: output.accountId,
               applicationId: output.applicationId,
             }).pipe(
@@ -1121,7 +1124,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
             yield* session.note(
               `Recreating container application ${name} with durable object binding...`,
             );
-            yield* deleteContainerApplication({
+            yield* Containers.deleteContainerApplication({
               accountId: existing.accountId,
               applicationId: existing.applicationId,
             }).pipe(
@@ -1183,7 +1186,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
           yield* Effect.logInfo(
             `Cloudflare Container delete: deleting ${output.applicationName}`,
           );
-          yield* deleteContainerApplication({
+          yield* Containers.deleteContainerApplication({
             accountId: output.accountId,
             applicationId: output.applicationId,
           }).pipe(
@@ -1214,7 +1217,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
             yield* Effect.logInfo(
               `Cloudflare Container read: checking ${output.applicationName}`,
             );
-            attrs = yield* getContainerApplication({
+            attrs = yield* Containers.getContainerApplication({
               accountId: output.accountId,
               applicationId: output.applicationId,
             }).pipe(

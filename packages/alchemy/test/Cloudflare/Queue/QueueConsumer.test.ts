@@ -28,7 +28,8 @@ const main = pathe.resolve(import.meta.dirname, "consumer-worker.ts");
  */
 test.provider("create, update settings, replace script, delete", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const env = yield* CloudflareEnvironment;
+    const { accountId } = yield* env;
 
     yield* stack.destroy();
 
@@ -166,7 +167,8 @@ test.provider("create, update settings, replace script, delete", (stack) =>
  */
 test.provider("recreates consumer after out-of-band delete", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const env = yield* CloudflareEnvironment;
+    const { accountId } = yield* env;
 
     yield* stack.destroy();
 
@@ -236,7 +238,7 @@ test.provider("recreates consumer after out-of-band delete", (stack) =>
  */
 test.provider("adopts existing consumer after local state loss", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 

@@ -44,7 +44,7 @@ export type VpcServiceRef = VpcServiceAttributes;
  */
 export const VpcServiceRef = (props: VpcServiceRefProps) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
     if ("name" in props) {
       const match = yield* connectivity.listDirectoryServices
         .items({ accountId })

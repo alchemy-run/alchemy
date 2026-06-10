@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(
 
 test.provider("create and delete index with explicit dimensions", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -46,7 +46,7 @@ test.provider("create and delete index with explicit dimensions", (stack) =>
 
 test.provider("create index from a preset", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -73,7 +73,7 @@ test.provider("create index from a preset", (stack) =>
 
 test.provider("replaces index when dimensions change", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
