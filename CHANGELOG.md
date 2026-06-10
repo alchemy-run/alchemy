@@ -1,3 +1,17 @@
+## v2.0.0-beta.54
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**: Queue consumers in alchemy dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/571 [<samp>(ecb63)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/ecb63322)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cloudflare**: Support lazy credentials in dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/578 [<samp>(b9781)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b9781c5e)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.53...HEAD)
+
+---
+
 ## v2.0.0-beta.53
 
 ### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
