@@ -413,7 +413,7 @@ export const R2BucketProvider = () =>
           })
           .pipe(
             Effect.retry({
-              while: isNoSuchBucket,
+              while: (e) => e._tag === "NoSuchBucket",
               schedule: r2BucketEndpointConsistencySchedule,
             }),
             Effect.map((response) =>
@@ -520,7 +520,7 @@ export const R2BucketProvider = () =>
                     })
                     .pipe(
                       Effect.retry({
-                        while: isNoSuchBucket,
+                        while: (e) => e._tag === "NoSuchBucket",
                         schedule: r2BucketEndpointConsistencySchedule,
                       }),
                       Effect.retry({
@@ -543,7 +543,7 @@ export const R2BucketProvider = () =>
                   })
                   .pipe(
                     Effect.retry({
-                      while: isNoSuchBucket,
+                      while: (e) => e._tag === "NoSuchBucket",
                       schedule: r2BucketEndpointConsistencySchedule,
                     }),
                   );
@@ -574,7 +574,7 @@ export const R2BucketProvider = () =>
             })
             .pipe(
               Effect.retry({
-                while: isNoSuchBucket,
+                while: (e) => e._tag === "NoSuchBucket",
                 schedule: r2BucketEndpointConsistencySchedule,
               }),
             );
@@ -595,7 +595,7 @@ export const R2BucketProvider = () =>
             })
             .pipe(
               Effect.retry({
-                while: isNoSuchBucket,
+                while: (e) => e._tag === "NoSuchBucket",
                 schedule: r2BucketEndpointConsistencySchedule,
               }),
             );
@@ -671,11 +671,20 @@ export const R2BucketProvider = () =>
               })
               .pipe(
                 Effect.catchTag("BucketAlreadyExists", () =>
-                  r2.getBucket({
-                    accountId: acct,
-                    bucketName: name,
-                    jurisdiction: news.jurisdiction,
-                  }),
+                  r2
+                    .getBucket({
+                      accountId: acct,
+                      bucketName: name,
+                      jurisdiction: news.jurisdiction,
+                    })
+                    .pipe(
+                      // The create lost a race, but the winning create may not
+                      // be readable yet — ride out the consistency lag.
+                      Effect.retry({
+                        while: (e) => e._tag === "NoSuchBucket",
+                        schedule: r2BucketEndpointConsistencySchedule,
+                      }),
+                    ),
                 ),
               );
           }
@@ -687,12 +696,21 @@ export const R2BucketProvider = () =>
           const desiredStorageClass = news.storageClass ?? "Standard";
           const observedStorageClass = observed.storageClass ?? "Standard";
           if (observedStorageClass !== desiredStorageClass) {
-            observed = yield* r2.patchBucket({
-              accountId: acct,
-              bucketName: observed.name!,
-              storageClass: desiredStorageClass,
-              jurisdiction: observed.jurisdiction ?? jurisdiction,
-            });
+            observed = yield* r2
+              .patchBucket({
+                accountId: acct,
+                bucketName: observed.name!,
+                storageClass: desiredStorageClass,
+                jurisdiction: observed.jurisdiction ?? jurisdiction,
+              })
+              .pipe(
+                // The patch endpoint can briefly 404 a freshly-created bucket
+                // even after `getBucket` already sees it.
+                Effect.retry({
+                  while: (e) => e._tag === "NoSuchBucket",
+                  schedule: r2BucketEndpointConsistencySchedule,
+                }),
+              );
           }
 
           const attrs = {
@@ -874,12 +892,6 @@ const toLifecyclePutPayload = (
   deleteObjectsTransition: rule.deleteObjectsTransition,
   storageClassTransitions: rule.storageClassTransitions,
 });
-
-const isNoSuchBucket = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  "_tag" in error &&
-  (error as { _tag: unknown })._tag === "NoSuchBucket";
 
 // Cloudflare keys a custom domain to a single bucket at the zone level. After a
 // domain is deleted, re-attaching the same hostname can transiently 409 with

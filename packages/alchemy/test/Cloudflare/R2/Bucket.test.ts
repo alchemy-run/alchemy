@@ -303,8 +303,11 @@ const getBucketWhenReady = Effect.fn(function* (
   return yield* r2.getBucket({ accountId, bucketName }).pipe(
     Effect.retry({
       while: (e) => e._tag === "NoSuchBucket",
+      // Cap the backoff at 2s so we keep sampling instead of sleeping
+      // through the budget on the geometric tail.
       schedule: Schedule.exponential("200 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
+        Schedule.either(Schedule.spaced("2 seconds")),
+        Schedule.both(Schedule.recurs(20)),
       ),
     }),
   );
