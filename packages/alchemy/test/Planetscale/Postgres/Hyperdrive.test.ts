@@ -9,6 +9,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
 import HyperdriveWorker from "./fixtures/hyperdrive-worker.ts";
 import type { Widget } from "./fixtures/schema.ts";
 import { Hyperdrive, PlanetscaleDb } from "./fixtures/Stack.ts";
@@ -82,7 +83,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("Hyperdrive", () => {
                 Schedule.both(Schedule.recurs(20)),
               ),
             }),
-          );
+          ) as Effect.Effect<HttpClientResponse>;
 
         const initial = yield* fetchReady(HttpClient.get(`${baseUrl}/widgets`));
         expect(initial.status).toBe(200);
