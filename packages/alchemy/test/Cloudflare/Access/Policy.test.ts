@@ -6,7 +6,10 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test } = Test.make({
+  providers: Cloudflare.providers(),
+  state: Cloudflare.state(),
+});
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
@@ -15,7 +18,7 @@ const logLevel = Effect.provideService(
 
 test.provider("create and delete basic allow policy", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -51,7 +54,7 @@ test.provider("create and delete basic allow policy", (stack) =>
 
 test.provider("update mutates includes without replacing", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -94,7 +97,7 @@ test.provider("update mutates includes without replacing", (stack) =>
 
 test.provider("adopts an out-of-band reusable policy", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
     const name = "alchemy-access-policy-adopt-test";
 
     yield* stack.destroy();

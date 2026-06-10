@@ -1,6 +1,5 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
 import type { Input } from "../../Input.ts";
@@ -267,6 +266,221 @@ export const AccessApplication = Resource<AccessApplication>(
   "Cloudflare.Access.Application",
 );
 
+export const AccessApplicationProvider = () =>
+  Provider.succeed(AccessApplication, {
+    stables: ["applicationId", "aud", "type", "accountId"],
+
+    diff: Effect.fn(function* ({ olds = {}, news }) {
+      if ((olds as AccessApplicationProps).type !== undefined) {
+        if (
+          (olds as AccessApplicationProps).type !==
+          (news as AccessApplicationProps).type
+        ) {
+          return { action: "replace" } as const;
+        }
+      }
+    }),
+
+    read: Effect.fn(function* ({ output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      if (!output?.applicationId) return undefined;
+      const observed = yield* observeById(accountId, output.applicationId);
+      if (!observed?.id || !observed.aud || !observed.type) {
+        return undefined;
+      }
+      return {
+        applicationId: observed.id,
+        aud: observed.aud,
+        domain: observed.domain ?? output.domain,
+        destinations: observed.destinations ?? output.destinations,
+        type: observed.type,
+        name: observed.name ?? output.name,
+        accountId: output.accountId,
+        createdAt: observed.createdAt ?? output.createdAt,
+        updatedAt: observed.updatedAt ?? output.updatedAt,
+      } satisfies AccessApplicationAttributes;
+    }),
+
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const resolvedName = yield* resolveName(id, news.name);
+      const resolvedIdps = resolveAllowedIdps(news.allowedIdps);
+      const resolvedPolicies = resolvePolicies(news.policies);
+      const body = buildMutableBody(
+        news,
+        resolvedName,
+        resolvedIdps,
+        resolvedPolicies,
+      );
+
+      // 1. Observe
+      let observed: ObservedApp | undefined;
+      if (output?.applicationId) {
+        observed = yield* observeById(accountId, output.applicationId);
+      }
+      if (!observed && news.type === "warp") {
+        // Warp is a singleton per account — reuse any existing app.
+        observed = yield* findWarpApp(accountId);
+      }
+
+      // 2. Ensure
+      if (!observed) {
+        const created = yield* zeroTrust
+          .createAccessApplicationForAccount({
+            accountId,
+            // Cloudflare requires a `domain` body field, but ignores it for
+            // warp (auto-set). Sending an empty string is safe and keeps
+            // distilled's request shape valid for the non-warp case where
+            // the caller forgot to pass one — server validation will then
+            // reject with a clear error rather than a TypeScript surprise.
+            domain: body.domain ?? "",
+            type: news.type,
+            name: resolvedName,
+            sessionDuration: body.sessionDuration,
+            allowedIdps:
+              body.allowedIdps === undefined
+                ? undefined
+                : Array.from(body.allowedIdps),
+            autoRedirectToIdentity: body.autoRedirectToIdentity,
+            appLauncherVisible: body.appLauncherVisible,
+            tags: body.tags === undefined ? undefined : Array.from(body.tags),
+            policies: toRequestPolicies(body.policies),
+            destinations:
+              body.destinations === undefined
+                ? undefined
+                : Array.from(body.destinations),
+          })
+          .pipe(
+            // Distilled does not tag Conflict; surface any creation error
+            // through the warp-singleton recovery path before re-failing.
+            Effect.catch((err) =>
+              Effect.gen(function* () {
+                if (news.type === "warp") {
+                  const existing = yield* findWarpApp(accountId);
+                  if (existing) return existing;
+                }
+                return yield* Effect.fail(err);
+              }),
+            ),
+          );
+        observed = narrowApp(created as Parameters<typeof narrowApp>[0]);
+      }
+
+      // 3. Sync — Cloudflare's update endpoint is PUT-style; resend the
+      // full desired body whenever any mutable field differs.
+      if (!observed.id) {
+        return yield* Effect.fail(
+          new Error(
+            "Cloudflare did not return an application id for Access application",
+          ),
+        );
+      }
+      if (!bodyEqualsObserved(body, observed)) {
+        const updated = yield* zeroTrust.updateAccessApplicationForAccount({
+          accountId,
+          appId: observed.id,
+          domain: body.domain ?? observed.domain ?? "",
+          type: news.type,
+          name: resolvedName,
+          sessionDuration: body.sessionDuration,
+          allowedIdps:
+            body.allowedIdps === undefined
+              ? undefined
+              : Array.from(body.allowedIdps),
+          autoRedirectToIdentity: body.autoRedirectToIdentity,
+          appLauncherVisible: body.appLauncherVisible,
+          tags: body.tags === undefined ? undefined : Array.from(body.tags),
+          policies: toRequestPolicies(body.policies),
+          destinations:
+            body.destinations === undefined
+              ? undefined
+              : Array.from(body.destinations),
+        });
+        observed = narrowApp(updated as Parameters<typeof narrowApp>[0]);
+      }
+
+      // 4. Return
+      if (!observed.id || !observed.aud || !observed.type) {
+        return yield* Effect.fail(
+          new Error(
+            "Cloudflare returned an Access application without id/aud/type",
+          ),
+        );
+      }
+      return {
+        applicationId: observed.id,
+        aud: observed.aud,
+        domain: observed.domain ?? body.domain ?? "",
+        destinations: observed.destinations ?? body.destinations,
+        type: observed.type,
+        name: observed.name ?? resolvedName,
+        accountId,
+        createdAt: observed.createdAt,
+        updatedAt: observed.updatedAt,
+      } satisfies AccessApplicationAttributes;
+    }),
+
+    delete: Effect.fn(function* ({ output }) {
+      yield* zeroTrust
+        .deleteAccessApplicationForAccount({
+          accountId: output.accountId,
+          appId: output.applicationId,
+        })
+        .pipe(Effect.catch(() => Effect.void));
+    }),
+  });
+
+const resolveName = (id: string, name: string | undefined) =>
+  Effect.gen(function* () {
+    if (name) return name;
+    return yield* createPhysicalName({ id });
+  });
+
+const resolveAllowedIdps = (
+  idps: AccessApplicationProps["allowedIdps"],
+): ReadonlyArray<string> | undefined =>
+  idps === undefined
+    ? undefined
+    : // Inputs have already been resolved by the Plan layer by the time
+      // we run, so they're concrete strings here.
+      (idps as ReadonlyArray<string>);
+
+// Cloudflare allows only one `warp` app per account. When we have no
+// cached applicationId, scan the account and reuse it. Requirements
+// (Credentials | HttpClient) are inferred and provided by the Provider
+// runtime — matches the un-annotated Tunnel.findTunnelByName pattern.
+const findWarpApp = (accountId: string) =>
+  zeroTrust.listAccessApplicationsForAccount.items({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).find(
+        (a) => (a as { type?: string | null }).type === "warp",
+      ),
+    ),
+    Effect.map((found) =>
+      found === undefined
+        ? undefined
+        : narrowApp(found as Parameters<typeof narrowApp>[0]),
+    ),
+  );
+
+const observeById = (accountId: string, appId: string) =>
+  Effect.gen(function* () {
+    const r = yield* zeroTrust
+      .getAccessApplicationForAccount({ accountId, appId })
+      .pipe(
+        // Distilled only tags transport errors (Unauthorized,
+        // ServiceUnavailable, etc.); the live Cloudflare 404 surfaces as
+        // an untagged error. Swallow generically so observe falls through
+        // to recreate.
+        Effect.catch(() => Effect.succeed(undefined)),
+      );
+    if (r === undefined) return undefined;
+    return narrowApp(r as Parameters<typeof narrowApp>[0]);
+  });
+
 // ---------------------------------------------------------------------------
 // Observed-state types
 //
@@ -323,8 +537,7 @@ const narrowApp = (raw: {
   id: undef(raw.id),
   aud: undef(raw.aud),
   name: undef(raw.name),
-  type:
-    raw.type == null ? undefined : (raw.type as AccessApplicationType),
+  type: raw.type == null ? undefined : (raw.type as AccessApplicationType),
   domain: undef(raw.domain),
   destinations:
     raw.destinations == null
@@ -543,10 +756,7 @@ const bodyEqualsObserved = (
   }
   // Only diff domain when caller actually set one (warp's auto-derived
   // domain must not trigger a perpetual update loop).
-  if (
-    desired.domain !== undefined &&
-    desired.domain !== observed.domain
-  ) {
+  if (desired.domain !== undefined && desired.domain !== observed.domain) {
     return false;
   }
   // Same rule for destinations — Cloudflare may echo back an enriched
@@ -591,234 +801,3 @@ const bodyEqualsObserved = (
   }
   return true;
 };
-
-// ---------------------------------------------------------------------------
-// Provider
-// ---------------------------------------------------------------------------
-
-export const AccessApplicationProvider = () =>
-  Provider.effect(
-    AccessApplication,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-
-      const createApp = yield* zeroTrust.createAccessApplicationForAccount;
-      const getApp = yield* zeroTrust.getAccessApplicationForAccount;
-      const updateApp = yield* zeroTrust.updateAccessApplicationForAccount;
-      const deleteApp = yield* zeroTrust.deleteAccessApplicationForAccount;
-      const listApps = zeroTrust.listAccessApplicationsForAccount;
-
-      const resolveName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          if (name) return name;
-          return yield* createPhysicalName({ id });
-        });
-
-      const resolveAllowedIdps = (
-        idps: AccessApplicationProps["allowedIdps"],
-      ): ReadonlyArray<string> | undefined =>
-        idps === undefined
-          ? undefined
-          : // Inputs have already been resolved by the Plan layer by the time
-            // we run, so they're concrete strings here.
-            (idps as ReadonlyArray<string>);
-
-      // Cloudflare allows only one `warp` app per account. When we have no
-      // cached applicationId, scan the account and reuse it. Requirements
-      // (Credentials | HttpClient) are inferred and provided by the Provider
-      // runtime — matches the un-annotated Tunnel.findTunnelByName pattern.
-      const findWarpApp = () =>
-        listApps
-          .items({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).find(
-                (a) => (a as { type?: string | null }).type === "warp",
-              ),
-            ),
-            Effect.map((found) =>
-              found === undefined
-                ? undefined
-                : narrowApp(found as Parameters<typeof narrowApp>[0]),
-            ),
-          );
-
-      const observeById = (appId: string) =>
-        Effect.gen(function* () {
-          const r = yield* getApp({ accountId, appId }).pipe(
-            // Distilled only tags transport errors (Unauthorized,
-            // ServiceUnavailable, etc.); the live Cloudflare 404 surfaces as
-            // an untagged error. Swallow generically so observe falls through
-            // to recreate.
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
-          if (r === undefined) return undefined;
-          return narrowApp(r as Parameters<typeof narrowApp>[0]);
-        });
-
-      return {
-        stables: ["applicationId", "aud", "type", "accountId"],
-
-        diff: Effect.fn(function* ({ olds = {}, news }) {
-          if ((olds as AccessApplicationProps).type !== undefined) {
-            if (
-              (olds as AccessApplicationProps).type !==
-              (news as AccessApplicationProps).type
-            ) {
-              return { action: "replace" } as const;
-            }
-          }
-        }),
-
-        reconcile: Effect.fn(function* ({ id, news, output }) {
-          const resolvedName = yield* resolveName(id, news.name);
-          const resolvedIdps = resolveAllowedIdps(news.allowedIdps);
-          const resolvedPolicies = resolvePolicies(news.policies);
-          const body = buildMutableBody(
-            news,
-            resolvedName,
-            resolvedIdps,
-            resolvedPolicies,
-          );
-
-          // 1. Observe
-          let observed: ObservedApp | undefined;
-          if (output?.applicationId) {
-            observed = yield* observeById(output.applicationId);
-          }
-          if (!observed && news.type === "warp") {
-            // Warp is a singleton per account — reuse any existing app.
-            observed = yield* findWarpApp();
-          }
-
-          // 2. Ensure
-          if (!observed) {
-            const created = yield* createApp({
-              accountId,
-              // Cloudflare requires a `domain` body field, but ignores it for
-              // warp (auto-set). Sending an empty string is safe and keeps
-              // distilled's request shape valid for the non-warp case where
-              // the caller forgot to pass one — server validation will then
-              // reject with a clear error rather than a TypeScript surprise.
-              domain: body.domain ?? "",
-              type: news.type,
-              name: resolvedName,
-              sessionDuration: body.sessionDuration,
-              allowedIdps:
-                body.allowedIdps === undefined
-                  ? undefined
-                  : Array.from(body.allowedIdps),
-              autoRedirectToIdentity: body.autoRedirectToIdentity,
-              appLauncherVisible: body.appLauncherVisible,
-              tags: body.tags === undefined ? undefined : Array.from(body.tags),
-              policies: toRequestPolicies(body.policies),
-              destinations:
-                body.destinations === undefined
-                  ? undefined
-                  : Array.from(body.destinations),
-            }).pipe(
-              // Distilled does not tag Conflict; surface any creation error
-              // through the warp-singleton recovery path before re-failing.
-              Effect.catch((err) =>
-                Effect.gen(function* () {
-                  if (news.type === "warp") {
-                    const existing = yield* findWarpApp();
-                    if (existing) return existing;
-                  }
-                  return yield* Effect.fail(err);
-                }),
-              ),
-            );
-            observed = narrowApp(
-              created as Parameters<typeof narrowApp>[0],
-            );
-          }
-
-          // 3. Sync — Cloudflare's update endpoint is PUT-style; resend the
-          // full desired body whenever any mutable field differs.
-          if (!observed.id) {
-            return yield* Effect.fail(
-              new Error(
-                "Cloudflare did not return an application id for Access application",
-              ),
-            );
-          }
-          if (!bodyEqualsObserved(body, observed)) {
-            const updated = yield* updateApp({
-              accountId,
-              appId: observed.id,
-              domain: body.domain ?? observed.domain ?? "",
-              type: news.type,
-              name: resolvedName,
-              sessionDuration: body.sessionDuration,
-              allowedIdps:
-                body.allowedIdps === undefined
-                  ? undefined
-                  : Array.from(body.allowedIdps),
-              autoRedirectToIdentity: body.autoRedirectToIdentity,
-              appLauncherVisible: body.appLauncherVisible,
-              tags: body.tags === undefined ? undefined : Array.from(body.tags),
-              policies: toRequestPolicies(body.policies),
-              destinations:
-                body.destinations === undefined
-                  ? undefined
-                  : Array.from(body.destinations),
-            });
-            observed = narrowApp(
-              updated as Parameters<typeof narrowApp>[0],
-            );
-          }
-
-          // 4. Return
-          if (!observed.id || !observed.aud || !observed.type) {
-            return yield* Effect.fail(
-              new Error(
-                "Cloudflare returned an Access application without id/aud/type",
-              ),
-            );
-          }
-          return {
-            applicationId: observed.id,
-            aud: observed.aud,
-            domain: observed.domain ?? body.domain ?? "",
-            destinations: observed.destinations ?? body.destinations,
-            type: observed.type,
-            name: observed.name ?? resolvedName,
-            accountId,
-            createdAt: observed.createdAt,
-            updatedAt: observed.updatedAt,
-          } satisfies AccessApplicationAttributes;
-        }),
-
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteApp({
-            accountId: output.accountId,
-            appId: output.applicationId,
-          }).pipe(Effect.catch(() => Effect.void));
-        }),
-
-        read: Effect.fn(function* ({ output }) {
-          if (!output?.applicationId) return undefined;
-          const observed = yield* observeById(output.applicationId);
-          if (!observed?.id || !observed.aud || !observed.type) {
-            return undefined;
-          }
-          return {
-            applicationId: observed.id,
-            aud: observed.aud,
-            domain: observed.domain ?? output.domain,
-            destinations: observed.destinations ?? output.destinations,
-            type: observed.type,
-            name: observed.name ?? output.name,
-            accountId: output.accountId,
-            createdAt: observed.createdAt ?? output.createdAt,
-            updatedAt: observed.updatedAt ?? output.updatedAt,
-          } satisfies AccessApplicationAttributes;
-        }),
-      };
-    }),
-  );
-
-// Silence "unused" warnings for the helper imported solely for typings.
-void Option.none;

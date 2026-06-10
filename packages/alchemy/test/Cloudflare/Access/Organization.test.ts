@@ -18,7 +18,7 @@ const skip = !AUTH_DOMAIN;
 
 test.provider.skipIf(skip)("adopts the existing Access organization", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     const org = yield* stack.deploy(
       Effect.gen(function* () {
@@ -48,7 +48,7 @@ test.provider.skipIf(skip)(
   "toggles allow_authenticate_via_warp and restores",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       const original = yield* zeroTrust.listOrganizationsForAccount({
         accountId,

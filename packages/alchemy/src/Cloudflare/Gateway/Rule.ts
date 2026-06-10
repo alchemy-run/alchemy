@@ -245,8 +245,7 @@ const narrowRule = (raw: {
 }): ObservedRule => ({
   id: undef(raw.id),
   name: undef(raw.name),
-  action:
-    raw.action == null ? undefined : (raw.action as GatewayRuleAction),
+  action: raw.action == null ? undefined : (raw.action as GatewayRuleAction),
   filters: undefArr(raw.filters ?? undefined),
   traffic: undef(raw.traffic),
   identity: undef(raw.identity),
@@ -319,10 +318,7 @@ const bodyEqualsObserved = (
   if (desired.name !== observed.name) return false;
   if (desired.action !== observed.action) return false;
   if (!arrEq(desired.filters, observed.filters)) return false;
-  if (
-    desired.traffic !== undefined &&
-    desired.traffic !== observed.traffic
-  ) {
+  if (desired.traffic !== undefined && desired.traffic !== observed.traffic) {
     return false;
   }
   if (
@@ -343,10 +339,7 @@ const bodyEqualsObserved = (
   ) {
     return false;
   }
-  if (
-    desired.enabled !== undefined &&
-    desired.enabled !== observed.enabled
-  ) {
+  if (desired.enabled !== undefined && desired.enabled !== observed.enabled) {
     return false;
   }
   if (
@@ -376,7 +369,7 @@ export const GatewayRuleProvider = () =>
   Provider.effect(
     GatewayRule,
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       const createRule = yield* zeroTrust.createGatewayRule;
       const getRule = yield* zeroTrust.getGatewayRule;
@@ -393,21 +386,19 @@ export const GatewayRuleProvider = () =>
       // Locate an existing rule by name when no ruleId is cached — used for
       // adoption and as a recovery path after a create returns a conflict.
       const findRuleByName = (name: string) =>
-        listRules
-          .items({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).find(
-                (r) => (r as { name?: string | null }).name === name,
-              ),
+        listRules.items({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).find(
+              (r) => (r as { name?: string | null }).name === name,
             ),
-            Effect.map((found) =>
-              found === undefined
-                ? undefined
-                : narrowRule(found as Parameters<typeof narrowRule>[0]),
-            ),
-          );
+          ),
+          Effect.map((found) =>
+            found === undefined
+              ? undefined
+              : narrowRule(found as Parameters<typeof narrowRule>[0]),
+          ),
+        );
 
       const observeById = (ruleId: string) =>
         Effect.gen(function* () {
@@ -475,17 +466,13 @@ export const GatewayRuleProvider = () =>
                 }),
               ),
             );
-            observed = narrowRule(
-              created as Parameters<typeof narrowRule>[0],
-            );
+            observed = narrowRule(created as Parameters<typeof narrowRule>[0]);
           }
 
           // 3. Sync
           if (!observed.id) {
             return yield* Effect.fail(
-              new Error(
-                "Cloudflare did not return a rule id for Gateway rule",
-              ),
+              new Error("Cloudflare did not return a rule id for Gateway rule"),
             );
           }
           if (!bodyEqualsObserved(body, observed)) {
@@ -503,9 +490,7 @@ export const GatewayRuleProvider = () =>
               enabled: body.enabled,
               description: body.description,
             });
-            observed = narrowRule(
-              updated as Parameters<typeof narrowRule>[0],
-            );
+            observed = narrowRule(updated as Parameters<typeof narrowRule>[0]);
           }
 
           // 4. Return

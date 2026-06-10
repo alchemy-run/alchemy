@@ -19,7 +19,8 @@ import type { Providers } from "../Providers.ts";
  * `CreateAccessPolicyRequest` so the full Cloudflare rule surface is available
  * without re-declaring the union.
  */
-export type AccessPolicyRule = zeroTrust.CreateAccessPolicyRequest["include"][number];
+export type AccessPolicyRule =
+  zeroTrust.CreateAccessPolicyRequest["include"][number];
 
 /**
  * Decision Cloudflare Access takes when a request matches this policy.
@@ -164,6 +165,187 @@ export type AccessPolicy = Resource<
  */
 export const AccessPolicy = Resource<AccessPolicy>("Cloudflare.AccessPolicy");
 
+export const AccessPolicyProvider = () =>
+  Provider.succeed(AccessPolicy, {
+    stables: ["policyId", "accountId", "decision"],
+    diff: Effect.fn(function* ({ id, olds = {}, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!isResolved(news)) return undefined;
+      if ((output?.accountId ?? accountId) !== accountId) {
+        return { action: "replace" } as const;
+      }
+      const name = yield* createPolicyName(id, news.name);
+      const oldName = output?.name
+        ? output.name
+        : yield* createPolicyName(id, olds.name);
+      if (name !== oldName) {
+        return { action: "replace" } as const;
+      }
+      const oldDecision = output?.decision ?? olds.decision;
+      if (oldDecision && oldDecision !== news.decision) {
+        return { action: "replace" } as const;
+      }
+    }),
+    reconcile: Effect.fn(function* ({
+      id,
+      news = {} as AccessPolicyProps,
+      output,
+    }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = yield* createPolicyName(id, news.name);
+      const acct = output?.accountId ?? accountId;
+
+      // Observe — prefer cached policyId, fall back to a name lookup so
+      // we recover from out-of-band deletes and partial state-persistence
+      // failures.
+      let observed: ObservedPolicy | undefined;
+      if (output?.policyId) {
+        observed = yield* zeroTrust
+          .getAccessPolicy({
+            accountId: acct,
+            policyId: output.policyId,
+          })
+          .pipe(
+            Effect.map(toObserved),
+            Effect.catch(
+              (): Effect.Effect<ObservedPolicy | undefined> =>
+                Effect.succeed(undefined),
+            ),
+          );
+      }
+      if (!observed) {
+        observed = yield* findPolicyByName(acct, name);
+      }
+
+      // Ensure — create the policy if missing. Tolerate a race where a
+      // parallel actor created the same-named policy by re-observing.
+      let ensured: ObservedPolicy;
+      if (!observed || !observed.id) {
+        ensured = yield* zeroTrust
+          .createAccessPolicy({
+            accountId: acct,
+            name,
+            decision: news.decision,
+            include: news.include,
+            exclude: news.exclude,
+            require: news.require,
+            sessionDuration: news.sessionDuration,
+            approvalRequired: news.approvalRequired,
+            purposeJustificationRequired: news.purposeJustificationRequired,
+          })
+          .pipe(
+            Effect.map(toObserved),
+            Effect.catch((err) =>
+              Effect.gen(function* () {
+                const existing = yield* findPolicyByName(acct, name);
+                if (existing && existing.id) return existing;
+                return yield* Effect.fail(err);
+              }),
+            ),
+          );
+      } else {
+        // Sync — Cloudflare PUTs the policy as a whole replacement, so a
+        // single update converges every mutable field. Always issuing the
+        // PUT keeps the resource convergent against drift; the API is
+        // idempotent for equal payloads.
+        const prior = observed;
+        const updated = yield* zeroTrust.updateAccessPolicy({
+          accountId: acct,
+          policyId: prior.id!,
+          name,
+          decision: news.decision,
+          include: news.include,
+          exclude: news.exclude,
+          require: news.require,
+          sessionDuration: news.sessionDuration,
+          approvalRequired: news.approvalRequired,
+          purposeJustificationRequired: news.purposeJustificationRequired,
+        });
+        ensured = {
+          id: updated.id ?? prior.id,
+          name: updated.name ?? prior.name,
+          decision: updated.decision ?? prior.decision,
+          createdAt: updated.createdAt ?? prior.createdAt,
+          updatedAt: updated.updatedAt ?? prior.updatedAt,
+        };
+      }
+
+      if (!ensured.id) {
+        return yield* Effect.fail(
+          new Error("AccessPolicy: ensured policy missing id"),
+        );
+      }
+      return {
+        policyId: ensured.id,
+        name: ensured.name ?? name,
+        decision: ensured.decision ?? news.decision,
+        accountId: acct,
+        createdAt: ensured.createdAt ?? undefined,
+        updatedAt: ensured.updatedAt ?? undefined,
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* zeroTrust
+        .deleteAccessPolicy({
+          accountId: output.accountId,
+          policyId: output.policyId,
+        })
+        .pipe(Effect.catch((): Effect.Effect<void> => Effect.void));
+    }),
+    read: Effect.fn(function* ({ id, output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const acct = output?.accountId ?? accountId;
+      if (output?.policyId) {
+        const direct = yield* zeroTrust
+          .getAccessPolicy({
+            accountId: acct,
+            policyId: output.policyId,
+          })
+          .pipe(
+            Effect.catch(
+              (): Effect.Effect<ObservedPolicy | undefined> =>
+                Effect.succeed(undefined),
+            ),
+          );
+        if (direct && direct.id) {
+          return {
+            policyId: direct.id,
+            name: direct.name ?? output.name,
+            decision: direct.decision ?? output.decision,
+            accountId: acct,
+            createdAt: direct.createdAt ?? output.createdAt,
+            updatedAt: direct.updatedAt ?? output.updatedAt,
+          };
+        }
+      }
+      const name = yield* createPolicyName(id, olds?.name ?? output?.name);
+      const existing = yield* findPolicyByName(acct, name);
+      if (!existing || !existing.id) return undefined;
+      return {
+        policyId: existing.id,
+        name: existing.name ?? name,
+        decision: existing.decision ?? olds?.decision ?? "allow",
+        accountId: acct,
+        createdAt: existing.createdAt ?? undefined,
+        updatedAt: existing.updatedAt ?? undefined,
+      };
+    }),
+  });
+
+const createPolicyName = (id: string, name: string | undefined) =>
+  Effect.gen(function* () {
+    if (name) return name;
+    return yield* createPhysicalName({ id });
+  });
+
+const findPolicyByName = (acct: string, name: string) =>
+  zeroTrust.listAccessPolicies.items({ accountId: acct }).pipe(
+    Stream.filter((p): p is ObservedPolicy => p.name === name),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+    Effect.catch(() => Effect.succeed(undefined)),
+  );
+
 type ObservedPolicy = {
   id?: string | null;
   name?: string | null;
@@ -190,187 +372,3 @@ const toObserved = (r: RawPolicy): ObservedPolicy => ({
   createdAt: r.createdAt,
   updatedAt: r.updatedAt,
 });
-
-export const AccessPolicyProvider = () =>
-  Provider.effect(
-    AccessPolicy,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const createPolicy = yield* zeroTrust.createAccessPolicy;
-      const getPolicy = yield* zeroTrust.getAccessPolicy;
-      const updatePolicy = yield* zeroTrust.updateAccessPolicy;
-      const deletePolicy = yield* zeroTrust.deleteAccessPolicy;
-      const listPolicies = zeroTrust.listAccessPolicies;
-
-      const createPolicyName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          if (name) return name;
-          return yield* createPhysicalName({ id });
-        });
-
-      const findPolicyByName = (acct: string, name: string) =>
-        listPolicies
-          .items({ accountId: acct })
-          .pipe(
-            Stream.filter((p): p is ObservedPolicy => p.name === name),
-            Stream.runHead,
-            Effect.map(Option.getOrUndefined),
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
-
-      return {
-        stables: ["policyId", "accountId", "decision"],
-        diff: Effect.fn(function* ({ id, olds = {}, news, output }) {
-          if (!isResolved(news)) return undefined;
-          if ((output?.accountId ?? accountId) !== accountId) {
-            return { action: "replace" } as const;
-          }
-          const name = yield* createPolicyName(id, news.name);
-          const oldName = output?.name
-            ? output.name
-            : yield* createPolicyName(id, olds.name);
-          if (name !== oldName) {
-            return { action: "replace" } as const;
-          }
-          const oldDecision = output?.decision ?? olds.decision;
-          if (oldDecision && oldDecision !== news.decision) {
-            return { action: "replace" } as const;
-          }
-        }),
-        reconcile: Effect.fn(function* ({
-          id,
-          news = {} as AccessPolicyProps,
-          output,
-        }) {
-          const name = yield* createPolicyName(id, news.name);
-          const acct = output?.accountId ?? accountId;
-
-          // Observe — prefer cached policyId, fall back to a name lookup so
-          // we recover from out-of-band deletes and partial state-persistence
-          // failures.
-          let observed: ObservedPolicy | undefined;
-          if (output?.policyId) {
-            observed = yield* getPolicy({
-              accountId: acct,
-              policyId: output.policyId,
-            }).pipe(
-              Effect.map(toObserved),
-              Effect.catch(
-                (): Effect.Effect<ObservedPolicy | undefined> =>
-                  Effect.succeed(undefined),
-              ),
-            );
-          }
-          if (!observed) {
-            observed = yield* findPolicyByName(acct, name);
-          }
-
-          // Ensure — create the policy if missing. Tolerate a race where a
-          // parallel actor created the same-named policy by re-observing.
-          let ensured: ObservedPolicy;
-          if (!observed || !observed.id) {
-            ensured = yield* createPolicy({
-              accountId: acct,
-              name,
-              decision: news.decision,
-              include: news.include,
-              exclude: news.exclude,
-              require: news.require,
-              sessionDuration: news.sessionDuration,
-              approvalRequired: news.approvalRequired,
-              purposeJustificationRequired: news.purposeJustificationRequired,
-            }).pipe(
-              Effect.map(toObserved),
-              Effect.catch((err) =>
-                Effect.gen(function* () {
-                  const existing = yield* findPolicyByName(acct, name);
-                  if (existing && existing.id) return existing;
-                  return yield* Effect.fail(err);
-                }),
-              ),
-            );
-          } else {
-            // Sync — Cloudflare PUTs the policy as a whole replacement, so a
-            // single update converges every mutable field. Always issuing the
-            // PUT keeps the resource convergent against drift; the API is
-            // idempotent for equal payloads.
-            const prior = observed;
-            const updated = yield* updatePolicy({
-              accountId: acct,
-              policyId: prior.id!,
-              name,
-              decision: news.decision,
-              include: news.include,
-              exclude: news.exclude,
-              require: news.require,
-              sessionDuration: news.sessionDuration,
-              approvalRequired: news.approvalRequired,
-              purposeJustificationRequired: news.purposeJustificationRequired,
-            });
-            ensured = {
-              id: updated.id ?? prior.id,
-              name: updated.name ?? prior.name,
-              decision: updated.decision ?? prior.decision,
-              createdAt: updated.createdAt ?? prior.createdAt,
-              updatedAt: updated.updatedAt ?? prior.updatedAt,
-            };
-          }
-
-          if (!ensured.id) {
-            return yield* Effect.fail(
-              new Error("AccessPolicy: ensured policy missing id"),
-            );
-          }
-          return {
-            policyId: ensured.id,
-            name: ensured.name ?? name,
-            decision: ensured.decision ?? news.decision,
-            accountId: acct,
-            createdAt: ensured.createdAt ?? undefined,
-            updatedAt: ensured.updatedAt ?? undefined,
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* deletePolicy({
-            accountId: output.accountId,
-            policyId: output.policyId,
-          }).pipe(Effect.catch((): Effect.Effect<void> => Effect.void));
-        }),
-        read: Effect.fn(function* ({ id, output, olds }) {
-          const acct = output?.accountId ?? accountId;
-          if (output?.policyId) {
-            const direct = yield* getPolicy({
-              accountId: acct,
-              policyId: output.policyId,
-            }).pipe(
-              Effect.catch(
-                (): Effect.Effect<ObservedPolicy | undefined> =>
-                  Effect.succeed(undefined),
-              ),
-            );
-            if (direct && direct.id) {
-              return {
-                policyId: direct.id,
-                name: direct.name ?? output.name,
-                decision: direct.decision ?? output.decision,
-                accountId: acct,
-                createdAt: direct.createdAt ?? output.createdAt,
-                updatedAt: direct.updatedAt ?? output.updatedAt,
-              };
-            }
-          }
-          const name = yield* createPolicyName(id, olds?.name ?? output?.name);
-          const existing = yield* findPolicyByName(acct, name);
-          if (!existing || !existing.id) return undefined;
-          return {
-            policyId: existing.id,
-            name: existing.name ?? name,
-            decision: existing.decision ?? olds?.decision ?? "allow",
-            accountId: acct,
-            createdAt: existing.createdAt ?? undefined,
-            updatedAt: existing.updatedAt ?? undefined,
-          };
-        }),
-      };
-    }),
-  );

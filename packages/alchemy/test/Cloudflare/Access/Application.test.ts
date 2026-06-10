@@ -1,3 +1,4 @@
+import * as AdoptPolicy from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Test from "@/Test/Vitest";
@@ -13,17 +14,29 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+// Self-hosted Access Applications require a domain that belongs to an
+// *active* zone in the account (pending zones are rejected with "domain does
+// not belong to zone"). Tests can't activate a fresh zone (that requires
+// nameserver delegation), so we adopt the shared pre-existing active zone.
+// It must stay on the default `retain` removal policy: it's registered via
+// Cloudflare Registrar, and the API refuses to delete registrar zones.
+const zoneName =
+  process.env.CLOUDFLARE_TEST_ACCESS_ZONE_NAME ?? "alchemy-test-2.us";
+
 test.provider(
   "create and delete a self_hosted application gated by a reusable policy",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
-      const domain = "alchemy-test-app.example.com";
+      const domain = `alchemy-test-app.${zoneName}`;
       const { app, policy } = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* Cloudflare.Zone("TestZone", {
+            name: zoneName,
+          }).pipe(AdoptPolicy.adopt(true));
           const policy = yield* Cloudflare.AccessPolicy("AllowExampleDomain", {
             name: "Allow example.com",
             decision: "allow",
@@ -78,6 +91,7 @@ test.provider(
 
       const app = yield* stack.deploy(
         Effect.gen(function* () {
+          // Warp apps derive their domain from the auth domain — no zone needed.
           const policy = yield* Cloudflare.AccessPolicy("WarpAllowDomain", {
             name: "Allow example.com",
             decision: "allow",
@@ -106,14 +120,17 @@ test.provider(
   "update policies in place keeps the applicationId stable",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
-      const domain = "alchemy-test-update.example.com";
+      const domain = `alchemy-test-update-policies.${zoneName}`;
 
       const initial = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* Cloudflare.Zone("TestZone", {
+            name: zoneName,
+          }).pipe(AdoptPolicy.adopt(true));
           const allow = yield* Cloudflare.AccessPolicy("UpdateAllow", {
             name: "Allow example.com",
             decision: "allow",
@@ -129,6 +146,9 @@ test.provider(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* Cloudflare.Zone("TestZone", {
+            name: zoneName,
+          }).pipe(AdoptPolicy.adopt(true));
           const allow = yield* Cloudflare.AccessPolicy("UpdateAllow", {
             name: "Allow example.com",
             decision: "allow",

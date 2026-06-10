@@ -259,9 +259,258 @@ export const DeviceDefaultProfile = Resource<DeviceDefaultProfile>(
   "Cloudflare.Devices.DefaultProfile",
 );
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+/**
+ * Live `Provider` for {@link DeviceDefaultProfile}. Wire into a Cloudflare
+ * provider Layer with `Provider.collection([DeviceDefaultProfile])` plus
+ * `DeviceDefaultProfileProvider()`.
+ */
+export const DeviceDefaultProfileProvider = () =>
+  Provider.succeed(DeviceDefaultProfile, {
+    stables: ["accountId"],
+    reconcile: Effect.fn(function* ({ news = {} }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // 1. Observe — the default profile always exists.
+      let obs = yield* observe();
+
+      // 2. Sync — four independent idempotent diffs.
+
+      // (a) General profile patch.
+      const desiredMode = news.mode ?? inferMode(obs.profile);
+      const observedSm = obs.profile.serviceModeV2;
+      const desiredSm = news.serviceModeV2;
+      const patchBody: zeroTrust.PatchDevicePolicyDefaultRequest = {
+        accountId,
+      };
+      let needsPatch = false;
+      const setIf = <K extends keyof zeroTrust.PatchDevicePolicyDefaultRequest>(
+        key: K,
+        desired: zeroTrust.PatchDevicePolicyDefaultRequest[K],
+        observed: unknown,
+      ) => {
+        if (desired === undefined) return;
+        if (desired !== observed) {
+          patchBody[key] = desired;
+          needsPatch = true;
+        }
+      };
+      setIf(
+        "captivePortal",
+        news.captivePortal,
+        denull(obs.profile.captivePortal),
+      );
+      setIf("autoConnect", news.autoConnect, denull(obs.profile.autoConnect));
+      setIf(
+        "allowedToLeave",
+        news.allowedToLeave,
+        denull(obs.profile.allowedToLeave),
+      );
+      setIf(
+        "allowModeSwitch",
+        news.allowModeSwitch,
+        denull(obs.profile.allowModeSwitch),
+      );
+      setIf(
+        "allowUpdates",
+        news.allowUpdates,
+        denull(obs.profile.allowUpdates),
+      );
+      setIf(
+        "disableAutoFallback",
+        news.disableAutoFallback,
+        denull(obs.profile.disableAutoFallback),
+      );
+      setIf(
+        "excludeOfficeIps",
+        news.excludeOfficeIps,
+        denull(obs.profile.excludeOfficeIps),
+      );
+      setIf(
+        "switchLocked",
+        news.switchLocked,
+        denull(obs.profile.switchLocked),
+      );
+      // lanAllowMinutes / lanAllowSubnetSize are accepted by PATCH but
+      // not surfaced on GET, so we cannot diff them. Push them every
+      // time the user sets them — the API is idempotent.
+      if (news.lanAllowMinutes !== undefined) {
+        patchBody.lanAllowMinutes = news.lanAllowMinutes;
+        needsPatch = true;
+      }
+      if (news.lanAllowSubnetSize !== undefined) {
+        patchBody.lanAllowSubnetSize = news.lanAllowSubnetSize;
+        needsPatch = true;
+      }
+      setIf(
+        "registerInterfaceIpWithDns",
+        news.registerInterfaceIpWithDns,
+        denull(obs.profile.registerInterfaceIpWithDns),
+      );
+      setIf(
+        "sccmVpnBoundarySupport",
+        news.sccmVpnBoundarySupport,
+        denull(obs.profile.sccmVpnBoundarySupport),
+      );
+      setIf("supportUrl", news.supportUrl, denull(obs.profile.supportUrl));
+      setIf(
+        "tunnelProtocol",
+        news.tunnelProtocol,
+        denull(obs.profile.tunnelProtocol),
+      );
+
+      if (
+        desiredSm !== undefined &&
+        !sameJSON(
+          desiredSm,
+          observedSm
+            ? {
+                mode: denull(observedSm.mode),
+                port: denull(observedSm.port),
+              }
+            : undefined,
+        )
+      ) {
+        patchBody.serviceModeV2 = desiredSm;
+        needsPatch = true;
+      }
+
+      // `mode` is a derived view of which list is enforced; the CF
+      // PATCH endpoint surfaces it as a SIDE-EFFECT of which array
+      // (`include`/`exclude`) is non-empty. We let the include/exclude
+      // sync blocks below handle persistence.
+      void desiredMode;
+
+      if (needsPatch) {
+        yield* zeroTrust.patchDevicePolicyDefault(patchBody);
+      }
+
+      // (b) Include list.
+      if (news.splitTunnelInclude !== undefined) {
+        const desired = news.splitTunnelInclude;
+        if (!sameJSON(desired, obs.splitTunnelInclude)) {
+          yield* zeroTrust.putDevicePolicyDefaultInclude({
+            accountId,
+            body: desired.map(encodeSplit),
+          });
+        }
+      }
+
+      // (c) Exclude list.
+      if (news.splitTunnelExclude !== undefined) {
+        const desired = news.splitTunnelExclude;
+        if (!sameJSON(desired, obs.splitTunnelExclude)) {
+          yield* zeroTrust.putDevicePolicyDefaultExclude({
+            accountId,
+            body: desired.map(encodeSplit),
+          });
+        }
+      }
+
+      // (d) Fallback domains.
+      if (news.fallbackDomains !== undefined) {
+        const desired = news.fallbackDomains;
+        if (!sameJSON(desired, obs.fallbackDomains)) {
+          yield* zeroTrust.putDevicePolicyDefaultFallbackDomain({
+            accountId,
+            domains: desired.map(encodeFallback),
+          });
+        }
+      }
+
+      // 3. Re-observe so attrs reflect post-sync truth.
+      obs = yield* observe();
+      return buildAttrs(accountId, obs);
+    }),
+    delete: Effect.fn(function* () {
+      // The default device profile cannot be deleted. Drop our state
+      // and leave the cloud profile in place.
+      yield* Effect.logWarning(
+        "Cloudflare.Devices.DefaultProfile: delete is a no-op; the default device profile cannot be deleted.",
+      );
+      return Effect.void;
+    }),
+    read: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const obs = yield* observe();
+      return buildAttrs(accountId, obs);
+    }),
+  });
+
+// Cloudflare returns `{result: null, success: true}` (NOT `[]`) when
+// a default-policy list endpoint is empty, and distilled's schema
+// rejects that as a transport error. Swallow into `undefined` so the
+// reconciler treats an empty list as "no entries" rather than failing.
+const listOrEmpty = <A, Err, Req>(
+  op: Effect.Effect<{ result?: readonly A[] | null }, Err, Req>,
+) =>
+  op.pipe(
+    Effect.catch(() =>
+      Effect.succeed({
+        result: [] as readonly A[],
+      }),
+    ),
+  );
+
+const observe = Effect.fn(function* () {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const [profile, include, exclude, fallback] = yield* Effect.all(
+    [
+      zeroTrust.getDevicePolicyDefault({ accountId }),
+      listOrEmpty(zeroTrust.getDevicePolicyDefaultInclude({ accountId })),
+      listOrEmpty(zeroTrust.getDevicePolicyDefaultExclude({ accountId })),
+      listOrEmpty(
+        zeroTrust.getDevicePolicyDefaultFallbackDomain({ accountId }),
+      ),
+    ],
+    { concurrency: "unbounded" },
+  );
+  const inc = (include.result ?? []).map(normalizeSplit);
+  const exc = (exclude.result ?? []).map(normalizeSplit);
+  const fb = (fallback.result ?? []).map(normalizeFallback);
+  return {
+    profile,
+    splitTunnelInclude: inc,
+    splitTunnelExclude: exc,
+    fallbackDomains: fb,
+  };
+});
+
+const buildAttrs = (
+  accountId: string,
+  obs: Effect.Success<ReturnType<typeof observe>>,
+): DeviceDefaultProfile["Attributes"] => {
+  const { profile } = obs;
+  const sm = profile.serviceModeV2;
+  const serviceModeV2: DeviceDefaultProfile.ServiceModeV2 | undefined =
+    sm && sm.mode != null
+      ? {
+          mode: (sm.mode === "proxy" ? "proxy" : "warp") as "warp" | "proxy",
+          port: denull(sm.port),
+        }
+      : undefined;
+  return {
+    accountId,
+    mode: inferMode(profile),
+    splitTunnelInclude: obs.splitTunnelInclude,
+    splitTunnelExclude: obs.splitTunnelExclude,
+    fallbackDomains: obs.fallbackDomains,
+    captivePortal: denull(profile.captivePortal),
+    autoConnect: denull(profile.autoConnect),
+    allowedToLeave: denull(profile.allowedToLeave),
+    allowModeSwitch: denull(profile.allowModeSwitch),
+    allowUpdates: denull(profile.allowUpdates),
+    disableAutoFallback: denull(profile.disableAutoFallback),
+    excludeOfficeIps: denull(profile.excludeOfficeIps),
+    switchLocked: denull(profile.switchLocked),
+    serviceModeV2,
+    // lanAllow* are PATCH-only — GET does not echo them back.
+    lanAllowMinutes: undefined,
+    lanAllowSubnetSize: undefined,
+    registerInterfaceIpWithDns: denull(profile.registerInterfaceIpWithDns),
+    sccmVpnBoundarySupport: denull(profile.sccmVpnBoundarySupport),
+    supportUrl: denull(profile.supportUrl),
+    tunnelProtocol: denull(profile.tunnelProtocol),
+  };
+};
 
 /**
  * Strip Cloudflare's `null` echoes to `undefined` so structural equality
@@ -324,251 +573,7 @@ const encodeFallback = (
 const sameJSON = (a: unknown, b: unknown): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
 
-const inferMode = (
-  observed: { include?: readonly unknown[] | null | undefined },
-): "include" | "exclude" =>
+const inferMode = (observed: {
+  include?: readonly unknown[] | null | undefined;
+}): "include" | "exclude" =>
   observed.include && observed.include.length > 0 ? "include" : "exclude";
-
-// ---------------------------------------------------------------------------
-// Provider
-// ---------------------------------------------------------------------------
-
-/**
- * Live `Provider` for {@link DeviceDefaultProfile}. Wire into a Cloudflare
- * provider Layer with `Provider.collection([DeviceDefaultProfile])` plus
- * `DeviceDefaultProfileProvider()`.
- */
-export const DeviceDefaultProfileProvider = () =>
-  Provider.effect(
-    DeviceDefaultProfile,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const getDefault = yield* zeroTrust.getDevicePolicyDefault;
-      const patchDefault = yield* zeroTrust.patchDevicePolicyDefault;
-      const getInclude = yield* zeroTrust.getDevicePolicyDefaultInclude;
-      const putInclude = yield* zeroTrust.putDevicePolicyDefaultInclude;
-      const getExclude = yield* zeroTrust.getDevicePolicyDefaultExclude;
-      const putExclude = yield* zeroTrust.putDevicePolicyDefaultExclude;
-      const getFallback = yield* zeroTrust.getDevicePolicyDefaultFallbackDomain;
-      const putFallback = yield* zeroTrust.putDevicePolicyDefaultFallbackDomain;
-
-      // Cloudflare returns `{result: null, success: true}` (NOT `[]`) when
-      // a default-policy list endpoint is empty, and distilled's schema
-      // rejects that as a transport error. Swallow into `undefined` so the
-      // reconciler treats an empty list as "no entries" rather than failing.
-      const listOrEmpty = <A>(
-        op: Effect.Effect<{ result?: readonly A[] | null }, unknown, unknown>,
-      ) =>
-        op.pipe(
-          Effect.catch(() =>
-            Effect.succeed({
-              result: [] as readonly A[],
-            }),
-          ),
-        );
-
-      const observe = Effect.fn(function* () {
-        const [profile, include, exclude, fallback] = yield* Effect.all(
-          [
-            getDefault({ accountId }),
-            listOrEmpty(getInclude({ accountId })),
-            listOrEmpty(getExclude({ accountId })),
-            listOrEmpty(getFallback({ accountId })),
-          ],
-          { concurrency: "unbounded" },
-        );
-        const inc = (include.result ?? []).map(normalizeSplit);
-        const exc = (exclude.result ?? []).map(normalizeSplit);
-        const fb = (fallback.result ?? []).map(normalizeFallback);
-        return {
-          profile,
-          splitTunnelInclude: inc,
-          splitTunnelExclude: exc,
-          fallbackDomains: fb,
-        };
-      });
-
-      const buildAttrs = (
-        obs: Effect.Success<ReturnType<typeof observe>>,
-      ): DeviceDefaultProfile["Attributes"] => {
-        const { profile } = obs;
-        const sm = profile.serviceModeV2;
-        const serviceModeV2: DeviceDefaultProfile.ServiceModeV2 | undefined =
-          sm && sm.mode != null
-            ? {
-                mode: (sm.mode === "proxy" ? "proxy" : "warp") as
-                  | "warp"
-                  | "proxy",
-                port: denull(sm.port),
-              }
-            : undefined;
-        return {
-          accountId,
-          mode: inferMode(profile),
-          splitTunnelInclude: obs.splitTunnelInclude,
-          splitTunnelExclude: obs.splitTunnelExclude,
-          fallbackDomains: obs.fallbackDomains,
-          captivePortal: denull(profile.captivePortal),
-          autoConnect: denull(profile.autoConnect),
-          allowedToLeave: denull(profile.allowedToLeave),
-          allowModeSwitch: denull(profile.allowModeSwitch),
-          allowUpdates: denull(profile.allowUpdates),
-          disableAutoFallback: denull(profile.disableAutoFallback),
-          excludeOfficeIps: denull(profile.excludeOfficeIps),
-          switchLocked: denull(profile.switchLocked),
-          serviceModeV2,
-          // lanAllow* are PATCH-only — GET does not echo them back.
-          lanAllowMinutes: undefined,
-          lanAllowSubnetSize: undefined,
-          registerInterfaceIpWithDns: denull(profile.registerInterfaceIpWithDns),
-          sccmVpnBoundarySupport: denull(profile.sccmVpnBoundarySupport),
-          supportUrl: denull(profile.supportUrl),
-          tunnelProtocol: denull(profile.tunnelProtocol),
-        };
-      };
-
-      return {
-        stables: ["accountId"],
-        reconcile: Effect.fn(function* ({ news = {} }) {
-          // 1. Observe — the default profile always exists.
-          let obs = yield* observe();
-
-          // 2. Sync — four independent idempotent diffs.
-
-          // (a) General profile patch.
-          const desiredMode = news.mode ?? inferMode(obs.profile);
-          const observedSm = obs.profile.serviceModeV2;
-          const desiredSm = news.serviceModeV2;
-          const patchBody: zeroTrust.PatchDevicePolicyDefaultRequest = {
-            accountId,
-          };
-          let needsPatch = false;
-          const setIf = <K extends keyof zeroTrust.PatchDevicePolicyDefaultRequest>(
-            key: K,
-            desired: zeroTrust.PatchDevicePolicyDefaultRequest[K],
-            observed: unknown,
-          ) => {
-            if (desired === undefined) return;
-            if (desired !== observed) {
-              patchBody[key] = desired;
-              needsPatch = true;
-            }
-          };
-          setIf("captivePortal", news.captivePortal, denull(obs.profile.captivePortal));
-          setIf("autoConnect", news.autoConnect, denull(obs.profile.autoConnect));
-          setIf("allowedToLeave", news.allowedToLeave, denull(obs.profile.allowedToLeave));
-          setIf("allowModeSwitch", news.allowModeSwitch, denull(obs.profile.allowModeSwitch));
-          setIf("allowUpdates", news.allowUpdates, denull(obs.profile.allowUpdates));
-          setIf(
-            "disableAutoFallback",
-            news.disableAutoFallback,
-            denull(obs.profile.disableAutoFallback),
-          );
-          setIf(
-            "excludeOfficeIps",
-            news.excludeOfficeIps,
-            denull(obs.profile.excludeOfficeIps),
-          );
-          setIf("switchLocked", news.switchLocked, denull(obs.profile.switchLocked));
-          // lanAllowMinutes / lanAllowSubnetSize are accepted by PATCH but
-          // not surfaced on GET, so we cannot diff them. Push them every
-          // time the user sets them — the API is idempotent.
-          if (news.lanAllowMinutes !== undefined) {
-            patchBody.lanAllowMinutes = news.lanAllowMinutes;
-            needsPatch = true;
-          }
-          if (news.lanAllowSubnetSize !== undefined) {
-            patchBody.lanAllowSubnetSize = news.lanAllowSubnetSize;
-            needsPatch = true;
-          }
-          setIf(
-            "registerInterfaceIpWithDns",
-            news.registerInterfaceIpWithDns,
-            denull(obs.profile.registerInterfaceIpWithDns),
-          );
-          setIf(
-            "sccmVpnBoundarySupport",
-            news.sccmVpnBoundarySupport,
-            denull(obs.profile.sccmVpnBoundarySupport),
-          );
-          setIf("supportUrl", news.supportUrl, denull(obs.profile.supportUrl));
-          setIf("tunnelProtocol", news.tunnelProtocol, denull(obs.profile.tunnelProtocol));
-
-          if (
-            desiredSm !== undefined &&
-            !sameJSON(
-              desiredSm,
-              observedSm
-                ? {
-                    mode: denull(observedSm.mode),
-                    port: denull(observedSm.port),
-                  }
-                : undefined,
-            )
-          ) {
-            patchBody.serviceModeV2 = desiredSm;
-            needsPatch = true;
-          }
-
-          // `mode` is a derived view of which list is enforced; the CF
-          // PATCH endpoint surfaces it as a SIDE-EFFECT of which array
-          // (`include`/`exclude`) is non-empty. We let the include/exclude
-          // sync blocks below handle persistence.
-          void desiredMode;
-
-          if (needsPatch) {
-            yield* patchDefault(patchBody);
-          }
-
-          // (b) Include list.
-          if (news.splitTunnelInclude !== undefined) {
-            const desired = news.splitTunnelInclude;
-            if (!sameJSON(desired, obs.splitTunnelInclude)) {
-              yield* putInclude({
-                accountId,
-                body: desired.map(encodeSplit),
-              });
-            }
-          }
-
-          // (c) Exclude list.
-          if (news.splitTunnelExclude !== undefined) {
-            const desired = news.splitTunnelExclude;
-            if (!sameJSON(desired, obs.splitTunnelExclude)) {
-              yield* putExclude({
-                accountId,
-                body: desired.map(encodeSplit),
-              });
-            }
-          }
-
-          // (d) Fallback domains.
-          if (news.fallbackDomains !== undefined) {
-            const desired = news.fallbackDomains;
-            if (!sameJSON(desired, obs.fallbackDomains)) {
-              yield* putFallback({
-                accountId,
-                domains: desired.map(encodeFallback),
-              });
-            }
-          }
-
-          // 3. Re-observe so attrs reflect post-sync truth.
-          obs = yield* observe();
-          return buildAttrs(obs);
-        }),
-        delete: Effect.fn(function* () {
-          // The default device profile cannot be deleted. Drop our state
-          // and leave the cloud profile in place.
-          yield* Effect.logWarning(
-            "Cloudflare.Devices.DefaultProfile: delete is a no-op; the default device profile cannot be deleted.",
-          );
-          return Effect.void;
-        }),
-        read: Effect.fn(function* () {
-          const obs = yield* observe();
-          return buildAttrs(obs);
-        }),
-      };
-    }),
-  );

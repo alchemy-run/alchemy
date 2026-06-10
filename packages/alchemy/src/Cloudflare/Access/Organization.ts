@@ -188,6 +188,206 @@ export const AccessOrganization = Resource<AccessOrganization>(
   "Cloudflare.AccessOrganization",
 );
 
+export const AccessOrganizationProvider = () =>
+  Provider.succeed(AccessOrganization, {
+    stables: ["accountId", "authDomain"],
+    reconcile: Effect.fn(function* ({ news }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const desiredName = news.name ?? news.authDomain;
+      const loginDesign = buildLoginDesign(news.loginDesign);
+      const customPages = news.customPages
+        ? {
+            ...(news.customPages.forbidden !== undefined
+              ? { forbidden: news.customPages.forbidden }
+              : {}),
+            ...(news.customPages.identityDenied !== undefined
+              ? { identityDenied: news.customPages.identityDenied }
+              : {}),
+          }
+        : undefined;
+
+      // Observe — singleton lookup. The org always exists for any
+      // account that has enabled Zero Trust; only a brand-new account
+      // returns "missing".
+      let observed = yield* observe();
+
+      // Ensure — create on a fresh account. If a race or out-of-band
+      // setup created it between the observe and create call, fall
+      // back to update.
+      if (!observed) {
+        observed = yield* zeroTrust
+          .createOrganizationForAccount({
+            accountId,
+            authDomain: news.authDomain,
+            name: desiredName,
+            ...(news.sessionDuration !== undefined
+              ? { sessionDuration: news.sessionDuration }
+              : {}),
+            ...(news.allowAuthenticateViaWarp !== undefined
+              ? { allowAuthenticateViaWarp: news.allowAuthenticateViaWarp }
+              : {}),
+            ...(news.isUiReadOnly !== undefined
+              ? { isUiReadOnly: news.isUiReadOnly }
+              : {}),
+            ...(news.autoRedirectToIdentity !== undefined
+              ? { autoRedirectToIdentity: news.autoRedirectToIdentity }
+              : {}),
+            ...(news.uiReadOnlyToggleReason !== undefined
+              ? { uiReadOnlyToggleReason: news.uiReadOnlyToggleReason }
+              : {}),
+            ...(news.userSeatExpirationInactiveTime !== undefined
+              ? {
+                  userSeatExpirationInactiveTime:
+                    news.userSeatExpirationInactiveTime,
+                }
+              : {}),
+            ...(news.warpAuthSessionDuration !== undefined
+              ? { warpAuthSessionDuration: news.warpAuthSessionDuration }
+              : {}),
+            ...(loginDesign ? { loginDesign } : {}),
+          })
+          .pipe(
+            Effect.catch((e) =>
+              Effect.gen(function* () {
+                const tag = (e as { _tag?: string })._tag;
+                if (tag === "Conflict") {
+                  const existing = yield* observe();
+                  if (existing) return existing;
+                  return yield* Effect.fail(
+                    new Error(
+                      "Cloudflare returned Conflict on createOrganizationForAccount but the org could not be observed afterwards",
+                    ),
+                  );
+                }
+                return yield* Effect.fail(e);
+              }),
+            ),
+          );
+      }
+
+      // Sync — Cloudflare's PUT is a true upsert. Always push so any
+      // drift in observed vs desired converges in one call. Cheap and
+      // idempotent.
+      const updated = yield* zeroTrust.updateOrganizationForAccount({
+        accountId,
+        authDomain: news.authDomain,
+        name: desiredName,
+        ...(news.sessionDuration !== undefined
+          ? { sessionDuration: news.sessionDuration }
+          : {}),
+        ...(news.allowAuthenticateViaWarp !== undefined
+          ? { allowAuthenticateViaWarp: news.allowAuthenticateViaWarp }
+          : {}),
+        ...(news.isUiReadOnly !== undefined
+          ? { isUiReadOnly: news.isUiReadOnly }
+          : {}),
+        ...(news.autoRedirectToIdentity !== undefined
+          ? { autoRedirectToIdentity: news.autoRedirectToIdentity }
+          : {}),
+        ...(news.uiReadOnlyToggleReason !== undefined
+          ? { uiReadOnlyToggleReason: news.uiReadOnlyToggleReason }
+          : {}),
+        ...(news.userSeatExpirationInactiveTime !== undefined
+          ? {
+              userSeatExpirationInactiveTime:
+                news.userSeatExpirationInactiveTime,
+            }
+          : {}),
+        ...(news.warpAuthSessionDuration !== undefined
+          ? { warpAuthSessionDuration: news.warpAuthSessionDuration }
+          : {}),
+        ...(loginDesign ? { loginDesign } : {}),
+        ...(customPages ? { customPages } : {}),
+      });
+
+      return toAttrs(accountId, updated, news.authDomain, desiredName);
+    }),
+    delete: Effect.fn(function* () {
+      yield* Effect.logWarning(
+        "AccessOrganization.delete is a no-op — the Cloudflare Access Organization is a singleton tied to the account and cannot be deleted without deleting the Cloudflare account itself.",
+      );
+    }),
+    read: Effect.fn(function* ({ olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const observed = yield* observe();
+      if (!observed) return undefined;
+      return toAttrs(
+        accountId,
+        observed,
+        olds?.authDomain ?? observed.authDomain ?? "",
+        olds?.name ?? observed.name ?? olds?.authDomain ?? "",
+      );
+    }),
+  });
+
+const observe = Effect.fn(function* () {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+
+  return yield* zeroTrust.listOrganizationsForAccount({ accountId }).pipe(
+    Effect.map((org) => {
+      // listOrganizationsForAccount returns a single object (the
+      // singleton org) under `result`; an account that has not yet
+      // enabled Zero Trust returns a sparse object with no
+      // `authDomain`. Treat that as "missing".
+      const typed = org as zeroTrust.ListOrganizationsResponse;
+      return typed && typed.authDomain ? typed : undefined;
+    }),
+    Effect.catch((e) =>
+      Effect.gen(function* () {
+        const tag = (e as { _tag?: string })._tag;
+        if (tag === "NotFound") {
+          return undefined as zeroTrust.ListOrganizationsResponse | undefined;
+        }
+        return yield* Effect.fail(e);
+      }),
+    ),
+  );
+});
+
+const toAttrs = (
+  accountId: string,
+  org: {
+    authDomain?: string | null;
+    name?: string | null;
+    sessionDuration?: string | null;
+    allowAuthenticateViaWarp?: boolean | null;
+    isUiReadOnly?: boolean | null;
+    autoRedirectToIdentity?: boolean | null;
+    uiReadOnlyToggleReason?: string | null;
+    userSeatExpirationInactiveTime?: string | null;
+    warpAuthSessionDuration?: string | null;
+    loginDesign?: {
+      backgroundColor?: string | null;
+      footerText?: string | null;
+      headerText?: string | null;
+      logoPath?: string | null;
+      textColor?: string | null;
+    } | null;
+    customPages?: {
+      forbidden?: string | null;
+      identityDenied?: string | null;
+    } | null;
+  },
+  fallbackAuthDomain: string,
+  fallbackName: string,
+) => ({
+  accountId,
+  authDomain: org.authDomain ?? fallbackAuthDomain,
+  name: org.name ?? fallbackName,
+  sessionDuration: org.sessionDuration ?? undefined,
+  allowAuthenticateViaWarp: org.allowAuthenticateViaWarp ?? undefined,
+  isUiReadOnly: org.isUiReadOnly ?? undefined,
+  autoRedirectToIdentity: org.autoRedirectToIdentity ?? undefined,
+  uiReadOnlyToggleReason: org.uiReadOnlyToggleReason ?? undefined,
+  userSeatExpirationInactiveTime:
+    org.userSeatExpirationInactiveTime ?? undefined,
+  warpAuthSessionDuration: org.warpAuthSessionDuration ?? undefined,
+  loginDesign: observedLoginDesign(org.loginDesign),
+  customPages: observedCustomPages(org.customPages),
+});
+
 const buildLoginDesign = (
   design: AccessOrganization.LoginDesign | undefined,
 ):
@@ -250,205 +450,3 @@ const observedCustomPages = (
     identityDenied: pages.identityDenied ?? undefined,
   };
 };
-
-export const AccessOrganizationProvider = () =>
-  Provider.effect(
-    AccessOrganization,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const listOrganizations = yield* zeroTrust.listOrganizationsForAccount;
-      const createOrganization = yield* zeroTrust.createOrganizationForAccount;
-      const updateOrganization = yield* zeroTrust.updateOrganizationForAccount;
-
-      const observe = Effect.fn(function* () {
-        return yield* listOrganizations({ accountId }).pipe(
-          Effect.map((org) => {
-            // listOrganizationsForAccount returns a single object (the
-            // singleton org) under `result`; an account that has not yet
-            // enabled Zero Trust returns a sparse object with no
-            // `authDomain`. Treat that as "missing".
-            const typed = org as zeroTrust.ListOrganizationsResponse;
-            return typed && typed.authDomain ? typed : undefined;
-          }),
-          Effect.catch((e) =>
-            Effect.gen(function* () {
-              const tag = (e as { _tag?: string })._tag;
-              if (tag === "NotFound") {
-                return undefined as
-                  | zeroTrust.ListOrganizationsResponse
-                  | undefined;
-              }
-              return yield* Effect.fail(e);
-            }),
-          ),
-        );
-      });
-
-      const toAttrs = (
-        org: {
-          authDomain?: string | null;
-          name?: string | null;
-          sessionDuration?: string | null;
-          allowAuthenticateViaWarp?: boolean | null;
-          isUiReadOnly?: boolean | null;
-          autoRedirectToIdentity?: boolean | null;
-          uiReadOnlyToggleReason?: string | null;
-          userSeatExpirationInactiveTime?: string | null;
-          warpAuthSessionDuration?: string | null;
-          loginDesign?: {
-            backgroundColor?: string | null;
-            footerText?: string | null;
-            headerText?: string | null;
-            logoPath?: string | null;
-            textColor?: string | null;
-          } | null;
-          customPages?: {
-            forbidden?: string | null;
-            identityDenied?: string | null;
-          } | null;
-        },
-        fallbackAuthDomain: string,
-        fallbackName: string,
-      ) => ({
-        accountId,
-        authDomain: org.authDomain ?? fallbackAuthDomain,
-        name: org.name ?? fallbackName,
-        sessionDuration: org.sessionDuration ?? undefined,
-        allowAuthenticateViaWarp: org.allowAuthenticateViaWarp ?? undefined,
-        isUiReadOnly: org.isUiReadOnly ?? undefined,
-        autoRedirectToIdentity: org.autoRedirectToIdentity ?? undefined,
-        uiReadOnlyToggleReason: org.uiReadOnlyToggleReason ?? undefined,
-        userSeatExpirationInactiveTime:
-          org.userSeatExpirationInactiveTime ?? undefined,
-        warpAuthSessionDuration: org.warpAuthSessionDuration ?? undefined,
-        loginDesign: observedLoginDesign(org.loginDesign),
-        customPages: observedCustomPages(org.customPages),
-      });
-
-      return {
-        stables: ["accountId", "authDomain"],
-        reconcile: Effect.fn(function* ({ news }) {
-          const desiredName = news.name ?? news.authDomain;
-          const loginDesign = buildLoginDesign(news.loginDesign);
-          const customPages = news.customPages
-            ? {
-                ...(news.customPages.forbidden !== undefined
-                  ? { forbidden: news.customPages.forbidden }
-                  : {}),
-                ...(news.customPages.identityDenied !== undefined
-                  ? { identityDenied: news.customPages.identityDenied }
-                  : {}),
-              }
-            : undefined;
-
-          // Observe — singleton lookup. The org always exists for any
-          // account that has enabled Zero Trust; only a brand-new account
-          // returns "missing".
-          let observed = yield* observe();
-
-          // Ensure — create on a fresh account. If a race or out-of-band
-          // setup created it between the observe and create call, fall
-          // back to update.
-          if (!observed) {
-            observed = yield* createOrganization({
-              accountId,
-              authDomain: news.authDomain,
-              name: desiredName,
-              ...(news.sessionDuration !== undefined
-                ? { sessionDuration: news.sessionDuration }
-                : {}),
-              ...(news.allowAuthenticateViaWarp !== undefined
-                ? { allowAuthenticateViaWarp: news.allowAuthenticateViaWarp }
-                : {}),
-              ...(news.isUiReadOnly !== undefined
-                ? { isUiReadOnly: news.isUiReadOnly }
-                : {}),
-              ...(news.autoRedirectToIdentity !== undefined
-                ? { autoRedirectToIdentity: news.autoRedirectToIdentity }
-                : {}),
-              ...(news.uiReadOnlyToggleReason !== undefined
-                ? { uiReadOnlyToggleReason: news.uiReadOnlyToggleReason }
-                : {}),
-              ...(news.userSeatExpirationInactiveTime !== undefined
-                ? {
-                    userSeatExpirationInactiveTime:
-                      news.userSeatExpirationInactiveTime,
-                  }
-                : {}),
-              ...(news.warpAuthSessionDuration !== undefined
-                ? { warpAuthSessionDuration: news.warpAuthSessionDuration }
-                : {}),
-              ...(loginDesign ? { loginDesign } : {}),
-            }).pipe(
-              Effect.catch((e) =>
-                Effect.gen(function* () {
-                  const tag = (e as { _tag?: string })._tag;
-                  if (tag === "Conflict") {
-                    const existing = yield* observe();
-                    if (existing) return existing;
-                    return yield* Effect.fail(
-                      new Error(
-                        "Cloudflare returned Conflict on createOrganizationForAccount but the org could not be observed afterwards",
-                      ),
-                    );
-                  }
-                  return yield* Effect.fail(e);
-                }),
-              ),
-            );
-          }
-
-          // Sync — Cloudflare's PUT is a true upsert. Always push so any
-          // drift in observed vs desired converges in one call. Cheap and
-          // idempotent.
-          const updated = yield* updateOrganization({
-            accountId,
-            authDomain: news.authDomain,
-            name: desiredName,
-            ...(news.sessionDuration !== undefined
-              ? { sessionDuration: news.sessionDuration }
-              : {}),
-            ...(news.allowAuthenticateViaWarp !== undefined
-              ? { allowAuthenticateViaWarp: news.allowAuthenticateViaWarp }
-              : {}),
-            ...(news.isUiReadOnly !== undefined
-              ? { isUiReadOnly: news.isUiReadOnly }
-              : {}),
-            ...(news.autoRedirectToIdentity !== undefined
-              ? { autoRedirectToIdentity: news.autoRedirectToIdentity }
-              : {}),
-            ...(news.uiReadOnlyToggleReason !== undefined
-              ? { uiReadOnlyToggleReason: news.uiReadOnlyToggleReason }
-              : {}),
-            ...(news.userSeatExpirationInactiveTime !== undefined
-              ? {
-                  userSeatExpirationInactiveTime:
-                    news.userSeatExpirationInactiveTime,
-                }
-              : {}),
-            ...(news.warpAuthSessionDuration !== undefined
-              ? { warpAuthSessionDuration: news.warpAuthSessionDuration }
-              : {}),
-            ...(loginDesign ? { loginDesign } : {}),
-            ...(customPages ? { customPages } : {}),
-          });
-
-          return toAttrs(updated, news.authDomain, desiredName);
-        }),
-        delete: Effect.fn(function* () {
-          yield* Effect.logWarning(
-            "AccessOrganization.delete is a no-op — the Cloudflare Access Organization is a singleton tied to the account and cannot be deleted without deleting the Cloudflare account itself.",
-          );
-        }),
-        read: Effect.fn(function* ({ olds }) {
-          const observed = yield* observe();
-          if (!observed) return undefined;
-          return toAttrs(
-            observed,
-            olds?.authDomain ?? observed.authDomain ?? "",
-            olds?.name ?? observed.name ?? olds?.authDomain ?? "",
-          );
-        }),
-      };
-    }),
-  );

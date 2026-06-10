@@ -23,7 +23,7 @@ test.provider.skipIf(skip)(
   "reads the existing default device profile without mutating it",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       const before = yield* zeroTrust.getDevicePolicyDefault({ accountId });
 
@@ -39,7 +39,9 @@ test.provider.skipIf(skip)(
       // Nothing supplied => no PATCH, no PUTs => observed state matches before.
       const after = yield* zeroTrust.getDevicePolicyDefault({ accountId });
       expect(after.captivePortal ?? null).toEqual(before.captivePortal ?? null);
-      expect(after.allowedToLeave ?? null).toEqual(before.allowedToLeave ?? null);
+      expect(after.allowedToLeave ?? null).toEqual(
+        before.allowedToLeave ?? null,
+      );
 
       // Singleton: delete is a no-op, so destroy must NOT remove the profile.
       yield* stack.destroy();
@@ -52,7 +54,7 @@ test.provider.skipIf(skip)(
   "toggles captivePortal and restores the original value",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       const original = yield* zeroTrust.getDevicePolicyDefault({ accountId });
       const originalCaptive = original.captivePortal ?? 180;

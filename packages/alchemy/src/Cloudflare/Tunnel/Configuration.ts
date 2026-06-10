@@ -191,14 +191,12 @@ const stripNulls = (v: unknown): unknown => {
 
 const narrowConfig = (raw: {
   config?: {
-    ingress?:
-      | ReadonlyArray<{
-          hostname?: string | null;
-          service?: string;
-          path?: string | null;
-          originRequest?: Record<string, unknown> | null;
-        }>
-      | null;
+    ingress?: ReadonlyArray<{
+      hostname?: string | null;
+      service?: string;
+      path?: string | null;
+      originRequest?: Record<string, unknown> | null;
+    }> | null;
     originRequest?: Record<string, unknown> | null;
   } | null;
   version?: number | null;
@@ -280,7 +278,7 @@ export const TunnelConfigurationProvider = () =>
   Provider.effect(
     TunnelConfiguration,
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       const getConfig = yield* zeroTrust.getTunnelCloudflaredConfiguration;
       const putConfig = yield* zeroTrust.putTunnelCloudflaredConfiguration;
@@ -295,9 +293,7 @@ export const TunnelConfigurationProvider = () =>
             ),
           );
           if (r === undefined) return undefined;
-          return narrowConfig(
-            r as Parameters<typeof narrowConfig>[0],
-          );
+          return narrowConfig(r as Parameters<typeof narrowConfig>[0]);
         });
 
       return {

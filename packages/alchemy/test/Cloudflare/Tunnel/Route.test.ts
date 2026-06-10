@@ -4,7 +4,9 @@ import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
+import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -22,7 +24,7 @@ const NETWORK_ADOPT = "10.99.3.0/24";
 
 test.provider("create and delete route with default props", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -59,7 +61,7 @@ test.provider("create and delete route with default props", (stack) =>
 
 test.provider("updating the comment patches in place", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -110,7 +112,7 @@ test.provider("updating the comment patches in place", (stack) =>
 
 test.provider("adopt: takes over a pre-existing route", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -127,14 +129,33 @@ test.provider("adopt: takes over a pre-existing route", (stack) =>
 
     // Manually create the route outside of alchemy's state. The reconcile
     // path with `adopt: true` should find this and take ownership rather
-    // than failing or creating a duplicate.
-    const pre = yield* zeroTrust.createNetworkRoute({
-      accountId,
-      tunnelId: tunnel.tunnelId,
-      network: NETWORK_ADOPT,
-      comment: "pre-existing",
-    });
-    expect(pre.id).toBeDefined();
+    // than failing or creating a duplicate. Route networks are unique
+    // account-wide, so on Conflict (a prior failed run leaked the route)
+    // reuse the existing one — that's an equally valid pre-existing route.
+    const pre = yield* zeroTrust
+      .createNetworkRoute({
+        accountId,
+        tunnelId: tunnel.tunnelId,
+        network: NETWORK_ADOPT,
+        comment: "pre-existing",
+      })
+      .pipe(
+        Effect.catch(() =>
+          zeroTrust.listNetworkRoutes
+            .items({
+              accountId,
+              isDeleted: false,
+              networkSubset: NETWORK_ADOPT,
+              networkSuperset: NETWORK_ADOPT,
+            })
+            .pipe(
+              Stream.filter((r) => r.network === NETWORK_ADOPT),
+              Stream.runHead,
+              Effect.map(Option.getOrUndefined),
+            ),
+        ),
+      );
+    expect(pre?.id).toBeDefined();
 
     const adopted = yield* stack.deploy(
       Effect.gen(function* () {
@@ -150,7 +171,7 @@ test.provider("adopt: takes over a pre-existing route", (stack) =>
       }),
     );
 
-    expect(adopted.route.routeId).toEqual(pre.id);
+    expect(adopted.route.routeId).toEqual(pre?.id);
     expect(adopted.route.network).toEqual(NETWORK_ADOPT);
 
     yield* stack.destroy();
