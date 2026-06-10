@@ -82,12 +82,12 @@ export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidat
 export const localRuntimeServices = () =>
   RpcProvider.providerServicesEffect(
     Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const getEnv = yield* CloudflareEnvironment;
       const { dotAlchemy } = yield* AlchemyContext;
       const path = yield* Path.Path;
       return layerRuntime({
         api: {
-          accountId,
+          accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
         },
         storage: {
           directory: path.join(dotAlchemy, "local"),
