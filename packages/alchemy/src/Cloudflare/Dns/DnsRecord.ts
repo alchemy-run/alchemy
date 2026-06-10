@@ -213,8 +213,7 @@ const narrowRecord = (raw: {
   ttl: undef(raw.ttl),
   proxied: undef(raw.proxied),
   comment: undef(raw.comment),
-  tags:
-    raw.tags == null ? undefined : (raw.tags as ReadonlyArray<string>),
+  tags: raw.tags == null ? undefined : (raw.tags as ReadonlyArray<string>),
   priority: undef(raw.priority),
   createdOn: undef(raw.createdOn),
   modifiedOn: undef(raw.modifiedOn),
@@ -244,7 +243,12 @@ const buildMutableBody = (
   content: resolvedContent,
   // Cloudflare rejects the string `"1"` even though distilled types
   // it as `number | "1"`; the API wants numeric 1 for "automatic".
-  ttl: news.ttl === undefined ? 1 : news.ttl === ("1" as unknown) ? 1 : (news.ttl as number),
+  ttl:
+    news.ttl === undefined
+      ? 1
+      : news.ttl === ("1" as unknown)
+        ? 1
+        : (news.ttl as number),
   proxied: news.proxied,
   comment: news.comment,
   tags: news.tags,
@@ -358,9 +362,7 @@ export const DnsRecordProvider = () =>
             Effect.map((found) =>
               found === undefined
                 ? undefined
-                : narrowRecord(
-                    found as Parameters<typeof narrowRecord>[0],
-                  ),
+                : narrowRecord(found as Parameters<typeof narrowRecord>[0]),
             ),
           );
 
@@ -431,8 +433,7 @@ export const DnsRecordProvider = () =>
               ttl: body.ttl,
               proxied: body.proxied,
               comment: body.comment,
-              tags:
-                body.tags === undefined ? undefined : Array.from(body.tags),
+              tags: body.tags === undefined ? undefined : Array.from(body.tags),
               priority: body.priority,
             });
             observed = narrowRecord(
@@ -444,9 +445,7 @@ export const DnsRecordProvider = () =>
           //    the full desired body when any mutable field differs.
           if (!observed.id) {
             return yield* Effect.fail(
-              new Error(
-                "Cloudflare did not return a record id for DNS record",
-              ),
+              new Error("Cloudflare did not return a record id for DNS record"),
             );
           }
           if (!bodyEqualsObserved(body, observed)) {
@@ -465,9 +464,7 @@ export const DnsRecordProvider = () =>
                 proxied: body.proxied,
                 comment: body.comment,
                 tags:
-                  body.tags === undefined
-                    ? undefined
-                    : Array.from(body.tags),
+                  body.tags === undefined ? undefined : Array.from(body.tags),
                 priority: body.priority,
               });
               observed = narrowRecord(
@@ -511,10 +508,7 @@ export const DnsRecordProvider = () =>
 
         read: Effect.fn(function* ({ output }) {
           if (!output?.recordId) return undefined;
-          const observed = yield* observeById(
-            output.zoneId,
-            output.recordId,
-          );
+          const observed = yield* observeById(output.zoneId, output.recordId);
           if (
             !observed?.id ||
             !observed.type ||
