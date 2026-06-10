@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 const apiGatewayInclude = ["test/AWS/ApiGateway/**/*.test.ts"];
+const planetscaleInclude = ["test/Planetscale/**/*.test.ts"];
 
 export default defineConfig({
   plugins: [tsconfigPaths({ projects: ["./tsconfig.test.json"] })],
@@ -51,7 +52,25 @@ export default defineConfig({
             "**/lib/**",
             "**/.{idea,git,cache,output,temp}/**",
             ...apiGatewayInclude,
+            ...planetscaleInclude,
           ],
+        },
+      },
+      {
+        // PlanetScale database create / branch resize / change-request
+        // workflows routinely take 5-20 minutes against the live API; the
+        // default 120s ceiling false-positives these as timeouts. The
+        // resource providers' own polling budgets already cap how long any
+        // single operation will sit waiting.
+        extends: true,
+        test: {
+          name: "planetscale",
+          pool: "forks",
+          maxWorkers: 32,
+          sequence: { concurrent: true },
+          testTimeout: 1_800_000,
+          hookTimeout: 1_800_000,
+          include: planetscaleInclude,
         },
       },
       {

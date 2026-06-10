@@ -49,5 +49,6 @@ export const Hyperdrive: Effect.Effect<Cloudflare.Hyperdrive, never, any> =
     const { password } = yield* PlanetscaleDb;
     return yield* Cloudflare.Hyperdrive("app-hyperdrive", {
       origin: password.origin,
+      caching: { disabled: true },
     });
   });

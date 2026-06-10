@@ -29,12 +29,14 @@ export class PlanetscaleConflict extends Data.TaggedError(
 }> {}
 
 /**
- * Default polling schedule: 5s spaced retries with a 10-minute total
- * budget (120 × 5s). Avoids the exponential-blowup trap where later
- * iterations would wait hours, indistinguishable from a hang.
+ * Default polling schedule: 5s spaced retries with a 30-minute total
+ * budget (360 × 5s). Avoids the exponential-blowup trap where later
+ * iterations would wait hours, indistinguishable from a hang. Postgres
+ * database creates routinely run 10-12 minutes, so a 10-minute budget
+ * regularly false-positives as "stuck".
  */
 const defaultSchedule = Schedule.spaced("5 seconds").pipe(
-  Schedule.both(Schedule.recurs(120)),
+  Schedule.both(Schedule.recurs(360)),
 );
 
 /**
