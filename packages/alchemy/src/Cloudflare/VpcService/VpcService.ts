@@ -120,143 +120,144 @@ export type VpcService = Resource<
  */
 export const VpcService = Resource<VpcService>("Cloudflare.VpcService");
 
+const createServiceName = (id: string, name: string | undefined) =>
+  Effect.gen(function* () {
+    if (name) return name;
+    return yield* createPhysicalName({
+      id,
+      lowercase: true,
+      maxLength: 63,
+    });
+  });
+
+const findServiceByName = Effect.fnUntraced(function* (name: string) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  return yield* connectivity.listDirectoryServices.items({ accountId }).pipe(
+    Stream.filter((s) => s.name === name),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );
+});
+
 export const VpcServiceProvider = () =>
-  Provider.effect(
-    VpcService,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const createService = yield* connectivity.createDirectoryService;
-      const getService = yield* connectivity.getDirectoryService;
-      const updateService = yield* connectivity.updateDirectoryService;
-      const deleteService = yield* connectivity.deleteDirectoryService;
-      const listServices = connectivity.listDirectoryServices;
+  Provider.succeed(VpcService, {
+    stables: ["serviceId", "accountId"],
+    diff: Effect.fn(function* ({ id, olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!isResolved(news)) return undefined;
+      if ((output?.accountId ?? accountId) !== accountId) {
+        return { action: "replace" } as const;
+      }
+      const name = yield* createServiceName(id, news.name);
+      const oldName = output?.serviceName
+        ? output.serviceName
+        : yield* createServiceName(id, olds?.name);
+      if (name !== oldName) {
+        return { action: "update" } as const;
+      }
+    }),
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = yield* createServiceName(id, news.name);
+      const acct = output?.accountId ?? accountId;
 
-      const createServiceName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          if (name) return name;
-          return yield* createPhysicalName({
-            id,
-            lowercase: true,
-            maxLength: 63,
-          });
-        });
-
-      const findServiceByName = (name: string) =>
-        listServices.items({ accountId }).pipe(
-          Stream.filter((s) => s.name === name),
-          Stream.runHead,
-          Effect.map(Option.getOrUndefined),
-        );
-
-      return {
-        stables: ["serviceId", "accountId"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
-          if (!isResolved(news)) return undefined;
-          if ((output?.accountId ?? accountId) !== accountId) {
-            return { action: "replace" } as const;
-          }
-          const name = yield* createServiceName(id, news.name);
-          const oldName = output?.serviceName
-            ? output.serviceName
-            : yield* createServiceName(id, olds?.name);
-          if (name !== oldName) {
-            return { action: "update" } as const;
-          }
-        }),
-        reconcile: Effect.fn(function* ({ id, news, output }) {
-          const name = yield* createServiceName(id, news.name);
-          const acct = output?.accountId ?? accountId;
-
-          // Observe — re-fetch the cached service; fall back to a name
-          // scan so we recover from out-of-band deletes or partial state
-          // persistence failures.
-          let observed: connectivity.GetDirectoryServiceResponse | undefined;
-          if (output?.serviceId) {
-            observed = yield* getService({
-              accountId: acct,
-              serviceId: output.serviceId,
-            }).pipe(Effect.catch(() => Effect.succeed(undefined)));
-          }
-          if (!observed) {
-            const match = yield* findServiceByName(name);
-            observed = match as
-              | connectivity.GetDirectoryServiceResponse
-              | undefined;
-          }
-
-          // Ensure — create if missing. Cloudflare rejects a duplicate
-          // name with a generic error; tolerate by adopting the existing
-          // service (when the caller opted in) and re-applying the
-          // desired configuration.
-          if (!observed || !observed.serviceId) {
-            const result = yield* createService({
-              accountId: acct,
-              name,
-              type: news.serviceType ?? "http",
-              httpPort: news.httpPort,
-              httpsPort: news.httpsPort,
-              host: news.host,
-            }).pipe(
-              Effect.catch((err: unknown) =>
-                Effect.gen(function* () {
-                  if (!news.adopt) return yield* Effect.fail(err as never);
-                  const existing = yield* findServiceByName(name);
-                  if (!existing || !existing.serviceId) {
-                    return yield* Effect.fail(err as never);
-                  }
-                  return yield* updateService({
-                    accountId: acct,
-                    serviceId: existing.serviceId,
-                    name,
-                    type: news.serviceType ?? "http",
-                    httpPort: news.httpPort,
-                    httpsPort: news.httpsPort,
-                    host: news.host,
-                  });
-                }),
-              ),
-            );
-            return formatVpcService(result, acct);
-          }
-
-          // Sync — the Cloudflare update API replaces all mutable fields
-          // (name, ports, host) atomically, so always issue it so
-          // adoption and routine updates converge.
-          const result = yield* updateService({
+      // Observe — re-fetch the cached service; fall back to a name
+      // scan so we recover from out-of-band deletes or partial state
+      // persistence failures.
+      let observed: connectivity.GetDirectoryServiceResponse | undefined;
+      if (output?.serviceId) {
+        observed = yield* connectivity
+          .getDirectoryService({
             accountId: acct,
-            serviceId: observed.serviceId,
+            serviceId: output.serviceId,
+          })
+          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+      }
+      if (!observed) {
+        const match = yield* findServiceByName(name);
+        observed = match as
+          | connectivity.GetDirectoryServiceResponse
+          | undefined;
+      }
+
+      // Ensure — create if missing. Cloudflare rejects a duplicate
+      // name with a generic error; tolerate by adopting the existing
+      // service (when the caller opted in) and re-applying the
+      // desired configuration.
+      if (!observed || !observed.serviceId) {
+        const result = yield* connectivity
+          .createDirectoryService({
+            accountId: acct,
             name,
-            type: news.serviceType ?? observed.type ?? "http",
+            type: news.serviceType ?? "http",
             httpPort: news.httpPort,
             httpsPort: news.httpsPort,
             host: news.host,
-          });
-          return formatVpcService(result, acct);
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteService({
+          })
+          .pipe(
+            Effect.catch((err: unknown) =>
+              Effect.gen(function* () {
+                if (!news.adopt) return yield* Effect.fail(err as never);
+                const existing = yield* findServiceByName(name);
+                if (!existing || !existing.serviceId) {
+                  return yield* Effect.fail(err as never);
+                }
+                return yield* connectivity.updateDirectoryService({
+                  accountId: acct,
+                  serviceId: existing.serviceId,
+                  name,
+                  type: news.serviceType ?? "http",
+                  httpPort: news.httpPort,
+                  httpsPort: news.httpsPort,
+                  host: news.host,
+                });
+              }),
+            ),
+          );
+        return formatVpcService(result, acct);
+      }
+
+      // Sync — the Cloudflare update API replaces all mutable fields
+      // (name, ports, host) atomically, so always issue it so
+      // adoption and routine updates converge.
+      const result = yield* connectivity.updateDirectoryService({
+        accountId: acct,
+        serviceId: observed.serviceId,
+        name,
+        type: news.serviceType ?? observed.type ?? "http",
+        httpPort: news.httpPort,
+        httpsPort: news.httpsPort,
+        host: news.host,
+      });
+      return formatVpcService(result, acct);
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* connectivity
+        .deleteDirectoryService({
+          accountId: output.accountId,
+          serviceId: output.serviceId,
+        })
+        .pipe(Effect.catch(() => Effect.void));
+    }),
+    read: Effect.fn(function* ({ id, output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output?.serviceId) {
+        return yield* connectivity
+          .getDirectoryService({
             accountId: output.accountId,
             serviceId: output.serviceId,
-          }).pipe(Effect.catch(() => Effect.void));
-        }),
-        read: Effect.fn(function* ({ id, output, olds }) {
-          if (output?.serviceId) {
-            return yield* getService({
-              accountId: output.accountId,
-              serviceId: output.serviceId,
-            }).pipe(
-              Effect.map((s) => formatVpcService(s, output.accountId)),
-              Effect.catch(() => Effect.succeed(undefined)),
-            );
-          }
-          const name = yield* createServiceName(id, olds?.name);
-          const existing = yield* findServiceByName(name);
-          if (!existing || !existing.serviceId) return undefined;
-          return formatVpcService(existing, accountId);
-        }),
-      };
+          })
+          .pipe(
+            Effect.map((s) => formatVpcService(s, output.accountId)),
+            Effect.catch(() => Effect.succeed(undefined)),
+          );
+      }
+      const name = yield* createServiceName(id, olds?.name);
+      const existing = yield* findServiceByName(name);
+      if (!existing || !existing.serviceId) return undefined;
+      return formatVpcService(existing, accountId);
     }),
-  );
+  });
 
 export const formatVpcService = (
   service: {

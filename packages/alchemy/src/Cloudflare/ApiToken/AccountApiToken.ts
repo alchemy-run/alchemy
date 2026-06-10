@@ -122,162 +122,151 @@ const resolveName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id }));
   });
 
+const buildAttributes = (
+  tokenData: {
+    id?: string | null;
+    name?: string | null;
+    // Distilled widened generated string enums to open unions (`string & {}`).
+    status?: string | null;
+  },
+  value: Redacted.Redacted<string>,
+  accountId: string,
+): AccountApiTokenAttributes => ({
+  tokenId: tokenData.id ?? "",
+  name: tokenData.name ?? "",
+  status: (tokenData.status ?? "active") as "active" | "disabled" | "expired",
+  value,
+  accountId,
+});
+
 export const AccountApiTokenProvider = () =>
-  Provider.effect(
-    AccountApiToken,
-    Effect.gen(function* () {
-      const { accountId: defaultAccountId } = yield* CloudflareEnvironment;
-      const createToken = yield* accounts.createToken;
-      const updateToken = yield* accounts.updateToken;
-      const deleteToken = yield* accounts.deleteToken;
-      const getToken = yield* accounts.getToken;
+  Provider.succeed(AccountApiToken, {
+    stables: ["tokenId", "accountId"],
+    diff: Effect.fn(function* ({ id, olds, news = {}, output }) {
+      if (!isResolved(news)) return undefined;
+      const { accountId: defaultAccountId } =
+        yield* yield* CloudflareEnvironment;
 
-      const buildAttributes = (
-        tokenData: {
-          id?: string | null;
-          name?: string | null;
-          // Distilled widened generated string enums to open unions (`string & {}`).
-          status?: string | null;
-        },
-        value: Redacted.Redacted<string>,
-        accountId: string,
-      ): AccountApiTokenAttributes => ({
-        tokenId: tokenData.id ?? "",
-        name: tokenData.name ?? "",
-        status: (tokenData.status ?? "active") as
-          | "active"
-          | "disabled"
-          | "expired",
-        value,
-        accountId,
-      });
-
-      return {
-        stables: ["tokenId", "accountId"],
-        diff: Effect.fn(function* ({ id, olds, news = {}, output }) {
-          if (!isResolved(news)) return undefined;
-          const newAccountId = news.accountId ?? defaultAccountId;
-          const oldAccountId =
-            output?.accountId ?? olds?.accountId ?? defaultAccountId;
-          if (oldAccountId !== newAccountId) {
-            return { action: "replace" } as const;
-          }
-          const oldName = output?.name ?? (yield* resolveName(id, olds?.name));
-          const newName = yield* resolveName(id, news.name);
-          const oldPolicyFp = policyFingerprint(
-            resolvePolicies(olds?.policies ?? []),
-          );
-          const newPolicyFp = policyFingerprint(
-            resolvePolicies(news.policies ?? []),
-          );
-          const oldCondFp = conditionFingerprint(olds?.condition);
-          const newCondFp = conditionFingerprint(news.condition);
-          if (
-            oldName !== newName ||
-            oldPolicyFp !== newPolicyFp ||
-            oldCondFp !== newCondFp ||
-            (olds?.expiresOn ?? undefined) !== (news.expiresOn ?? undefined) ||
-            (olds?.notBefore ?? undefined) !== (news.notBefore ?? undefined)
-          ) {
-            return { action: "update" } as const;
-          }
-        }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output, bindings }) {
-          const accountId = news.accountId ?? defaultAccountId;
-          const name = yield* resolveName(id, news.name);
-          const collected = collectPolicies(news.policies, bindings);
-          if (collected.length === 0) {
-            return yield* Effect.die(
-              `Cloudflare requires at least one policy on token "${name}". ` +
-                "Pass `policies` or attach them via a binding.",
-            );
-          }
-          const policies = resolvePolicies(collected);
-
-          // Observe — fetch current state if we already know the token id.
-          // Cloudflare reports a deleted token as `InvalidRoute` or
-          // `TokenNotFound`; both mean "create from scratch".
-          const observed = output?.tokenId
-            ? yield* getToken({
-                accountId: output.accountId,
-                tokenId: output.tokenId,
-              }).pipe(
-                Effect.map((token) => token),
-                Effect.catchTag("InvalidRoute", () =>
-                  Effect.succeed(undefined),
-                ),
-                Effect.catchTag("TokenNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-              )
-            : undefined;
-
-          // Ensure — create if missing. Cloudflare returns the plaintext
-          // token value exactly once on create, so we must persist it for
-          // downstream consumers. There is no idempotency token here; if
-          // a stale write produced an orphan we accept the duplicate over
-          // the alternative of losing the secret value.
-          if (observed === undefined) {
-            const result = yield* createToken({
-              accountId,
-              name,
-              policies,
-              condition: buildConditionPayload(news.condition),
-              expiresOn: news.expiresOn,
-              notBefore: news.notBefore,
-            });
-            if (!result.value) {
-              return yield* Effect.die(
-                `Cloudflare did not return a value for token "${name}".`,
-              );
-            }
-            return buildAttributes(
-              result,
-              Redacted.make(result.value),
-              accountId,
-            );
-          }
-
-          // Sync — the update API replaces all mutable fields (name,
-          // policies, condition, validity window). Cloudflare does not
-          // return the plaintext value on update, so we preserve the one
-          // captured at creation.
-          const result = yield* updateToken({
-            accountId,
-            tokenId: output!.tokenId,
-            name,
-            policies,
-            condition: buildConditionPayload(news.condition),
-            expiresOn: news.expiresOn,
-            notBefore: news.notBefore,
-          });
-          return buildAttributes(result, output!.value, accountId);
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteToken({
-            accountId: output.accountId,
-            tokenId: output.tokenId,
-          }).pipe(
-            // Already gone — Cloudflare may report this as either an
-            // `InvalidRoute` (token-id no longer routable) or a generic
-            // `TokenNotFound`. Either is fine; we just want the resource gone.
-            Effect.catchTag("InvalidRoute", () => Effect.void),
-            Effect.catchTag("TokenNotFound", () => Effect.void),
-          );
-        }),
-        read: Effect.fn(function* ({ output }) {
-          if (!output?.tokenId) return undefined;
-          return yield* getToken({
-            accountId: output.accountId,
-            tokenId: output.tokenId,
-          }).pipe(
-            Effect.map((token) =>
-              buildAttributes(token, output.value, output.accountId),
-            ),
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-            Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
-          );
-        }),
-      };
+      const newAccountId = news.accountId ?? defaultAccountId;
+      const oldAccountId =
+        output?.accountId ?? olds?.accountId ?? defaultAccountId;
+      if (oldAccountId !== newAccountId) {
+        return { action: "replace" } as const;
+      }
+      const oldName = output?.name ?? (yield* resolveName(id, olds?.name));
+      const newName = yield* resolveName(id, news.name);
+      const oldPolicyFp = policyFingerprint(
+        resolvePolicies(olds?.policies ?? []),
+      );
+      const newPolicyFp = policyFingerprint(
+        resolvePolicies(news.policies ?? []),
+      );
+      const oldCondFp = conditionFingerprint(olds?.condition);
+      const newCondFp = conditionFingerprint(news.condition);
+      if (
+        oldName !== newName ||
+        oldPolicyFp !== newPolicyFp ||
+        oldCondFp !== newCondFp ||
+        (olds?.expiresOn ?? undefined) !== (news.expiresOn ?? undefined) ||
+        (olds?.notBefore ?? undefined) !== (news.notBefore ?? undefined)
+      ) {
+        return { action: "update" } as const;
+      }
     }),
-  );
+    reconcile: Effect.fn(function* ({ id, news = {}, output, bindings }) {
+      const { accountId: defaultAccountId } =
+        yield* yield* CloudflareEnvironment;
+      const accountId = news.accountId ?? defaultAccountId;
+      const name = yield* resolveName(id, news.name);
+      const collected = collectPolicies(news.policies, bindings);
+      if (collected.length === 0) {
+        return yield* Effect.die(
+          `Cloudflare requires at least one policy on token "${name}". ` +
+            "Pass `policies` or attach them via a binding.",
+        );
+      }
+      const policies = resolvePolicies(collected);
+
+      // Observe — fetch current state if we already know the token id.
+      // Cloudflare reports a deleted token as `InvalidRoute` or
+      // `TokenNotFound`; both mean "create from scratch".
+      const observed = output?.tokenId
+        ? yield* accounts
+            .getToken({
+              accountId: output.accountId,
+              tokenId: output.tokenId,
+            })
+            .pipe(
+              Effect.map((token) => token),
+              Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+              Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
+            )
+        : undefined;
+
+      // Ensure — create if missing. Cloudflare returns the plaintext
+      // token value exactly once on create, so we must persist it for
+      // downstream consumers. There is no idempotency token here; if
+      // a stale write produced an orphan we accept the duplicate over
+      // the alternative of losing the secret value.
+      if (observed === undefined) {
+        const result = yield* accounts.createToken({
+          accountId,
+          name,
+          policies,
+          condition: buildConditionPayload(news.condition),
+          expiresOn: news.expiresOn,
+          notBefore: news.notBefore,
+        });
+        if (!result.value) {
+          return yield* Effect.die(
+            `Cloudflare did not return a value for token "${name}".`,
+          );
+        }
+        return buildAttributes(result, Redacted.make(result.value), accountId);
+      }
+
+      // Sync — the update API replaces all mutable fields (name,
+      // policies, condition, validity window). Cloudflare does not
+      // return the plaintext value on update, so we preserve the one
+      // captured at creation.
+      const result = yield* accounts.updateToken({
+        accountId,
+        tokenId: output!.tokenId,
+        name,
+        policies,
+        condition: buildConditionPayload(news.condition),
+        expiresOn: news.expiresOn,
+        notBefore: news.notBefore,
+      });
+      return buildAttributes(result, output!.value, accountId);
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* accounts
+        .deleteToken({
+          accountId: output.accountId,
+          tokenId: output.tokenId,
+        })
+        .pipe(
+          // Already gone — Cloudflare may report this as either an
+          // `InvalidRoute` (token-id no longer routable) or a generic
+          // `TokenNotFound`. Either is fine; we just want the resource gone.
+          Effect.catchTag("InvalidRoute", () => Effect.void),
+          Effect.catchTag("TokenNotFound", () => Effect.void),
+        );
+    }),
+    read: Effect.fn(function* ({ output }) {
+      if (!output?.tokenId) return undefined;
+      return yield* accounts
+        .getToken({
+          accountId: output.accountId,
+          tokenId: output.tokenId,
+        })
+        .pipe(
+          Effect.map((token) =>
+            buildAttributes(token, output.value, output.accountId),
+          ),
+          Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
+        );
+    }),
+  });

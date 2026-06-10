@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(
 
 test.provider("create and delete bucket with default props", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -46,7 +46,7 @@ test.provider("create and delete bucket with default props", (stack) =>
 
 test.provider("create, update, delete bucket", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -95,7 +95,7 @@ test.provider(
   "existing bucket (matching name) is silently adopted without --adopt",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
@@ -154,7 +154,7 @@ test.provider(
 
 test.provider("destroying a bucket empties its objects first", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -207,7 +207,7 @@ test.provider("destroying a bucket empties its objects first", (stack) =>
 
 test.provider("lifecycle rules are added, updated, and removed", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -303,8 +303,11 @@ const getBucketWhenReady = Effect.fn(function* (
   return yield* r2.getBucket({ accountId, bucketName }).pipe(
     Effect.retry({
       while: (e) => e._tag === "NoSuchBucket",
+      // Cap the backoff at 2s so we keep sampling instead of sleeping
+      // through the budget on the geometric tail.
       schedule: Schedule.exponential("200 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
+        Schedule.either(Schedule.spaced("2 seconds")),
+        Schedule.both(Schedule.recurs(20)),
       ),
     }),
   );

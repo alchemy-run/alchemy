@@ -1,4 +1,3 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -32,7 +31,6 @@ export const ListRulesLive = Layer.effect(
   Effect.gen(function* () {
     const Policy = yield* ListRulesPolicy;
     const listRules = yield* eventbridge.listRules;
-
     return Effect.fn(function* (bus?: EventBus) {
       const EventBusName = bus ? yield* bus.eventBusName : undefined;
       yield* Policy(bus);
@@ -57,10 +55,9 @@ export class ListRulesPolicy extends Binding.Policy<
 
 export const ListRulesPolicyLive = ListRulesPolicy.layer.effect(
   Effect.gen(function* () {
-    const region = yield* Region;
-    const { accountId } = yield* AWSEnvironment;
-
+    const env = yield* AWSEnvironment;
     return Effect.fn(function* (host, bus?: EventBus) {
+      const { accountId, region } = yield* env;
       if (isFunction(host)) {
         const resource = bus
           ? Output.interpolate`${bus.eventBusArn}`

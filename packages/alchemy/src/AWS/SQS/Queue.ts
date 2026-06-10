@@ -1,4 +1,3 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -161,8 +160,6 @@ export const QueueProvider = () =>
   Provider.effect(
     Queue,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
       const createQueueName = Effect.fnUntraced(function* (
         id: string,
         props: {
@@ -216,6 +213,7 @@ export const QueueProvider = () =>
       return Queue.Provider.of({
         stables: ["queueName", "queueUrl", "queueArn"],
         read: Effect.fn(function* ({ id, olds, output }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const queueName =
             output?.queueName ?? (yield* createQueueName(id, olds ?? {}));
           const url = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
@@ -259,6 +257,7 @@ export const QueueProvider = () =>
           session,
           bindings,
         }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const queueName =
             output?.queueName ?? (yield* createQueueName(id, news));
           const queueArn =

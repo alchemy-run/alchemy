@@ -76,6 +76,7 @@ export const effect = <
     cls,
     Effect.gen(function* () {
       const client = yield* Effect.serviceOption(RpcProviderProxy);
+      const context = yield* Effect.context();
       const stack = yield* Stack;
 
       if (client._tag === "None") {
@@ -87,6 +88,7 @@ export const effect = <
             return (...args: any[]) => {
               const result = value(...args);
               const services = Layer.mergeAll(
+                Layer.succeedContext(context),
                 layerFallback(Stack, stack),
                 layerFallback(Stage, stack.stage),
                 Predicate.hasProperty(args[0], "instanceId") &&

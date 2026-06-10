@@ -1,4 +1,3 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -7,7 +6,6 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import {
   createInternalTags,
   createTagsList,
@@ -15,6 +13,7 @@ import {
   hasAlchemyTags,
 } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type {
@@ -273,9 +272,6 @@ export const RuleProvider = () =>
   Provider.effect(
     Rule,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const createRuleName = (id: string, props: { name?: string } = {}) => {
         if (props.name) {
           return Effect.succeed(props.name);
@@ -302,6 +298,7 @@ export const RuleProvider = () =>
           }
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const ruleName =
             output?.ruleName ?? (yield* createRuleName(id, olds));
           const eventBusName =
@@ -342,6 +339,7 @@ export const RuleProvider = () =>
             : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           yield* validateRuleProps(news);
           const ruleName =
             output?.ruleName ?? (yield* createRuleName(id, news));

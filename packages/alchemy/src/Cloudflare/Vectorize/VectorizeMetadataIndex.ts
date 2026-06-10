@@ -87,122 +87,110 @@ export const VectorizeMetadataIndex = Resource<VectorizeMetadataIndex>(
 );
 
 export const VectorizeMetadataIndexProvider = () =>
-  Provider.effect(
-    VectorizeMetadataIndex,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const createMetadataIndex = yield* vectorize.createIndexMetadataIndex;
-      const deleteMetadataIndex = yield* vectorize.deleteIndexMetadataIndex;
-      const listMetadataIndexes = yield* vectorize.listIndexMetadataIndexes;
-
-      const findExisting = (
-        acct: string,
-        indexName: string,
-        propertyName: string,
-      ) =>
-        listMetadataIndexes({
-          accountId: acct,
-          indexName,
-        }).pipe(
-          Effect.map((res) => {
-            const index = res.metadataIndexes?.find(
-              (m) => m.propertyName === propertyName,
-            );
-            return index
-              ? {
-                  propertyName: index.propertyName,
-                  indexType:
-                    index.indexType?.toLowerCase() as MetadataIndexType,
-                }
-              : undefined;
-          }),
-          Effect.catchTag(["NotFound", "Gone"], () =>
-            Effect.succeed(undefined),
-          ),
-        );
-
+  Provider.succeed(VectorizeMetadataIndex, {
+    stables: ["propertyName", "indexName", "accountId"],
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!isResolved(news)) return undefined;
+      if ((output?.accountId ?? accountId) !== accountId) {
+        return { action: "replace" } as const;
+      }
+      const newIndexName = news.indexName;
+      const oldIndexName = output?.indexName ?? olds.indexName;
+      if (
+        (oldIndexName ?? newIndexName) !== newIndexName ||
+        (olds.propertyName ?? news.propertyName) !== news.propertyName ||
+        (olds.indexType ?? news.indexType) !== news.indexType
+      ) {
+        return { action: "replace" } as const;
+      }
+      return undefined;
+    }),
+    read: Effect.fn(function* ({ output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const acct = output?.accountId ?? accountId;
+      const indexName = output?.indexName ?? olds?.indexName;
+      const propertyName = output?.propertyName ?? olds?.propertyName;
+      if (!indexName || !propertyName) return undefined;
+      const existing = yield* findExisting(acct, indexName, propertyName);
+      if (!existing?.propertyName || !existing.indexType) return undefined;
       return {
-        stables: ["propertyName", "indexName", "accountId"],
-        diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!isResolved(news)) return undefined;
-          if ((output?.accountId ?? accountId) !== accountId) {
-            return { action: "replace" } as const;
-          }
-          const newIndexName = news.indexName;
-          const oldIndexName = output?.indexName ?? olds.indexName;
-          if (
-            (oldIndexName ?? newIndexName) !== newIndexName ||
-            (olds.propertyName ?? news.propertyName) !== news.propertyName ||
-            (olds.indexType ?? news.indexType) !== news.indexType
-          ) {
-            return { action: "replace" } as const;
-          }
-          return undefined;
-        }),
-        read: Effect.fn(function* ({ output, olds }) {
-          const acct = output?.accountId ?? accountId;
-          const indexName = output?.indexName ?? olds?.indexName;
-          const propertyName = output?.propertyName ?? olds?.propertyName;
-          if (!indexName || !propertyName) return undefined;
-          const existing = yield* findExisting(acct, indexName, propertyName);
-          if (!existing?.propertyName || !existing.indexType) return undefined;
-          return {
-            propertyName: existing.propertyName,
-            indexType: existing.indexType,
-            indexName,
-            accountId: acct,
-            mutationId: output?.mutationId,
-          };
-        }),
-        reconcile: Effect.fn(function* ({ news, output }) {
-          const acct = output?.accountId ?? accountId;
-          const indexName = news.indexName;
-
-          // Observe — list metadata indexes on the parent and look for one
-          // matching propertyName.
-          const existing = yield* findExisting(
-            acct,
-            indexName,
-            news.propertyName,
-          );
-
-          // Ensure — create if missing. Cloudflare returns 409 Conflict on
-          // duplicate; tolerate the race by reusing the prior mutationId.
-          let mutationId = output?.mutationId;
-          if (!existing) {
-            const created = yield* createMetadataIndex({
-              accountId: acct,
-              indexName,
-              propertyName: news.propertyName,
-              indexType: news.indexType,
-            }).pipe(
-              Effect.catchTag("MetadataIndexAlreadyExists", () =>
-                Effect.succeed({ mutationId: output?.mutationId }),
-              ),
-            );
-            mutationId = created.mutationId ?? undefined;
-          }
-
-          return {
-            propertyName: news.propertyName,
-            indexType: news.indexType,
-            indexName,
-            accountId: acct,
-            mutationId,
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteMetadataIndex({
-            accountId: output.accountId,
-            indexName: output.indexName,
-            propertyName: output.propertyName,
-          }).pipe(
-            Effect.catchTag(
-              ["NotFound", "Gone", "MetadataIndexNotFound"],
-              () => Effect.void,
-            ),
-          );
-        }),
+        propertyName: existing.propertyName,
+        indexType: existing.indexType,
+        indexName,
+        accountId: acct,
+        mutationId: output?.mutationId,
       };
     }),
-  );
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const acct = output?.accountId ?? accountId;
+      const indexName = news.indexName;
+
+      // Observe — list metadata indexes on the parent and look for one
+      // matching propertyName.
+      const existing = yield* findExisting(acct, indexName, news.propertyName);
+
+      // Ensure — create if missing. Cloudflare returns 409 Conflict on
+      // duplicate; tolerate the race by reusing the prior mutationId.
+      let mutationId = output?.mutationId;
+      if (!existing) {
+        const created = yield* vectorize
+          .createIndexMetadataIndex({
+            accountId: acct,
+            indexName,
+            propertyName: news.propertyName,
+            indexType: news.indexType,
+          })
+          .pipe(
+            Effect.catchTag("MetadataIndexAlreadyExists", () =>
+              Effect.succeed({ mutationId: output?.mutationId }),
+            ),
+          );
+        mutationId = created.mutationId ?? undefined;
+      }
+
+      return {
+        propertyName: news.propertyName,
+        indexType: news.indexType,
+        indexName,
+        accountId: acct,
+        mutationId,
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* vectorize
+        .deleteIndexMetadataIndex({
+          accountId: output.accountId,
+          indexName: output.indexName,
+          propertyName: output.propertyName,
+        })
+        .pipe(
+          Effect.catchTag(
+            ["NotFound", "Gone", "MetadataIndexNotFound"],
+            () => Effect.void,
+          ),
+        );
+    }),
+  });
+
+const findExisting = (acct: string, indexName: string, propertyName: string) =>
+  vectorize
+    .listIndexMetadataIndexes({
+      accountId: acct,
+      indexName,
+    })
+    .pipe(
+      Effect.map((res) => {
+        const index = res.metadataIndexes?.find(
+          (m) => m.propertyName === propertyName,
+        );
+        return index
+          ? {
+              propertyName: index.propertyName,
+              indexType: index.indexType?.toLowerCase() as MetadataIndexType,
+            }
+          : undefined;
+      }),
+      Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)),
+    );

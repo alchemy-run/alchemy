@@ -180,7 +180,7 @@ test.provider(
       // The zone itself is deleted (destroy, not retain) — assert it's gone in
       // Cloudflare. (Querying the phase entrypoint here is meaningless: the
       // zone no longer exists, so Cloudflare answers Unauthorized, not 404.)
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const zoneAfter = yield* findZoneByName({
         accountId,
         name: unresolvedZoneName,

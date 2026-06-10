@@ -106,144 +106,156 @@ export const Queue = Resource<Queue>("Cloudflare.Queue")({
 });
 
 export const QueueProviderLive = () =>
-  Provider.effect(
-    Queue,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const createQueue = yield* queues.createQueue;
-      const getQueue = yield* queues.getQueue;
-      const deleteQueue = yield* queues.deleteQueue;
+  Provider.succeed(Queue, {
+    // The `queueId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
+    stables: ["accountId"],
+    diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!isResolved(news)) return undefined;
+      // If the queueId is a `dev:` ID, we need to update to a live one.
+      // The live resource doesn't exist yet, so there's no need to replace even if the name or accountId changed.
+      if (!isLiveId(output?.queueId)) {
+        return { action: "update" };
+      }
+      if ((output?.accountId ?? accountId) !== accountId) {
+        return { action: "replace" } as const;
+      }
+      const name = yield* createQueueName(id, news.name);
+      const oldName = output?.queueName
+        ? output.queueName
+        : yield* createQueueName(id, olds.name);
+      if (name !== oldName) {
+        return { action: "replace" } as const;
+      }
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const queueName = yield* createQueueName(id, news.name);
+      const acct = output?.accountId ?? accountId;
 
-      // Cloudflare's `listQueues` accepts no name/prefix filter, so
-      // adoption-by-name has to scan every page. Use the paginated
-      // `.items` stream off the un-yielded operation method.
-      const findQueueByName = (queueName: string) =>
-        queues.listQueues.items({ accountId }).pipe(
-          Stream.filter((q) => q.queueName === queueName),
-          Stream.runHead,
-          Effect.map(Option.getOrUndefined),
-        );
-
-      return {
-        // The `queueId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
-        stables: ["accountId"],
-        diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
-          if (!isResolved(news)) return undefined;
-          // If the queueId is a `dev:` ID, we need to update to a live one.
-          // The live resource doesn't exist yet, so there's no need to replace even if the name or accountId changed.
-          if (!isLiveId(output?.queueId)) {
-            return { action: "update" };
-          }
-          if ((output?.accountId ?? accountId) !== accountId) {
-            return { action: "replace" } as const;
-          }
-          const name = yield* createQueueName(id, news.name);
-          const oldName = output?.queueName
-            ? output.queueName
-            : yield* createQueueName(id, olds.name);
-          if (name !== oldName) {
-            return { action: "replace" } as const;
-          }
-        }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
-          const queueName = yield* createQueueName(id, news.name);
-          const acct = output?.accountId ?? accountId;
-
-          // Observe — re-fetch the cached queue; fall back to a name scan
-          // when the cached id is gone (out-of-band delete or partial
-          // state-persistence failure).
-          let observed:
-            | { queueId?: string | null; queueName?: string | null }
-            | undefined;
-          if (output?.queueId) {
-            observed = yield* getQueue({
-              accountId: acct,
-              queueId: output.queueId,
-            }).pipe(Effect.catch(() => Effect.succeed(undefined)));
-          }
-          if (!observed) {
-            observed = yield* findQueueByName(queueName);
-          }
-
-          // Ensure — create if missing. Cloudflare returns a generic
-          // failure when the queue name is taken; tolerate by adopting
-          // the queue with the same name so reconciles converge after a
-          // crashed peer.
-          if (!observed) {
-            observed = yield* createQueue({
-              accountId: acct,
-              queueName,
-            }).pipe(
-              Effect.catch(() =>
-                Effect.gen(function* () {
-                  const match = yield* findQueueByName(queueName);
-                  if (match && match.queueId && match.queueName) {
-                    return match;
-                  }
-                  return yield* Effect.die(
-                    `Queue "${queueName}" already exists but could not be found`,
-                  );
-                }),
-              ),
-            );
-          }
-
-          // Sync — Cloudflare Queues have no mutable per-queue settings
-          // here (the queue name itself is treated as a replace by diff),
-          // so observed state is the answer.
-          return {
-            queueId: observed.queueId!,
-            queueName: observed.queueName!,
+      // Observe — re-fetch the cached queue; fall back to a name scan
+      // when the cached id is gone (out-of-band delete or partial
+      // state-persistence failure).
+      let observed:
+        | { queueId?: string | null; queueName?: string | null }
+        | undefined;
+      if (output?.queueId) {
+        observed = yield* queues
+          .getQueue({
             accountId: acct,
-          };
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          // If the queueId is a `dev:` ID, the resource only exists locally, so we don't need to delete it from Cloudflare.
-          if (!isLiveId(output.queueId)) return;
-          yield* deleteQueue({
-            accountId: output.accountId,
             queueId: output.queueId,
-          }).pipe(Effect.catch(() => Effect.void));
-        }),
-        read: Effect.fn(function* ({ id, output, olds }) {
-          if (output?.queueId) {
-            return yield* getQueue({
-              accountId: output.accountId,
-              queueId: output.queueId,
-            }).pipe(
-              Effect.map((queue) => ({
-                queueId: queue.queueId!,
-                queueName: queue.queueName!,
-                accountId: output.accountId,
-              })),
-              Effect.catch(() => Effect.succeed(undefined)),
-            );
-          }
-          const queueName = yield* createQueueName(id, olds?.name);
-          const match = yield* findQueueByName(queueName);
-          if (match && match.queueId && match.queueName) {
-            return {
-              queueId: match.queueId,
-              queueName: match.queueName,
-              accountId,
-            };
-          }
-          return undefined;
-        }),
+          })
+          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+      }
+      if (!observed) {
+        observed = yield* findQueueByName(queueName);
+      }
+
+      // Ensure — create if missing. Cloudflare returns a generic
+      // failure when the queue name is taken; tolerate by adopting
+      // the queue with the same name so reconciles converge after a
+      // crashed peer.
+      if (!observed) {
+        observed = yield* queues
+          .createQueue({
+            accountId: acct,
+            queueName,
+          })
+          .pipe(
+            Effect.catch(() =>
+              Effect.gen(function* () {
+                const match = yield* findQueueByName(queueName);
+                if (match && match.queueId && match.queueName) {
+                  return match;
+                }
+                return yield* Effect.die(
+                  `Queue "${queueName}" already exists but could not be found`,
+                );
+              }),
+            ),
+          );
+      }
+
+      // Sync — Cloudflare Queues have no mutable per-queue settings
+      // here (the queue name itself is treated as a replace by diff),
+      // so observed state is the answer.
+      return {
+        queueId: observed.queueId!,
+        queueName: observed.queueName!,
+        accountId: acct,
       };
     }),
+    delete: Effect.fn(function* ({ output }) {
+      // If the queueId is a `dev:` ID, the resource only exists locally, so we don't need to delete it from Cloudflare.
+      if (!isLiveId(output.queueId)) return;
+      yield* queues
+        .deleteQueue({
+          accountId: output.accountId,
+          queueId: output.queueId,
+        })
+        .pipe(Effect.catch(() => Effect.void));
+    }),
+    read: Effect.fn(function* ({ id, output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (output?.queueId) {
+        return yield* queues
+          .getQueue({
+            accountId: output.accountId,
+            queueId: output.queueId,
+          })
+          .pipe(
+            Effect.map((queue) => ({
+              queueId: queue.queueId!,
+              queueName: queue.queueName!,
+              accountId: output.accountId,
+            })),
+            Effect.catch(() => Effect.succeed(undefined)),
+          );
+      }
+      const queueName = yield* createQueueName(id, olds?.name);
+      const match = yield* findQueueByName(queueName);
+      if (match && match.queueId && match.queueName) {
+        return {
+          queueId: match.queueId,
+          queueName: match.queueName,
+          accountId,
+        };
+      }
+      return undefined;
+    }),
+  });
+
+const createQueueName = (id: string, name: string | undefined) =>
+  Effect.gen(function* () {
+    if (name) return name;
+    return (yield* createPhysicalName({
+      id,
+      maxLength: 63,
+    })).toLowerCase();
+  });
+
+// Cloudflare's `listQueues` accepts no name/prefix filter, so
+// adoption-by-name has to scan every page. Use the paginated
+// `.items` stream off the un-yielded operation method.
+const findQueueByName = Effect.fnUntraced(function* (queueName: string) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  return yield* queues.listQueues.items({ accountId }).pipe(
+    Stream.filter((q) => q.queueName === queueName),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
   );
+});
 
 export const QueueProviderLocal = () =>
   RpcProvider.effect(
     Queue,
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
       const localRuntimeState = yield* LocalRuntimeState;
       return {
         stables: ["accountId"],
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
           if (!output?.queueId) return { action: "update" };
           if (!isResolved(news)) return undefined;
           const name = yield* createQueueName(id, news.name);
@@ -266,6 +278,7 @@ export const QueueProviderLocal = () =>
           ).pipe(Option.getOrUndefined);
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
           const queue: Queue["Attributes"] = {
             queueId: output?.queueId ?? generateLocalId(),
             queueName: yield* createQueueName(id, news.name),
@@ -280,15 +293,6 @@ export const QueueProviderLocal = () =>
       };
     }),
   );
-
-const createQueueName = (id: string, name: string | undefined) =>
-  Effect.gen(function* () {
-    if (name) return name;
-    return (yield* createPhysicalName({
-      id,
-      maxLength: 63,
-    })).toLowerCase();
-  });
 
 export const QueueProvider = () =>
   ProviderLayer.select({

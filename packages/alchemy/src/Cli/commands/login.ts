@@ -7,7 +7,7 @@ import * as Logger from "effect/Logger";
 import { Command, Flag } from "effect/unstable/cli";
 
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
-import { Profile, withProfileOverride } from "../../Auth/Profile.ts";
+import { AlchemyProfile, withProfileOverride } from "../../Auth/Profile.ts";
 import { Stage } from "../../Stage.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
@@ -20,7 +20,6 @@ import {
   printProfile,
   profile,
   script,
-  stage,
 } from "./_shared.ts";
 
 const loginConfigure = Flag.boolean("configure").pipe(
@@ -35,25 +34,18 @@ export const loginCommand = Command.make(
   {
     main: script,
     envFile,
-    stage,
     profile,
     configure: loginConfigure,
   },
   instrumentCommand(
     "login",
-    (a: {
-      main: string;
-      stage: string;
-      profile: string;
-      configure: boolean;
-    }) => ({
-      "alchemy.stage": a.stage,
+    (a: { main: string; profile: string; configure: boolean }) => ({
       "alchemy.profile": a.profile,
       "alchemy.main": a.main,
       "alchemy.configure": a.configure,
     }),
   )(
-    Effect.fnUntraced(function* ({ main, stage, envFile, profile, configure }) {
+    Effect.fnUntraced(function* ({ main, envFile, profile, configure }) {
       const stackEffect = yield* importStack(main);
 
       const authProviders: AuthProviders["Service"] = {};
@@ -72,20 +64,20 @@ export const loginCommand = Command.make(
                 ),
               ),
               Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
-              Layer.succeed(Stage, stage),
+              Layer.succeed(Stage, "placeholder"),
               Layer.succeed(Stack, {
                 actions: {},
                 bindings: {},
                 name: stackEffect.stackName,
                 resources: {},
-                stage,
+                stage: "placeholder",
               }),
             ),
           ),
         ),
       );
 
-      const profiles = yield* Profile;
+      const profiles = yield* AlchemyProfile;
 
       const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
       const providers = Object.values(authProviders);
@@ -116,14 +108,6 @@ export const loginCommand = Command.make(
             } else {
               cfg = stored;
             }
-
-            // `read` succeeds when creds are present and not expired
-            // (refreshing OAuth proactively if near expiry). Any failure
-            // — missing file, dead refresh token, etc. — falls through
-            // to `login`.
-            yield* provider
-              .read(profile, cfg)
-              .pipe(Effect.catch(() => provider.login(profile, cfg)));
           }),
         { discard: true },
       );

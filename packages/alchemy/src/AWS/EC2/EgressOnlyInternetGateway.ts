@@ -1,14 +1,13 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
 
@@ -74,9 +73,6 @@ export const EgressOnlyInternetGatewayProvider = () =>
   Provider.effect(
     EgressOnlyInternetGateway,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const createTags = Effect.fn(function* (
         id: string,
         tags?: Record<string, string>,
@@ -106,16 +102,23 @@ export const EgressOnlyInternetGatewayProvider = () =>
             ),
           );
 
-      const toAttrs = (gw: ec2.EgressOnlyInternetGateway) => ({
-        egressOnlyInternetGatewayId:
-          gw.EgressOnlyInternetGatewayId as EgressOnlyInternetGatewayId,
-        egressOnlyInternetGatewayArn:
-          `arn:aws:ec2:${region}:${accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
-        attachments: gw.Attachments?.map((a) => ({
-          state: a.State as "attaching" | "attached" | "detaching" | "detached",
-          vpcId: a.VpcId as VpcId,
-        })),
-      });
+      const toAttrs = (gw: ec2.EgressOnlyInternetGateway) =>
+        AWSEnvironment.current.pipe(
+          Effect.map((env) => ({
+            egressOnlyInternetGatewayId:
+              gw.EgressOnlyInternetGatewayId as EgressOnlyInternetGatewayId,
+            egressOnlyInternetGatewayArn:
+              `arn:aws:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
+            attachments: gw.Attachments?.map((a) => ({
+              state: a.State as
+                | "attaching"
+                | "attached"
+                | "detaching"
+                | "detached",
+              vpcId: a.VpcId as VpcId,
+            })),
+          })),
+        );
 
       return {
         stables: [
@@ -128,7 +131,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
           const gw = yield* describeEgressOnlyInternetGateway(
             output.egressOnlyInternetGatewayId,
           );
-          return toAttrs(gw);
+          return yield* toAttrs(gw);
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
@@ -222,7 +225,7 @@ export const EgressOnlyInternetGatewayProvider = () =>
 
           // Re-read to reflect current cloud state in the returned attributes.
           const final = yield* describeEgressOnlyInternetGateway(eigwId);
-          return toAttrs(final);
+          return yield* toAttrs(final);
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

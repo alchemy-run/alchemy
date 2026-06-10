@@ -99,14 +99,11 @@ export interface Policy<
   new (_: never): PolicyShape<Identifier, Shape>;
   layer: {
     succeed(
-      fn: (
-        ctx: ResourceLike,
-        ...args: Parameters<Shape>
-      ) => Effect.Effect<void>,
+      fn: (ctx: ResourceLike, ...args: Parameters<Shape>) => ReturnType<Shape>,
     ): Layer.Layer<Self>;
     effect<Req = never>(
       fn: Effect.Effect<
-        (ctx: ResourceLike, ...args: Parameters<Shape>) => Effect.Effect<void>,
+        (ctx: ResourceLike, ...args: Parameters<Shape>) => ReturnType<Shape>,
         never,
         Req
       >,

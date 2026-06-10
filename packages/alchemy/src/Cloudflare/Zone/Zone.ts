@@ -193,11 +193,10 @@ export const ZoneProvider = () =>
   Provider.effect(
     Zone,
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const get = yield* zones.getZone;
-      const create = yield* zones.createZone;
-      const patch = yield* zones.patchZone;
-      const del = yield* zones.deleteZone;
+      // const get = yield* zones.getZone;
+      // const create = yield* zones.createZone;
+      // const patch = yield* zones.patchZone;
+      // const del = yield* zones.deleteZone;
 
       return {
         stables: ["name", "zoneId", "accountId"],
@@ -220,12 +219,13 @@ export const ZoneProvider = () =>
           return undefined;
         }),
         read: Effect.fn(function* ({ output, olds }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
           const name = output?.name ?? olds?.name;
           // Owned path: we have persisted state (our own zoneId) — refresh it.
           if (output?.zoneId) {
-            const result = yield* get({ zoneId: output.zoneId }).pipe(
-              Effect.catch(() => Effect.succeed(undefined)),
-            );
+            const result = yield* zones
+              .getZone({ zoneId: output.zoneId })
+              .pipe(Effect.catch(() => Effect.succeed(undefined)));
             if (result) return toZoneAttributes(result, accountId);
           }
           // Adoption path: no state of our own, but a zone with this name
@@ -236,12 +236,13 @@ export const ZoneProvider = () =>
           if (name) {
             const match = yield* findZoneByName({ accountId, name });
             if (!match) return undefined;
-            const result = yield* get({ zoneId: match.id });
+            const result = yield* zones.getZone({ zoneId: match.id });
             return Unowned(toZoneAttributes(result, accountId));
           }
           return undefined;
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
           // 1. Observe — do we have a live zone for this name?
           let zoneId = output?.zoneId;
           if (!zoneId) {
@@ -254,33 +255,35 @@ export const ZoneProvider = () =>
 
           // 2. Ensure — create if missing.
           if (!zoneId) {
-            zoneId = yield* create({
-              account: { id: accountId },
-              name: news.name,
-              type: news.type ?? "full",
-            }).pipe(
-              Effect.map((created) => created.id),
-              // A concurrent deploy (or a prior crashed run) may have created
-              // the zone between our observe and create — recover by resolving
-              // its id rather than failing the reconcile.
-              Effect.catchTag("ZoneAlreadyExists", () =>
-                findZoneByName({ accountId, name: news.name }).pipe(
-                  Effect.flatMap((match) =>
-                    match
-                      ? Effect.succeed(match.id)
-                      : Effect.fail(
-                          new Error(
-                            `Cloudflare reported zone ${news.name} already exists but it could not be found`,
+            zoneId = yield* zones
+              .createZone({
+                account: { id: accountId },
+                name: news.name,
+                type: news.type ?? "full",
+              })
+              .pipe(
+                Effect.map((created) => created.id),
+                // A concurrent deploy (or a prior crashed run) may have created
+                // the zone between our observe and create — recover by resolving
+                // its id rather than failing the reconcile.
+                Effect.catchTag("ZoneAlreadyExists", () =>
+                  findZoneByName({ accountId, name: news.name }).pipe(
+                    Effect.flatMap((match) =>
+                      match
+                        ? Effect.succeed(match.id)
+                        : Effect.fail(
+                            new Error(
+                              `Cloudflare reported zone ${news.name} already exists but it could not be found`,
+                            ),
                           ),
-                        ),
+                    ),
                   ),
                 ),
-              ),
-            );
+              );
           }
 
           // 3. Sync — apply mutable settings (type/paused/vanity NS).
-          const observed = yield* get({ zoneId });
+          const observed = yield* zones.getZone({ zoneId });
           const desiredType = news.type ?? "full";
           const desiredPaused = news.paused ?? false;
           const desiredVanity = news.vanityNameServers ?? [];
@@ -290,7 +293,7 @@ export const ZoneProvider = () =>
             !stringArrayEq(observed.vanityNameServers ?? [], desiredVanity);
 
           if (needsPatch) {
-            yield* patch({
+            yield* zones.patchZone({
               zoneId,
               type: desiredType,
               paused: desiredPaused,
@@ -298,12 +301,12 @@ export const ZoneProvider = () =>
             });
           }
 
-          const final = yield* get({ zoneId });
+          const final = yield* zones.getZone({ zoneId });
           return toZoneAttributes(final, accountId);
         }),
         delete: Effect.fn(function* ({ output }) {
           if (!output.zoneId) return;
-          yield* del({ zoneId: output.zoneId }).pipe(
+          yield* zones.deleteZone({ zoneId: output.zoneId }).pipe(
             // Zone already gone — idempotent delete.
             Effect.catchTag("InvalidZoneIdentifier", () => Effect.void),
           );

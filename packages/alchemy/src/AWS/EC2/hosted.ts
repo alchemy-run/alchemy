@@ -16,6 +16,7 @@ import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
 import { sha256 } from "../../Util/sha256.ts";
 import { zipCode } from "../../Util/zip.ts";
 import { Assets } from "../Assets.ts";
+import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 
 export interface Ec2HostedBinding {
@@ -122,24 +123,18 @@ export const createEc2HostRuntimeContext =
   };
 
 export const createEc2HostedSupport = ({
-  accountId,
-  region,
   stackName,
   stage,
   fs,
   virtualEntryPlugin,
-  assets,
   resourceType,
 }: {
-  accountId: string;
-  region: string;
   stackName: string;
   stage: string;
   fs: FileSystem.FileSystem;
   virtualEntryPlugin: (
     content: (importPath: string) => string,
   ) => rolldown.Plugin;
-  assets: typeof Assets.Service | undefined;
   resourceType: string;
 }) => {
   const alchemyEnv = {
@@ -297,15 +292,17 @@ await Effect.runPromise(program);
       .map(([key, value]) => `${key}=${quoteEnvValue(value)}`)
       .join("\n");
 
-  const renderHostedUserData = ({
+  const renderHostedUserData = Effect.fnUntraced(function* ({
     unitName,
     bundleKey,
     envKey,
+    region,
   }: {
     unitName: string;
     bundleKey: string;
     envKey: string;
-  }) => {
+    region: string;
+  }) {
     const appDir = `/opt/${unitName}`;
     return `#!/bin/bash
 set -euo pipefail
@@ -332,8 +329,8 @@ cat >/usr/local/bin/${unitName}-sync.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 mkdir -p "${appDir}"
-aws s3 cp "s3://${assets?.bucketName}/${bundleKey}" "${appDir}/bundle.zip" --region "${region}"
-aws s3 cp "s3://${assets?.bucketName}/${envKey}" "${appDir}/env" --region "${region}"
+aws s3 cp "s3://${yield* Assets.BucketName}/${bundleKey}" "${appDir}/bundle.zip" --region "${region}"
+aws s3 cp "s3://${yield* Assets.BucketName}/${envKey}" "${appDir}/env" --region "${region}"
 rm -f "${appDir}/index.mjs"
 unzip -o "${appDir}/bundle.zip" -d "${appDir}"
 EOF
@@ -362,7 +359,7 @@ EOF
 systemctl daemon-reload
 systemctl enable --now ${unitName}.service
 `;
-  };
+  });
 
   const mergeUserData = (hosted: string, userData?: string) => {
     if (!userData) {
@@ -414,6 +411,7 @@ systemctl enable --now ${unitName}.service
     roleName: string;
     managedPolicyArns: string[];
   }) {
+    const { accountId } = yield* AWSEnvironment.current;
     const tags = yield* createInternalTags(id);
     const role = yield* iam
       .createRole({
@@ -533,7 +531,7 @@ systemctl enable --now ${unitName}.service
       Sid: undefined,
       Effect: "Allow",
       Action: ["s3:GetObject"],
-      Resource: [`arn:aws:s3:::${assets?.bucketName}/${assetPrefix}/*`],
+      Resource: [`arn:aws:s3:::${yield* Assets.BucketName}/${assetPrefix}/*`],
     });
 
     yield* iam.putRolePolicy({
@@ -559,23 +557,16 @@ systemctl enable --now ${unitName}.service
     archive: Uint8Array<ArrayBufferLike>;
     env: Record<string, any>;
   }) {
-    if (!assets) {
-      return yield* Effect.fail(
-        new Error(
-          `${resourceType} host mode requires the AWS assets bucket. Run bootstrap first.`,
-        ),
-      );
-    }
-
+    const assets = yield* Assets;
     const contentHash = yield* sha256(archive);
     const uploadedAssetKey = yield* assets.uploadAsset(contentHash, archive);
     yield* s3.copyObject({
-      Bucket: assets.bucketName,
+      Bucket: yield* assets.bucketName,
       Key: bundleKey,
-      CopySource: `${assets.bucketName}/${uploadedAssetKey}`,
+      CopySource: `${yield* assets.bucketName}/${uploadedAssetKey}`,
     });
     yield* s3.putObject({
-      Bucket: assets.bucketName,
+      Bucket: yield* assets.bucketName,
       Key: envKey,
       Body: renderEnvFile(env),
       ContentType: "text/plain; charset=utf-8",
@@ -619,14 +610,8 @@ systemctl enable --now ${unitName}.service
         ),
       );
     }
-    if (!assets) {
-      return yield* Effect.fail(
-        new Error(
-          `${resourceType} host mode requires the AWS assets bucket. Run bootstrap first.`,
-        ),
-      );
-    }
 
+    const { region } = yield* AWSEnvironment.current;
     const runtimeUnitName =
       output?.runtimeUnitName ?? (yield* createRuntimeUnitName(id));
     const assetPrefix = output?.assetPrefix ?? `ec2/${runtimeUnitName}`;
@@ -697,10 +682,11 @@ systemctl enable --now ${unitName}.service
       env,
     });
 
-    const hostedUserData = renderHostedUserData({
+    const hostedUserData = yield* renderHostedUserData({
       unitName: runtimeUnitName,
       bundleKey,
       envKey,
+      region,
     });
 
     return {
@@ -765,14 +751,14 @@ systemctl enable --now ${unitName}.service
         .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void));
     }
 
-    if (assets && output.assetPrefix) {
+    if (output.assetPrefix) {
       for (const key of [
         `${output.assetPrefix}/bundle.zip`,
         `${output.assetPrefix}/env`,
       ]) {
         yield* s3
           .deleteObject({
-            Bucket: assets.bucketName,
+            Bucket: yield* Assets.BucketName,
             Key: key,
           })
           .pipe(Effect.catchTag("NotFound", () => Effect.void));

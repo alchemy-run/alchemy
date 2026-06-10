@@ -1,4 +1,3 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -6,8 +5,8 @@ import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hasAlchemyTags } from "../../Tags.ts";
-import type { Providers } from "../Providers.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { AlarmArn } from "./Alarm.ts";
 import {
   createName,
@@ -66,14 +65,16 @@ export const CompositeAlarmProvider = () =>
   Provider.effect(
     CompositeAlarm,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const createAlarmName = (id: string, props: { name?: string } = {}) =>
         createName(id, props.name, 255);
 
       const alarmArn = (alarmName: string) =>
-        `arn:aws:cloudwatch:${region}:${accountId}:alarm:${alarmName}` as AlarmArn;
+        AWSEnvironment.current.pipe(
+          Effect.map(
+            (env) =>
+              `arn:aws:cloudwatch:${env.region}:${env.accountId}:alarm:${alarmName}` as AlarmArn,
+          ),
+        );
 
       const readCompositeAlarm = Effect.fn(function* (alarmName: string) {
         const described = yield* cloudwatch.describeAlarms({
@@ -146,12 +147,12 @@ export const CompositeAlarmProvider = () =>
           // observed.
           const tags = yield* updateResourceTags({
             id,
-            resourceArn: alarmArn(name),
+            resourceArn: yield* alarmArn(name),
             olds: olds?.tags ?? existing?.tags,
             news: news.tags,
           });
 
-          yield* session.note(alarmArn(name));
+          yield* session.note(yield* alarmArn(name));
 
           const state = yield* readCompositeAlarm(name);
           if (!state) {

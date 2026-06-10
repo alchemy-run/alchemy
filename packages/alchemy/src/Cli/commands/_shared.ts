@@ -15,7 +15,7 @@ import {
   AuthError,
   AuthProviders,
 } from "../../Auth/AuthProvider.ts";
-import type { AlchemyProfile } from "../../Auth/Profile.ts";
+import type { AlchemyProfileProviders } from "../../Auth/Profile.ts";
 import type * as Stack from "../../Stack.ts";
 import { recordCli } from "../../Telemetry/Metrics.ts";
 import { PromptCancelled } from "../../Util/Clank.ts";
@@ -269,7 +269,7 @@ export const instrumentCommand =
  */
 export const printProfile = Effect.fn(function* (
   profile: string,
-  stored: AlchemyProfile,
+  stored: AlchemyProfileProviders,
   registry: AuthProviders["Service"],
 ) {
   yield* Console.log(`Profile: ${profile}`);

@@ -1,4 +1,3 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -6,9 +5,10 @@ import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, tagRecord } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
+import { AWSEnvironment } from "../Environment.ts";
 import { syncTags, vpcLinkArn } from "./common.ts";
 
 export interface VpcLinkProps {
@@ -96,8 +96,6 @@ export const VpcLinkProvider = () =>
   Provider.effect(
     VpcLinkResource,
     Effect.gen(function* () {
-      const awsRegion = yield* Region;
-
       return {
         stables: ["vpcLinkId"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
@@ -127,7 +125,7 @@ export const VpcLinkProvider = () =>
           const name = yield* generatedName(id, news);
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
-
+          const { region } = yield* AWSEnvironment.current;
           // Observe — fetch the live VPC link if we have a cached id.
           // We never trust `output.description`/etc. for diffing; the
           // observed cloud state drives every sync below.
@@ -186,7 +184,7 @@ export const VpcLinkProvider = () =>
           const observedTags = tagRecord(observed.tags);
           if (!deepEqual(observedTags, desiredTags)) {
             yield* syncTags({
-              resourceArn: vpcLinkArn(awsRegion, vpcLinkId),
+              resourceArn: vpcLinkArn(region, vpcLinkId),
               oldTags: observedTags,
               newTags: desiredTags,
             });

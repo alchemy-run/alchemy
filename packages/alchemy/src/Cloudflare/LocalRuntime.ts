@@ -46,14 +46,14 @@ const LocalRuntimeStateLive = Layer.succeed(
 export const localRuntimeServices = () =>
   RpcProvider.providerServicesEffect(
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const getEnv = yield* CloudflareEnvironment;
       const { dotAlchemy } = yield* AlchemyContext;
       const path = yield* Path.Path;
       return Layer.merge(
         LocalRuntimeStateLive,
         layerRuntime({
           api: {
-            accountId,
+            accountId: getEnv.pipe(Effect.map((env) => env.accountId)),
           },
           storage: {
             directory: path.join(dotAlchemy, "local"),

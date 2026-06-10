@@ -74,82 +74,85 @@ const toAttrs = (
 });
 
 export const EmailAddressProvider = () =>
-  Provider.effect(
-    EmailAddress,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const create = yield* emailRouting.createAddress;
-      const get = yield* emailRouting.getAddress;
-      const del = yield* emailRouting.deleteAddress;
+  Provider.succeed(EmailAddress, {
+    stables: ["addressId", "accountId", "email"],
+    diff: Effect.fn(function* ({ news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!output) return undefined;
+      if (output.accountId !== accountId) {
+        return { action: "replace" } as const;
+      }
+      if (!isResolved(news)) return undefined;
+      if (news.email !== output.email) {
+        return { action: "replace" } as const;
+      }
+      return undefined;
+    }),
+    read: Effect.fn(function* ({ output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const identifier =
+        output?.addressId ??
+        (olds?.email ? encodeURIComponent(olds.email) : undefined);
+      if (!identifier) return undefined;
+      const acct = output?.accountId ?? accountId;
+      return yield* emailRouting
+        .getAddress({
+          accountId: acct,
+          destinationAddressIdentifier: identifier,
+        })
+        .pipe(
+          Effect.map((r) => toAttrs(acct, r)),
+          Effect.catch(() => Effect.succeed(undefined)),
+        );
+    }),
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const acct = output?.accountId ?? accountId;
+      const email = news.email;
 
-      return {
-        stables: ["addressId", "accountId", "email"],
-        diff: Effect.fn(function* ({ news, output }) {
-          if (!output) return undefined;
-          if (output.accountId !== accountId) {
-            return { action: "replace" } as const;
-          }
-          if (!isResolved(news)) return undefined;
-          if (news.email !== output.email) {
-            return { action: "replace" } as const;
-          }
-          return undefined;
-        }),
-        read: Effect.fn(function* ({ output, olds }) {
-          const identifier =
-            output?.addressId ??
-            (olds?.email ? encodeURIComponent(olds.email) : undefined);
-          if (!identifier) return undefined;
-          const acct = output?.accountId ?? accountId;
-          return yield* get({
+      // Observe — by addressId if known, else by email lookup.
+      let observed: ReturnType<typeof toAttrs> | undefined = output?.addressId
+        ? yield* emailRouting
+            .getAddress({
+              accountId: acct,
+              destinationAddressIdentifier: output.addressId,
+            })
+            .pipe(
+              Effect.map((r) => toAttrs(acct, r)),
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+        : undefined;
+
+      if (!observed) {
+        observed = yield* emailRouting
+          .getAddress({
             accountId: acct,
-            destinationAddressIdentifier: identifier,
-          }).pipe(
+            destinationAddressIdentifier: encodeURIComponent(email),
+          })
+          .pipe(
             Effect.map((r) => toAttrs(acct, r)),
             Effect.catch(() => Effect.succeed(undefined)),
           );
-        }),
-        reconcile: Effect.fn(function* ({ news, output }) {
-          const acct = output?.accountId ?? accountId;
-          const email = news.email;
+      }
 
-          // Observe — by addressId if known, else by email lookup.
-          let observed: ReturnType<typeof toAttrs> | undefined =
-            output?.addressId
-              ? yield* get({
-                  accountId: acct,
-                  destinationAddressIdentifier: output.addressId,
-                }).pipe(
-                  Effect.map((r) => toAttrs(acct, r)),
-                  Effect.catch(() => Effect.succeed(undefined)),
-                )
-              : undefined;
+      // Ensure — register the address if it doesn't already exist.
+      if (!observed) {
+        const created = yield* emailRouting.createAddress({
+          accountId: acct,
+          email,
+        });
+        observed = toAttrs(acct, created);
+      }
 
-          if (!observed) {
-            observed = yield* get({
-              accountId: acct,
-              destinationAddressIdentifier: encodeURIComponent(email),
-            }).pipe(
-              Effect.map((r) => toAttrs(acct, r)),
-              Effect.catch(() => Effect.succeed(undefined)),
-            );
-          }
-
-          // Ensure — register the address if it doesn't already exist.
-          if (!observed) {
-            const created = yield* create({ accountId: acct, email });
-            observed = toAttrs(acct, created);
-          }
-
-          return observed;
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          if (!output?.addressId) return;
-          yield* del({
-            accountId: output.accountId,
-            destinationAddressIdentifier: output.addressId,
-          }).pipe(Effect.catch(() => Effect.void));
-        }),
-      };
+      return observed;
     }),
-  );
+    delete: Effect.fn(function* ({ output }) {
+      if (!output?.addressId) return;
+      yield* emailRouting
+        .deleteAddress({
+          accountId: output.accountId,
+          destinationAddressIdentifier: output.addressId,
+        })
+        .pipe(Effect.catch(() => Effect.void));
+    }),
+  });

@@ -3,7 +3,6 @@ import { Region } from "@distilled.cloud/aws/Region";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
 import type * as rolldown from "rolldown";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -15,7 +14,6 @@ import { Resource } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { Stage } from "../../Stage.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
-import { Assets } from "../Assets.ts";
 import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import {
   createEc2HostRuntimeContext,
@@ -23,10 +21,10 @@ import {
   type Ec2HostRuntimeContext,
 } from "../EC2/hosted.ts";
 import type { AccountID } from "../Environment.ts";
-import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+import { AWSEnvironment } from "../index.ts";
 
 export type LaunchTemplateId = `lt-${string}`;
 export type LaunchTemplateName = string;
@@ -175,24 +173,16 @@ export const LaunchTemplateProvider = () =>
   Provider.effect(
     LaunchTemplate,
     Effect.gen(function* () {
-      const { accountId } = yield* AWSEnvironment;
-      const region = yield* Region;
       const stack = yield* Stack;
       const stage = yield* Stage;
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-      const assets = (yield* Effect.serviceOption(Assets)).pipe(
-        Option.getOrUndefined,
-      );
 
       const hosted = createEc2HostedSupport({
-        accountId,
-        region,
         stackName: stack.name,
         stage,
         fs,
         virtualEntryPlugin,
-        assets,
         resourceType: "AWS.AutoScaling.LaunchTemplate",
       });
 
@@ -205,7 +195,12 @@ export const LaunchTemplateProvider = () =>
           : createPhysicalName({ id, maxLength: 128, lowercase: true });
 
       const toArn = (launchTemplateId: LaunchTemplateId) =>
-        `arn:aws:ec2:${region}:${accountId}:launch-template/${launchTemplateId}` as LaunchTemplateArn;
+        AWSEnvironment.current.pipe(
+          Effect.map(
+            (env) =>
+              `arn:aws:ec2:${env.region}:${env.accountId}:launch-template/${launchTemplateId}` as LaunchTemplateArn,
+          ),
+        );
 
       const describeById = (launchTemplateId: string) =>
         ec2
@@ -307,25 +302,29 @@ export const LaunchTemplateProvider = () =>
         return Number(versionNumber);
       });
 
-      const toAttributes = (
+      const toAttributes = Effect.fnUntraced(function* (
         template: ec2.LaunchTemplate,
         runtime: Partial<LaunchTemplate["Attributes"]> = {},
-      ): LaunchTemplate["Attributes"] => ({
-        launchTemplateId: template.LaunchTemplateId as LaunchTemplateId,
-        launchTemplateArn: toArn(template.LaunchTemplateId as LaunchTemplateId),
-        launchTemplateName: template.LaunchTemplateName!,
-        defaultVersionNumber: Number(template.DefaultVersionNumber ?? 1),
-        latestVersionNumber: Number(
-          template.LatestVersionNumber ?? template.DefaultVersionNumber ?? 1,
-        ),
-        tags: toTagRecord(template.Tags),
-        roleArn: runtime.roleArn,
-        roleName: runtime.roleName,
-        policyName: runtime.policyName,
-        managedIam: runtime.managedIam,
-        runtimeUnitName: runtime.runtimeUnitName,
-        assetPrefix: runtime.assetPrefix,
-        code: runtime.code,
+      ) {
+        return {
+          launchTemplateId: template.LaunchTemplateId as LaunchTemplateId,
+          launchTemplateArn: yield* toArn(
+            template.LaunchTemplateId as LaunchTemplateId,
+          ),
+          launchTemplateName: template.LaunchTemplateName!,
+          defaultVersionNumber: Number(template.DefaultVersionNumber ?? 1),
+          latestVersionNumber: Number(
+            template.LatestVersionNumber ?? template.DefaultVersionNumber ?? 1,
+          ),
+          tags: toTagRecord(template.Tags),
+          roleArn: runtime.roleArn,
+          roleName: runtime.roleName,
+          policyName: runtime.policyName,
+          managedIam: runtime.managedIam,
+          runtimeUnitName: runtime.runtimeUnitName,
+          assetPrefix: runtime.assetPrefix,
+          code: runtime.code,
+        } satisfies LaunchTemplate["Attributes"];
       });
 
       return {
@@ -361,7 +360,7 @@ export const LaunchTemplateProvider = () =>
             (yield* describeByName(yield* toName(id, olds ?? {})));
 
           return template
-            ? toAttributes(template, {
+            ? yield* toAttributes(template, {
                 roleArn: output?.roleArn,
                 roleName: output?.roleName,
                 policyName: output?.policyName,
@@ -439,7 +438,7 @@ export const LaunchTemplateProvider = () =>
               );
             }
             yield* session.note(template.LaunchTemplateId);
-            return toAttributes(template as ec2.LaunchTemplate, runtime);
+            return yield* toAttributes(template as ec2.LaunchTemplate, runtime);
           }
 
           if (!hasTags(desiredTags, toTagRecord(existing.Tags))) {
@@ -475,7 +474,7 @@ export const LaunchTemplateProvider = () =>
             );
           }
           yield* session.note(refreshed.LaunchTemplateId!);
-          return toAttributes(refreshed, runtime);
+          return yield* toAttributes(refreshed, runtime);
         }),
         delete: Effect.fn(function* ({ output, session }) {
           yield* ec2

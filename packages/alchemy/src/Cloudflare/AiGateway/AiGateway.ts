@@ -381,232 +381,233 @@ export const AiGateway = Resource<AiGateway>("Cloudflare.AiGateway")({
 });
 
 export const AiGatewayProvider = () =>
-  Provider.effect(
-    AiGateway,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const createAiGateway = yield* aiGateway.createAiGateway;
-      const getAiGateway = yield* aiGateway.getAiGateway;
-      const updateAiGateway = yield* aiGateway.updateAiGateway;
-      const deleteAiGateway = yield* aiGateway.deleteAiGateway;
+  Provider.succeed(AiGateway, {
+    stables: ["gatewayId", "accountId"],
+    diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
+      if (!isResolved(news)) return undefined;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-      const createGatewayId = (id: string, gatewayId: string | undefined) =>
-        Effect.gen(function* () {
-          if (gatewayId) return gatewayId;
-          return yield* createPhysicalName({
-            id,
-            maxLength: 64,
-            lowercase: true,
-          });
-        });
-
-      const desired = (id: string, props: AiGatewayProps | undefined) =>
-        Effect.gen(function* () {
-          return {
-            gatewayId: yield* createGatewayId(id, props?.id),
-            cacheInvalidateOnUpdate: props?.cacheInvalidateOnUpdate ?? false,
-            cacheTtl: props?.cacheTtl ?? null,
-            collectLogs: props?.collectLogs ?? true,
-            rateLimitingInterval: props?.rateLimitingInterval ?? null,
-            rateLimitingLimit: props?.rateLimitingLimit ?? null,
-            rateLimitingTechnique: props?.rateLimitingTechnique ?? "fixed",
-            // Defaults align with what Cloudflare's API returns for an
-            // unconfigured gateway, so the reconciler converges to noop
-            // when the user didn't explicitly set the field.
-            authentication: props?.authentication ?? false,
-            dlp: props?.dlp ?? undefined,
-            isDefault: props?.isDefault ?? false,
-            logManagement: props?.logManagement ?? 100_000,
-            logManagementStrategy:
-              props?.logManagementStrategy ?? "STOP_INSERTING",
-            logpush: props?.logpush ?? false,
-            logpushPublicKey: props?.logpushPublicKey ?? undefined,
-            otel: props?.otel ?? undefined,
-            storeId: props?.storeId ?? "",
-            stripe: props?.stripe ?? undefined,
-            zdr: props?.zdr ?? false,
-          };
-        });
-
-      const mapGateway = (
-        gateway:
-          | aiGateway.GetAiGatewayResponse
-          | aiGateway.CreateAiGatewayResponse
-          | aiGateway.UpdateAiGatewayResponse,
-        accountId: string,
-      ): AiGateway["Attributes"] => ({
-        gatewayId: gateway.id,
-        accountId,
-        // accountTag: gateway.accountTag ?? undefined,
-        // internalId: gateway.internalId ?? undefined,
-        cacheInvalidateOnUpdate: gateway.cacheInvalidateOnUpdate,
-        cacheTtl: nullIfZero(gateway.cacheTtl),
-        collectLogs: gateway.collectLogs,
-        createdAt: gateway.createdAt,
-        modifiedAt: gateway.modifiedAt,
-        rateLimitingInterval: nullIfZero(gateway.rateLimitingInterval),
-        rateLimitingLimit: nullIfZero(gateway.rateLimitingLimit),
-        rateLimitingTechnique: gateway.rateLimitingTechnique ?? "fixed",
-        authentication: gateway.authentication ?? false,
-        // Distilled widened generated string enums to open unions (`string & {}`).
-        dlp: (gateway.dlp ?? undefined) as AiGatewayDlp | undefined,
-        isDefault: gateway.isDefault ?? false,
-        logManagement: gateway.logManagement ?? 100_000,
-        logManagementStrategy:
-          gateway.logManagementStrategy ?? "STOP_INSERTING",
-        logpush: gateway.logpush ?? false,
-        logpushPublicKey: gateway.logpushPublicKey ?? undefined,
-        otel: gateway.otel ?? undefined,
-        storeId: gateway.storeId ?? "",
-        stripe: gateway.stripe ?? undefined,
-        zdr: gateway.zdr ?? false,
-      });
-
-      const mutable = (gateway: AiGateway["Attributes"]) => ({
-        cacheInvalidateOnUpdate: gateway.cacheInvalidateOnUpdate,
-        cacheTtl: gateway.cacheTtl,
-        collectLogs: gateway.collectLogs,
-        rateLimitingInterval: gateway.rateLimitingInterval,
-        rateLimitingLimit: gateway.rateLimitingLimit,
-        rateLimitingTechnique: gateway.rateLimitingTechnique,
-        authentication: gateway.authentication,
-        dlp: gateway.dlp,
-        isDefault: gateway.isDefault,
-        logManagement: gateway.logManagement,
-        logManagementStrategy: gateway.logManagementStrategy,
-        logpush: gateway.logpush,
-        logpushPublicKey: gateway.logpushPublicKey,
-        otel: gateway.otel,
-        storeId: gateway.storeId,
-        stripe: gateway.stripe,
-        zdr: gateway.zdr,
-      });
-
-      const createRequest = Effect.fn(function* (
-        id: string,
-        props: AiGatewayProps | undefined,
+      const next = yield* desired(id, news);
+      const oldGatewayId =
+        output?.gatewayId ?? (yield* createGatewayId(id, olds.id));
+      if (
+        (output?.accountId ?? accountId) !== accountId ||
+        oldGatewayId !== next.gatewayId
       ) {
-        const next = yield* desired(id, props);
-        return {
-          accountId,
-          id: next.gatewayId,
-          cacheInvalidateOnUpdate: next.cacheInvalidateOnUpdate,
-          cacheTtl: next.cacheTtl,
-          collectLogs: next.collectLogs,
-          rateLimitingInterval: next.rateLimitingInterval,
-          rateLimitingLimit: next.rateLimitingLimit,
-          rateLimitingTechnique: next.rateLimitingTechnique,
-          authentication: next.authentication,
-          logManagement: next.logManagement,
-          logManagementStrategy: next.logManagementStrategy,
-          logpush: next.logpush,
-          logpushPublicKey: next.logpushPublicKey,
-          zdr: next.zdr,
-        } satisfies aiGateway.CreateAiGatewayRequest;
-      });
+        return { action: "replace" } as const;
+      }
 
-      const updateRequest = Effect.fn(function* (
-        id: string,
-        props: AiGatewayProps | undefined,
-        accountId: string,
-      ) {
-        const next = yield* desired(id, props);
-        return {
-          accountId,
-          id: next.gatewayId,
-          cacheInvalidateOnUpdate: next.cacheInvalidateOnUpdate,
-          cacheTtl: next.cacheTtl,
-          collectLogs: next.collectLogs,
-          rateLimitingInterval: next.rateLimitingInterval,
-          rateLimitingLimit: next.rateLimitingLimit,
-          rateLimitingTechnique: next.rateLimitingTechnique,
-          authentication: next.authentication,
-          dlp: next.dlp,
-          logManagement: next.logManagement,
-          logManagementStrategy: next.logManagementStrategy,
-          logpush: next.logpush,
-          logpushPublicKey: next.logpushPublicKey,
-          otel: next.otel,
-          storeId: next.storeId,
-          stripe: next.stripe,
-          zdr: next.zdr,
-        } satisfies aiGateway.UpdateAiGatewayRequest;
-      });
-
-      return {
-        stables: ["gatewayId", "accountId"],
-        diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
-          if (!isResolved(news)) return undefined;
-          const next = yield* desired(id, news);
-          const oldGatewayId =
-            output?.gatewayId ?? (yield* createGatewayId(id, olds.id));
-          if (
-            (output?.accountId ?? accountId) !== accountId ||
-            oldGatewayId !== next.gatewayId
-          ) {
-            return { action: "replace" } as const;
-          }
-
-          const oldMutable = mutable(
-            output ?? ((yield* desired(id, olds)) as AiGateway["Attributes"]),
-          );
-          const nextMutable = mutable(next as AiGateway["Attributes"]);
-          if (!deepEqual(oldMutable, nextMutable)) {
-            return { action: "update" } as const;
-          }
-        }),
-        reconcile: Effect.fn(function* ({ id, news = {}, output }) {
-          const acct = output?.accountId ?? accountId;
-          const gatewayId =
-            output?.gatewayId ?? (yield* createGatewayId(id, news.id));
-
-          // Observe — fetch the gateway's current state. The Cloudflare API
-          // returns 404 when the gateway is missing, which we tolerate so the
-          // reconciler can fall through to create.
-          const observed = yield* getAiGateway({
-            accountId: acct,
-            id: gatewayId,
-          }).pipe(
-            Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
-          );
-
-          // Ensure — create if missing. Tolerate `GatewayAlreadyExists` for
-          // idempotency: a peer reconciler may have created it concurrently,
-          // or state persistence may have failed after a previous create.
-          if (observed === undefined) {
-            const request = yield* createRequest(id, news);
-            yield* createAiGateway(request).pipe(
-              Effect.catchTag("GatewayAlreadyExists", () =>
-                getAiGateway({ accountId: acct, id: request.id }),
-              ),
-            );
-          }
-
-          // Sync — the Cloudflare AI Gateway update API is a full PATCH that
-          // overwrites all mutable fields. We always apply the desired shape
-          // so adoption, drift, and routine updates all converge.
-          const update = yield* updateRequest(id, news, acct);
-          const gateway = yield* updateAiGateway(update);
-          return mapGateway(gateway, acct);
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteAiGateway({
-            accountId: output.accountId,
-            id: output.gatewayId,
-          }).pipe(Effect.catchTag("GatewayNotFound", () => Effect.void));
-        }),
-        read: Effect.fn(function* ({ id, olds, output }) {
-          const gatewayId =
-            output?.gatewayId ?? (yield* createGatewayId(id, olds?.id));
-          const acct = output?.accountId ?? accountId;
-          return yield* getAiGateway({
-            accountId: acct,
-            id: gatewayId,
-          }).pipe(
-            Effect.map((gateway) => mapGateway(gateway, acct)),
-            Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
-          );
-        }),
-      };
+      const oldMutable = mutable(
+        output ?? ((yield* desired(id, olds)) as AiGateway["Attributes"]),
+      );
+      const nextMutable = mutable(next as AiGateway["Attributes"]);
+      if (!deepEqual(oldMutable, nextMutable)) {
+        return { action: "update" } as const;
+      }
     }),
-  );
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const acct = output?.accountId ?? accountId;
+      const gatewayId =
+        output?.gatewayId ?? (yield* createGatewayId(id, news.id));
+
+      // Observe — fetch the gateway's current state. The Cloudflare API
+      // returns 404 when the gateway is missing, which we tolerate so the
+      // reconciler can fall through to create.
+      const observed = yield* aiGateway
+        .getAiGateway({
+          accountId: acct,
+          id: gatewayId,
+        })
+        .pipe(
+          Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
+        );
+
+      // Ensure — create if missing. Tolerate `GatewayAlreadyExists` for
+      // idempotency: a peer reconciler may have created it concurrently,
+      // or state persistence may have failed after a previous create.
+      if (observed === undefined) {
+        const request = yield* createRequest(id, news);
+        yield* aiGateway
+          .createAiGateway(request)
+          .pipe(
+            Effect.catchTag("GatewayAlreadyExists", () =>
+              aiGateway.getAiGateway({ accountId: acct, id: request.id }),
+            ),
+          );
+      }
+
+      // Sync — the Cloudflare AI Gateway update API is a full PATCH that
+      // overwrites all mutable fields. We always apply the desired shape
+      // so adoption, drift, and routine updates all converge.
+      const update = yield* updateRequest(id, news, acct);
+      const gateway = yield* aiGateway.updateAiGateway(update);
+      return mapGateway(gateway, acct);
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      yield* aiGateway
+        .deleteAiGateway({
+          accountId: output.accountId,
+          id: output.gatewayId,
+        })
+        .pipe(Effect.catchTag("GatewayNotFound", () => Effect.void));
+    }),
+    read: Effect.fn(function* ({ id, olds, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const gatewayId =
+        output?.gatewayId ?? (yield* createGatewayId(id, olds?.id));
+      const acct = output?.accountId ?? accountId;
+      return yield* aiGateway
+        .getAiGateway({
+          accountId: acct,
+          id: gatewayId,
+        })
+        .pipe(
+          Effect.map((gateway) => mapGateway(gateway, acct)),
+          Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
+        );
+    }),
+  });
+
+const createGatewayId = (id: string, gatewayId: string | undefined) =>
+  Effect.gen(function* () {
+    if (gatewayId) return gatewayId;
+    return yield* createPhysicalName({
+      id,
+      maxLength: 64,
+      lowercase: true,
+    });
+  });
+const desired = (id: string, props: AiGatewayProps | undefined) =>
+  Effect.gen(function* () {
+    return {
+      gatewayId: yield* createGatewayId(id, props?.id),
+      cacheInvalidateOnUpdate: props?.cacheInvalidateOnUpdate ?? false,
+      cacheTtl: props?.cacheTtl ?? null,
+      collectLogs: props?.collectLogs ?? true,
+      rateLimitingInterval: props?.rateLimitingInterval ?? null,
+      rateLimitingLimit: props?.rateLimitingLimit ?? null,
+      rateLimitingTechnique: props?.rateLimitingTechnique ?? "fixed",
+      // Defaults align with what Cloudflare's API returns for an
+      // unconfigured gateway, so the reconciler converges to noop
+      // when the user didn't explicitly set the field.
+      authentication: props?.authentication ?? false,
+      dlp: props?.dlp ?? undefined,
+      isDefault: props?.isDefault ?? false,
+      logManagement: props?.logManagement ?? 100_000,
+      logManagementStrategy: props?.logManagementStrategy ?? "STOP_INSERTING",
+      logpush: props?.logpush ?? false,
+      logpushPublicKey: props?.logpushPublicKey ?? undefined,
+      otel: props?.otel ?? undefined,
+      storeId: props?.storeId ?? "",
+      stripe: props?.stripe ?? undefined,
+      zdr: props?.zdr ?? false,
+    };
+  });
+
+const mapGateway = (
+  gateway:
+    | aiGateway.GetAiGatewayResponse
+    | aiGateway.CreateAiGatewayResponse
+    | aiGateway.UpdateAiGatewayResponse,
+  accountId: string,
+): AiGateway["Attributes"] => ({
+  gatewayId: gateway.id,
+  accountId,
+  // accountTag: gateway.accountTag ?? undefined,
+  // internalId: gateway.internalId ?? undefined,
+  cacheInvalidateOnUpdate: gateway.cacheInvalidateOnUpdate,
+  cacheTtl: nullIfZero(gateway.cacheTtl),
+  collectLogs: gateway.collectLogs,
+  createdAt: gateway.createdAt,
+  modifiedAt: gateway.modifiedAt,
+  rateLimitingInterval: nullIfZero(gateway.rateLimitingInterval),
+  rateLimitingLimit: nullIfZero(gateway.rateLimitingLimit),
+  rateLimitingTechnique: gateway.rateLimitingTechnique ?? "fixed",
+  authentication: gateway.authentication ?? false,
+  // Distilled widened generated string enums to open unions (`string & {}`).
+  dlp: (gateway.dlp ?? undefined) as AiGatewayDlp | undefined,
+  isDefault: gateway.isDefault ?? false,
+  logManagement: gateway.logManagement ?? 100_000,
+  logManagementStrategy: gateway.logManagementStrategy ?? "STOP_INSERTING",
+  logpush: gateway.logpush ?? false,
+  logpushPublicKey: gateway.logpushPublicKey ?? undefined,
+  otel: gateway.otel ?? undefined,
+  storeId: gateway.storeId ?? "",
+  stripe: gateway.stripe ?? undefined,
+  zdr: gateway.zdr ?? false,
+});
+
+const mutable = (gateway: AiGateway["Attributes"]) => ({
+  cacheInvalidateOnUpdate: gateway.cacheInvalidateOnUpdate,
+  cacheTtl: gateway.cacheTtl,
+  collectLogs: gateway.collectLogs,
+  rateLimitingInterval: gateway.rateLimitingInterval,
+  rateLimitingLimit: gateway.rateLimitingLimit,
+  rateLimitingTechnique: gateway.rateLimitingTechnique,
+  authentication: gateway.authentication,
+  dlp: gateway.dlp,
+  isDefault: gateway.isDefault,
+  logManagement: gateway.logManagement,
+  logManagementStrategy: gateway.logManagementStrategy,
+  logpush: gateway.logpush,
+  logpushPublicKey: gateway.logpushPublicKey,
+  otel: gateway.otel,
+  storeId: gateway.storeId,
+  stripe: gateway.stripe,
+  zdr: gateway.zdr,
+});
+const createRequest = Effect.fn(function* (
+  id: string,
+  props: AiGatewayProps | undefined,
+) {
+  const next = yield* desired(id, props);
+  const { accountId } = yield* yield* CloudflareEnvironment;
+
+  return {
+    accountId,
+    id: next.gatewayId,
+    cacheInvalidateOnUpdate: next.cacheInvalidateOnUpdate,
+    cacheTtl: next.cacheTtl,
+    collectLogs: next.collectLogs,
+    rateLimitingInterval: next.rateLimitingInterval,
+    rateLimitingLimit: next.rateLimitingLimit,
+    rateLimitingTechnique: next.rateLimitingTechnique,
+    authentication: next.authentication,
+    logManagement: next.logManagement,
+    logManagementStrategy: next.logManagementStrategy,
+    logpush: next.logpush,
+    logpushPublicKey: next.logpushPublicKey,
+    zdr: next.zdr,
+  } satisfies aiGateway.CreateAiGatewayRequest;
+});
+
+const updateRequest = Effect.fn(function* (
+  id: string,
+  props: AiGatewayProps | undefined,
+  accountId: string,
+) {
+  const next = yield* desired(id, props);
+  return {
+    accountId,
+    id: next.gatewayId,
+    cacheInvalidateOnUpdate: next.cacheInvalidateOnUpdate,
+    cacheTtl: next.cacheTtl,
+    collectLogs: next.collectLogs,
+    rateLimitingInterval: next.rateLimitingInterval,
+    rateLimitingLimit: next.rateLimitingLimit,
+    rateLimitingTechnique: next.rateLimitingTechnique,
+    authentication: next.authentication,
+    dlp: next.dlp,
+    logManagement: next.logManagement,
+    logManagementStrategy: next.logManagementStrategy,
+    logpush: next.logpush,
+    logpushPublicKey: next.logpushPublicKey,
+    otel: next.otel,
+    storeId: next.storeId,
+    stripe: next.stripe,
+    zdr: next.zdr,
+  } satisfies aiGateway.UpdateAiGatewayRequest;
+});

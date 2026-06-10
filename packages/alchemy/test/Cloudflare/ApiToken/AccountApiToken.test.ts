@@ -20,7 +20,7 @@ const logLevel = Effect.provideService(
 describe.skip("AccountApiToken", () => {
   test.provider("create and delete account token with default props", (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
@@ -60,7 +60,7 @@ describe.skip("AccountApiToken", () => {
 
   test.provider("create, update, delete account token", (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 
@@ -123,7 +123,7 @@ describe.skip("AccountApiToken", () => {
 
   test.provider("noop when account token props unchanged", (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
 

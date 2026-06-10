@@ -1,6 +1,5 @@
 import type * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -219,9 +218,6 @@ export const VpcEndpointProvider = () =>
   Provider.effect(
     VpcEndpoint,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const createTags = Effect.fn(function* (
         id: string,
         tags?: Record<string, string>,
@@ -244,48 +240,52 @@ export const VpcEndpointProvider = () =>
                 ),
           ),
         );
+      // const { accountId, region } = yield* AWSEnvironment.current;
 
-      const toAttrs = (ep: ec2.VpcEndpoint): VpcEndpoint["Attributes"] => ({
-        vpcEndpointId: ep.VpcEndpointId as VpcEndpointId,
-        vpcEndpointArn:
-          `arn:aws:ec2:${region}:${accountId}:vpc-endpoint/${ep.VpcEndpointId}` as VpcEndpointArn,
-        vpcEndpointType: ep.VpcEndpointType!,
-        vpcId: ep.VpcId as VpcId,
-        serviceName: ep.ServiceName!,
-        state: ep.State!,
-        policyDocument: ep.PolicyDocument,
-        routeTableIds: ep.RouteTableIds,
-        subnetIds: ep.SubnetIds,
-        groups: ep.Groups?.map((g) => ({
-          groupId: g.GroupId!,
-          groupName: g.GroupName!,
-        })),
-        privateDnsEnabled: ep.PrivateDnsEnabled,
-        requesterManaged: ep.RequesterManaged,
-        networkInterfaceIds: ep.NetworkInterfaceIds,
-        dnsEntries: ep.DnsEntries?.map((d) => ({
-          dnsName: d.DnsName,
-          hostedZoneId: d.HostedZoneId,
-        })),
-        creationTimestamp:
-          ep.CreationTimestamp instanceof Date
-            ? ep.CreationTimestamp.toISOString()
-            : (ep.CreationTimestamp as string | undefined),
-        ownerId: ep.OwnerId,
-        ipAddressType: ep.IpAddressType,
-        dnsOptions: ep.DnsOptions
-          ? {
-              dnsRecordIpType: ep.DnsOptions.DnsRecordIpType,
-              privateDnsOnlyForInboundResolverEndpoint:
-                ep.DnsOptions.PrivateDnsOnlyForInboundResolverEndpoint,
-            }
-          : undefined,
-        lastError: ep.LastError
-          ? {
-              code: ep.LastError.Code,
-              message: ep.LastError.Message,
-            }
-          : undefined,
+      const toAttrs = Effect.fnUntraced(function* (ep: ec2.VpcEndpoint) {
+        const { accountId, region } = yield* AWSEnvironment.current;
+        return {
+          vpcEndpointId: ep.VpcEndpointId as VpcEndpointId,
+          vpcEndpointArn:
+            `arn:aws:ec2:${region}:${accountId}:vpc-endpoint/${ep.VpcEndpointId}` as VpcEndpointArn,
+          vpcEndpointType: ep.VpcEndpointType!,
+          vpcId: ep.VpcId as VpcId,
+          serviceName: ep.ServiceName!,
+          state: ep.State!,
+          policyDocument: ep.PolicyDocument,
+          routeTableIds: ep.RouteTableIds,
+          subnetIds: ep.SubnetIds,
+          groups: ep.Groups?.map((g) => ({
+            groupId: g.GroupId!,
+            groupName: g.GroupName!,
+          })),
+          privateDnsEnabled: ep.PrivateDnsEnabled,
+          requesterManaged: ep.RequesterManaged,
+          networkInterfaceIds: ep.NetworkInterfaceIds,
+          dnsEntries: ep.DnsEntries?.map((d) => ({
+            dnsName: d.DnsName,
+            hostedZoneId: d.HostedZoneId,
+          })),
+          creationTimestamp:
+            ep.CreationTimestamp instanceof Date
+              ? ep.CreationTimestamp.toISOString()
+              : (ep.CreationTimestamp as string | undefined),
+          ownerId: ep.OwnerId,
+          ipAddressType: ep.IpAddressType,
+          dnsOptions: ep.DnsOptions
+            ? {
+                dnsRecordIpType: ep.DnsOptions.DnsRecordIpType,
+                privateDnsOnlyForInboundResolverEndpoint:
+                  ep.DnsOptions.PrivateDnsOnlyForInboundResolverEndpoint,
+              }
+            : undefined,
+          lastError: ep.LastError
+            ? {
+                code: ep.LastError.Code,
+                message: ep.LastError.Message,
+              }
+            : undefined,
+        } satisfies VpcEndpoint["Attributes"];
       });
 
       return {
@@ -294,7 +294,7 @@ export const VpcEndpointProvider = () =>
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
           const ep = yield* describeVpcEndpoint(output.vpcEndpointId);
-          return toAttrs(ep);
+          return yield* toAttrs(ep);
         }),
 
         diff: Effect.fn(function* ({ news, olds }) {
@@ -520,7 +520,7 @@ export const VpcEndpointProvider = () =>
 
           // Re-read final state.
           const final = yield* describeVpcEndpoint(vpcEndpointId);
-          return toAttrs(final);
+          return yield* toAttrs(final);
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

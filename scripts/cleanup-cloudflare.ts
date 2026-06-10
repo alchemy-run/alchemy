@@ -576,7 +576,7 @@ const cleanupR2 = (accountId: string) =>
   });
 
 const program = Effect.gen(function* () {
-  const { accountId } = yield* CloudflareEnvironment;
+  const { accountId } = yield* yield* CloudflareEnvironment;
   yield* Console.log(
     `→ account=${accountId} dryRun=${DRY_RUN} concurrency=${CONCURRENCY} skip=${JSON.stringify([...SKIP])}`,
   );

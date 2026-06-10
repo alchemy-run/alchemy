@@ -3,8 +3,8 @@ import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import { createName, retryConcurrent } from "./common.ts";
 
 export type DashboardName = string;
@@ -163,13 +163,16 @@ export const DashboardProvider = () =>
   Provider.effect(
     Dashboard,
     Effect.gen(function* () {
-      const { accountId } = yield* AWSEnvironment;
-
       const createDashboardName = (id: string, props: { name?: string } = {}) =>
         createName(id, props.name, 255);
 
       const dashboardArn = (dashboardName: string) =>
-        `arn:aws:cloudwatch::${accountId}:dashboard/${dashboardName}` as DashboardArn;
+        AWSEnvironment.current.pipe(
+          Effect.map(
+            (env) =>
+              `arn:aws:cloudwatch::${env.accountId}:dashboard/${dashboardName}` as DashboardArn,
+          ),
+        );
 
       const readDashboard = Effect.fn(function* (dashboardName: string) {
         const output = yield* cloudwatch
@@ -188,7 +191,7 @@ export const DashboardProvider = () =>
 
         return {
           dashboardName: output.DashboardName,
-          dashboardArn: dashboardArn(output.DashboardName),
+          dashboardArn: yield* dashboardArn(output.DashboardName),
           dashboardBody: parseDashboardBody(output.DashboardBody),
           tags: {},
         };
@@ -232,7 +235,7 @@ export const DashboardProvider = () =>
             }),
           );
 
-          yield* session.note(dashboardArn(name));
+          yield* session.note(yield* dashboardArn(name));
 
           const state = yield* readDashboard(name);
           if (!state) {

@@ -29,7 +29,7 @@ test.provider(
   "StaticSite: editing a source file republishes the assets in a single deploy",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
@@ -100,7 +100,7 @@ test.provider(
   "StaticSite: class form deploys and serves the built assets",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
@@ -159,7 +159,7 @@ test.provider(
   "StaticSite: relocating the project (and deleting the old one) preserves hash.assets",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
@@ -242,7 +242,7 @@ test.provider(
   "StaticSite: a bundle-only change keeps the asset manifest (hash.assets stable)",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
+      const { accountId } = yield* yield* CloudflareEnvironment;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 

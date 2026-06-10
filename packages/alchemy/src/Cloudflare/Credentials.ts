@@ -11,7 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import { getAuthProvider } from "../Auth/AuthProvider.ts";
-import { ALCHEMY_PROFILE, Profile } from "../Auth/Profile.ts";
+import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
 import {
   CLOUDFLARE_AUTH_PROVIDER_NAME,
   type CloudflareAuthConfig,
@@ -29,7 +29,7 @@ export const fromAuthProvider = () =>
   Layer.effect(
     Credentials,
     Effect.gen(function* () {
-      const profile = yield* Profile;
+      const profile = yield* AlchemyProfile;
       const auth = yield* getAuthProvider<
         CloudflareAuthConfig,
         CloudflareResolvedCredentials

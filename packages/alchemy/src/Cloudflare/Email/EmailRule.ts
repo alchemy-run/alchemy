@@ -122,89 +122,88 @@ const normalize = (
   ),
 });
 
+const resolve = Effect.fnUntraced(function* (zone: ZoneReference) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  return yield* resolveZoneId({
+    accountId,
+    zone,
+    hostname: typeof zone === "string" ? zone : (zone.name ?? ""),
+  });
+});
+
 export const EmailRuleProvider = () =>
-  Provider.effect(
-    EmailRule,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const create = yield* emailRouting.createRule;
-      const update = yield* emailRouting.updateRule;
-      const get = yield* emailRouting.getRule;
-      const del = yield* emailRouting.deleteRule;
-
-      const resolve = (zone: ZoneReference) =>
-        resolveZoneId({
-          accountId,
-          zone,
-          hostname: typeof zone === "string" ? zone : (zone.name ?? ""),
-        });
-
-      return {
-        stables: ["ruleId", "zoneId"],
-        diff: Effect.fn(function* ({ news, output }) {
-          if (!output) return undefined;
-          if (!isResolved(news)) return undefined;
-          const zoneId = yield* resolve(news.zone);
-          if (zoneId !== output.zoneId) {
-            return { action: "replace" } as const;
-          }
-          return undefined;
-        }),
-        read: Effect.fn(function* ({ output }) {
-          if (!output?.ruleId || !output?.zoneId) return undefined;
-          return yield* get({
-            zoneId: output.zoneId,
-            ruleIdentifier: output.ruleId,
-          }).pipe(
-            Effect.map((r) => normalize(r, output.zoneId)),
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
-        }),
-        reconcile: Effect.fn(function* ({ news, output }) {
-          const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
-          const body = {
-            actions: news.actions.map((a) =>
-              a.type === "drop"
-                ? { type: a.type }
-                : { type: a.type, value: a.value },
-            ),
-            matchers: news.matchers.map((m) =>
-              m.type === "all"
-                ? { type: "all" as const }
-                : {
-                    type: "literal" as const,
-                    field: "to" as const,
-                    value: m.value,
-                  },
-            ),
-            enabled: news.enabled ?? true,
-            name: news.name ?? "",
-            priority: news.priority ?? 0,
-          };
-
-          if (output?.ruleId) {
-            const result = yield* update({
-              zoneId,
-              ruleIdentifier: output.ruleId,
-              ...body,
-            }).pipe(
-              Effect.catch(() =>
-                create({ zoneId, ...body }).pipe(Effect.map((r) => r)),
-              ),
-            );
-            return normalize(result, zoneId);
-          }
-
-          const result = yield* create({ zoneId, ...body });
-          return normalize(result, zoneId);
-        }),
-        delete: Effect.fn(function* ({ output }) {
-          if (!output?.ruleId) return;
-          yield* del({
-            zoneId: output.zoneId,
-            ruleIdentifier: output.ruleId,
-          }).pipe(Effect.catch(() => Effect.void));
-        }),
-      };
+  Provider.succeed(EmailRule, {
+    stables: ["ruleId", "zoneId"],
+    diff: Effect.fn(function* ({ news, output }) {
+      if (!output) return undefined;
+      if (!isResolved(news)) return undefined;
+      const zoneId = yield* resolve(news.zone);
+      if (zoneId !== output.zoneId) {
+        return { action: "replace" } as const;
+      }
+      return undefined;
     }),
-  );
+    read: Effect.fn(function* ({ output }) {
+      if (!output?.ruleId || !output?.zoneId) return undefined;
+      return yield* emailRouting
+        .getRule({
+          zoneId: output.zoneId,
+          ruleIdentifier: output.ruleId,
+        })
+        .pipe(
+          Effect.map((r) => normalize(r, output.zoneId)),
+          Effect.catch(() => Effect.succeed(undefined)),
+        );
+    }),
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
+      const body = {
+        actions: news.actions.map((a) =>
+          a.type === "drop"
+            ? { type: a.type }
+            : { type: a.type, value: a.value },
+        ),
+        matchers: news.matchers.map((m) =>
+          m.type === "all"
+            ? { type: "all" as const }
+            : {
+                type: "literal" as const,
+                field: "to" as const,
+                value: m.value,
+              },
+        ),
+        enabled: news.enabled ?? true,
+        name: news.name ?? "",
+        priority: news.priority ?? 0,
+      };
+
+      if (output?.ruleId) {
+        const result = yield* emailRouting
+          .updateRule({
+            zoneId,
+            ruleIdentifier: output.ruleId,
+            ...body,
+          })
+          .pipe(
+            Effect.catch(() =>
+              emailRouting
+                .createRule({ zoneId, ...body })
+                .pipe(Effect.map((r) => r)),
+            ),
+          );
+        return normalize(result, zoneId);
+      }
+
+      const result = yield* emailRouting.createRule({ zoneId, ...body });
+      return normalize(result, zoneId);
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      if (!output?.ruleId) return;
+      yield* emailRouting
+        .deleteRule({
+          zoneId: output.zoneId,
+          ruleIdentifier: output.ruleId,
+        })
+        .pipe(Effect.catch(() => Effect.void));
+    }),
+  });

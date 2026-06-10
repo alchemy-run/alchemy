@@ -70,7 +70,7 @@ const seedDevQueue = (input: {
  */
 test.provider("promotes a dev queue to a live queue on deploy", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
@@ -132,7 +132,7 @@ test.provider("promotes a dev queue to a live queue on deploy", (stack) =>
  */
 test.provider("suppresses deletion of a dev-only queue", (stack) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
