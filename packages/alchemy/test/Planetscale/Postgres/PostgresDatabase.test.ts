@@ -56,7 +56,7 @@ describe
             region: {
               slug: expect.any(String),
             },
-            clusterSize: "PS_10",
+            clusterSize: "PS_10_AWS_X86",
           });
 
           const branch = yield* Planetscale.waitForBranchReady(
@@ -66,6 +66,58 @@ describe
           );
 
           expect(branch.cluster_name).toEqual("PS_10_AWS_X86");
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      5_000_000,
+    );
+
+    test.provider(
+      "create database with minimal settings and arm arch",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.PostgresDatabase(
+                "PostgresDatabaseBasicArm",
+                {
+                  clusterSize: "PS_10",
+                  arch: "arm",
+                },
+              );
+
+              return {
+                database,
+              };
+            }),
+          );
+
+          expect(database).toMatchObject({
+            id: expect.any(String),
+            name: expect.any(String),
+            organization: expect.any(String),
+            state: expect.any(String),
+            defaultBranch: "main",
+            plan: expect.any(String),
+            createdAt: expect.any(String),
+            updatedAt: expect.any(String),
+            htmlUrl: expect.any(String),
+            region: {
+              slug: expect.any(String),
+            },
+            arch: "arm",
+            clusterSize: "PS_10_AWS_ARM",
+          });
+
+          const branch = yield* Planetscale.waitForBranchReady(
+            database.organization,
+            database.name,
+            "main",
+          );
+
+          expect(branch.cluster_name).toEqual("PS_10_AWS_ARM");
 
           yield* stack.destroy();
         }).pipe(logLevel),
@@ -115,7 +167,7 @@ describe
             region: {
               slug: expect.any(String),
             },
-            clusterSize: "PS_10",
+            clusterSize: "PS_10_AWS_X86",
             defaultBranch: "main",
             requireApprovalForDeploy: false,
             restrictBranchRegion: true,
@@ -220,50 +272,6 @@ describe
     );
 
     test.provider(
-      "create database with arm arch",
-      (stack) =>
-        Effect.gen(function* () {
-          const name = `alchemy-test-postgresql-basic`;
-          yield* stack.destroy();
-
-          const { database } = yield* stack.deploy(
-            Effect.gen(function* () {
-              const database = yield* Planetscale.PostgresDatabase(
-                "PostgresDatabaseBasic",
-                {
-                  name,
-                  clusterSize: "PS_10",
-                  arch: "arm",
-                },
-              );
-
-              return {
-                database,
-              };
-            }),
-          );
-
-          expect(database).toMatchObject({
-            id: expect.any(String),
-            name,
-            arch: "arm",
-            clusterSize: "PS_10",
-          });
-
-          const branch = yield* Planetscale.waitForBranchReady(
-            database.organization,
-            database.name,
-            "main",
-          );
-
-          expect(branch.cluster_name).toEqual("PS_10_AWS_ARM");
-
-          yield* stack.destroy();
-        }).pipe(logLevel),
-      5_000_000,
-    );
-
-    test.provider(
       "applies migrations and import files",
       (stack) =>
         Effect.gen(function* () {
@@ -287,7 +295,7 @@ describe
             }),
           );
 
-          expect(database.migrationsTable).toEqual("planetscale_migrations");
+          expect(database.migrationsTable).toEqual("__alchemy_migrations");
           expect(database.migrationsHashes["0001_create_widgets.sql"]).toEqual(
             expect.any(String),
           );

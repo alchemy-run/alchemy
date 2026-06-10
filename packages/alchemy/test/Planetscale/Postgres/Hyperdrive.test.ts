@@ -9,6 +9,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import type { HttpClientResponse } from "effect/unstable/http/HttpClientResponse";
 import HyperdriveWorker from "./fixtures/hyperdrive-worker.ts";
 import type { Widget } from "./fixtures/schema.ts";
 import { Hyperdrive, PlanetscaleDb } from "./fixtures/Stack.ts";
@@ -57,52 +58,60 @@ describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("Hyperdrive", () => {
         expect(worker.url).toBeTypeOf("string");
         const baseUrl = (worker.url as string).replace(/\/+$/, "");
 
-        // workers.dev edge takes a few seconds to start serving; retry the
-        // first request until we get a non-4xx.
-        const initial = yield* HttpClient.get(`${baseUrl}/widgets`).pipe(
-          Effect.flatMap((res) =>
-            res.status === 200
-              ? res.text.pipe(Effect.as(res))
-              : res.text.pipe(
-                  Effect.flatMap((body) =>
-                    Effect.fail(
-                      new WorkerNotReady({ status: res.status, body }),
+        // workers.dev edge takes a few seconds to start serving; retry any
+        // request until we get a 2xx. Edge routing can flip mid-test as
+        // different POPs warm up, so apply to every call, not just the first.
+        const fetchReady = (req: Effect.Effect<any, any, any>) =>
+          req.pipe(
+            Effect.flatMap((res: any) =>
+              res.status >= 200 && res.status < 300
+                ? res.text.pipe(Effect.as(res))
+                : res.text.pipe(
+                    Effect.flatMap((body: string) =>
+                      Effect.fail(
+                        new WorkerNotReady({ status: res.status, body }),
+                      ),
                     ),
                   ),
-                ),
-          ),
-          Effect.retry({
-            while: (e): e is WorkerNotReady =>
-              e instanceof WorkerNotReady && e.status >= 400 && e.status < 600,
-            schedule: Schedule.exponential("500 millis").pipe(
-              Schedule.both(Schedule.recurs(20)),
             ),
-          }),
-        );
+            Effect.retry({
+              while: (e: unknown): e is WorkerNotReady =>
+                e instanceof WorkerNotReady &&
+                e.status >= 400 &&
+                e.status < 600,
+              schedule: Schedule.exponential("500 millis").pipe(
+                Schedule.both(Schedule.recurs(20)),
+              ),
+            }),
+          ) as Effect.Effect<HttpClientResponse>;
+
+        const initial = yield* fetchReady(HttpClient.get(`${baseUrl}/widgets`));
         expect(initial.status).toBe(200);
         const initialBody = (yield* initial.json) as { widgets: Widget[] };
         expect(Array.isArray(initialBody.widgets)).toBe(true);
 
-        const insertRes = yield* HttpClient.execute(
-          HttpClientRequest.post(`${baseUrl}/widgets`).pipe(
-            HttpClientRequest.bodyJsonUnsafe({ id: 1, name: "alpha" }),
+        const insertRes = yield* fetchReady(
+          HttpClient.execute(
+            HttpClientRequest.post(`${baseUrl}/widgets`).pipe(
+              HttpClientRequest.bodyJsonUnsafe({ id: 1, name: "alpha" }),
+            ),
           ),
         );
         expect(insertRes.status).toBe(200);
         const insertBody = (yield* insertRes.json) as { widget: Widget };
         expect(insertBody.widget).toMatchObject({ id: 1, name: "alpha" });
 
-        const after = yield* HttpClient.get(`${baseUrl}/widgets`);
+        const after = yield* fetchReady(HttpClient.get(`${baseUrl}/widgets`));
         expect(after.status).toBe(200);
         const afterBody = (yield* after.json) as { widgets: Widget[] };
         expect(afterBody.widgets.some((w) => w.id === 1)).toBe(true);
 
-        const deleteRes = yield* HttpClient.execute(
-          HttpClientRequest.delete(`${baseUrl}/widgets/1`),
+        const deleteRes = yield* fetchReady(
+          HttpClient.execute(HttpClientRequest.delete(`${baseUrl}/widgets/1`)),
         );
         expect(deleteRes.status).toBe(200);
 
-        const final = yield* HttpClient.get(`${baseUrl}/widgets`);
+        const final = yield* fetchReady(HttpClient.get(`${baseUrl}/widgets`));
         const finalBody = (yield* final.json) as { widgets: Widget[] };
         expect(finalBody.widgets.some((w) => w.id === 1)).toBe(false);
 

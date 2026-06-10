@@ -1,4 +1,4 @@
-import { Ignore } from "@alchemy.run/node-utils/ignore";
+import createIgnore from "@alchemy.run/node-utils/ignore";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -98,7 +98,7 @@ const maybeReadString = Effect.fnUntraced(function* (file: string) {
 });
 
 const createIgnoreMatcher = (patterns: string[]) => {
-  const matcher = new Ignore().add(patterns);
+  const matcher = createIgnore().add(patterns);
   return (file: string) => matcher.ignores(file);
 };
 
