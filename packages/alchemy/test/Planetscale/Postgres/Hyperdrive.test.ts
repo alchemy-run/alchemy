@@ -27,7 +27,7 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   body: string;
 }> {}
 
-describe.skipIf(!process.env.PLANETSCALE_TEST)(() => {
+describe.skipIf(!process.env.PLANETSCALE_TEST).concurrent("Hyperdrive", () => {
   /**
    * End-to-end: deploy a {@link Planetscale.PostgresDatabase} + branch +
    * role, point a {@link Cloudflare.Hyperdrive} at the role's origin, and
