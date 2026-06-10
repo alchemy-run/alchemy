@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import * as Cloudflare from "alchemy/Cloudflare/Bridge";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type Backend from "../backend.ts";
 import { env } from "../env.ts";
@@ -62,20 +64,6 @@ export const Route = createFileRoute("/api/hello")({
               });
             });
 
-          // option 3 — bind to your effect worker and call http client
-          case "http-client":
-            return trace("GET option 3 (env.BACKEND.httpClient)", async () => {
-              const client = Cloudflare.toHttpClient(
-                Cloudflare.fromCloudflareFetcher(env.BACKEND),
-              );
-              const res = await client
-                .get(`https://backend/?key=${encodeURIComponent(key)}`)
-                .pipe(Effect.runPromise);
-              return HttpServerResponse.toWeb(
-                HttpServerResponse.fromClientResponse(res),
-              );
-            });
-
           // option 3 — bind to your effect worker and call rpc method
           case "rpc":
             return trace("GET option 3 (backend.hello rpc)", async () => {
@@ -86,6 +74,20 @@ export const Route = createFileRoute("/api/hello")({
               if (value === null)
                 return new Response("Not found", { status: 404 });
               return new Response(value);
+            });
+
+          // option 4 — bind to your effect worker and call http client
+          case "http-client":
+            return trace("GET option 4 (env.BACKEND.httpClient)", async () => {
+              const client = Cloudflare.toHttpClient(
+                Cloudflare.fromCloudflareFetcher(env.BACKEND),
+              );
+              const res = await client
+                .get(`https://backend/?key=${encodeURIComponent(key)}`)
+                .pipe(Effect.runPromise);
+              return HttpServerResponse.toWeb(
+                HttpServerResponse.fromClientResponse(res),
+              );
             });
         }
       },
@@ -136,6 +138,31 @@ export const Route = createFileRoute("/api/hello")({
           case "rpc":
             return new Response("PUT is not supported via=rpc", {
               status: 400,
+            });
+
+          // option 4 — bind to your effect worker and call http client
+          case "http-client":
+            return trace("PUT option 4 (env.BACKEND.httpClient)", async () => {
+              const client = Cloudflare.toHttpClient(
+                Cloudflare.fromCloudflareFetcher(env.BACKEND),
+              );
+              const res = await client
+                .put(`https://backend/?key=${encodeURIComponent(key)}`, {
+                  headers: request.headers,
+                  body: HttpBody.stream(
+                    Stream.fromReadableStream({
+                      evaluate: () => request.body!,
+                      onError: (error) =>
+                        new Error("Error reading request body", {
+                          cause: error,
+                        }),
+                    }),
+                  ),
+                })
+                .pipe(Effect.runPromise);
+              return HttpServerResponse.toWeb(
+                HttpServerResponse.fromClientResponse(res),
+              );
             });
         }
       },
