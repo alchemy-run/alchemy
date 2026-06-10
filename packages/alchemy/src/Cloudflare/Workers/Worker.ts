@@ -807,7 +807,7 @@ export const LiveWorkerProvider = () =>
         enabled: boolean,
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        return workers.createScriptSubdomain({
+        return yield* workers.createScriptSubdomain({
           accountId,
           scriptName: name,
           enabled,

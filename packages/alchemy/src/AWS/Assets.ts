@@ -87,7 +87,7 @@ export const AssetsLive = Layer.effect(
           onNone: () =>
             Effect.die(
               new Error(
-                "Assets bucket not found. Run 'alchemy bootstrap' to create it.",
+                "Assets bucket not found. Run 'alchemy aws bootstrap' to create it.",
               ),
             ),
           onSome: (bucketName) => Effect.succeed(bucketName),

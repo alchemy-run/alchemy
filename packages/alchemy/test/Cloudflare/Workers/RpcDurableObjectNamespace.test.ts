@@ -35,12 +35,18 @@ const readinessSchedule = Schedule.exponential("500 millis").pipe(
 const runId = Math.random().toString(36).slice(2, 10);
 const k = (name: string) => `${name}-${runId}`;
 
+// Retry transient 5xx/network errors from a freshly-deployed worker. The
+// worker→DO binding can take a while to propagate to every edge POP, during
+// which requests fail with 500 before the DO method ever runs — so retrying
+// non-idempotent calls (increment) through this window is safe (the
+// 100-concurrent test below relies on the same property).
+const retryHttp = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
+  eff.pipe(Effect.retry({ schedule: readinessSchedule, times: 10 }));
+
 const resetCounter = (url: string, id: string) =>
   Effect.gen(function* () {
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-    yield* client
-      .post(`${url}/counter/${id}/reset`)
-      .pipe(Effect.retry({ schedule: readinessSchedule, times: 10 }));
+    yield* client.post(`${url}/counter/${id}/reset`).pipe(retryHttp);
   });
 
 const rpcClientLayer = (url: string) =>
@@ -101,15 +107,17 @@ test(
     yield* resetCounter(url, alpha);
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    const incRes = yield* client.post(`${url}/counter/${alpha}/increment`);
+    const incRes = yield* client
+      .post(`${url}/counter/${alpha}/increment`)
+      .pipe(retryHttp);
     expect(incRes.status).toBe(200);
     const inc = (yield* incRes.json) as { count: number };
     expect(inc.count).toBe(1);
 
-    yield* client.post(`${url}/counter/${alpha}/increment`);
-    yield* client.post(`${url}/counter/${alpha}/increment`);
+    yield* client.post(`${url}/counter/${alpha}/increment`).pipe(retryHttp);
+    yield* client.post(`${url}/counter/${alpha}/increment`).pipe(retryHttp);
 
-    const getRes = yield* client.get(`${url}/counter/${alpha}`);
+    const getRes = yield* client.get(`${url}/counter/${alpha}`).pipe(retryHttp);
     expect(getRes.status).toBe(200);
     const got = (yield* getRes.json) as { count: number };
     expect(got.count).toBe(3);
@@ -127,14 +135,16 @@ test(
     yield* resetCounter(url, gammaId);
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    yield* client.post(`${url}/counter/${betaId}/increment`);
+    yield* client.post(`${url}/counter/${betaId}/increment`).pipe(retryHttp);
 
-    const beta = (yield* (yield* client.get(`${url}/counter/${betaId}`))
-      .json) as {
+    const beta = (yield* (yield* client
+      .get(`${url}/counter/${betaId}`)
+      .pipe(retryHttp)).json) as {
       count: number;
     };
-    const gamma = (yield* (yield* client.get(`${url}/counter/${gammaId}`))
-      .json) as {
+    const gamma = (yield* (yield* client
+      .get(`${url}/counter/${gammaId}`)
+      .pipe(retryHttp)).json) as {
       count: number;
     };
     expect(beta.count).toBe(1);
@@ -152,7 +162,7 @@ test(
 
     const res = yield* client
       .get(`${url}/counter/${delta}/stream?upto=4`)
-      .pipe(Effect.retry({ times: 5 }));
+      .pipe(retryHttp);
     expect(res.status).toBe(200);
     const body = yield* res.text;
     const lines = body.split("\n").filter((l) => l.length > 0);
@@ -186,7 +196,9 @@ test(
     yield* resetCounter(url, concurrent);
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
 
-    yield* client.post(`${url}/counter/${concurrent}/increment`);
+    yield* client
+      .post(`${url}/counter/${concurrent}/increment`)
+      .pipe(retryHttp);
 
     const N = 100;
     const results = yield* Effect.forEach(
@@ -204,7 +216,9 @@ test(
     );
 
     expect(results).toHaveLength(N);
-    const finalRes = yield* client.get(`${url}/counter/${concurrent}`);
+    const finalRes = yield* client
+      .get(`${url}/counter/${concurrent}`)
+      .pipe(retryHttp);
     const final = (yield* finalRes.json) as { count: number };
     expect(final.count).toBe(N + 1);
   }).pipe(logLevel),
