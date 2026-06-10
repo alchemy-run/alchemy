@@ -1,15 +1,14 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, createTagsList, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
 
@@ -180,9 +179,6 @@ export const SecurityGroupProvider = () =>
   Provider.effect(
     SecurityGroup,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const createTags = Effect.fn(function* (
         id: string,
         tags?: Record<string, string>,
@@ -215,45 +211,48 @@ export const SecurityGroupProvider = () =>
           Filters: [{ Name: "group-id", Values: [groupId] }],
         });
 
-      const toAttrs = (
+      const toAttrs = Effect.fnUntraced(function* (
         sg: ec2.SecurityGroup,
         rules: ec2.SecurityGroupRule[],
-      ): SecurityGroup["Attributes"] => ({
-        groupId: sg.GroupId as SecurityGroupId,
-        groupArn:
-          `arn:aws:ec2:${region}:${accountId}:security-group/${sg.GroupId as SecurityGroupId}` as SecurityGroupArn,
-        groupName: sg.GroupName!,
-        description: sg.Description!,
-        vpcId: sg.VpcId as VpcId,
-        ownerId: sg.OwnerId!,
-        ingressRules: rules
-          .filter((r) => !r.IsEgress)
-          .map((r) => ({
-            securityGroupRuleId: r.SecurityGroupRuleId!,
-            ipProtocol: r.IpProtocol!,
-            fromPort: r.FromPort,
-            toPort: r.ToPort,
-            cidrIpv4: r.CidrIpv4,
-            cidrIpv6: r.CidrIpv6,
-            referencedGroupId: r.ReferencedGroupInfo?.GroupId,
-            prefixListId: r.PrefixListId,
-            description: r.Description,
-            isEgress: false as const,
-          })),
-        egressRules: rules
-          .filter((r) => r.IsEgress)
-          .map((r) => ({
-            securityGroupRuleId: r.SecurityGroupRuleId!,
-            ipProtocol: r.IpProtocol!,
-            fromPort: r.FromPort,
-            toPort: r.ToPort,
-            cidrIpv4: r.CidrIpv4,
-            cidrIpv6: r.CidrIpv6,
-            referencedGroupId: r.ReferencedGroupInfo?.GroupId,
-            prefixListId: r.PrefixListId,
-            description: r.Description,
-            isEgress: true as const,
-          })),
+      ) {
+        const { accountId, region } = yield* AWSEnvironment.current;
+        return {
+          groupId: sg.GroupId as SecurityGroupId,
+          groupArn:
+            `arn:aws:ec2:${region}:${accountId}:security-group/${sg.GroupId as SecurityGroupId}` as SecurityGroupArn,
+          groupName: sg.GroupName!,
+          description: sg.Description!,
+          vpcId: sg.VpcId as VpcId,
+          ownerId: sg.OwnerId!,
+          ingressRules: rules
+            .filter((r) => !r.IsEgress)
+            .map((r) => ({
+              securityGroupRuleId: r.SecurityGroupRuleId!,
+              ipProtocol: r.IpProtocol!,
+              fromPort: r.FromPort,
+              toPort: r.ToPort,
+              cidrIpv4: r.CidrIpv4,
+              cidrIpv6: r.CidrIpv6,
+              referencedGroupId: r.ReferencedGroupInfo?.GroupId,
+              prefixListId: r.PrefixListId,
+              description: r.Description,
+              isEgress: false as const,
+            })),
+          egressRules: rules
+            .filter((r) => r.IsEgress)
+            .map((r) => ({
+              securityGroupRuleId: r.SecurityGroupRuleId!,
+              ipProtocol: r.IpProtocol!,
+              fromPort: r.FromPort,
+              toPort: r.ToPort,
+              cidrIpv4: r.CidrIpv4,
+              cidrIpv6: r.CidrIpv6,
+              referencedGroupId: r.ReferencedGroupInfo?.GroupId,
+              prefixListId: r.PrefixListId,
+              description: r.Description,
+              isEgress: true as const,
+            })),
+        } satisfies SecurityGroup["Attributes"];
       });
 
       const toIpPermission = (
@@ -293,7 +292,7 @@ export const SecurityGroupProvider = () =>
           if (!output) return undefined;
           const sg = yield* describeSecurityGroup(output.groupId);
           const rulesResult = yield* describeSecurityGroupRules(output.groupId);
-          return toAttrs(sg, rulesResult.SecurityGroupRules ?? []);
+          return yield* toAttrs(sg, rulesResult.SecurityGroupRules ?? []);
         }),
 
         diff: Effect.fn(function* ({ id, news, olds, output }) {
@@ -450,7 +449,7 @@ export const SecurityGroupProvider = () =>
           // Re-read final state.
           const finalSg = yield* describeSecurityGroup(groupId);
           const finalRules = yield* describeSecurityGroupRules(groupId);
-          return toAttrs(finalSg, finalRules.SecurityGroupRules ?? []);
+          return yield* toAttrs(finalSg, finalRules.SecurityGroupRules ?? []);
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

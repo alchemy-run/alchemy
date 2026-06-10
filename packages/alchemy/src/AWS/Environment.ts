@@ -9,9 +9,13 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type { FileSystem } from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import type { Path } from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import type { HttpClient } from "effect/unstable/http/HttpClient";
+import { ALCHEMY_PROFILE } from "../Auth/Profile.ts";
 
 export const AWS_PROFILE = Config.string("AWS_PROFILE").pipe(
   Config.withDefault("default"),
@@ -53,30 +57,15 @@ export interface AWSEnvironmentShape {
 
 export class AWSEnvironment extends Context.Service<
   AWSEnvironment,
-  AWSEnvironmentShape
->()("AWS::Environment") {}
+  Effect.Effect<AWSEnvironmentShape>
+>()("AWS::Environment") {
+  static current = AWSEnvironment.use((env) => env);
+}
 
-/**
- * Build an `AWSEnvironment` from one of two sources, in priority order:
- *
- *   1. **Environment variables** — used when `AWS_ACCESS_KEY_ID` is set, as
- *      it is on GitHub Actions runners after `aws-actions/configure-aws-credentials`
- *      runs (OIDC), or whenever the user has exported static creds. Requires
- *      `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, and `AWS_ACCOUNT_ID`. The role
- *      ARN's account ID is exported by `configure-aws-credentials` as
- *      `AWS_ACCOUNT_ID` when invoked with `output-credentials: true`.
- *   2. **SSO profile** (`AWS_PROFILE`, default `"default"`) — used locally
- *      when no static creds are exported. Reads the profile's
- *      `sso_account_id` / `region` from `~/.aws/config` and refreshes
- *      credentials lazily via `aws sso login`.
- */
 export const Default = Layer.effect(
   AWSEnvironment,
-  Effect.suspend(() => loadDefault()),
-).pipe(Layer.orDie);
-
-export const loadDefault = () =>
   Effect.gen(function* () {
+    const ctx = yield* Effect.context<FileSystem | HttpClient | Path>();
     // Env-credentials path only kicks in under CI (where
     // `aws-actions/configure-aws-credentials` exports AWS_ACCESS_KEY_ID
     // and friends). Locally we always go through SSO so a stray
@@ -89,11 +78,15 @@ export const loadDefault = () =>
         Config.map(Option.getOrUndefined),
       );
       if (accessKeyId) {
-        return yield* loadFromEnv(accessKeyId);
+        return loadFromEnv(accessKeyId).pipe(
+          Effect.provideContext(ctx),
+          Effect.orDie,
+        );
       }
     }
-    return yield* loadFromSso();
-  });
+    return loadFromSso().pipe(Effect.provideContext(ctx), Effect.orDie);
+  }),
+).pipe(Layer.orDie);
 
 const loadFromEnv = (accessKeyId: string) =>
   Effect.gen(function* () {
@@ -117,7 +110,7 @@ const loadFromEnv = (accessKeyId: string) =>
 
 const loadFromSso = () =>
   Effect.gen(function* () {
-    const profileName = yield* AWS_PROFILE;
+    const profileName = yield* ALCHEMY_PROFILE;
     const auth = yield* Auth.Default;
     const profile = yield* auth.loadProfile(profileName);
     if (!profile.sso_account_id) {
@@ -166,12 +159,14 @@ export const makeEnvironment = (
 ) =>
   Layer.succeed(
     AWSEnvironment,
-    isStatic(shape)
-      ? {
-          ...shape,
-          credentials: Effect.succeed(
-            fromAwsCredentialIdentity(shape.credentials),
-          ),
-        }
-      : shape,
+    Effect.succeed(
+      isStatic(shape)
+        ? {
+            ...shape,
+            credentials: Effect.succeed(
+              fromAwsCredentialIdentity(shape.credentials),
+            ),
+          }
+        : shape,
+    ),
   );

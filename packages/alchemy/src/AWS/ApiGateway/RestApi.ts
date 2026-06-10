@@ -1,4 +1,3 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -6,9 +5,10 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, tagRecord } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
+import { AWSEnvironment } from "../Environment.ts";
 import { restApiArn, retryOnApiStatusUpdating, syncTags } from "./common.ts";
 
 export interface RestApiProps {
@@ -299,8 +299,6 @@ export const RestApiProvider = () =>
   Provider.effect(
     RestApi,
     Effect.gen(function* () {
-      const awsRegion = yield* Region;
-
       return {
         stables: ["restApiId", "rootResourceId"] as const,
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
@@ -355,7 +353,7 @@ export const RestApiProvider = () =>
           const news = newsIn as RestApiProps;
           const name = yield* generatedName(id, news);
           const internalTags = yield* createInternalTags(id);
-          const allTags = { ...(news.tags ?? {}), ...internalTags };
+          const allTags = { ...news.tags, ...internalTags };
           const created = yield* retryOnApiStatusUpdating(
             ag.createRestApi({
               name,
@@ -383,6 +381,7 @@ export const RestApiProvider = () =>
           return snapshotFromApi(full);
         }),
         reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
+          const { region } = yield* AWSEnvironment.current;
           if (!isResolved(newsIn)) {
             return yield* Effect.die("RestApi props were not resolved");
           }
@@ -434,7 +433,7 @@ export const RestApiProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
           if (!deepEqual(observedSnapshot.tags, desiredTags)) {
-            const arn = restApiArn(awsRegion, output.restApiId);
+            const arn = restApiArn(region, output.restApiId);
             yield* syncTags({
               resourceArn: arn,
               oldTags: observedSnapshot.tags,

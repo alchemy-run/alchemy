@@ -263,7 +263,7 @@ describe.skipIf(!process.env.PLANETSCALE_TEST)(() => {
       Effect.gen(function* () {
         yield* stack.destroy();
 
-        const { organization } = yield* Planetscale.Credentials;
+        const { organization } = yield* yield* Planetscale.Credentials;
 
         const { database, role } = yield* stack.deploy(
           Effect.gen(function* () {

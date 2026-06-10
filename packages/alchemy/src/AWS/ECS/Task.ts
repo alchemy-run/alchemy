@@ -164,7 +164,7 @@ export interface Task extends Resource<
   Providers
 > {}
 
-export type TaskServices = Credentials | Region | ServerHost;
+export type TaskServices = Credentials | Region | ServerHost | AWSEnvironment;
 
 export type TaskShape = Main<TaskServices>;
 
@@ -219,8 +219,7 @@ export const TaskProvider = () =>
     Task,
     Effect.gen(function* () {
       const stack = yield* Stack;
-      const { accountId } = yield* AWSEnvironment;
-      const region = yield* Region;
+
       const { dotAlchemy } = yield* AlchemyContext;
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -380,6 +379,7 @@ export const TaskProvider = () =>
         id: string;
         logGroupName: string;
       }) {
+        const { accountId, region } = yield* AWSEnvironment.current;
         const tags = yield* createInternalTags(id);
         yield* logs
           .createLogGroup({
@@ -630,6 +630,7 @@ await Effect.runPromise(program);
         executionRoleArn: string;
         logGroupName: string;
       }) {
+        const { region } = yield* AWSEnvironment.current;
         const containerName = props.container?.name ?? family;
         const response = yield* ecs.registerTaskDefinition({
           family,

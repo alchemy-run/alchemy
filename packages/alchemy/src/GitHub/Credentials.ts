@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { AuthError, getAuthProvider } from "../Auth/AuthProvider.ts";
-import { ALCHEMY_PROFILE, Profile } from "../Auth/Profile.ts";
+import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
 import {
   GITHUB_AUTH_PROVIDER_NAME,
   type GitHubAuthConfig,
@@ -44,7 +44,7 @@ export const fromToken = (token: string | Redacted.Redacted<string>) =>
  * `GITHUB_ACCESS_TOKEN` or `GITHUB_TOKEN` at layer build time.
  */
 export const fromEnv = () =>
-  Layer.effect(
+  Layer.succeed(
     GitHubCredentials,
     Effect.gen(function* () {
       const access = yield* Config.redacted("GITHUB_ACCESS_TOKEN").pipe(
@@ -63,7 +63,7 @@ export const fromEnv = () =>
             "GitHub credentials not found. Set GITHUB_ACCESS_TOKEN or GITHUB_TOKEN.",
         });
       }
-      return Effect.succeed(make(value));
+      return make(value);
     }).pipe(Effect.orDie),
   );
 
@@ -76,7 +76,7 @@ export const fromAuthProvider = () =>
   Layer.effect(
     GitHubCredentials,
     Effect.gen(function* () {
-      const profile = yield* Profile;
+      const profile = yield* AlchemyProfile;
       const auth = yield* getAuthProvider<
         GitHubAuthConfig,
         GitHubResolvedCredentials

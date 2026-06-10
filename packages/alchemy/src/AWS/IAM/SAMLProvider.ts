@@ -1,12 +1,12 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { AWSEnvironment } from "../Environment.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
+import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import { toTagRecord, unwrapRedactedString } from "./common.ts";
 
 export interface SAMLProviderProps {
@@ -107,7 +107,7 @@ export const SAMLProviderProvider = () =>
         ...internalTags,
         ...news.tags,
       };
-      const accountId = (yield* AWSEnvironment).accountId;
+      const accountId = (yield* AWSEnvironment.current).accountId;
       const samlProviderArn =
         output?.samlProviderArn ??
         `arn:aws:iam::${accountId}:saml-provider/${news.name}`;

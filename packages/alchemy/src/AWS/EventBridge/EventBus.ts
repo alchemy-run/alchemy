@@ -1,4 +1,3 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 
@@ -7,7 +6,6 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import {
   createInternalTags,
   createTagsList,
@@ -15,6 +13,7 @@ import {
   hasAlchemyTags,
 } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { QueueArn } from "../SQS/Queue.ts";
 
@@ -121,9 +120,6 @@ export const EventBusProvider = () =>
   Provider.effect(
     EventBus,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const createEventBusName = (id: string, props: { name?: string } = {}) =>
         Effect.gen(function* () {
           if (props.name) {
@@ -178,6 +174,7 @@ export const EventBusProvider = () =>
             : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const eventBusName =
             output?.eventBusName ?? (yield* createEventBusName(id, news));
           const eventBusArn = (output?.eventBusArn ??

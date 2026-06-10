@@ -146,7 +146,6 @@ export const Comment = Resource<Comment>("GitHub.Comment");
 export const CommentProvider = () =>
   Provider.succeed(Comment, {
     stables: ["commentId"],
-
     reconcile: Effect.fn(function* ({ news, output }) {
       const octokit = yield* Octokit;
       const body = dedent(news.body);

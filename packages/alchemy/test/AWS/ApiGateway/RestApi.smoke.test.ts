@@ -17,7 +17,7 @@ test.provider.skipIf(!runLive)(
   "REST API proxies to Lambda (primitives)",
   (stack) =>
     Effect.gen(function* () {
-      const { region, accountId } = yield* AWSEnvironment;
+      const { region, accountId } = yield* AWSEnvironment.current;
 
       const out = yield* stack.deploy(
         Effect.gen(function* () {

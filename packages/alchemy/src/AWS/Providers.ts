@@ -18,8 +18,8 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { Command, CommandProvider } from "../Build/Command.ts";
-import * as Provider from "../Provider.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
+import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as ACM from "./ACM/index.ts";
 import * as ApiGateway from "./ApiGateway/index.ts";
@@ -575,7 +575,7 @@ export const providers = () =>
         CommandProvider(),
         KeyPairProvider(),
         RandomProvider(),
-        Assets.AssetsProvider(),
+        Assets.AssetsLive,
       ),
     ),
     Layer.provideMerge(Region.fromEnvironment),

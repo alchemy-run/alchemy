@@ -1,5 +1,4 @@
 import * as lambda from "@distilled.cloud/aws/lambda";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -7,9 +6,9 @@ import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags, hasTags } from "../../Tags.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 
 export type StartingPosition = "TRIM_HORIZON" | "LATEST" | "AT_TIMESTAMP";
 
@@ -179,9 +178,6 @@ export const EventSourceMappingProvider = () =>
   Provider.effect(
     EventSourceMapping,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const createEventSourceMappingTags = Effect.fn(function* (id: string) {
         const internalTags = yield* createInternalTags(id);
         return {
@@ -293,6 +289,7 @@ export const EventSourceMappingProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const expectedInternalTags = yield* createEventSourceMappingTags(id);
           const desiredTags = { ...expectedInternalTags, ...news.tags };
 

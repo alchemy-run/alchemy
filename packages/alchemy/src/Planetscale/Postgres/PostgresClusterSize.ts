@@ -1,4 +1,4 @@
-import * as ops from "@distilled.cloud/planetscale/Operations";
+import * as planetscale from "@distilled.cloud/planetscale";
 import * as Effect from "effect/Effect";
 import { pollUntil } from "../Util.ts";
 
@@ -67,7 +67,7 @@ export const waitForPendingPostgresChanges = Effect.fn(function* (
 ) {
   yield* pollUntil(
     `changes for branch "${branch}"`,
-    ops.listBranchChangeRequests({
+    planetscale.listBranchChangeRequests({
       organization,
       database,
       branch,
@@ -98,7 +98,7 @@ export const ensurePostgresProductionBranchClusterSize = Effect.fn(function* (
   branch: string,
   expectedClusterSize: PostgresClusterSize,
 ) {
-  const data = yield* ops.getBranch({ organization, database, branch });
+  const data = yield* planetscale.getBranch({ organization, database, branch });
 
   const sku = toPostgresClusterSku({
     size: expectedClusterSize,
@@ -110,7 +110,7 @@ export const ensurePostgresProductionBranchClusterSize = Effect.fn(function* (
     return;
   }
   yield* waitForPendingPostgresChanges(organization, database, branch);
-  const change = yield* ops.updateBranchChangeRequest({
+  const change = yield* planetscale.updateBranchChangeRequest({
     organization,
     database,
     branch,

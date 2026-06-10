@@ -7,7 +7,7 @@ import * as Logger from "effect/Logger";
 import { Command, Flag } from "effect/unstable/cli";
 
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
-import { Profile, withProfileOverride } from "../../Auth/Profile.ts";
+import { AlchemyProfile, withProfileOverride } from "../../Auth/Profile.ts";
 import { Stage } from "../../Stage.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
@@ -85,7 +85,7 @@ export const loginCommand = Command.make(
         ),
       );
 
-      const profiles = yield* Profile;
+      const profiles = yield* AlchemyProfile;
 
       const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
       const providers = Object.values(authProviders);

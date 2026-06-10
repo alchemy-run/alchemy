@@ -1,13 +1,12 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
-import { Region } from "@distilled.cloud/aws/Region";
 import * as Effect from "effect/Effect";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags } from "../../Tags.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type ClusterName = string;
@@ -78,9 +77,6 @@ export const ClusterProvider = () =>
   Provider.effect(
     Cluster,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const toEcsTags = (tags: Record<string, string>): ecs.Tag[] =>
         Object.entries(tags).map(([key, value]) => ({
           key,
@@ -155,6 +151,7 @@ export const ClusterProvider = () =>
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const clusterName = yield* toClusterName(id, news);
           const clusterArn =
             `arn:aws:ecs:${region}:${accountId}:cluster/${clusterName}` as ClusterArn;

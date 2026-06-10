@@ -1,4 +1,3 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -61,11 +60,11 @@ export class PutEventsPolicy extends Binding.Policy<
 
 export const PutEventsPolicyLive = PutEventsPolicy.layer.effect(
   Effect.gen(function* () {
-    const region = yield* Region;
-    const { accountId } = yield* AWSEnvironment;
+    const env = yield* AWSEnvironment;
 
     return Effect.fn(function* (host, bus?: EventBus) {
       if (isFunction(host)) {
+        const { accountId, region } = yield* env;
         const resource = bus
           ? yield* yield* bus.eventBusArn
           : (`arn:aws:events:${region}:${accountId}:event-bus/default` as const);

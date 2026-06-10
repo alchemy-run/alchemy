@@ -1,5 +1,5 @@
+import * as planetscale from "@distilled.cloud/planetscale";
 import { Credentials } from "@distilled.cloud/planetscale/Credentials";
-import * as ops from "@distilled.cloud/planetscale/Operations";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
@@ -155,6 +155,8 @@ export interface BranchMigrationRunners {
   ) => Effect.Effect<Record<string, string>, any, any>;
 }
 
+const rootDir = Effect.sync(() => process.cwd());
+
 /**
  * Build a branch provider for a specific PlanetScale engine. The
  * caller supplies the typed `Resource` token and the engine's migration
@@ -166,343 +168,331 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
   engineLabel: string;
   runners: BranchMigrationRunners;
 }) =>
-  Provider.effect(
-    opts.resource,
-    Effect.gen(function* () {
-      const rootDir = yield* Effect.sync(() => process.cwd());
-      const createBranch = yield* ops.createBranch;
-      const getBranch = yield* ops.getBranch;
-      const updateBranch = yield* ops.updateBranch;
-      const deleteBranch = yield* ops.deleteBranch;
-      const promoteBranch = yield* ops.promoteBranch;
-      const demoteBranch = yield* ops.demoteBranch;
-      const enableSafe = yield* ops.enableSafeMigrations;
-      const disableSafe = yield* ops.disableSafeMigrations;
-      const { runMigrations, runImports } = opts.runners;
+  Provider.succeed(opts.resource, {
+    stables: ["organization", "database"],
+    diff: Effect.fn(function* ({ news, olds, output }: any) {
+      if (!isResolved(news)) return undefined;
 
-      return {
-        stables: ["organization", "database"],
+      const newDb = resolveDatabase(news.database).name;
+      const oldDbRef = output?.database ?? olds.database;
+      if (oldDbRef) {
+        const oldDb = resolveDatabase(oldDbRef).name;
+        if (newDb !== oldDb) {
+          return { action: "replace" } as const;
+        }
+      }
 
-        diff: Effect.fn(function* ({ news, olds, output }: any) {
-          if (!isResolved(news)) return undefined;
+      const newParent = resolveParent(news.parentBranch);
+      const oldParent =
+        output?.parentBranch ?? resolveParent(olds.parentBranch);
+      if (newParent !== oldParent) {
+        return { action: "replace" } as const;
+      }
 
-          const newDb = resolveDatabase(news.database).name;
-          const oldDbRef = output?.database ?? olds.database;
-          if (oldDbRef) {
-            const oldDb = resolveDatabase(oldDbRef).name;
-            if (newDb !== oldDb) {
-              return { action: "replace" } as const;
-            }
-          }
+      if (
+        news.region?.slug &&
+        output?.region?.slug &&
+        news.region.slug !== output.region.slug
+      ) {
+        return { action: "replace" } as const;
+      }
 
-          const newParent = resolveParent(news.parentBranch);
-          const oldParent =
-            output?.parentBranch ?? resolveParent(olds.parentBranch);
-          if (newParent !== oldParent) {
-            return { action: "replace" } as const;
-          }
+      if (news.migrationsDir) {
+        const newHashes = yield* hashMigrations(news.migrationsDir);
+        if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
+          return { action: "update" } as const;
+        }
+        if (
+          (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
+          (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
+        ) {
+          return { action: "update" } as const;
+        }
+      }
+      if (news.importFiles?.length) {
+        const newHashes = yield* hashImports(news.importFiles, yield* rootDir);
+        if (!recordsEqual(newHashes, output?.importHashes ?? {})) {
+          return { action: "update" } as const;
+        }
+      }
 
-          if (
-            news.region?.slug &&
-            output?.region?.slug &&
-            news.region.slug !== output.region.slug
-          ) {
-            return { action: "replace" } as const;
-          }
+      return undefined;
+    }),
 
-          if (news.migrationsDir) {
-            const newHashes = yield* hashMigrations(news.migrationsDir);
-            if (!recordsEqual(newHashes, output?.migrationsHashes ?? {})) {
-              return { action: "update" } as const;
-            }
-            if (
-              (news.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE) !==
-              (output?.migrationsTable ?? DEFAULT_MIGRATIONS_TABLE)
-            ) {
-              return { action: "update" } as const;
-            }
-          }
-          if (news.importFiles?.length) {
-            const newHashes = yield* hashImports(news.importFiles, rootDir);
-            if (!recordsEqual(newHashes, output?.importHashes ?? {})) {
-              return { action: "update" } as const;
-            }
-          }
+    read: Effect.fn(function* ({ id, olds, output }: any) {
+      // If we have neither a cached output nor a usable `olds.database`
+      // there's no way to identify which branch to refresh — most often
+      // this is destroy of a partially-created resource whose props
+      // never got fully persisted. Return `undefined` so the engine
+      // treats it as already-gone and drops the state entry.
+      if (!output && !olds?.database) {
+        return undefined;
+      }
+      const dbInfo = output
+        ? { name: output.database, organization: output.organization }
+        : resolveDatabase(olds.database);
+      const { organization: envOrg } = yield* yield* Credentials;
+      const organization =
+        output?.organization ?? dbInfo.organization ?? envOrg;
+      const databaseName = output?.database ?? dbInfo.name;
+      const branchName =
+        output?.name ?? (yield* createBranchName(id, olds.name));
 
-          return undefined;
-        }),
+      return yield* planetscale
+        .getBranch({
+          organization,
+          database: databaseName,
+          branch: branchName,
+        })
+        .pipe(
+          Effect.map((data) => {
+            const attrs = {
+              name: data.name,
+              organization,
+              database: databaseName,
+              parentBranch: data.parent_branch ?? "main",
+              production: data.production,
+              createdAt: data.created_at,
+              updatedAt: data.updated_at,
+              htmlUrl: data.html_url,
+              region: { slug: data.region.slug },
+              migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
+              migrationsTable: output?.migrationsTable ?? olds?.migrationsTable,
+              migrationsHashes: output?.migrationsHashes ?? {},
+              importHashes: output?.importHashes ?? {},
+            } satisfies BaseBranchAttributes;
 
-        read: Effect.fn(function* ({ id, olds, output }: any) {
-          // If we have neither a cached output nor a usable `olds.database`
-          // there's no way to identify which branch to refresh — most often
-          // this is destroy of a partially-created resource whose props
-          // never got fully persisted. Return `undefined` so the engine
-          // treats it as already-gone and drops the state entry.
-          if (!output && !olds?.database) {
-            return undefined;
-          }
-          const dbInfo = output
-            ? { name: output.database, organization: output.organization }
-            : resolveDatabase(olds.database);
-          const { organization: envOrg } = yield* Credentials;
-          const organization =
-            output?.organization ?? dbInfo.organization ?? envOrg;
-          const databaseName = output?.database ?? dbInfo.name;
-          const branchName =
-            output?.name ?? (yield* createBranchName(id, olds.name));
+            return output ? attrs : Unowned(attrs);
+          }),
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        );
+    }),
 
-          return yield* getBranch({
-            organization,
-            database: databaseName,
-            branch: branchName,
-          }).pipe(
-            Effect.map((data) => {
-              const attrs = {
-                name: data.name,
+    reconcile: Effect.fn(function* ({ id, news, output, session }: any) {
+      const { organization: envOrg } = yield* yield* Credentials;
+      const dbInfo = resolveDatabase(news.database);
+      const organization =
+        output?.organization ?? dbInfo.organization ?? envOrg;
+      const databaseName = output?.database ?? dbInfo.name;
+      const desiredBranchName = yield* createBranchName(id, news.name);
+      const observedBranchName = output?.name ?? desiredBranchName;
+      const parentBranchName = resolveParent(news.parentBranch);
+
+      // If parentBranch is a plain string (an unmanaged branch reference),
+      // wait for it to be ready before we touch the child branch. When it
+      // is a Branch resource, Alchemy's resource graph already guarantees
+      // readiness before this resource's inputs are resolved.
+      if (news.parentBranch && typeof news.parentBranch === "string") {
+        yield* waitForBranchReady(
+          organization,
+          databaseName,
+          parentBranchName,
+          session,
+        );
+      }
+
+      // Observe — fetch the live branch state.
+      let current = yield* planetscale
+        .getBranch({
+          organization,
+          database: databaseName,
+          branch: observedBranchName,
+        })
+        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+
+      // Ensure — if missing, create. The parent must be ready before
+      // the child can fork from it. PostgreSQL short cluster sizes need
+      // to be expanded against the parent's region so the API call lands
+      // with a valid sku.
+      if (!current) {
+        const parent = yield* waitForBranchReady(
+          organization,
+          databaseName,
+          parentBranchName,
+          session,
+        );
+        const parentClusterSize = news.clusterSize
+          ? parent.kind === "postgresql"
+            ? toPostgresClusterSku({
+                size: news.clusterSize,
+                region: parent.region.slug,
+              })
+            : news.clusterSize
+          : undefined;
+        yield* session.note("Creating branch...");
+        current = yield* planetscale.createBranch({
+          organization,
+          database: databaseName,
+          name: desiredBranchName,
+          parent_branch: parentBranchName,
+          backup_id: news.backupId,
+          seed_data: news.seedData,
+          region: news.region?.slug,
+          cluster_size: parentClusterSize,
+        });
+      }
+
+      if (current.kind !== opts.expectedKind) {
+        return yield* Effect.fail(
+          new PlanetscaleConflict({
+            message:
+              `Planetscale branch "${current.name}" (database "${databaseName}") has kind ` +
+              `"${current.kind}" but this resource is a ${opts.engineLabel}. ` +
+              `Use the matching ${current.kind === "mysql" ? "MySQLBranch" : "PostgresBranch"} ` +
+              `resource instead.`,
+          }),
+        );
+      }
+
+      yield* waitForBranchReady(
+        organization,
+        databaseName,
+        current.name,
+        session,
+      );
+
+      // Sync name — branch names are mutable. Continue subsequent syncs
+      // under the name returned by the API.
+      if (current.name !== desiredBranchName) {
+        current = yield* planetscale.updateBranch({
+          organization,
+          database: databaseName,
+          branch: current.name,
+          new_name: desiredBranchName,
+        });
+      }
+
+      const branchName = current.name;
+
+      // Sync production status before branch settings that depend on it.
+      // PlanetScale only supports explicit branch promotion/demotion for MySQL.
+      if (opts.expectedKind === "mysql") {
+        const desiredProduction = news.isProduction ?? false;
+        if (current.production !== desiredProduction) {
+          current = desiredProduction
+            ? yield* planetscale.promoteBranch({
                 organization,
                 database: databaseName,
-                parentBranch: data.parent_branch ?? "main",
-                production: data.production,
-                createdAt: data.created_at,
-                updatedAt: data.updated_at,
-                htmlUrl: data.html_url,
-                region: { slug: data.region.slug },
-                migrationsDir: output?.migrationsDir ?? olds?.migrationsDir,
-                migrationsTable:
-                  output?.migrationsTable ?? olds?.migrationsTable,
-                migrationsHashes: output?.migrationsHashes ?? {},
-                importHashes: output?.importHashes ?? {},
-              } satisfies BaseBranchAttributes;
-
-              return output ? attrs : Unowned(attrs);
-            }),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-          );
-        }),
-
-        reconcile: Effect.fn(function* ({ id, news, output, session }: any) {
-          const { organization: envOrg } = yield* Credentials;
-          const dbInfo = resolveDatabase(news.database);
-          const organization =
-            output?.organization ?? dbInfo.organization ?? envOrg;
-          const databaseName = output?.database ?? dbInfo.name;
-          const desiredBranchName = yield* createBranchName(id, news.name);
-          const observedBranchName = output?.name ?? desiredBranchName;
-          const parentBranchName = resolveParent(news.parentBranch);
-
-          // If parentBranch is a plain string (an unmanaged branch reference),
-          // wait for it to be ready before we touch the child branch. When it
-          // is a Branch resource, Alchemy's resource graph already guarantees
-          // readiness before this resource's inputs are resolved.
-          if (news.parentBranch && typeof news.parentBranch === "string") {
-            yield* waitForBranchReady(
-              organization,
-              databaseName,
-              parentBranchName,
-              session,
-            );
-          }
-
-          // Observe — fetch the live branch state.
-          let current = yield* getBranch({
-            organization,
-            database: databaseName,
-            branch: observedBranchName,
-          }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-
-          // Ensure — if missing, create. The parent must be ready before
-          // the child can fork from it. PostgreSQL short cluster sizes need
-          // to be expanded against the parent's region so the API call lands
-          // with a valid sku.
-          if (!current) {
-            const parent = yield* waitForBranchReady(
-              organization,
-              databaseName,
-              parentBranchName,
-              session,
-            );
-            const parentClusterSize = news.clusterSize
-              ? parent.kind === "postgresql"
-                ? toPostgresClusterSku({
-                    size: news.clusterSize,
-                    region: parent.region.slug,
-                  })
-                : news.clusterSize
-              : undefined;
-            yield* session.note("Creating branch...");
-            current = yield* createBranch({
-              organization,
-              database: databaseName,
-              name: desiredBranchName,
-              parent_branch: parentBranchName,
-              backup_id: news.backupId,
-              seed_data: news.seedData,
-              region: news.region?.slug,
-              cluster_size: parentClusterSize,
-            });
-          }
-
-          if (current.kind !== opts.expectedKind) {
-            return yield* Effect.fail(
-              new PlanetscaleConflict({
-                message:
-                  `Planetscale branch "${current.name}" (database "${databaseName}") has kind ` +
-                  `"${current.kind}" but this resource is a ${opts.engineLabel}. ` +
-                  `Use the matching ${current.kind === "mysql" ? "MySQLBranch" : "PostgresBranch"} ` +
-                  `resource instead.`,
-              }),
-            );
-          }
-
-          yield* waitForBranchReady(
-            organization,
-            databaseName,
-            current.name,
-            session,
-          );
-
-          // Sync name — branch names are mutable. Continue subsequent syncs
-          // under the name returned by the API.
-          if (current.name !== desiredBranchName) {
-            current = yield* updateBranch({
-              organization,
-              database: databaseName,
-              branch: current.name,
-              new_name: desiredBranchName,
-            });
-          }
-
-          const branchName = current.name;
-
-          // Sync production status before branch settings that depend on it.
-          // PlanetScale only supports explicit branch promotion/demotion for MySQL.
-          if (opts.expectedKind === "mysql") {
-            const desiredProduction = news.isProduction ?? false;
-            if (current.production !== desiredProduction) {
-              current = desiredProduction
-                ? yield* promoteBranch({
-                    organization,
-                    database: databaseName,
-                    branch: branchName,
-                  })
-                : yield* demoteBranch({
-                    organization,
-                    database: databaseName,
-                    branch: branchName,
-                  });
-            }
-          }
-
-          // Sync safeMigrations — observed via `current.safe_migrations`,
-          // skip the API call entirely on no-op.
-          if (
-            news.safeMigrations !== undefined &&
-            current.safe_migrations !== news.safeMigrations
-          ) {
-            if (news.safeMigrations) {
-              yield* enableSafe({
+                branch: branchName,
+              })
+            : yield* planetscale.demoteBranch({
                 organization,
                 database: databaseName,
                 branch: branchName,
               });
-            } else {
-              yield* disableSafe({
-                organization,
-                database: databaseName,
-                branch: branchName,
-              });
-            }
-          }
+        }
+      }
 
-          // Sync clusterSize — only meaningful on production branches.
-          if (news.clusterSize) {
-            if (current.kind === "postgresql") {
-              yield* ensurePostgresProductionBranchClusterSize(
-                organization,
-                databaseName,
-                branchName,
-                news.clusterSize,
-              );
-            } else {
-              yield* ensureMySQLProductionBranchClusterSize(
-                organization,
-                databaseName,
-                branchName,
-                news.clusterSize,
-              );
-            }
-          }
-
-          // Re-read so the returned attributes reflect any mutation.
-          const updated = yield* getBranch({
+      // Sync safeMigrations — observed via `current.safe_migrations`,
+      // skip the API call entirely on no-op.
+      if (
+        news.safeMigrations !== undefined &&
+        current.safe_migrations !== news.safeMigrations
+      ) {
+        if (news.safeMigrations) {
+          yield* planetscale.enableSafeMigrations({
             organization,
             database: databaseName,
             branch: branchName,
           });
-
-          const migrationTarget = {
+        } else {
+          yield* planetscale.disableSafeMigrations({
             organization,
             database: databaseName,
-            branch: updated.name,
-          };
+            branch: branchName,
+          });
+        }
+      }
 
-          const migrationsTable =
-            news.migrationsTable ??
-            output?.migrationsTable ??
-            DEFAULT_MIGRATIONS_TABLE;
-          const migrationsHashes = news.migrationsDir
-            ? yield* runMigrations(
-                migrationTarget,
-                news.migrationsDir,
-                migrationsTable,
-              )
-            : (output?.migrationsHashes ?? {});
-          const importHashes = news.importFiles?.length
-            ? yield* runImports(
-                migrationTarget,
-                news.importFiles,
-                rootDir,
-                output?.importHashes ?? {},
-              )
-            : {};
-
-          return {
-            name: updated.name,
+      // Sync clusterSize — only meaningful on production branches.
+      if (news.clusterSize) {
+        if (current.kind === "postgresql") {
+          yield* ensurePostgresProductionBranchClusterSize(
             organization,
-            database: databaseName,
-            parentBranch: updated.parent_branch ?? parentBranchName,
-            production: updated.production,
-            createdAt: updated.created_at,
-            updatedAt: updated.updated_at,
-            htmlUrl: updated.html_url,
-            region: { slug: updated.region.slug },
-            migrationsDir: news.migrationsDir,
-            migrationsTable: news.migrationsDir ? migrationsTable : undefined,
-            migrationsHashes,
-            importHashes,
-          } satisfies BaseBranchAttributes;
-        }),
-
-        delete: Effect.fn(function* ({ output }: any) {
-          // If `read` returned undefined (e.g. destroy of a partially-
-          // created branch whose props never finished persisting), there
-          // is nothing addressable to delete. Drop the state entry.
-          if (!output) return;
-          yield* deleteBranch({
-            organization: output.organization,
-            database: output.database,
-            branch: output.name,
-          }).pipe(
-            Effect.catchTag("NotFound", () => Effect.void),
-            Effect.catchIf(
-              isKnownError(
-                "UnprocessableEntity",
-                "The default branch cannot be deleted.",
-              ),
-              () => Effect.void,
-            ),
+            databaseName,
+            branchName,
+            news.clusterSize,
           );
-        }),
-      } as any;
+        } else {
+          yield* ensureMySQLProductionBranchClusterSize(
+            organization,
+            databaseName,
+            branchName,
+            news.clusterSize,
+          );
+        }
+      }
+
+      // Re-read so the returned attributes reflect any mutation.
+      const updated = yield* planetscale.getBranch({
+        organization,
+        database: databaseName,
+        branch: branchName,
+      });
+
+      const migrationTarget = {
+        organization,
+        database: databaseName,
+        branch: updated.name,
+      };
+
+      const migrationsTable =
+        news.migrationsTable ??
+        output?.migrationsTable ??
+        DEFAULT_MIGRATIONS_TABLE;
+      const migrationsHashes = news.migrationsDir
+        ? yield* opts.runners.runMigrations(
+            migrationTarget,
+            news.migrationsDir,
+            migrationsTable,
+          )
+        : (output?.migrationsHashes ?? {});
+      const importHashes = news.importFiles?.length
+        ? yield* opts.runners.runImports(
+            migrationTarget,
+            news.importFiles,
+            yield* rootDir,
+            output?.importHashes ?? {},
+          )
+        : {};
+
+      return {
+        name: updated.name,
+        organization,
+        database: databaseName,
+        parentBranch: updated.parent_branch ?? parentBranchName,
+        production: updated.production,
+        createdAt: updated.created_at,
+        updatedAt: updated.updated_at,
+        htmlUrl: updated.html_url,
+        region: { slug: updated.region.slug },
+        migrationsDir: news.migrationsDir,
+        migrationsTable: news.migrationsDir ? migrationsTable : undefined,
+        migrationsHashes,
+        importHashes,
+      } satisfies BaseBranchAttributes;
     }),
-  );
+
+    delete: Effect.fn(function* ({ output }: any) {
+      // If `read` returned undefined (e.g. destroy of a partially-
+      // created branch whose props never finished persisting), there
+      // is nothing addressable to delete. Drop the state entry.
+      if (!output) return;
+      yield* planetscale
+        .deleteBranch({
+          organization: output.organization,
+          database: output.database,
+          branch: output.name,
+        })
+        .pipe(
+          Effect.catchTag("NotFound", () => Effect.void),
+          Effect.catchIf(
+            isKnownError(
+              "UnprocessableEntity",
+              "The default branch cannot be deleted.",
+            ),
+            () => Effect.void,
+          ),
+        );
+    }),
+  } as any);

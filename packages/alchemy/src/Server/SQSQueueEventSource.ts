@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
 
-import { Region } from "@distilled.cloud/aws/Region";
+import { AWSEnvironment } from "../AWS/Environment.ts";
 import * as SQS from "../AWS/SQS/index.ts";
 import { ServerHost } from "./Process.ts";
 
@@ -10,7 +10,7 @@ export const SQSQueueEventSource = Layer.effect(
   SQS.QueueEventSource,
   Effect.gen(function* () {
     const { run } = yield* ServerHost;
-    const region = yield* Region;
+    const env = yield* AWSEnvironment;
 
     const ReceiveMessage = yield* SQS.ReceiveMessage;
     const DeleteMessageBatch = yield* SQS.DeleteMessageBatch;
@@ -23,6 +23,7 @@ export const SQSQueueEventSource = Layer.effect(
       ) => Effect.Effect<void, never, Req | StreamReq>,
     ) {
       const QueueArn = yield* queue.queueArn;
+      const { region } = yield* env;
 
       const receiveMessage = yield* ReceiveMessage(queue);
       const deleteMessageBatch = yield* DeleteMessageBatch(queue);
