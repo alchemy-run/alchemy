@@ -16,7 +16,7 @@ import {
   destroyBootstrap as destroyBootstrapAws,
 } from "../../AWS/Bootstrap.ts";
 import * as AWSCredentials from "../../AWS/Credentials.ts";
-import * as AWSEnvironment from "../../AWS/Environment.ts";
+import { AWSEnvironment } from "../../AWS/Environment.ts";
 import * as AWSRegion from "../../AWS/Region.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
@@ -72,14 +72,17 @@ const bootstrapCommand = Command.make(
         }
 
         const ambient = yield* Effect.context<FileSystem | Path | HttpClient>();
-        const environment = AWSEnvironment.makeEnvironment({
-          accountId: ssoProfile.sso_account_id,
-          region: region ?? ssoProfile.region ?? "us-east-1",
-          credentials: Auth.loadProfileCredentials(profile).pipe(
-            Effect.provide(ambient),
-          ),
-          profile,
-        });
+        const environment = Layer.succeed(
+          AWSEnvironment,
+          Effect.succeed({
+            accountId: ssoProfile.sso_account_id!,
+            region: region ?? ssoProfile.region ?? "us-east-1",
+            credentials: Auth.loadProfileCredentials(profile).pipe(
+              Effect.provide(ambient),
+            ),
+            profile,
+          }),
+        );
 
         const awsLayers = Layer.provideMerge(
           Layer.mergeAll(

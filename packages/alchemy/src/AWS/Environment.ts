@@ -1,21 +1,19 @@
-import * as Auth from "@distilled.cloud/aws/Auth";
 import {
-  fromAwsCredentialIdentity,
   type CredentialsError,
   type ResolvedCredentials,
 } from "@distilled.cloud/aws/Credentials";
-import type { AwsCredentialIdentity } from "@smithy/types";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import type { FileSystem } from "effect/FileSystem";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import type { Path } from "effect/Path";
-import * as Redacted from "effect/Redacted";
-import type { HttpClient } from "effect/unstable/http/HttpClient";
-import { ALCHEMY_PROFILE } from "../Auth/Profile.ts";
+import { getAuthProvider } from "../Auth/AuthProvider.ts";
+import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
+import {
+  AWS_AUTH_PROVIDER_NAME,
+  type AwsAuthConfig,
+  type AwsResolvedCredentials,
+} from "./AuthProvider.ts";
 
 export const AWS_PROFILE = Config.string("AWS_PROFILE").pipe(
   Config.withDefault("default"),
@@ -65,108 +63,17 @@ export class AWSEnvironment extends Context.Service<
 export const Default = Layer.effect(
   AWSEnvironment,
   Effect.gen(function* () {
-    const ctx = yield* Effect.context<FileSystem | HttpClient | Path>();
-    // Env-credentials path only kicks in under CI (where
-    // `aws-actions/configure-aws-credentials` exports AWS_ACCESS_KEY_ID
-    // and friends). Locally we always go through SSO so a stray
-    // AWS_ACCESS_KEY_ID in the shell doesn't silently override the
-    // user's `~/.aws/config` profile.
+    const profile = yield* AlchemyProfile;
+    const auth = yield* getAuthProvider<AwsAuthConfig, AwsResolvedCredentials>(
+      AWS_AUTH_PROVIDER_NAME,
+    );
+    const profileName = yield* ALCHEMY_PROFILE;
     const ci = yield* Config.boolean("CI").pipe(Config.withDefault(false));
-    if (ci) {
-      const accessKeyId = yield* AWS_ACCESS_KEY_ID.pipe(
-        Config.option,
-        Config.map(Option.getOrUndefined),
-      );
-      if (accessKeyId) {
-        return loadFromEnv(accessKeyId).pipe(
-          Effect.provideContext(ctx),
-          Effect.orDie,
-        );
-      }
-    }
-    return loadFromSso().pipe(Effect.provideContext(ctx), Effect.orDie);
+
+    return yield* profile.loadOrConfigure(auth, profileName, { ci }).pipe(
+      Effect.flatMap((config) => auth.read(profileName, config)),
+      Effect.orDie,
+      Effect.cached,
+    );
   }),
 ).pipe(Layer.orDie);
-
-const loadFromEnv = (accessKeyId: string) =>
-  Effect.gen(function* () {
-    const secretAccessKey = yield* AWS_SECRET_ACCESS_KEY;
-    const sessionToken = yield* AWS_SESSION_TOKEN.pipe(
-      Config.option,
-      Config.map(Option.getOrUndefined),
-    );
-    const region = yield* AWS_REGION;
-    const accountId = yield* AWS_ACCOUNT_ID;
-    return {
-      accountId,
-      region,
-      credentials: Effect.succeed({
-        accessKeyId: Redacted.make(accessKeyId),
-        secretAccessKey,
-        sessionToken,
-      } satisfies ResolvedCredentials),
-    } satisfies AWSEnvironmentShape;
-  });
-
-const loadFromSso = () =>
-  Effect.gen(function* () {
-    const profileName = yield* ALCHEMY_PROFILE;
-    const auth = yield* Auth.Default;
-    const profile = yield* auth.loadProfile(profileName);
-    if (!profile.sso_account_id) {
-      return yield* Effect.die(
-        `AWS SSO profile '${profileName}' is missing sso_account_id`,
-      );
-    }
-    const region =
-      profile.region ??
-      (yield* AWS_REGION.pipe(
-        Config.option,
-        Config.map(Option.getOrElse(() => "us-east-1")),
-      ));
-    return {
-      profile: profileName,
-      accountId: profile.sso_account_id,
-      region,
-      credentials: auth.loadProfileCredentials(profileName),
-    } satisfies AWSEnvironmentShape;
-  });
-
-export interface AWSEnvironmentStaticInput {
-  accountId: AccountID;
-  region: RegionID;
-  credentials: AwsCredentialIdentity;
-  endpoint?: string;
-  profile?: string;
-}
-
-const isStatic = (
-  shape: AWSEnvironmentShape | AWSEnvironmentStaticInput,
-): shape is AWSEnvironmentStaticInput =>
-  shape.credentials != null &&
-  typeof (shape.credentials as AwsCredentialIdentity).accessKeyId === "string";
-
-/**
- * Build an `AWSEnvironment` Layer directly from values — useful for
- * static credentials in CI or tests.
- *
- * Named `makeEnvironment` rather than `of` because `Context.Service.of`
- * already exists with different semantics (builds the service value, not
- * a Layer); putting both on `AWSEnvironment` would be confusing.
- */
-export const makeEnvironment = (
-  shape: AWSEnvironmentShape | AWSEnvironmentStaticInput,
-) =>
-  Layer.succeed(
-    AWSEnvironment,
-    Effect.succeed(
-      isStatic(shape)
-        ? {
-            ...shape,
-            credentials: Effect.succeed(
-              fromAwsCredentialIdentity(shape.credentials),
-            ),
-          }
-        : shape,
-    ),
-  );
