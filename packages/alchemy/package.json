@@ -347,6 +347,7 @@
     "tsdown": "^0.15.4",
     "tsx": "^4.20.6",
     "typescript": "catalog:",
+    "uuid": "catalog:",
     "ws": "catalog:"
   },
   "peerDependencies": {
