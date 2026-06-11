@@ -1,3 +1,19 @@
+## v2.0.0-beta.55
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **cloudflare**:
+  - **ai-gateway**: Add AiGatewaySpendingLimit (account-level spend cap) &nbsp;-&nbsp; by **Matthew Aylward** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/569 [<samp>(3c550)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/3c550b58)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Dangling process on alchemy deploy/destroy &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/580 [<samp>(67bcc)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/67bcca0f)
+- **cloudflare**: Export fetcher utils from alchemy/Cloudflare/Bridge &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/581 [<samp>(77777)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/77777c6a)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.54...HEAD)
+
+---
+
 ## v2.0.0-beta.54
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
