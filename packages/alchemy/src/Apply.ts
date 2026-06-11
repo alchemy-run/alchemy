@@ -2,6 +2,7 @@ import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Semaphore from "effect/Semaphore";
 import type { Simplify } from "effect/Types";
 import {
   Artifacts,
@@ -78,6 +79,46 @@ interface ResourceTracker {
   instanceId: string;
 }
 
+export interface ApplyOptions {
+  /**
+   * Upper bound on the number of resources that may be running a provider
+   * lifecycle operation (precreate / create / update / replace / delete) at
+   * the same time.
+   *
+   * - `"unbounded"` (the default) places no limit — every ready resource is
+   *   dispatched concurrently, exactly as before.
+   * - A positive integer (e.g. `64`) caps in-flight lifecycle operations at
+   *   that many; additional resources queue until a slot frees up.
+   *
+   * Only the actual provider call is gated, never the dependency wait that
+   * precedes it, so bounding concurrency can never deadlock the DAG: a
+   * resource blocked on its upstreams holds no permit.
+   */
+  readonly concurrency?: "unbounded" | number;
+}
+
+/**
+ * A combinator that gates an effect on a shared concurrency permit. For
+ * `"unbounded"` it is the identity function; for a numeric limit it wraps the
+ * effect in a single permit taken from a shared {@link Semaphore}, so no more
+ * than `concurrency` gated effects run at once across the whole apply.
+ */
+export type LifecycleLimit = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+) => Effect.Effect<A, E, R>;
+
+const makeLifecycleLimit = (
+  concurrency: "unbounded" | number,
+): LifecycleLimit => {
+  if (concurrency === "unbounded") {
+    return (effect) => effect;
+  }
+  // One semaphore shared across every phase (executePlan, converge,
+  // collectGarbage) so the limit is global to the apply, not per-phase.
+  const semaphore = Semaphore.makeUnsafe(concurrency);
+  return (effect) => Semaphore.withPermits(semaphore, 1)(effect);
+};
+
 const provideLifecycleScope =
   (fqn: string, instanceId: string) =>
   <A, E, R>(
@@ -105,6 +146,7 @@ const provideLifecycleScope =
  */
 const instrumentLifecycle =
   (
+    limit: LifecycleLimit,
     op: ResourceOp,
     fqn: string,
     resourceType: string,
@@ -116,6 +158,10 @@ const instrumentLifecycle =
   ): Effect.Effect<A, E, Exclude<R, InstanceId | Artifacts>> =>
     effect.pipe(
       provideLifecycleScope(fqn, instanceId),
+      // Hold a concurrency permit only around the scoped provider call. The
+      // metric/span below stay outside the permit so queue time isn't counted
+      // as operation duration.
+      limit,
       recordResourceOp(resourceType, op),
       Effect.withSpan(`provider.${op}`, {
         attributes: {
@@ -130,6 +176,7 @@ const instrumentLifecycle =
 
 export const apply = <P extends Plan>(
   plan: P,
+  options?: ApplyOptions,
 ): Effect.Effect<
   Input.Resolve<P["output"]>,
   Output.InvalidReferenceError | Output.MissingSourceError | StateStoreError,
@@ -142,6 +189,9 @@ export const apply = <P extends Plan>(
     const stack = yield* Stack;
     const stage = yield* Stage;
     const stackName = stack.name;
+
+    // Shared across all three phases so the cap is global to the apply.
+    const limit = makeLifecycleLimit(options?.concurrency ?? "unbounded");
 
     const tracker: Record<string, ResourceTracker> = {};
     const terminalStatuses = new Map<
@@ -161,13 +211,14 @@ export const apply = <P extends Plan>(
       state,
       stackName,
       stage,
+      limit,
     );
 
     // TODO(sam): support roll back to previous state if errors occur during expansion
     // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
     // TODO(sam): should pivot be done separately? E.g shift traffic?
 
-    yield* collectGarbage(plan, session);
+    yield* collectGarbage(plan, session, limit);
 
     yield* converge(
       plan,
@@ -177,6 +228,7 @@ export const apply = <P extends Plan>(
       state,
       stackName,
       stage,
+      limit,
     );
 
     yield* Effect.forEach(
@@ -242,6 +294,7 @@ const executePlan = Effect.fnUntraced(function* (
   },
   stackName: string,
   stage: string,
+  limit: LifecycleLimit,
 ) {
   // Resources and tasks share the same FQN namespace and DAG, so the
   // scheduler tracks them together. Each entry gets a single Deferred that
@@ -344,6 +397,7 @@ const executePlan = Effect.fnUntraced(function* (
             waitForDeps,
             failures,
             plan.cycleMembers.has(fqn),
+            limit,
           ),
     ),
     { concurrency: "unbounded" },
@@ -393,6 +447,7 @@ const executeNode = (
   waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
   failures: LifecycleFailure[],
   inCycle: boolean,
+  limit: LifecycleLimit,
 ): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
     const logicalId = node.resource.LogicalId;
@@ -583,6 +638,7 @@ const executeNode = (
             })
             .pipe(
               instrumentLifecycle(
+                limit,
                 "precreate",
                 fqn,
                 node.resource.Type,
@@ -644,6 +700,7 @@ const executeNode = (
           })
           .pipe(
             instrumentLifecycle(
+              limit,
               "create",
               fqn,
               node.resource.Type,
@@ -766,6 +823,7 @@ const executeNode = (
           })
           .pipe(
             instrumentLifecycle(
+              limit,
               "update",
               fqn,
               node.resource.Type,
@@ -880,6 +938,7 @@ const executeNode = (
             })
             .pipe(
               instrumentLifecycle(
+                limit,
                 "precreate",
                 fqn,
                 node.resource.Type,
@@ -942,6 +1001,7 @@ const executeNode = (
           })
           .pipe(
             instrumentLifecycle(
+              limit,
               "create",
               fqn,
               node.resource.Type,
@@ -1222,6 +1282,7 @@ const converge = Effect.fnUntraced(function* (
   },
   stackName: string,
   stage: string,
+  limit: LifecycleLimit,
 ) {
   for (;;) {
     let anyUpdated = false;
@@ -1276,6 +1337,7 @@ const converge = Effect.fnUntraced(function* (
         })
         .pipe(
           instrumentLifecycle(
+            limit,
             "update",
             fqn,
             node.resource.Type,
@@ -1396,6 +1458,7 @@ const converge = Effect.fnUntraced(function* (
 const collectGarbage = Effect.fnUntraced(function* (
   plan: Plan,
   session: PlanStatusSession,
+  limit: LifecycleLimit,
 ) {
   const state = yield* yield* State;
   const stack = yield* Stack;
@@ -1569,6 +1632,7 @@ const collectGarbage = Effect.fnUntraced(function* (
                 })
                 .pipe(
                   instrumentLifecycle(
+                    limit,
                     "delete",
                     fqn,
                     resourceType,

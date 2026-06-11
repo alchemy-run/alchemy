@@ -137,6 +137,22 @@ export const force = Flag.boolean("force").pipe(
   Flag.withDefault(false),
 );
 
+/**
+ * `--concurrency <n>` caps how many resources run a provider lifecycle
+ * operation at the same time (e.g. `--concurrency 64`). Defers to Effect's
+ * own concurrency model: omitting the flag leaves the apply unbounded, exactly
+ * like `{ concurrency: "unbounded" }`.
+ */
+export const concurrency = Flag.integer("concurrency").pipe(
+  Flag.withSchema(S.Int.check(S.isGreaterThanOrEqualTo(1))),
+  Flag.withDescription(
+    "Max number of resources applying in parallel (e.g. 64). " +
+      "Defaults to unbounded (no limit).",
+  ),
+  Flag.optional,
+  Flag.map(Option.getOrUndefined),
+);
+
 export const script = Argument.file("main", {
   mustExist: true,
 }).pipe(

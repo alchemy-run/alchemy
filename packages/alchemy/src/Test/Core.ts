@@ -7,7 +7,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import { AdoptPolicy } from "../AdoptPolicy.ts";
 import { AlchemyContext, AlchemyContextLive } from "../AlchemyContext.ts";
-import { apply } from "../Apply.ts";
+import { apply, type ApplyOptions } from "../Apply.ts";
 import { provideFreshArtifactStore } from "../Artifacts.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
@@ -206,8 +206,9 @@ export interface ScratchStack<ROut = any> {
   readonly state: Layer.Layer<State.State, never, never>;
   deploy<A, E, R>(
     effect: Effect.Effect<A, E, R>,
+    options?: ApplyOptions,
   ): Effect.Effect<Input.Resolve<A>, any, Exclude<R, ROut | StackServices>>;
-  destroy(): Effect.Effect<void, any, never>;
+  destroy(options?: ApplyOptions): Effect.Effect<void, any, never>;
 }
 
 const sanitizeStackName = (name: string) =>
@@ -233,7 +234,10 @@ export const scratchStack = <ROut>(
     State.InMemoryService(inMemory),
   );
 
-  const buildAndApply = (effect: Effect.Effect<any, any, any>) =>
+  const buildAndApply = (
+    effect: Effect.Effect<any, any, any>,
+    applyOptions?: ApplyOptions,
+  ) =>
     (effect as Effect.Effect<any, any, never>).pipe(
       makeStack({
         name: stackName,
@@ -242,7 +246,7 @@ export const scratchStack = <ROut>(
       } as any) as any,
       Effect.flatMap((compiled: any) =>
         Plan.make(compiled).pipe(
-          Effect.flatMap(apply),
+          Effect.flatMap((plan) => apply(plan, applyOptions)),
           Effect.provide(compiled.services),
         ),
       ),
@@ -253,9 +257,11 @@ export const scratchStack = <ROut>(
   return {
     name: stackName,
     state: stateLayer,
-    deploy: ((effect: Effect.Effect<any, any, any>) =>
-      buildAndApply(effect)) as ScratchStack<ROut>["deploy"],
-    destroy: () =>
+    deploy: ((
+      effect: Effect.Effect<any, any, any>,
+      applyOptions?: ApplyOptions,
+    ) => buildAndApply(effect, applyOptions)) as ScratchStack<ROut>["deploy"],
+    destroy: (applyOptions?: ApplyOptions) =>
       Plan.make({
         name: stackName,
         stage,
@@ -264,7 +270,7 @@ export const scratchStack = <ROut>(
         actions: {},
         output: {},
       }).pipe(
-        Effect.flatMap(apply),
+        Effect.flatMap((plan) => apply(plan, applyOptions)),
         Effect.asVoid,
         Effect.provide(stateLayer),
         Effect.provide(options.providers as Layer.Layer<any, never, any>),

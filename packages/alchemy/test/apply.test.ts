@@ -4614,3 +4614,159 @@ describe("Duration round-trip through state", () => {
       }),
   );
 });
+
+describe("concurrency limit", () => {
+  // Probe that records the high-water mark of resources running their
+  // provider lifecycle (reconcile) at the same time. The `create` hook is
+  // invoked from inside `reconcile`, which is exactly the operation gated by
+  // the apply's concurrency semaphore, so `max` reflects in-flight permits.
+  const makeConcurrencyProbe = (holdMillis = 50) => {
+    const state = { current: 0, max: 0 };
+    const probe = Layer.succeed(TestResourceHooks, {
+      create: () =>
+        Effect.gen(function* () {
+          yield* Effect.sync(() => {
+            state.current += 1;
+            state.max = Math.max(state.max, state.current);
+          });
+          // Hold the permit long enough that every concurrently-admitted
+          // reconcile overlaps before any of them releases.
+          yield* Effect.sleep(Duration.millis(holdMillis));
+          yield* Effect.sync(() => {
+            state.current -= 1;
+          });
+        }),
+    });
+    return { state, probe };
+  };
+
+  // N resources with no dependencies between them — every node is "ready"
+  // immediately, so without a limit they all reconcile at once.
+  const independentResources = (count: number) =>
+    Effect.gen(function* () {
+      for (let i = 0; i < count; i++) {
+        yield* TestResource(`R${i}`, { string: `v${i}` });
+      }
+    });
+
+  const expectCreated = Effect.fn(function* (id: string, string: string) {
+    const s = (yield* getState(id)) as unknown as {
+      status: string;
+      attr: { string: string };
+    };
+    expect(s?.status).toEqual("created");
+    expect(s?.attr?.string).toEqual(string);
+  });
+
+  test.provider(
+    "defaults to unbounded — every ready resource applies at once",
+    (stack) =>
+      Effect.gen(function* () {
+        const count = 8;
+        const { state, probe } = makeConcurrencyProbe();
+
+        yield* stack
+          .deploy(independentResources(count))
+          .pipe(Effect.provide(probe));
+
+        // No limit supplied → all `count` reconciles run concurrently.
+        expect(state.max).toBe(count);
+        for (let i = 0; i < count; i++) {
+          yield* expectCreated(`R${i}`, `v${i}`);
+        }
+      }),
+    { timeout: 20_000 },
+  );
+
+  test.provider(
+    "caps the number of resources applying at the same time",
+    (stack) =>
+      Effect.gen(function* () {
+        const count = 12;
+        const limit = 4;
+        const { state, probe } = makeConcurrencyProbe();
+
+        yield* stack
+          .deploy(independentResources(count), { concurrency: limit })
+          .pipe(Effect.provide(probe));
+
+        // Never more than `limit` reconciles in flight, yet the cap is
+        // actually reached (count > limit and they all overlap).
+        expect(state.max).toBeLessThanOrEqual(limit);
+        expect(state.max).toBe(limit);
+
+        // …and every resource still converges.
+        for (let i = 0; i < count; i++) {
+          yield* expectCreated(`R${i}`, `v${i}`);
+        }
+      }),
+    { timeout: 20_000 },
+  );
+
+  test.provider(
+    "concurrency of 1 fully serializes lifecycle operations",
+    (stack) =>
+      Effect.gen(function* () {
+        const count = 5;
+        const { state, probe } = makeConcurrencyProbe(10);
+
+        yield* stack
+          .deploy(independentResources(count), { concurrency: 1 })
+          .pipe(Effect.provide(probe));
+
+        expect(state.max).toBe(1);
+        for (let i = 0; i < count; i++) {
+          expect((yield* getState(`R${i}`))?.status).toEqual("created");
+        }
+      }),
+    { timeout: 20_000 },
+  );
+
+  // Regression guard for the permit-after-wait design: a bounded apply must
+  // only hold a permit around the actual provider call, never around the
+  // dependency wait. A chain longer than the limit would deadlock if a
+  // resource held its permit while blocked on an upstream that can't acquire
+  // one. With `concurrency: 1` and a 5-deep chain this would hang forever if
+  // the gate were placed around the wait.
+  const chain = (count: number) =>
+    Effect.gen(function* () {
+      let prev = yield* TestResource("C0", { string: "base" });
+      for (let i = 1; i < count; i++) {
+        prev = yield* TestResource(`C${i}`, { string: prev.string });
+      }
+      return prev.string;
+    });
+
+  test.provider(
+    "a dependency chain does not deadlock under a tight limit",
+    (stack) =>
+      Effect.gen(function* () {
+        const out = yield* stack.deploy(chain(5), { concurrency: 1 });
+
+        // The value must propagate the whole way down the chain.
+        expect(out).toEqual("base");
+        for (let i = 0; i < 5; i++) {
+          expect((yield* getState(`C${i}`))?.status).toEqual("created");
+        }
+      }),
+    { timeout: 20_000 },
+  );
+
+  test.provider("destroy honors the concurrency limit", (stack) =>
+    Effect.gen(function* () {
+      const count = 6;
+      yield* stack.deploy(independentResources(count));
+      for (let i = 0; i < count; i++) {
+        expect((yield* getState(`R${i}`))?.status).toEqual("created");
+      }
+
+      // A bounded destroy must still tear everything down.
+      yield* stack.destroy({ concurrency: 2 });
+
+      for (let i = 0; i < count; i++) {
+        expect(yield* getState(`R${i}`)).toBeUndefined();
+      }
+      expect(yield* listState()).toEqual([]);
+    }),
+  );
+});

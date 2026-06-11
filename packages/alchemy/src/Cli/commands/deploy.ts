@@ -21,6 +21,7 @@ import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 
 import {
+  concurrency,
   dryRun as dryRunFlag,
   envFile,
   force,
@@ -43,6 +44,7 @@ export const ExecStackOptions = Schema.Struct({
   destroy: Schema.optional(Schema.Boolean),
   dev: Schema.optional(Schema.Boolean),
   adopt: Schema.optional(Schema.Boolean),
+  concurrency: Schema.optional(Schema.Number),
 });
 export type ExecStackOptions = typeof ExecStackOptions.Type;
 export type ExecStackOptionsEncoded = typeof ExecStackOptions.Encoded;
@@ -56,6 +58,7 @@ const stackSpanAttrs = (args: ExecStackOptions) => ({
   "alchemy.destroy": !!args.destroy,
   "alchemy.dev": !!args.dev,
   "alchemy.adopt": !!args.adopt,
+  "alchemy.concurrency": args.concurrency ?? "unbounded",
 });
 
 const adopt = Flag.boolean("adopt").pipe(
@@ -77,6 +80,7 @@ export const execStack = Effect.fn(function* ({
   destroy = false,
   dev = false,
   adopt = false,
+  concurrency,
 }: ExecStackOptions) {
   const stackEffect = yield* importStack(main);
 
@@ -147,7 +151,9 @@ export const execStack = Effect.fn(function* ({
             return;
           }
         }
-        const outputs = yield* apply(updatePlan);
+        const outputs = yield* apply(updatePlan, {
+          concurrency: concurrency ?? "unbounded",
+        });
 
         if (outputs !== undefined) {
           yield* Console.log(outputs);
@@ -172,6 +178,7 @@ export const deployCommand = Command.make(
     yes,
     profile,
     adopt,
+    concurrency,
   },
   instrumentCommand("deploy", stackSpanAttrs)(execStack),
 );
@@ -185,6 +192,7 @@ export const destroyCommand = Command.make(
     stage,
     yes,
     profile,
+    concurrency,
   },
   instrumentCommand(
     "destroy",
