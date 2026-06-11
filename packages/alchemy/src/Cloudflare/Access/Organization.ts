@@ -248,19 +248,15 @@ export const AccessOrganizationProvider = () =>
             ...(loginDesign ? { loginDesign } : {}),
           })
           .pipe(
-            Effect.catch((e) =>
+            Effect.catchTag("OrganizationAlreadyExists", () =>
               Effect.gen(function* () {
-                const tag = (e as { _tag?: string })._tag;
-                if (tag === "Conflict") {
-                  const existing = yield* observe();
-                  if (existing) return existing;
-                  return yield* Effect.fail(
-                    new Error(
-                      "Cloudflare returned Conflict on createOrganizationForAccount but the org could not be observed afterwards",
-                    ),
-                  );
-                }
-                return yield* Effect.fail(e);
+                const existing = yield* observe();
+                if (existing) return existing;
+                return yield* Effect.fail(
+                  new Error(
+                    "Cloudflare returned OrganizationAlreadyExists on createOrganizationForAccount but the org could not be observed afterwards",
+                  ),
+                );
               }),
             ),
           );
@@ -334,14 +330,10 @@ const observe = Effect.fn(function* () {
       const typed = org as zeroTrust.ListOrganizationsResponse;
       return typed && typed.authDomain ? typed : undefined;
     }),
-    Effect.catch((e) =>
-      Effect.gen(function* () {
-        const tag = (e as { _tag?: string })._tag;
-        if (tag === "NotFound") {
-          return undefined as zeroTrust.ListOrganizationsResponse | undefined;
-        }
-        return yield* Effect.fail(e);
-      }),
+    Effect.catchTag("OrganizationNotFound", () =>
+      Effect.succeed(
+        undefined as zeroTrust.ListOrganizationsResponse | undefined,
+      ),
     ),
   );
 });

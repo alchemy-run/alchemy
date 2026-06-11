@@ -460,8 +460,8 @@ export const R2BucketProvider = () =>
                       jurisdiction,
                     })
                     .pipe(
-                      Effect.catchIf(
-                        isMissingCustomDomainOrBucket,
+                      Effect.catchTag(
+                        ["DomainNotFound", "NoSuchBucket"],
                         () => Effect.void,
                       ),
                     ),
@@ -499,8 +499,8 @@ export const R2BucketProvider = () =>
                       jurisdiction,
                     })
                     .pipe(
-                      Effect.catchIf(
-                        isMissingCustomDomainOrBucket,
+                      Effect.catchTag(
+                        ["DomainNotFound", "NoSuchBucket"],
                         () => Effect.void,
                       ),
                     );
@@ -524,7 +524,7 @@ export const R2BucketProvider = () =>
                         schedule: r2BucketEndpointConsistencySchedule,
                       }),
                       Effect.retry({
-                        while: isDomainInUseConflict,
+                        while: (e) => e._tag === "CustomDomainInUse",
                         schedule: r2CustomDomainConflictSchedule,
                       }),
                     );
@@ -753,8 +753,8 @@ export const R2BucketProvider = () =>
                 jurisdiction: output.jurisdiction,
               })
               .pipe(
-                Effect.catchIf(
-                  isMissingCustomDomainOrBucket,
+                Effect.catchTag(
+                  ["DomainNotFound", "NoSuchBucket"],
                   () => Effect.void,
                 ),
               );
@@ -840,14 +840,6 @@ const sameCustomDomainConfig = (
   deepEqual(observed.ciphers, desired.ciphers) &&
   observed.minTLS === desired.minTLS;
 
-const isMissingCustomDomainOrBucket = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  (("status" in error && (error as { status: unknown }).status === 404) ||
-    ("_tag" in error &&
-      ((error as { _tag: unknown })._tag === "DomainNotFound" ||
-        (error as { _tag: unknown })._tag === "NoSuchBucket")));
-
 type LifecycleRuleResponse = NonNullable<
   r2.GetBucketLifecycleResponse["rules"]
 >[number];
@@ -895,19 +887,11 @@ const toLifecyclePutPayload = (
 
 // Cloudflare keys a custom domain to a single bucket at the zone level. After a
 // domain is deleted, re-attaching the same hostname can transiently 409 with
-// "Domain already in use" until the prior association is fully released. Treat
-// that narrow conflict as eventual consistency and retry it on create.
-const isDomainInUseConflict = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  "_tag" in error &&
-  (error as { _tag: unknown })._tag === "Conflict" &&
-  "message" in error &&
-  typeof (error as { message: unknown }).message === "string" &&
-  (error as { message: string }).message.toLowerCase().includes("in use");
-
-// Releasing a custom domain after delete can lag a few seconds, so give the
-// conflict a longer, bounded budget than the bucket-endpoint lag above.
+// "Domain already in use" (typed as `CustomDomainInUse`) until the prior
+// association is fully released. Treat that narrow conflict as eventual
+// consistency and retry it on create. Releasing a custom domain after delete
+// can lag a few seconds, so give the conflict a longer, bounded budget than
+// the bucket-endpoint lag above.
 const r2CustomDomainConflictSchedule = Schedule.spaced("2 seconds").pipe(
   Schedule.both(Schedule.recurs(8)),
 );

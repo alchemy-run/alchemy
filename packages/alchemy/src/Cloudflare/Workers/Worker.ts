@@ -867,8 +867,7 @@ export const LiveWorkerProvider = () =>
             })
             .pipe(
               Effect.retry({
-                while: (error: { _tag?: string }) =>
-                  error?._tag === "WorkerNotFound",
+                while: (error) => error._tag === "WorkerNotFound",
                 schedule: Schedule.exponential(200).pipe(
                   Schedule.both(Schedule.recurs(15)),
                 ),
@@ -1020,8 +1019,7 @@ export const LiveWorkerProvider = () =>
               })
               .pipe(
                 Effect.retry({
-                  while: (error: { _tag?: string }) =>
-                    error?._tag === "WorkerNotFound",
+                  while: (error) => error._tag === "WorkerNotFound",
                   schedule: Schedule.exponential(200).pipe(
                     Schedule.both(Schedule.recurs(15)),
                   ),
@@ -1701,10 +1699,10 @@ export const LiveWorkerProvider = () =>
           // provider for DO-namespace propagation and for `putScript` itself.
           yield* setWorkerSubdomain(name, desiredSubdomainEnabled).pipe(
             Effect.retry({
-              while: (error: { _tag?: string }) =>
-                error?._tag === "WorkerNotFound" ||
-                error?._tag === "InternalServerError" ||
-                error?._tag === "UnknownCloudflareError",
+              while: (error) =>
+                error._tag === "WorkerNotFound" ||
+                error._tag === "InternalServerError" ||
+                error._tag === "UnknownCloudflareError",
               schedule: Schedule.exponential(200).pipe(
                 Schedule.both(Schedule.recurs(15)),
               ),

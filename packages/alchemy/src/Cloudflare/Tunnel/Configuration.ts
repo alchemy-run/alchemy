@@ -264,16 +264,6 @@ const configsEqual = (
 // Provider
 // ---------------------------------------------------------------------------
 
-// Distilled tags only transport errors; a 404 for a tunnel that has no
-// configuration yet surfaces as the tagged `TunnelConfigurationNotFound`
-// (code 1055) — that's the one we want to swallow into "missing".
-const isConfigNotFound = (
-  err: unknown,
-): err is { readonly _tag: "TunnelConfigurationNotFound" } =>
-  typeof err === "object" &&
-  err !== null &&
-  (err as { _tag?: string })._tag === "TunnelConfigurationNotFound";
-
 export const TunnelConfigurationProvider = () =>
   Provider.effect(
     TunnelConfiguration,
@@ -285,11 +275,11 @@ export const TunnelConfigurationProvider = () =>
 
       const observe = (tunnelId: string) =>
         Effect.gen(function* () {
+          // A tunnel with no configuration yet surfaces as the tagged
+          // `TunnelConfigurationNotFound` (code 1055) — swallow into "missing".
           const r = yield* getConfig({ accountId, tunnelId }).pipe(
-            Effect.catch((err) =>
-              isConfigNotFound(err)
-                ? Effect.succeed(undefined)
-                : Effect.fail(err),
+            Effect.catchTag("TunnelConfigurationNotFound", () =>
+              Effect.succeed(undefined),
             ),
           );
           if (r === undefined) return undefined;

@@ -540,6 +540,53 @@ See the [VPC Smoke Test](./test/AWS/EC2/Vpc.smoke.test.ts) for an example.
 
 11. Add the resource-level JSDoc (`@section` + `@example` blocks) and field-level JSDoc on each prop/attribute on the source `.ts` file. Then run `bun generate:api-reference` to refresh `website/src/content/docs/providers/{Cloud}/{Resource}.md`. Do NOT manually edit the generated markdown.
 
+# Typed Error Doctrine (distilled)
+
+Every error a distilled operation can produce in practice MUST be a tagged error in that operation's **type-level** error union. The catch-all classes (`UnknownCloudflareError`, `CloudflareHttpError`, and the status-derived classes like `NotFound`/`BadRequest` that distilled leaves out of the typed union) exist only to *surface* gaps — they are never something alchemy code handles.
+
+**When you hit an unmatched error** (an `UnknownCloudflareError`, or you find yourself wanting to check `CloudflareHttpError.status` or an out-of-union `NotFound`), the fix is ALWAYS a distilled patch, never a catch in alchemy:
+
+1. Note the error's code / status / message from the failure output.
+2. Add or extend `distilled/packages/cloudflare/patches/{service}/{operation}.json` with a **meaningful, resource-specific tag** (e.g. `WidgetNotFound`, not a bare `NotFound`):
+
+   ```json
+   { "errors": { "WidgetNotFound": [{ "code": 1234 }] } }
+   ```
+
+   Matchers may combine `code`, `status`, and `message` (`{ "includes": "..." }` / `{ "matches": "..." }`) — e.g. `[{ "status": 400, "message": { "includes": "snippet not found" } }]` when Cloudflare misuses 400 for a missing resource. Prefer matching the Cloudflare error `code` when one exists; fall back to `status` + `message` otherwise.
+
+3. Regenerate ONLY that service: `cd distilled/packages/cloudflare && bun scripts/generate.ts --service {service}` (then `bun oxlint --fix src/services/{service}.ts && bun oxfmt --write src/services/{service}.ts`).
+4. Handle the now-typed tag in alchemy code and re-run the tests.
+
+**Forbidden patterns** — these defeat the type system and must never appear in alchemy code or tests:
+
+```ts
+// ❌ unknown-typed structural predicates
+const isNotFoundError = (e: unknown): boolean =>
+  Predicate.hasProperty(e, "_tag") && (e as { _tag: unknown })._tag === "NotFound";
+
+// ❌ widening casts to duck-typed tags
+Effect.retry({ while: (e) => (e as { _tag?: string })._tag === "Forbidden" })
+
+// ❌ catching the catch-all HTTP error by status
+Effect.catchIf((e) => e._tag === "CloudflareHttpError" && e.status === 404, ...)
+```
+
+**Required patterns** — fully inferred, no casts, no `unknown`:
+
+```ts
+// ✅ catch a typed tag
+.pipe(Effect.catchTag("WidgetNotFound", () => Effect.void))
+
+// ✅ retry while a typed tag is observed (e is the op's inferred error union)
+Effect.retry({ while: (e) => e._tag === "WidgetNotFound", schedule, times })
+
+// ✅ multiple tags
+Effect.catchTag(["WidgetNotFound", "Gone"], () => Effect.succeed(undefined))
+```
+
+If `Effect.catchTag("SomeTag", ...)` fails to typecheck, that is the signal that distilled's union is missing the error — patch distilled (step 2 above); do not loosen the alchemy-side types.
+
 # Test Fixtures for Effect-Native Workers / Functions
 
 To test runtime behavior of an Effect-native Worker, Workflow, Lambda, etc., write a **fixture** that defines the Worker/Function with the bindings under test and exposes one HTTP route per behavior, then write a **test** that deploys the fixture once via `beforeAll` and drives it over HTTP.

@@ -12,6 +12,7 @@ export * from "./HttpServer.ts";
 export * from "./InferEnv.ts";
 export * from "./LocalWorkerProvider.ts";
 export * from "./Request.ts";
+export * from "./Route.ts";
 export * from "./Rpc.ts";
 export * from "./RpcDurableObjectNamespace.ts";
 export * from "./RpcWorker.ts";

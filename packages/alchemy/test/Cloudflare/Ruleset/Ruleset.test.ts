@@ -200,12 +200,6 @@ const getPhaseRules = Effect.fn(function* (
     })
     .pipe(
       Effect.map((ruleset) => ruleset.rules ?? []),
-      Effect.catchIf(isNotFoundError, () => Effect.succeed([])),
+      Effect.catchTag("RulesetNotFound", () => Effect.succeed([])),
     );
 });
-
-const isNotFoundError = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  (("status" in error && (error as { status: unknown }).status === 404) ||
-    ("_tag" in error && (error as { _tag: unknown })._tag === "NotFound"));
