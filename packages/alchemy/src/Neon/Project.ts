@@ -21,6 +21,7 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { recordsEqual } from "../Util/equal.ts";
 import {
   hashImports,
   hashMigrations,
@@ -649,16 +650,3 @@ const runImports = (
     }
     return hashes;
   });
-
-const recordsEqual = (
-  a: Record<string, string>,
-  b: Record<string, string>,
-): boolean => {
-  const aKeys = Object.keys(a);
-  const bKeys = Object.keys(b);
-  if (aKeys.length !== bKeys.length) return false;
-  for (const k of aKeys) {
-    if (a[k] !== b[k]) return false;
-  }
-  return true;
-};

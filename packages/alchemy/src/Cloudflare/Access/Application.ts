@@ -6,6 +6,7 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { arrayEquals } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -706,18 +707,8 @@ const buildMutableBody = (
 // Drift detection
 // ---------------------------------------------------------------------------
 
-const arrEq = <T>(
-  a: ReadonlyArray<T> | undefined,
-  b: ReadonlyArray<T> | undefined,
-): boolean => {
-  if (a === b) return true;
-  if (a === undefined || b === undefined) return false;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) return false;
-  }
-  return true;
-};
+const jsonEq = <T>(x: T, y: T): boolean =>
+  JSON.stringify(x) === JSON.stringify(y);
 
 const policiesEq = (
   desired: ReadonlyArray<ResolvedPolicy> | undefined,
@@ -789,11 +780,14 @@ const bodyEqualsObserved = (
   }
   if (
     desired.allowedIdps !== undefined &&
-    !arrEq(desired.allowedIdps, observed.allowedIdps)
+    !arrayEquals(desired.allowedIdps, observed.allowedIdps, jsonEq)
   ) {
     return false;
   }
-  if (desired.tags !== undefined && !arrEq(desired.tags, observed.tags)) {
+  if (
+    desired.tags !== undefined &&
+    !arrayEquals(desired.tags, observed.tags, jsonEq)
+  ) {
     return false;
   }
   if (!policiesEq(desired.policies, observed.policies)) {

@@ -6,6 +6,7 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { arrayEqualsUnordered } from "../../Util/equal.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -459,19 +460,6 @@ const buildMutableBody = (
 // Drift detection
 // ---------------------------------------------------------------------------
 
-const arrEq = (
-  a: ReadonlyArray<string> | undefined,
-  b: ReadonlyArray<string> | undefined,
-): boolean => {
-  if (a === b) return true;
-  if (a === undefined || b === undefined) return false;
-  if (a.length !== b.length) return false;
-  const as = [...a].sort();
-  const bs = [...b].sort();
-  for (let i = 0; i < as.length; i++) if (as[i] !== bs[i]) return false;
-  return true;
-};
-
 const bodyEqualsObserved = (
   desired: RecordMutableBody,
   observed: ObservedRecord,
@@ -491,7 +479,10 @@ const bodyEqualsObserved = (
   ) {
     return false;
   }
-  if (desired.tags !== undefined && !arrEq(desired.tags, observed.tags)) {
+  if (
+    desired.tags !== undefined &&
+    !arrayEqualsUnordered(desired.tags, observed.tags)
+  ) {
     return false;
   }
   if (

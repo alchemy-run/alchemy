@@ -696,7 +696,7 @@ When a canonical resource needs mutable event-source configuration and there is 
 Always run type checking before committing changes:
 
 ```bash
-bun tsc -b
+bun tsgo -b
 ```
 
 This runs the TypeScript compiler in build mode, which checks all projects in the workspace. This is critical because CI will fail if there are type errors.
@@ -705,7 +705,7 @@ This runs the TypeScript compiler in build mode, which checks all projects in th
 
 | Command           | Description                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------------------- |
-| `bun tsc -b`      | Type check all projects (always run before committing)                                       |
+| `bun tsgo -b`     | Type check all projects (always run before committing)                                       |
 | `bun run build`   | Clean, type check, and build the alchemy package                                             |
 | `bun build:clean` | Full clean rebuild: cleans all artifacts, reinstalls dependencies, builds, and downloads env |
 

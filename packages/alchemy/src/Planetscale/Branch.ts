@@ -8,6 +8,7 @@ import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import type { ResourceClass, ResourceLike } from "../Resource.ts";
 import { hashImports, hashMigrations } from "../Sql/SqlFile.ts";
+import { recordsEqual } from "../Util/equal.ts";
 import { ensureMySQLProductionBranchClusterSize } from "./MySQL/MySQLClusterSize.ts";
 import {
   ensurePostgresProductionBranchClusterSize,
@@ -17,7 +18,6 @@ import {
   DEFAULT_MIGRATIONS_TABLE,
   PlanetscaleConflict,
   isKnownError,
-  recordsEqual,
   waitForBranchReady,
 } from "./Util.ts";
 

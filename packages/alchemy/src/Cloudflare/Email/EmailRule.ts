@@ -82,55 +82,6 @@ export type EmailRule = Resource<
  */
 export const EmailRule = Resource<EmailRule>("Cloudflare.EmailRule");
 
-const normalize = (
-  rule: {
-    id?: string | null;
-    name?: string | null;
-    enabled?: boolean | null;
-    priority?: number | null;
-    // Distilled widened generated string enums to open unions (`string & {}`);
-    // the runtime values are still the known variants, narrowed below.
-    matchers?:
-      | {
-          type: string;
-          field?: string | null;
-          value?: string | null;
-        }[]
-      | null;
-    actions?: { type: string; value?: string[] | null }[] | null;
-  },
-  zoneId: string,
-) => ({
-  ruleId: rule.id ?? "",
-  zoneId,
-  name: rule.name ?? "",
-  enabled: rule.enabled ?? true,
-  priority: rule.priority ?? 0,
-  matchers: (rule.matchers ?? []).map(
-    (m): EmailMatcher =>
-      m.type === "all"
-        ? { type: "all" }
-        : { type: "literal", field: "to", value: m.value ?? "" },
-  ),
-  actions: (rule.actions ?? []).map(
-    (a): EmailAction =>
-      a.type === "drop"
-        ? { type: "drop" }
-        : a.type === "forward"
-          ? { type: "forward", value: a.value ?? [] }
-          : { type: "worker", value: a.value ?? [] },
-  ),
-});
-
-const resolve = Effect.fnUntraced(function* (zone: ZoneReference) {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  return yield* resolveZoneId({
-    accountId,
-    zone,
-    hostname: typeof zone === "string" ? zone : (zone.name ?? ""),
-  });
-});
-
 export const EmailRuleProvider = () =>
   Provider.succeed(EmailRule, {
     stables: ["ruleId", "zoneId"],
@@ -207,3 +158,52 @@ export const EmailRuleProvider = () =>
         .pipe(Effect.catch(() => Effect.void));
     }),
   });
+
+const normalize = (
+  rule: {
+    id?: string | null;
+    name?: string | null;
+    enabled?: boolean | null;
+    priority?: number | null;
+    // Distilled widened generated string enums to open unions (`string & {}`);
+    // the runtime values are still the known variants, narrowed below.
+    matchers?:
+      | {
+          type: string;
+          field?: string | null;
+          value?: string | null;
+        }[]
+      | null;
+    actions?: { type: string; value?: string[] | null }[] | null;
+  },
+  zoneId: string,
+) => ({
+  ruleId: rule.id ?? "",
+  zoneId,
+  name: rule.name ?? "",
+  enabled: rule.enabled ?? true,
+  priority: rule.priority ?? 0,
+  matchers: (rule.matchers ?? []).map(
+    (m): EmailMatcher =>
+      m.type === "all"
+        ? { type: "all" }
+        : { type: "literal", field: "to", value: m.value ?? "" },
+  ),
+  actions: (rule.actions ?? []).map(
+    (a): EmailAction =>
+      a.type === "drop"
+        ? { type: "drop" }
+        : a.type === "forward"
+          ? { type: "forward", value: a.value ?? [] }
+          : { type: "worker", value: a.value ?? [] },
+  ),
+});
+
+const resolve = Effect.fnUntraced(function* (zone: ZoneReference) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  return yield* resolveZoneId({
+    accountId,
+    zone,
+    hostname: typeof zone === "string" ? zone : (zone.name ?? ""),
+  });
+});

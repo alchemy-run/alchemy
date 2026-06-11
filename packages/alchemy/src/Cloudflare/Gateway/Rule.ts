@@ -1,11 +1,11 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { arrayEquals } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -201,167 +201,6 @@ export type GatewayRule = Resource<
 export const GatewayRule = Resource<GatewayRule>("Cloudflare.Gateway.Rule");
 
 // ---------------------------------------------------------------------------
-// Observed-state types
-// ---------------------------------------------------------------------------
-
-interface ObservedRule {
-  readonly id?: string;
-  readonly name?: string;
-  readonly action?: GatewayRuleAction;
-  readonly filters?: ReadonlyArray<GatewayRuleFilter>;
-  readonly traffic?: string;
-  readonly identity?: string;
-  readonly devicePosture?: string;
-  readonly precedence?: number;
-  readonly enabled?: boolean;
-  readonly description?: string;
-  readonly ruleSettings?: Record<string, unknown>;
-  readonly createdAt?: string;
-  readonly updatedAt?: string;
-}
-
-const undef = <T>(v: T | null | undefined): T | undefined =>
-  v == null ? undefined : v;
-
-const undefArr = <T>(
-  v: ReadonlyArray<T | null> | null | undefined,
-): ReadonlyArray<T> | undefined =>
-  v == null ? undefined : (v.filter((x) => x != null) as ReadonlyArray<T>);
-
-const narrowRule = (raw: {
-  id?: string | null;
-  name?: string | null;
-  action?: GatewayRuleAction | null | string;
-  filters?: ReadonlyArray<GatewayRuleFilter | null> | null;
-  traffic?: string | null;
-  identity?: string | null;
-  devicePosture?: string | null;
-  precedence?: number | null;
-  enabled?: boolean | null;
-  description?: string | null;
-  ruleSettings?: Record<string, unknown> | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-}): ObservedRule => ({
-  id: undef(raw.id),
-  name: undef(raw.name),
-  action: raw.action == null ? undefined : (raw.action as GatewayRuleAction),
-  filters: undefArr(raw.filters ?? undefined),
-  traffic: undef(raw.traffic),
-  identity: undef(raw.identity),
-  devicePosture: undef(raw.devicePosture),
-  precedence: undef(raw.precedence),
-  enabled: undef(raw.enabled),
-  description: undef(raw.description),
-  ruleSettings: undef(raw.ruleSettings),
-  createdAt: undef(raw.createdAt),
-  updatedAt: undef(raw.updatedAt),
-});
-
-// ---------------------------------------------------------------------------
-// Body construction
-// ---------------------------------------------------------------------------
-
-interface RuleMutableBody {
-  name: string;
-  action: GatewayRuleAction;
-  filters: ReadonlyArray<GatewayRuleFilter>;
-  traffic?: string;
-  identity?: string;
-  devicePosture?: string;
-  ruleSettings?: GatewayRuleSettings;
-  precedence?: number;
-  enabled?: boolean;
-  description?: string;
-}
-
-const buildMutableBody = (
-  news: GatewayRuleProps,
-  resolvedName: string,
-): RuleMutableBody => {
-  const body: RuleMutableBody = {
-    name: resolvedName,
-    action: news.action,
-    filters: news.filters,
-  };
-  if (news.traffic !== undefined) body.traffic = news.traffic;
-  if (news.identity !== undefined) body.identity = news.identity;
-  if (news.devicePosture !== undefined) body.devicePosture = news.devicePosture;
-  if (news.ruleSettings !== undefined) body.ruleSettings = news.ruleSettings;
-  if (news.precedence !== undefined) body.precedence = news.precedence;
-  if (news.enabled !== undefined) body.enabled = news.enabled;
-  if (news.description !== undefined) body.description = news.description;
-  return body;
-};
-
-// ---------------------------------------------------------------------------
-// Drift detection
-// ---------------------------------------------------------------------------
-
-const arrEq = <T>(
-  a: ReadonlyArray<T> | undefined,
-  b: ReadonlyArray<T> | undefined,
-): boolean => {
-  if (a === b) return true;
-  if (a === undefined || b === undefined) return false;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-};
-
-const bodyEqualsObserved = (
-  desired: RuleMutableBody,
-  observed: ObservedRule,
-): boolean => {
-  if (desired.name !== observed.name) return false;
-  if (desired.action !== observed.action) return false;
-  if (!arrEq(desired.filters, observed.filters)) return false;
-  if (desired.traffic !== undefined && desired.traffic !== observed.traffic) {
-    return false;
-  }
-  if (
-    desired.identity !== undefined &&
-    desired.identity !== observed.identity
-  ) {
-    return false;
-  }
-  if (
-    desired.devicePosture !== undefined &&
-    desired.devicePosture !== observed.devicePosture
-  ) {
-    return false;
-  }
-  if (
-    desired.precedence !== undefined &&
-    desired.precedence !== observed.precedence
-  ) {
-    return false;
-  }
-  if (desired.enabled !== undefined && desired.enabled !== observed.enabled) {
-    return false;
-  }
-  if (
-    desired.description !== undefined &&
-    desired.description !== observed.description
-  ) {
-    return false;
-  }
-  // ruleSettings is a deeply-nested object whose server echo may include
-  // extra `null` fields. Stringify-compare only when the caller set them.
-  if (desired.ruleSettings !== undefined) {
-    if (
-      JSON.stringify(desired.ruleSettings) !==
-      JSON.stringify(observed.ruleSettings ?? {})
-    ) {
-      return false;
-    }
-  }
-  return true;
-};
-
-// ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
 
@@ -551,4 +390,146 @@ export const GatewayRuleProvider = () =>
     }),
   );
 
-void Option.none;
+interface ObservedRule {
+  readonly id?: string;
+  readonly name?: string;
+  readonly action?: GatewayRuleAction;
+  readonly filters?: ReadonlyArray<GatewayRuleFilter>;
+  readonly traffic?: string;
+  readonly identity?: string;
+  readonly devicePosture?: string;
+  readonly precedence?: number;
+  readonly enabled?: boolean;
+  readonly description?: string;
+  readonly ruleSettings?: Record<string, unknown>;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+}
+
+const undef = <T>(v: T | null | undefined): T | undefined =>
+  v == null ? undefined : v;
+
+const undefArr = <T>(
+  v: ReadonlyArray<T | null> | null | undefined,
+): ReadonlyArray<T> | undefined =>
+  v == null ? undefined : (v.filter((x) => x != null) as ReadonlyArray<T>);
+
+const narrowRule = (raw: {
+  id?: string | null;
+  name?: string | null;
+  action?: GatewayRuleAction | null | string;
+  filters?: ReadonlyArray<GatewayRuleFilter | null> | null;
+  traffic?: string | null;
+  identity?: string | null;
+  devicePosture?: string | null;
+  precedence?: number | null;
+  enabled?: boolean | null;
+  description?: string | null;
+  ruleSettings?: Record<string, unknown> | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}): ObservedRule => ({
+  id: undef(raw.id),
+  name: undef(raw.name),
+  action: raw.action == null ? undefined : (raw.action as GatewayRuleAction),
+  filters: undefArr(raw.filters ?? undefined),
+  traffic: undef(raw.traffic),
+  identity: undef(raw.identity),
+  devicePosture: undef(raw.devicePosture),
+  precedence: undef(raw.precedence),
+  enabled: undef(raw.enabled),
+  description: undef(raw.description),
+  ruleSettings: undef(raw.ruleSettings),
+  createdAt: undef(raw.createdAt),
+  updatedAt: undef(raw.updatedAt),
+});
+
+// ---------------------------------------------------------------------------
+// Body construction
+// ---------------------------------------------------------------------------
+
+interface RuleMutableBody {
+  name: string;
+  action: GatewayRuleAction;
+  filters: ReadonlyArray<GatewayRuleFilter>;
+  traffic?: string;
+  identity?: string;
+  devicePosture?: string;
+  ruleSettings?: GatewayRuleSettings;
+  precedence?: number;
+  enabled?: boolean;
+  description?: string;
+}
+
+const buildMutableBody = (
+  news: GatewayRuleProps,
+  resolvedName: string,
+): RuleMutableBody => {
+  const body: RuleMutableBody = {
+    name: resolvedName,
+    action: news.action,
+    filters: news.filters,
+  };
+  if (news.traffic !== undefined) body.traffic = news.traffic;
+  if (news.identity !== undefined) body.identity = news.identity;
+  if (news.devicePosture !== undefined) body.devicePosture = news.devicePosture;
+  if (news.ruleSettings !== undefined) body.ruleSettings = news.ruleSettings;
+  if (news.precedence !== undefined) body.precedence = news.precedence;
+  if (news.enabled !== undefined) body.enabled = news.enabled;
+  if (news.description !== undefined) body.description = news.description;
+  return body;
+};
+
+// ---------------------------------------------------------------------------
+// Drift detection
+// ---------------------------------------------------------------------------
+
+const bodyEqualsObserved = (
+  desired: RuleMutableBody,
+  observed: ObservedRule,
+): boolean => {
+  if (desired.name !== observed.name) return false;
+  if (desired.action !== observed.action) return false;
+  if (!arrayEquals(desired.filters, observed.filters)) return false;
+  if (desired.traffic !== undefined && desired.traffic !== observed.traffic) {
+    return false;
+  }
+  if (
+    desired.identity !== undefined &&
+    desired.identity !== observed.identity
+  ) {
+    return false;
+  }
+  if (
+    desired.devicePosture !== undefined &&
+    desired.devicePosture !== observed.devicePosture
+  ) {
+    return false;
+  }
+  if (
+    desired.precedence !== undefined &&
+    desired.precedence !== observed.precedence
+  ) {
+    return false;
+  }
+  if (desired.enabled !== undefined && desired.enabled !== observed.enabled) {
+    return false;
+  }
+  if (
+    desired.description !== undefined &&
+    desired.description !== observed.description
+  ) {
+    return false;
+  }
+  // ruleSettings is a deeply-nested object whose server echo may include
+  // extra `null` fields. Stringify-compare only when the caller set them.
+  if (desired.ruleSettings !== undefined) {
+    if (
+      JSON.stringify(desired.ruleSettings) !==
+      JSON.stringify(observed.ruleSettings ?? {})
+    ) {
+      return false;
+    }
+  }
+  return true;
+};
