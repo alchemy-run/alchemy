@@ -13,7 +13,10 @@ import * as Build from "../Build/index.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
 import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
+import * as AccessApp from "./Access/Application.ts";
 import * as Access from "./Access.ts";
+import * as AccessOrg from "./Access/Organization.ts";
+import * as AccessPol from "./Access/Policy.ts";
 import * as AiGateway from "./AiGateway/index.ts";
 import * as AnalyticsEngine from "./AnalyticsEngine/index.ts";
 import * as ApiToken from "./ApiToken/index.ts";
@@ -24,8 +27,10 @@ import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
 import * as Containers from "./Container/index.ts";
 import * as Credentials from "./Credentials.ts";
 import * as D1 from "./D1/index.ts";
+import * as Devices from "./Devices/index.ts";
 import * as Dns from "./Dns/index.ts";
 import * as Email from "./Email/index.ts";
+import * as GatewayRule from "./Gateway/Rule.ts";
 import * as Hyperdrive from "./Hyperdrive/index.ts";
 import * as Images from "./Images/index.ts";
 import * as KV from "./KV/index.ts";
@@ -58,6 +63,9 @@ export const providers = () =>
   Layer.effect(
     Providers,
     Provider.collection([
+      AccessApp.AccessApplication,
+      AccessOrg.AccessOrganization,
+      AccessPol.AccessPolicy,
       ApiToken.AccountApiToken,
       ApiToken.UserApiToken,
       AiGateway.AiGateway,
@@ -71,13 +79,16 @@ export const providers = () =>
       D1.D1ConnectionPolicy,
       D1.D1Database,
       DevServer,
+      Devices.DeviceDefaultProfile,
       Dns.DnsReadPolicy,
       Dns.DnsReadWritePolicy,
+      Dns.DnsRecord,
       Dns.DnsWritePolicy,
       Email.EmailAddress,
       Email.EmailRouting,
       Email.EmailRule,
       Email.SendEmailBindingPolicy,
+      GatewayRule.GatewayRule,
       Hyperdrive.Hyperdrive,
       Hyperdrive.HyperdriveBindingPolicy,
       Images.ImagesBindingPolicy,
@@ -95,8 +106,10 @@ export const providers = () =>
       SecretsStore.SecretsStore,
       SecretsStore.Secret,
       Tunnel.Tunnel,
+      Tunnel.TunnelConfiguration,
       Tunnel.TunnelReadPolicy,
       Tunnel.TunnelReadWritePolicy,
+      Tunnel.TunnelRoute,
       Tunnel.TunnelWritePolicy,
       Vectorize.VectorizeIndexBindingPolicy,
       Vectorize.VectorizeIndex,
@@ -116,6 +129,9 @@ export const providers = () =>
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
+        AccessApp.AccessApplicationProvider(),
+        AccessOrg.AccessOrganizationProvider(),
+        AccessPol.AccessPolicyProvider(),
         ApiToken.AccountApiTokenProvider(),
         ApiToken.UserApiTokenProvider(),
         AiGateway.AiGatewayProvider(),
@@ -128,13 +144,16 @@ export const providers = () =>
         D1.D1ConnectionPolicyLive,
         D1.DatabaseProvider(),
         DevServerProvider(),
+        Devices.DeviceDefaultProfileProvider(),
         Dns.DnsReadPolicyLive,
         Dns.DnsReadWritePolicyLive,
+        Dns.DnsRecordProvider(),
         Dns.DnsWritePolicyLive,
         Email.EmailAddressProvider(),
         Email.EmailRoutingProvider(),
         Email.EmailRuleProvider(),
         Email.SendEmailBindingPolicyLive,
+        GatewayRule.GatewayRuleProvider(),
         Hyperdrive.HyperdriveBindingPolicyLive,
         Hyperdrive.HyperdriveProvider(),
         Images.ImagesBindingPolicyLive,
@@ -152,8 +171,10 @@ export const providers = () =>
         SecretsStore.SecretsStoreProvider(),
         SecretsStore.StoreSecretProvider(),
         Tunnel.TunnelProvider(),
+        Tunnel.TunnelConfigurationProvider(),
         Tunnel.TunnelReadPolicyLive,
         Tunnel.TunnelReadWritePolicyLive,
+        Tunnel.TunnelRouteProvider(),
         Tunnel.TunnelWritePolicyLive,
         Vectorize.VectorizeIndexBindingPolicyLive,
         Vectorize.VectorizeIndexProvider(),
