@@ -1,12 +1,11 @@
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
+import { Unowned } from "../../AdoptPolicy.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
 /**
@@ -93,15 +92,6 @@ export interface DnsRecordProps {
    * Priority — required for `MX` and `URI` records, ignored for others.
    */
   priority?: number;
-  /**
-   * Take over an existing record with the same `(zoneId, name, type)`
-   * triple instead of failing on conflict. Without this flag, the
-   * reconciler refuses to touch a record it didn't create, to protect
-   * hand-edited DNS entries.
-   *
-   * @default false
-   */
-  adopt?: boolean;
 }
 
 export interface DnsRecordAttributes {
@@ -136,13 +126,13 @@ export type DnsRecord = Resource<
 /**
  * A single DNS record on a Cloudflare-managed zone.
  *
- * Safety: by default the reconciler refuses to take over a record it
- * didn't create. If `getRecord` by cached id misses, the reconciler
- * scans the zone for an existing `(name, type)` match; finding one
- * without `adopt: true` is a hard error, not a silent overwrite. This
- * protects hand-edited records (especially the apex `A`/`AAAA` and
- * email DKIM/SPF records that the dashboard often manages) from being
- * clobbered.
+ * Safety: when there is no prior state, `read` scans the zone for an
+ * existing `(name, type)` match. DNS records carry no ownership markers
+ * we can inspect, so an existing match is reported as `Unowned` and the
+ * engine refuses to take it over unless `--adopt` (or `adopt(true)`) is
+ * set. This protects hand-edited records (especially the apex `A`/`AAAA`
+ * and email DKIM/SPF records that the dashboard often manages) from
+ * being clobbered.
  *
  * @section Proxied CNAME pointing at a tunnel
  * @example Route a subdomain through a Cloudflare Tunnel
@@ -154,7 +144,6 @@ export type DnsRecord = Resource<
  *   content: `${tunnel.tunnelId}.cfargotunnel.com`,
  *   proxied: true,
  *   comment: "research admin UI",
- *   adopt: true,
  * });
  * ```
  *
@@ -172,9 +161,194 @@ export type DnsRecord = Resource<
  */
 export const DnsRecord = Resource<DnsRecord>("Cloudflare.Dns.Record");
 
-// ---------------------------------------------------------------------------
-// Observed-state types
-// ---------------------------------------------------------------------------
+export const DnsRecordProvider = () =>
+  Provider.succeed(DnsRecord, {
+    stables: ["recordId", "zoneId", "type", "name"],
+
+    diff: Effect.fn(function* ({ olds = {}, news }) {
+      const o = olds as DnsRecordProps;
+      const n = news as DnsRecordProps;
+      if (o.type !== undefined && o.type !== n.type) {
+        return { action: "replace" } as const;
+      }
+      if (o.name !== undefined && o.name !== n.name) {
+        return { action: "replace" } as const;
+      }
+      // zoneId is Input<string>; by reconcile time both sides are
+      // concrete strings.
+      if (
+        typeof o.zoneId === "string" &&
+        typeof n.zoneId === "string" &&
+        o.zoneId !== n.zoneId
+      ) {
+        return { action: "replace" } as const;
+      }
+    }),
+
+    reconcile: Effect.fn(function* ({ news, output }) {
+      // Inputs have been resolved to concrete strings by Plan.
+      const zoneId = news.zoneId as string;
+      const content = news.content as string;
+      const body = buildMutableBody(news, content);
+
+      // 1. Observe by cached id first.
+      let observed: ObservedRecord | undefined;
+      if (output?.recordId) {
+        observed = yield* observeById(zoneId, output.recordId);
+      }
+
+      // 2. Fall back to scanning the zone for a (name, type) match.
+      //    Ownership has already been verified upstream — `read` reports
+      //    existing records as `Unowned` and the engine gates takeover
+      //    behind the adopt policy before reconcile ever runs.
+      let foundByScan = false;
+      if (!observed) {
+        const existing = yield* findByNameType(zoneId, news.name, news.type);
+        if (existing) {
+          foundByScan = true;
+          observed = existing;
+        }
+      }
+
+      // 3. Ensure.
+      if (!observed) {
+        const created = yield* dns.createRecord({
+          zoneId,
+          name: body.name,
+          type: body.type,
+          content: body.content,
+          ttl: body.ttl,
+          proxied: body.proxied,
+          comment: body.comment,
+          tags: body.tags === undefined ? undefined : Array.from(body.tags),
+          priority: body.priority,
+        });
+        observed = narrowRecord(created as Parameters<typeof narrowRecord>[0]);
+      }
+
+      // 4. Sync — Cloudflare's update endpoint is PUT-style; resend
+      //    the full desired body when any mutable field differs.
+      if (!observed.id) {
+        return yield* Effect.fail(
+          new Error("Cloudflare did not return a record id for DNS record"),
+        );
+      }
+      if (!bodyEqualsObserved(body, observed)) {
+        // Suppress noise when we just created the record above — the
+        // server echo already matches and any diff is a CF-side
+        // normalisation we shouldn't fight on the very first reconcile.
+        const justCreated = !output?.recordId && !foundByScan;
+        if (!justCreated) {
+          const updated = yield* dns.updateRecord({
+            zoneId,
+            dnsRecordId: observed.id,
+            name: body.name,
+            type: body.type,
+            content: body.content,
+            ttl: body.ttl,
+            proxied: body.proxied,
+            comment: body.comment,
+            tags: body.tags === undefined ? undefined : Array.from(body.tags),
+            priority: body.priority,
+          });
+          observed = narrowRecord(
+            updated as Parameters<typeof narrowRecord>[0],
+          );
+        }
+      }
+
+      // 5. Return.
+      if (
+        !observed.id ||
+        !observed.type ||
+        observed.content === undefined ||
+        observed.ttl === undefined
+      ) {
+        return yield* Effect.fail(
+          new Error(
+            "Cloudflare returned a DNS record without id/type/content/ttl",
+          ),
+        );
+      }
+      return {
+        recordId: observed.id,
+        zoneId,
+        name: observed.name ?? body.name,
+        type: observed.type,
+        content: observed.content,
+        ttl: observed.ttl,
+        proxied: observed.proxied ?? false,
+        createdOn: observed.createdOn,
+        modifiedOn: observed.modifiedOn,
+      } satisfies DnsRecordAttributes;
+    }),
+
+    delete: Effect.fn(function* ({ output }) {
+      yield* dns
+        .deleteRecord({
+          zoneId: output.zoneId,
+          dnsRecordId: output.recordId,
+        })
+        .pipe(Effect.catch(() => Effect.void));
+    }),
+
+    read: Effect.fn(function* ({ output, olds }) {
+      // Owned path: we have persisted state (our own recordId) — refresh it.
+      if (output?.recordId) {
+        const observed = yield* observeById(output.zoneId, output.recordId);
+        const attrs = toAttributes(observed, output.zoneId);
+        if (attrs) return attrs;
+      }
+      // Adoption path: no state of our own, but a record with this
+      // `(zoneId, name, type)` may already exist. DNS records carry no
+      // ownership markers we can inspect, so we cannot prove we created
+      // it — brand it `Unowned` so the engine refuses to take over
+      // unless `adopt` is set.
+      const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
+      const name = output?.name ?? olds?.name;
+      const type = output?.type ?? olds?.type;
+      if (zoneId && name && type) {
+        const observed = yield* findByNameType(zoneId, name, type);
+        const attrs = toAttributes(observed, zoneId);
+        if (attrs) return Unowned(attrs);
+      }
+      return undefined;
+    }),
+  });
+
+const observeById = (zoneId: string, dnsRecordId: string) =>
+  Effect.gen(function* () {
+    const r = yield* dns.getRecord({ zoneId, dnsRecordId }).pipe(
+      // Distilled tags transport errors but a 404 for a missing
+      // record surfaces as an untagged error. Swallow so the
+      // reconciler falls through to the find-by-name path.
+      Effect.catch(() => Effect.succeed(undefined)),
+    );
+    if (r === undefined) return undefined;
+    return narrowRecord(r as Parameters<typeof narrowRecord>[0]);
+  });
+
+// Locate an existing record by `(zoneId, name, type)`. Used both
+// for the adoption path and to surface a conflict when the caller
+// hasn't opted into adoption.
+const findByNameType = (zoneId: string, name: string, type: DnsRecordType) =>
+  dns.listRecords
+    .items({
+      zoneId,
+      name: { exact: name },
+      type: type as dns.ListRecordsRequest["type"],
+    })
+    .pipe(
+      Stream.runCollect,
+      Effect.map((chunk) =>
+        Array.from(chunk).find((r) => r.name === name && r.type === type),
+      ),
+      Effect.map((found) =>
+        found === undefined
+          ? undefined
+          : narrowRecord(found as Parameters<typeof narrowRecord>[0]),
+      ),
+    );
 
 interface ObservedRecord {
   readonly id?: string;
@@ -218,6 +392,32 @@ const narrowRecord = (raw: {
   createdOn: undef(raw.createdOn),
   modifiedOn: undef(raw.modifiedOn),
 });
+
+const toAttributes = (
+  observed: ObservedRecord | undefined,
+  zoneId: string,
+): DnsRecordAttributes | undefined => {
+  if (
+    !observed?.id ||
+    !observed.name ||
+    !observed.type ||
+    observed.content === undefined ||
+    observed.ttl === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    recordId: observed.id,
+    zoneId,
+    name: observed.name,
+    type: observed.type,
+    content: observed.content,
+    ttl: observed.ttl,
+    proxied: observed.proxied ?? false,
+    createdOn: observed.createdOn,
+    modifiedOn: observed.modifiedOn,
+  };
+};
 
 // ---------------------------------------------------------------------------
 // Body construction
@@ -302,235 +502,3 @@ const bodyEqualsObserved = (
   }
   return true;
 };
-
-// ---------------------------------------------------------------------------
-// Provider
-// ---------------------------------------------------------------------------
-
-export const DnsRecordProvider = () =>
-  Provider.effect(
-    DnsRecord,
-    Effect.gen(function* () {
-      // Resolve the CF environment for tracing context; per-call zoneId
-      // comes from props since DNS records are zone-scoped, not account-
-      // scoped.
-      yield* CloudflareEnvironment;
-
-      const createRecord = yield* dns.createRecord;
-      const getRecord = yield* dns.getRecord;
-      const updateRecord = yield* dns.updateRecord;
-      const deleteRecord = yield* dns.deleteRecord;
-      const listRecords = dns.listRecords;
-
-      const observeById = (zoneId: string, dnsRecordId: string) =>
-        Effect.gen(function* () {
-          const r = yield* getRecord({ zoneId, dnsRecordId }).pipe(
-            // Distilled tags transport errors but a 404 for a missing
-            // record surfaces as an untagged error. Swallow so the
-            // reconciler falls through to the find-by-name path.
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
-          if (r === undefined) return undefined;
-          return narrowRecord(r as Parameters<typeof narrowRecord>[0]);
-        });
-
-      // Locate an existing record by `(zoneId, name, type)`. Used both
-      // for the adoption path and to surface a conflict when the caller
-      // hasn't opted into adoption.
-      const findByNameType = (
-        zoneId: string,
-        name: string,
-        type: DnsRecordType,
-      ) =>
-        listRecords
-          .items({
-            zoneId,
-            name: { exact: name },
-            // `type` on the list endpoint is a bare literal, not the
-            // `{exact: ...}` struct used for `name`/`content`.
-            type: type as dns.ListRecordsRequest["type"],
-          })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).find(
-                (r) =>
-                  (r as { name?: string | null }).name === name &&
-                  (r as { type?: string | null }).type === type,
-              ),
-            ),
-            Effect.map((found) =>
-              found === undefined
-                ? undefined
-                : narrowRecord(found as Parameters<typeof narrowRecord>[0]),
-            ),
-          );
-
-      return {
-        stables: ["recordId", "zoneId", "type", "name"],
-
-        diff: Effect.fn(function* ({ olds = {}, news }) {
-          const o = olds as DnsRecordProps;
-          const n = news as DnsRecordProps;
-          if (o.type !== undefined && o.type !== n.type) {
-            return { action: "replace" } as const;
-          }
-          if (o.name !== undefined && o.name !== n.name) {
-            return { action: "replace" } as const;
-          }
-          // zoneId is Input<string>; by reconcile time both sides are
-          // concrete strings.
-          if (
-            typeof o.zoneId === "string" &&
-            typeof n.zoneId === "string" &&
-            o.zoneId !== n.zoneId
-          ) {
-            return { action: "replace" } as const;
-          }
-        }),
-
-        reconcile: Effect.fn(function* ({ news, output }) {
-          // Inputs have been resolved to concrete strings by Plan.
-          const zoneId = news.zoneId as string;
-          const content = news.content as string;
-          const body = buildMutableBody(news, content);
-
-          // 1. Observe by cached id first.
-          let observed: ObservedRecord | undefined;
-          if (output?.recordId) {
-            observed = yield* observeById(zoneId, output.recordId);
-          }
-
-          // 2. Adoption / collision detection: fall back to scanning the
-          //    zone for a (name, type) match.
-          let foundByScan = false;
-          if (!observed) {
-            const existing = yield* findByNameType(
-              zoneId,
-              news.name,
-              news.type,
-            );
-            if (existing) {
-              foundByScan = true;
-              if (!news.adopt) {
-                return yield* Effect.fail(
-                  new Error(
-                    `Cloudflare DNS record ${news.type} ${news.name} already exists in zone ${zoneId}. Pass \`adopt: true\` to take ownership of it.`,
-                  ),
-                );
-              }
-              observed = existing;
-            }
-          }
-
-          // 3. Ensure.
-          if (!observed) {
-            const created = yield* createRecord({
-              zoneId,
-              name: body.name,
-              type: body.type,
-              content: body.content,
-              ttl: body.ttl,
-              proxied: body.proxied,
-              comment: body.comment,
-              tags: body.tags === undefined ? undefined : Array.from(body.tags),
-              priority: body.priority,
-            });
-            observed = narrowRecord(
-              created as Parameters<typeof narrowRecord>[0],
-            );
-          }
-
-          // 4. Sync — Cloudflare's update endpoint is PUT-style; resend
-          //    the full desired body when any mutable field differs.
-          if (!observed.id) {
-            return yield* Effect.fail(
-              new Error("Cloudflare did not return a record id for DNS record"),
-            );
-          }
-          if (!bodyEqualsObserved(body, observed)) {
-            // Suppress noise when we just created the record above — the
-            // server echo already matches and any diff is a CF-side
-            // normalisation we shouldn't fight on the very first reconcile.
-            const justCreated = !output?.recordId && !foundByScan;
-            if (!justCreated) {
-              const updated = yield* updateRecord({
-                zoneId,
-                dnsRecordId: observed.id,
-                name: body.name,
-                type: body.type,
-                content: body.content,
-                ttl: body.ttl,
-                proxied: body.proxied,
-                comment: body.comment,
-                tags:
-                  body.tags === undefined ? undefined : Array.from(body.tags),
-                priority: body.priority,
-              });
-              observed = narrowRecord(
-                updated as Parameters<typeof narrowRecord>[0],
-              );
-            }
-          }
-
-          // 5. Return.
-          if (
-            !observed.id ||
-            !observed.type ||
-            observed.content === undefined ||
-            observed.ttl === undefined
-          ) {
-            return yield* Effect.fail(
-              new Error(
-                "Cloudflare returned a DNS record without id/type/content/ttl",
-              ),
-            );
-          }
-          return {
-            recordId: observed.id,
-            zoneId,
-            name: observed.name ?? body.name,
-            type: observed.type,
-            content: observed.content,
-            ttl: observed.ttl,
-            proxied: observed.proxied ?? false,
-            createdOn: observed.createdOn,
-            modifiedOn: observed.modifiedOn,
-          } satisfies DnsRecordAttributes;
-        }),
-
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteRecord({
-            zoneId: output.zoneId,
-            dnsRecordId: output.recordId,
-          }).pipe(Effect.catch(() => Effect.void));
-        }),
-
-        read: Effect.fn(function* ({ output }) {
-          if (!output?.recordId) return undefined;
-          const observed = yield* observeById(output.zoneId, output.recordId);
-          if (
-            !observed?.id ||
-            !observed.type ||
-            observed.content === undefined ||
-            observed.ttl === undefined
-          ) {
-            return undefined;
-          }
-          return {
-            recordId: observed.id,
-            zoneId: output.zoneId,
-            name: observed.name ?? output.name,
-            type: observed.type,
-            content: observed.content,
-            ttl: observed.ttl,
-            proxied: observed.proxied ?? false,
-            createdOn: observed.createdOn ?? output.createdOn,
-            modifiedOn: observed.modifiedOn ?? output.modifiedOn,
-          } satisfies DnsRecordAttributes;
-        }),
-      };
-    }),
-  );
-
-void Option.none;
