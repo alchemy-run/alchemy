@@ -17,6 +17,7 @@
     "**/*.mdx",
     "**/*.md",
     "**/.vendor/**",
-    "**/package.json"
+    "**/package.json",
+    "./distilled"
   ]
 }

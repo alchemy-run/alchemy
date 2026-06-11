@@ -46,3 +46,4 @@ examples/cloudflare-worker/src/scratch.ts
 .vendor/*
 .tmp
 pnpm-lock.yaml
+!.vendor/distilled

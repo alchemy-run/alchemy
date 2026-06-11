@@ -1,9 +1,7 @@
 {
   "diffEditor.renderSideBySide": false,
   "js/ts.experimental.useTsgo": true,
-  "typescript.experimental.useTsgo": true,
-  "typescript.tsdk": "node_modules/@typescript/native-preview/lib",
-  "typescript.native-preview.tsdk": "node_modules/@typescript/native-preview/lib",
+  "typescript.experimental.useTsgo": false,
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "typescript.preferences.importModuleSpecifier": "relative",
   "typescript.preferences.importModuleSpecifierEnding": "js",
@@ -44,6 +42,12 @@
     "**/*.pyc": true,
     "packages/alchemy/bin/**/*.js*": true,
     "packages/alchemy/bin/**/*.d*": true
+  },
+  "files.watcherExclude": {
+    "**/distilled/**": true
+  },
+  "search.exclude": {
+    "**/distilled/**": true
   },
   "[typescript]": {
     "editor.indentSize": 2,
