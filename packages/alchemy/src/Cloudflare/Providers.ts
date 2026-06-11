@@ -34,6 +34,7 @@ import * as GatewayRule from "./Gateway/Rule.ts";
 import * as Hyperdrive from "./Hyperdrive/index.ts";
 import * as Images from "./Images/index.ts";
 import * as KV from "./KV/index.ts";
+import { localRuntimeServices } from "./LocalRuntime.ts";
 import * as Queue from "./Queue/index.ts";
 import * as R2 from "./R2/index.ts";
 import * as RateLimit from "./RateLimit/index.ts";
@@ -68,6 +69,7 @@ export const providers = () =>
       ApiToken.AccountApiToken,
       ApiToken.UserApiToken,
       AiGateway.AiGateway,
+      AiGateway.AiGatewaySpendingLimit,
       AiGateway.AiGatewayBindingPolicy,
       AnalyticsEngine.AnalyticsEngineDatasetBindingPolicy,
       Artifacts.ArtifactsBindingPolicy,
@@ -133,6 +135,7 @@ export const providers = () =>
         ApiToken.AccountApiTokenProvider(),
         ApiToken.UserApiTokenProvider(),
         AiGateway.AiGatewayProvider(),
+        AiGateway.AiGatewaySpendingLimitProvider(),
         AiGateway.AiGatewayBindingPolicyLive,
         AnalyticsEngine.AnalyticsEngineDatasetBindingPolicyLive,
         Artifacts.ArtifactsBindingPolicyLive,
@@ -194,6 +197,7 @@ export const providers = () =>
         RandomProvider(),
       ),
     ),
+    Layer.provideMerge(localRuntimeServices()),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(CloudflareEnvironment.fromProfile()),
     Layer.provideMerge(CloudflareAuth),

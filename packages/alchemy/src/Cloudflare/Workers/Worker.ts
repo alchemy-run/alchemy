@@ -6,20 +6,19 @@ import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
-import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Artifacts from "../../Artifacts.ts";
 import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
 import type { InputProps } from "../../Input.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { Platform, type Main, type PlatformProps } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
@@ -36,10 +35,7 @@ import {
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObjectNamespace.ts";
-import {
-  LocalWorkerProvider,
-  localRuntimeServices,
-} from "./LocalWorkerProvider.ts";
+import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
 import * as Vite from "./Vite.ts";
 import {
@@ -743,27 +739,10 @@ class MissingDurableObjectNamespaces extends Data.TaggedError(
   expected: string[];
 }> {}
 
-const selectLayer = <
-  LayerLive extends Layer.Layer<any, any, any>,
-  LayerDev extends Layer.Layer<any, any, any>,
->(input: {
-  live: () => LayerLive;
-  dev: () => LayerDev;
-}): Layer.Layer<
-  Layer.Success<LayerLive | LayerDev>,
-  Layer.Error<LayerLive | LayerDev>,
-  Layer.Services<LayerLive | LayerDev> | AlchemyContext
-> =>
-  Layer.unwrap(
-    AlchemyContext.useSync((context) =>
-      context.dev ? input.dev() : input.live(),
-    ),
-  );
-
 export const WorkerProvider = () =>
-  selectLayer({
-    live: LiveWorkerProvider,
-    dev: () => Layer.provide(LocalWorkerProvider(), localRuntimeServices()),
+  ProviderLayer.select({
+    live: () => LiveWorkerProvider(),
+    local: () => LocalWorkerProvider(),
   });
 
 export const LiveWorkerProvider = () =>

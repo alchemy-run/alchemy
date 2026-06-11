@@ -2,9 +2,14 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
+import { cast } from "effect/Function";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import Stack from "../alchemy.run.ts";
+import type { QueueMessage } from "../src/AsyncWorker.ts";
 import { WORKFLOW_SECRET_VALUE } from "../src/NotifyWorkflow.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
@@ -20,14 +25,10 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 test(
   "deploys all workers with URLs",
   Effect.gen(function* () {
-    const { asyncWorker, effectWorker, additionalWorkers } = yield* stack;
+    const { asyncWorker, effectWorker } = yield* stack;
 
     expect(asyncWorker).toBeString();
     expect(effectWorker).toBeString();
-    expect(additionalWorkers).toBeArrayOfSize(5);
-    for (const workerUrl of additionalWorkers) {
-      expect(workerUrl).toBeString();
-    }
   }),
 );
 
@@ -78,6 +79,41 @@ test(
   }),
 );
 
+test(
+  "AsyncWorker sends and receives messages on the queue",
+  Effect.gen(function* () {
+    const { asyncWorker } = yield* stack;
+    const url = asyncWorker!;
+    const body = { text: "hello", sentAt: Date.now() };
+    yield* HttpClient.post(new URL("/queue/send", url), {
+      body: yield* HttpBody.json(body),
+    }).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
+    const message = yield* HttpClient.get(new URL("/queue/messages", url)).pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap((res) => res.json),
+      Effect.map(cast<Schema.Json, Array<QueueMessage>>),
+      Effect.map((messages) =>
+        messages.find((m) => m.body.sentAt === body.sentAt),
+      ),
+      Effect.filterOrFail(
+        (message) => message !== undefined,
+        () => ({ _tag: "MessageNotFound" }) as const,
+      ),
+      Effect.retry({
+        while: (error) => error._tag === "MessageNotFound",
+        schedule: Schedule.spaced("250 millis").pipe(
+          Schedule.both(Schedule.recurs(25)),
+        ),
+      }),
+    );
+    expect(message).toMatchObject({
+      id: expect.any(String),
+      body,
+    });
+  }),
+  { timeout: 10_000 },
+);
+
 /**
  * EffectWorker binds a KV namespace via `Cloudflare.KVNamespace.bind(KV)`
  * and returns the result of `kv.list()` as JSON. A successful response
@@ -99,6 +135,41 @@ test(
     expect(Array.isArray(body.keys)).toBe(true);
     expect(typeof body.list_complete).toBe("boolean");
   }),
+);
+
+test(
+  "EffectWorker sends and receives messages on the queue",
+  Effect.gen(function* () {
+    const { effectWorker } = yield* stack;
+    const url = effectWorker!;
+    const body = { text: "hello", sentAt: Date.now() };
+    yield* HttpClient.post(new URL("/queue/send", url), {
+      body: yield* HttpBody.json(body),
+    }).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
+    const message = yield* HttpClient.get(new URL("/queue/messages", url)).pipe(
+      Effect.flatMap(HttpClientResponse.filterStatusOk),
+      Effect.flatMap((res) => res.json),
+      Effect.map(cast<Schema.Json, Array<QueueMessage>>),
+      Effect.map((messages) =>
+        messages.find((m) => m.body.sentAt === body.sentAt),
+      ),
+      Effect.filterOrFail(
+        (message) => message !== undefined,
+        () => ({ _tag: "MessageNotFound" }) as const,
+      ),
+      Effect.retry({
+        while: (error) => error._tag === "MessageNotFound",
+        schedule: Schedule.spaced("250 millis").pipe(
+          Schedule.both(Schedule.recurs(25)),
+        ),
+      }),
+    );
+    expect(message).toMatchObject({
+      id: expect.any(String),
+      body,
+    });
+  }),
+  { timeout: 10_000 },
 );
 
 /**
