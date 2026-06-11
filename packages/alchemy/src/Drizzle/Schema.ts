@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as crypto from "node:crypto";
+import * as Artifacts from "../Artifacts.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -220,7 +221,7 @@ export const SchemaProvider = () =>
               new Error(`drizzle-kit generateMigration failed: ${cause}`),
           });
           return { out, cur, prevEntry, sqlStatements };
-        });
+        }).pipe(Artifacts.cached("detectDrift"));
 
       /**
        * Generate a new migration directory if the schema has drifted from
