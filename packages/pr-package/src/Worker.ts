@@ -2,6 +2,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
@@ -70,7 +71,10 @@ export const handler = (options: HandlerOptions = {}) =>
         const requireAuth = Effect.gen(function* () {
           const authHeader = request.headers.authorization;
           const expected = yield* authToken;
-          if (!authHeader || authHeader !== `Bearer ${expected}`) {
+          if (
+            !authHeader ||
+            authHeader !== `Bearer ${Redacted.value(expected)}`
+          ) {
             return yield* Effect.fail(new Unauthorized());
           }
         });

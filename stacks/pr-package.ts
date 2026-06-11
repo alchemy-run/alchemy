@@ -2,6 +2,7 @@ import * as PrPackage from "@alchemy.run/pr-package";
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import Api from "./pr-package/Api.ts";
 
 export default Alchemy.Stack(
@@ -15,7 +16,7 @@ export default Alchemy.Stack(
     const api = yield* Api;
     return {
       url: api.url.as<string>(),
-      authToken: authToken.text,
+      authToken: Redacted.value(authToken.text),
     };
   }),
 );
