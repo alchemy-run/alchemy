@@ -11,6 +11,7 @@ import { isArtifacts } from "../Artifacts/Artifacts.ts";
 import { isBrowser } from "../Browser/Browser.ts";
 import { isD1Database } from "../D1/D1Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
+import { isFlagshipApp } from "../Flagship/App.ts";
 import { isHyperdrive } from "../Hyperdrive/Hyperdrive.ts";
 import { getHyperdriveDevOrigin } from "../Hyperdrive/HyperdriveBinding.ts";
 import { isImages } from "../Images/Images.ts";
@@ -117,6 +118,12 @@ const toBinding = (
     return {
       type: "browser",
       name: bindingName,
+    };
+  } else if (isFlagshipApp(binding)) {
+    return {
+      type: "flagship",
+      name: bindingName,
+      appId: binding.appId,
     };
   } else if (isAnalyticsEngineDataset(binding)) {
     return {

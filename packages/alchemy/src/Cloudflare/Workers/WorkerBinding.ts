@@ -12,6 +12,7 @@ import { Artifacts } from "../Artifacts/Artifacts.ts";
 import { Browser } from "../Browser/Browser.ts";
 import type { D1Database } from "../D1/D1Database.ts";
 import { SendEmail } from "../Email/SendEmail.ts";
+import type { FlagshipApp } from "../Flagship/App.ts";
 import { Hyperdrive } from "../Hyperdrive/Hyperdrive.ts";
 import { Images } from "../Images/Images.ts";
 import type { KVNamespace } from "../KV/KVNamespace.ts";
@@ -54,6 +55,7 @@ export type WorkerBindingResource =
   | Artifacts
   | RateLimit
   | Browser
+  | FlagshipApp
   | Images
   | Hyperdrive
   | VectorizeIndex
