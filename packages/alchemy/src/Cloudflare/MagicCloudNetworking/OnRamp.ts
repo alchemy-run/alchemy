@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -258,34 +259,36 @@ export const OnRampProvider = () =>
     ],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
+      const old = olds !== undefined && isResolved(olds) ? olds : undefined;
       // Immutable identity/topology properties — the PATCH body accepts
       // none of these, so any change is a replacement.
-      const oldCloudType = output?.cloudType ?? olds?.cloudType;
+      const oldCloudType = output?.cloudType ?? old?.cloudType;
       if (oldCloudType !== undefined && oldCloudType !== news.cloudType) {
         return { action: "replace" } as const;
       }
-      const oldType = output?.type ?? olds?.type;
+      const oldType = output?.type ?? old?.type;
       if (oldType !== undefined && oldType !== news.type) {
         return { action: "replace" } as const;
       }
-      const oldDynamicRouting = output?.dynamicRouting ?? olds?.dynamicRouting;
+      const oldDynamicRouting = output?.dynamicRouting ?? old?.dynamicRouting;
       if (
         oldDynamicRouting !== undefined &&
         oldDynamicRouting !== news.dynamicRouting
       ) {
         return { action: "replace" } as const;
       }
-      if (olds !== undefined) {
-        if (olds.region !== news.region) {
+      if (old !== undefined) {
+        if (old.region !== news.region) {
           return { action: "replace" } as const;
         }
-        if (olds.cloudAsn !== news.cloudAsn) {
+        if (old.cloudAsn !== news.cloudAsn) {
           return { action: "replace" } as const;
         }
-        if (olds.adoptedHubId !== news.adoptedHubId) {
+        if (old.adoptedHubId !== news.adoptedHubId) {
           return { action: "replace" } as const;
         }
-        if (olds.hubProviderId !== news.hubProviderId) {
+        if (old.hubProviderId !== news.hubProviderId) {
           return { action: "replace" } as const;
         }
       }

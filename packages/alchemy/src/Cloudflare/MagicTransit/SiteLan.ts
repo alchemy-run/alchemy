@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -191,6 +192,7 @@ export const MagicSiteLanProvider = () =>
     stables: ["lanId", "siteId", "accountId"],
 
     diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return undefined;
       if (olds === undefined) return undefined;
       // LANs cannot move between sites.
       if (

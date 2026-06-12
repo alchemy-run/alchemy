@@ -7,6 +7,7 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -258,21 +259,27 @@ export const CustomCertificateProvider = () =>
     stables: ["certificateId", "zoneId", "type", "uploadedOn"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      const o = olds as CustomCertificateProps | undefined;
-      const n = news as CustomCertificateProps;
+      if (!isResolved(news)) return undefined;
       // Zone move replaces. zoneId is Input<string>; compare only once
       // both sides are concrete.
-      const oldZone = output?.zoneId ?? (o?.zoneId as string | undefined);
+      const oldZone =
+        output?.zoneId ??
+        (olds !== undefined && isResolved(olds)
+          ? (olds.zoneId as string | undefined)
+          : undefined);
       if (
         typeof oldZone === "string" &&
-        typeof n.zoneId === "string" &&
-        oldZone !== n.zoneId
+        typeof news.zoneId === "string" &&
+        oldZone !== news.zoneId
       ) {
         return { action: "replace" } as const;
       }
       // `type` is create-only (the PATCH body does not accept it).
-      const oldType = output?.type ?? o?.type ?? "legacy_custom";
-      if ((n.type ?? "legacy_custom") !== oldType) {
+      const oldType =
+        output?.type ??
+        (olds !== undefined && isResolved(olds) ? olds.type : undefined) ??
+        "legacy_custom";
+      if ((news.type ?? "legacy_custom") !== oldType) {
         return { action: "replace" } as const;
       }
       return undefined;

@@ -150,23 +150,25 @@ export const Web3HostnameContentListProvider = () =>
   Provider.succeed(Web3HostnameContentList, {
     stables: ["zoneId", "hostnameId"],
 
-    diff: Effect.fn(function* ({ olds, news, output }) {
+    diff: Effect.fn(function* ({ olds = {}, news, output }) {
+      const o = olds as Partial<Web3HostnameContentListProps>;
+      const n = news as Web3HostnameContentListProps;
       // zoneId/hostnameId are Input<string>; compare only once both
       // sides are concrete. The content list is a sub-singleton of the
       // hostname — pointing elsewhere replaces it.
-      const oldZone = output?.zoneId ?? olds?.zoneId;
+      const oldZone = output?.zoneId ?? o.zoneId;
       if (
         typeof oldZone === "string" &&
-        typeof news.zoneId === "string" &&
-        oldZone !== news.zoneId
+        typeof n.zoneId === "string" &&
+        oldZone !== n.zoneId
       ) {
         return { action: "replace" } as const;
       }
-      const oldHostname = output?.hostnameId ?? olds?.hostnameId;
+      const oldHostname = output?.hostnameId ?? o.hostnameId;
       if (
         typeof oldHostname === "string" &&
-        typeof news.hostnameId === "string" &&
-        oldHostname !== news.hostnameId
+        typeof n.hostnameId === "string" &&
+        oldHostname !== n.hostnameId
       ) {
         return { action: "replace" } as const;
       }

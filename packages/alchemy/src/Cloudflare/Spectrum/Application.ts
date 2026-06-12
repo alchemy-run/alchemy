@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -277,6 +278,9 @@ export const SpectrumApplicationProvider = () =>
     stables: ["appId", "zoneId", "createdOn"],
 
     diff: Effect.fn(function* ({ olds, news }) {
+      // `news` may still contain unresolved plan-time expressions — defer
+      // to the engine's default update logic until everything is concrete.
+      if (!isResolved(news)) return undefined;
       // Everything is mutable through the PUT update except the zone the
       // application lives in (a path parameter).
       if (

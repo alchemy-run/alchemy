@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -250,15 +251,14 @@ export const LoadBalancerProvider = () =>
   Provider.succeed(LoadBalancer, {
     stables: ["loadBalancerId", "zoneId", "createdOn"],
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as LoadBalancerProps;
-      const n = news as LoadBalancerProps;
+    diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return undefined;
       // zoneId is Input<string>; by diff time both sides are concrete
       // strings when statically known.
       if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
+        typeof olds.zoneId === "string" &&
+        typeof news.zoneId === "string" &&
+        olds.zoneId !== news.zoneId
       ) {
         return { action: "replace" } as const;
       }

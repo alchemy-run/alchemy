@@ -45,7 +45,11 @@ export interface MagicNetworkMonitoringConfigProps {
    */
   defaultSampling: number;
   /**
-   * IPv4 CIDR addresses of the routers that send flow data to Cloudflare.
+   * IPv4 CIDR addresses (`/32`) of the routers that send flow data to
+   * Cloudflare. Registering router flow sources requires the Magic Network
+   * Monitoring router-flow entitlement — accounts without it reject any
+   * non-empty value with the typed `InvalidMnmConfig` error (Cloudflare
+   * code 1003).
    * @default []
    */
   routerIps?: Input<string>[];
@@ -153,10 +157,10 @@ export const MagicNetworkMonitoringConfigProvider = () =>
     read: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      // A missing config decodes as `null` (Cloudflare answers HTTP 200
-      // with `result: null` rather than a 404).
-      const observed = yield* mnm.getConfig({ accountId: acct });
-      if (observed === null) return undefined;
+      // A missing config answers HTTP 200 with `result: null` rather than
+      // a 404 — `observe` maps that to `undefined`.
+      const observed = observe(yield* mnm.getConfig({ accountId: acct }));
+      if (observed === undefined) return undefined;
       // The config carries no ownership markers. With no prior state we
       // cannot prove we created it — report `Unowned` so the engine gates
       // takeover behind the adopt policy.
@@ -175,25 +179,28 @@ export const MagicNetworkMonitoringConfigProvider = () =>
         warpDevices: news.warpDevices ?? [],
       };
 
-      // 1. Observe — the singleton either exists or decodes as `null`.
-      const observed = yield* mnm.getConfig({ accountId });
+      // 1. Observe — a missing singleton answers `result: null` and maps
+      //    to `undefined`.
+      const observed = observe(yield* mnm.getConfig({ accountId }));
 
       // 2. Ensure — create when missing, converging a concurrent create
       //    (`MnmConfigAlreadyExists`, Cloudflare code 1005) into the
       //    update below.
-      if (observed === null) {
-        const created = yield* mnm
-          .createConfig(desired)
-          .pipe(
-            Effect.catchTag("MnmConfigAlreadyExists", () =>
-              mnm.updateConfig(desired),
+      if (observed === undefined) {
+        const created = observe(
+          yield* mnm
+            .createConfig(desired)
+            .pipe(
+              Effect.catchTag("MnmConfigAlreadyExists", () =>
+                mnm.updateConfig(desired),
+              ),
             ),
-          );
-        // `updateConfig` decodes `result: null` if the config vanished
+        );
+        // `updateConfig` answers `result: null` if the config vanished
         // again mid-flight — fall back to one fresh create.
-        if (created !== null) return toAttributes(created, accountId);
+        if (created !== undefined) return toAttributes(created, accountId);
         const recreated = yield* mnm.createConfig(desired);
-        return toAttributes(recreated, accountId);
+        return toAttributes(observe(recreated) ?? desired, accountId);
       }
 
       // 3. Sync — diff observed cloud state against desired; the update
@@ -205,11 +212,11 @@ export const MagicNetworkMonitoringConfigProvider = () =>
         !sameWarpDevices(observed.warpDevices, desired.warpDevices);
       if (!dirty) return toAttributes(observed, accountId);
 
-      const updated = yield* mnm.updateConfig(desired);
-      if (updated !== null) return toAttributes(updated, accountId);
+      const updated = observe(yield* mnm.updateConfig(desired));
+      if (updated !== undefined) return toAttributes(updated, accountId);
       // Deleted out-of-band between observe and update — recreate.
       const recreated = yield* mnm.createConfig(desired);
-      return toAttributes(recreated, accountId);
+      return toAttributes(observe(recreated) ?? desired, accountId);
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -220,7 +227,36 @@ export const MagicNetworkMonitoringConfigProvider = () =>
     }),
   });
 
-type ObservedConfig = NonNullable<mnm.GetConfigResponse>;
+/**
+ * A normalized, definitely-present MNM configuration.
+ */
+interface ObservedConfig {
+  name: string;
+  defaultSampling: number;
+  routerIps: readonly string[];
+  warpDevices: readonly MagicNetworkMonitoringWarpDevice[];
+}
+
+/**
+ * Normalize a config response to a definitely-present shape, mapping
+ * "missing" to `undefined`. Cloudflare answers HTTP 200 with
+ * `result: null` when no config exists; the distilled core client decodes
+ * that as an empty object, so a config without a `name` (a required field
+ * on every real config) means there is no config.
+ */
+const observe = (
+  config: mnm.GetConfigResponse | mnm.UpdateConfigResponse,
+): ObservedConfig | undefined => {
+  if (config === null) return undefined;
+  const { name, defaultSampling } = config;
+  if (name == null || defaultSampling == null) return undefined;
+  return {
+    name,
+    defaultSampling,
+    routerIps: config.routerIps ?? [],
+    warpDevices: config.warpDevices ?? [],
+  };
+};
 
 const sameStrings = (observed: readonly string[], desired: readonly string[]) =>
   observed.length === desired.length &&

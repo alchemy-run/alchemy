@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -237,28 +238,29 @@ export const CertificatePackProvider = () =>
   Provider.succeed(CertificatePack, {
     stables: ["certificatePackId", "zoneId"],
 
-    diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as CertificatePackProps;
-      const n = news as CertificatePackProps;
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      // news is Input<Props> during plan — only compare once resolved.
+      if (!isResolved(news)) return undefined;
       // No prior props to compare against — let the engine decide.
-      if (o.hosts === undefined) return undefined;
+      if (olds?.hosts === undefined) return undefined;
       // zoneId is the pack's scope; it is Input<string>, so compare only
       // once both sides are concrete.
       const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+        output?.zoneId ??
+        (typeof olds.zoneId === "string" ? olds.zoneId : undefined);
       if (
         oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
+        typeof news.zoneId === "string" &&
+        oldZoneId !== news.zoneId
       ) {
         return { action: "replace" } as const;
       }
       // The order is immutable in CA, hosts, and validity — any change is
       // a re-order (replacement). hosts compare order-insensitively.
       if (
-        o.certificateAuthority !== n.certificateAuthority ||
-        o.validityDays !== n.validityDays ||
-        !sameHosts(o.hosts, n.hosts)
+        olds.certificateAuthority !== news.certificateAuthority ||
+        olds.validityDays !== news.validityDays ||
+        !sameHosts(olds.hosts, news.hosts)
       ) {
         return { action: "replace" } as const;
       }

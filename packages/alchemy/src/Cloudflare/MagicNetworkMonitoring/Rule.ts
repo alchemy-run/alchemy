@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -203,22 +204,21 @@ export const MagicNetworkMonitoringRuleProvider = () =>
   Provider.succeed(MagicNetworkMonitoringRule, {
     stables: ["ruleId", "accountId"],
 
-    diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as MagicNetworkMonitoringRuleProps;
-      const n = news as MagicNetworkMonitoringRuleProps;
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
       // The rule type is immutable — alerting semantics differ entirely.
-      const oldType = output?.type ?? o.type;
-      if (oldType !== undefined && oldType !== n.type) {
+      const oldType =
+        output?.type ??
+        (olds !== undefined && isResolved(olds) ? olds.type : undefined);
+      if (oldType !== undefined && oldType !== news.type) {
         return { action: "replace" } as const;
       }
       // accountId is Input<string>; compare only once both are concrete.
-      const oldAccount =
-        output?.accountId ??
-        (typeof o.accountId === "string" ? o.accountId : undefined);
+      const oldAccount = output?.accountId;
       if (
         oldAccount !== undefined &&
-        typeof n.accountId === "string" &&
-        oldAccount !== n.accountId
+        typeof news.accountId === "string" &&
+        oldAccount !== news.accountId
       ) {
         return { action: "replace" } as const;
       }

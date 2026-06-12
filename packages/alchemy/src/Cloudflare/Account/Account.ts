@@ -2,6 +2,7 @@ import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -153,20 +154,17 @@ export const AccountProvider = () =>
   Provider.succeed(Account, {
     stables: ["accountId", "type", "createdOn", "parentOrgId", "parentOrgName"],
 
-    diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as Partial<AccountProps>;
-      const n = news as AccountProps;
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
       // The account type cannot be changed after creation — Cloudflare
       // rejects it with `UpdateAccountTypeNotSupported`.
-      const oldType = output?.type ?? o.type ?? "standard";
-      if ((n.type ?? "standard") !== oldType) {
+      const oldType = output?.type ?? olds?.type ?? "standard";
+      if ((news.type ?? "standard") !== oldType) {
         return { action: "replace" } as const;
       }
       // The tenant unit is a create-only placement decision.
-      if (o.unit !== undefined || n.unit !== undefined) {
-        if ((o.unit?.id ?? undefined) !== (n.unit?.id ?? undefined)) {
-          return { action: "replace" } as const;
-        }
+      if ((olds?.unit?.id ?? undefined) !== (news.unit?.id ?? undefined)) {
+        return { action: "replace" } as const;
       }
       return undefined;
     }),

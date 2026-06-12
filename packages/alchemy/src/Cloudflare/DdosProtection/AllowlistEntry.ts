@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -119,6 +120,9 @@ export const DdosAllowlistEntryProvider = () =>
 
     diff: Effect.fn(function* ({ olds, news }) {
       if (olds === undefined) return undefined;
+      // `news` runs at plan time and may still carry unresolved
+      // expressions — bail out and let the engine apply default logic.
+      if (!isResolved(news)) return undefined;
       // The API only patches comment/enabled — the prefix is the entry's
       // identity and cannot change.
       if (olds.prefix !== news.prefix) {

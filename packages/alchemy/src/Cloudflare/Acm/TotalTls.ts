@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -131,16 +132,16 @@ export const TotalTlsProvider = () =>
   Provider.succeed(TotalTls, {
     stables: ["zoneId", "initialEnabled", "initialCertificateAuthority"],
 
-    diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as TotalTlsProps;
-      const n = news as TotalTlsProps;
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+        output?.zoneId ??
+        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (
         oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
+        typeof news.zoneId === "string" &&
+        oldZoneId !== news.zoneId
       ) {
         return { action: "replace" } as const;
       }
@@ -230,9 +231,9 @@ export const TotalTlsProvider = () =>
         .updateTotalTl({
           zoneId,
           enabled: initialEnabled,
-          certificateAuthority: initialCertificateAuthority as
-            | TotalTlsCertificateAuthority
-            | undefined,
+          // The request type accepts any string (`(string & {})`), so the
+          // captured initial CA round-trips without a cast.
+          certificateAuthority: initialCertificateAuthority,
         })
         .pipe(
           Effect.catchTag("InvalidObjectIdentifier", () => Effect.void),

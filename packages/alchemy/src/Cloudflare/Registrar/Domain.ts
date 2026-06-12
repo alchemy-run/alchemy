@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -168,12 +169,11 @@ export const RegistrarDomainProvider = () =>
   Provider.succeed(RegistrarDomain, {
     stables: ["domainName", "accountId", "initialSettings"],
 
-    diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as RegistrarDomainProps;
-      const n = news as RegistrarDomainProps;
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
       // The domain name is the resource's identity.
-      const oldDomainName = output?.domainName ?? o.domainName;
-      if (oldDomainName !== undefined && oldDomainName !== n.domainName) {
+      const oldDomainName = output?.domainName ?? olds?.domainName;
+      if (oldDomainName !== undefined && oldDomainName !== news.domainName) {
         return { action: "replace" } as const;
       }
       return undefined;

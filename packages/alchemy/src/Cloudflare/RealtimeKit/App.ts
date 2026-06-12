@@ -1,4 +1,5 @@
 import * as realtimeKit from "@distilled.cloud/cloudflare/realtime-kit";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
@@ -158,6 +159,7 @@ export const RealtimeKitAppProvider = () =>
             appId: observed.id ?? "",
             currentName: observed.name ?? "",
             desiredName: name,
+            message: `Cloudflare RealtimeKit apps cannot be renamed (no update API) or replaced (no delete API). App ${observed.id} is named "${observed.name}" but "${name}" was requested.`,
           }),
         );
       }
@@ -177,23 +179,14 @@ export const RealtimeKitAppProvider = () =>
  * has neither an update endpoint (to rename in place) nor a delete endpoint
  * (to model the change as a replacement).
  */
-export class RealtimeKitAppRenameNotSupported {
-  readonly _tag = "RealtimeKitAppRenameNotSupported";
+export class RealtimeKitAppRenameNotSupported extends Data.TaggedError(
+  "RealtimeKitAppRenameNotSupported",
+)<{
   readonly appId: string;
   readonly currentName: string;
   readonly desiredName: string;
   readonly message: string;
-  constructor(args: {
-    appId: string;
-    currentName: string;
-    desiredName: string;
-  }) {
-    this.appId = args.appId;
-    this.currentName = args.currentName;
-    this.desiredName = args.desiredName;
-    this.message = `Cloudflare RealtimeKit apps cannot be renamed (no update API) or replaced (no delete API). App ${args.appId} is named "${args.currentName}" but "${args.desiredName}" was requested.`;
-  }
-}
+}> {}
 
 type ObservedApp = {
   id?: string | null;

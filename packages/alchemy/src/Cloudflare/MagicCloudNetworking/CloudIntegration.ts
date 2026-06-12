@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -182,7 +183,10 @@ export const CloudIntegrationProvider = () =>
     stables: ["integrationId", "accountId", "cloudType"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
-      const oldCloudType = output?.cloudType ?? olds?.cloudType;
+      if (!isResolved(news)) return undefined;
+      const oldCloudType =
+        output?.cloudType ??
+        (olds !== undefined && isResolved(olds) ? olds.cloudType : undefined);
       if (oldCloudType !== undefined && oldCloudType !== news.cloudType) {
         return { action: "replace" } as const;
       }

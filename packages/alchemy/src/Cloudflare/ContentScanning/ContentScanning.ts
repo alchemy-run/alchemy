@@ -2,6 +2,7 @@ import * as contentScanning from "@distilled.cloud/cloudflare/content-scanning";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -115,17 +116,13 @@ export const ContentScanningProvider = () =>
   Provider.succeed(ContentScanning, {
     stables: ["zoneId", "initialValue"],
 
-    diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as ContentScanningProps;
-      const n = news as ContentScanningProps;
+    diff: Effect.fn(function* ({ olds, news, output }) {
       // zoneId is Input<string>; compare only once both sides are concrete.
+      if (!isResolved(news)) return undefined;
       const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
-      if (
-        oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
-      ) {
+        output?.zoneId ??
+        (olds !== undefined && isResolved(olds) ? olds.zoneId : undefined);
+      if (oldZoneId !== undefined && oldZoneId !== news.zoneId) {
         return { action: "replace" } as const;
       }
       return undefined;

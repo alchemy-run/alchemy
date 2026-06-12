@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -228,31 +229,32 @@ export const KeylessCertificateProvider = () =>
   Provider.succeed(KeylessCertificate, {
     stables: ["keylessCertificateId", "zoneId", "createdOn"],
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as KeylessCertificateProps;
-      const n = news as KeylessCertificateProps;
+    diff: Effect.fn(function* ({ olds, news }) {
+      // diff runs during plan — `news` may still contain unresolved Outputs.
+      if (!isResolved(news)) return undefined;
       // No prior props to compare against — let the engine decide.
-      if (o.certificate === undefined) return undefined;
+      if (olds?.certificate === undefined) return undefined;
       // The PATCH API has no certificate field — rotation replaces.
-      if (normalizePem(o.certificate) !== normalizePem(n.certificate)) {
+      if (normalizePem(olds.certificate) !== normalizePem(news.certificate)) {
         return { action: "replace" } as const;
       }
       // bundleMethod is create-only.
       if (
-        (o.bundleMethod ?? "ubiquitous") !== (n.bundleMethod ?? "ubiquitous")
+        (olds.bundleMethod ?? "ubiquitous") !==
+        (news.bundleMethod ?? "ubiquitous")
       ) {
         return { action: "replace" } as const;
       }
       // The PATCH API can set a tunnel but cannot clear one — removing it
       // requires a replacement. (Adding/changing is an in-place update.)
-      if (o.tunnel !== undefined && n.tunnel === undefined) {
+      if (olds.tunnel !== undefined && news.tunnel === undefined) {
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both are concrete.
       if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
+        typeof olds.zoneId === "string" &&
+        typeof news.zoneId === "string" &&
+        olds.zoneId !== news.zoneId
       ) {
         return { action: "replace" } as const;
       }

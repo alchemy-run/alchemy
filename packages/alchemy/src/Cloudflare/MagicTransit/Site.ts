@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -134,6 +135,7 @@ export const MagicSiteProvider = () =>
     stables: ["siteId", "accountId", "haMode"],
 
     diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return undefined;
       if (olds === undefined) return undefined;
       // haMode is create-only — the update API has no such field.
       if ((olds.haMode ?? false) !== (news.haMode ?? false)) {

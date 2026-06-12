@@ -41,13 +41,11 @@ const resolveZoneId = Effect.gen(function* () {
 // retry that too. The exponential schedule reaches the ~1 minute window
 // within the bounded attempts.
 const transientRetrySchedule = Schedule.exponential("500 millis");
-const isTransient = (e: { _tag: string }) =>
-  e._tag === "Forbidden" || e._tag === "TooManyRequests";
 
 const getUniversal = (zoneId: string) =>
   ssl.getUniversalSetting({ zoneId }).pipe(
     Effect.retry({
-      while: isTransient,
+      while: (e) => e._tag === "Forbidden" || e._tag === "TooManyRequests",
       schedule: transientRetrySchedule,
       times: 8,
     }),
@@ -59,7 +57,7 @@ const getUniversal = (zoneId: string) =>
 const setBaseline = (zoneId: string, enabled: boolean) =>
   ssl.patchUniversalSetting({ zoneId, enabled }).pipe(
     Effect.retry({
-      while: isTransient,
+      while: (e) => e._tag === "Forbidden" || e._tag === "TooManyRequests",
       schedule: transientRetrySchedule,
       times: 8,
     }),

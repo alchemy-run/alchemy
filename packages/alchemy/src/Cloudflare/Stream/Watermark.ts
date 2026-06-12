@@ -2,6 +2,7 @@ import * as stream from "@distilled.cloud/cloudflare/stream";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -181,6 +182,9 @@ export const StreamWatermarkProvider = () =>
         return { action: "replace" } as const;
       }
       if (olds === undefined) return undefined;
+      // `news` may still contain unresolved Outputs at plan time — let
+      // the engine apply the default update logic in that case.
+      if (!isResolved(news)) return undefined;
       // No update endpoint — any prop change is a replacement. Compare
       // against the observed output where the API echoes the value, and
       // against olds for the create-only `url`.

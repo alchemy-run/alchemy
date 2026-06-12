@@ -87,16 +87,10 @@ const purgeApps = (zoneId: string, dnsName: string, protocol: string) =>
   );
 
 // Hostname of the entitled zone, resolved from its id so the gated tests
-// can build deterministic edge hostnames inside that zone.
+// can build deterministic edge hostnames inside that zone. (No Forbidden
+// retry here — `zones.getZone`'s typed error union does not include it.)
 const resolveEntitledZoneName = (zoneId: string) =>
-  zones.getZone({ zoneId }).pipe(
-    Effect.map((z) => z.name),
-    Effect.retry({
-      while: (e) => e._tag === "Forbidden",
-      schedule: forbiddenRetrySchedule,
-      times: 8,
-    }),
-  );
+  zones.getZone({ zoneId }).pipe(Effect.map((z) => z.name));
 
 test.provider(
   "surfaces the typed SpectrumProtocolNotAvailable error on unentitled zones",

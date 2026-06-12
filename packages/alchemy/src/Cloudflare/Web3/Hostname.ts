@@ -152,24 +152,26 @@ export const Web3HostnameProvider = () =>
   Provider.succeed(Web3Hostname, {
     stables: ["hostnameId", "zoneId", "name", "target", "createdOn"],
 
-    diff: Effect.fn(function* ({ olds, news, output }) {
-      const oldName = output?.name ?? olds?.name;
-      const oldTarget = output?.target ?? olds?.target;
+    diff: Effect.fn(function* ({ olds = {}, news, output }) {
+      const o = olds as Partial<Web3HostnameProps>;
+      const n = news as Web3HostnameProps;
+      const oldName = output?.name ?? o.name;
+      const oldTarget = output?.target ?? o.target;
       if (oldName === undefined && oldTarget === undefined) return undefined;
       // The hostname is the resource's identity — no rename API exists.
-      if (oldName !== undefined && oldName !== news.name) {
+      if (oldName !== undefined && oldName !== n.name) {
         return { action: "replace" } as const;
       }
       // The target gateway is immutable after creation.
-      if (oldTarget !== undefined && oldTarget !== news.target) {
+      if (oldTarget !== undefined && oldTarget !== n.target) {
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both are concrete.
-      const oldZone = output?.zoneId ?? olds?.zoneId;
+      const oldZone = output?.zoneId ?? o.zoneId;
       if (
         typeof oldZone === "string" &&
-        typeof news.zoneId === "string" &&
-        oldZone !== news.zoneId
+        typeof n.zoneId === "string" &&
+        oldZone !== n.zoneId
       ) {
         return { action: "replace" } as const;
       }

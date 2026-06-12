@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -141,21 +142,20 @@ export const OriginTlsClientAuthHostnameAssociationProvider = () =>
   Provider.succeed(OriginTlsClientAuthHostnameAssociation, {
     stables: ["zoneId", "hostname"],
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as OriginTlsClientAuthHostnameAssociationProps;
-      const n = news as OriginTlsClientAuthHostnameAssociationProps;
+    diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return undefined;
       // zoneId is Input<string>; compare only once both sides are concrete.
       if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
+        typeof olds.zoneId === "string" &&
+        typeof news.zoneId === "string" &&
+        olds.zoneId !== news.zoneId
       ) {
         return { action: "replace" } as const;
       }
       // The hostname is the association's identity in Cloudflare's bulk
       // upsert — changing it must void the old hostname's entry, so it is a
       // replacement.
-      if (o.hostname !== undefined && o.hostname !== n.hostname) {
+      if (olds.hostname !== news.hostname) {
         return { action: "replace" } as const;
       }
       return undefined;

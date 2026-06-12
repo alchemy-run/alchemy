@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -167,6 +168,7 @@ export const IpsecTunnelProvider = () =>
     stables: ["tunnelId", "accountId", "createdOn"],
 
     diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return undefined;
       if (olds === undefined) return undefined;
       // The tunnel name is unique routing identity; renames are rejected.
       if (olds.name !== news.name) return { action: "replace" } as const;

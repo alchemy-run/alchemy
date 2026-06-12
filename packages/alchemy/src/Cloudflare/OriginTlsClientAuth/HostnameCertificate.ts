@@ -140,23 +140,19 @@ export const OriginTlsClientAuthHostnameCertificateProvider = () =>
   Provider.succeed(OriginTlsClientAuthHostnameCertificate, {
     stables: ["certificateId", "zoneId"],
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
+    diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;
-      const o = olds as OriginTlsClientAuthHostnameCertificateProps;
-      const n = news as OriginTlsClientAuthHostnameCertificateProps;
       // zoneId is Input<string>; compare only once both sides are concrete.
       if (
-        typeof o.zoneId === "string" &&
-        typeof n.zoneId === "string" &&
-        o.zoneId !== n.zoneId
+        typeof olds.zoneId === "string" &&
+        typeof news.zoneId === "string" &&
+        olds.zoneId !== news.zoneId
       ) {
         return { action: "replace" } as const;
       }
       if (
-        (o.certificate !== undefined &&
-          normalizePem(o.certificate) !== normalizePem(n.certificate)) ||
-        (o.privateKey !== undefined &&
-          unwrap(o.privateKey) !== unwrap(n.privateKey))
+        normalizePem(olds.certificate) !== normalizePem(news.certificate) ||
+        unwrap(olds.privateKey) !== unwrap(news.privateKey)
       ) {
         // There is no update API for hostname client certificates — every
         // change is a replacement.
@@ -196,11 +192,14 @@ export const OriginTlsClientAuthHostnameCertificateProvider = () =>
         : yield* findByContent(zoneId, news.certificate);
 
       // 2. Ensure — upload if missing. Cloudflare rejects uploading a PEM
-      //    identical to a live certificate (code 1406); tolerate the race
-      //    (or an orphaned prior upload) by re-listing and adopting the
-      //    certificate with identical PEM content. Re-uploading the PEM of
-      //    a certificate in `pending_deletion` resurrects it under the same
-      //    id, so a destroy→deploy cycle converges naturally.
+      //    identical to an existing certificate (code 1406); tolerate the
+      //    race (or an orphaned prior upload) by re-listing and adopting the
+      //    certificate with identical PEM content. A destroy→deploy cycle
+      //    also hits 1406 while the old certificate's tombstone is still
+      //    `pending_deletion` (observed live: it settles to `deleted` within
+      //    ~10 seconds, after which re-uploading the PEM resurrects it under
+      //    the same id) — ride that window out with a bounded retry of the
+      //    whole create-or-adopt step.
       if (!observed) {
         observed = yield* originTls
           .createHostnameCertificate({
@@ -216,6 +215,11 @@ export const OriginTlsClientAuthHostnameCertificateProvider = () =>
                 return match;
               }),
             ),
+            Effect.retry({
+              while: (e) => e._tag === "CertificateAlreadyExists",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 10,
+            }),
           );
       }
 

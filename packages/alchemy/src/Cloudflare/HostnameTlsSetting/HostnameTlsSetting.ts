@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -169,25 +170,27 @@ export const HostnameTlsSettingProvider = () =>
   Provider.succeed(HostnameTlsSetting, {
     stables: ["zoneId", "settingId", "hostname", "createdAt"],
 
-    diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as HostnameTlsSettingProps;
-      const n = news as HostnameTlsSettingProps;
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      // `news` may still carry unresolved plan-time expressions — defer to
+      // the engine's default update logic until everything is concrete.
+      if (!isResolved(news)) return undefined;
       // (settingId, hostname) is the override's identity.
-      const oldSettingId = output?.settingId ?? o.settingId;
-      if (oldSettingId !== undefined && oldSettingId !== n.settingId) {
+      const oldSettingId = output?.settingId ?? olds?.settingId;
+      if (oldSettingId !== undefined && oldSettingId !== news.settingId) {
         return { action: "replace" } as const;
       }
-      const oldHostname = output?.hostname ?? o.hostname;
-      if (oldHostname !== undefined && oldHostname !== n.hostname) {
+      const oldHostname = output?.hostname ?? olds?.hostname;
+      if (oldHostname !== undefined && oldHostname !== news.hostname) {
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+        output?.zoneId ??
+        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (
         oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
+        typeof news.zoneId === "string" &&
+        oldZoneId !== news.zoneId
       ) {
         return { action: "replace" } as const;
       }

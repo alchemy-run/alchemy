@@ -2,6 +2,7 @@ import * as ssl from "@distilled.cloud/cloudflare/ssl";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -97,17 +98,18 @@ export const UniversalSslProvider = () =>
   Provider.succeed(UniversalSsl, {
     stables: ["zoneId", "initialEnabled"],
 
-    diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as UniversalSslProps;
-      const n = news as UniversalSslProps;
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      // news is Input<Props> during plan — only compare once resolved.
+      if (!isResolved(news)) return undefined;
       // zoneId is the resource's identity; it is Input<string>, so
       // compare only once both sides are concrete.
       const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+        output?.zoneId ??
+        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (
         oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
+        typeof news.zoneId === "string" &&
+        oldZoneId !== news.zoneId
       ) {
         return { action: "replace" } as const;
       }

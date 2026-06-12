@@ -4,6 +4,7 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -125,24 +126,24 @@ export const CustomTrustStoreProvider = () =>
   Provider.succeed(CustomTrustStore, {
     stables: ["id", "zoneId", "issuer", "signature", "uploadedOn"],
 
-    diff: Effect.fn(function* ({ olds = {}, news, output }) {
-      const o = olds as CustomTrustStoreProps;
-      const n = news as CustomTrustStoreProps;
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
       // The certificate is the resource's identity — no update API exists.
-      const oldCertificate = o.certificate ?? output?.certificate;
+      const oldCertificate = olds?.certificate ?? output?.certificate;
       if (
         oldCertificate !== undefined &&
-        normalizePem(oldCertificate) !== normalizePem(n.certificate)
+        normalizePem(oldCertificate) !== normalizePem(news.certificate)
       ) {
         return { action: "replace" } as const;
       }
       // zoneId is Input<string>; compare only once both sides are concrete.
       const oldZoneId =
-        output?.zoneId ?? (typeof o.zoneId === "string" ? o.zoneId : undefined);
+        output?.zoneId ??
+        (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
       if (
         oldZoneId !== undefined &&
-        typeof n.zoneId === "string" &&
-        oldZoneId !== n.zoneId
+        typeof news.zoneId === "string" &&
+        oldZoneId !== news.zoneId
       ) {
         return { action: "replace" } as const;
       }

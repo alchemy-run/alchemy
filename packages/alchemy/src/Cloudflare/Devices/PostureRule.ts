@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -117,14 +118,18 @@ export type DevicePostureRule = Resource<
  * `type` replaces the rule.
  *
  * @section Infrastructure-free checks
- * @example Require a minimum macOS version
+ * @example Require a minimum Windows version
  * ```typescript
- * const rule = yield* Cloudflare.DevicePostureRule("MacOsVersion", {
+ * const rule = yield* Cloudflare.DevicePostureRule("WindowsOsVersion", {
  *   type: "os_version",
- *   description: "Require macOS 14.5+",
- *   match: [{ platform: "mac" }],
+ *   description: "Require Windows 10.0.19045+",
+ *   match: [{ platform: "windows" }],
  *   schedule: "5m",
- *   input: { operatingSystem: "mac", operator: ">=", version: "14.5.0" },
+ *   input: {
+ *     operatingSystem: "windows",
+ *     operator: ">=",
+ *     version: "10.0.19045",
+ *   },
  * });
  * ```
  *
@@ -166,6 +171,7 @@ export const DevicePostureRuleProvider = () =>
     stables: ["postureRuleId", "accountId", "type"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
       // `type` is immutable on Cloudflare's side — replace on change.
       const oldType = output?.type ?? olds?.type;
       if (oldType !== undefined && oldType !== news.type) {
