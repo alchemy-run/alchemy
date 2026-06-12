@@ -24,7 +24,7 @@ export default class ChatBackendRpc extends Cloudflare.RpcDurableObjectNamespace
     // once — shared across every instance hosted by this Worker.
     const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
     const languageModel = aiGateway.model({
-      model: "@cf/meta/llama-3.1-8b-instruct",
+      model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       parameters: {
         temperature: 0.2,
         maxTokens: 512,

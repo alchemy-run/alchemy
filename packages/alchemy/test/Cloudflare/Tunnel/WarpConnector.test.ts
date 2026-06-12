@@ -1,3 +1,4 @@
+import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Test from "@/Test/Vitest";
@@ -37,7 +38,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* Cloudflare.TunnelWarpConnector("SiteA", {
             name: "alchemy-test-warp-connector",
-          });
+          }).pipe(adopt(true));
         }),
       );
 
@@ -57,7 +58,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* Cloudflare.TunnelWarpConnector("SiteA", {
             name: "alchemy-test-warp-connector-v2",
-          });
+          }).pipe(adopt(true));
         }),
       );
       expect(renamed.tunnelId).toEqual(connector.tunnelId);

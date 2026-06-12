@@ -1,3 +1,4 @@
+import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Vitest";
 import * as originCa from "@distilled.cloud/cloudflare/origin-ca-certificates";
@@ -60,7 +61,7 @@ test.provider("issue, verify, and revoke a certificate", (stack) =>
         hostnames: [hostname],
         requestType: "origin-rsa",
         requestedValidity: 90,
-      }),
+      }).pipe(adopt(true)),
     );
 
     // Issuance is synchronous — the signed PEM comes back on create.
@@ -85,7 +86,7 @@ test.provider("issue, verify, and revoke a certificate", (stack) =>
         hostnames: [hostname],
         requestType: "origin-rsa",
         requestedValidity: 90,
-      }),
+      }).pipe(adopt(true)),
     );
     expect(noop.certificateId).toEqual(cert.certificateId);
 
@@ -106,7 +107,7 @@ test.provider("replacement on requestedValidity change", (stack) =>
         hostnames: [hostname],
         requestType: "origin-rsa",
         requestedValidity: 90,
-      }),
+      }).pipe(adopt(true)),
     );
     expect(initial.requestedValidity).toEqual(90);
 
@@ -118,7 +119,7 @@ test.provider("replacement on requestedValidity change", (stack) =>
         hostnames: [hostname],
         requestType: "origin-rsa",
         requestedValidity: 30,
-      }),
+      }).pipe(adopt(true)),
     );
 
     expect(replaced.certificateId).not.toEqual(initial.certificateId);
@@ -143,7 +144,7 @@ test.provider("replacement on hostnames change", (stack) =>
         hostnames: [hostname],
         requestType: "origin-rsa",
         requestedValidity: 90,
-      }),
+      }).pipe(adopt(true)),
     );
     expect(initial.hostnames).toEqual([hostname]);
 
@@ -155,7 +156,7 @@ test.provider("replacement on hostnames change", (stack) =>
         hostnames: [hostname, altHostname],
         requestType: "origin-rsa",
         requestedValidity: 90,
-      }),
+      }).pipe(adopt(true)),
     );
 
     expect(replaced.certificateId).not.toEqual(initial.certificateId);

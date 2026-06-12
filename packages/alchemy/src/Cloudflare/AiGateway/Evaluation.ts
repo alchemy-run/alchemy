@@ -221,15 +221,29 @@ export const AiGatewayEvaluationProvider = () =>
         );
       }
 
-      // Ensure — greenfield (or out-of-band delete): names are not unique
-      // on Cloudflare's side so there is no AlreadyExists race to tolerate.
-      const created = yield* aiGateway.createEvaluation({
-        accountId,
-        gatewayId,
-        name,
-        datasetIds,
-        evaluationTypeIds,
-      });
+      // Ensure — greenfield (or out-of-band delete). Cloudflare enforces
+      // name uniqueness, so a conflict (e.g. a leftover from an interrupted
+      // run or a create race) is converged by adopting the existing
+      // evaluation by name instead of failing — evaluations are immutable,
+      // and diff routes any prop change to a replacement, so a name match
+      // is already the desired evaluation.
+      const created = yield* aiGateway
+        .createEvaluation({
+          accountId,
+          gatewayId,
+          name,
+          datasetIds,
+          evaluationTypeIds,
+        })
+        .pipe(
+          Effect.catchTag("EvaluationNameAlreadyExists", (originalError) =>
+            findByName(accountId, gatewayId, name).pipe(
+              Effect.flatMap((match) =>
+                match ? Effect.succeed(match) : Effect.fail(originalError),
+              ),
+            ),
+          ),
+        );
       return toAttributes(created, accountId, evaluationTypeIds);
     }),
     delete: Effect.fn(function* ({ output }) {

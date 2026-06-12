@@ -57,9 +57,12 @@ test.provider(
       // hits, so retry upsert/describe (both idempotent) until they hit
       // the route handler. `filterStatusOk` fails non-2xx so the retry
       // fires.
+      // Cap each backoff at 5s (otherwise the exponential blows past a
+      // minute per sleep) and stop after 12 attempts (~45s worst case).
       const readinessRetry = {
         schedule: Schedule.exponential("500 millis").pipe(
-          Schedule.both(Schedule.recurs(20)),
+          Schedule.either(Schedule.spaced("5 seconds")),
+          Schedule.both(Schedule.recurs(12)),
         ),
       } as const;
 
@@ -85,6 +88,10 @@ test.provider(
           Effect.flatMap(HttpClientResponse.filterStatusOk),
           Effect.flatMap((res) => res.json),
           Effect.map((body) => body as { count: number; ids: string[] }),
+          // Edge propagation can still transiently 404 individual route
+          // hits even after /health answered 200 — retry within each poll
+          // attempt instead of failing the whole test.
+          Effect.retry(readinessRetry),
         ),
         predicate: (body) => body.count >= 3,
       });
@@ -98,6 +105,7 @@ test.provider(
           Effect.flatMap(HttpClientResponse.filterStatusOk),
           Effect.flatMap((res) => res.json),
           Effect.map((body) => body as { ids: string[] }),
+          Effect.retry(readinessRetry),
         ),
         predicate: (body) => body.ids.length === 2,
       });
@@ -115,6 +123,7 @@ test.provider(
           Effect.map(
             (body) => body as { count: number; ids: string[]; kinds: string[] },
           ),
+          Effect.retry(readinessRetry),
         ),
         predicate: (body) => body.ids.length === 1 && body.kinds.length === 1,
       });

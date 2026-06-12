@@ -225,10 +225,23 @@ export const AiSearchTokenProvider = () =>
       return toAttributes(updated, acct);
     }),
     delete: Effect.fn(function* ({ output }) {
-      // A missing token (already deleted) is success.
+      // A missing token (already deleted) is success. An AI Search
+      // instance that referenced this token may still be deleting
+      // asynchronously — Cloudflare rejects the delete with
+      // `token_in_use_by_instances` until the instance is gone, so ride
+      // that out briefly.
       yield* aisearch
         .deleteToken({ accountId: output.accountId, id: output.id })
-        .pipe(Effect.catchTag("TokenNotFound", () => Effect.void));
+        .pipe(
+          Effect.retry({
+            while: (e) => e._tag === "TokenInUseByInstances",
+            schedule: Schedule.exponential("1 second").pipe(
+              Schedule.either(Schedule.spaced("5 seconds")),
+            ),
+            times: 10,
+          }),
+          Effect.catchTag("TokenNotFound", () => Effect.void),
+        );
     }),
   });
 
