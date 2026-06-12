@@ -63,9 +63,12 @@ const managementApiLayer = () =>
 /**
  * Build a layer for Prisma Management API operation helpers.
  *
- * Use this when calling helpers like `Prisma.listProjects()` outside a stack
- * resource provider. `Prisma.providers()` is still the layer to pass to an
- * Alchemy stack for resource lifecycle management.
+ * Use this when calling helpers like `Prisma.listProjects()` outside an
+ * Alchemy stack or test. Inside a stack (or a `test.provider` body) deployed
+ * with `Prisma.providers()`, the management client is already in context, so
+ * operation helpers work without providing this layer. Note that in
+ * `alchemy dev` mode the providers run against local dev implementations and
+ * the management client is not available.
  *
  * @example
  * ```typescript
@@ -115,7 +118,7 @@ export const providers = () =>
       EnvironmentVariable,
       SourceRepository,
     ]),
-  ).pipe(Layer.provide(implementationLayer()));
+  ).pipe(Layer.provideMerge(implementationLayer()));
 
 const implementationLayer = () =>
   Layer.unwrap(
