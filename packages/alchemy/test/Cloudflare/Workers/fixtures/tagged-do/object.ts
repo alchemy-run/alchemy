@@ -1,5 +1,5 @@
-import type { RuntimeContext } from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@/Cloudflare";
+import type { RuntimeContext } from "@/index";
 import * as Effect from "effect/Effect";
 
 export const MyDB = Cloudflare.D1Database("MyDB");

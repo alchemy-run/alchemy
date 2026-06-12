@@ -1,6 +1,6 @@
-import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Output from "alchemy/Output";
+import * as Cloudflare from "@/Cloudflare";
+import * as Alchemy from "@/index";
+import * as Output from "@/Output";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
