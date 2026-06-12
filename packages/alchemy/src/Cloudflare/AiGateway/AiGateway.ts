@@ -63,7 +63,7 @@ export type AiGatewayOtel = {
   /**
    * Authorization header value for the OpenTelemetry endpoint.
    */
-  authorization: string;
+  authorization?: string;
   /**
    * Additional headers sent to the OpenTelemetry endpoint.
    */
@@ -72,6 +72,11 @@ export type AiGatewayOtel = {
    * OpenTelemetry endpoint URL.
    */
   url: string;
+  /**
+   * Payload encoding sent to the OpenTelemetry endpoint.
+   * @default "json"
+   */
+  contentType?: "json" | "protobuf";
 };
 
 export type AiGatewayStripe = {
@@ -534,7 +539,18 @@ const mapGateway = (
   logManagementStrategy: gateway.logManagementStrategy ?? "STOP_INSERTING",
   logpush: gateway.logpush ?? false,
   logpushPublicKey: gateway.logpushPublicKey ?? undefined,
-  otel: gateway.otel ?? undefined,
+  // The wire shape uses explicit nulls and an open content-type union —
+  // normalize into our prop shape so attributes diff cleanly against props.
+  otel: gateway.otel?.map(
+    (o): AiGatewayOtel => ({
+      url: o.url,
+      headers: o.headers,
+      ...(o.authorization != null ? { authorization: o.authorization } : {}),
+      ...(o.contentType != null
+        ? { contentType: o.contentType as "json" | "protobuf" }
+        : {}),
+    }),
+  ),
   storeId: gateway.storeId ?? "",
   stripe: gateway.stripe ?? undefined,
   zdr: gateway.zdr ?? false,

@@ -1,0 +1,128 @@
+import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Test from "@/Test/Vitest";
+import * as originTls from "@distilled.cloud/cloudflare/origin-tls-client-auth";
+import { expect } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+
+const { test } = Test.make({ providers: Cloudflare.providers() });
+
+const logLevel = Effect.provideService(
+  MinimumLogLevel,
+  process.env.DEBUG ? "Debug" : "Info",
+);
+
+const zoneName =
+  process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+
+const resolveZoneId = Effect.gen(function* () {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const zone = yield* findZoneByName({ accountId, name: zoneName });
+  if (!zone) {
+    return yield* Effect.die(
+      new Error(`zone "${zoneName}" not found in account`),
+    );
+  }
+  return zone.id;
+});
+
+// The scoped API token the test harness mints propagates eventually-
+// consistently across Cloudflare's edge — a fresh token intermittently 403s
+// with "Unable to authenticate request". Ride out the blips on the test's
+// own out-of-band calls by retrying the typed `Forbidden` error (part of
+// each operation's error union via distilled patches).
+const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+
+const getSetting = (zoneId: string) =>
+  originTls.getSetting({ zoneId }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden",
+      schedule: forbiddenRetrySchedule,
+      times: 8,
+    }),
+  );
+
+// Normalize the singleton to a known baseline so each run starts from the
+// same cloud state regardless of what a previous (possibly interrupted) run
+// left behind.
+const setBaseline = (zoneId: string, enabled: boolean) =>
+  originTls.putSetting({ zoneId, enabled }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden",
+      schedule: forbiddenRetrySchedule,
+      times: 8,
+    }),
+  );
+
+test.provider(
+  "enables AOP and restores the original value on destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      // Known baseline: zone-level AOP defaults to disabled.
+      yield* setBaseline(zoneId, false);
+
+      const setting = yield* stack.deploy(
+        Cloudflare.OriginTlsClientAuthSetting("Aop", {
+          zoneId,
+          enabled: true,
+        }),
+      );
+
+      expect(setting.zoneId).toEqual(zoneId);
+      expect(setting.enabled).toEqual(true);
+      // The pre-management value is captured for restore-on-destroy.
+      expect(setting.initialEnabled).toEqual(false);
+
+      const observed = yield* getSetting(zoneId);
+      expect(observed.enabled).toEqual(true);
+
+      yield* stack.destroy();
+
+      // Destroy restores the captured baseline, not a hardcoded default.
+      const restored = yield* getSetting(zoneId);
+      expect(restored.enabled).toEqual(false);
+    }).pipe(logLevel),
+);
+
+test.provider("updates the enabled flag in place", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
+
+    yield* stack.destroy();
+    yield* setBaseline(zoneId, false);
+
+    const enabled = yield* stack.deploy(
+      Cloudflare.OriginTlsClientAuthSetting("AopUpdate", {
+        zoneId,
+        enabled: true,
+      }),
+    );
+    expect(enabled.enabled).toEqual(true);
+    expect(enabled.initialEnabled).toEqual(false);
+
+    // In-place update — the singleton is never replaced.
+    const disabled = yield* stack.deploy(
+      Cloudflare.OriginTlsClientAuthSetting("AopUpdate", {
+        zoneId,
+        enabled: false,
+      }),
+    );
+    expect(disabled.enabled).toEqual(false);
+    // The original baseline survives the update.
+    expect(disabled.initialEnabled).toEqual(false);
+
+    const observed = yield* getSetting(zoneId);
+    expect(observed.enabled).toEqual(false);
+
+    yield* stack.destroy();
+
+    const restored = yield* getSetting(zoneId);
+    expect(restored.enabled).toEqual(false);
+  }).pipe(logLevel),
+);

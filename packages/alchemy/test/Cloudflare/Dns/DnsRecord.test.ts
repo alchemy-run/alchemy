@@ -43,15 +43,9 @@ const resolveZoneId = Effect.gen(function* () {
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — a fresh token intermittently 403s
 // with "Unable to authenticate request". Ride out the blips on the test's
-// own out-of-band verification calls.
-const retryForbidden = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
-  eff.pipe(
-    Effect.retry({
-      while: (e) => (e as { _tag?: string })._tag === "Forbidden",
-      schedule: Schedule.exponential("500 millis"),
-      times: 8,
-    }),
-  );
+// own out-of-band verification calls by retrying the typed `Forbidden` error
+// (part of each dns operation's error union via distilled patches).
+const forbiddenRetrySchedule = Schedule.exponential("500 millis");
 
 // Server-side `(name, type)` filter (deepObject `name.exact=…`, needs
 // distilled >= 0.24.9) plus a client-side match as defense in depth.
@@ -66,14 +60,24 @@ const listByNameType = (zoneId: string, name: string, type: string) =>
       Stream.filter((r) => r.name === name && r.type === type),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
-      retryForbidden,
+      Effect.retry({
+        while: (e) => e._tag === "Forbidden",
+        schedule: forbiddenRetrySchedule,
+        times: 8,
+      }),
     );
 
 const findRecord = (zoneId: string, name: string, type: string) =>
   listByNameType(zoneId, name, type).pipe(Effect.map((rs) => rs[0]));
 
 const getRecord = (zoneId: string, dnsRecordId: string) =>
-  dns.getRecord({ zoneId, dnsRecordId }).pipe(retryForbidden);
+  dns.getRecord({ zoneId, dnsRecordId }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden",
+      schedule: forbiddenRetrySchedule,
+      times: 8,
+    }),
+  );
 
 // Delete every record matching (name, type) — used to purge leftovers from
 // interrupted runs so the adoption test starts from a clean slate.
@@ -244,7 +248,13 @@ test.provider(
           ttl: 1,
           comment: "pre-existing",
         })
-        .pipe(retryForbidden);
+        .pipe(
+          Effect.retry({
+            while: (e) => e._tag === "Forbidden",
+            schedule: forbiddenRetrySchedule,
+            times: 8,
+          }),
+        );
       expect(pre.id).toBeDefined();
 
       // Without `adopt`: DNS records carry no ownership markers, so the

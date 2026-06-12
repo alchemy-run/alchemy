@@ -1,0 +1,281 @@
+import * as originTls from "@distilled.cloud/cloudflare/origin-tls-client-auth";
+import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Redacted from "effect/Redacted";
+
+import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
+import { Resource } from "../../Resource.ts";
+import type { Providers } from "../Providers.ts";
+
+const OriginTlsClientAuthCertificateTypeId =
+  "Cloudflare.OriginTlsClientAuth.Certificate" as const;
+type OriginTlsClientAuthCertificateTypeId =
+  typeof OriginTlsClientAuthCertificateTypeId;
+
+/**
+ * Deployment status of the certificate. Deploying and deleting are
+ * asynchronous (`pending_deployment` → `active`, `pending_deletion` →
+ * `deleted`), typically settling within minutes.
+ */
+export type OriginTlsClientAuthCertificateStatus =
+  | "initializing"
+  | "pending_deployment"
+  | "pending_deletion"
+  | "active"
+  | "deleted"
+  | "deployment_timed_out"
+  | "deletion_timed_out"
+  // Keep the union open so new Cloudflare statuses aren't blocked by stale types.
+  | (string & {});
+
+export type OriginTlsClientAuthCertificateProps = {
+  /**
+   * Zone the certificate is uploaded to. Cannot be changed after upload —
+   * updating this property triggers a replacement.
+   */
+  zoneId: string;
+  /**
+   * The zone's leaf client certificate in PEM format, presented by
+   * Cloudflare to your origin when Authenticated Origin Pulls is enabled.
+   * Cannot be changed after upload — updating this property triggers a
+   * replacement.
+   */
+  certificate: string;
+  /**
+   * The certificate's private key in PEM format. Cannot be changed after
+   * upload — updating this property triggers a replacement.
+   */
+  privateKey: Redacted.Redacted<string>;
+};
+
+export type OriginTlsClientAuthCertificateAttributes = {
+  /** Unique identifier of the uploaded certificate. */
+  certificateId: string;
+  /** Zone the certificate is uploaded to. */
+  zoneId: string;
+  /** Deployment status of the certificate. */
+  status: OriginTlsClientAuthCertificateStatus | undefined;
+  /** When the certificate expires. */
+  expiresOn: string | undefined;
+  /** The certificate authority that issued the certificate. */
+  issuer: string | undefined;
+  /** The type of hash used for the certificate signature. */
+  signature: string | undefined;
+  /** When the certificate was uploaded to Cloudflare. */
+  uploadedOn: string | undefined;
+};
+
+export type OriginTlsClientAuthCertificate = Resource<
+  OriginTlsClientAuthCertificateTypeId,
+  OriginTlsClientAuthCertificateProps,
+  OriginTlsClientAuthCertificateAttributes,
+  never,
+  Providers
+>;
+
+/**
+ * A zone-level Authenticated Origin Pulls (AOP) client certificate
+ * (`/zones/{zone_id}/origin_tls_client_auth`).
+ *
+ * Uploads the client certificate Cloudflare presents to your origin when
+ * zone-level Authenticated Origin Pulls is enabled
+ * ({@link OriginTlsClientAuthSetting}), letting the origin verify that
+ * requests really come from Cloudflare via mTLS.
+ *
+ * Certificates are immutable: there is no update API, so changing any
+ * property triggers a replacement. Deployment is asynchronous — the
+ * certificate starts in `pending_deployment` and becomes `active` within a
+ * few minutes; deletion likewise passes through `pending_deletion`.
+ *
+ * @section Uploading a certificate
+ * @example Zone client certificate
+ * ```typescript
+ * const cert = yield* Cloudflare.OriginTlsClientAuthCertificate("AopCert", {
+ *   zoneId: zone.zoneId,
+ *   certificate: clientCertPem,
+ *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
+ * });
+ * ```
+ *
+ * @section Enabling Authenticated Origin Pulls
+ * @example Upload the certificate and turn AOP on
+ * ```typescript
+ * const cert = yield* Cloudflare.OriginTlsClientAuthCertificate("AopCert", {
+ *   zoneId: zone.zoneId,
+ *   certificate: clientCertPem,
+ *   privateKey: alchemy.secret.env.AOP_CLIENT_KEY,
+ * });
+ *
+ * yield* Cloudflare.OriginTlsClientAuthSetting("Aop", {
+ *   zoneId: zone.zoneId,
+ *   enabled: true,
+ * });
+ * ```
+ *
+ * @see https://developers.cloudflare.com/ssl/origin-configuration/authenticated-origin-pull/
+ */
+export const OriginTlsClientAuthCertificate =
+  Resource<OriginTlsClientAuthCertificate>(
+    OriginTlsClientAuthCertificateTypeId,
+  );
+
+/**
+ * Returns true if the given value is an OriginTlsClientAuthCertificate
+ * resource.
+ */
+export const isOriginTlsClientAuthCertificate = (
+  value: unknown,
+): value is OriginTlsClientAuthCertificate =>
+  Predicate.hasProperty(value, "Type") &&
+  value.Type === OriginTlsClientAuthCertificateTypeId;
+
+export const OriginTlsClientAuthCertificateProvider = () =>
+  Provider.succeed(OriginTlsClientAuthCertificate, {
+    stables: ["certificateId", "zoneId"],
+
+    diff: Effect.fn(function* ({ olds = {}, news }) {
+      if (!isResolved(news)) return undefined;
+      const o = olds as OriginTlsClientAuthCertificateProps;
+      const n = news as OriginTlsClientAuthCertificateProps;
+      // zoneId is Input<string>; compare only once both sides are concrete.
+      if (
+        typeof o.zoneId === "string" &&
+        typeof n.zoneId === "string" &&
+        o.zoneId !== n.zoneId
+      ) {
+        return { action: "replace" } as const;
+      }
+      if (
+        (o.certificate !== undefined &&
+          normalizePem(o.certificate) !== normalizePem(n.certificate)) ||
+        (o.privateKey !== undefined &&
+          unwrap(o.privateKey) !== unwrap(n.privateKey))
+      ) {
+        // There is no update API for zone client certificates — every change
+        // is a replacement.
+        return { action: "replace" } as const;
+      }
+      return undefined;
+    }),
+
+    read: Effect.fn(function* ({ output, olds }) {
+      const zoneId = output?.zoneId ?? (olds?.zoneId as string | undefined);
+      if (!zoneId) return undefined;
+      if (output?.certificateId) {
+        const observed = yield* observeById(zoneId, output.certificateId);
+        if (observed) return toAttributes(observed, zoneId);
+      }
+      // Cold read — recover by listing and matching on the certificate PEM
+      // content (the only identity available; zone client certificates have
+      // no name or tags). A content match IS the desired state, so adoption
+      // is safe without an `Unowned` gate.
+      if (typeof olds?.certificate === "string") {
+        const match = yield* findByContent(zoneId, olds.certificate);
+        if (match) return toAttributes(match, zoneId);
+      }
+      return undefined;
+    }),
+
+    reconcile: Effect.fn(function* ({ news, output }) {
+      // Inputs have been resolved to concrete strings by Plan.
+      const zoneId = news.zoneId as string;
+
+      // 1. Observe — the certificate id is the stable identifier; fall
+      //    through a CertificateNotFound (or a pending/completed deletion)
+      //    to the list+content match so we recover from out-of-band deletes
+      //    and partial state persistence.
+      let observed = output?.certificateId
+        ? yield* observeById(zoneId, output.certificateId)
+        : yield* findByContent(zoneId, news.certificate);
+
+      // 2. Ensure — upload if missing. Cloudflare rejects uploading a PEM
+      //    identical to a live certificate (code 1406); tolerate the race
+      //    (or an orphaned prior upload) by re-listing and adopting the
+      //    certificate with identical PEM content. Re-uploading the PEM of
+      //    a certificate in `pending_deletion` resurrects it under the same
+      //    id, so a destroy→deploy cycle converges naturally.
+      if (!observed) {
+        observed = yield* originTls
+          .createOriginTlsClientAuth({
+            zoneId,
+            certificate: news.certificate,
+            privateKey: unwrap(news.privateKey),
+          })
+          .pipe(
+            Effect.catchTag("CertificateAlreadyExists", (originalError) =>
+              Effect.gen(function* () {
+                const match = yield* findByContent(zoneId, news.certificate);
+                if (!match) return yield* Effect.fail(originalError);
+                return match;
+              }),
+            ),
+          );
+      }
+
+      // 3. Return — deployment is asynchronous (`pending_deployment` →
+      //    `active`); we do not block on activation.
+      return toAttributes(observed, zoneId);
+    }),
+
+    delete: Effect.fn(function* ({ output }) {
+      yield* originTls
+        .deleteOriginTlsClientAuth({
+          zoneId: output.zoneId,
+          certificateId: output.certificateId,
+        })
+        .pipe(Effect.catchTag("CertificateNotFound", () => Effect.void));
+    }),
+  });
+
+/** A certificate that is being or has been deleted no longer satisfies the desired state. */
+const isLive = (status: string | null | undefined): boolean =>
+  status !== "deleted" && status !== "pending_deletion";
+
+// Observe a certificate by id, treating "not found" and "deleted /
+// pending_deletion" (Cloudflare keeps tombstones readable by id) as missing.
+const observeById = (zoneId: string, certificateId: string) =>
+  originTls.getOriginTlsClientAuth({ zoneId, certificateId }).pipe(
+    Effect.map((cert) => (isLive(cert.status) ? cert : undefined)),
+    Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)),
+  );
+
+// Locate a live certificate by exact PEM content. Tombstoned certificates
+// are excluded so a destroy→deploy cycle re-creates (resurrects) instead of
+// adopting a certificate that is on its way out.
+const findByContent = (zoneId: string, certificate: string) =>
+  Effect.gen(function* () {
+    const list = yield* originTls.listOriginTlsClientAuths({ zoneId });
+    return list.result.find(
+      (c) =>
+        isLive(c.status) &&
+        normalizePem(c.certificate ?? "") === normalizePem(certificate),
+    );
+  });
+
+const normalizePem = (pem: string): string => pem.trim();
+
+const unwrap = (value: Redacted.Redacted<string> | string): string =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value;
+
+type CertificateShape = {
+  id?: string | null;
+  status?: string | null;
+  expiresOn?: string | null;
+  issuer?: string | null;
+  signature?: string | null;
+  uploadedOn?: string | null;
+};
+
+const toAttributes = (
+  cert: CertificateShape,
+  zoneId: string,
+): OriginTlsClientAuthCertificateAttributes => ({
+  certificateId: cert.id!,
+  zoneId,
+  status: cert.status ?? undefined,
+  expiresOn: cert.expiresOn ?? undefined,
+  issuer: cert.issuer ?? undefined,
+  signature: cert.signature ?? undefined,
+  uploadedOn: cert.uploadedOn ?? undefined,
+});

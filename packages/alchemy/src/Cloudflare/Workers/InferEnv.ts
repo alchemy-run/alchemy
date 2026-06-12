@@ -20,47 +20,49 @@ export type InferEnv<W> =
 export type GetBindingType<T> =
   T extends Effect.Effect<infer A, infer _E, infer _R>
     ? GetBindingType<A>
-    : T extends Cloudflare.Assets
-      ? Service
-      : T extends Rpc<infer Shape extends object>
-        ? RpcWireShape<Shape> & Service
-        : T extends Cloudflare.D1Database
-          ? D1Database
-          : T extends Cloudflare.R2Bucket
-            ? R2Bucket
-            : T extends Cloudflare.KVNamespace
-              ? KVNamespace
-              : T extends Cloudflare.Queue
-                ? Queue<unknown>
-                : T extends Cloudflare.AiGateway
-                  ? Ai
-                  : T extends Cloudflare.SendEmail
-                    ? SendEmail
-                    : T extends Cloudflare.AnalyticsEngineDataset
-                      ? AnalyticsEngineDataset
-                      : T extends Cloudflare.Artifacts
-                        ? Artifacts
-                        : T extends Cloudflare.RateLimit
-                          ? RateLimit
-                          : T extends Cloudflare.Images
-                            ? ImagesBinding
-                            : T extends Cloudflare.Browser
-                              ? BrowserRun
-                              : T extends Cloudflare.Hyperdrive
-                                ? Hyperdrive
-                                : T extends Cloudflare.VersionMetadata
-                                  ? WorkerVersionMetadata
-                                  : T extends Cloudflare.DynamicWorkerLoader
-                                    ? Cloudflare.DynamicWorkerLoaderBinding
-                                    : T extends Cloudflare.DurableObjectNamespaceLike
-                                      ? DurableObjectNamespace<
-                                          Exclude<T["Shape"], undefined>
-                                        >
-                                      : T extends Redacted<any>
-                                        ? // redacteds are always stored as secret_text, so are always string
-                                          // we JSON.stringify when not a Redacted<string>
-                                          string
-                                        : T;
+    : T extends Cloudflare.FlagshipApp
+      ? Flagship
+      : T extends Cloudflare.Assets
+        ? Service
+        : T extends Rpc<infer Shape extends object>
+          ? RpcWireShape<Shape> & Service
+          : T extends Cloudflare.D1Database
+            ? D1Database
+            : T extends Cloudflare.R2Bucket
+              ? R2Bucket
+              : T extends Cloudflare.KVNamespace
+                ? KVNamespace
+                : T extends Cloudflare.Queue
+                  ? Queue<unknown>
+                  : T extends Cloudflare.AiGateway
+                    ? Ai
+                    : T extends Cloudflare.SendEmail
+                      ? SendEmail
+                      : T extends Cloudflare.AnalyticsEngineDataset
+                        ? AnalyticsEngineDataset
+                        : T extends Cloudflare.Artifacts
+                          ? Artifacts
+                          : T extends Cloudflare.RateLimit
+                            ? RateLimit
+                            : T extends Cloudflare.Images
+                              ? ImagesBinding
+                              : T extends Cloudflare.Browser
+                                ? BrowserRun
+                                : T extends Cloudflare.Hyperdrive
+                                  ? Hyperdrive
+                                  : T extends Cloudflare.VersionMetadata
+                                    ? WorkerVersionMetadata
+                                    : T extends Cloudflare.DynamicWorkerLoader
+                                      ? Cloudflare.DynamicWorkerLoaderBinding
+                                      : T extends Cloudflare.DurableObjectNamespaceLike
+                                        ? DurableObjectNamespace<
+                                            Exclude<T["Shape"], undefined>
+                                          >
+                                        : T extends Redacted<any>
+                                          ? // redacteds are always stored as secret_text, so are always string
+                                            // we JSON.stringify when not a Redacted<string>
+                                            string
+                                          : T;
 
 /**
  * Cloudflare service-binding wire shape for an Effect-native Worker.

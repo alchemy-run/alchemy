@@ -2,10 +2,10 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { arrayEquals } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -100,7 +100,7 @@ export interface AccessApplicationProps {
    * Allowed identity-provider UUIDs. Defaults (on Cloudflare's side) to every
    * IdP configured for the account.
    */
-  allowedIdps?: Input<string>[];
+  allowedIdps?: string[];
   /**
    * Skip the IdP picker when only one IdP is allowed. Requires `allowedIdps`
    * to contain exactly one entry.
@@ -124,17 +124,17 @@ export interface AccessApplicationProps {
    * bodies in this provider.
    *
    * Each entry can be:
-   * - a policy id (`Input<string>`),
+   * - a policy id (`string`),
    * - `{ id, precedence? }`, or
    * - the same with per-application overrides (`approvalRequired`,
    *   `isolationRequired`, `purposeJustificationRequired`,
    *   `purposeJustificationPrompt`, `sessionDuration`, `approvalGroups`).
    */
   policies?: ReadonlyArray<
-    | Input<string>
-    | { id: Input<string>; precedence?: number }
+    | string
+    | { id: string; precedence?: number }
     | {
-        id: Input<string>;
+        id: string;
         precedence?: number;
         approvalRequired?: boolean;
         isolationRequired?: boolean;
@@ -706,18 +706,8 @@ const buildMutableBody = (
 // Drift detection
 // ---------------------------------------------------------------------------
 
-const arrEq = <T>(
-  a: ReadonlyArray<T> | undefined,
-  b: ReadonlyArray<T> | undefined,
-): boolean => {
-  if (a === b) return true;
-  if (a === undefined || b === undefined) return false;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) return false;
-  }
-  return true;
-};
+const jsonEq = <T>(x: T, y: T): boolean =>
+  JSON.stringify(x) === JSON.stringify(y);
 
 const policiesEq = (
   desired: ReadonlyArray<ResolvedPolicy> | undefined,
@@ -789,11 +779,14 @@ const bodyEqualsObserved = (
   }
   if (
     desired.allowedIdps !== undefined &&
-    !arrEq(desired.allowedIdps, observed.allowedIdps)
+    !arrayEquals(desired.allowedIdps, observed.allowedIdps, jsonEq)
   ) {
     return false;
   }
-  if (desired.tags !== undefined && !arrEq(desired.tags, observed.tags)) {
+  if (
+    desired.tags !== undefined &&
+    !arrayEquals(desired.tags, observed.tags, jsonEq)
+  ) {
     return false;
   }
   if (!policiesEq(desired.policies, observed.policies)) {

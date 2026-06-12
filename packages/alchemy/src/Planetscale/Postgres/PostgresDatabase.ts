@@ -6,12 +6,12 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hashImports, hashMigrations } from "../../Sql/SqlFile.ts";
+import { recordsEqual } from "../../Util/equal.ts";
 import type { BaseDatabaseAttributes, BaseDatabaseProps } from "../Database.ts";
 import type { Providers } from "../Providers.ts";
 import {
   DEFAULT_MIGRATIONS_TABLE,
   PlanetscaleConflict,
-  recordsEqual,
   waitForBranchReady,
   waitForDatabaseReady,
 } from "../Util.ts";

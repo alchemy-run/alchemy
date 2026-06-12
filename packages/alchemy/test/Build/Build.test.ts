@@ -16,7 +16,6 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const path = yield* Path.Path;
 
       yield* stack.destroy();
 

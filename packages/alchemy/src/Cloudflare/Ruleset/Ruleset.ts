@@ -161,7 +161,7 @@ export const RulesetProvider = () =>
           description: output.description,
           rules: [],
         })
-        .pipe(Effect.catchIf(isNotFoundError, () => Effect.void));
+        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.void));
     }),
     read: Effect.fn(function* ({ olds, output }) {
       const zoneId = output?.zoneId ?? zoneIdOf(olds.zone);
@@ -173,7 +173,7 @@ export const RulesetProvider = () =>
         })
         .pipe(
           Effect.map((ruleset) => toRulesetAttributes(zoneId, ruleset)),
-          Effect.catchIf(isNotFoundError, () => Effect.succeed(undefined)),
+          Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)),
         );
     }),
   });
@@ -199,12 +199,6 @@ export const toRulesetAttributes = (
   lastUpdated: ruleset.lastUpdated,
   version: ruleset.version,
 });
-
-const isNotFoundError = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  (("status" in error && (error as { status: unknown }).status === 404) ||
-    ("_tag" in error && (error as { _tag: unknown })._tag === "NotFound"));
 
 // A `Zone` prop is resolved to its attributes before a lifecycle op runs, so
 // `zone.zoneId` is normally a plain string even though the `Zone` resource

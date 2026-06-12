@@ -20,6 +20,7 @@ import {
   Data,
   DispatchNamespace,
   DurableObjectNamespace,
+  Flagship,
   Hyperdrive,
   Images,
   Json,
@@ -575,6 +576,8 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
           b.namespaceId ??
           encodeURIComponent(`${b.scriptName!}-${b.className}`),
       });
+    case "flagship":
+      return Flagship.remote(b.name, b.appId);
     case "hyperdrive":
       return Hyperdrive.local(b.name, b.id);
     case "images":

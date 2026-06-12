@@ -2,6 +2,7 @@ import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as Effect from "effect/Effect";
 import * as MutableHashMap from "effect/MutableHashMap";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
@@ -139,13 +140,19 @@ export const QueueProviderLive = () =>
       let observed:
         | { queueId?: string | null; queueName?: string | null }
         | undefined;
-      if (output?.queueId) {
+      // A `dev:` id never exists on Cloudflare — skip straight to the
+      // name scan (promotion from dev to live).
+      if (output?.queueId && isLiveId(output.queueId)) {
         observed = yield* queues
           .getQueue({
             accountId: acct,
             queueId: output.queueId,
           })
-          .pipe(Effect.catch(() => Effect.succeed(undefined)));
+          .pipe(
+            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () =>
+              Effect.succeed(undefined),
+            ),
+          );
       }
       if (!observed) {
         observed = yield* findQueueByName(queueName);
@@ -162,7 +169,7 @@ export const QueueProviderLive = () =>
             queueName,
           })
           .pipe(
-            Effect.catch(() =>
+            Effect.catchTag("QueueAlreadyExists", () =>
               Effect.gen(function* () {
                 const match = yield* findQueueByName(queueName);
                 if (match && match.queueId && match.queueName) {
@@ -188,16 +195,28 @@ export const QueueProviderLive = () =>
     delete: Effect.fn(function* ({ output }) {
       // If the queueId is a `dev:` ID, the resource only exists locally, so we don't need to delete it from Cloudflare.
       if (!isLiveId(output.queueId)) return;
+      // Dependents (e.g. R2 event notification configs targeting this
+      // queue) may still be tearing down concurrently — ride out the
+      // dependency violation briefly, then fail loudly instead of
+      // silently leaking the queue.
       yield* queues
         .deleteQueue({
           accountId: output.accountId,
           queueId: output.queueId,
         })
-        .pipe(Effect.catch(() => Effect.void));
+        .pipe(
+          Effect.retry({
+            while: (e) => e._tag === "QueueInUseByEventNotification",
+            schedule: Schedule.exponential("1 second").pipe(
+              Schedule.both(Schedule.recurs(8)),
+            ),
+          }),
+          Effect.catchTag("QueueNotFound", () => Effect.void),
+        );
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      if (output?.queueId) {
+      if (output?.queueId && isLiveId(output.queueId)) {
         return yield* queues
           .getQueue({
             accountId: output.accountId,
@@ -209,7 +228,9 @@ export const QueueProviderLive = () =>
               queueName: queue.queueName!,
               accountId: output.accountId,
             })),
-            Effect.catch(() => Effect.succeed(undefined)),
+            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () =>
+              Effect.succeed(undefined),
+            ),
           );
       }
       const queueName = yield* createQueueName(id, olds?.name);

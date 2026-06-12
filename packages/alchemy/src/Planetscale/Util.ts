@@ -146,17 +146,3 @@ export const isKnownError =
     error !== null &&
     (error as { readonly _tag?: unknown })._tag === tag &&
     (error as { readonly message?: unknown }).message === message;
-
-// todo: this repeats across Neon, D1, and PlanetScale resources so maybe we should move it to Diff? or Util?
-export const recordsEqual = (
-  a: Record<string, string>,
-  b: Record<string, string>,
-): boolean => {
-  const aKeys = Object.keys(a);
-  const bKeys = Object.keys(b);
-  if (aKeys.length !== bKeys.length) return false;
-  for (const k of aKeys) {
-    if (a[k] !== b[k]) return false;
-  }
-  return true;
-};

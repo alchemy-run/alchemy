@@ -17,6 +17,9 @@ const zoneId = process.env.CLOUDFLARE_TEST_ZARAZ_ZONE_ID;
 const zoneName =
   process.env.CLOUDFLARE_TEST_ZARAZ_ZONE_NAME ?? "alchemy-test-2.us";
 
+// Zaraz needs no entitlement (available on all plans), but its config is a
+// zone-wide singleton these tests mutate in place — they only run against a
+// dedicated opt-in zone via CLOUDFLARE_TEST_ZARAZ_ZONE_ID (+ optional _NAME).
 test.provider.skipIf(!zoneId)(
   "updates and retains a zone-level Zaraz config",
   (stack) =>
@@ -66,6 +69,8 @@ test.provider.skipIf(!zoneId)(
   { timeout: 120_000 },
 );
 
+// Same gate as above: mutates the zone-wide Zaraz singleton, so it requires
+// the dedicated opt-in zone from CLOUDFLARE_TEST_ZARAZ_ZONE_ID.
 test.provider.skipIf(!zoneId)(
   "delete true resets Zaraz config to defaults",
   (stack) =>
@@ -115,6 +120,8 @@ test.provider.skipIf(!zoneId)(
   { timeout: 120_000 },
 );
 
+// Same gate as above: mutates the zone-wide Zaraz singleton, so it requires
+// the dedicated opt-in zone from CLOUDFLARE_TEST_ZARAZ_ZONE_ID.
 test.provider.skipIf(!zoneId)(
   "updates and retains Zaraz workflow mode",
   (stack) =>

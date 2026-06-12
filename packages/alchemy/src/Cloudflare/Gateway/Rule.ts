@@ -1,11 +1,11 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { arrayEquals } from "../../Util/equal.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
@@ -201,8 +201,198 @@ export type GatewayRule = Resource<
 export const GatewayRule = Resource<GatewayRule>("Cloudflare.Gateway.Rule");
 
 // ---------------------------------------------------------------------------
-// Observed-state types
+// Provider
 // ---------------------------------------------------------------------------
+
+export const GatewayRuleProvider = () =>
+  Provider.effect(
+    GatewayRule,
+    Effect.gen(function* () {
+      const env = yield* CloudflareEnvironment;
+
+      const createRule = yield* zeroTrust.createGatewayRule;
+      const getRule = yield* zeroTrust.getGatewayRule;
+      const updateRule = yield* zeroTrust.updateGatewayRule;
+      const deleteRule = yield* zeroTrust.deleteGatewayRule;
+      const listRules = zeroTrust.listGatewayRules;
+
+      const resolveName = (id: string, name: string | undefined) =>
+        Effect.gen(function* () {
+          if (name) return name;
+          return yield* createPhysicalName({ id });
+        });
+
+      // Locate an existing rule by name when no ruleId is cached — used for
+      // adoption and as a recovery path after a create returns a conflict.
+      const findRuleByName = (accountId: string, name: string) =>
+        listRules.items({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).find(
+              (r) => (r as { name?: string | null }).name === name,
+            ),
+          ),
+          Effect.map((found) =>
+            found === undefined
+              ? undefined
+              : narrowRule(found as Parameters<typeof narrowRule>[0]),
+          ),
+        );
+
+      const observeById = (accountId: string, ruleId: string) =>
+        Effect.gen(function* () {
+          const r = yield* getRule({ accountId, ruleId }).pipe(
+            // Distilled tags transport errors but not the live Cloudflare 404
+            // for a missing rule. Swallow generically so the reconcile flow
+            // falls through to recreate.
+            Effect.catch(() => Effect.succeed(undefined)),
+          );
+          if (r === undefined) return undefined;
+          return narrowRule(r as Parameters<typeof narrowRule>[0]);
+        });
+
+      return {
+        stables: ["ruleId", "action", "accountId"],
+
+        diff: Effect.fn(function* ({ olds = {}, news }) {
+          if ((olds as GatewayRuleProps).action !== undefined) {
+            if (
+              (olds as GatewayRuleProps).action !==
+              (news as GatewayRuleProps).action
+            ) {
+              return { action: "replace" } as const;
+            }
+          }
+        }),
+
+        reconcile: Effect.fn(function* ({ id, news, output }) {
+          const { accountId } = yield* env;
+          const resolvedName = yield* resolveName(id, news.name);
+          const body = buildMutableBody(news, resolvedName);
+
+          // 1. Observe
+          let observed: ObservedRule | undefined;
+          if (output?.ruleId) {
+            observed = yield* observeById(accountId, output.ruleId);
+          }
+          if (!observed) {
+            // Adoption / recovery path — look up by name. Cheap relative to
+            // the create call we'd otherwise blow up on a duplicate name.
+            observed = yield* findRuleByName(accountId, resolvedName);
+          }
+
+          // 2. Ensure
+          if (!observed) {
+            const created = yield* createRule({
+              accountId,
+              name: resolvedName,
+              action: body.action,
+              filters: Array.from(body.filters),
+              traffic: body.traffic,
+              identity: body.identity,
+              devicePosture: body.devicePosture,
+              ruleSettings: body.ruleSettings,
+              precedence: body.precedence,
+              enabled: body.enabled,
+              description: body.description,
+            }).pipe(
+              // Distilled does not tag Conflict — fall back to a name lookup
+              // before re-failing so a racing create still converges.
+              Effect.catch((err) =>
+                Effect.gen(function* () {
+                  const existing = yield* findRuleByName(
+                    accountId,
+                    resolvedName,
+                  );
+                  if (existing) return existing;
+                  return yield* Effect.fail(err);
+                }),
+              ),
+            );
+            observed = narrowRule(created as Parameters<typeof narrowRule>[0]);
+          }
+
+          // 3. Sync
+          if (!observed.id) {
+            return yield* Effect.fail(
+              new Error("Cloudflare did not return a rule id for Gateway rule"),
+            );
+          }
+          if (!bodyEqualsObserved(body, observed)) {
+            const updated = yield* updateRule({
+              accountId,
+              ruleId: observed.id,
+              name: resolvedName,
+              action: body.action,
+              filters: Array.from(body.filters),
+              traffic: body.traffic,
+              identity: body.identity,
+              devicePosture: body.devicePosture,
+              ruleSettings: body.ruleSettings,
+              precedence: body.precedence,
+              enabled: body.enabled,
+              description: body.description,
+            });
+            observed = narrowRule(updated as Parameters<typeof narrowRule>[0]);
+          }
+
+          // 4. Return
+          if (
+            !observed.id ||
+            !observed.action ||
+            !observed.filters ||
+            observed.precedence === undefined
+          ) {
+            return yield* Effect.fail(
+              new Error(
+                "Cloudflare returned a Gateway rule without id/action/filters/precedence",
+              ),
+            );
+          }
+          return {
+            ruleId: observed.id,
+            name: observed.name ?? resolvedName,
+            action: observed.action,
+            filters: observed.filters,
+            precedence: observed.precedence,
+            accountId,
+            createdAt: observed.createdAt,
+            updatedAt: observed.updatedAt,
+          } satisfies GatewayRuleAttributes;
+        }),
+
+        delete: Effect.fn(function* ({ output }) {
+          yield* deleteRule({
+            accountId: output.accountId,
+            ruleId: output.ruleId,
+          }).pipe(Effect.catch(() => Effect.void));
+        }),
+
+        read: Effect.fn(function* ({ output }) {
+          if (!output?.ruleId) return undefined;
+          const observed = yield* observeById(output.accountId, output.ruleId);
+          if (
+            !observed?.id ||
+            !observed.action ||
+            !observed.filters ||
+            observed.precedence === undefined
+          ) {
+            return undefined;
+          }
+          return {
+            ruleId: observed.id,
+            name: observed.name ?? output.name,
+            action: observed.action,
+            filters: observed.filters,
+            precedence: observed.precedence,
+            accountId: output.accountId,
+            createdAt: observed.createdAt ?? output.createdAt,
+            updatedAt: observed.updatedAt ?? output.updatedAt,
+          } satisfies GatewayRuleAttributes;
+        }),
+      };
+    }),
+  );
 
 interface ObservedRule {
   readonly id?: string;
@@ -298,26 +488,13 @@ const buildMutableBody = (
 // Drift detection
 // ---------------------------------------------------------------------------
 
-const arrEq = <T>(
-  a: ReadonlyArray<T> | undefined,
-  b: ReadonlyArray<T> | undefined,
-): boolean => {
-  if (a === b) return true;
-  if (a === undefined || b === undefined) return false;
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-};
-
 const bodyEqualsObserved = (
   desired: RuleMutableBody,
   observed: ObservedRule,
 ): boolean => {
   if (desired.name !== observed.name) return false;
   if (desired.action !== observed.action) return false;
-  if (!arrEq(desired.filters, observed.filters)) return false;
+  if (!arrayEquals(desired.filters, observed.filters)) return false;
   if (desired.traffic !== undefined && desired.traffic !== observed.traffic) {
     return false;
   }
@@ -360,195 +537,3 @@ const bodyEqualsObserved = (
   }
   return true;
 };
-
-// ---------------------------------------------------------------------------
-// Provider
-// ---------------------------------------------------------------------------
-
-export const GatewayRuleProvider = () =>
-  Provider.effect(
-    GatewayRule,
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-
-      const createRule = yield* zeroTrust.createGatewayRule;
-      const getRule = yield* zeroTrust.getGatewayRule;
-      const updateRule = yield* zeroTrust.updateGatewayRule;
-      const deleteRule = yield* zeroTrust.deleteGatewayRule;
-      const listRules = zeroTrust.listGatewayRules;
-
-      const resolveName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          if (name) return name;
-          return yield* createPhysicalName({ id });
-        });
-
-      // Locate an existing rule by name when no ruleId is cached — used for
-      // adoption and as a recovery path after a create returns a conflict.
-      const findRuleByName = (name: string) =>
-        listRules.items({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).find(
-              (r) => (r as { name?: string | null }).name === name,
-            ),
-          ),
-          Effect.map((found) =>
-            found === undefined
-              ? undefined
-              : narrowRule(found as Parameters<typeof narrowRule>[0]),
-          ),
-        );
-
-      const observeById = (ruleId: string) =>
-        Effect.gen(function* () {
-          const r = yield* getRule({ accountId, ruleId }).pipe(
-            // Distilled tags transport errors but not the live Cloudflare 404
-            // for a missing rule. Swallow generically so the reconcile flow
-            // falls through to recreate.
-            Effect.catch(() => Effect.succeed(undefined)),
-          );
-          if (r === undefined) return undefined;
-          return narrowRule(r as Parameters<typeof narrowRule>[0]);
-        });
-
-      return {
-        stables: ["ruleId", "action", "accountId"],
-
-        diff: Effect.fn(function* ({ olds = {}, news }) {
-          if ((olds as GatewayRuleProps).action !== undefined) {
-            if (
-              (olds as GatewayRuleProps).action !==
-              (news as GatewayRuleProps).action
-            ) {
-              return { action: "replace" } as const;
-            }
-          }
-        }),
-
-        reconcile: Effect.fn(function* ({ id, news, output }) {
-          const resolvedName = yield* resolveName(id, news.name);
-          const body = buildMutableBody(news, resolvedName);
-
-          // 1. Observe
-          let observed: ObservedRule | undefined;
-          if (output?.ruleId) {
-            observed = yield* observeById(output.ruleId);
-          }
-          if (!observed) {
-            // Adoption / recovery path — look up by name. Cheap relative to
-            // the create call we'd otherwise blow up on a duplicate name.
-            observed = yield* findRuleByName(resolvedName);
-          }
-
-          // 2. Ensure
-          if (!observed) {
-            const created = yield* createRule({
-              accountId,
-              name: resolvedName,
-              action: body.action,
-              filters: Array.from(body.filters),
-              traffic: body.traffic,
-              identity: body.identity,
-              devicePosture: body.devicePosture,
-              ruleSettings: body.ruleSettings,
-              precedence: body.precedence,
-              enabled: body.enabled,
-              description: body.description,
-            }).pipe(
-              // Distilled does not tag Conflict — fall back to a name lookup
-              // before re-failing so a racing create still converges.
-              Effect.catch((err) =>
-                Effect.gen(function* () {
-                  const existing = yield* findRuleByName(resolvedName);
-                  if (existing) return existing;
-                  return yield* Effect.fail(err);
-                }),
-              ),
-            );
-            observed = narrowRule(created as Parameters<typeof narrowRule>[0]);
-          }
-
-          // 3. Sync
-          if (!observed.id) {
-            return yield* Effect.fail(
-              new Error("Cloudflare did not return a rule id for Gateway rule"),
-            );
-          }
-          if (!bodyEqualsObserved(body, observed)) {
-            const updated = yield* updateRule({
-              accountId,
-              ruleId: observed.id,
-              name: resolvedName,
-              action: body.action,
-              filters: Array.from(body.filters),
-              traffic: body.traffic,
-              identity: body.identity,
-              devicePosture: body.devicePosture,
-              ruleSettings: body.ruleSettings,
-              precedence: body.precedence,
-              enabled: body.enabled,
-              description: body.description,
-            });
-            observed = narrowRule(updated as Parameters<typeof narrowRule>[0]);
-          }
-
-          // 4. Return
-          if (
-            !observed.id ||
-            !observed.action ||
-            !observed.filters ||
-            observed.precedence === undefined
-          ) {
-            return yield* Effect.fail(
-              new Error(
-                "Cloudflare returned a Gateway rule without id/action/filters/precedence",
-              ),
-            );
-          }
-          return {
-            ruleId: observed.id,
-            name: observed.name ?? resolvedName,
-            action: observed.action,
-            filters: observed.filters,
-            precedence: observed.precedence,
-            accountId,
-            createdAt: observed.createdAt,
-            updatedAt: observed.updatedAt,
-          } satisfies GatewayRuleAttributes;
-        }),
-
-        delete: Effect.fn(function* ({ output }) {
-          yield* deleteRule({
-            accountId: output.accountId,
-            ruleId: output.ruleId,
-          }).pipe(Effect.catch(() => Effect.void));
-        }),
-
-        read: Effect.fn(function* ({ output }) {
-          if (!output?.ruleId) return undefined;
-          const observed = yield* observeById(output.ruleId);
-          if (
-            !observed?.id ||
-            !observed.action ||
-            !observed.filters ||
-            observed.precedence === undefined
-          ) {
-            return undefined;
-          }
-          return {
-            ruleId: observed.id,
-            name: observed.name ?? output.name,
-            action: observed.action,
-            filters: observed.filters,
-            precedence: observed.precedence,
-            accountId: output.accountId,
-            createdAt: observed.createdAt ?? output.createdAt,
-            updatedAt: observed.updatedAt ?? output.updatedAt,
-          } satisfies GatewayRuleAttributes;
-        }),
-      };
-    }),
-  );
-
-void Option.none;

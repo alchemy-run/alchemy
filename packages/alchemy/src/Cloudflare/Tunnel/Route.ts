@@ -22,7 +22,7 @@ export type TunnelRouteProps = {
    *
    * Stable -- changing the CIDR triggers replacement.
    *
-   * Declared as a plain `string` (not `Input<string>`) so it is statically
+   * Declared as a plain `string` (not `string`) so it is statically
    * knowable inside `diff`.
    */
   network: string;

@@ -163,6 +163,8 @@ const ALCHEMY_DEFAULT_PERMISSION_GROUP_NAMES: ReadonlySet<string> = new Set([
   "AI Gateway Read",
   "AI Gateway Run",
   "AI Gateway Write",
+  "Flagship Read",
+  "Flagship Write",
   "Browser Rendering Read",
   "Browser Rendering Write",
   "Images Read",

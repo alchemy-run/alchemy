@@ -41,7 +41,7 @@ test.provider.skipIf(!runLive)("create and delete stage", (stack) =>
 
 test.provider.skipIf(!runLive)("stage variables update in place", (stack) =>
   Effect.gen(function* () {
-    const { api, deployment } = yield* stack.deploy(
+    const { api } = yield* stack.deploy(
       Effect.gen(function* () {
         const api = yield* AWS.ApiGateway.RestApi("AgStageVarApi", {
           endpointConfiguration: { types: ["REGIONAL"] },
