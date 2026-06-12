@@ -5,6 +5,7 @@ export * from "./Access/Certificate.ts";
 export * from "./Access/CustomPage.ts";
 export * from "./Access/Group.ts";
 export * from "./Access/IdentityProvider.ts";
+export * from "./Access/KeyConfiguration.ts";
 export * from "./Access/Organization.ts";
 export * from "./Access/Policy.ts";
 export * from "./Access/ServiceToken.ts";

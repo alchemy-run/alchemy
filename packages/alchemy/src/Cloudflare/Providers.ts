@@ -21,6 +21,7 @@ import * as AccessCustomPage from "./Access/CustomPage.ts";
 import * as AccessTag from "./Access/Tag.ts";
 import * as AccessGroup from "./Access/Group.ts";
 import * as AccessIdp from "./Access/IdentityProvider.ts";
+import * as AccessKeyConfig from "./Access/KeyConfiguration.ts";
 import * as AccessOrg from "./Access/Organization.ts";
 import * as AccessPol from "./Access/Policy.ts";
 import * as AccessSvcToken from "./Access/ServiceToken.ts";
@@ -154,6 +155,7 @@ export const providers = () =>
       AccessCustomPage.AccessCustomPage,
       AccessGroup.AccessGroup,
       AccessIdp.AccessIdentityProvider,
+      AccessKeyConfig.AccessKeyConfiguration,
       AccessOrg.AccessOrganization,
       AccessPol.AccessPolicy,
       AccessSvcToken.AccessServiceToken,
@@ -361,6 +363,7 @@ export const providers = () =>
       Ssl.CertificatePack,
       Ssl.UniversalSsl,
       Stream.StreamLiveInput,
+      Stream.StreamLiveInputOutput,
       Stream.StreamSigningKey,
       Stream.StreamWatermark,
       Stream.StreamWebhook,
@@ -374,6 +377,7 @@ export const providers = () =>
       Tunnel.TunnelReadWritePolicy,
       Tunnel.TunnelRoute,
       Tunnel.TunnelVirtualNetwork,
+      Tunnel.TunnelWarpConnector,
       Tunnel.TunnelWritePolicy,
       Turnstile.TurnstileWidget,
       UrlNorm.UrlNormalization,
@@ -421,6 +425,7 @@ export const providers = () =>
           AccessCustomPage.AccessCustomPageProvider(),
           AccessGroup.AccessGroupProvider(),
           AccessIdp.AccessIdentityProviderProvider(),
+          AccessKeyConfig.AccessKeyConfigurationProvider(),
           AccessOrg.AccessOrganizationProvider(),
           AccessPol.AccessPolicyProvider(),
           AccessSvcToken.AccessServiceTokenProvider(),
@@ -620,6 +625,7 @@ export const providers = () =>
           Ssl.CertificatePackProvider(),
           Ssl.UniversalSslProvider(),
           Stream.StreamLiveInputProvider(),
+          Stream.StreamLiveInputOutputProvider(),
           Stream.StreamSigningKeyProvider(),
           Stream.StreamWatermarkProvider(),
           Stream.StreamWebhookProvider(),
@@ -633,6 +639,7 @@ export const providers = () =>
           Tunnel.TunnelReadWritePolicyLive,
           Tunnel.TunnelRouteProvider(),
           Tunnel.TunnelVirtualNetworkProvider(),
+          Tunnel.TunnelWarpConnectorProvider(),
           Tunnel.TunnelWritePolicyLive,
           Turnstile.TurnstileWidgetProvider(),
           UrlNorm.UrlNormalizationProvider(),

@@ -6,3 +6,4 @@ export * from "./TunnelRead.ts";
 export * from "./TunnelReadWrite.ts";
 export * from "./TunnelWrite.ts";
 export * from "./VirtualNetwork.ts";
+export * from "./WarpConnector.ts";
