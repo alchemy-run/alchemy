@@ -28,10 +28,13 @@ jobs:
       # `|| true` keeps the cp harmless in packages whose pkg dir is
       # nested differently or that don't need the root README.
       build-command: "cp ../../README.md . 2>/dev/null || true; bun run build"
+      # Every package's tsgo build pulls in the alchemy -> distilled
+      # project-reference chain (distilled/aws is huge), so all three
+      # need the larger runner — same as distilled's own CI.
       packages: |
         [
-          { "dir": "packages/alchemy",     "name": "alchemy" },
-          { "dir": "packages/better-auth", "name": "@alchemy.run/better-auth" },
-          { "dir": "packages/pr-package",  "name": "@alchemy.run/pr-package" }
+          { "dir": "packages/alchemy",     "name": "alchemy",                   "runner": "ubuntu-22-large" },
+          { "dir": "packages/better-auth", "name": "@alchemy.run/better-auth",  "runner": "ubuntu-22-large" },
+          { "dir": "packages/pr-package",  "name": "@alchemy.run/pr-package",   "runner": "ubuntu-22-large" }
         ]
     secrets: inherit
