@@ -272,7 +272,7 @@ test.provider.skipIf(!recipientAccountId)(
       const liveEntry = yield* resourceSharing.getResource({
         accountId,
         shareId: share.shareId,
-        resourceId: entry.shareResourceId,
+        shareResourceId: entry.shareResourceId,
       });
       expect(liveEntry.resourceId).toEqual(policyB.ruleId);
 

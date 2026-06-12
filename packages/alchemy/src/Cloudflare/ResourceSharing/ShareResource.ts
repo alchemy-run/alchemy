@@ -244,7 +244,7 @@ export const ShareResourceProvider = () =>
         const updated = yield* resourceSharing.updateResource({
           accountId: acct,
           shareId,
-          resourceId: observed.id,
+          shareResourceId: observed.id,
           meta: desiredMeta,
         });
         return toAttributes(updated, acct, shareId);
@@ -259,7 +259,7 @@ export const ShareResourceProvider = () =>
         .deleteResource({
           accountId: output.accountId,
           shareId: output.shareId,
-          resourceId: output.shareResourceId,
+          shareResourceId: output.shareResourceId,
         })
         .pipe(Effect.catchTag("ShareResourceNotFound", () => Effect.void));
     }),
@@ -272,8 +272,12 @@ type ObservedEntry = resourceSharing.GetResourceResponse;
  * (`ShareResourceNotFound`, HTTP 404) and the terminal `deleted` status to
  * `undefined`.
  */
-const getEntry = (accountId: string, shareId: string, resourceId: string) =>
-  resourceSharing.getResource({ accountId, shareId, resourceId }).pipe(
+const getEntry = (
+  accountId: string,
+  shareId: string,
+  shareResourceId: string,
+) =>
+  resourceSharing.getResource({ accountId, shareId, shareResourceId }).pipe(
     Effect.map((entry): ObservedEntry | undefined =>
       entry.status === "deleted" ? undefined : entry,
     ),

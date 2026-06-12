@@ -330,7 +330,7 @@ export const ShareProvider = () =>
           yield* resourceSharing.updateResource({
             accountId: acct,
             shareId: observed.id,
-            resourceId: match.id,
+            shareResourceId: match.id,
             meta: desired.meta,
           });
         }
@@ -346,7 +346,7 @@ export const ShareProvider = () =>
             .deleteResource({
               accountId: acct,
               shareId: observed.id,
-              resourceId: live.id,
+              shareResourceId: live.id,
             })
             .pipe(Effect.catchTag("ShareResourceNotFound", () => Effect.void));
         }

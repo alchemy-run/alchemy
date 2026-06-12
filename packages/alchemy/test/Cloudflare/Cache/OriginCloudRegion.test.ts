@@ -57,7 +57,6 @@ const probeAvailability = (zoneId: string) =>
 /** Observe a single mapping out-of-band, `undefined` when gone (typed). */
 const getMapping = (zoneId: string, ip: string) =>
   cache.getOriginCloudRegion({ zoneId, originIP: ip }).pipe(
-    Effect.map((response) => response.value),
     Effect.catchTag("OriginCloudRegionNotFound", () =>
       Effect.succeed(undefined),
     ),

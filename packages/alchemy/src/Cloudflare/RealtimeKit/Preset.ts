@@ -69,10 +69,23 @@ export type RealtimeKitPresetConfig = {
 /**
  * UI design tokens of a preset (colors, logo, spacing).
  */
+/** Corner rounding of UI elements. */
+export type RealtimeKitBorderRadius =
+  | "sharp"
+  | "rounded"
+  | "extra-rounded"
+  | "circular";
+
+/** Border width of UI elements. */
+export type RealtimeKitBorderWidth = "none" | "thin" | "fat";
+
+/** Base color theme of the meeting UI. */
+export type RealtimeKitTheme = "darkest" | "dark" | "light";
+
 export type RealtimeKitPresetUi = {
   designTokens: {
-    borderRadius: "rounded";
-    borderWidth: "thin";
+    borderRadius: RealtimeKitBorderRadius;
+    borderWidth: RealtimeKitBorderWidth;
     colors: {
       background: {
         "600": string;
@@ -97,10 +110,11 @@ export type RealtimeKitPresetUi = {
     };
     logo: string;
     spacingBase: number;
-    theme: "dark";
+    theme: RealtimeKitTheme;
   };
   /**
-   * Raw UI-kit config diff applied on top of the design tokens.
+   * Raw UI-kit config diff applied on top of the design tokens. Required by
+   * the live API (defaulted to `{}` when omitted).
    * @default {}
    */
   configDiff?: unknown;
@@ -532,7 +546,7 @@ const createPresetName = (id: string, name: string | undefined) =>
 
 const withUiDefaults = (
   ui: RealtimeKitPresetUi | undefined,
-): RealtimeKitPresetUi => {
+): RealtimeKitPresetUi & { configDiff: unknown } => {
   const base = ui ?? defaultRealtimeKitPresetUi();
   // `config_diff` is required by the API even though it's incidental —
   // default it so users don't have to care.
@@ -635,8 +649,9 @@ const toAttributes = (
   },
   ui: {
     designTokens: {
-      borderRadius: preset.ui.designTokens.borderRadius,
-      borderWidth: preset.ui.designTokens.borderWidth,
+      borderRadius: preset.ui.designTokens
+        .borderRadius as RealtimeKitBorderRadius,
+      borderWidth: preset.ui.designTokens.borderWidth as RealtimeKitBorderWidth,
       colors: {
         background: { ...preset.ui.designTokens.colors.background },
         brand: { ...preset.ui.designTokens.colors.brand },
@@ -647,9 +662,9 @@ const toAttributes = (
         videoBg: preset.ui.designTokens.colors.videoBg,
         warning: preset.ui.designTokens.colors.warning,
       },
-      logo: preset.ui.designTokens.logo,
+      logo: preset.ui.designTokens.logo ?? "",
       spacingBase: preset.ui.designTokens.spacingBase,
-      theme: preset.ui.designTokens.theme,
+      theme: preset.ui.designTokens.theme as RealtimeKitTheme,
     },
     configDiff: preset.ui.configDiff ?? {},
   },

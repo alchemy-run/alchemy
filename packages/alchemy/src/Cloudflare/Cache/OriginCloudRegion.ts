@@ -56,11 +56,6 @@ export interface OriginCloudRegionAttributes {
   vendor: string;
   /** Cloud vendor region identifier. */
   region: string;
-  /**
-   * Whether the setting can be modified on the zone's current plan
-   * (`false` means the setting is plan-gated).
-   */
-  editable: boolean;
   /** When the mapping was last modified, if Cloudflare reports it. */
   modifiedOn: string | undefined;
 }
@@ -190,46 +185,29 @@ export const OriginCloudRegionProvider = () =>
 
       // 1. Observe — cloud state is authoritative; a cached output is only
       //    a hint and the mapping may be gone.
-      let observed = yield* getMapping(zoneId, ip);
+      const observed = yield* getMapping(zoneId, ip);
 
-      // 2. Ensure — create when missing. A concurrent create surfaces as
-      //    the typed conflict; converge by re-reading the winner.
-      if (observed === undefined) {
-        observed = yield* cache
-          .createOriginCloudRegion({
-            zoneId,
-            ip: news.ip,
-            vendor: news.vendor,
-            region: news.region,
-          })
-          .pipe(
-            Effect.map((created) => toAttributes(zoneId, created)),
-            Effect.catchTag("OriginCloudRegionAlreadyExists", (error) =>
-              getMapping(zoneId, news.ip).pipe(
-                Effect.flatMap((existing) =>
-                  existing ? Effect.succeed(existing) : Effect.fail(error),
-                ),
-              ),
-            ),
-          );
+      // 2. Ensure + sync in one step — the endpoint is a true PUT upsert
+      //    (`PUT /origin/cloud_regions/{origin_ip}`), so a missing mapping
+      //    and a drifted mapping converge through the same call. Skip the
+      //    API entirely on a no-op.
+      if (
+        observed !== undefined &&
+        observed.vendor === news.vendor &&
+        observed.region === news.region
+      ) {
+        return observed;
       }
-
-      // 3. Sync — diff observed vendor/region against desired; skip the
-      //    PATCH entirely on a no-op.
-      if (observed.vendor !== news.vendor || observed.region !== news.region) {
-        // PATCH addresses the mapping by IP in the body and echoes the full
-        // mapping set — re-read the single mapping for fresh attributes.
-        yield* cache.patchOriginCloudRegion({
-          zoneId,
-          ip: observed.originIp,
-          vendor: news.vendor,
-          region: news.region,
-        });
-        const synced = yield* getMapping(zoneId, observed.originIp);
-        if (synced !== undefined) observed = synced;
-      }
-
-      return observed;
+      const upserted = yield* cache.putOriginCloudRegion({
+        zoneId,
+        // Path param and body `origin_ip` must match or Cloudflare rejects
+        // the request with a 400.
+        originIP: ip,
+        originIp: ip,
+        vendor: news.vendor,
+        region: news.region,
+      });
+      return toAttributes(zoneId, upserted);
     }),
 
     delete: Effect.fn(function* ({ output }) {
@@ -265,12 +243,11 @@ const toAttributes = (
   zoneId: string,
   response:
     | cache.GetOriginCloudRegionResponse
-    | cache.CreateOriginCloudRegionResponse,
+    | cache.PutOriginCloudRegionResponse,
 ): OriginCloudRegionAttributes => ({
   zoneId,
-  originIp: response.value.originIp,
-  vendor: response.value.vendor,
-  region: response.value.region,
-  editable: response.editable,
-  modifiedOn: response.value.modifiedOn ?? response.modifiedOn ?? undefined,
+  originIp: response.originIp,
+  vendor: response.vendor,
+  region: response.region,
+  modifiedOn: response.modifiedOn ?? undefined,
 });
