@@ -6,6 +6,7 @@ import * as Redacted from "effect/Redacted";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import type * as Serverless from "../../Serverless/index.ts";
+import type { DurableObjectExport } from "./DurableObjectNamespace.ts";
 import { makeRequestHandler } from "./HttpServer.ts";
 import {
   ExportedHandlerMethods,
@@ -13,6 +14,7 @@ import {
   WorkerTypeId,
   type WorkerEvent,
 } from "./Worker.ts";
+import type { WorkflowExport } from "./Workflow.ts";
 
 export interface WorkerRuntimeContext extends Serverless.FunctionContext {
   export(name: string, value: any): Effect.Effect<void>;
@@ -21,7 +23,7 @@ export interface WorkerRuntimeContext extends Serverless.FunctionContext {
 
 export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
   const listeners: Effect.Effect<Serverless.FunctionListener>[] = [];
-  const exports: Record<string, any> = {};
+  const exports: Record<string, DurableObjectExport | WorkflowExport> = {};
   const env: Record<string, any> = {};
   let userShape: Record<string, unknown> | undefined;
 
