@@ -95,6 +95,8 @@ test.provider(
   { timeout: 120_000 },
 );
 
+// Requires the Enterprise Page Shield CSP entitlement — unentitled zones have a zero
+// rule quota and fail with the typed PolicyQuotaExceeded. Unlock with CLOUDFLARE_TEST_PAGE_SHIELD_POLICY_ZONE_ID=<zone id>.
 test.provider.skipIf(!entitledZoneId)(
   "creates, updates in place, and deletes a CSP policy",
   (stack) =>

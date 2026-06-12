@@ -159,6 +159,8 @@ test.provider(
     }).pipe(logLevel),
 );
 
+// Requires a zone with a non-zero custom-detection quota (plan-gated) — the standard
+// zone fails with the typed DetectionQuotaExceeded. Unlock with CLOUDFLARE_TEST_LCC_DETECTION_ZONE_ID=<zone id>.
 test.provider.skipIf(!detectionZoneId)(
   "creates, updates, and destroys a custom detection",
   (stack) =>

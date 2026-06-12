@@ -30,6 +30,9 @@ const accountId = Effect.gen(function* () {
   return accountId;
 });
 
+// Inverse probe: pins the typed `AdvancedTcpProtectionNotEntitled` rejection,
+// so it skips on entitled accounts (CLOUDFLARE_TEST_MAGIC_TRANSIT set), where
+// the API would accept the call.
 test.provider.skipIf(!!magicTransit)(
   "surfaces the typed AdvancedTcpProtectionNotEntitled error without Magic Transit",
   (stack) =>

@@ -118,6 +118,8 @@ test.provider(
   { timeout: 120_000 },
 );
 
+// Unentitlement probe — pins the typed FraudDetectionNotEntitled rejection (code 10400)
+// and skips on entitled zones, where the PUT would succeed and mutate live settings.
 test.provider.skipIf(entitled)(
   "surfaces the typed FraudDetectionNotEntitled error on unentitled zones",
   (stack) =>
@@ -152,6 +154,8 @@ test.provider.skipIf(entitled)(
   { timeout: 120_000 },
 );
 
+// Requires a zone with a Fraud Detection (beta) subscription — unentitled zones fail with
+// the typed FraudDetectionNotEntitled (code 10400). Unlock with CLOUDFLARE_TEST_FRAUD_DETECTION=1.
 test.provider.skipIf(!entitled)(
   "manages fraud detection settings and restores them on destroy",
   (stack) =>

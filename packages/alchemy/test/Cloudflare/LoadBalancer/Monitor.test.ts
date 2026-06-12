@@ -52,6 +52,8 @@ const expectGone = (accountId: string, monitorId: string) =>
     }),
   );
 
+// Unentitlement probe: pins the typed plan-gate rejection, so it must skip
+// on entitled accounts — there the create would succeed instead of failing.
 test.provider.skipIf(lbEnabled)(
   "surfaces the typed MonitorIntervalOutOfRange error without the LB subscription",
   (stack) =>

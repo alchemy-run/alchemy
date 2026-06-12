@@ -29,6 +29,8 @@ const probeEntitlement = (accountId: string) =>
     Effect.catchTag("Unauthorized", () => Effect.succeed(false)),
   );
 
+// Unentitlement probe — pins the typed Unauthorized rejection ("needs cfone.port_scan
+// entitlement") and skips on entitled accounts, where the API would accept the calls.
 test.provider.skipIf(entitled)(
   "unentitled accounts surface the typed Unauthorized error",
   (stack) =>
@@ -80,6 +82,8 @@ const expectGone = (accountId: string, configId: string) =>
     }),
   );
 
+// Requires the Cloudforce One attack-surface scan (cfone.port_scan) entitlement —
+// unentitled accounts fail with the typed Unauthorized. Unlock with CLOUDFLARE_TEST_CLOUDFORCE_ONE=1.
 test.provider.skipIf(!entitled)(
   "create a scan config, update ports in place, delete",
   (stack) =>

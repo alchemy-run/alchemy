@@ -74,6 +74,8 @@ test.provider(
     }).pipe(logLevel),
 );
 
+// Requires WAF Content Scanning (Enterprise paid add-on) on the zone — without it payload
+// calls fail with the typed ContentScanningNotEnabled. Unlock with CLOUDFLARE_TEST_CONTENT_SCANNING_ZONE_ID=<zone id>.
 test.provider.skipIf(!entitledZoneId)(
   "creates a custom expression, replaces on payload change, destroys cleanly",
   (stack) =>

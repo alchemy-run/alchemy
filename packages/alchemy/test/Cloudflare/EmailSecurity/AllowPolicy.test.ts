@@ -39,6 +39,8 @@ const findByPattern = (accountId: string) =>
     }),
   );
 
+// Unentitlement probe — pins the typed EmailSecurityNotEntitled rejection and
+// skips on entitled accounts, where the list call would succeed.
 test.provider.skipIf(entitled)(
   "surfaces the typed EmailSecurityNotEntitled error on unentitled accounts",
   (stack) =>
@@ -67,6 +69,8 @@ test.provider.skipIf(entitled)(
   { timeout: 120_000 },
 );
 
+// Requires the Email Security (Area 1) enterprise add-on — unentitled accounts fail
+// with the typed EmailSecurityNotEntitled. Unlock with CLOUDFLARE_EMAIL_SECURITY=1.
 test.provider.skipIf(!entitled)(
   "create, update in place, destroy",
   (stack) =>

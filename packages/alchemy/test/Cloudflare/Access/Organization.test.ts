@@ -16,6 +16,10 @@ const logLevel = Effect.provideService(
 const AUTH_DOMAIN = process.env.CLOUDFLARE_TEST_AUTH_DOMAIN;
 const skip = !AUTH_DOMAIN;
 
+// The Access organization is an account-wide singleton whose auth domain is
+// allocated once and effectively immutable — the test adopts and mutates the
+// LIVE org, so it only runs when the operator opts in by setting
+// CLOUDFLARE_TEST_AUTH_DOMAIN to the account's <team>.cloudflareaccess.com domain.
 test.provider.skipIf(skip)("adopts the existing Access organization", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
@@ -44,6 +48,8 @@ test.provider.skipIf(skip)("adopts the existing Access organization", (stack) =>
   }).pipe(logLevel),
 );
 
+// Same opt-in gate as above: toggling allow_authenticate_via_warp mutates the
+// account's live singleton org, so it requires CLOUDFLARE_TEST_AUTH_DOMAIN.
 test.provider.skipIf(skip)(
   "toggles allow_authenticate_via_warp and restores",
   (stack) =>

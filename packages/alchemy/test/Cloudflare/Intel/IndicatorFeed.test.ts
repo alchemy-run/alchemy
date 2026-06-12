@@ -88,6 +88,8 @@ test.provider.skipIf(entitled)(
   { timeout: 120_000 },
 );
 
+// Requires a Cloudforce One feed-provider account — unentitled accounts fail with
+// the typed IndicatorFeedsNotEntitled (HTTP 403). Unlock with CLOUDFLARE_TEST_INTEL_FEEDS=1.
 test.provider.skipIf(!entitled)(
   "create (or adopt), verify out-of-band, update in place, destroy",
   (stack) =>
@@ -167,6 +169,8 @@ test.provider.skipIf(!entitled)(
   { timeout: 120_000 },
 );
 
+// Requires a Cloudflare feed-provider account (typed IndicatorFeedsNotEntitled otherwise);
+// unlock with CLOUDFLARE_TEST_INTEL_FEEDS=1 (+ CLOUDFLARE_TEST_INTEL_CONSUMER_ACCOUNT for the grant step).
 test.provider.skipIf(!entitled)(
   "uploads a STIX2 snapshot and grants/revokes a consumer permission",
   (stack) =>

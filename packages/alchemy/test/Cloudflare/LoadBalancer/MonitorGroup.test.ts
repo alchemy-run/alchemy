@@ -55,6 +55,8 @@ const expectGone = (accountId: string, monitorGroupId: string) =>
     }),
   );
 
+// Unentitlement probe: pins the typed plan-gate rejection, so it must skip
+// on Enterprise accounts — there the create would succeed instead of failing.
 test.provider.skipIf(monitorGroupsEnabled)(
   "surfaces the typed MonitorGroupsNotEnabled error on non-Enterprise accounts",
   (stack) =>
