@@ -21,19 +21,27 @@ permissions:
 
 jobs:
   release:
-    uses: alchemy-run/actions/.github/workflows/release.yml@67b1515cf5774c16a0666f4480d21b03443e6091 # main
+    uses: alchemy-run/actions/.github/workflows/release.yml@a18b368e044cb380a8c4904d5cfbccbc2798e768 # main
     with:
+      # The bun workspace includes `distilled/packages/*` from the
+      # distilled submodule, so consumer checkouts must fetch it.
+      submodules: "true"
       version: ${{ inputs.version }}
       repo: alchemy-run/alchemy-effect
       current-version: "2.0.0"
+      # Each package builds in its own publish job: the tsgo build pulls
+      # in the alchemy -> distilled project-reference chain (distilled/aws
+      # is huge), which doesn't fit the bump job's ubuntu-latest box.
+      build-mode: per-package
       # The alchemy package ships the repo-root README.md; copy it in
       # before the build so `bun pm pack` picks it up. Same trick the
-      # legacy `publish:npm` script used.
-      build-command: "cp README.md packages/alchemy/ && bun run build:packages"
+      # legacy `publish:npm` script used (`|| true` keeps it harmless
+      # elsewhere).
+      build-command: "cp ../../README.md . 2>/dev/null || true; bun run build"
       packages: |
         [
-          { "dir": "packages/alchemy",     "name": "alchemy" },
-          { "dir": "packages/better-auth", "name": "@alchemy.run/better-auth" },
-          { "dir": "packages/pr-package",  "name": "@alchemy.run/pr-package" }
+          { "dir": "packages/alchemy",     "name": "alchemy",                   "runner": "ubuntu-22-large" },
+          { "dir": "packages/better-auth", "name": "@alchemy.run/better-auth",  "runner": "ubuntu-22-large" },
+          { "dir": "packages/pr-package",  "name": "@alchemy.run/pr-package",   "runner": "ubuntu-22-large" }
         ]
     secrets: inherit
