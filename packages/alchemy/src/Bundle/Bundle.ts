@@ -311,7 +311,7 @@ function bundleErrorFromUnknown(error: unknown): BundleError {
   });
 }
 
-function bundleOutputFromFiles(
+export function bundleOutputFromFiles(
   files: [BundleFile, ...BundleFile[]],
 ): Effect.Effect<BundleOutput> {
   return Effect.map(
