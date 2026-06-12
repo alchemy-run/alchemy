@@ -5,7 +5,6 @@ import * as Schedule from "effect/Schedule";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { deepEqual } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";

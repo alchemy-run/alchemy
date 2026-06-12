@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";

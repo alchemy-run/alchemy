@@ -217,11 +217,8 @@ const mergeSnapshot = (
   observed: GatewayLoggingSnapshot,
   declared: GatewayLoggingSnapshot,
 ): GatewayLoggingSnapshot => {
-  const merged: GatewayLoggingSnapshot = {
-    ...(observed.redactPii !== undefined
-      ? { redactPii: observed.redactPii }
-      : {}),
-  };
+  const merged: GatewayLoggingSnapshot =
+    observed.redactPii !== undefined ? { redactPii: observed.redactPii } : {};
   if (declared.redactPii !== undefined) merged.redactPii = declared.redactPii;
   for (const key of RULE_TYPES) {
     const base = observed[key];

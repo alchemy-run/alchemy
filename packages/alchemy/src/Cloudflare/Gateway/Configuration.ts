@@ -238,7 +238,7 @@ export const GatewayConfigurationProvider = () =>
       //    snapshot.
       const initialSettings: GatewayConfigurationSnapshot = {
         ...captureBlocks(observedSettings, managed),
-        ...(output?.initialSettings ?? {}),
+        ...output?.initialSettings,
       };
 
       // 3. Sync — patch only when a declared block diverges from the

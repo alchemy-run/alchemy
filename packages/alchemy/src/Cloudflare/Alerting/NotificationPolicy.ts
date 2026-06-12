@@ -2,7 +2,6 @@ import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";

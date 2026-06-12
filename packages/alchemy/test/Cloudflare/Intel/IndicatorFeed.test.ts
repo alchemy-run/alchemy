@@ -171,7 +171,6 @@ test.provider.skipIf(!entitled)(
   "uploads a STIX2 snapshot and grants/revokes a consumer permission",
   (stack) =>
     Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
       const consumer = process.env.CLOUDFLARE_TEST_INTEL_CONSUMER_ACCOUNT;
 
       yield* stack.destroy();

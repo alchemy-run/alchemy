@@ -209,10 +209,8 @@ test.provider(
           ],
         }),
       );
-      expect(
-        [...noop.notification.rules.map((rule) => rule.ruleId)].sort(),
-      ).toEqual(
-        [...updated.notification.rules.map((rule) => rule.ruleId)].sort(),
+      expect(noop.notification.rules.map((rule) => rule.ruleId).sort()).toEqual(
+        updated.notification.rules.map((rule) => rule.ruleId).sort(),
       );
 
       yield* stack.destroy();

@@ -5,7 +5,6 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -394,18 +393,18 @@ const toAttributes = (
   selector: {
     ...(rule.selector.include != null
       ? {
-          include: rule.selector.include.map((entry) => ({
-            ...(entry.host != null ? { host: [...entry.host] } : {}),
-          })),
+          include: rule.selector.include.map((entry) =>
+            entry.host != null ? { host: [...entry.host] } : {},
+          ),
         }
       : {}),
     ...(rule.selector.exclude != null
       ? {
-          exclude: rule.selector.exclude.map((entry) => ({
-            ...(entry.operationIds != null
+          exclude: rule.selector.exclude.map((entry) =>
+            entry.operationIds != null
               ? { operationIds: [...entry.operationIds] }
-              : {}),
-          })),
+              : {},
+          ),
         }
       : {}),
   },

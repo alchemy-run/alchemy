@@ -7,13 +7,12 @@ import { Sandbox } from "./Sandbox.ts";
 const _agentEff = Effect.gen(function* () {
   const agent1 = yield* Agent;
   const _binding1 = agent1.getByName("");
-  const profile1 = yield* _binding1.getProfile();
+
   const agent2 = yield* Agent2;
   const _binding2 = agent2.getByName("");
-  const profile2 = yield* _binding2.getProfile();
+
   const agent3 = yield* Agent3;
   const _binding3 = agent3.getByName("");
-  const profile3 = yield* _binding3.getProfile();
 });
 
 const _gen = Effect.gen(function* () {
