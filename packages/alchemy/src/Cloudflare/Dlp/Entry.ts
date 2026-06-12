@@ -2,6 +2,7 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
+import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -107,6 +108,7 @@ export const DlpEntryProvider = () =>
     stables: ["entryId", "accountId", "profileId"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!isResolved(news)) return undefined;
       // The profile association is set at create time only — replace
       // when it changes.
       const oldProfileId = output?.profileId ?? olds?.profileId;

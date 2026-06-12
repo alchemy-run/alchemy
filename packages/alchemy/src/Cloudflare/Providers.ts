@@ -22,6 +22,7 @@ import * as AccessTag from "./Access/Tag.ts";
 import * as AccessGroup from "./Access/Group.ts";
 import * as AccessIdp from "./Access/IdentityProvider.ts";
 import * as AccessKeyConfig from "./Access/KeyConfiguration.ts";
+import * as AccessMcpPortal from "./Access/McpPortal.ts";
 import * as AccessOrg from "./Access/Organization.ts";
 import * as AccessPol from "./Access/Policy.ts";
 import * as AccessSvcToken from "./Access/ServiceToken.ts";
@@ -58,6 +59,7 @@ import * as D1 from "./D1/index.ts";
 import * as DdosProtection from "./DdosProtection/index.ts";
 import * as Devices from "./Devices/index.ts";
 import * as Diagnostics from "./Diagnostics/index.ts";
+import * as Dlp from "./Dlp/index.ts";
 import * as Dns from "./Dns/index.ts";
 import * as DnsFirewall from "./DnsFirewall/index.ts";
 import * as Email from "./Email/index.ts";
@@ -107,6 +109,7 @@ import * as RealtimeKit from "./RealtimeKit/index.ts";
 import * as RegionalHostname from "./RegionalHostname/index.ts";
 import * as Registrar from "./Registrar/index.ts";
 import * as ResourceSharing from "./ResourceSharing/index.ts";
+import * as RiskScoring from "./RiskScoring/index.ts";
 import * as Rules from "./Rules/index.ts";
 import * as Rum from "./Rum/index.ts";
 import * as Ruleset from "./Ruleset/index.ts";
@@ -156,6 +159,7 @@ export const providers = () =>
       AccessGroup.AccessGroup,
       AccessIdp.AccessIdentityProvider,
       AccessKeyConfig.AccessKeyConfiguration,
+      AccessMcpPortal.AccessMcpPortal,
       AccessOrg.AccessOrganization,
       AccessPol.AccessPolicy,
       AccessSvcToken.AccessServiceToken,
@@ -226,10 +230,14 @@ export const providers = () =>
       DevServer,
       Devices.DeviceCustomProfile,
       Devices.DeviceDefaultProfile,
+      Devices.DeviceDexTest,
       Devices.DeviceManagedNetwork,
+      Devices.DevicePostureIntegration,
       Devices.DevicePostureRule,
       Devices.DeviceSettings,
       Diagnostics.EndpointHealthcheck,
+      Dlp.DlpEntry,
+      Dlp.DlpProfile,
       Dns.AccountDnsSettings,
       Dns.DnsReadPolicy,
       Dns.DnsReadWritePolicy,
@@ -343,6 +351,7 @@ export const providers = () =>
       ResourceSharing.Share,
       ResourceSharing.ShareRecipient,
       ResourceSharing.ShareResource,
+      RiskScoring.RiskScoringIntegration,
       Rules.RulesList,
       Rum.RumRule,
       Rum.RumSite,
@@ -373,6 +382,7 @@ export const providers = () =>
       TokenValidation.TokenValidationRule,
       Tunnel.Tunnel,
       Tunnel.TunnelConfiguration,
+      Tunnel.TunnelHostnameRoute,
       Tunnel.TunnelReadPolicy,
       Tunnel.TunnelReadWritePolicy,
       Tunnel.TunnelRoute,
@@ -426,6 +436,7 @@ export const providers = () =>
           AccessGroup.AccessGroupProvider(),
           AccessIdp.AccessIdentityProviderProvider(),
           AccessKeyConfig.AccessKeyConfigurationProvider(),
+          AccessMcpPortal.AccessMcpPortalProvider(),
           AccessOrg.AccessOrganizationProvider(),
           AccessPol.AccessPolicyProvider(),
           AccessSvcToken.AccessServiceTokenProvider(),
@@ -495,10 +506,14 @@ export const providers = () =>
           DevServerProvider(),
           Devices.DeviceCustomProfileProvider(),
           Devices.DeviceDefaultProfileProvider(),
+          Devices.DeviceDexTestProvider(),
           Devices.DeviceManagedNetworkProvider(),
+          Devices.DevicePostureIntegrationProvider(),
           Devices.DevicePostureRuleProvider(),
           Devices.DeviceSettingsProvider(),
           Diagnostics.EndpointHealthcheckProvider(),
+          Dlp.DlpEntryProvider(),
+          Dlp.DlpProfileProvider(),
           Dns.DnsReadPolicyLive,
           Dns.DnsReadWritePolicyLive,
           Dns.DnsRecordProvider(),
@@ -605,6 +620,7 @@ export const providers = () =>
           ResourceSharing.ShareProvider(),
           ResourceSharing.ShareRecipientProvider(),
           ResourceSharing.ShareResourceProvider(),
+          RiskScoring.RiskScoringIntegrationProvider(),
           Rules.RulesListProvider(),
           Rum.RumRuleProvider(),
           Rum.RumSiteProvider(),
@@ -635,6 +651,7 @@ export const providers = () =>
           TokenValidation.TokenValidationRuleProvider(),
           Tunnel.TunnelProvider(),
           Tunnel.TunnelConfigurationProvider(),
+          Tunnel.TunnelHostnameRouteProvider(),
           Tunnel.TunnelReadPolicyLive,
           Tunnel.TunnelReadWritePolicyLive,
           Tunnel.TunnelRouteProvider(),

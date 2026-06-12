@@ -1,4 +1,5 @@
 export * from "./Configuration.ts";
+export * from "./HostnameRoute.ts";
 export * from "./Route.ts";
 export * from "./Tunnel.ts";
 export * from "./TunnelBinding.ts";
