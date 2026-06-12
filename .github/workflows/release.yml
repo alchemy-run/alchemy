@@ -21,8 +21,11 @@ permissions:
 
 jobs:
   release:
-    uses: alchemy-run/actions/.github/workflows/release.yml@67b1515cf5774c16a0666f4480d21b03443e6091 # main
+    uses: alchemy-run/actions/.github/workflows/release.yml@a18b368e044cb380a8c4904d5cfbccbc2798e768 # main
     with:
+      # The bun workspace includes `distilled/packages/*` from the
+      # distilled submodule, so consumer checkouts must fetch it.
+      submodules: "true"
       version: ${{ inputs.version }}
       repo: alchemy-run/alchemy-effect
       current-version: "2.0.0"

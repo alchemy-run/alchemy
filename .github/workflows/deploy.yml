@@ -53,6 +53,9 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # `bun install` needs the distilled submodule (workspace member)
+          submodules: true
 
       # Mint a token for the alchemy-version-bot GitHub App so the PR
       # preview comment (created via GitHub.Comment in alchemy.run.ts)
@@ -118,6 +121,9 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # `bun install` needs the distilled submodule (workspace member)
+          submodules: true
 
       - name: Generate bot token
         id: bot-token
