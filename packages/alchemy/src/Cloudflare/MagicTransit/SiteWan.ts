@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -32,7 +31,7 @@ export interface MagicSiteWanProps {
   /**
    * The site this WAN belongs to. Changing it triggers a replacement.
    */
-  siteId: Input<string>;
+  siteId: string;
   /**
    * The physical port number on the connector this WAN is attached to.
    */

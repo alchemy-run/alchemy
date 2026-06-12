@@ -15,7 +15,7 @@ export interface SnippetProps {
    * Zone the snippet belongs to. Stable — changing the zone triggers
    * replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Name of the snippet. Snippet names may only contain letters, numbers,
    * and underscores (`[a-zA-Z0-9_]`) — the name is the snippet's identity

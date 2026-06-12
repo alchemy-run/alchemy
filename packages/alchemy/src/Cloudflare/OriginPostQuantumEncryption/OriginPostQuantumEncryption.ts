@@ -32,7 +32,7 @@ export type OriginPostQuantumEncryptionProps = {
    * changing the zone triggers a replacement (the old zone's setting is
    * restored to the value it had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Desired value of the setting. Mutable — updated in place.
    *

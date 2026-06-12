@@ -21,14 +21,14 @@ export interface EmailSendingSubdomainProps {
    *
    * Stable — moving the subdomain to another zone triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The fully-qualified subdomain to send email from (e.g.
    * `mail.example.com`). Must be within the zone.
    *
    * Stable — the Cloudflare API has no update operation for sending
    * subdomains, so a rename is a delete + create. Declared as plain
-   * `string` (not `Input<string>`) so it is statically knowable in `diff`.
+   * `string` (not `string`) so it is statically knowable in `diff`.
    */
   name: string;
 }

@@ -50,7 +50,7 @@ export interface SpeedTestScheduleProps {
    * Immutable — moving a schedule to a different zone triggers a
    * replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The page URL to test, e.g. `example.com/` or `example.com/pricing`.
    * Must be a page on the zone. Cloudflare normalizes a bare hostname to
@@ -58,7 +58,7 @@ export interface SpeedTestScheduleProps {
    *
    * Immutable — the URL is the schedule's identity (path parameter), so
    * changing it triggers a replacement. Deliberately a plain `string` (not
-   * `Input<string>`) so it is statically knowable inside `diff`.
+   * `string`) so it is statically knowable inside `diff`.
    */
   url: string;
   /**

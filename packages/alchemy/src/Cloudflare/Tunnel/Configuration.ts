@@ -63,10 +63,10 @@ export interface TunnelConfigurationProps {
    *
    * Stable — changing the tunnel triggers replacement.
    *
-   * Declared as plain `string` (not `Input<string>`) so it is statically
+   * Declared as plain `string` (not `string`) so it is statically
    * knowable inside `diff` for the replacement check.
    */
-  tunnelId: Input<string>;
+  tunnelId: string;
   /**
    * Ordered ingress rules. cloudflared evaluates them top-down and the
    * first match wins. The catch-all rule is appended automatically — do

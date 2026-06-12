@@ -37,9 +37,9 @@ export interface NotificationPolicyMechanisms {
   /** Email destinations — `id` is the recipient email address. */
   email?: ReadonlyArray<{ id: string }>;
   /** Webhook destinations — `id` references a {@link NotificationWebhook}. */
-  webhooks?: ReadonlyArray<{ id: Input<string> }>;
+  webhooks?: ReadonlyArray<{ id: string }>;
   /** PagerDuty destinations — `id` references a connected PagerDuty service. */
-  pagerduty?: ReadonlyArray<{ id: Input<string> }>;
+  pagerduty?: ReadonlyArray<{ id: string }>;
 }
 
 export interface NotificationPolicyProps {

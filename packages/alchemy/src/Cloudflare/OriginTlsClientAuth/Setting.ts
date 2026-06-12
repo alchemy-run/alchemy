@@ -17,7 +17,7 @@ export type OriginTlsClientAuthSettingProps = {
    * replacement (the old zone's setting is restored to the value it had
    * before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether zone-level Authenticated Origin Pulls is enabled. When enabled,
    * Cloudflare presents the zone's uploaded client certificate

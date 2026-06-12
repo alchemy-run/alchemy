@@ -5,7 +5,6 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -67,7 +66,7 @@ export interface TokenConfigurationProps {
    *
    * Stable — moving a configuration between zones triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Human-readable name for the configuration. If omitted, a unique name is
    * generated from the app, stage, and logical ID.

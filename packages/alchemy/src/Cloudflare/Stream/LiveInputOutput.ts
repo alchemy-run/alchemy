@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -22,7 +21,7 @@ export type StreamLiveInputOutputProps = {
    * Immutable — an output belongs to exactly one live input, so changing
    * it triggers a replacement.
    */
-  liveInputId: Input<string>;
+  liveInputId: string;
   /**
    * The URL the output restreams to, e.g.
    * `rtmps://a.rtmps.youtube.com/live2`.

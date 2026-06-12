@@ -35,7 +35,7 @@ export type OriginTlsClientAuthCertificateProps = {
    * Zone the certificate is uploaded to. Cannot be changed after upload —
    * updating this property triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The zone's leaf client certificate in PEM format, presented by
    * Cloudflare to your origin when Authenticated Origin Pulls is enabled.

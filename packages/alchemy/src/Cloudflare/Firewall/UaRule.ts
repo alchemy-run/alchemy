@@ -27,7 +27,7 @@ export interface UaRuleProps {
    *
    * Stable — moving a rule between zones triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The exact User-Agent string to match. The whole UA header must equal
    * this value — no wildcards or substring matching.

@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -19,7 +18,7 @@ export interface AddressingServiceBindingProps {
    * Identifier of the parent BYOIP prefix. Changing it forces a
    * replacement.
    */
-  prefixId: Input<string>;
+  prefixId: string;
   /**
    * IP Prefix in Classless Inter-Domain Routing format to bind. Must be
    * contained in the parent prefix. Changing it forces a replacement.
@@ -30,7 +29,7 @@ export interface AddressingServiceBindingProps {
    * bind the CIDR to. Service IDs are discoverable via the
    * `addressing.listServices` catalog. Changing it forces a replacement.
    */
-  serviceId: Input<string>;
+  serviceId: string;
 }
 
 export interface AddressingServiceBindingAttributes {

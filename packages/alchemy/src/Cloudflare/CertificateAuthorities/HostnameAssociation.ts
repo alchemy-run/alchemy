@@ -18,7 +18,7 @@ export type HostnameAssociationProps = {
    * the association's identity, so changing it triggers a replacement (the
    * old zone's association is cleared).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * UUID of an uploaded CA certificate from the account-level mTLS
    * Certificate Management store (`Cloudflare.MtlsCertificate` with
@@ -30,13 +30,13 @@ export type HostnameAssociationProps = {
    *
    * @default the active Cloudflare Managed CA
    */
-  mtlsCertificateId?: Input<string>;
+  mtlsCertificateId?: string;
   /**
    * Fully-qualified hostnames in the zone that enforce mTLS for the keyed
    * certificate authority. Mutable — the desired list replaces the current
    * one in full on update.
    */
-  hostnames: Array<Input<string>>;
+  hostnames: Array<string>;
 };
 
 export type HostnameAssociationAttributes = {

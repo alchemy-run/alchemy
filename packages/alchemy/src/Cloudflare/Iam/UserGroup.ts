@@ -30,12 +30,12 @@ export interface IamUserGroupPolicyInput {
    * IDs of the permission groups (what actions are permitted). Look these
    * up via the account's `/iam/permission_groups` catalog.
    */
-  permissionGroups: Input<string>[];
+  permissionGroups: string[];
   /**
    * IDs of the resource groups (which resources the permissions apply
    * to) — e.g. from {@link IamResourceGroup}.
    */
-  resourceGroups: Input<string>[];
+  resourceGroups: string[];
 }
 
 /**

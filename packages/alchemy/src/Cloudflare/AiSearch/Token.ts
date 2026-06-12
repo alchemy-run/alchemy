@@ -7,7 +7,6 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -31,13 +30,13 @@ export type AiSearchTokenProps = {
    * "AI Search Index Engine" permission group — Cloudflare validates it
    * on create/update and rejects tokens without it.
    */
-  cfApiId: Input<string>;
+  cfApiId: string;
   /**
    * Plaintext value of the underlying Cloudflare API token. Write-only —
    * Cloudflare never returns it, so rotation is detected against the
    * previously-persisted props rather than observed cloud state.
    */
-  cfApiKey: Input<Redacted.Redacted<string>>;
+  cfApiKey: Redacted.Redacted<string>;
   /**
    * Whether this is a legacy (account-level instance) token.
    * @default false

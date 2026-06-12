@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -17,7 +16,7 @@ export interface PageShieldSettingsProps {
    * the zone triggers a replacement (the old zone's configuration is
    * restored to the values it had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether Page Shield (client-side script monitoring) is enabled on
    * the zone. The resource exists to turn the feature on, so this

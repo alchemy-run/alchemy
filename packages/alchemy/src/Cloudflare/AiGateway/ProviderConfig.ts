@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -20,7 +19,7 @@ export type AiGatewayProviderConfigProps = {
    * must have its `storeId` set to a Secrets Store id — Cloudflare resolves
    * the key inside that store. Changing the gateway triggers a replacement.
    */
-  gatewayId: Input<string>;
+  gatewayId: string;
   /**
    * The upstream provider the key authenticates against (e.g. `openai`,
    * `anthropic`, `workers-ai`). Changing the provider triggers a
@@ -43,7 +42,7 @@ export type AiGatewayProviderConfigProps = {
    * be named `{gatewayId}_{providerSlug}_{alias}`. Changing the secret
    * triggers a replacement.
    */
-  secretId: Input<string>;
+  secretId: string;
   /**
    * Whether this key is the gateway's default credential for the provider
    * (used when a request does not name a specific key).

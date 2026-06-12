@@ -5,7 +5,6 @@ import * as Redacted from "effect/Redacted";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -59,7 +58,7 @@ export interface LegacyPipelineDestination {
   /**
    * Name of the destination R2 bucket. The bucket must already exist.
    */
-  bucket: Input<string>;
+  bucket: string;
   /**
    * R2 S3-compatible credentials the pipeline uses to write objects.
    * Write-only — Cloudflare never echoes them back.

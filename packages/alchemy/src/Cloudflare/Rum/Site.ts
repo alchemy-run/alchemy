@@ -31,7 +31,7 @@ export type RumSiteProps = {
    * inject the measurement snippet at the edge. Changing this property
    * triggers a replacement.
    */
-  zoneTag?: Input<string>;
+  zoneTag?: string;
   /**
    * If enabled, the JavaScript measurement snippet is automatically
    * injected for orange-clouded sites — no manual embed needed.

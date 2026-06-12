@@ -13,7 +13,7 @@ export interface FallbackOriginProps {
    * Zone the fallback origin belongs to. Stable — a zone has exactly one
    * fallback origin, so changing the zone triggers replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Your origin hostname that requests to custom hostnames are sent to.
    * Must be a DNS record (A, AAAA or CNAME) within the zone — create the
@@ -21,7 +21,7 @@ export interface FallbackOriginProps {
    *
    * Mutable — the API is a PUT-style upsert.
    */
-  origin: Input<string>;
+  origin: string;
 }
 
 export interface FallbackOriginAttributes {

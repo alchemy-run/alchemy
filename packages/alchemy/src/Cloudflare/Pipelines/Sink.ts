@@ -7,7 +7,6 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -44,7 +43,7 @@ export interface PipelineSinkR2Config {
   /**
    * Name of the destination R2 bucket. The bucket must already exist.
    */
-  bucket: Input<string>;
+  bucket: string;
   /**
    * R2 S3-compatible credentials the sink uses to write objects.
    * Write-only — Cloudflare never echoes them back.
@@ -102,7 +101,7 @@ export interface PipelineSinkR2DataCatalogConfig {
    * Name of the R2 bucket backing the catalog. The bucket must already
    * exist and have the Data Catalog enabled.
    */
-  bucket: Input<string>;
+  bucket: string;
   /**
    * Name of the Iceberg table to write.
    */

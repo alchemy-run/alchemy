@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -31,7 +30,7 @@ export interface ZoneTransferPeerProps {
    *
    * Mutable — updated in place (PUT).
    */
-  ip?: Input<string>;
+  ip?: string;
   /**
    * DNS port of the primary or secondary nameserver.
    *
@@ -45,7 +44,7 @@ export interface ZoneTransferPeerProps {
    *
    * Mutable — updated in place (PUT).
    */
-  tsigId?: Input<string>;
+  tsigId?: string;
   /**
    * Use the IXFR (incremental) transfer protocol instead of AXFR. Only
    * applicable to secondary zones.

@@ -68,7 +68,7 @@ export interface LoadBalancerProps {
    * Zone the load balancer lives in. Stable — changing the zone triggers
    * replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The DNS hostname to associate with the Load Balancer (e.g.
    * `lb.example.com`). If this hostname already exists as a DNS record,
@@ -79,11 +79,11 @@ export interface LoadBalancerProps {
    * Pool IDs ordered by their failover priority. Used by default, or when
    * region/country/PoP pools are not configured for a request.
    */
-  defaultPools: ReadonlyArray<Input<string>>;
+  defaultPools: ReadonlyArray<string>;
   /**
    * The pool ID to use when all other pools are detected as unhealthy.
    */
-  fallbackPool: Input<string>;
+  fallbackPool: string;
   /**
    * Object description.
    */
@@ -142,17 +142,17 @@ export interface LoadBalancerProps {
    * Region code → ordered pool IDs for that region. Regions not defined
    * fall back to `defaultPools`.
    */
-  regionPools?: Record<string, ReadonlyArray<Input<string>>>;
+  regionPools?: Record<string, ReadonlyArray<string>>;
   /**
    * Country code → ordered pool IDs for that country. Countries not
    * defined fall back to the corresponding region pool mapping.
    */
-  countryPools?: Record<string, ReadonlyArray<Input<string>>>;
+  countryPools?: Record<string, ReadonlyArray<string>>;
   /**
    * Enterprise only — Cloudflare PoP identifier → ordered pool IDs for
    * that PoP.
    */
-  popPools?: Record<string, ReadonlyArray<Input<string>>>;
+  popPools?: Record<string, ReadonlyArray<string>>;
 }
 
 export interface LoadBalancerAttributes {

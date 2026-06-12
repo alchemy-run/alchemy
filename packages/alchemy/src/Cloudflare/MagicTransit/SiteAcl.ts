@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -24,7 +23,7 @@ export type MagicSiteAclProtocol = "tcp" | "udp" | "icmp";
  */
 export interface MagicSiteAclLan {
   /** The LAN identifier this side of the ACL applies to. */
-  lanId: Input<string>;
+  lanId: string;
   /** Display name of the LAN (informational). */
   lanName?: string;
   /** Specific ports to match. */
@@ -39,7 +38,7 @@ export interface MagicSiteAclProps {
   /**
    * The site this ACL belongs to. Changing it triggers a replacement.
    */
-  siteId: Input<string>;
+  siteId: string;
   /**
    * The name of the ACL.
    */

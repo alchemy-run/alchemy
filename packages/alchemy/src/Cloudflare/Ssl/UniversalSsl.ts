@@ -17,7 +17,7 @@ export type UniversalSslProps = {
    * zone triggers a replacement (the old zone's setting is restored to
    * the value it had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether Universal SSL certificates are issued for the zone.
    *

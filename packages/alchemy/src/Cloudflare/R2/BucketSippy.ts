@@ -5,7 +5,6 @@ import * as Redacted from "effect/Redacted";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -93,7 +92,7 @@ export interface R2BucketSippyProps {
    *
    * Immutable — changing the bucket triggers a replacement.
    */
-  bucketName: Input<string>;
+  bucketName: string;
   /**
    * Jurisdiction of the bucket (must match the bucket's own
    * jurisdiction).

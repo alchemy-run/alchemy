@@ -5,7 +5,6 @@ import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -33,7 +32,7 @@ export interface PagesDeploymentProps {
    * Deployments are immutable and belong to exactly one project —
    * changing the project triggers a replacement.
    */
-  projectName: Input<string>;
+  projectName: string;
   /**
    * The branch the deployment is attributed to. Deploying to the project's
    * production branch produces a production deployment; any other branch

@@ -62,7 +62,7 @@ export interface FirewallAccessRuleProps {
    *
    * Stable — moving a rule between scopes triggers a replacement.
    */
-  zoneId?: Input<string>;
+  zoneId?: string;
   /**
    * The rule's match configuration (target + value).
    *

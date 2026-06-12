@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { deepEqual, isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -112,7 +111,7 @@ export type AiSearchInstanceProps = {
    * URL (for `type: "web-crawler"`). Changing it triggers a replacement —
    * the index must be rebuilt from scratch.
    */
-  source: Input<string>;
+  source: string;
   /**
    * Source-specific indexing parameters (R2 prefix / include / exclude
    * filters, web-crawler crawl and parse options).
@@ -122,11 +121,11 @@ export type AiSearchInstanceProps = {
    * Id of the AI Search service token used to access the data source on
    * sync. When omitted, Cloudflare provisions one automatically.
    */
-  tokenId?: Input<string>;
+  tokenId?: string;
   /**
    * AI Gateway to route model inference calls through.
    */
-  aiGatewayId?: Input<string>;
+  aiGatewayId?: string;
   /**
    * Embedding model used to vectorize content. Cannot be changed after
    * creation — updating this property triggers a replacement.

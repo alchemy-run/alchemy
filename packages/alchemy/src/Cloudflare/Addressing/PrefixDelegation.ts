@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -19,7 +18,7 @@ export interface AddressingPrefixDelegationProps {
    * Identifier of the parent BYOIP prefix being delegated from. Changing it
    * forces a replacement.
    */
-  prefixId: Input<string>;
+  prefixId: string;
   /**
    * IP Prefix in Classless Inter-Domain Routing format to delegate. Must be
    * contained in the parent prefix. Changing it forces a replacement.
@@ -29,7 +28,7 @@ export interface AddressingPrefixDelegationProps {
    * Identifier of the Cloudflare account the prefix is delegated to.
    * Changing it forces a replacement.
    */
-  delegatedAccountId: Input<string>;
+  delegatedAccountId: string;
 }
 
 export interface AddressingPrefixDelegationAttributes {

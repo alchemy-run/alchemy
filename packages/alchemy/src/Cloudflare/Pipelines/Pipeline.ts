@@ -6,7 +6,6 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -36,7 +35,7 @@ export interface PipelineProps {
    *
    * Immutable — changing the SQL triggers a replacement.
    */
-  sql: Input<string>;
+  sql: string;
 }
 
 export interface PipelineAttributes {

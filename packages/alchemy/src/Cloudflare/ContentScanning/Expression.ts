@@ -19,7 +19,7 @@ export interface ContentScanningExpressionProps {
    * Zone the custom scan expression belongs to. Stable — moving an
    * expression between zones triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Ruleset-language expression that locates the content to scan inside
    * the request — e.g.

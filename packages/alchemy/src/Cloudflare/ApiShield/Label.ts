@@ -18,7 +18,7 @@ export interface ApiShieldLabelProps {
    *
    * Immutable — moving a label between zones triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Name of the label. Must be 1–24 characters. If omitted, a unique
    * lowercase name is generated from the app, stage, and logical ID.

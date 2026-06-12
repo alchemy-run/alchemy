@@ -35,7 +35,7 @@ export type OriginTlsClientAuthHostnameAssociationProps = {
    * Zone the hostname belongs to. Cannot be changed — updating this property
    * triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The hostname on the origin for which the client certificate will be
    * presented. Must be a hostname of the zone. This is the association's
@@ -49,7 +49,7 @@ export type OriginTlsClientAuthHostnameAssociationProps = {
    * for this hostname. Required by Cloudflare for every hostname AOP
    * configuration. Mutable — updated in place.
    */
-  certId: Input<string>;
+  certId: string;
   /**
    * Whether hostname-level Authenticated Origin Pulls is enabled for this
    * hostname. Mutable — updated in place. On destroy the association is

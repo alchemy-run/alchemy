@@ -42,7 +42,7 @@ export interface ManagedTransformsProps {
    * triggers a replacement (the old zone's managed transforms are restored
    * to the enabled states they had before Alchemy managed them).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Desired enabled state per managed **request** transform id (e.g.
    * `{ add_visitor_location_headers: true }`). Only the ids you name here

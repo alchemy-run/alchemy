@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -17,7 +16,7 @@ export interface SnippetRule {
    * a `Snippet` resource's `name` output to create the dependency edge so
    * the snippet is created before the rule (and deleted after it).
    */
-  snippetName: Input<string>;
+  snippetName: string;
   /**
    * Cloudflare Rules language expression selecting the traffic the
    * snippet runs on, e.g. `http.request.uri.path wildcard "/api/*"`.
@@ -39,7 +38,7 @@ export interface SnippetRulesProps {
    * Zone the rules apply to. Stable — changing the zone triggers
    * replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Ordered list of snippet rules. The whole list is owned by this
    * resource and replaced atomically on every change — rules managed

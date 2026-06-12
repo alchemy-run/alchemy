@@ -132,7 +132,7 @@ export interface BotManagementProps extends BotManagementSettings {
    * the zone triggers a replacement (which simply re-adopts the new
    * zone's singleton and restores the old zone's snapshot).
    */
-  zoneId: Input<string>;
+  zoneId: string;
 }
 
 export interface BotManagementAttributes extends BotManagementSettings {

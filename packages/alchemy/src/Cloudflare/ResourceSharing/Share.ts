@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -38,12 +37,12 @@ export type ShareRecipientInput = {
    * Recipient account identifier. Exactly one of `accountId` /
    * `organizationId` must be set.
    */
-  accountId?: Input<string>;
+  accountId?: string;
   /**
    * Recipient organization identifier. Exactly one of `accountId` /
    * `organizationId` must be set.
    */
-  organizationId?: Input<string>;
+  organizationId?: string;
 };
 
 /**
@@ -57,12 +56,12 @@ export type ShareResourceInput = {
   /**
    * Identifier of the resource being shared (e.g. the gateway policy id).
    */
-  resourceId: Input<string>;
+  resourceId: string;
   /**
    * Account that owns the resource being shared.
    * @default the current account
    */
-  resourceAccountId?: Input<string>;
+  resourceAccountId?: string;
   /**
    * Resource metadata forwarded to the share API.
    * @default {}

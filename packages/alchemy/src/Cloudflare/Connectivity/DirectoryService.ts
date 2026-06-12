@@ -6,7 +6,6 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -37,7 +36,7 @@ export declare namespace DirectoryService {
      * UUID of the `cfd_tunnel` that provides connectivity to the host.
      * Accepts a reference to a `Cloudflare.Tunnel` output.
      */
-    tunnelId: Input<string>;
+    tunnelId: string;
   }
 
   /**
@@ -48,7 +47,7 @@ export declare namespace DirectoryService {
      * UUID of the `cfd_tunnel` that provides connectivity to the host.
      * Accepts a reference to a `Cloudflare.Tunnel` output.
      */
-    tunnelId: Input<string>;
+    tunnelId: string;
     /**
      * IP addresses of the DNS resolvers used to resolve the hostname
      * inside the private network.

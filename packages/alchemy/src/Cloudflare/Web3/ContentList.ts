@@ -43,7 +43,7 @@ export interface Web3HostnameContentListProps {
    *
    * Stable — moving to another zone triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The Web3 hostname the content list belongs to. Must be an
    * `ipfs_universal_path` hostname — other targets reject content-list
@@ -51,7 +51,7 @@ export interface Web3HostnameContentListProps {
    *
    * Stable — pointing at another hostname triggers a replacement.
    */
-  hostnameId: Input<string>;
+  hostnameId: string;
   /**
    * Behavior of the content list. Cloudflare currently only supports
    * `block`.

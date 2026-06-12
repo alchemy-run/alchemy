@@ -21,7 +21,7 @@ export interface SilenceProps {
    * replacement — the silence update API cannot move a silence to a
    * different policy.
    */
-  policyId: Input<string>;
+  policyId: string;
   /**
    * When the silence window starts, as an RFC3339/ISO8601 timestamp (e.g.
    * `2026-07-01T00:00:00Z`). Must be within 90 days of now — Cloudflare

@@ -5,7 +5,6 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -28,7 +27,7 @@ export interface AccessInfrastructureTargetIp {
      * Virtual network the address lives in. Defaults to the account's
      * default virtual network.
      */
-    virtualNetworkId?: Input<string>;
+    virtualNetworkId?: string;
   };
   /** IPv6 address of the target, optionally scoped to a virtual network. */
   ipv6?: {
@@ -38,7 +37,7 @@ export interface AccessInfrastructureTargetIp {
      * Virtual network the address lives in. Defaults to the account's
      * default virtual network.
      */
-    virtualNetworkId?: Input<string>;
+    virtualNetworkId?: string;
   };
 }
 

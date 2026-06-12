@@ -67,7 +67,7 @@ export type R2DataCatalogProps = {
    * resource to order catalog-after-bucket. Changing the bucket replaces the
    * catalog (the old bucket's catalog is disabled; table data is untouched).
    */
-  bucketName: Input<string>;
+  bucketName: string;
   /**
    * Compaction maintenance configuration. Only the fields you specify are
    * enforced; omitted fields keep Cloudflare's defaults.

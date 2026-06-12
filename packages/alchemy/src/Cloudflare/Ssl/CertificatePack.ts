@@ -91,7 +91,7 @@ export interface CertificatePackProps {
    * Zone the certificate pack belongs to. Stable — moving a pack to a
    * different zone triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Certificate Authority to order the certificates from.
    *

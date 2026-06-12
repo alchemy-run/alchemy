@@ -5,7 +5,6 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -42,14 +41,14 @@ export interface ObservabilityDestinationProps {
    * the endpoint must accept a `POST` with a `2xx` response for updates to
    * succeed.
    */
-  url: Input<string>;
+  url: string;
   /**
    * Extra HTTP headers sent with each push (e.g. authentication tokens).
    * Cloudflare always adds a `content-type: application/json` header of
    * its own. Mutable — updated in place.
    * @default {}
    */
-  headers?: Record<string, Input<string>>;
+  headers?: Record<string, string>;
   /**
    * Which Workers Logs dataset to export. Cannot be changed after
    * creation — updating this property triggers a replacement.

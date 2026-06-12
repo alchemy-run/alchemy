@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -38,12 +37,12 @@ export interface MagicSiteProps {
   /**
    * Magic WAN Connector identifier tag to associate with this site.
    */
-  connectorId?: Input<string>;
+  connectorId?: string;
   /**
    * Secondary Magic WAN Connector identifier tag. Used when high
    * availability mode is on.
    */
-  secondaryConnectorId?: Input<string>;
+  secondaryConnectorId?: string;
   /**
    * Site high availability mode. If true, the site can have two connectors
    * and runs in high availability mode. Create-only — changing it triggers

@@ -81,7 +81,7 @@ export interface OrganizationProps {
    * is gated by the organization's `accountMobility`/flags and is not
    * supported in place.
    */
-  parent?: Input<string>;
+  parent?: string;
   /**
    * Business profile of the organization. Mutable in place.
    */

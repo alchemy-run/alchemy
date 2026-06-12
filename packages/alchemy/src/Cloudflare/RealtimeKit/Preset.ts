@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -165,7 +164,7 @@ export type RealtimeKitPresetProps = {
    * The RealtimeKit app the preset belongs to. Changing the app triggers a
    * replacement.
    */
-  appId: Input<string>;
+  appId: string;
   /**
    * Human readable preset name (e.g. `host`, `guest`). If omitted, a unique
    * name is generated from the app, stage, and logical ID.

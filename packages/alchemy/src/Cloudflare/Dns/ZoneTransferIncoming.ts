@@ -18,7 +18,7 @@ export interface ZoneTransferIncomingProps {
    * Stable — the configuration is a per-zone singleton, so changing the
    * zone triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Zone name (e.g. `example.com.`).
    *
@@ -31,7 +31,7 @@ export interface ZoneTransferIncomingProps {
    *
    * Mutable — updated in place (PUT).
    */
-  peers: Input<string>[];
+  peers: string[];
   /**
    * How often (seconds) the secondary zone auto-refreshes regardless of
    * DNS NOTIFY.

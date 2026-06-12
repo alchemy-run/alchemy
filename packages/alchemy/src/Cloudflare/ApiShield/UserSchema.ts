@@ -19,7 +19,7 @@ export interface ApiShieldUserSchemaProps {
    *
    * Immutable — moving a schema between zones triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Name of the schema. If omitted, a unique name is generated from the
    * app, stage, and logical ID.

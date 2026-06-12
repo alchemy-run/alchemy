@@ -5,7 +5,6 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -68,7 +67,7 @@ export interface EmailSecurityDomainProps {
   /**
    * The API integration (e.g. Office 365) the domain is associated with.
    */
-  integrationId?: Input<string>;
+  integrationId?: string;
   /**
    * Number of message hops to look back when determining the original
    * sender.

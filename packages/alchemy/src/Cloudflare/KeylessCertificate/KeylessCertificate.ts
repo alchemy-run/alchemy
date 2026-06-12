@@ -39,12 +39,12 @@ export interface KeylessCertificateTunnel {
   /**
    * Private IP of the key server inside the tunnel's virtual network.
    */
-  privateIp: Input<string>;
+  privateIp: string;
   /**
    * Identifier of the Cloudflare Tunnel virtual network the key server is
    * reachable through (e.g. `TunnelVirtualNetwork.vnetId`).
    */
-  vnetId: Input<string>;
+  vnetId: string;
 }
 
 export interface KeylessCertificateProps {
@@ -55,13 +55,13 @@ export interface KeylessCertificateProps {
    * Immutable — moving a Keyless SSL configuration between zones triggers a
    * replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The zone's SSL certificate (or certificate and intermediates) in PEM
    * format. The private key never leaves your key server.
    *
    * Immutable — the PATCH API has no certificate field, so changing the
-   * certificate triggers a replacement. Plain `string` (not `Input<string>`)
+   * certificate triggers a replacement. Plain `string` (not `string`)
    * so it is statically comparable inside `diff`.
    */
   certificate: string;

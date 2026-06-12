@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -52,7 +51,7 @@ export interface MagicNetworkMonitoringConfigProps {
    * code 1003).
    * @default []
    */
-  routerIps?: Input<string>[];
+  routerIps?: string[];
   /**
    * WARP devices registered as flow-data sources.
    * @default []

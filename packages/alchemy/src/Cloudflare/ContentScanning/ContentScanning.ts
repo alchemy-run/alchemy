@@ -20,7 +20,7 @@ export interface ContentScanningProps {
    * triggers a replacement (the old zone's status is restored to the
    * value it had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether Content Scanning is enabled on the zone. Mutable — toggled
    * in place via the settings endpoint.

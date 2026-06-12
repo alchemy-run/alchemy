@@ -16,7 +16,7 @@ export interface RegionalHostnameProps {
    * The zone the regional hostname belongs to. Changing it forces a
    * replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * DNS hostname to be regionalized. Must be a subdomain of the zone;
    * wildcards are supported for one level (e.g. `*.example.com`). The

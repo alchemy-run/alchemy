@@ -32,7 +32,7 @@ export interface Web3HostnameProps {
    *
    * Stable — moving a hostname to another zone triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The hostname that points to the target gateway via CNAME, e.g.
    * `gateway.example.com`.

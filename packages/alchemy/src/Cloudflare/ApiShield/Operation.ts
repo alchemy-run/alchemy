@@ -32,7 +32,7 @@ export interface ApiShieldOperationProps {
    *
    * Immutable — moving an operation between zones triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The HTTP method used to access the endpoint.
    *

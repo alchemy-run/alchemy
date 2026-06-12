@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -18,7 +17,7 @@ export type LogsRetentionFlagProps = {
    * triggers a replacement (the old zone's flag is restored to the value
    * it had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether Logpull log retention is enabled for the zone. Mutable —
    * re-posted in place.

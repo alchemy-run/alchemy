@@ -39,7 +39,7 @@ export interface ApiShieldConfigurationProps {
    * replacement (the old zone's configuration is restored to the value it
    * had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The session identifiers ("auth ID characteristics") API Shield uses to
    * attribute API requests to individual consumers — used by API Discovery

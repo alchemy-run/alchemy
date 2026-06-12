@@ -59,14 +59,14 @@ export interface AccountResourceTagsProps {
    *
    * Stable — changing it triggers a replacement.
    */
-  resourceId: Input<string>;
+  resourceId: string;
   /**
    * Worker identifier. Required when `resourceType` is `worker_version`,
    * ignored otherwise.
    *
    * Stable — changing it triggers a replacement.
    */
-  workerId?: Input<string>;
+  workerId?: string;
   /**
    * Key/value tags to attach to the resource. The PUT API replaces the
    * full tag set, so this is the complete desired set — keys absent here
@@ -75,7 +75,7 @@ export interface AccountResourceTagsProps {
    * An empty record is indistinguishable from "no tags" on Cloudflare's
    * side, so prefer at least one entry.
    */
-  tags: Record<string, Input<string>>;
+  tags: Record<string, string>;
 }
 
 export interface AccountResourceTagsAttributes {

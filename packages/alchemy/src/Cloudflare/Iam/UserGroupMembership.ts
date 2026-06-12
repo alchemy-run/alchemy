@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -19,13 +18,13 @@ export interface IamUserGroupMembershipProps {
    * `userGroup.userGroupId`. Immutable — changing it triggers a
    * replacement.
    */
-  userGroup: Input<string>;
+  userGroup: string;
   /**
    * Account member ID to add to the user group (the membership id from
    * the account's member roster, not the user id). Immutable — changing
    * it triggers a replacement.
    */
-  memberId: Input<string>;
+  memberId: string;
 }
 
 export interface IamUserGroupMembershipAttributes {

@@ -47,7 +47,7 @@ export interface VariantsProps extends VariantsValue {
    * zone triggers a replacement (the old zone's setting is deleted, the
    * new zone's setting is created).
    */
-  zoneId: Input<string>;
+  zoneId: string;
 }
 
 export interface VariantsAttributes {

@@ -5,7 +5,6 @@ import * as Redacted from "effect/Redacted";
 
 import * as Schedule from "effect/Schedule";
 
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -45,7 +44,7 @@ export interface NotificationWebhookProps {
    * respond with a 2xx or the operation fails with `WebhookTestFailed`.
    * Mutable — updated in place.
    */
-  url: Input<string>;
+  url: string;
   /**
    * Optional secret sent in the `cf-webhook-auth` header on every
    * notification dispatch (for generic webhooks). Write-only: Cloudflare

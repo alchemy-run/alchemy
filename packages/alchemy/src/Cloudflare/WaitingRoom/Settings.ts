@@ -16,7 +16,7 @@ export type WaitingRoomSettingsProps = {
    * zone triggers a replacement (the old zone's settings are restored to
    * the value they had before Alchemy managed them).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether to allow verified search engine crawlers to bypass all waiting
    * rooms on this zone. Enabling the bypass requires the Waiting Room

@@ -98,14 +98,14 @@ export interface CustomHostnameProps {
    * Zone the custom hostname is onboarded onto (the SaaS zone). Stable —
    * changing the zone triggers replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The customer-owned hostname that will point at your zone via CNAME
    * (e.g. `app.customer.com`).
    *
    * Stable — the hostname is the resource's identity and is not
    * patchable; a rename is a delete + create. Declared as plain `string`
-   * (not `Input<string>`) so it is statically knowable inside `diff`.
+   * (not `string`) so it is statically knowable inside `diff`.
    */
   hostname: string;
   /**
@@ -127,7 +127,7 @@ export interface CustomHostnameProps {
    * zone's fallback origin. Must be a DNS record within the zone.
    * Requires the Enterprise Cloudflare for SaaS entitlement.
    */
-  customOriginServer?: Input<string>;
+  customOriginServer?: string;
   /**
    * SNI value sent to `customOriginServer` during the TLS handshake, or
    * the literal `:request_host_header:`. Requires the Enterprise

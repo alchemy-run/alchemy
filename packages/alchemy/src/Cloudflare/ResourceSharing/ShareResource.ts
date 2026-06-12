@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -18,7 +17,7 @@ export type ShareResourceProps = {
    * The share this resource belongs to. Changing the share triggers a
    * replacement.
    */
-  shareId: Input<string>;
+  shareId: string;
   /**
    * Type of the shared resource (e.g. `gateway-policy`). Changing the type
    * triggers a replacement.
@@ -28,13 +27,13 @@ export type ShareResourceProps = {
    * Identifier of the resource being shared (e.g. the gateway policy id).
    * Changing it triggers a replacement.
    */
-  resourceId: Input<string>;
+  resourceId: string;
   /**
    * Account that owns the resource being shared. Changing it triggers a
    * replacement.
    * @default the current account
    */
-  resourceAccountId?: Input<string>;
+  resourceAccountId?: string;
   /**
    * Resource metadata forwarded to the share API. The only mutable field.
    * @default {}

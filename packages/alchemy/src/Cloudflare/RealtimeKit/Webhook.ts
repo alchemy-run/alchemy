@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -32,7 +31,7 @@ export type RealtimeKitWebhookProps = {
    * The RealtimeKit app the webhook belongs to. Changing the app triggers a
    * replacement.
    */
-  appId: Input<string>;
+  appId: string;
   /**
    * Human readable webhook name. If omitted, a unique name is generated from
    * the app, stage, and logical ID.
@@ -42,7 +41,7 @@ export type RealtimeKitWebhookProps = {
   /**
    * URL this webhook will send events to. Often a deployed Worker URL.
    */
-  url: Input<string>;
+  url: string;
   /**
    * Events that trigger this webhook.
    */

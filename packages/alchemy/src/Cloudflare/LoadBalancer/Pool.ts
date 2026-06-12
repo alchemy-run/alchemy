@@ -5,7 +5,6 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -53,7 +52,7 @@ export interface LoadBalancerPoolOrigin {
   /**
    * The virtual network subnet the origin belongs to (private origins).
    */
-  virtualNetworkId?: Input<string>;
+  virtualNetworkId?: string;
 }
 
 /**
@@ -106,12 +105,12 @@ export interface LoadBalancerPoolProps {
    * The ID of the Monitor to use for checking the health of origins within
    * this pool. Mutually exclusive with `monitorGroup`.
    */
-  monitor?: Input<string>;
+  monitor?: string;
   /**
    * The ID of the Monitor Group to use for checking the health of origins
    * within this pool. Mutually exclusive with `monitor`.
    */
-  monitorGroup?: Input<string>;
+  monitorGroup?: string;
   /**
    * The minimum number of origins that must be healthy for this pool to
    * serve traffic.

@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -20,7 +19,7 @@ export interface DispatchNamespaceScriptProps {
    * `namespace.name` of a {@link DispatchNamespace}). Changing the
    * namespace triggers a replacement.
    */
-  namespace: Input<string>;
+  namespace: string;
   /**
    * Name of the script within the namespace. The name is the script's
    * identity — changing it triggers a replacement. If omitted, a unique

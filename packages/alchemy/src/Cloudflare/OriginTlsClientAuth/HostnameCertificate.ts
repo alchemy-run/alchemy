@@ -36,7 +36,7 @@ export type OriginTlsClientAuthHostnameCertificateProps = {
    * Zone the certificate is uploaded to. Cannot be changed after upload —
    * updating this property triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The per-hostname client certificate in PEM format, presented by
    * Cloudflare to your origin for hostnames associated with it via

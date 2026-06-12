@@ -32,7 +32,7 @@ export interface ZoneResourceTagsProps {
    *
    * Stable — changing the zone triggers replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The type of the zone-level resource the tags attach to (e.g.
    * `dns_record`, `custom_hostname`, or `zone` for the zone itself).
@@ -49,14 +49,14 @@ export interface ZoneResourceTagsProps {
    *
    * Stable — changing it triggers a replacement.
    */
-  resourceId: Input<string>;
+  resourceId: string;
   /**
    * Access application identifier. Required when `resourceType` is
    * `access_application_policy`, ignored otherwise.
    *
    * Stable — changing it triggers a replacement.
    */
-  accessApplicationId?: Input<string>;
+  accessApplicationId?: string;
   /**
    * Key/value tags to attach to the resource. The PUT API replaces the
    * full tag set, so this is the complete desired set — keys absent here
@@ -65,7 +65,7 @@ export interface ZoneResourceTagsProps {
    * An empty record is indistinguishable from "no tags" on Cloudflare's
    * side, so prefer at least one entry.
    */
-  tags: Record<string, Input<string>>;
+  tags: Record<string, string>;
 }
 
 export interface ZoneResourceTagsAttributes {

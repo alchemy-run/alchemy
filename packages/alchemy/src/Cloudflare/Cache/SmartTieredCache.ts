@@ -2,7 +2,6 @@ import * as cache from "@distilled.cloud/cloudflare/cache";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -16,7 +15,7 @@ export interface SmartTieredCacheProps {
    * the zone triggers a replacement (the old zone's setting is restored
    * to the value it had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether Smart Tiered Cache is enabled on the zone (`value: "on"`)
    * or disabled (`value: "off"`). Mutable — patched in place.

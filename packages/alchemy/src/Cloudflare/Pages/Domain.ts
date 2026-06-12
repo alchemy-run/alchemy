@@ -34,7 +34,7 @@ export interface PagesDomainProps {
    * `project.name`). The attachment cannot be moved — changing the project
    * triggers a replacement.
    */
-  projectName: Input<string>;
+  projectName: string;
   /**
    * The custom domain name (e.g. `www.example.com`). The domain is the
    * attachment's identity — changing it triggers a replacement.

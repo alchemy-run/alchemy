@@ -2,7 +2,6 @@ import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import { deepEqual, isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -170,7 +169,7 @@ export type AiGatewayDynamicRoutingProps = {
    * The AI Gateway the route belongs to. Changing the gateway triggers a
    * replacement.
    */
-  gatewayId: Input<string>;
+  gatewayId: string;
   /**
    * Route name, unique within the gateway. If omitted, a unique name is
    * generated from the app, stage, and logical ID. Renames are applied in

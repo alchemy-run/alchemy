@@ -66,14 +66,14 @@ export interface R2BucketEventNotificationProps {
    *
    * Immutable — changing the bucket triggers a replacement.
    */
-  bucketName: Input<string>;
+  bucketName: string;
   /**
    * ID of the Queue that receives the event messages. Pass
    * `queue.queueId` from a `Cloudflare.Queue`.
    *
    * Immutable — changing the queue triggers a replacement.
    */
-  queueId: Input<string>;
+  queueId: string;
   /**
    * Jurisdiction of the bucket (must match the bucket's own jurisdiction).
    *

@@ -33,12 +33,12 @@ export interface PageRuleProps {
    * Zone the Page Rule applies to. Stable — moving a rule between zones
    * triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The URL pattern the rule matches, e.g. `*.example.com/images/*`.
    *
    * Mutable — the API accepts a new target via PUT. Declared as plain
-   * `string` (not `Input<string>`) so it is statically knowable inside
+   * `string` (not `string`) so it is statically knowable inside
    * `diff` and usable as the rule's identity for stateless recovery.
    */
   target: string;

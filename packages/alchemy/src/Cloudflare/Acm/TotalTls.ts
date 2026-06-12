@@ -26,7 +26,7 @@ export interface TotalTlsProps {
    * triggers a replacement (the old zone's setting is restored to the
    * state it had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether Total TLS is enabled. When enabled, Cloudflare orders a
    * hostname-specific TLS certificate for every proxied A, AAAA, or CNAME

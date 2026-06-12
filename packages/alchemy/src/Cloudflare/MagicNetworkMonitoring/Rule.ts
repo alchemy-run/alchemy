@@ -44,7 +44,7 @@ export interface MagicNetworkMonitoringRuleProps {
    * the rule after the configuration (rules cannot be created until the
    * account's MNM configuration exists).
    */
-  accountId?: Input<string>;
+  accountId?: string;
   /**
    * The name of the rule. Must be unique within the account. Supports
    * `A-Z`, `a-z`, `0-9`, underscore, dash, period, and tilde — no spaces.

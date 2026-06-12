@@ -5,7 +5,6 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -23,7 +22,7 @@ export interface LoadBalancerMonitorGroupMember {
   /**
    * The ID of the {@link LoadBalancerMonitor} to include in the group.
    */
-  monitorId: Input<string>;
+  monitorId: string;
   /**
    * Whether this member's health check is active.
    * @default true

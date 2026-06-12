@@ -17,7 +17,7 @@ export type ZoneHoldProps = {
    * replacement (the hold is removed from the old zone and placed on the
    * new one).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Extend the hold to block any subdomain of the zone, as well as
    * SSL4SaaS Custom Hostnames. For example, a hold on `example.com` with

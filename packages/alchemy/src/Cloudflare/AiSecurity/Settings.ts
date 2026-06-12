@@ -16,7 +16,7 @@ export type AiSecuritySettingsProps = {
    * triggers a replacement (the old zone's setting is restored to the
    * value it had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether AI Security for Apps (Firewall for AI) is enabled on the
    * zone. Mutable — toggled in place via PUT.

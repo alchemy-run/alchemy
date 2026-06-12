@@ -34,7 +34,7 @@ export interface CustomTrustStoreProps {
    * Immutable — moving the certificate to another zone triggers a
    * replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The root CA certificate in PEM format. Only root CA certificates are
    * accepted; intermediate and leaf certificates are rejected by

@@ -14,14 +14,14 @@ export interface WorkerRouteProps {
    * Zone the route lives in. Stable — routes are scoped to a zone, so
    * changing the zone triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Pattern to match incoming requests against, e.g.
    * `api.example.com/*`. The pattern must match a hostname inside the
    * zone identified by {@link zoneId}.
    *
    * Mutable — Cloudflare's PUT endpoint accepts a new pattern in place.
-   * Declared as plain `string` (not `Input<string>`) so the reconciler
+   * Declared as plain `string` (not `string`) so the reconciler
    * can locate an existing route by pattern after state loss.
    */
   pattern: string;
@@ -33,7 +33,7 @@ export interface WorkerRouteProps {
    *
    * Mutable — updated in place.
    */
-  script?: Input<string>;
+  script?: string;
 }
 
 export interface WorkerRouteAttributes {

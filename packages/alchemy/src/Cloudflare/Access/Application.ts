@@ -101,7 +101,7 @@ export interface AccessApplicationProps {
    * Allowed identity-provider UUIDs. Defaults (on Cloudflare's side) to every
    * IdP configured for the account.
    */
-  allowedIdps?: Input<string>[];
+  allowedIdps?: string[];
   /**
    * Skip the IdP picker when only one IdP is allowed. Requires `allowedIdps`
    * to contain exactly one entry.
@@ -125,17 +125,17 @@ export interface AccessApplicationProps {
    * bodies in this provider.
    *
    * Each entry can be:
-   * - a policy id (`Input<string>`),
+   * - a policy id (`string`),
    * - `{ id, precedence? }`, or
    * - the same with per-application overrides (`approvalRequired`,
    *   `isolationRequired`, `purposeJustificationRequired`,
    *   `purposeJustificationPrompt`, `sessionDuration`, `approvalGroups`).
    */
   policies?: ReadonlyArray<
-    | Input<string>
-    | { id: Input<string>; precedence?: number }
+    | string
+    | { id: string; precedence?: number }
     | {
-        id: Input<string>;
+        id: string;
         precedence?: number;
         approvalRequired?: boolean;
         isolationRequired?: boolean;

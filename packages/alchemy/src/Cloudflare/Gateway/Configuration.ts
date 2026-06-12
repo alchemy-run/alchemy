@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -73,7 +72,7 @@ export interface GatewayConfigurationSettings {
    * The Gateway-managed certificate used for TLS interception. Reference
    * a `Cloudflare.GatewayCertificate`'s `certificateId` here.
    */
-  certificate?: { id: Input<string> };
+  certificate?: { id: string };
   /** Match on both email aliases and the primary address. */
   extendedEmailMatching?: { enabled?: boolean };
   /** FIPS-compliant TLS-only enforcement. */

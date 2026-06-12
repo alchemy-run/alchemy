@@ -49,7 +49,7 @@ export interface PagesEnvVar {
   /**
    * The environment variable value.
    */
-  value: Input<string>;
+  value: string;
 }
 
 /**
@@ -69,17 +69,17 @@ export interface PagesDeploymentConfig {
    * KV namespace bindings, keyed by binding name. The value is the KV
    * namespace id (e.g. `kvNamespace.namespaceId`).
    */
-  kvNamespaces?: Record<string, Input<string>>;
+  kvNamespaces?: Record<string, string>;
   /**
    * D1 database bindings, keyed by binding name. The value is the D1
    * database UUID (e.g. `database.databaseId`).
    */
-  d1Databases?: Record<string, Input<string>>;
+  d1Databases?: Record<string, string>;
   /**
    * R2 bucket bindings, keyed by binding name. The value is the bucket
    * name (e.g. `bucket.bucketName`).
    */
-  r2Buckets?: Record<string, Input<string>>;
+  r2Buckets?: Record<string, string>;
   /**
    * Compatibility date used by Pages Functions (e.g. `2025-01-01`).
    */

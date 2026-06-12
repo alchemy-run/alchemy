@@ -17,7 +17,7 @@ export type SecurityTxtProps = {
    * triggers a replacement (the old zone's security.txt is deleted and a
    * new one is created on the new zone).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether the security.txt file is served at
    * `/.well-known/security.txt` on the zone. Mutable.

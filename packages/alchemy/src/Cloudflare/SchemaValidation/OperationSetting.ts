@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -29,7 +28,7 @@ export interface SchemaValidationOperationSettingProps {
    *
    * Immutable — changing the zone triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * UUID of the API Shield operation the override applies to (cross-resource
    * reference to `Cloudflare.ApiShield.Operation`).
@@ -37,7 +36,7 @@ export interface SchemaValidationOperationSettingProps {
    * Immutable — the operation is the override's identity, so changing it
    * triggers a replacement.
    */
-  operationId: Input<string>;
+  operationId: string;
   /**
    * The mitigation action applied to this operation, superseding the zone
    * default just for this operation: `log` records non-conforming requests,

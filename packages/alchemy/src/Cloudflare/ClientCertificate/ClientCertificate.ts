@@ -33,14 +33,14 @@ export interface ClientCertificateProps {
    *
    * Immutable — moving a certificate between zones triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The Certificate Signing Request (CSR) in PEM format. Must be
    * newline-encoded. Cloudflare's Managed CA signs this CSR and returns the
    * client certificate.
    *
    * Immutable — the API has no way to re-sign a certificate, so changing the
-   * CSR triggers a replacement. Plain `string` (not `Input<string>`) so it is
+   * CSR triggers a replacement. Plain `string` (not `string`) so it is
    * statically comparable inside `diff`.
    */
   csr: string;

@@ -119,7 +119,7 @@ export interface HealthcheckProps {
    * Zone the health check belongs to. Stable — changing the zone triggers
    * a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * A short name to identify the health check. Only alphanumeric
    * characters, hyphens and underscores are allowed. If omitted, a unique

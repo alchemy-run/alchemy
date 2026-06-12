@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -33,7 +32,7 @@ export interface ImagesVariantProps {
    * Account the variant is created in. Defaults to the ambient Cloudflare
    * account. Changing it triggers a replacement.
    */
-  accountId?: Input<string>;
+  accountId?: string;
   /**
    * Variant name — the URL segment used to request the variant (e.g.
    * `https://imagedelivery.net/<hash>/<image>/<name>`). Alphanumeric only;

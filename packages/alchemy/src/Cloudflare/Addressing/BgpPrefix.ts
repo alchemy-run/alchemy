@@ -19,7 +19,7 @@ export interface AddressingBgpPrefixProps {
    * Identifier of the parent BYOIP prefix the BGP prefix belongs to.
    * Changing it forces a replacement.
    */
-  prefixId: Input<string>;
+  prefixId: string;
   /**
    * IP Prefix in Classless Inter-Domain Routing format. Must be contained
    * in the parent prefix. Changing it forces a replacement.

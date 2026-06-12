@@ -35,7 +35,7 @@ export interface UrlNormalizationProps {
    * triggers a replacement (the old zone's URL normalization is reset to
    * Cloudflare defaults as the old instance deletes).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The scope of the URL normalization: `"incoming"` normalizes URLs used
    * for rule matching only, `"both"` also normalizes URLs sent to the

@@ -2,7 +2,6 @@ import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -24,7 +23,7 @@ export interface AddressMapMembership {
    * Note: due to the shape of the Cloudflare API, account memberships can
    * only target the account that owns the Address Map.
    */
-  identifier: Input<string>;
+  identifier: string;
   /**
    * Whether the membership targets a zone or a whole account.
    */
@@ -54,7 +53,7 @@ export interface AddressMapProps {
    * PUT/DELETE against observed cloud state.
    * @default []
    */
-  ips?: Input<string>[];
+  ips?: string[];
   /**
    * Zones and accounts assigned IPs on this Address Map. Mutable — synced
    * per-membership via PUT/DELETE against observed cloud state.

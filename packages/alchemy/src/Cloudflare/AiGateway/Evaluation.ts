@@ -2,7 +2,6 @@ import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import { deepEqual, isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -17,7 +16,7 @@ export type AiGatewayEvaluationProps = {
    * The AI Gateway the evaluation runs against. Changing the gateway
    * triggers a replacement.
    */
-  gatewayId: Input<string>;
+  gatewayId: string;
   /**
    * Human readable evaluation name. If omitted, a unique name is generated
    * from the app, stage, and logical ID. Evaluations are immutable —
@@ -30,7 +29,7 @@ export type AiGatewayEvaluationProps = {
    * `datasetId` attributes of `AiGatewayDataset` resources on the same
    * gateway. Changing the datasets triggers a replacement.
    */
-  datasetIds: Input<string>[];
+  datasetIds: string[];
   /**
    * The evaluation types to run (e.g. speed, cost). Discover ids with
    * `listEvaluationTypes` — the mandatory `speed` and `cost` types are

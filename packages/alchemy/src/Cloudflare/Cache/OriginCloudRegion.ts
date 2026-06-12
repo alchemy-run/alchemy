@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -25,7 +24,7 @@ export interface OriginCloudRegionProps {
    * Zone the mapping belongs to. Stable — moving the mapping to a
    * different zone triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Origin IP address (IPv4 or IPv6) the mapping applies to. The IP is the
    * mapping's identity within the zone, so changing it triggers a

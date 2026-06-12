@@ -60,7 +60,7 @@ export interface ZoneDnsSettingsProps {
    * replacement (the old zone's managed settings are restored to their
    * pre-management values).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Flatten all CNAME records in the zone (a CNAME at the zone apex is
    * always flattened regardless).

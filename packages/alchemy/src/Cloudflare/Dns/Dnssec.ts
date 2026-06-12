@@ -38,7 +38,7 @@ export interface DnssecProps {
    * per-zone singleton, so changing the zone triggers a replacement
    * (the old zone's DNSSEC is restored to its pre-management state).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Desired DNSSEC state. `"active"` signs the zone; `"disabled"` turns
    * signing off. Activation is eventually consistent — Cloudflare

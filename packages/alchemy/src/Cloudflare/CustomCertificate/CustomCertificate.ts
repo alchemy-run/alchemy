@@ -65,10 +65,10 @@ export interface CustomCertificateProps {
    *
    * Immutable — moving a certificate between zones triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The zone's SSL certificate — the leaf certificate plus any
-   * intermediates, in PEM format. Plain `string` (not `Input<string>`) so
+   * intermediates, in PEM format. Plain `string` (not `string`) so
    * its content hash is statically computable.
    *
    * Mutable — Cloudflare PATCHes a new certificate onto the same record,
@@ -88,7 +88,7 @@ export interface CustomCertificateProps {
    * The identifier of a Custom CSR held by Cloudflare to source the private
    * key from, as an alternative to uploading `privateKey`.
    */
-  customCsrId?: Input<string>;
+  customCsrId?: string;
   /**
    * How Cloudflare builds the certificate chain served to clients.
    * @default "ubiquitous"

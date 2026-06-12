@@ -36,7 +36,7 @@ export interface LockdownProps {
    *
    * Stable — moving a rule between zones triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The URLs to lock down. Each entry is escaped before use, so only simple
    * wildcard patterns are supported (e.g. `shop.example.com/admin*`).

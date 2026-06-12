@@ -23,7 +23,7 @@ export interface SchemaValidationSettingsProps {
    * replacement (the old zone's settings are restored to the values they
    * had before Alchemy managed them).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The default mitigation action used when a request does not conform to
    * an enabled schema: `log` records it, `block` denies it, `none` does

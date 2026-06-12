@@ -5,7 +5,6 @@ import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -93,7 +92,7 @@ export interface SpectrumApplicationProps {
    * Zone the application is created in. Stable — moving an application to
    * a different zone triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The edge DNS record (hostname + record type) for the application.
    * Mutable — the PUT update accepts a new `dns`, but note `dns.name` +
@@ -155,7 +154,7 @@ export interface SpectrumApplicationProps {
   /**
    * UUID of a tunnel virtual network to route origin traffic through.
    */
-  virtualNetworkId?: Input<string>;
+  virtualNetworkId?: string;
 }
 
 export interface SpectrumApplicationAttributes {

@@ -16,7 +16,7 @@ export type SmartRoutingProps = {
    * zone triggers a replacement (the old zone's setting is restored to
    * the value it had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether Argo Smart Routing is enabled on the zone. Mutable — patched
    * in place.

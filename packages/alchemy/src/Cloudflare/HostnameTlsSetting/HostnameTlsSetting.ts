@@ -43,7 +43,7 @@ export interface HostnameTlsSettingProps {
    * Zone the hostname belongs to. Stable — moving the override to another
    * zone triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Which TLS setting to override (`ciphers`, `min_tls_version`, or
    * `http2`). Part of the override's identity — changing it triggers a

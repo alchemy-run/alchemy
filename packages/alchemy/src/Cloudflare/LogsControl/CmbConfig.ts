@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -20,7 +19,7 @@ export type LogsCmbConfigProps = {
    * replacement.
    * @default the account from the active Cloudflare profile
    */
-  accountId?: Input<string>;
+  accountId?: string;
   /**
    * Name of the region log data is restricted to (e.g. `"eu"`).
    *

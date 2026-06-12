@@ -23,12 +23,12 @@ export interface IamResourceGroupScopeInput {
   /**
    * The scope key, e.g. `com.cloudflare.api.account.{accountId}`.
    */
-  key: Input<string>;
+  key: string;
   /**
    * The objects within the scope this resource group spans, e.g.
    * `com.cloudflare.api.account.zone.{zoneId}` or `*`.
    */
-  objects: { key: Input<string> }[];
+  objects: { key: string }[];
 }
 
 /**

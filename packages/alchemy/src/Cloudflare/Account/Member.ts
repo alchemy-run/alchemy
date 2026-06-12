@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -55,7 +54,7 @@ export interface AccountMemberProps {
    *
    * Exactly one of `roles` or `policies` should be provided.
    */
-  roles?: Input<string>[];
+  roles?: string[];
   /**
    * Scoped access policies to attach to the member (Enterprise feature).
    * Mutable — policy changes are applied in place via `PUT`.

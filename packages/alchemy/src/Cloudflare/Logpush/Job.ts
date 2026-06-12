@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -98,7 +97,7 @@ export interface LogpushJobProps {
    *
    * Stable — moving a job between scopes triggers a replacement.
    */
-  zoneId?: Input<string>;
+  zoneId?: string;
   /**
    * Name of the dataset to push (e.g. `workers_trace_events`,
    * `audit_logs`, `http_requests`).
@@ -120,7 +119,7 @@ export interface LogpushJobProps {
    * *provider/domain* of an existing job; in that case change a
    * replacement-triggering prop instead.
    */
-  destinationConf: Input<string>;
+  destinationConf: string;
   /**
    * Optional human readable job name (not unique). If omitted, a unique
    * name will be generated.
@@ -289,7 +288,7 @@ export const LogpushJobProvider = () =>
       if (o.dataset !== undefined && (o.kind ?? "") !== (n.kind ?? "")) {
         return { action: "replace" } as const;
       }
-      // zoneId is Input<string>; only comparable when both sides are
+      // zoneId is string; only comparable when both sides are
       // concrete strings (or one side is absent => scope change).
       const oZone = typeof o.zoneId === "string" ? o.zoneId : undefined;
       const nZone = typeof n.zoneId === "string" ? n.zoneId : undefined;

@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -28,7 +27,7 @@ export interface DnsViewProps {
    *
    * Mutable — patched in place.
    */
-  zones: Input<string>[];
+  zones: string[];
 }
 
 export interface DnsViewAttributes {

@@ -5,7 +5,6 @@ import * as Redacted from "effect/Redacted";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -20,7 +19,7 @@ export interface ImagesSigningKeyProps {
    * Account the signing key is created in. Defaults to the ambient
    * Cloudflare account. Changing it triggers a replacement.
    */
-  accountId?: Input<string>;
+  accountId?: string;
   /**
    * Name of the signing key — the PUT path identifier. If omitted, a unique
    * name is generated from the app, stage, and logical ID. Changing the

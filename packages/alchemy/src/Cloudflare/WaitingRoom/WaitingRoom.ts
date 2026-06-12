@@ -82,7 +82,7 @@ export interface WaitingRoomProps {
    * Zone the waiting room belongs to. Stable — changing the zone triggers
    * a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * A unique name to identify the waiting room. Only alphanumeric
    * characters, hyphens, and underscores are allowed. If omitted, a unique

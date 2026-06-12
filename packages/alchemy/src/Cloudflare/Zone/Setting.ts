@@ -87,7 +87,7 @@ export type ZoneSettingProps = {
    * replacement (the old zone's setting is restored to the value it had
    * before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Which zone setting to manage (e.g. `always_online`,
    * `browser_cache_ttl`, `min_tls_version`). Stable — the setting id is

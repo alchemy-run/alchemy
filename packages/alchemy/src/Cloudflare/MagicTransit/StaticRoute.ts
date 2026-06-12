@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -33,7 +32,7 @@ export interface MagicStaticRouteProps {
    * The next-hop IP address for the static route — typically a Magic
    * tunnel's customer-side interface address.
    */
-  nexthop: Input<string>;
+  nexthop: string;
   /**
    * Priority of the static route. Lower values are preferred.
    * @default 100

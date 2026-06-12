@@ -36,7 +36,7 @@ export interface TokenValidationRuleSelector {
    */
   exclude?: {
     /** API Shield operation IDs the rule must not cover. */
-    operationIds?: Input<string>[];
+    operationIds?: string[];
   }[];
 }
 
@@ -55,7 +55,7 @@ export interface TokenValidationRuleProps {
    *
    * Stable — moving a rule between zones triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Human-readable name for the rule. If omitted, a unique name is
    * generated from the app, stage, and logical ID.
@@ -82,7 +82,7 @@ export interface TokenValidationRuleProps {
    * e.g. `is_jwt_valid("<configId>")`. Reference a
    * {@link TokenConfiguration} by interpolating its `configId` output.
    */
-  expression: Input<string>;
+  expression: string;
   /**
    * Which operations the rule covers (include by host, exclude by API
    * Shield operation ID).

@@ -16,7 +16,7 @@ export interface LeakedCredentialCheckProps {
    * changing the zone triggers a replacement (the old zone's setting is
    * restored to the value it had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether Leaked Credential Checks are enabled on the zone. Mutable —
    * set in place via the API's POST upsert.

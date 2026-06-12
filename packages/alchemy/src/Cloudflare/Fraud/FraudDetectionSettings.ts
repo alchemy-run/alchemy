@@ -76,7 +76,7 @@ export interface FraudDetectionSettingsProps extends FraudDetectionSettingsValue
    * the zone triggers a replacement (which re-adopts the new zone's
    * singleton and restores the old zone's snapshot).
    */
-  zoneId: Input<string>;
+  zoneId: string;
 }
 
 export interface FraudDetectionSettingsAttributes extends FraudDetectionSettingsValues {

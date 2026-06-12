@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -28,17 +27,17 @@ export type ShareRecipientProps = {
    * The share the recipient is added to. Changing the share triggers a
    * replacement.
    */
-  shareId: Input<string>;
+  shareId: string;
   /**
    * Recipient account identifier. Exactly one of `accountId` /
    * `organizationId` must be set. Changing it triggers a replacement.
    */
-  accountId?: Input<string>;
+  accountId?: string;
   /**
    * Recipient organization identifier. Exactly one of `accountId` /
    * `organizationId` must be set. Changing it triggers a replacement.
    */
-  organizationId?: Input<string>;
+  organizationId?: string;
 };
 
 export type ShareRecipientAttributes = {

@@ -17,7 +17,7 @@ export interface CacheReserveProps {
    * zone triggers a replacement (the old zone's setting is restored to
    * the value it had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Whether Cache Reserve is enabled on the zone (`value: "on"`) or
    * disabled (`value: "off"`). Mutable — patched in place.

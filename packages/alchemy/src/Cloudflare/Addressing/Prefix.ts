@@ -4,7 +4,6 @@ import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -33,7 +32,7 @@ export interface AddressingPrefixProps {
    * Identifier for an uploaded LOA (Letter of Authorization) document.
    * Create-only — changing it forces a replacement.
    */
-  loaDocumentId?: Input<string>;
+  loaDocumentId?: string;
   /**
    * Whether Cloudflare is allowed to generate the LOA document on behalf of
    * the prefix owner. Create-only — changing it forces a replacement.

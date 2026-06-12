@@ -18,7 +18,7 @@ export interface LeakedCredentialDetectionProps {
    * Zone the custom detection belongs to. Stable — moving a detection
    * between zones triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Ruleset expression locating the username in the request, e.g.
    * `lookup_json_string(http.request.body.raw, "user")`. Mutable —

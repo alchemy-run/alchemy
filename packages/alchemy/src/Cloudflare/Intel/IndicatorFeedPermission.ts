@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { isResolved } from "../../Diff.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -18,7 +17,7 @@ export interface IndicatorFeedPermissionProps {
    * The ID of the indicator feed to grant access to — e.g. `feed.feedId`.
    * Immutable — changing it triggers a replacement.
    */
-  feedId: Input<number>;
+  feedId: number;
   /**
    * The Cloudflare account tag of the consumer account being granted
    * access to the feed. Immutable — changing it triggers a replacement.

@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
@@ -40,7 +39,7 @@ export interface CloudConnectorRule {
    * or an R2 bucket's public host. Accepts an `Input` so it can reference
    * another resource's output (commonly an `R2Bucket`).
    */
-  host: Input<string>;
+  host: string;
   /**
    * Whether the rule is enabled.
    * @default true
@@ -57,7 +56,7 @@ export interface CloudConnectorRulesProps {
    * Zone the rules apply to. Stable — changing the zone triggers
    * replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Ordered list of Cloud Connector rules. The whole list is owned by
    * this resource and replaced atomically on every change — rules

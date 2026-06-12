@@ -31,7 +31,7 @@ export type AiSecurityCustomTopicsProps = {
    * triggers a replacement (the old zone's topic list is restored to
    * the value it had before Alchemy managed it).
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * The full list of custom topic categories. Mutable — the PUT
    * replaces the entire list, so reconcile syncs the list as a whole.

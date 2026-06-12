@@ -18,7 +18,7 @@ export interface ZoneTransferOutgoingProps {
    * Stable — the configuration is a per-zone singleton, so changing the
    * zone triggers a replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Zone name (e.g. `example.com.`).
    *
@@ -32,7 +32,7 @@ export interface ZoneTransferOutgoingProps {
    *
    * Mutable — updated in place (PUT).
    */
-  peers: Input<string>[];
+  peers: string[];
   /**
    * Whether outgoing transfers are enabled for the zone. Mapped to the
    * dedicated enable/disable endpoints, separate from the
