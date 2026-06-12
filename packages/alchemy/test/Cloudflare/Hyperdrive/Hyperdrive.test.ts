@@ -25,6 +25,10 @@ const baseOrigin = {
   password: Redacted.make("p4ssword!"),
 };
 
+// Skipped in PR #319 ("stabilize live test suite"), predating the 2026-06
+// coverage factory; `baseOrigin` is a placeholder Neon host and Cloudflare
+// validates origin connectivity on create — needs a reachable Postgres origin
+// (e.g. a real Neon database) before unskipping.
 test.provider.skip("create and delete hyperdrive with default props", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
@@ -56,6 +60,9 @@ test.provider.skip("create and delete hyperdrive with default props", (stack) =>
   }).pipe(logLevel),
 );
 
+// Skipped in PR #319 for the same reason as above: the placeholder
+// `baseOrigin` is not a reachable Postgres origin, which create-time
+// validation requires.
 test.provider.skip("create, update, delete hyperdrive", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;

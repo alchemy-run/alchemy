@@ -1,0 +1,210 @@
+import * as iam from "@distilled.cloud/cloudflare/iam";
+import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+
+import { isResolved } from "../../Diff.ts";
+import * as Provider from "../../Provider.ts";
+import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { Providers } from "../Providers.ts";
+
+const IamUserGroupMembershipTypeId =
+  "Cloudflare.Iam.UserGroupMembership" as const;
+type IamUserGroupMembershipTypeId = typeof IamUserGroupMembershipTypeId;
+
+export interface IamUserGroupMembershipProps {
+  /**
+   * ID of the user group to add the member to — e.g.
+   * `userGroup.userGroupId`. Immutable — changing it triggers a
+   * replacement.
+   */
+  userGroup: string;
+  /**
+   * Account member ID to add to the user group (the membership id from
+   * the account's member roster, not the user id). Immutable — changing
+   * it triggers a replacement.
+   */
+  memberId: string;
+}
+
+export interface IamUserGroupMembershipAttributes {
+  /** ID of the user group the member belongs to. */
+  userGroupId: string;
+  /** Account member ID of the member. */
+  memberId: string;
+  /** The Cloudflare account the user group belongs to. */
+  accountId: string;
+  /** The contact email address of the member, if known. */
+  email: string | undefined;
+  /** The member's status in the account (`accepted` or `pending`). */
+  status: string | undefined;
+}
+
+export type IamUserGroupMembership = Resource<
+  IamUserGroupMembershipTypeId,
+  IamUserGroupMembershipProps,
+  IamUserGroupMembershipAttributes,
+  never,
+  Providers
+>;
+
+/**
+ * Membership of a single account member in a Cloudflare IAM user group.
+ *
+ * This is an existence-only resource: it has no mutable aspects beyond its
+ * identity (user group + member), so changing either property triggers a
+ * replacement. Cloudflare's member-add API is idempotent — adding a member
+ * who is already in the group succeeds — so reconcile is a simple
+ * observe-then-ensure flow.
+ *
+ * Account-scoped IAM (user groups and their members) is an Enterprise
+ * feature.
+ *
+ * @section Adding a Member
+ * @example Add an account member to a user group
+ * ```typescript
+ * const group = yield* Cloudflare.IamUserGroup("Operators", {});
+ *
+ * yield* Cloudflare.IamUserGroupMembership("SamInOperators", {
+ *   userGroup: group.userGroupId,
+ *   memberId: "b67b4c279ea0177a0ddff0a2ef64b11b",
+ * });
+ * ```
+ *
+ * @see https://developers.cloudflare.com/fundamentals/manage-members/user-groups/
+ */
+export const IamUserGroupMembership = Resource<IamUserGroupMembership>(
+  IamUserGroupMembershipTypeId,
+);
+
+/**
+ * Returns true if the given value is an IamUserGroupMembership resource.
+ */
+export const isIamUserGroupMembership = (
+  value: unknown,
+): value is IamUserGroupMembership =>
+  Predicate.hasProperty(value, "Type") &&
+  value.Type === IamUserGroupMembershipTypeId;
+
+export const IamUserGroupMembershipProvider = () =>
+  Provider.succeed(IamUserGroupMembership, {
+    stables: ["userGroupId", "memberId", "accountId"],
+
+    diff: Effect.fn(function* ({ olds, news }) {
+      if (!isResolved(news)) return undefined;
+      // Identity change — both props are the resource's identity, so any
+      // change is a replacement. Compare only once both sides are concrete.
+      if (
+        typeof olds?.userGroup === "string" &&
+        olds.userGroup !== news.userGroup
+      ) {
+        return { action: "replace" } as const;
+      }
+      if (
+        typeof olds?.memberId === "string" &&
+        olds.memberId !== news.memberId
+      ) {
+        return { action: "replace" } as const;
+      }
+      return undefined;
+    }),
+
+    read: Effect.fn(function* ({ output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const acct = output?.accountId ?? accountId;
+      // Cold read falls back to the previous props — the identity is fully
+      // user-specified, so the (group, member) pair is the lookup key.
+      const userGroupId =
+        output?.userGroupId ?? (olds?.userGroup as string | undefined);
+      const memberId =
+        output?.memberId ?? (olds?.memberId as string | undefined);
+      if (userGroupId === undefined || memberId === undefined) {
+        return undefined;
+      }
+      const observed = yield* getMembership(acct, userGroupId, memberId);
+      return observed ? toAttributes(observed, userGroupId, acct) : undefined;
+    }),
+
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Inputs have been resolved to concrete strings by Plan.
+      const userGroupId = news.userGroup as string;
+      const memberId = news.memberId as string;
+
+      // Observe — membership is existence-only; if it's already there we
+      // are done.
+      const observed = yield* getMembership(accountId, userGroupId, memberId);
+      if (observed) {
+        return toAttributes(observed, userGroupId, accountId);
+      }
+
+      // Ensure — add the member. The batch POST is idempotent for members
+      // already in the group, so a concurrent add is not an error.
+      const created = yield* iam.createUserGroupMember({
+        accountId,
+        userGroupId,
+        members: [{ id: memberId }],
+      });
+      const member = created.result.find((m) => m.id === memberId);
+      if (member) {
+        return toAttributes(member, userGroupId, accountId);
+      }
+      // The POST response echoes the full member set; fall back to a read
+      // for the member we just added.
+      const reread = yield* getMembership(accountId, userGroupId, memberId);
+      return toAttributes(reread ?? { id: memberId }, userGroupId, accountId);
+    }),
+
+    delete: Effect.fn(function* ({ output }) {
+      yield* iam
+        .deleteUserGroupMember({
+          accountId: output.accountId,
+          userGroupId: output.userGroupId,
+          memberId: output.memberId,
+        })
+        .pipe(
+          // Already gone — the member (404 in group, or no longer a valid
+          // account member at all → InvalidMember) or the whole user group
+          // (404) has been removed out-of-band.
+          Effect.catchTag(
+            ["UserGroupMemberNotFound", "UserGroupNotFound", "InvalidMember"],
+            () => Effect.void,
+          ),
+        );
+    }),
+  });
+
+type ObservedMember = {
+  id: string;
+  email?: string | null;
+  status?: string | null;
+};
+
+/**
+ * Read a membership, mapping "gone" — the member not being in the group
+ * (`UserGroupMemberNotFound`) or the group itself missing
+ * (`UserGroupNotFound`) — to `undefined`.
+ */
+const getMembership = (
+  accountId: string,
+  userGroupId: string,
+  memberId: string,
+) =>
+  iam.getUserGroupMember({ accountId, userGroupId, memberId }).pipe(
+    Effect.map((m): ObservedMember | undefined => m),
+    Effect.catchTag(["UserGroupMemberNotFound", "UserGroupNotFound"], () =>
+      Effect.succeed(undefined),
+    ),
+  );
+
+const toAttributes = (
+  member: ObservedMember,
+  userGroupId: string,
+  accountId: string,
+): IamUserGroupMembershipAttributes => ({
+  userGroupId,
+  memberId: member.id,
+  accountId,
+  email: member.email ?? undefined,
+  status: member.status ?? undefined,
+});

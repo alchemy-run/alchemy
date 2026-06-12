@@ -155,7 +155,7 @@ export const Deployment = (id: string, props: DeploymentInputProps) =>
       for (const b of bindings) {
         autoTriggers[`@alchemy:binding:${b.sid}`] = bindingDigest(b.data);
       }
-      triggers = { ...autoTriggers, ...(triggers ?? {}) };
+      triggers = { ...autoTriggers, ...triggers };
     }
     return yield* DeploymentResource(id, {
       ...rest,

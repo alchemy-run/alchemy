@@ -47,3 +47,7 @@ examples/cloudflare-worker/src/scratch.ts
 .tmp
 pnpm-lock.yaml
 !.vendor/distilled
+
+.ai-workspace/
+/processes/
+.probe

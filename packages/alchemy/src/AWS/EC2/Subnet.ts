@@ -237,7 +237,7 @@ export const SubnetProvider = () =>
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const alchemyTags = yield* createInternalTags(id);
-          const desiredTags = { ...alchemyTags, ...(news.tags ?? {}) };
+          const desiredTags = { ...alchemyTags, ...news.tags };
 
           // Observe — find the subnet via cached id, else fall through to
           // create.

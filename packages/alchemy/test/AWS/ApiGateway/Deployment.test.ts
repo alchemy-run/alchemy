@@ -9,7 +9,7 @@ const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_APIGATEWAY_TESTS === "true";
 
 test.provider.skipIf(!runLive)("create and delete deployment", (stack) =>
   Effect.gen(function* () {
-    const { api, deployment } = yield* stack.deploy(
+    const { deployment } = yield* stack.deploy(
       Effect.gen(function* () {
         const api = yield* AWS.ApiGateway.RestApi("AgDepApi", {
           endpointConfiguration: { types: ["REGIONAL"] },
@@ -38,7 +38,7 @@ test.provider.skipIf(!runLive)(
   "deployment trigger change creates new deployment",
   (stack) =>
     Effect.gen(function* () {
-      const { api, d1 } = yield* stack.deploy(
+      const { d1 } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgTrigApi", {
             endpointConfiguration: { types: ["REGIONAL"] },

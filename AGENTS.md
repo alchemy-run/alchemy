@@ -79,6 +79,84 @@ packages/alchemy/src/AWS/EC2/Vpc.ts            # VPC resource + provider
 packages/alchemy/src/AWS/EC2/Subnet.ts         # Subnet resource + provider
 ```
 
+# The Resource Factory Process
+
+Alchemy resource coverage is produced as a **software factory**: fleets of agents implement and live-test IaC resources in waves, and every API mismatch the tests surface is fed back as a patch to distilled. The factory was used to take Cloudflare from 36 to 239 cataloged resources (250 test files / 600+ test cases, 1000+ patched operations) and is the template for every future provider.
+
+## The flywheel
+
+```
+ catalog ──> implement ──> live test ──> unmatched error / wrong schema?
+    ^                                          │
+    │                                          v
+ update statuses <── regenerate service <── patch distilled
+```
+
+1. **Catalog** — fan out research agents over the provider's distilled service modules (one batch per thematic group). Each agent reads the generated SDK (`distilled/packages/{cloud}/src/services/{service}.ts`), cross-references the vendor API docs, and writes a self-contained design spec to `processes/{Cloud}/catalog/{service}.md`: resources, namespaces, props/attrs with replacement rules, lifecycle-to-operation mapping, scope (account/zone), testability, priority. The coordinator aggregates a machine-readable `summary.json` + human `INDEX.md` that tracks `implemented | partial | missing` per resource — this is the factory's order book.
+2. **Implement + test** in waves (below). Tests run against the real cloud (`ALCHEMY_PROFILE=testing`); zone-scoped tests use the standing test zone (`alchemy-test-2.us` via `findZoneByName`).
+3. **Patch the SDK, never the consumer** — every `UnknownCloudflareError`, out-of-union status error, or wrong request/response schema found by a test becomes a patch under `distilled/packages/{cloud}/patches/{service}/{op}.json` (see the Typed Error Doctrine section). Regenerate only that service. The typed union improves for every future consumer of the SDK — that is the flywheel's output.
+4. **Update the catalog** statuses after each wave and pick the next batch from the order book. Repeat until everything left is documented as out of scope (deprecated APIs, billing/data-only endpoints, closed-beta, needs-external-systems).
+
+## Orchestration rules (the coordinator)
+
+- **One workflow at a time**, ~12 concurrent agents (cap ≈ CPU cores − 2). Two parallel workflows double throughput but also double crash blast-radius — only do it when the machine and budget clearly allow.
+- **One agent per distilled service.** Service ownership is the unit of isolation: only the owner may touch `patches/{service}/` and regenerate `src/services/{service}.ts`, so generator runs never race. An agent may own several resources of its service; a very large same-service backlog (e.g. zero-trust) runs as a **sequential chain** of agents inside the workflow, in parallel with all other services.
+- **Shared-file discipline.** `Providers.ts` and the provider barrel `index.ts` are edited by every agent: single minimal insertions only, re-read and retry on edit conflict, never rewrite wholesale.
+- **`Layer.mergeAll` ceiling.** Keep `Providers.ts`'s provider layers in *nested* `Layer.mergeAll` groups (~90 entries each). A flat ~200-argument call exceeds tsgo's variadic inference and **silently drops the tail layers** from the inferred union, producing baffling `Provider<X> is not assignable to StackServices` cascades across every test file.
+- **Crash resilience.** Word every task as *assess-first*: "partial work may exist from an interrupted run — list your dirs, read existing files, check registration, FINISH rather than rewrite." Completed agent results are banked in the workflow journal even if the workflow dies; the coordinator recovers them from `journal.jsonl` and re-dispatches only the lost tasks.
+- **The coordinator (not agents) does**: the authoritative type-check, distilled lib rebuilds, combined verification runs, catalog/index updates, cross-cutting fixes (shared-file restructures, Effect-version API migrations), and deterministic mass transforms (mechanical codemods are scripted centrally, not fanned out).
+- **Monitor for stalls**: an agent transcript that hasn't been written for ~5 minutes with no child test process is stalled — kill and re-dispatch; don't wait.
+
+## Resource budget: one type-checker for the whole factory
+
+`tsgo -b` over the workspace is expensive; dozens of agents running it concurrently thrashes the machine (and concurrent `tsbuildinfo` writes race). Instead:
+
+- The coordinator runs exactly **one** watcher for the lifetime of the factory:
+  ```sh
+  nohup bun tsgo -b -w > /tmp/tsgo-watch.log 2>&1 &
+  ```
+- **Agents are banned** from running `tsgo`, `tsc`, or `bun run build` (root or distilled) in any form. They read type state from the watch log instead — free and instant:
+  ```sh
+  grep -a "Found" /tmp/tsgo-watch.log | tail -1      # settled error count
+  grep -a "error TS" /tmp/tsgo-watch.log | tail -20  # current errors
+  ```
+- Because the distilled packages are **project references** in the root build graph, the watcher automatically rebuilds `distilled/packages/{cloud}/lib/` within ~15–30s of a `src` regeneration. This matters because **vitest loads distilled from `lib/`** (the forks pool resolves the `default` export condition, not `bun` — and a blanket `resolve.conditions: ["bun"]` breaks npm packages whose `bun` condition points at TS sources under `node_modules`). So: after regenerating a service, give the watcher ~30s before re-running tests if the patch changed **response schemas**; error-tag-only patches usually tolerate a stale lib.
+- Watch-mode occasionally reports a spurious `TS6059` rootDir error with a lowercase-mangled path — a one-shot `bun tsgo -b` is the authoritative check, run by the coordinator at wave boundaries.
+
+## Speed doctrine: never wait on a hang
+
+- Wrap **every** test invocation in a hard kill: `timeout 240 ALCHEMY_PROFILE=testing bun vitest run <suite>` (from the repo root). Hitting the wall **is** the failure — read the partial output, find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping.
+- Per-test vitest timeout ≤ 90–120s. A suite needing more than ~3–5 minutes total is a bug.
+- Every `Effect.retry`/`Effect.repeat` is bounded: `times ≤ 8–10`, total backoff under ~45–60s. Never poll for asynchronous provisioning slower than ~90s — skipIf-gate instead.
+- **Known engine bug**: a deploy that *replaces* a resource while simultaneously *removing* its old dependency deadlocks. Keep both dependencies deployed across replacement steps in tests (see `test/Cloudflare/R2/BucketEventNotification.test.ts`).
+- **Three-iteration budget**: if a suite is not green after ~3 fix iterations and the blocker is platform behavior (entitlement, slow async provisioning, beta API), implement fully, skipIf-gate with the typed tag and exact error, verify a skip-clean run, and report honestly. Do not burn an hour on one resource.
+
+## Entitlement gating pattern
+
+Most enterprise/plan-gated resources are still fully implementable; only the live lifecycle is gated:
+
+1. **Probe once** against the real API to capture the exact rejection (code + message). If it surfaces as an untyped catch-all, patch distilled first so the entitlement error is a typed tag (e.g. `MagicTransitNotOnboarded` code 1012, `SaasQuotaNotAllocated` code 1404, `AdvancedCertificateManagerRequired` code 1450).
+2. Keep an **ungated probe test** that asserts the typed tag is returned — this proves both the patch and the gating are correct, forever, at near-zero cost.
+3. skipIf-gate the full lifecycle behind an env var (`CLOUDFLARE_TEST_MAGIC_TRANSIT=1`, `CLOUDFLARE_TEST_DLP=1`, …) so an entitled account can run it unchanged.
+4. Record the testability verdict (`yes | limited | no`) and the exact error in the catalog notes.
+
+Deprecated APIs (superseded by Rulesets etc.), billing/subscription objects, pure data-APIs, and closed-beta endpoints are *documented as out of scope* in `INDEX.md` rather than implemented.
+
+## What every agent task prompt must include
+
+A wave task prompt is a contract. Include, every time:
+
+1. The **distilled service the agent owns** and the resources to build (with namespace + directory).
+2. **Assess-first** instruction (finish partial work, don't rewrite).
+3. The reading list: this file's Reconciler doctrine + Typed Error Doctrine, the catalog spec, the distilled service module + existing patches, current exemplar resources/tests (account-level CRUD, zone singleton capture-and-restore, observe-before-delete), and the registration files.
+4. The **type-check/build ban** + watch-log usage (above).
+5. The **speed doctrine** (above) verbatim — agents rediscover unbounded waits otherwise.
+6. The **Typed Error Doctrine** hard rule with the patch-regenerate command for *their* service only.
+7. Registration discipline for the shared files, including the nested-mergeAll note.
+8. Test requirements: `test.provider`, start **and** end with `stack.destroy()`, deterministic names (engine default or constant), out-of-band verification via distilled, typed wait-until-gone, replacement coverage where applicable.
+9. Known footguns: `diff` receives `Input<Props>` — narrow with `isResolved(news)` before property access; never `Input<T>` in declared Props; Effect 4 APIs (`Effect.result` + `Result.isSuccess/isFailure`, not `Effect.either`/`effect/Either`); request-schema patch keys are camelCase, response keys are wire snake_case; fixtures (CSRs, PEMs, JWKS) are generated once and checked in as constants, never at test time.
+10. A **structured result schema**: `{ service, resources, testsPassed, testCommand, files, patches (with reasons), skippedTests (with exact errors), notes }` — the coordinator aggregates these into the catalog.
+
 # Documentation Generation
 
 **Source of truth:** The source code is the single source of truth for all API documentation. JSDoc comments in `packages/alchemy/src/**/*.ts` are extracted and used to generate the public API reference markdown.
@@ -185,9 +263,11 @@ This generates:
 - Show real-world patterns like error handling, combining with other resources
 - Use descriptive titles that explain what the example demonstrates
 
-# Workflow
+# Workflow (per-service inner loop)
 
-Development of Alchemy-Effect Resources is heavily pattern based. Each Service has many Resources that each have 0 oor more Capabilities and Event Sources. When working on a new Service, the following steps should be followed.
+This is the inner loop that each factory agent (see **The Resource Factory Process** above) executes for the service it owns — it applies equally when a single engineer brings up one service by hand.
+
+Development of Alchemy-Effect Resources is heavily pattern based. Each Service has many Resources that each have 0 or more Capabilities and Event Sources. When working on a new Service, the following steps should be followed.
 
 1. Research the AWS Service and identify its Resources, Identifier Types, Structs, Capabilities, and Event Sources. Refer to the corresponding Terraform Provider, Pulumi Provider, and CloudFormation docs for that service (use the provided tools specifically for searching these docs for services and resources).
 
@@ -348,12 +428,22 @@ export interface Function extends Resource<
 > {}
 ```
 
-:::tip
-Some Input Property types are wrapped in an `Input<T>`, but not all are. Only properties that may need to be references to another resource's Output Attribute. E.g. common use-cases are `Input<VpcId>`, `Input<QueueUrl>`, `Tags: Record<string, Input<string>>`.
-:::
-
 :::warning
-For fields like `name: string`, `bucketName: string`, `bucketPrefix: string`, you should not use `Input<string>` because these properties need to be statically knowable in the `diff` function.
+**Never use `Input<T>` in declared Props interfaces.** Declare plain types (`zoneId: string`, `ips?: string[]`, nested structs with plain fields). The `Resource` machinery applies `Input` automatically — and `Input<T>` is deep (it recursively distributes over arrays and object fields), so even nested references like `memberships: [{ identifier: zone.zoneId }]` accept `Output<string>` without any explicit annotation. Writing `Input<string>` in a Props interface produces a redundant double-wrap.
+
+```ts
+// ❌ wrong
+export interface LoadBalancerProps {
+  zoneId: Input<string>;
+}
+
+// ✅ right — the engine wraps automatically and deeply
+export interface LoadBalancerProps {
+  zoneId: string;
+}
+```
+
+`Input<T>` in a *function signature* is still legitimate when the function genuinely receives unresolved values at runtime (e.g. helpers that resolve tag maps, or `DurableObjectNamespace.from(scriptName: Input<string>)`).
 :::
 
 7. Implement the Capabilities as `Binding.Service` + `Binding.Policy` pairs in `packages/alchemy/src/{Cloud}/{Service}/{Capability}.ts`.
@@ -540,6 +630,53 @@ See the [VPC Smoke Test](./test/AWS/EC2/Vpc.smoke.test.ts) for an example.
 
 11. Add the resource-level JSDoc (`@section` + `@example` blocks) and field-level JSDoc on each prop/attribute on the source `.ts` file. Then run `bun generate:api-reference` to refresh `website/src/content/docs/providers/{Cloud}/{Resource}.md`. Do NOT manually edit the generated markdown.
 
+# Typed Error Doctrine (distilled)
+
+Every error a distilled operation can produce in practice MUST be a tagged error in that operation's **type-level** error union. The catch-all classes (`UnknownCloudflareError`, `CloudflareHttpError`, and the status-derived classes like `NotFound`/`BadRequest` that distilled leaves out of the typed union) exist only to *surface* gaps — they are never something alchemy code handles.
+
+**When you hit an unmatched error** (an `UnknownCloudflareError`, or you find yourself wanting to check `CloudflareHttpError.status` or an out-of-union `NotFound`), the fix is ALWAYS a distilled patch, never a catch in alchemy:
+
+1. Note the error's code / status / message from the failure output.
+2. Add or extend `distilled/packages/cloudflare/patches/{service}/{operation}.json` with a **meaningful, resource-specific tag** (e.g. `WidgetNotFound`, not a bare `NotFound`):
+
+   ```json
+   { "errors": { "WidgetNotFound": [{ "code": 1234 }] } }
+   ```
+
+   Matchers may combine `code`, `status`, and `message` (`{ "includes": "..." }` / `{ "matches": "..." }`) — e.g. `[{ "status": 400, "message": { "includes": "snippet not found" } }]` when Cloudflare misuses 400 for a missing resource. Prefer matching the Cloudflare error `code` when one exists; fall back to `status` + `message` otherwise.
+
+3. Regenerate ONLY that service: `cd distilled/packages/cloudflare && bun scripts/generate.ts --service {service}` (then `bun oxlint --fix src/services/{service}.ts && bun oxfmt --write src/services/{service}.ts`).
+4. Handle the now-typed tag in alchemy code and re-run the tests.
+
+**Forbidden patterns** — these defeat the type system and must never appear in alchemy code or tests:
+
+```ts
+// ❌ unknown-typed structural predicates
+const isNotFoundError = (e: unknown): boolean =>
+  Predicate.hasProperty(e, "_tag") && (e as { _tag: unknown })._tag === "NotFound";
+
+// ❌ widening casts to duck-typed tags
+Effect.retry({ while: (e) => (e as { _tag?: string })._tag === "Forbidden" })
+
+// ❌ catching the catch-all HTTP error by status
+Effect.catchIf((e) => e._tag === "CloudflareHttpError" && e.status === 404, ...)
+```
+
+**Required patterns** — fully inferred, no casts, no `unknown`:
+
+```ts
+// ✅ catch a typed tag
+.pipe(Effect.catchTag("WidgetNotFound", () => Effect.void))
+
+// ✅ retry while a typed tag is observed (e is the op's inferred error union)
+Effect.retry({ while: (e) => e._tag === "WidgetNotFound", schedule, times })
+
+// ✅ multiple tags
+Effect.catchTag(["WidgetNotFound", "Gone"], () => Effect.succeed(undefined))
+```
+
+If `Effect.catchTag("SomeTag", ...)` fails to typecheck, that is the signal that distilled's union is missing the error — patch distilled (step 2 above); do not loosen the alchemy-side types.
+
 # Test Fixtures for Effect-Native Workers / Functions
 
 To test runtime behavior of an Effect-native Worker, Workflow, Lambda, etc., write a **fixture** that defines the Worker/Function with the bindings under test and exposes one HTTP route per behavior, then write a **test** that deploys the fixture once via `beforeAll` and drives it over HTTP.
@@ -699,7 +836,19 @@ Always run type checking before committing changes:
 bun tsgo -b
 ```
 
-This runs the TypeScript compiler in build mode, which checks all projects in the workspace. This is critical because CI will fail if there are type errors.
+This runs the TypeScript compiler in build mode, which checks all projects in the workspace (including the distilled packages, which are project references). This is critical because CI will fail if there are type errors.
+
+## Multi-agent sessions: one watcher, no per-agent checks
+
+When many agents work concurrently (see **The Resource Factory Process**), do NOT let each agent run `bun tsgo -b` — concurrent runs thrash the machine and race on `tsbuildinfo`. Instead the coordinator runs a single watcher for the session:
+
+```bash
+nohup bun tsgo -b -w > /tmp/tsgo-watch.log 2>&1 &
+```
+
+- Agents read type state from the log (`grep -a "Found" /tmp/tsgo-watch.log | tail -1`) instead of invoking the compiler.
+- The watcher also rebuilds `distilled/packages/*/lib` automatically after a service regeneration (~15–30s), which is what vitest actually loads — so distilled response-schema patches become test-visible without anyone running `bun run build`.
+- Watch mode occasionally emits a spurious `TS6059` rootDir error with a lowercase-mangled path; a one-shot `bun tsgo -b` at wave boundaries is the authoritative check.
 
 ## Build Commands
 

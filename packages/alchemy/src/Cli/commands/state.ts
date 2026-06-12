@@ -43,10 +43,6 @@ const stackArg = Argument.string("stack").pipe(
   Argument.withDescription("Stack name (e.g. AlchemyEffectWebsite)"),
 );
 
-const stageArg = Argument.string("stage").pipe(
-  Argument.withDescription("Stage name (e.g. dev_samgoodwin, prod)"),
-);
-
 const fqnArg = Argument.string("fqn").pipe(
   Argument.withDescription("Fully-qualified resource name"),
 );

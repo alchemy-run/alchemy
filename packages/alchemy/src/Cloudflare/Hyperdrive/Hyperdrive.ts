@@ -312,14 +312,7 @@ export const HyperdriveProvider = () =>
           accountId: output.accountId,
           hyperdriveId: output.hyperdriveId,
         })
-        .pipe(
-          Effect.catchIf(
-            (e) =>
-              e._tag === "HyperdriveConfigNotFound" ||
-              (e._tag === "CloudflareHttpError" && e.status === 404),
-            () => Effect.void,
-          ),
-        );
+        .pipe(Effect.catchTag("HyperdriveConfigNotFound", () => Effect.void));
     }),
   });
 

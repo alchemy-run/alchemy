@@ -2,7 +2,6 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -63,10 +62,10 @@ export interface TunnelConfigurationProps {
    *
    * Stable — changing the tunnel triggers replacement.
    *
-   * Declared as plain `string` (not `Input<string>`) so it is statically
+   * Declared as plain `string` (not `string`) so it is statically
    * knowable inside `diff` for the replacement check.
    */
-  tunnelId: Input<string>;
+  tunnelId: string;
   /**
    * Ordered ingress rules. cloudflared evaluates them top-down and the
    * first match wins. The catch-all rule is appended automatically — do
@@ -264,32 +263,22 @@ const configsEqual = (
 // Provider
 // ---------------------------------------------------------------------------
 
-// Distilled tags only transport errors; a 404 for a tunnel that has no
-// configuration yet surfaces as the tagged `TunnelConfigurationNotFound`
-// (code 1055) — that's the one we want to swallow into "missing".
-const isConfigNotFound = (
-  err: unknown,
-): err is { readonly _tag: "TunnelConfigurationNotFound" } =>
-  typeof err === "object" &&
-  err !== null &&
-  (err as { _tag?: string })._tag === "TunnelConfigurationNotFound";
-
 export const TunnelConfigurationProvider = () =>
   Provider.effect(
     TunnelConfiguration,
     Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const env = yield* CloudflareEnvironment;
 
       const getConfig = yield* zeroTrust.getTunnelCloudflaredConfiguration;
       const putConfig = yield* zeroTrust.putTunnelCloudflaredConfiguration;
 
-      const observe = (tunnelId: string) =>
+      const observe = (accountId: string, tunnelId: string) =>
         Effect.gen(function* () {
+          // A tunnel with no configuration yet surfaces as the tagged
+          // `TunnelConfigurationNotFound` (code 1055) — swallow into "missing".
           const r = yield* getConfig({ accountId, tunnelId }).pipe(
-            Effect.catch((err) =>
-              isConfigNotFound(err)
-                ? Effect.succeed(undefined)
-                : Effect.fail(err),
+            Effect.catchTag("TunnelConfigurationNotFound", () =>
+              Effect.succeed(undefined),
             ),
           );
           if (r === undefined) return undefined;
@@ -315,6 +304,7 @@ export const TunnelConfigurationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news }) {
+          const { accountId } = yield* env;
           // Inputs have been resolved to concrete strings by the Plan layer.
           const tunnelId = news.tunnelId as string;
           const catchAllService =
@@ -322,7 +312,7 @@ export const TunnelConfigurationProvider = () =>
           const desiredIngress = buildIngress(news.ingress, catchAllService);
 
           // Observe — falls through to a PUT if the tunnel has no config yet.
-          let observed = yield* observe(tunnelId);
+          let observed = yield* observe(accountId, tunnelId);
 
           // Sync — skip the PUT entirely when observed equals desired.
           if (
@@ -369,7 +359,7 @@ export const TunnelConfigurationProvider = () =>
 
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
-          const observed = yield* observe(output.tunnelId);
+          const observed = yield* observe(output.accountId, output.tunnelId);
           if (observed === undefined) return undefined;
           return {
             tunnelId: output.tunnelId,

@@ -1,0 +1,302 @@
+import * as pages from "@distilled.cloud/cloudflare/pages";
+import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+
+import { Unowned } from "../../AdoptPolicy.ts";
+import * as Provider from "../../Provider.ts";
+import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { Providers } from "../Providers.ts";
+
+const PagesDomainTypeId = "Cloudflare.Pages.Domain" as const;
+type PagesDomainTypeId = typeof PagesDomainTypeId;
+
+/**
+ * Lifecycle status of a Pages custom domain. Newly attached domains start
+ * `initializing`/`pending` and become `active` once DNS validation and
+ * certificate issuance complete.
+ */
+export type PagesDomainStatus =
+  | "initializing"
+  | "pending"
+  | "active"
+  | "deactivated"
+  | "blocked"
+  | "error"
+  // Keep the union open so new Cloudflare statuses aren't blocked by
+  // stale types.
+  | (string & {});
+
+export interface PagesDomainProps {
+  /**
+   * Name of the Pages project the domain is attached to (e.g.
+   * `project.name`). The attachment cannot be moved — changing the project
+   * triggers a replacement.
+   */
+  projectName: string;
+  /**
+   * The custom domain name (e.g. `www.example.com`). The domain is the
+   * attachment's identity — changing it triggers a replacement.
+   *
+   * Declared as plain `string` so it is statically knowable inside `diff`.
+   */
+  name: string;
+}
+
+export interface PagesDomainAttributes {
+  /**
+   * Cloudflare-assigned UUID of the domain attachment.
+   */
+  domainId: string;
+  /**
+   * The Cloudflare account the project belongs to.
+   */
+  accountId: string;
+  /**
+   * Name of the Pages project the domain is attached to.
+   */
+  projectName: string;
+  /**
+   * The custom domain name.
+   */
+  name: string;
+  /**
+   * Current lifecycle status of the domain. Newly attached domains stay
+   * `pending` until DNS validation completes (the zone needs a CNAME from
+   * the domain to the project's `*.pages.dev` subdomain).
+   */
+  status: PagesDomainStatus;
+  /**
+   * Certificate authority issuing the domain's TLS certificate.
+   */
+  certificateAuthority: string;
+  /**
+   * Status of the domain-ownership validation.
+   */
+  validationStatus: string;
+  /**
+   * Method used for domain-ownership validation (`http` or `txt`).
+   */
+  validationMethod: string;
+  /**
+   * Status of the domain verification.
+   */
+  verificationStatus: string;
+  /**
+   * Zone tag (zone id) of the Cloudflare zone the domain belongs to, when
+   * the zone is on the same account.
+   */
+  zoneTag: string;
+  /**
+   * When the domain was attached to the project.
+   */
+  createdOn: string;
+}
+
+export type PagesDomain = Resource<
+  PagesDomainTypeId,
+  PagesDomainProps,
+  PagesDomainAttributes,
+  never,
+  Providers
+>;
+
+/**
+ * A custom domain attached to a Cloudflare Pages project.
+ *
+ * Attaching a domain starts Cloudflare's validation flow: the domain must
+ * resolve to the project (typically via a CNAME record pointing at the
+ * project's `*.pages.dev` subdomain) before its status becomes `active`.
+ * The resource does not wait for activation — compose it with
+ * `Cloudflare.DnsRecord` to create the CNAME, and certificate issuance
+ * completes asynchronously.
+ *
+ * Both properties are the attachment's identity, so every change triggers a
+ * replacement (detach + attach).
+ *
+ * @section Attaching a Domain
+ * @example Custom domain with its CNAME record
+ * ```typescript
+ * const project = yield* Cloudflare.PagesProject("site", {});
+ *
+ * const domain = yield* Cloudflare.PagesDomain("site-domain", {
+ *   projectName: project.name,
+ *   name: "www.example.com",
+ * });
+ *
+ * yield* Cloudflare.DnsRecord("site-cname", {
+ *   zoneId: zone.zoneId,
+ *   name: "www.example.com",
+ *   type: "CNAME",
+ *   content: project.subdomain,
+ *   proxied: true,
+ * });
+ * ```
+ *
+ * @see https://developers.cloudflare.com/pages/configuration/custom-domains/
+ */
+export const PagesDomain = Resource<PagesDomain>(PagesDomainTypeId);
+
+/**
+ * Returns true if the given value is a PagesDomain resource.
+ */
+export const isPagesDomain = (value: unknown): value is PagesDomain =>
+  Predicate.hasProperty(value, "Type") && value.Type === PagesDomainTypeId;
+
+export const PagesDomainProvider = () =>
+  Provider.succeed(PagesDomain, {
+    stables: [
+      "domainId",
+      "accountId",
+      "projectName",
+      "name",
+      "zoneTag",
+      "createdOn",
+    ],
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const o = olds as PagesDomainProps | undefined;
+      const n = news as PagesDomainProps;
+      if ((output?.accountId ?? accountId) !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // The domain name is the attachment's identity — no rename API.
+      const oldName = output?.name ?? o?.name;
+      if (oldName !== undefined && oldName !== n.name) {
+        return { action: "replace" } as const;
+      }
+      // projectName is Input<string>; compare only once both sides are
+      // concrete strings.
+      const oldProject =
+        output?.projectName ??
+        (typeof o?.projectName === "string" ? o.projectName : undefined);
+      if (
+        oldProject !== undefined &&
+        typeof n.projectName === "string" &&
+        oldProject !== n.projectName
+      ) {
+        return { action: "replace" } as const;
+      }
+      return undefined;
+    }),
+    read: Effect.fn(function* ({ output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const acct = output?.accountId ?? accountId;
+      const projectName =
+        output?.projectName ??
+        (typeof olds?.projectName === "string" ? olds.projectName : undefined);
+      const name = output?.name ?? olds?.name;
+      if (projectName === undefined || name === undefined) return undefined;
+
+      const observed = yield* getDomain(acct, projectName, name);
+      if (!observed) return undefined;
+      const attrs = toAttributes(observed, acct, projectName);
+      // With persisted state the attachment is ours; on a cold read we
+      // cannot prove ownership (domain attachments carry no markers), so
+      // gate takeover behind the adopt policy.
+      return output?.domainId ? attrs : Unowned(attrs);
+    }),
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Inputs have been resolved to concrete strings by Plan.
+      const projectName = news.projectName as string;
+
+      // 1. Observe — `(projectName, name)` is the attachment's identity.
+      let observed = yield* getDomain(accountId, projectName, news.name);
+
+      // 2. Ensure — existence-only resource: attach when missing,
+      //    tolerating the AlreadyExists race by re-reading.
+      if (!observed) {
+        observed = yield* pages
+          .createProjectDomain({
+            accountId,
+            projectName,
+            name: news.name,
+          })
+          .pipe(
+            Effect.catchTag("PagesDomainAlreadyExists", (originalError) =>
+              Effect.gen(function* () {
+                const existing = yield* getDomain(
+                  accountId,
+                  projectName,
+                  news.name,
+                );
+                if (!existing) return yield* Effect.fail(originalError);
+                return existing;
+              }),
+            ),
+          );
+      } else if (observed.status === "pending" || observed.status === "error") {
+        // 3. Sync — nothing is mutable on the attachment itself, but a
+        //    stalled validation can be re-kicked. Tolerate the domain
+        //    vanishing between observe and patch.
+        observed = yield* pages
+          .patchProjectDomain({
+            accountId,
+            projectName,
+            domainName: news.name,
+          })
+          .pipe(
+            Effect.catchTag("PagesDomainNotFound", () =>
+              Effect.succeed(observed!),
+            ),
+          );
+      }
+
+      // 4. Return fresh attributes.
+      return toAttributes(observed, accountId, projectName);
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      // Idempotent: the domain may already be detached, or the whole
+      // project may already be gone (deleting a project detaches its
+      // domains) — both count as success.
+      yield* pages
+        .deleteProjectDomain({
+          accountId: output.accountId,
+          projectName: output.projectName,
+          domainName: output.name,
+        })
+        .pipe(
+          Effect.catchTag("PagesDomainNotFound", () => Effect.void),
+          Effect.catchTag("ProjectNotFound", () => Effect.void),
+        );
+    }),
+  });
+
+type ObservedDomain =
+  | pages.GetProjectDomainResponse
+  | pages.CreateProjectDomainResponse
+  | pages.PatchProjectDomainResponse;
+
+/**
+ * Read a domain attachment, mapping "gone" to `undefined` — either the
+ * domain is not attached (`PagesDomainNotFound`, code 8000021) or the
+ * whole project no longer exists (`ProjectNotFound`, code 8000007).
+ */
+const getDomain = (
+  accountId: string,
+  projectName: string,
+  domainName: string,
+) =>
+  pages.getProjectDomain({ accountId, projectName, domainName }).pipe(
+    Effect.catchTag("PagesDomainNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ProjectNotFound", () => Effect.succeed(undefined)),
+  );
+
+const toAttributes = (
+  domain: ObservedDomain,
+  accountId: string,
+  projectName: string,
+): PagesDomainAttributes => ({
+  domainId: domain.domainId,
+  accountId,
+  projectName,
+  name: domain.name,
+  status: domain.status,
+  certificateAuthority: domain.certificateAuthority,
+  validationStatus: domain.validationData.status,
+  validationMethod: domain.validationData.method,
+  verificationStatus: domain.verificationData.status,
+  zoneTag: domain.zoneTag,
+  createdOn: domain.createdOn,
+});

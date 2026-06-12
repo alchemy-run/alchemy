@@ -8,7 +8,7 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import QueueWorker, { Counter, RoundTripQueue } from "./round-trip-worker.ts";
+import QueueWorker, { RoundTripQueue } from "./round-trip-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 

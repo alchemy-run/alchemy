@@ -3,7 +3,6 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
-import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { arrayEqualsUnordered } from "../../Util/equal.ts";
@@ -43,13 +42,13 @@ export interface DnsRecordProps {
    * Zone the record lives in. Stable — changing the zone triggers
    * replacement.
    */
-  zoneId: Input<string>;
+  zoneId: string;
   /**
    * Fully-qualified record name (e.g. `cluster-admin.microtrack.ai`).
    *
    * Stable — Cloudflare treats `(name, type)` as the record's identity,
    * so a rename is a delete + create. Declared as plain `string` (not
-   * `Input<string>`) so it is statically knowable inside `diff`.
+   * `string`) so it is statically knowable inside `diff`.
    */
   name: string;
   /**
@@ -65,7 +64,7 @@ export interface DnsRecordProps {
    *
    * Mutable — patched in place.
    */
-  content: Input<string>;
+  content: string;
   /**
    * TTL in seconds (`60`–`86400`), or `"1"` for Cloudflare's "automatic"
    * setting. Must be `"1"` when `proxied` is `true`.
