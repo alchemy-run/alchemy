@@ -1,5 +1,6 @@
 import * as GitHub from "@/GitHub";
 import { Octokit } from "@/GitHub/Octokit.ts";
+import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -54,8 +55,7 @@ test.provider.skipIf(!owner)(
             autoInit: true,
             hasWiki: false,
             topics: ["alchemy", "test"],
-            allowDelete: true,
-          });
+          }).pipe(destroy());
         }),
       );
 
@@ -82,8 +82,7 @@ test.provider.skipIf(!owner)(
             visibility: "private",
             hasWiki: true,
             topics: ["alchemy"],
-            allowDelete: true,
-          });
+          }).pipe(destroy());
         }),
       );
 
@@ -101,8 +100,7 @@ test.provider.skipIf(!owner)(
             name: renamed,
             description: "updated description",
             visibility: "private",
-            allowDelete: true,
-          });
+          }).pipe(destroy());
         }),
       );
 

@@ -135,15 +135,6 @@ export interface RepositoryProps {
    * Only used at create time.
    */
   licenseTemplate?: string;
-
-  /**
-   * Whether to delete the repository when the resource is destroyed. By
-   * default the repository is preserved on destroy to protect its history
-   * (issues, pull requests, commits). Set to `true` to opt in to deletion —
-   * the token must have the `delete_repo` scope.
-   * @default false
-   */
-  allowDelete?: boolean;
 }
 
 export interface Repository extends Resource<
@@ -209,12 +200,17 @@ export interface Repository extends Resource<
  *
  * `Repository` manages the lifecycle of a repository owned by a user or
  * organization. The repository is created on first deploy and its settings are
- * converged on every subsequent deploy. To protect irreplaceable history,
- * destroy preserves the repository by default — opt in with `allowDelete: true`.
+ * converged on every subsequent deploy.
+ *
+ * Repositories default to **retain** on removal — destroying the stack does
+ * NOT delete the repository on GitHub, protecting its irreplaceable history
+ * (issues, pull requests, commits). Opt in to actual deletion by wrapping the
+ * resource (or the whole stack) in {@link destroy}() from
+ * `alchemy/RemovalPolicy`.
  *
  * Authentication is resolved via the `GitHubCredentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
- * `repo` scope (and `delete_repo` when `allowDelete` is set).
+ * `repo` scope (and `delete_repo` when deletion is opted in via `destroy()`).
  *
  * @section Creating a Repository
  * @example Basic Repository
@@ -276,37 +272,16 @@ export interface Repository extends Resource<
  * @section Deleting a Repository
  * @example Allow Repository Deletion
  * ```typescript
- * const repo = yield* GitHub.Repository("ephemeral", {
+ * import { destroy } from "alchemy/RemovalPolicy";
+ *
+ * yield* GitHub.Repository("ephemeral", {
  *   owner: "my-org",
  *   name: "ephemeral-preview",
- *   allowDelete: true,
- * });
+ * }).pipe(destroy());
  * ```
  */
-export const Repository = Resource<Repository>("GitHub.Repository");
-
-const attrsOf = (data: {
-  id: number;
-  node_id: string;
-  full_name: string;
-  html_url: string;
-  git_url: string;
-  ssh_url: string;
-  clone_url: string;
-  default_branch: string;
-  created_at: string | null;
-  updated_at: string | null;
-}) => ({
-  repoId: data.id,
-  nodeId: data.node_id,
-  fullName: data.full_name,
-  htmlUrl: data.html_url,
-  gitUrl: data.git_url,
-  sshUrl: data.ssh_url,
-  cloneUrl: data.clone_url,
-  defaultBranch: data.default_branch,
-  createdAt: data.created_at ?? new Date().toISOString(),
-  updatedAt: data.updated_at ?? new Date().toISOString(),
+export const Repository = Resource<Repository>("GitHub.Repository", {
+  defaultRemovalPolicy: "retain",
 });
 
 export const RepositoryProvider = () =>
@@ -561,10 +536,6 @@ export const RepositoryProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ olds, output }) {
-      if (!olds.allowDelete) {
-        return;
-      }
-
       const octokit = yield* Octokit;
 
       // Resolve the current repository name via the stable numeric ID. A rename
@@ -608,3 +579,27 @@ export const RepositoryProvider = () =>
       });
     }),
   });
+
+const attrsOf = (data: {
+  id: number;
+  node_id: string;
+  full_name: string;
+  html_url: string;
+  git_url: string;
+  ssh_url: string;
+  clone_url: string;
+  default_branch: string;
+  created_at: string | null;
+  updated_at: string | null;
+}) => ({
+  repoId: data.id,
+  nodeId: data.node_id,
+  fullName: data.full_name,
+  htmlUrl: data.html_url,
+  gitUrl: data.git_url,
+  sshUrl: data.ssh_url,
+  cloneUrl: data.clone_url,
+  defaultBranch: data.default_branch,
+  createdAt: data.created_at ?? new Date().toISOString(),
+  updatedAt: data.updated_at ?? new Date().toISOString(),
+});
