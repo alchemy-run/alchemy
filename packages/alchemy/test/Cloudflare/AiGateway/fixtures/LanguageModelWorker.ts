@@ -13,7 +13,9 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { Gateway } from "./Gateway.ts";
 
-const MODEL = "@cf/meta/llama-3.1-8b-instruct";
+// `@cf/meta/llama-3.1-8b-instruct` was deprecated by Cloudflare on
+// 2026-05-30 (the API answers 410), so use the supported fast 3.3 model.
+const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const TOOL_MODEL = "@cf/moonshotai/kimi-k2.6";
 
 const GetWeather = Tool.make("get_weather", {

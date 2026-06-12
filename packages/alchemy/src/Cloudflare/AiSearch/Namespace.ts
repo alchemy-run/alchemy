@@ -178,12 +178,26 @@ export const AiSearchNamespaceProvider = () =>
       if (observedDescription === news.description) {
         return toAttributes(observed, acct);
       }
-      const updated = yield* aisearch.updateNamespace({
-        accountId: acct,
-        name,
-        // `null` clears a previously-set description.
-        description: news.description ?? null,
-      });
+      const updated = yield* aisearch
+        .updateNamespace({
+          accountId: acct,
+          name,
+          // `null` clears a previously-set description.
+          description: news.description ?? null,
+        })
+        .pipe(
+          // The observe read can be eventually consistent: a namespace
+          // deleted out-of-band may still appear in `readNamespace` and
+          // then 404 here. Treat that as "missing" and recreate with the
+          // desired shape.
+          Effect.catchTag("NamespaceNotFound", () =>
+            aisearch.createNamespace({
+              accountId: acct,
+              name,
+              description: news.description,
+            }),
+          ),
+        );
       return toAttributes(updated, acct);
     }),
     delete: Effect.fn(function* ({ output }) {

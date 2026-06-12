@@ -34,7 +34,10 @@ import {
   type AssetsProps,
 } from "./Assets.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import { isDurableObjectExport } from "./DurableObjectNamespace.ts";
+import {
+  isDurableObjectExport,
+  type DurableObjectExport,
+} from "./DurableObjectNamespace.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
 import * as Vite from "./Vite.ts";
@@ -58,6 +61,7 @@ import {
   makeWorkerRuntimeContext,
   type WorkerRuntimeContext,
 } from "./WorkerRuntimeContext.ts";
+import type { WorkflowExport } from "./Workflow.ts";
 
 export const WorkerTypeId = "Cloudflare.Worker";
 export type WorkerTypeId = typeof WorkerTypeId;
@@ -238,7 +242,12 @@ export interface WorkerProps<
   };
   limits?: WorkerLimits;
   placement?: WorkerPlacement;
-  exports?: string[];
+  /**
+   * Tracks Durable Object and Workflow exports for Effect-native Workers only.
+   * Populated automatically from bindings; do not set manually.
+   * @internal
+   */
+  exports?: Record<string, DurableObjectExport | WorkflowExport>;
   /**
    * Environment variables and native Cloudflare Bindings to bind to
    * the Worker. Accepts:
@@ -1209,7 +1218,7 @@ export const LiveWorkerProvider = () =>
                   }
                 : {
                     kind: "effect",
-                    exports: (props.exports ?? {}) as any,
+                    exports: props.exports ?? {},
                   },
               stack: { name: stack.name, stage: stack.stage },
               extraOptions: props.build,
@@ -1923,7 +1932,7 @@ export const LiveWorkerProvider = () =>
         precreate: Effect.fnUntraced(function* ({ id, news, session }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name = yield* createWorkerName(id, news.name);
-          const exportMap = (news.exports ?? {}) as Record<string, unknown>;
+          const exportMap = news.exports ?? {};
           const durableObjects = Object.keys(exportMap)
             .filter((logicalId) => isDurableObjectExport(exportMap[logicalId]))
             .map((logicalId) => ({

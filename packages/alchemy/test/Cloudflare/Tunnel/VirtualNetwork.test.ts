@@ -1,3 +1,4 @@
+import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Test from "@/Test/Vitest";
@@ -54,7 +55,7 @@ test.provider("create, verify, and destroy a virtual network", (stack) =>
       Cloudflare.TunnelVirtualNetwork("BasicVnet", {
         name: "alchemy-zt-vnet-basic",
         comment: "alchemy test vnet",
-      }),
+      }).pipe(adopt(true)),
     );
 
     expect(vnet.virtualNetworkId).toBeTruthy();
@@ -82,14 +83,14 @@ test.provider("update name and comment in place (same id)", (stack) =>
       Cloudflare.TunnelVirtualNetwork("UpdateVnet", {
         name: "alchemy-zt-vnet-update",
         comment: "v1",
-      }),
+      }).pipe(adopt(true)),
     );
 
     const updated = yield* stack.deploy(
       Cloudflare.TunnelVirtualNetwork("UpdateVnet", {
         name: "alchemy-zt-vnet-update-v2",
         comment: "v2",
-      }),
+      }).pipe(adopt(true)),
     );
 
     // Same vnet mutated in place — not a replacement.
@@ -106,7 +107,7 @@ test.provider("update name and comment in place (same id)", (stack) =>
       Cloudflare.TunnelVirtualNetwork("UpdateVnet", {
         name: "alchemy-zt-vnet-update-v2",
         comment: "v2",
-      }),
+      }).pipe(adopt(true)),
     );
     expect(noop.virtualNetworkId).toEqual(initial.virtualNetworkId);
 
@@ -125,7 +126,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
       Cloudflare.TunnelVirtualNetwork("HealVnet", {
         name: "alchemy-zt-vnet-heal",
         comment: "v1",
-      }),
+      }).pipe(adopt(true)),
     );
 
     yield* zeroTrust
@@ -147,7 +148,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
       Cloudflare.TunnelVirtualNetwork("HealVnet", {
         name: "alchemy-zt-vnet-heal",
         comment: "v2",
-      }),
+      }).pipe(adopt(true)),
     );
 
     expect(healed.virtualNetworkId).not.toEqual(vnet.virtualNetworkId);

@@ -223,7 +223,7 @@ export const AiGatewayDatasetProvider = () =>
 
       // Observe — the datasetId cached on `output` is a hint, not a
       // guarantee: a missing dataset falls through and we recreate.
-      const observed = output?.datasetId
+      let observed = output?.datasetId
         ? yield* getDataset(
             output.accountId ?? accountId,
             gatewayId,
@@ -232,15 +232,27 @@ export const AiGatewayDatasetProvider = () =>
         : undefined;
 
       if (!observed) {
-        // Ensure — greenfield (or out-of-band delete): create with the full
-        // desired body. Dataset names are not unique so there is no
-        // AlreadyExists race to tolerate.
-        const created = yield* aiGateway.createDataset({
-          accountId,
-          gatewayId,
-          ...desired,
-        });
-        return toAttributes(created, accountId);
+        // Ensure — greenfield (or out-of-band delete). Cloudflare enforces
+        // name uniqueness per gateway, so a name conflict (e.g. a leftover
+        // from an interrupted run or a create race) is converged by
+        // adopting the existing dataset and syncing it to the desired
+        // shape below instead of failing.
+        const created = yield* aiGateway
+          .createDataset({
+            accountId,
+            gatewayId,
+            ...desired,
+          })
+          .pipe(
+            Effect.catchTag("DatasetNameAlreadyExists", (originalError) =>
+              findByName(accountId, gatewayId, name).pipe(
+                Effect.flatMap((match) =>
+                  match ? Effect.succeed(match) : Effect.fail(originalError),
+                ),
+              ),
+            ),
+          );
+        observed = created;
       }
 
       // Sync — diff observed cloud state against desired; the update API is

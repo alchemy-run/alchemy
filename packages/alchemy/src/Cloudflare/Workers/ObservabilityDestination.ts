@@ -1,6 +1,7 @@
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -287,12 +288,27 @@ export const ObservabilityDestinationProvider = () =>
         observed.configuration.url !== url ||
         !sameHeaders(observed.configuration.headers, headers)
       ) {
-        const patched = yield* workers.patchObservabilityDestination({
-          accountId,
-          slug: observed.slug,
-          enabled,
-          configuration: { type: "logpush", url, headers },
-        });
+        const patched = yield* workers
+          .patchObservabilityDestination({
+            accountId,
+            slug: observed.slug,
+            enabled,
+            configuration: { type: "logpush", url, headers },
+          })
+          .pipe(
+            // Every PATCH re-runs the endpoint preflight POST from
+            // Cloudflare's edge. A freshly deployed endpoint (e.g. a
+            // workers.dev sink) can transiently fail that probe while the
+            // route propagates, so ride out preflight failures briefly.
+            Effect.retry({
+              while: (e) =>
+                e._tag === "ObservabilityDestinationPreflightFailed",
+              schedule: Schedule.exponential("1 second").pipe(
+                Schedule.either(Schedule.spaced("5 seconds")),
+              ),
+              times: 8,
+            }),
+          );
         observed = yield* freshObserved(accountId, patched.slug);
       }
 

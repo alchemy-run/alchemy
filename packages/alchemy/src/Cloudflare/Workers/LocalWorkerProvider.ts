@@ -311,7 +311,7 @@ export const LocalWorkerProvider = () =>
             compatibility,
             entry: props.isExternal
               ? { kind: "external" }
-              : { kind: "effect", exports: (props.exports ?? {}) as any },
+              : { kind: "effect", exports: props.exports ?? {} },
             stack: { name: stack.name, stage: stack.stage },
             extraOptions: props.build,
           } satisfies WorkerBundleOptions,

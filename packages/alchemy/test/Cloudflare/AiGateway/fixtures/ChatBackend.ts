@@ -15,7 +15,7 @@ export default class ChatBackend extends Cloudflare.DurableObjectNamespace<ChatB
     // Init phase: bind the AI Gateway and build the LanguageModel layer.
     const aiGateway = yield* Cloudflare.AiGateway.bind(Gateway);
     const languageModel = aiGateway.model({
-      model: "@cf/meta/llama-3.1-8b-instruct",
+      model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       parameters: { temperature: 0.2, maxTokens: 512 },
     });
 
