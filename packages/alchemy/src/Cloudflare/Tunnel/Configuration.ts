@@ -267,12 +267,12 @@ export const TunnelConfigurationProvider = () =>
   Provider.effect(
     TunnelConfiguration,
     Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const env = yield* CloudflareEnvironment;
 
       const getConfig = yield* zeroTrust.getTunnelCloudflaredConfiguration;
       const putConfig = yield* zeroTrust.putTunnelCloudflaredConfiguration;
 
-      const observe = (tunnelId: string) =>
+      const observe = (accountId: string, tunnelId: string) =>
         Effect.gen(function* () {
           // A tunnel with no configuration yet surfaces as the tagged
           // `TunnelConfigurationNotFound` (code 1055) — swallow into "missing".
@@ -304,6 +304,7 @@ export const TunnelConfigurationProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ news }) {
+          const { accountId } = yield* env;
           // Inputs have been resolved to concrete strings by the Plan layer.
           const tunnelId = news.tunnelId as string;
           const catchAllService =
@@ -311,7 +312,7 @@ export const TunnelConfigurationProvider = () =>
           const desiredIngress = buildIngress(news.ingress, catchAllService);
 
           // Observe — falls through to a PUT if the tunnel has no config yet.
-          let observed = yield* observe(tunnelId);
+          let observed = yield* observe(accountId, tunnelId);
 
           // Sync — skip the PUT entirely when observed equals desired.
           if (
@@ -358,7 +359,7 @@ export const TunnelConfigurationProvider = () =>
 
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;
-          const observed = yield* observe(output.tunnelId);
+          const observed = yield* observe(output.accountId, output.tunnelId);
           if (observed === undefined) return undefined;
           return {
             tunnelId: output.tunnelId,

@@ -208,7 +208,7 @@ export const GatewayRuleProvider = () =>
   Provider.effect(
     GatewayRule,
     Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+      const env = yield* CloudflareEnvironment;
 
       const createRule = yield* zeroTrust.createGatewayRule;
       const getRule = yield* zeroTrust.getGatewayRule;
@@ -224,7 +224,7 @@ export const GatewayRuleProvider = () =>
 
       // Locate an existing rule by name when no ruleId is cached — used for
       // adoption and as a recovery path after a create returns a conflict.
-      const findRuleByName = (name: string) =>
+      const findRuleByName = (accountId: string, name: string) =>
         listRules.items({ accountId }).pipe(
           Stream.runCollect,
           Effect.map((chunk) =>
@@ -239,7 +239,7 @@ export const GatewayRuleProvider = () =>
           ),
         );
 
-      const observeById = (ruleId: string) =>
+      const observeById = (accountId: string, ruleId: string) =>
         Effect.gen(function* () {
           const r = yield* getRule({ accountId, ruleId }).pipe(
             // Distilled tags transport errors but not the live Cloudflare 404
@@ -266,18 +266,19 @@ export const GatewayRuleProvider = () =>
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output }) {
+          const { accountId } = yield* env;
           const resolvedName = yield* resolveName(id, news.name);
           const body = buildMutableBody(news, resolvedName);
 
           // 1. Observe
           let observed: ObservedRule | undefined;
           if (output?.ruleId) {
-            observed = yield* observeById(output.ruleId);
+            observed = yield* observeById(accountId, output.ruleId);
           }
           if (!observed) {
             // Adoption / recovery path — look up by name. Cheap relative to
             // the create call we'd otherwise blow up on a duplicate name.
-            observed = yield* findRuleByName(resolvedName);
+            observed = yield* findRuleByName(accountId, resolvedName);
           }
 
           // 2. Ensure
@@ -299,7 +300,10 @@ export const GatewayRuleProvider = () =>
               // before re-failing so a racing create still converges.
               Effect.catch((err) =>
                 Effect.gen(function* () {
-                  const existing = yield* findRuleByName(resolvedName);
+                  const existing = yield* findRuleByName(
+                    accountId,
+                    resolvedName,
+                  );
                   if (existing) return existing;
                   return yield* Effect.fail(err);
                 }),
@@ -366,7 +370,7 @@ export const GatewayRuleProvider = () =>
 
         read: Effect.fn(function* ({ output }) {
           if (!output?.ruleId) return undefined;
-          const observed = yield* observeById(output.ruleId);
+          const observed = yield* observeById(output.accountId, output.ruleId);
           if (
             !observed?.id ||
             !observed.action ||
