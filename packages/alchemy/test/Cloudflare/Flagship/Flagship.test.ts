@@ -21,12 +21,14 @@ class WorkerNotReady extends Data.TaggedError("WorkerNotReady")<{
   body: string;
 }> {}
 
-// Cloudflare's edge takes a few seconds to start serving a fresh workers.dev
-// URL — retry through the transient propagation states until the worker
-// answers 200.
-const looksLikeCloudflarePlaceholder = (body: string) =>
-  body.includes("There is nothing here yet") || /Error\s+\d{3,4}/i.test(body);
-
+// A fresh workers.dev URL needs a few seconds of edge propagation before it
+// serves real traffic. During that window the request can fail in several
+// ways: the DNS name doesn't resolve yet (transport `RequestError`), the
+// edge returns Cloudflare's placeholder page (4xx/5xx), or a 200 briefly
+// carries a non-JSON body (parse error). Retry through ALL of these — the
+// same defensiveness the Workers/*.test.ts suites use — until the worker
+// answers with a real 200 JSON body. `WorkerNotReady` keeps the status/body
+// on the final surfaced error so a genuine failure isn't masked.
 const getJson = (url: string) =>
   HttpClient.get(url).pipe(
     Effect.flatMap((res) =>
@@ -39,10 +41,6 @@ const getJson = (url: string) =>
           ),
     ),
     Effect.retry({
-      while: (e): e is WorkerNotReady =>
-        e instanceof WorkerNotReady &&
-        ((e.status >= 400 && e.status < 500) ||
-          looksLikeCloudflarePlaceholder(e.body)),
       schedule: Schedule.exponential("500 millis").pipe(
         Schedule.either(Schedule.spaced("5 seconds")),
         Schedule.both(Schedule.recurs(30)),

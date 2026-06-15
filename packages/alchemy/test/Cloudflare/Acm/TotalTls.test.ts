@@ -7,6 +7,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -51,112 +52,115 @@ const getTotalTls = (zoneId: string) =>
     }),
   );
 
-test.provider(
-  "converges enabled:false as a no-op on a zone without the ACM entitlement",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+// Both cases mutate the same zone-level Total TLS singleton; run them serially so they don't corrupt each other's captured `initialEnabled` under the global concurrent test config.
+describe.sequential("TotalTls", () => {
+  test.provider(
+    "converges enabled:false as a no-op on a zone without the ACM entitlement",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Total TLS defaults to disabled. Desiring `enabled: false` matches
-      // the observed state, so reconcile never POSTs — the deploy succeeds
-      // even though the zone lacks the ACM entitlement.
-      const setting = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.TotalTls("TotalTls", {
-            zoneId,
-            enabled: false,
-          });
-        }),
-      );
+        // Total TLS defaults to disabled. Desiring `enabled: false` matches
+        // the observed state, so reconcile never POSTs — the deploy succeeds
+        // even though the zone lacks the ACM entitlement.
+        const setting = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.TotalTls("TotalTls", {
+              zoneId,
+              enabled: false,
+            });
+          }),
+        );
 
-      expect(setting.zoneId).toEqual(zoneId);
-      expect(setting.enabled).toEqual(false);
-      // The pre-management state was captured for restore-on-destroy.
-      expect(setting.initialEnabled).toEqual(false);
+        expect(setting.zoneId).toEqual(zoneId);
+        expect(setting.enabled).toEqual(false);
+        // The pre-management state was captured for restore-on-destroy.
+        expect(setting.initialEnabled).toEqual(false);
 
-      // Out-of-band verification via the distilled API.
-      const live = yield* getTotalTls(zoneId);
-      expect(live.enabled ?? false).toEqual(false);
+        // Out-of-band verification via the distilled API.
+        const live = yield* getTotalTls(zoneId);
+        expect(live.enabled ?? false).toEqual(false);
 
-      // Destroy restores the (identical) baseline — also a no-op POST.
-      yield* stack.destroy();
-      const after = yield* getTotalTls(zoneId);
-      expect(after.enabled ?? false).toEqual(false);
-    }).pipe(logLevel),
-);
+        // Destroy restores the (identical) baseline — also a no-op POST.
+        yield* stack.destroy();
+        const after = yield* getTotalTls(zoneId);
+        expect(after.enabled ?? false).toEqual(false);
+      }).pipe(logLevel),
+  );
 
-test.provider(
-  "surfaces the typed AdvancedCertificateManagerRequired error when enabling without the entitlement",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider(
+    "surfaces the typed AdvancedCertificateManagerRequired error when enabling without the entitlement",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Enabling Total TLS requires the ACM add-on; the distilled call
-      // must fail with the typed entitlement tag (code 1450).
-      const error = yield* acm.updateTotalTl({ zoneId, enabled: true }).pipe(
-        Effect.retry({
-          while: (e) => e._tag === "Forbidden",
-          schedule: forbiddenRetrySchedule,
-          times: 8,
-        }),
-        Effect.flip,
-      );
-      expect(error._tag).toEqual("AdvancedCertificateManagerRequired");
+        // Enabling Total TLS requires the ACM add-on; the distilled call
+        // must fail with the typed entitlement tag (code 1450).
+        const error = yield* acm.updateTotalTl({ zoneId, enabled: true }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "Forbidden",
+            schedule: forbiddenRetrySchedule,
+            times: 8,
+          }),
+          Effect.flip,
+        );
+        expect(error._tag).toEqual("AdvancedCertificateManagerRequired");
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
-);
+        yield* stack.destroy();
+      }).pipe(logLevel),
+  );
 
-test.provider.skipIf(!entitledZoneId)(
-  "enables Total TLS, updates the CA in place, and restores the baseline on destroy",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = entitledZoneId!;
+  test.provider.skipIf(!entitledZoneId)(
+    "enables Total TLS, updates the CA in place, and restores the baseline on destroy",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = entitledZoneId!;
 
-      yield* stack.destroy();
-      // Known baseline: disabled.
-      const baseline = yield* getTotalTls(zoneId);
+        yield* stack.destroy();
+        // Known baseline: disabled.
+        const baseline = yield* getTotalTls(zoneId);
 
-      const setting = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.TotalTls("TotalTls", {
-            zoneId,
-            enabled: true,
-          });
-        }),
-      );
+        const setting = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.TotalTls("TotalTls", {
+              zoneId,
+              enabled: true,
+            });
+          }),
+        );
 
-      expect(setting.zoneId).toEqual(zoneId);
-      expect(setting.enabled).toEqual(true);
-      expect(setting.initialEnabled).toEqual(baseline.enabled ?? false);
+        expect(setting.zoneId).toEqual(zoneId);
+        expect(setting.enabled).toEqual(true);
+        expect(setting.initialEnabled).toEqual(baseline.enabled ?? false);
 
-      // Out-of-band verification.
-      const live = yield* getTotalTls(zoneId);
-      expect(live.enabled).toEqual(true);
+        // Out-of-band verification.
+        const live = yield* getTotalTls(zoneId);
+        expect(live.enabled).toEqual(true);
 
-      // Update in place — pin the issuing Certificate Authority. The
-      // singleton's identity (zoneId) is unchanged.
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.TotalTls("TotalTls", {
-            zoneId,
-            enabled: true,
-            certificateAuthority: "lets_encrypt",
-          });
-        }),
-      );
-      expect(updated.enabled).toEqual(true);
-      expect(updated.certificateAuthority).toEqual("lets_encrypt");
-      expect(updated.initialEnabled).toEqual(baseline.enabled ?? false);
+        // Update in place — pin the issuing Certificate Authority. The
+        // singleton's identity (zoneId) is unchanged.
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.TotalTls("TotalTls", {
+              zoneId,
+              enabled: true,
+              certificateAuthority: "lets_encrypt",
+            });
+          }),
+        );
+        expect(updated.enabled).toEqual(true);
+        expect(updated.certificateAuthority).toEqual("lets_encrypt");
+        expect(updated.initialEnabled).toEqual(baseline.enabled ?? false);
 
-      // Destroy restores the pre-management state.
-      yield* stack.destroy();
-      const after = yield* getTotalTls(zoneId);
-      expect(after.enabled ?? false).toEqual(baseline.enabled ?? false);
-    }).pipe(logLevel),
-  { timeout: 120_000 },
-);
+        // Destroy restores the pre-management state.
+        yield* stack.destroy();
+        const after = yield* getTotalTls(zoneId);
+        expect(after.enabled ?? false).toEqual(baseline.enabled ?? false);
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+});

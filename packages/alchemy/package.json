@@ -25,6 +25,7 @@
     "bundle": "tsdown",
     "bundle:watch": "tsdown --watch",
     "publish:npm": "cp ../README.md . && bun publish && rm README.md",
+    "test": "vitest run",
     "test:benchmark": "tsx --tsconfig tsconfig.test.json test/types.benchmark.ts"
   },
   "exports": {
@@ -348,6 +349,7 @@
     "tsx": "^4.20.6",
     "typescript": "catalog:",
     "uuid": "catalog:",
+    "vitest": "catalog:",
     "ws": "catalog:"
   },
   "peerDependencies": {

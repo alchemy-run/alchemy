@@ -1,12 +1,11 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index.ts";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import CronTestWorker from "./fixtures/cron-worker.ts";
+import Stack from "./fixtures/cron/stack.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -16,21 +15,6 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
-);
-
-const Stack = Alchemy.Stack(
-  "CronEventSourceStack",
-  {
-    providers: Cloudflare.providers(),
-    state: Cloudflare.state(),
-  },
-  Effect.gen(function* () {
-    const worker = yield* CronTestWorker;
-    return {
-      url: worker.url.as<string>(),
-      crons: worker.crons,
-    };
-  }),
 );
 
 const stack = beforeAll(deploy(Stack));

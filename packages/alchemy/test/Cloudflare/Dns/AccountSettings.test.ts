@@ -6,6 +6,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -63,108 +64,116 @@ const normalizeBaseline = (accountId: string) =>
     );
   });
 
-test.provider(
-  "pins a zone default and restores the pre-management value on destroy",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+describe.sequential("AccountSettings", () => {
+  test.provider(
+    "pins a zone default and restores the pre-management value on destroy",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
-      yield* normalizeBaseline(accountId);
+        yield* stack.destroy();
+        yield* normalizeBaseline(accountId);
 
-      const settings = yield* stack.deploy(
-        Cloudflare.AccountDnsSettings("AccountDns", {
-          zoneDefaults: { multiProvider: true },
-        }),
-      );
+        const settings = yield* stack.deploy(
+          Cloudflare.AccountDnsSettings("AccountDns", {
+            zoneDefaults: { multiProvider: true },
+          }),
+        );
 
-      expect(settings.accountId).toEqual(accountId);
-      expect(settings.zoneDefaults.multiProvider).toEqual(true);
-      // The pre-management snapshot was captured for restore-on-destroy.
-      expect(settings.initialSettings.zoneDefaults.multiProvider).toEqual(
-        BASELINE_MULTI_PROVIDER,
-      );
-      expect(settings.managedKeys).toContain("zoneDefaults.multiProvider");
+        expect(settings.accountId).toEqual(accountId);
+        expect(settings.zoneDefaults.multiProvider).toEqual(true);
+        // The pre-management snapshot was captured for restore-on-destroy.
+        expect(settings.initialSettings.zoneDefaults.multiProvider).toEqual(
+          BASELINE_MULTI_PROVIDER,
+        );
+        expect(settings.managedKeys).toContain("zoneDefaults.multiProvider");
 
-      // Out-of-band verify via the SDK.
-      const live = yield* getSettings(accountId);
-      expect(live.zoneDefaults.multiProvider).toEqual(true);
+        // Out-of-band verify via the SDK.
+        const live = yield* getSettings(accountId);
+        expect(live.zoneDefaults.multiProvider).toEqual(true);
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Destroy restored the managed field to its pre-management value.
-      const restored = yield* getSettings(accountId);
-      expect(restored.zoneDefaults.multiProvider).toEqual(
-        BASELINE_MULTI_PROVIDER,
-      );
+        // Destroy restored the managed field to its pre-management value.
+        const restored = yield* getSettings(accountId);
+        expect(restored.zoneDefaults.multiProvider).toEqual(
+          BASELINE_MULTI_PROVIDER,
+        );
 
-      // Re-running destroy is idempotent (nothing left to restore).
-      yield* stack.destroy();
-      const still = yield* getSettings(accountId);
-      expect(still.zoneDefaults.multiProvider).toEqual(BASELINE_MULTI_PROVIDER);
-    }).pipe(logLevel),
-  { timeout: 300_000 },
-);
+        // Re-running destroy is idempotent (nothing left to restore).
+        yield* stack.destroy();
+        const still = yield* getSettings(accountId);
+        expect(still.zoneDefaults.multiProvider).toEqual(
+          BASELINE_MULTI_PROVIDER,
+        );
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
 
-test.provider(
-  "updates in place, unions managedKeys, restores all managed fields",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
+  test.provider(
+    "updates in place, unions managedKeys, restores all managed fields",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
 
-      yield* stack.destroy();
-      yield* normalizeBaseline(accountId);
+        yield* stack.destroy();
+        yield* normalizeBaseline(accountId);
 
-      const initial = yield* stack.deploy(
-        Cloudflare.AccountDnsSettings("AccountDns", {
-          zoneDefaults: { multiProvider: true },
-        }),
-      );
-      expect(initial.zoneDefaults.multiProvider).toEqual(true);
-      expect(initial.managedKeys).toContain("zoneDefaults.multiProvider");
+        const initial = yield* stack.deploy(
+          Cloudflare.AccountDnsSettings("AccountDns", {
+            zoneDefaults: { multiProvider: true },
+          }),
+        );
+        expect(initial.zoneDefaults.multiProvider).toEqual(true);
+        expect(initial.managedKeys).toContain("zoneDefaults.multiProvider");
 
-      // Same singleton patched in place — a second managed field joins;
-      // the original snapshot survives the update.
-      const updated = yield* stack.deploy(
-        Cloudflare.AccountDnsSettings("AccountDns", {
-          zoneDefaults: { multiProvider: true, secondaryOverrides: true },
-        }),
-      );
-      expect(updated.zoneDefaults.multiProvider).toEqual(true);
-      expect(updated.zoneDefaults.secondaryOverrides).toEqual(true);
-      expect(updated.initialSettings.zoneDefaults.multiProvider).toEqual(
-        BASELINE_MULTI_PROVIDER,
-      );
-      expect(updated.initialSettings.zoneDefaults.secondaryOverrides).toEqual(
-        BASELINE_SECONDARY_OVERRIDES,
-      );
-      expect(updated.managedKeys).toContain("zoneDefaults.multiProvider");
-      expect(updated.managedKeys).toContain("zoneDefaults.secondaryOverrides");
+        // Same singleton patched in place — a second managed field joins;
+        // the original snapshot survives the update.
+        const updated = yield* stack.deploy(
+          Cloudflare.AccountDnsSettings("AccountDns", {
+            zoneDefaults: { multiProvider: true, secondaryOverrides: true },
+          }),
+        );
+        expect(updated.zoneDefaults.multiProvider).toEqual(true);
+        expect(updated.zoneDefaults.secondaryOverrides).toEqual(true);
+        expect(updated.initialSettings.zoneDefaults.multiProvider).toEqual(
+          BASELINE_MULTI_PROVIDER,
+        );
+        expect(updated.initialSettings.zoneDefaults.secondaryOverrides).toEqual(
+          BASELINE_SECONDARY_OVERRIDES,
+        );
+        expect(updated.managedKeys).toContain("zoneDefaults.multiProvider");
+        expect(updated.managedKeys).toContain(
+          "zoneDefaults.secondaryOverrides",
+        );
 
-      const live = yield* getSettings(accountId);
-      expect(live.zoneDefaults.multiProvider).toEqual(true);
-      expect(live.zoneDefaults.secondaryOverrides).toEqual(true);
+        const live = yield* getSettings(accountId);
+        expect(live.zoneDefaults.multiProvider).toEqual(true);
+        expect(live.zoneDefaults.secondaryOverrides).toEqual(true);
 
-      // Drop `multiProvider` from props — the key stays managed (union
-      // across all reconciles) so destroy still restores it.
-      const dropped = yield* stack.deploy(
-        Cloudflare.AccountDnsSettings("AccountDns", {
-          zoneDefaults: { secondaryOverrides: true },
-        }),
-      );
-      expect(dropped.managedKeys).toContain("zoneDefaults.multiProvider");
-      expect(dropped.managedKeys).toContain("zoneDefaults.secondaryOverrides");
+        // Drop `multiProvider` from props — the key stays managed (union
+        // across all reconciles) so destroy still restores it.
+        const dropped = yield* stack.deploy(
+          Cloudflare.AccountDnsSettings("AccountDns", {
+            zoneDefaults: { secondaryOverrides: true },
+          }),
+        );
+        expect(dropped.managedKeys).toContain("zoneDefaults.multiProvider");
+        expect(dropped.managedKeys).toContain(
+          "zoneDefaults.secondaryOverrides",
+        );
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Both managed fields were restored to their pre-management values.
-      const restored = yield* getSettings(accountId);
-      expect(restored.zoneDefaults.multiProvider).toEqual(
-        BASELINE_MULTI_PROVIDER,
-      );
-      expect(restored.zoneDefaults.secondaryOverrides).toEqual(
-        BASELINE_SECONDARY_OVERRIDES,
-      );
-    }).pipe(logLevel),
-  { timeout: 300_000 },
-);
+        // Both managed fields were restored to their pre-management values.
+        const restored = yield* getSettings(accountId);
+        expect(restored.zoneDefaults.multiProvider).toEqual(
+          BASELINE_MULTI_PROVIDER,
+        );
+        expect(restored.zoneDefaults.secondaryOverrides).toEqual(
+          BASELINE_SECONDARY_OVERRIDES,
+        );
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+});

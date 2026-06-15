@@ -1,5 +1,5 @@
+import * as Cloudflare from "@/Cloudflare";
 import type * as runtime from "@cloudflare/workers-types";
-import * as Cloudflare from "alchemy/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";

@@ -93,7 +93,9 @@ export const makeLanguageModel = ({
             const idGen = yield* IdGenerator.IdGenerator;
             const body = toRequestBody({ options, parameters, stream: true });
             const resp = yield* callRaw(body, "streamText");
-            return parseStreamText(resp, idGen);
+            const hasTools =
+              options.tools.length > 0 && options.toolChoice !== "none";
+            return parseStreamText(resp, idGen, hasTools);
           }),
         ),
     });
@@ -568,6 +570,14 @@ interface StreamState {
   readonly finishReason: string | undefined;
   readonly receivedAnyData: boolean;
   readonly receivedDone: boolean;
+  // Workers AI's *native* streaming for function-calling models (e.g.
+  // `@cf/meta/llama-3.3-70b`) does not emit structured `tool_calls` deltas
+  // — it streams the call as a JSON document inside the `response` text
+  // field (`{"name":"get_weather","parameters":{...}}`). When tools were
+  // requested we buffer that text here instead of emitting it as
+  // text-delta, then parse it into tool-params parts on finalize.
+  readonly nativeToolBuffer: string;
+  readonly nativeToolId: string | undefined;
 }
 
 const initialStreamState = (): StreamState => ({
@@ -580,6 +590,8 @@ const initialStreamState = (): StreamState => ({
   finishReason: undefined,
   receivedAnyData: false,
   receivedDone: false,
+  nativeToolBuffer: "",
+  nativeToolId: undefined,
 });
 
 type StreamParts = Array<Response.StreamPartEncoded>;
@@ -746,12 +758,26 @@ const handleNativeText = (
   chunk: Record<string, unknown>,
   parts: StreamParts,
   idGen: IdGenerator.Service,
+  hasTools: boolean,
 ): Effect.Effect<StreamState> => {
   const native = chunk.response;
   if (native == null || native === "") return Effect.succeed(state);
   const text =
     typeof native === "object" ? JSON.stringify(native) : String(native);
   if (text.length === 0) return Effect.succeed(state);
+  // When tools were requested, the native `response` stream is the
+  // tool-call JSON, not prose — buffer it and decide on finalize. We
+  // pre-allocate the tool id here (we're in an Effect, finalize is sync).
+  if (hasTools) {
+    return Effect.gen(function* () {
+      const id = state.nativeToolId ?? (yield* idGen.generateId());
+      return {
+        ...state,
+        nativeToolId: id,
+        nativeToolBuffer: state.nativeToolBuffer + text,
+      };
+    });
+  }
   return emitTextDelta(state, text, parts, idGen);
 };
 
@@ -810,6 +836,7 @@ const handleStreamChunk = (
   state: StreamState,
   data: string,
   idGen: IdGenerator.Service,
+  hasTools: boolean,
 ): Effect.Effect<
   readonly [StreamState, ReadonlyArray<Response.StreamPartEncoded>]
 > =>
@@ -824,11 +851,80 @@ const handleStreamChunk = (
     const parts: StreamParts = [];
     let s: StreamState = { ...state, receivedAnyData: true };
     s = updateChunkMeta(s, chunk);
-    s = yield* handleNativeText(s, chunk, parts, idGen);
+    s = yield* handleNativeText(s, chunk, parts, idGen, hasTools);
     s = yield* handleNativeToolCalls(s, chunk, parts, idGen);
     s = yield* handleOpenAiDelta(s, chunk, parts, idGen);
     return [s, parts] as const;
   });
+
+/**
+ * Decode a buffered native-streaming tool call. Workers AI's native shape
+ * for a function call is a JSON document with `name` plus `parameters` (or
+ * `arguments`), optionally wrapped in an array. Returns one entry per call,
+ * or `undefined` if the buffer isn't a tool-call document (so the caller
+ * can fall back to treating it as plain text).
+ */
+const decodeNativeToolBuffer = (
+  buffer: string,
+): ReadonlyArray<{ name: string; args: string }> | undefined => {
+  const trimmed = buffer.trim();
+  if (trimmed.length === 0 || !(trimmed[0] === "{" || trimmed[0] === "[")) {
+    return undefined;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return undefined;
+  }
+  const items = Array.isArray(parsed) ? parsed : [parsed];
+  const calls = items.flatMap(
+    (
+      item,
+    ): ReadonlyArray<{
+      name: string;
+      args: string;
+    }> => {
+      if (item == null || typeof item !== "object") return [];
+      const rec = item as Record<string, unknown>;
+      const fn = rec.function as Record<string, unknown> | undefined;
+      const name = (fn?.name ?? rec.name) as string | undefined;
+      if (typeof name !== "string" || name.length === 0) return [];
+      const rawArgs = fn?.arguments ?? rec.arguments ?? rec.parameters ?? {};
+      const args =
+        typeof rawArgs === "string" ? rawArgs : JSON.stringify(rawArgs);
+      return [{ name, args }];
+    },
+  );
+  return calls.length > 0 ? calls : undefined;
+};
+
+const flushNativeToolBuffer = (
+  state: StreamState,
+  parts: StreamParts,
+): StreamState => {
+  if (state.nativeToolBuffer.length === 0) return state;
+  const calls = decodeNativeToolBuffer(state.nativeToolBuffer);
+  // Not a tool-call document — the model returned prose despite tools being
+  // available; surface it as text so nothing is dropped.
+  if (calls === undefined) {
+    const id = state.nativeToolId ?? "text-0";
+    parts.push({ type: "text-start", id });
+    parts.push({ type: "text-delta", id, delta: state.nativeToolBuffer });
+    parts.push({ type: "text-end", id });
+    return { ...state, nativeToolBuffer: "", nativeToolId: undefined };
+  }
+  const baseId = state.nativeToolId ?? "tool-0";
+  calls.forEach((call, i) => {
+    const id = i === 0 ? baseId : `${baseId}-${i}`;
+    parts.push({ type: "tool-params-start", id, name: call.name });
+    if (call.args.length > 0) {
+      parts.push({ type: "tool-params-delta", id, delta: call.args });
+    }
+    parts.push({ type: "tool-params-end", id });
+  });
+  return { ...state, nativeToolBuffer: "", nativeToolId: undefined };
+};
 
 const finalizeStream = (
   state: StreamState,
@@ -838,6 +934,9 @@ const finalizeStream = (
   for (const [idx] of s.toolCalls) s = closeToolCall(s, idx, parts);
   s = closeReasoning(s, parts);
   if (s.textId !== undefined) parts.push({ type: "text-end", id: s.textId });
+  // Emit any buffered native-streaming tool call (llama-style) before the
+  // terminal finish part.
+  s = flushNativeToolBuffer(s, parts);
 
   // Three cases for the final reason:
   //  1. The model emitted an explicit `finish_reason`           → map it.
@@ -867,6 +966,7 @@ const finalizeStream = (
 const parseStreamText = (
   resp: Response,
   idGen: IdGenerator.Service,
+  hasTools: boolean,
 ): Stream.Stream<Response.StreamPartEncoded, AiError.AiError> => {
   const body = resp.body;
   if (body === null) {
@@ -883,7 +983,7 @@ const parseStreamText = (
     Stream.catchTag("Retry", (retry) => Stream.die(retry)),
     Stream.mapAccumEffect(
       initialStreamState,
-      (state, event) => handleStreamChunk(state, event.data, idGen),
+      (state, event) => handleStreamChunk(state, event.data, idGen, hasTools),
       { onHalt: (state) => finalizeStream(state) },
     ),
   );

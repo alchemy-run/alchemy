@@ -53,8 +53,7 @@
     "test:canary": "SMOKE_CANARY=1 bun test --only-failures ./test/smoke.test.ts",
     "test:examples": "bun run --filter ./examples/cloudflare-worker --filter ./examples/cloudflare-worker-async --filter ./examples/cloudflare-tanstack --filter ./examples/cloudflare-tanstack-start-solid --filter ./examples/aws-lambda test && bun format",
     "test:fast": "NO_SLOW_TESTS=1 FAST=1 bun run test:live",
-    "test:live": "bun ./scripts/test.ts",
-    "test:local": "LOCAL=1 bun ./scripts/test.ts",
+    "test:live": "bun run --filter alchemy test",
     "test:smoke": "bun test --only-failures ./test/smoke.test.ts",
     "test": "bun run test:live"
   },
@@ -110,6 +109,7 @@
       "sonda": "^0.11.1",
       "typescript": "^6.0.3",
       "vite": "^8.0.7",
+      "vitest": "^4.1.8",
       "uuid": "^14.0.0",
       "web-tree-sitter": "0.25.10",
       "ws": "^8.20.0",
@@ -123,8 +123,7 @@
       "dotenv": "^16.5.0",
       "oxfmt": "^0.36.0",
       "oxlint": "^1.51.0",
-      "pathe": "^2.0.3",
-      "vitest": "^3.2.3"
+      "pathe": "^2.0.3"
     }
   },
   "devDependencies": {
@@ -150,8 +149,6 @@
     "pkg-pr-new": "^0.0.62",
     "ts-morph": "^27.0.2",
     "typescript": "latest",
-    "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.0.18",
     "yaml": "^2.8.2"
   }
 }

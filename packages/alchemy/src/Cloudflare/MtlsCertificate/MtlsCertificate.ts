@@ -275,7 +275,12 @@ export const MtlsCertificateProvider = () =>
           accountId: output.accountId,
           mtlsCertificateId: output.mtlsCertificateId,
         })
-        .pipe(Effect.catchTag("CertificateNotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["CertificateNotFound", "CertificateAlreadyDeleted"],
+            () => Effect.void,
+          ),
+        );
     }),
   });
 

@@ -1,6 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -162,6 +163,24 @@ export const GatewayLocation = Resource<GatewayLocation>(GatewayLocationTypeId);
 export const isGatewayLocation = (value: unknown): value is GatewayLocation =>
   Predicate.hasProperty(value, "Type") && value.Type === GatewayLocationTypeId;
 
+/**
+ * Right after a location create/update, Cloudflare's edge intermittently
+ * answers the write with a 401 `Unauthorized` carrying "This account does
+ * not have access to this feature." even though the account is fully
+ * entitled — the same transient edge/token-propagation blip the read path
+ * rides out as a 403 `Forbidden`. It clears within a few hundred ms, so we
+ * retry the mutation while we see exactly that message. A genuine
+ * entitlement loss carries the same tag, but the bounded retry surfaces it
+ * quickly instead of looping. Matching the message keeps real auth failures
+ * (a bad/expired token) non-retryable.
+ */
+const isTransientFeatureAccessBlip = (e: {
+  readonly _tag: string;
+  readonly message?: string;
+}): boolean =>
+  e._tag === "Unauthorized" &&
+  (e.message ?? "").includes("does not have access to this feature");
+
 export const GatewayLocationProvider = () =>
   Provider.succeed(GatewayLocation, {
     stables: ["locationId", "accountId", "dohSubdomain", "ip", "createdAt"],
@@ -210,15 +229,25 @@ export const GatewayLocationProvider = () =>
       //    are not unique on Cloudflare's side, so there is no
       //    AlreadyExists race to tolerate.
       if (!observed) {
-        const created = yield* zeroTrust.createGatewayLocation({
-          accountId,
-          name,
-          clientDefault: news.clientDefault,
-          ecsSupport: news.ecsSupport,
-          dnsDestinationIpsId: news.dnsDestinationIpsId,
-          endpoints: news.endpoints,
-          networks: news.networks,
-        });
+        const created = yield* zeroTrust
+          .createGatewayLocation({
+            accountId,
+            name,
+            clientDefault: news.clientDefault,
+            ecsSupport: news.ecsSupport,
+            dnsDestinationIpsId: news.dnsDestinationIpsId,
+            endpoints: news.endpoints,
+            networks: news.networks,
+          })
+          // See `isTransientFeatureAccessBlip` — ride out the transient
+          // 401 "does not have access to this feature" edge blip.
+          .pipe(
+            Effect.retry({
+              while: isTransientFeatureAccessBlip,
+              schedule: Schedule.exponential("500 millis"),
+              times: 8,
+            }),
+          );
         return toAttributes(created, accountId);
       }
 
@@ -245,16 +274,26 @@ export const GatewayLocationProvider = () =>
         (news.endpoints !== undefined &&
           !sameEndpoints(observed.endpoints, news.endpoints));
       if (dirty) {
-        const updated = yield* zeroTrust.updateGatewayLocation({
-          accountId,
-          locationId: observed.id!,
-          name: desired.name,
-          clientDefault: desired.clientDefault,
-          ecsSupport: desired.ecsSupport,
-          dnsDestinationIpsId: desired.dnsDestinationIpsId,
-          endpoints: desired.endpoints,
-          networks: desired.networks,
-        });
+        const updated = yield* zeroTrust
+          .updateGatewayLocation({
+            accountId,
+            locationId: observed.id!,
+            name: desired.name,
+            clientDefault: desired.clientDefault,
+            ecsSupport: desired.ecsSupport,
+            dnsDestinationIpsId: desired.dnsDestinationIpsId,
+            endpoints: desired.endpoints,
+            networks: desired.networks,
+          })
+          // See `isTransientFeatureAccessBlip` — ride out the transient
+          // 401 "does not have access to this feature" edge blip.
+          .pipe(
+            Effect.retry({
+              while: isTransientFeatureAccessBlip,
+              schedule: Schedule.exponential("500 millis"),
+              times: 8,
+            }),
+          );
         return toAttributes(updated, accountId);
       }
 

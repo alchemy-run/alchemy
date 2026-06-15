@@ -5,6 +5,7 @@ import * as zaraz from "@distilled.cloud/cloudflare/zaraz";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -20,146 +21,151 @@ const zoneName =
 // Zaraz needs no entitlement (available on all plans), but its config is a
 // zone-wide singleton these tests mutate in place — they only run against a
 // dedicated opt-in zone via CLOUDFLARE_TEST_ZARAZ_ZONE_ID (+ optional _NAME).
-test.provider.skipIf(!zoneId)(
-  "updates and retains a zone-level Zaraz config",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const original = yield* zaraz.getConfig({ zoneId: zoneId! });
-      const toggledDataLayer = !original.dataLayer;
-
-      yield* Effect.gen(function* () {
-        const updated = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.ZarazConfig("Config", {
-              zone: { zoneId: zoneId!, name: zoneName },
-              dataLayer: toggledDataLayer,
-            });
-          }),
-        );
-
-        expect(updated.zoneId).toEqual(zoneId);
-        expect(updated.dataLayer).toEqual(toggledDataLayer);
-
-        const liveUpdated = yield* zaraz.getConfig({ zoneId: zoneId! });
-        expect(liveUpdated.dataLayer).toEqual(toggledDataLayer);
-
-        const restored = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.ZarazConfig("Config", {
-              zone: { zoneId: zoneId!, name: zoneName },
-              dataLayer: original.dataLayer,
-            });
-          }),
-        );
-
-        expect(restored.dataLayer).toEqual(original.dataLayer);
-
+// All cases mutate the same zone-wide Zaraz config singleton; run them
+// serially so they don't corrupt each other under the global concurrent
+// test config.
+describe.sequential("ZarazConfig", () => {
+  test.provider.skipIf(!zoneId)(
+    "updates and retains a zone-level Zaraz config",
+    (stack) =>
+      Effect.gen(function* () {
         yield* stack.destroy();
 
-        const liveRetained = yield* zaraz.getConfig({ zoneId: zoneId! });
-        expect(liveRetained.dataLayer).toEqual(original.dataLayer);
-      }).pipe(
-        Effect.ensuring(
-          zaraz.putConfig(toPutConfig(zoneId!, original)).pipe(Effect.ignore),
-        ),
-      );
-    }).pipe(logLevel),
-  { timeout: 120_000 },
-);
+        const original = yield* zaraz.getConfig({ zoneId: zoneId! });
+        const toggledDataLayer = !original.dataLayer;
 
-// Same gate as above: mutates the zone-wide Zaraz singleton, so it requires
-// the dedicated opt-in zone from CLOUDFLARE_TEST_ZARAZ_ZONE_ID.
-test.provider.skipIf(!zoneId)(
-  "delete true resets Zaraz config to defaults",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+        yield* Effect.gen(function* () {
+          const updated = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.ZarazConfig("Config", {
+                zone: { zoneId: zoneId!, name: zoneName },
+                dataLayer: toggledDataLayer,
+              });
+            }),
+          );
 
-      const original = yield* zaraz.getConfig({ zoneId: zoneId! });
-      const originalWorkflow = yield* zaraz.getWorkflow({ zoneId: zoneId! });
-      const defaults = yield* zaraz.getDefault({ zoneId: zoneId! });
+          expect(updated.zoneId).toEqual(zoneId);
+          expect(updated.dataLayer).toEqual(toggledDataLayer);
 
-      yield* Effect.gen(function* () {
-        yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.ZarazConfig("Config", {
-              zone: { zoneId: zoneId!, name: zoneName },
-              dataLayer: !defaults.dataLayer,
-              workflow: "preview",
-              delete: true,
-            });
-          }),
+          const liveUpdated = yield* zaraz.getConfig({ zoneId: zoneId! });
+          expect(liveUpdated.dataLayer).toEqual(toggledDataLayer);
+
+          const restored = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.ZarazConfig("Config", {
+                zone: { zoneId: zoneId!, name: zoneName },
+                dataLayer: original.dataLayer,
+              });
+            }),
+          );
+
+          expect(restored.dataLayer).toEqual(original.dataLayer);
+
+          yield* stack.destroy();
+
+          const liveRetained = yield* zaraz.getConfig({ zoneId: zoneId! });
+          expect(liveRetained.dataLayer).toEqual(original.dataLayer);
+        }).pipe(
+          Effect.ensuring(
+            zaraz.putConfig(toPutConfig(zoneId!, original)).pipe(Effect.ignore),
+          ),
         );
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
 
-        const liveUpdated = yield* zaraz.getConfig({ zoneId: zoneId! });
-        expect(liveUpdated.dataLayer).toEqual(!defaults.dataLayer);
-
+  // Same gate as above: mutates the zone-wide Zaraz singleton, so it requires
+  // the dedicated opt-in zone from CLOUDFLARE_TEST_ZARAZ_ZONE_ID.
+  test.provider.skipIf(!zoneId)(
+    "delete true resets Zaraz config to defaults",
+    (stack) =>
+      Effect.gen(function* () {
         yield* stack.destroy();
 
-        const liveDeleted = yield* zaraz.getConfig({ zoneId: zoneId! });
-        expect(liveDeleted.dataLayer).toEqual(defaults.dataLayer);
-        const liveDeletedWorkflow = yield* zaraz.getWorkflow({
-          zoneId: zoneId!,
-        });
-        expect(liveDeletedWorkflow).toEqual("realtime");
-      }).pipe(
-        Effect.ensuring(
-          Effect.gen(function* () {
-            yield* zaraz
-              .putConfig(toPutConfig(zoneId!, original))
-              .pipe(Effect.ignore);
-            yield* zaraz
-              .putZaraz({ zoneId: zoneId!, workflow: originalWorkflow })
-              .pipe(Effect.ignore);
-          }),
-        ),
-      );
-    }).pipe(logLevel),
-  { timeout: 120_000 },
-);
+        const original = yield* zaraz.getConfig({ zoneId: zoneId! });
+        const originalWorkflow = yield* zaraz.getWorkflow({ zoneId: zoneId! });
+        const defaults = yield* zaraz.getDefault({ zoneId: zoneId! });
 
-// Same gate as above: mutates the zone-wide Zaraz singleton, so it requires
-// the dedicated opt-in zone from CLOUDFLARE_TEST_ZARAZ_ZONE_ID.
-test.provider.skipIf(!zoneId)(
-  "updates and retains Zaraz workflow mode",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
+        yield* Effect.gen(function* () {
+          yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.ZarazConfig("Config", {
+                zone: { zoneId: zoneId!, name: zoneName },
+                dataLayer: !defaults.dataLayer,
+                workflow: "preview",
+                delete: true,
+              });
+            }),
+          );
 
-      const original = yield* zaraz.getWorkflow({ zoneId: zoneId! });
-      const workflow = original === "realtime" ? "preview" : "realtime";
+          const liveUpdated = yield* zaraz.getConfig({ zoneId: zoneId! });
+          expect(liveUpdated.dataLayer).toEqual(!defaults.dataLayer);
 
-      yield* Effect.gen(function* () {
-        const updated = yield* stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.ZarazConfig("Config", {
-              zone: { zoneId: zoneId!, name: zoneName },
-              workflow,
-            });
-          }),
+          yield* stack.destroy();
+
+          const liveDeleted = yield* zaraz.getConfig({ zoneId: zoneId! });
+          expect(liveDeleted.dataLayer).toEqual(defaults.dataLayer);
+          const liveDeletedWorkflow = yield* zaraz.getWorkflow({
+            zoneId: zoneId!,
+          });
+          expect(liveDeletedWorkflow).toEqual("realtime");
+        }).pipe(
+          Effect.ensuring(
+            Effect.gen(function* () {
+              yield* zaraz
+                .putConfig(toPutConfig(zoneId!, original))
+                .pipe(Effect.ignore);
+              yield* zaraz
+                .putZaraz({ zoneId: zoneId!, workflow: originalWorkflow })
+                .pipe(Effect.ignore);
+            }),
+          ),
         );
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
 
-        expect(updated.workflow).toEqual(workflow);
-
-        const liveUpdated = yield* zaraz.getWorkflow({ zoneId: zoneId! });
-        expect(liveUpdated).toEqual(workflow);
-
+  // Same gate as above: mutates the zone-wide Zaraz singleton, so it requires
+  // the dedicated opt-in zone from CLOUDFLARE_TEST_ZARAZ_ZONE_ID.
+  test.provider.skipIf(!zoneId)(
+    "updates and retains Zaraz workflow mode",
+    (stack) =>
+      Effect.gen(function* () {
         yield* stack.destroy();
 
-        const liveRetained = yield* zaraz.getWorkflow({ zoneId: zoneId! });
-        expect(liveRetained).toEqual(workflow);
-      }).pipe(
-        Effect.ensuring(
-          zaraz
-            .putZaraz({ zoneId: zoneId!, workflow: original })
-            .pipe(Effect.ignore),
-        ),
-      );
-    }).pipe(logLevel),
-  { timeout: 120_000 },
-);
+        const original = yield* zaraz.getWorkflow({ zoneId: zoneId! });
+        const workflow = original === "realtime" ? "preview" : "realtime";
+
+        yield* Effect.gen(function* () {
+          const updated = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.ZarazConfig("Config", {
+                zone: { zoneId: zoneId!, name: zoneName },
+                workflow,
+              });
+            }),
+          );
+
+          expect(updated.workflow).toEqual(workflow);
+
+          const liveUpdated = yield* zaraz.getWorkflow({ zoneId: zoneId! });
+          expect(liveUpdated).toEqual(workflow);
+
+          yield* stack.destroy();
+
+          const liveRetained = yield* zaraz.getWorkflow({ zoneId: zoneId! });
+          expect(liveRetained).toEqual(workflow);
+        }).pipe(
+          Effect.ensuring(
+            zaraz
+              .putZaraz({ zoneId: zoneId!, workflow: original })
+              .pipe(Effect.ignore),
+          ),
+        );
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+});
 
 type ConfigResponse = zaraz.GetConfigResponse | zaraz.PutConfigResponse;
 

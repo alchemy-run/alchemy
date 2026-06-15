@@ -7,6 +7,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -60,125 +61,128 @@ const setBaseline = (zoneId: string, value: "enabled" | "disabled") =>
     }),
   );
 
-test.provider(
-  "surfaces the typed ContentScanningNotEntitled error on unentitled zones",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+// Both cases mutate the same zone-level content-scanning enablement singleton; run them serially so they don't corrupt each other's captured `initialValue` under the global concurrent test config.
+describe.sequential("ContentScanning", () => {
+  test.provider(
+    "surfaces the typed ContentScanningNotEntitled error on unentitled zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // The standard testing zone lacks the Content Scanning add-on — the
-      // distilled enable call must fail with the typed entitlement tag.
-      const error = yield* contentScanning
-        .putContentScanning({ zoneId, value: "enabled" })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "Forbidden",
-            schedule: forbiddenRetrySchedule,
-            times: 8,
+        // The standard testing zone lacks the Content Scanning add-on — the
+        // distilled enable call must fail with the typed entitlement tag.
+        const error = yield* contentScanning
+          .putContentScanning({ zoneId, value: "enabled" })
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "Forbidden",
+              schedule: forbiddenRetrySchedule,
+              times: 8,
+            }),
+            Effect.flip,
+          );
+        expect(error._tag).toEqual("ContentScanningNotEntitled");
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+  );
+
+  test.provider(
+    "pins Content Scanning off on an unentitled zone and destroys cleanly",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
+
+        yield* stack.destroy();
+        // Known baseline: an unentitled zone reports "disabled" (the PUT to
+        // "disabled" succeeds even without the add-on).
+        yield* setBaseline(zoneId, "disabled");
+
+        const scanning = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.ContentScanning("UploadScanning", {
+              zoneId,
+              enabled: false,
+            });
           }),
-          Effect.flip,
         );
-      expect(error._tag).toEqual("ContentScanningNotEntitled");
 
-      yield* stack.destroy();
-    }).pipe(logLevel),
-);
+        expect(scanning.zoneId).toEqual(zoneId);
+        expect(scanning.enabled).toEqual(false);
+        // The pre-management status was captured for restore-on-destroy.
+        expect(scanning.initialValue).toEqual("disabled");
 
-test.provider(
-  "pins Content Scanning off on an unentitled zone and destroys cleanly",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+        // Out-of-band verification via the distilled API.
+        const live = yield* getStatus(zoneId);
+        expect(live.value).toEqual("disabled");
 
-      yield* stack.destroy();
-      // Known baseline: an unentitled zone reports "disabled" (the PUT to
-      // "disabled" succeeds even without the add-on).
-      yield* setBaseline(zoneId, "disabled");
+        // Re-deploying the same desired state is a pure no-op (no PUT) —
+        // on an unentitled zone any write of "enabled" would fail, so this
+        // also proves reconcile only calls the API on a delta.
+        const again = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.ContentScanning("UploadScanning", {
+              zoneId,
+              enabled: false,
+            });
+          }),
+        );
+        expect(again.enabled).toEqual(false);
+        expect(again.initialValue).toEqual("disabled");
 
-      const scanning = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ContentScanning("UploadScanning", {
-            zoneId,
-            enabled: false,
-          });
-        }),
-      );
+        yield* stack.destroy();
 
-      expect(scanning.zoneId).toEqual(zoneId);
-      expect(scanning.enabled).toEqual(false);
-      // The pre-management status was captured for restore-on-destroy.
-      expect(scanning.initialValue).toEqual("disabled");
+        // Destroy restored (kept) the pre-management status.
+        const restored = yield* getStatus(zoneId);
+        expect(restored.value).toEqual("disabled");
+      }).pipe(logLevel),
+  );
 
-      // Out-of-band verification via the distilled API.
-      const live = yield* getStatus(zoneId);
-      expect(live.value).toEqual("disabled");
+  test.provider.skipIf(!entitledZoneId)(
+    "enables Content Scanning and restores the original status on destroy",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = entitledZoneId!;
 
-      // Re-deploying the same desired state is a pure no-op (no PUT) —
-      // on an unentitled zone any write of "enabled" would fail, so this
-      // also proves reconcile only calls the API on a delta.
-      const again = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ContentScanning("UploadScanning", {
-            zoneId,
-            enabled: false,
-          });
-        }),
-      );
-      expect(again.enabled).toEqual(false);
-      expect(again.initialValue).toEqual("disabled");
+        yield* stack.destroy();
+        // Known baseline: Content Scanning defaults to "disabled".
+        yield* setBaseline(zoneId, "disabled");
 
-      yield* stack.destroy();
+        const scanning = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.ContentScanning("UploadScanning", {
+              zoneId,
+            });
+          }),
+        );
 
-      // Destroy restored (kept) the pre-management status.
-      const restored = yield* getStatus(zoneId);
-      expect(restored.value).toEqual("disabled");
-    }).pipe(logLevel),
-);
+        expect(scanning.zoneId).toEqual(zoneId);
+        expect(scanning.enabled).toEqual(true);
+        expect(scanning.initialValue).toEqual("disabled");
 
-test.provider.skipIf(!entitledZoneId)(
-  "enables Content Scanning and restores the original status on destroy",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = entitledZoneId!;
+        const live = yield* getStatus(zoneId);
+        expect(live.value).toEqual("enabled");
 
-      yield* stack.destroy();
-      // Known baseline: Content Scanning defaults to "disabled".
-      yield* setBaseline(zoneId, "disabled");
+        // Update in place — same singleton, initialValue survives.
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.ContentScanning("UploadScanning", {
+              zoneId,
+              enabled: false,
+            });
+          }),
+        );
+        expect(updated.enabled).toEqual(false);
+        expect(updated.initialValue).toEqual("disabled");
 
-      const scanning = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ContentScanning("UploadScanning", {
-            zoneId,
-          });
-        }),
-      );
+        yield* stack.destroy();
 
-      expect(scanning.zoneId).toEqual(zoneId);
-      expect(scanning.enabled).toEqual(true);
-      expect(scanning.initialValue).toEqual("disabled");
-
-      const live = yield* getStatus(zoneId);
-      expect(live.value).toEqual("enabled");
-
-      // Update in place — same singleton, initialValue survives.
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ContentScanning("UploadScanning", {
-            zoneId,
-            enabled: false,
-          });
-        }),
-      );
-      expect(updated.enabled).toEqual(false);
-      expect(updated.initialValue).toEqual("disabled");
-
-      yield* stack.destroy();
-
-      // Destroy restored the status the zone had before we managed it.
-      const restored = yield* getStatus(zoneId);
-      expect(restored.value).toEqual("disabled");
-    }).pipe(logLevel),
-  { timeout: 120_000 },
-);
+        // Destroy restored the status the zone had before we managed it.
+        const restored = yield* getStatus(zoneId);
+        expect(restored.value).toEqual("disabled");
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+});

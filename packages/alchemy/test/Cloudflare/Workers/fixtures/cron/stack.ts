@@ -1,18 +1,19 @@
 import * as Cloudflare from "@/Cloudflare";
-import * as Alchemy from "@/index";
+import * as Alchemy from "@/index.ts";
 import * as Effect from "effect/Effect";
-import AsyncSecretWorker from "./worker.ts";
+import CronTestWorker from "./cron-worker.ts";
 
 export default Alchemy.Stack(
-  "AsyncSecretBindingStack",
+  "CronEventSourceStack",
   {
     providers: Cloudflare.providers(),
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {
-    const worker = yield* AsyncSecretWorker;
+    const worker = yield* CronTestWorker;
     return {
       url: worker.url.as<string>(),
+      crons: worker.crons,
     };
   }),
 );

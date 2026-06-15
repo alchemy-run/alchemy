@@ -7,6 +7,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -57,72 +58,75 @@ const setBaseline = (zoneId: string, enabled: boolean) =>
     }),
   );
 
-test.provider(
-  "enables AOP and restores the original value on destroy",
-  (stack) =>
+// Both cases toggle the same zone-level AOP singleton; run them serially so they don't corrupt each other's captured `initialEnabled` under the global concurrent test config.
+describe.sequential("Setting", () => {
+  test.provider(
+    "enables AOP and restores the original value on destroy",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
+
+        yield* stack.destroy();
+        // Known baseline: zone-level AOP defaults to disabled.
+        yield* setBaseline(zoneId, false);
+
+        const setting = yield* stack.deploy(
+          Cloudflare.OriginTlsClientAuthSetting("Aop", {
+            zoneId,
+            enabled: true,
+          }),
+        );
+
+        expect(setting.zoneId).toEqual(zoneId);
+        expect(setting.enabled).toEqual(true);
+        // The pre-management value is captured for restore-on-destroy.
+        expect(setting.initialEnabled).toEqual(false);
+
+        const observed = yield* getSetting(zoneId);
+        expect(observed.enabled).toEqual(true);
+
+        yield* stack.destroy();
+
+        // Destroy restores the captured baseline, not a hardcoded default.
+        const restored = yield* getSetting(zoneId);
+        expect(restored.enabled).toEqual(false);
+      }).pipe(logLevel),
+  );
+
+  test.provider("updates the enabled flag in place", (stack) =>
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
 
       yield* stack.destroy();
-      // Known baseline: zone-level AOP defaults to disabled.
       yield* setBaseline(zoneId, false);
 
-      const setting = yield* stack.deploy(
-        Cloudflare.OriginTlsClientAuthSetting("Aop", {
+      const enabled = yield* stack.deploy(
+        Cloudflare.OriginTlsClientAuthSetting("AopUpdate", {
           zoneId,
           enabled: true,
         }),
       );
+      expect(enabled.enabled).toEqual(true);
+      expect(enabled.initialEnabled).toEqual(false);
 
-      expect(setting.zoneId).toEqual(zoneId);
-      expect(setting.enabled).toEqual(true);
-      // The pre-management value is captured for restore-on-destroy.
-      expect(setting.initialEnabled).toEqual(false);
+      // In-place update — the singleton is never replaced.
+      const disabled = yield* stack.deploy(
+        Cloudflare.OriginTlsClientAuthSetting("AopUpdate", {
+          zoneId,
+          enabled: false,
+        }),
+      );
+      expect(disabled.enabled).toEqual(false);
+      // The original baseline survives the update.
+      expect(disabled.initialEnabled).toEqual(false);
 
       const observed = yield* getSetting(zoneId);
-      expect(observed.enabled).toEqual(true);
+      expect(observed.enabled).toEqual(false);
 
       yield* stack.destroy();
 
-      // Destroy restores the captured baseline, not a hardcoded default.
       const restored = yield* getSetting(zoneId);
       expect(restored.enabled).toEqual(false);
     }).pipe(logLevel),
-);
-
-test.provider("updates the enabled flag in place", (stack) =>
-  Effect.gen(function* () {
-    const zoneId = yield* resolveZoneId;
-
-    yield* stack.destroy();
-    yield* setBaseline(zoneId, false);
-
-    const enabled = yield* stack.deploy(
-      Cloudflare.OriginTlsClientAuthSetting("AopUpdate", {
-        zoneId,
-        enabled: true,
-      }),
-    );
-    expect(enabled.enabled).toEqual(true);
-    expect(enabled.initialEnabled).toEqual(false);
-
-    // In-place update — the singleton is never replaced.
-    const disabled = yield* stack.deploy(
-      Cloudflare.OriginTlsClientAuthSetting("AopUpdate", {
-        zoneId,
-        enabled: false,
-      }),
-    );
-    expect(disabled.enabled).toEqual(false);
-    // The original baseline survives the update.
-    expect(disabled.initialEnabled).toEqual(false);
-
-    const observed = yield* getSetting(zoneId);
-    expect(observed.enabled).toEqual(false);
-
-    yield* stack.destroy();
-
-    const restored = yield* getSetting(zoneId);
-    expect(restored.enabled).toEqual(false);
-  }).pipe(logLevel),
-);
+  );
+});

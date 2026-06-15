@@ -1,6 +1,6 @@
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Test from "alchemy/Test/Vitest";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

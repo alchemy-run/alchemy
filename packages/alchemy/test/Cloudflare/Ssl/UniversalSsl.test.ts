@@ -7,6 +7,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -63,118 +64,120 @@ const setBaseline = (zoneId: string, enabled: boolean) =>
     }),
   );
 
-test.provider(
-  "disables Universal SSL and restores the original value on destroy",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+describe.sequential("UniversalSsl", () => {
+  test.provider(
+    "disables Universal SSL and restores the original value on destroy",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      // Known baseline: Universal SSL defaults to enabled.
-      yield* setBaseline(zoneId, true);
+        yield* stack.destroy();
+        // Known baseline: Universal SSL defaults to enabled.
+        yield* setBaseline(zoneId, true);
 
-      const setting = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.UniversalSsl("UniversalSsl", {
-            zoneId,
-            enabled: false,
-          });
-        }),
-      );
+        const setting = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.UniversalSsl("UniversalSsl", {
+              zoneId,
+              enabled: false,
+            });
+          }),
+        );
 
-      expect(setting.zoneId).toEqual(zoneId);
-      expect(setting.enabled).toEqual(false);
-      // The pre-management value was captured for restore-on-destroy.
-      expect(setting.initialEnabled).toEqual(true);
+        expect(setting.zoneId).toEqual(zoneId);
+        expect(setting.enabled).toEqual(false);
+        // The pre-management value was captured for restore-on-destroy.
+        expect(setting.initialEnabled).toEqual(true);
 
-      const live = yield* getUniversal(zoneId);
-      expect(live.enabled).toEqual(false);
+        const live = yield* getUniversal(zoneId);
+        expect(live.enabled).toEqual(false);
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Destroy restored the value the setting had before we managed it.
-      const restored = yield* getUniversal(zoneId);
-      expect(restored.enabled).toEqual(true);
-    }).pipe(logLevel),
-);
+        // Destroy restored the value the setting had before we managed it.
+        const restored = yield* getUniversal(zoneId);
+        expect(restored.enabled).toEqual(true);
+      }).pipe(logLevel),
+  );
 
-test.provider(
-  "updates enabled in place and keeps the captured initial value",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider(
+    "updates enabled in place and keeps the captured initial value",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* setBaseline(zoneId, true);
+        yield* stack.destroy();
+        yield* setBaseline(zoneId, true);
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.UniversalSsl("UniversalSsl", {
-            zoneId,
-            enabled: false,
-          });
-        }),
-      );
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.UniversalSsl("UniversalSsl", {
+              zoneId,
+              enabled: false,
+            });
+          }),
+        );
 
-      expect(initial.enabled).toEqual(false);
-      expect(initial.initialEnabled).toEqual(true);
+        expect(initial.enabled).toEqual(false);
+        expect(initial.initialEnabled).toEqual(true);
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.UniversalSsl("UniversalSsl", {
-            zoneId,
-            enabled: true,
-          });
-        }),
-      );
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.UniversalSsl("UniversalSsl", {
+              zoneId,
+              enabled: true,
+            });
+          }),
+        );
 
-      // Same singleton patched in place; the original value survives the
-      // update so destroy still restores the pre-management state.
-      expect(updated.enabled).toEqual(true);
-      expect(updated.initialEnabled).toEqual(true);
+        // Same singleton patched in place; the original value survives the
+        // update so destroy still restores the pre-management state.
+        expect(updated.enabled).toEqual(true);
+        expect(updated.initialEnabled).toEqual(true);
 
-      const live = yield* getUniversal(zoneId);
-      expect(live.enabled).toEqual(true);
+        const live = yield* getUniversal(zoneId);
+        expect(live.enabled).toEqual(true);
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const restored = yield* getUniversal(zoneId);
-      expect(restored.enabled).toEqual(true);
-    }).pipe(logLevel),
-);
+        const restored = yield* getUniversal(zoneId);
+        expect(restored.enabled).toEqual(true);
+      }).pipe(logLevel),
+  );
 
-test.provider(
-  "destroy restores a disabled baseline when managing from a disabled zone",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider(
+    "destroy restores a disabled baseline when managing from a disabled zone",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      // Pre-management state is disabled — the capture-and-restore must
-      // bring the zone back to disabled, not to Cloudflare's default.
-      yield* setBaseline(zoneId, false);
+        yield* stack.destroy();
+        // Pre-management state is disabled — the capture-and-restore must
+        // bring the zone back to disabled, not to Cloudflare's default.
+        yield* setBaseline(zoneId, false);
 
-      const setting = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.UniversalSsl("UniversalSsl", {
-            zoneId,
-            enabled: true,
-          });
-        }),
-      );
+        const setting = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.UniversalSsl("UniversalSsl", {
+              zoneId,
+              enabled: true,
+            });
+          }),
+        );
 
-      expect(setting.enabled).toEqual(true);
-      expect(setting.initialEnabled).toEqual(false);
+        expect(setting.enabled).toEqual(true);
+        expect(setting.initialEnabled).toEqual(false);
 
-      const live = yield* getUniversal(zoneId);
-      expect(live.enabled).toEqual(true);
+        const live = yield* getUniversal(zoneId);
+        expect(live.enabled).toEqual(true);
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const restored = yield* getUniversal(zoneId);
-      expect(restored.enabled).toEqual(false);
+        const restored = yield* getUniversal(zoneId);
+        expect(restored.enabled).toEqual(false);
 
-      // Leave the zone in its default state for other suites.
-      yield* setBaseline(zoneId, true);
-    }).pipe(logLevel),
-);
+        // Leave the zone in its default state for other suites.
+        yield* setBaseline(zoneId, true);
+      }).pipe(logLevel),
+  );
+});

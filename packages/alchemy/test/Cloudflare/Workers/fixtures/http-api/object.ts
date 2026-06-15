@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@/Cloudflare";
 import { Layer } from "effect";
 import * as Effect from "effect/Effect";
 import { HttpRouter } from "effect/unstable/http";

@@ -7,6 +7,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -57,85 +58,90 @@ const setBaseline = (zoneId: string, value: "on" | "off") =>
     }),
   );
 
-test.provider(
-  "enables Tiered Caching and restores the original value on destroy",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+// Both cases mutate the same zone-level Tiered Caching singleton with
+// opposite baselines; run them serially so they don't corrupt each other's
+// captured `initialValue` under the global concurrent test config.
+describe.sequential("TieredCaching", () => {
+  test.provider(
+    "enables Tiered Caching and restores the original value on destroy",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      // Known baseline: tiered caching off before we manage it.
-      yield* setBaseline(zoneId, "off");
+        yield* stack.destroy();
+        // Known baseline: tiered caching off before we manage it.
+        yield* setBaseline(zoneId, "off");
 
-      const setting = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.TieredCaching("TieredCaching", {
-            zoneId,
-          });
-        }),
-      );
+        const setting = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.TieredCaching("TieredCaching", {
+              zoneId,
+            });
+          }),
+        );
 
-      expect(setting.zoneId).toEqual(zoneId);
-      expect(setting.value).toEqual("on");
-      // The pre-management value was captured for restore-on-destroy.
-      expect(setting.initialValue).toEqual("off");
+        expect(setting.zoneId).toEqual(zoneId);
+        expect(setting.value).toEqual("on");
+        // The pre-management value was captured for restore-on-destroy.
+        expect(setting.initialValue).toEqual("off");
 
-      const live = yield* getTieredCaching(zoneId);
-      expect(live.value).toEqual("on");
+        const live = yield* getTieredCaching(zoneId);
+        expect(live.value).toEqual("on");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Destroy restored the value the setting had before we managed it.
-      const restored = yield* getTieredCaching(zoneId);
-      expect(restored.value).toEqual("off");
-    }).pipe(logLevel),
-);
+        // Destroy restored the value the setting had before we managed it.
+        const restored = yield* getTieredCaching(zoneId);
+        expect(restored.value).toEqual("off");
+      }).pipe(logLevel),
+  );
 
-test.provider(
-  "updates enabled in place and keeps the captured initial value",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider(
+    "updates enabled in place and keeps the captured initial value",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      // Known baseline: tiered caching on before we manage it.
-      yield* setBaseline(zoneId, "on");
+        yield* stack.destroy();
+        // Known baseline: tiered caching on before we manage it.
+        yield* setBaseline(zoneId, "on");
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.TieredCaching("TieredCaching", {
-            zoneId,
-            enabled: false,
-          });
-        }),
-      );
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.TieredCaching("TieredCaching", {
+              zoneId,
+              enabled: false,
+            });
+          }),
+        );
 
-      expect(initial.value).toEqual("off");
-      expect(initial.initialValue).toEqual("on");
+        expect(initial.value).toEqual("off");
+        expect(initial.initialValue).toEqual("on");
 
-      const liveOff = yield* getTieredCaching(zoneId);
-      expect(liveOff.value).toEqual("off");
+        const liveOff = yield* getTieredCaching(zoneId);
+        expect(liveOff.value).toEqual("off");
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.TieredCaching("TieredCaching", {
-            zoneId,
-            enabled: true,
-          });
-        }),
-      );
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.TieredCaching("TieredCaching", {
+              zoneId,
+              enabled: true,
+            });
+          }),
+        );
 
-      // Same singleton patched in place; the original value survives the
-      // update so destroy still restores the pre-management state.
-      expect(updated.value).toEqual("on");
-      expect(updated.initialValue).toEqual("on");
+        // Same singleton patched in place; the original value survives the
+        // update so destroy still restores the pre-management state.
+        expect(updated.value).toEqual("on");
+        expect(updated.initialValue).toEqual("on");
 
-      const liveOn = yield* getTieredCaching(zoneId);
-      expect(liveOn.value).toEqual("on");
+        const liveOn = yield* getTieredCaching(zoneId);
+        expect(liveOn.value).toEqual("on");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const restored = yield* getTieredCaching(zoneId);
-      expect(restored.value).toEqual("on");
-    }).pipe(logLevel),
-);
+        const restored = yield* getTieredCaching(zoneId);
+        expect(restored.value).toEqual("on");
+      }).pipe(logLevel),
+  );
+});

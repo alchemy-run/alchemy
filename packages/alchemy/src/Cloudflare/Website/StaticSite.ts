@@ -1,4 +1,3 @@
-import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
@@ -6,6 +5,7 @@ import { Command, type CommandProps } from "../../Build/Command.ts";
 import { DevServer } from "../../Build/DevServer.ts";
 import type { Input, InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
+import * as Output from "../../Output.ts";
 import { effectClass } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
 import type { Providers } from "../Providers.ts";

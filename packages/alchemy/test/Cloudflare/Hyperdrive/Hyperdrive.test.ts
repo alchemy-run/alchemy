@@ -1,45 +1,36 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Neon from "@/Neon";
 import * as Test from "@/Test/Vitest";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
-import { expect } from "@effect/vitest";
+import { assert, expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test } = Test.make({
+  providers: Layer.merge(Cloudflare.providers(), Neon.providers()),
+});
 
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
-
-const baseOrigin = {
-  scheme: "postgres" as const,
-  host: "ep-cool-darkness-123456.us-east-2.aws.neon.tech",
-  port: 5432,
-  database: "app",
-  user: "app",
-  password: Redacted.make("p4ssword!"),
-};
-
-// Skipped in PR #319 ("stabilize live test suite"), predating the 2026-06
-// coverage factory; `baseOrigin` is a placeholder Neon host and Cloudflare
-// validates origin connectivity on create — needs a reachable Postgres origin
-// (e.g. a real Neon database) before unskipping.
-test.provider.skip("create and delete hyperdrive with default props", (stack) =>
+test.provider("create and delete hyperdrive with default props", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
 
-    const hd = yield* stack.deploy(
+    const { db, hd } = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.Hyperdrive("DefaultHyperdrive", {
-          origin: baseOrigin,
+        const db = yield* Neon.Project("DefaultProject");
+        const hd = yield* Cloudflare.Hyperdrive("DefaultHyperdrive", {
+          origin: db.origin,
         });
+        return { db, hd };
       }),
     );
 
@@ -51,8 +42,8 @@ test.provider.skip("create and delete hyperdrive with default props", (stack) =>
       hyperdriveId: hd.hyperdriveId,
     });
     expect(actual.id).toEqual(hd.hyperdriveId);
-    // @ts-expect-error
-    expect(actual.origin.host).toEqual(baseOrigin.host);
+    assert("host" in actual.origin, "db.origin must have a host");
+    expect(actual.origin.host).toEqual(db.origin.host);
 
     yield* stack.destroy();
 
@@ -60,10 +51,7 @@ test.provider.skip("create and delete hyperdrive with default props", (stack) =>
   }).pipe(logLevel),
 );
 
-// Skipped in PR #319 for the same reason as above: the placeholder
-// `baseOrigin` is not a reachable Postgres origin, which create-time
-// validation requires.
-test.provider.skip("create, update, delete hyperdrive", (stack) =>
+test.provider("create, update, delete hyperdrive", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -71,8 +59,9 @@ test.provider.skip("create, update, delete hyperdrive", (stack) =>
 
     const hd = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.Hyperdrive("UpdateHyperdrive", {
-          origin: baseOrigin,
+        const project = yield* Neon.Project("CRUDProject");
+        return yield* Cloudflare.Hyperdrive("CRUDHyperdrive", {
+          origin: project.origin,
           caching: { disabled: false, maxAge: 60 },
         });
       }),
@@ -80,8 +69,9 @@ test.provider.skip("create, update, delete hyperdrive", (stack) =>
 
     const updated = yield* stack.deploy(
       Effect.gen(function* () {
-        return yield* Cloudflare.Hyperdrive("UpdateHyperdrive", {
-          origin: baseOrigin,
+        const project = yield* Neon.Project("CRUDProject");
+        return yield* Cloudflare.Hyperdrive("CRUDHyperdrive", {
+          origin: project.origin,
           caching: { disabled: true },
         });
       }),
