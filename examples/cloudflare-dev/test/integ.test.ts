@@ -46,14 +46,14 @@ test(
     const { asyncWorker } = yield* stack;
     const url = asyncWorker!;
 
-    const first = yield* HttpClient.get(url);
+    const first = yield* HttpClient.get(new URL("/counter", url));
     expect(first.status).toBe(200);
     const firstBody = yield* first.text;
     const firstMatch = firstBody.match(/^Hello, world! (\d+)$/);
     expect(firstMatch).not.toBeNull();
     const firstCount = Number(firstMatch![1]);
 
-    const second = yield* HttpClient.get(url);
+    const second = yield* HttpClient.get(new URL("/counter", url));
     expect(second.status).toBe(200);
     const secondBody = yield* second.text;
     const secondMatch = secondBody.match(/^Hello, world! (\d+)$/);
@@ -61,6 +61,18 @@ test(
     const secondCount = Number(secondMatch![1]);
 
     expect(secondCount).toBe(firstCount + 1);
+  }),
+);
+
+test(
+  "AsyncWorker serves assets",
+  Effect.gen(function* () {
+    const { asyncWorker } = yield* stack;
+    const url = asyncWorker!;
+    const response = yield* HttpClient.get(new URL("/", url));
+    expect(response.status).toBe(200);
+    const body = yield* response.text;
+    expect(body).toMatch("<h1>Hello, world!</h1>");
   }),
 );
 
