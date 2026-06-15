@@ -7,6 +7,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -60,127 +61,129 @@ const setBaseline = (
     }),
   );
 
-test.provider(
-  "pins the setting and restores the original value on destroy",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+describe.sequential("OriginPostQuantumEncryption", () => {
+  test.provider(
+    "pins the setting and restores the original value on destroy",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      // Known baseline: Cloudflare's default is "supported".
-      yield* setBaseline(zoneId, "supported");
+        yield* stack.destroy();
+        // Known baseline: Cloudflare's default is "supported".
+        yield* setBaseline(zoneId, "supported");
 
-      const setting = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
-            zoneId,
-            value: "preferred",
-          });
-        }),
-      );
+        const setting = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
+              zoneId,
+              value: "preferred",
+            });
+          }),
+        );
 
-      expect(setting.zoneId).toEqual(zoneId);
-      expect(setting.value).toEqual("preferred");
-      // The pre-management value was captured for restore-on-destroy.
-      expect(setting.initialValue).toEqual("supported");
-      expect(setting.editable).toEqual(true);
+        expect(setting.zoneId).toEqual(zoneId);
+        expect(setting.value).toEqual("preferred");
+        // The pre-management value was captured for restore-on-destroy.
+        expect(setting.initialValue).toEqual("supported");
+        expect(setting.editable).toEqual(true);
 
-      const live = yield* getSetting(zoneId);
-      expect(live.value).toEqual("preferred");
+        const live = yield* getSetting(zoneId);
+        expect(live.value).toEqual("preferred");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Destroy restored the value the setting had before we managed it.
-      const restored = yield* getSetting(zoneId);
-      expect(restored.value).toEqual("supported");
-    }).pipe(logLevel),
-);
+        // Destroy restored the value the setting had before we managed it.
+        const restored = yield* getSetting(zoneId);
+        expect(restored.value).toEqual("supported");
+      }).pipe(logLevel),
+  );
 
-test.provider(
-  "updates the value in place and keeps the captured initial value",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider(
+    "updates the value in place and keeps the captured initial value",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      // Start from a non-default baseline so capture-and-restore is
-      // observable: destroy must restore "off", not the documented default.
-      yield* setBaseline(zoneId, "off");
+        yield* stack.destroy();
+        // Start from a non-default baseline so capture-and-restore is
+        // observable: destroy must restore "off", not the documented default.
+        yield* setBaseline(zoneId, "off");
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
-            zoneId,
-            value: "preferred",
-          });
-        }),
-      );
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
+              zoneId,
+              value: "preferred",
+            });
+          }),
+        );
 
-      expect(initial.value).toEqual("preferred");
-      expect(initial.initialValue).toEqual("off");
+        expect(initial.value).toEqual("preferred");
+        expect(initial.initialValue).toEqual("off");
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
-            zoneId,
-            value: "supported",
-          });
-        }),
-      );
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
+              zoneId,
+              value: "supported",
+            });
+          }),
+        );
 
-      // Same singleton updated in place; the original value survives the
-      // update so destroy still restores the pre-management state.
-      expect(updated.value).toEqual("supported");
-      expect(updated.initialValue).toEqual("off");
+        // Same singleton updated in place; the original value survives the
+        // update so destroy still restores the pre-management state.
+        expect(updated.value).toEqual("supported");
+        expect(updated.initialValue).toEqual("off");
 
-      const live = yield* getSetting(zoneId);
-      expect(live.value).toEqual("supported");
+        const live = yield* getSetting(zoneId);
+        expect(live.value).toEqual("supported");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Restored to the captured pre-management value, not the default.
-      const restored = yield* getSetting(zoneId);
-      expect(restored.value).toEqual("off");
+        // Restored to the captured pre-management value, not the default.
+        const restored = yield* getSetting(zoneId);
+        expect(restored.value).toEqual("off");
 
-      // Leave the zone on Cloudflare's documented default for other tests.
-      yield* setBaseline(zoneId, "supported");
-    }).pipe(logLevel),
-);
+        // Leave the zone on Cloudflare's documented default for other tests.
+        yield* setBaseline(zoneId, "supported");
+      }).pipe(logLevel),
+  );
 
-test.provider(
-  "no-op redeploy converges without changing the setting",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider(
+    "no-op redeploy converges without changing the setting",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* setBaseline(zoneId, "supported");
+        yield* stack.destroy();
+        yield* setBaseline(zoneId, "supported");
 
-      const deploy = stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
-            zoneId,
-            value: "off",
-          });
-        }),
-      );
+        const deploy = stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.OriginPostQuantumEncryption("OriginPqe", {
+              zoneId,
+              value: "off",
+            });
+          }),
+        );
 
-      const first = yield* deploy;
-      expect(first.value).toEqual("off");
-      expect(first.initialValue).toEqual("supported");
+        const first = yield* deploy;
+        expect(first.value).toEqual("off");
+        expect(first.initialValue).toEqual("supported");
 
-      // Redeploy with identical props — reconcile observes "off" already
-      // live and skips the PUT; attributes stay stable.
-      const second = yield* deploy;
-      expect(second.value).toEqual("off");
-      expect(second.initialValue).toEqual("supported");
+        // Redeploy with identical props — reconcile observes "off" already
+        // live and skips the PUT; attributes stay stable.
+        const second = yield* deploy;
+        expect(second.value).toEqual("off");
+        expect(second.initialValue).toEqual("supported");
 
-      const live = yield* getSetting(zoneId);
-      expect(live.value).toEqual("off");
+        const live = yield* getSetting(zoneId);
+        expect(live.value).toEqual("off");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const restored = yield* getSetting(zoneId);
-      expect(restored.value).toEqual("supported");
-    }).pipe(logLevel),
-);
+        const restored = yield* getSetting(zoneId);
+        expect(restored.value).toEqual("supported");
+      }).pipe(logLevel),
+  );
+});

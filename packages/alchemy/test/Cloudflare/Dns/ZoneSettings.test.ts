@@ -7,6 +7,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -76,119 +77,121 @@ const normalizeBaseline = (zoneId: string) =>
     );
   });
 
-test.provider(
-  "pins flattenAllCnames and restores the pre-management value on destroy",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+describe.sequential("ZoneSettings", () => {
+  test.provider(
+    "pins flattenAllCnames and restores the pre-management value on destroy",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* normalizeBaseline(zoneId);
+        yield* stack.destroy();
+        yield* normalizeBaseline(zoneId);
 
-      const settings = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
-            zoneId,
-            flattenAllCnames: true,
-          });
-        }),
-      );
+        const settings = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
+              zoneId,
+              flattenAllCnames: true,
+            });
+          }),
+        );
 
-      expect(settings.zoneId).toEqual(zoneId);
-      expect(settings.flattenAllCnames).toEqual(true);
-      // The pre-management snapshot was captured for restore-on-destroy.
-      expect(settings.initialSettings.flattenAllCnames).toEqual(
-        BASELINE_FLATTEN_ALL_CNAMES,
-      );
-      expect(settings.managedKeys).toContain("flattenAllCnames");
+        expect(settings.zoneId).toEqual(zoneId);
+        expect(settings.flattenAllCnames).toEqual(true);
+        // The pre-management snapshot was captured for restore-on-destroy.
+        expect(settings.initialSettings.flattenAllCnames).toEqual(
+          BASELINE_FLATTEN_ALL_CNAMES,
+        );
+        expect(settings.managedKeys).toContain("flattenAllCnames");
 
-      // Out-of-band verify via the SDK.
-      const live = yield* getSettings(zoneId);
-      expect(live.flattenAllCnames).toEqual(true);
+        // Out-of-band verify via the SDK.
+        const live = yield* getSettings(zoneId);
+        expect(live.flattenAllCnames).toEqual(true);
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Destroy restored the managed field to its pre-management value.
-      const restored = yield* getSettings(zoneId);
-      expect(restored.flattenAllCnames).toEqual(BASELINE_FLATTEN_ALL_CNAMES);
+        // Destroy restored the managed field to its pre-management value.
+        const restored = yield* getSettings(zoneId);
+        expect(restored.flattenAllCnames).toEqual(BASELINE_FLATTEN_ALL_CNAMES);
 
-      // Re-running destroy is idempotent (nothing left to restore).
-      yield* stack.destroy();
-      const still = yield* getSettings(zoneId);
-      expect(still.flattenAllCnames).toEqual(BASELINE_FLATTEN_ALL_CNAMES);
-    }).pipe(logLevel),
-  { timeout: 300_000 },
-);
+        // Re-running destroy is idempotent (nothing left to restore).
+        yield* stack.destroy();
+        const still = yield* getSettings(zoneId);
+        expect(still.flattenAllCnames).toEqual(BASELINE_FLATTEN_ALL_CNAMES);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
 
-test.provider(
-  "updates in place, unions managedKeys, restores all managed fields",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider(
+    "updates in place, unions managedKeys, restores all managed fields",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* normalizeBaseline(zoneId);
+        yield* stack.destroy();
+        yield* normalizeBaseline(zoneId);
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
-            zoneId,
-            multiProvider: true,
-          });
-        }),
-      );
-      expect(initial.multiProvider).toEqual(true);
-      expect(initial.initialSettings.multiProvider).toEqual(
-        BASELINE_MULTI_PROVIDER,
-      );
-      expect(initial.managedKeys).toContain("multiProvider");
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
+              zoneId,
+              multiProvider: true,
+            });
+          }),
+        );
+        expect(initial.multiProvider).toEqual(true);
+        expect(initial.initialSettings.multiProvider).toEqual(
+          BASELINE_MULTI_PROVIDER,
+        );
+        expect(initial.managedKeys).toContain("multiProvider");
 
-      // Same singleton patched in place — new value plus a second managed
-      // field; the original snapshot survives the update.
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
-            zoneId,
-            multiProvider: true,
-            flattenAllCnames: true,
-          });
-        }),
-      );
-      expect(updated.zoneId).toEqual(zoneId);
-      expect(updated.multiProvider).toEqual(true);
-      expect(updated.flattenAllCnames).toEqual(true);
-      expect(updated.initialSettings.multiProvider).toEqual(
-        BASELINE_MULTI_PROVIDER,
-      );
-      expect(updated.initialSettings.flattenAllCnames).toEqual(
-        BASELINE_FLATTEN_ALL_CNAMES,
-      );
-      expect(updated.managedKeys).toContain("multiProvider");
-      expect(updated.managedKeys).toContain("flattenAllCnames");
+        // Same singleton patched in place — new value plus a second managed
+        // field; the original snapshot survives the update.
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
+              zoneId,
+              multiProvider: true,
+              flattenAllCnames: true,
+            });
+          }),
+        );
+        expect(updated.zoneId).toEqual(zoneId);
+        expect(updated.multiProvider).toEqual(true);
+        expect(updated.flattenAllCnames).toEqual(true);
+        expect(updated.initialSettings.multiProvider).toEqual(
+          BASELINE_MULTI_PROVIDER,
+        );
+        expect(updated.initialSettings.flattenAllCnames).toEqual(
+          BASELINE_FLATTEN_ALL_CNAMES,
+        );
+        expect(updated.managedKeys).toContain("multiProvider");
+        expect(updated.managedKeys).toContain("flattenAllCnames");
 
-      const live = yield* getSettings(zoneId);
-      expect(live.multiProvider).toEqual(true);
-      expect(live.flattenAllCnames).toEqual(true);
+        const live = yield* getSettings(zoneId);
+        expect(live.multiProvider).toEqual(true);
+        expect(live.flattenAllCnames).toEqual(true);
 
-      // Drop `multiProvider` from props — the key stays managed (union
-      // across all reconciles) so destroy still restores it.
-      const dropped = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
-            zoneId,
-            flattenAllCnames: true,
-          });
-        }),
-      );
-      expect(dropped.managedKeys).toContain("multiProvider");
-      expect(dropped.managedKeys).toContain("flattenAllCnames");
+        // Drop `multiProvider` from props — the key stays managed (union
+        // across all reconciles) so destroy still restores it.
+        const dropped = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.ZoneDnsSettings("DnsSettings", {
+              zoneId,
+              flattenAllCnames: true,
+            });
+          }),
+        );
+        expect(dropped.managedKeys).toContain("multiProvider");
+        expect(dropped.managedKeys).toContain("flattenAllCnames");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Both managed fields were restored to their pre-management values.
-      const restored = yield* getSettings(zoneId);
-      expect(restored.multiProvider).toEqual(BASELINE_MULTI_PROVIDER);
-      expect(restored.flattenAllCnames).toEqual(BASELINE_FLATTEN_ALL_CNAMES);
-    }).pipe(logLevel),
-  { timeout: 300_000 },
-);
+        // Both managed fields were restored to their pre-management values.
+        const restored = yield* getSettings(zoneId);
+        expect(restored.multiProvider).toEqual(BASELINE_MULTI_PROVIDER);
+        expect(restored.flattenAllCnames).toEqual(BASELINE_FLATTEN_ALL_CNAMES);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+});

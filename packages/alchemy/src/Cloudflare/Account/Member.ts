@@ -239,9 +239,12 @@ export const AccountMemberProvider = () =>
         observed = yield* findByEmail(accountId, news.email);
       }
 
-      // 3. Ensure — invite when missing. A concurrent invite surfaces as
-      //    a validation error on the duplicate email: converge by
-      //    re-scanning for the membership that won the race.
+      // 3. Ensure — invite when missing. A concurrent (or orphaned) invite
+      //    for the same email surfaces either as a generic validation error
+      //    or as the typed `AccountMemberAlreadyExists` (Cloudflare answers
+      //    the duplicate with HTTP 400 "Account member already exists for
+      //    email address"): in both cases converge by re-scanning for the
+      //    membership that won the race and adopting it.
       if (!observed) {
         const created = yield* accounts
           .createMember({
@@ -252,12 +255,14 @@ export const AccountMemberProvider = () =>
             status: news.status,
           })
           .pipe(
-            Effect.catchTag("ValidationError", (error) =>
-              findByEmail(accountId, news.email).pipe(
-                Effect.flatMap((existing) =>
-                  existing ? Effect.succeed(existing) : Effect.fail(error),
+            Effect.catchTag(
+              ["ValidationError", "AccountMemberAlreadyExists"],
+              (error) =>
+                findByEmail(accountId, news.email).pipe(
+                  Effect.flatMap((existing) =>
+                    existing ? Effect.succeed(existing) : Effect.fail(error),
+                  ),
                 ),
-              ),
             ),
           );
         observed = created;

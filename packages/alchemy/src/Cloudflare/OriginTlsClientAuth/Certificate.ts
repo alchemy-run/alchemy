@@ -219,12 +219,22 @@ export const OriginTlsClientAuthCertificateProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
+      // Deletion is idempotent: a certificate that is already gone surfaces
+      // as `CertificateNotFound`, and one already in (or past) deletion
+      // answers HTTP 400 "Certificate is already deleted."
+      // (`CertificateAlreadyDeleted`). Both mean the desired end state — the
+      // certificate is not live — is reached.
       yield* originTls
         .deleteOriginTlsClientAuth({
           zoneId: output.zoneId,
           certificateId: output.certificateId,
         })
-        .pipe(Effect.catchTag("CertificateNotFound", () => Effect.void));
+        .pipe(
+          Effect.catchTag(
+            ["CertificateNotFound", "CertificateAlreadyDeleted"],
+            () => Effect.void,
+          ),
+        );
     }),
   });
 

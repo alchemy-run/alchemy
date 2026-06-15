@@ -202,6 +202,20 @@ test.skipIf(!process.env.DEBUG_RAW_STREAM)(
       print(yield* res.text);
       print("\n=== end ===\n");
     }
+
+    const toolRes = yield* client
+      .get(
+        `${out.url}/raw-tool-stream?prompt=${encodeURIComponent("What's the weather in Seattle?")}`,
+      )
+      .pipe(
+        Effect.retry({
+          schedule: Schedule.exponential("500 millis"),
+          times: 10,
+        }),
+      );
+    print(`\n=== raw tool stream ===\n`);
+    print(yield* toolRes.text);
+    print("\n=== end tool stream ===\n");
   }).pipe(logLevel),
   { timeout: 180_000 },
 );

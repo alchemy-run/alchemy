@@ -86,7 +86,15 @@ const purgeCertificates = (zoneId: string) =>
       (c) =>
         originTls
           .deleteOriginTlsClientAuth({ zoneId, certificateId: c.id! })
-          .pipe(Effect.catchTag("CertificateNotFound", () => Effect.void)),
+          .pipe(
+            // Deletion is idempotent: a cert that flipped into (or past)
+            // deletion between the list and this call answers HTTP 400
+            // "Certificate is already deleted." — both mean it is gone.
+            Effect.catchTag(
+              ["CertificateNotFound", "CertificateAlreadyDeleted"],
+              () => Effect.void,
+            ),
+          ),
     );
   });
 

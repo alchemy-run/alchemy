@@ -7,6 +7,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -77,99 +78,102 @@ const normalizeDisabled = (zoneId: string) =>
     );
   });
 
-test.provider(
-  "enables DNSSEC, captures the disabled baseline, destroy deactivates",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+// Both cases mutate the same zone-level DNSSEC singleton with opposite desired states; run them serially so they don't corrupt each other's captured baseline under the global concurrent test config.
+describe.sequential("Dnssec", () => {
+  test.provider(
+    "enables DNSSEC, captures the disabled baseline, destroy deactivates",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* normalizeDisabled(zoneId);
+        yield* stack.destroy();
+        yield* normalizeDisabled(zoneId);
 
-      const dnssec = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Dnssec("ZoneDnssec", { zoneId });
-        }),
-      );
+        const dnssec = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Dnssec("ZoneDnssec", { zoneId });
+          }),
+        );
 
-      expect(dnssec.zoneId).toEqual(zoneId);
-      // No DS record at the registrar, so the zone sits at `pending` —
-      // that's the active family as far as Cloudflare's side goes.
-      expect(family(dnssec.status)).toEqual("active");
-      // The pre-management state was captured for restore-on-destroy.
-      expect(dnssec.initialStatus).toEqual("disabled");
-      // The DS record string is what users paste at their registrar.
-      expect(dnssec.ds).toBeTypeOf("string");
-      expect(dnssec.ds!.length).toBeGreaterThan(0);
+        expect(dnssec.zoneId).toEqual(zoneId);
+        // No DS record at the registrar, so the zone sits at `pending` —
+        // that's the active family as far as Cloudflare's side goes.
+        expect(family(dnssec.status)).toEqual("active");
+        // The pre-management state was captured for restore-on-destroy.
+        expect(dnssec.initialStatus).toEqual("disabled");
+        // The DS record string is what users paste at their registrar.
+        expect(dnssec.ds).toBeTypeOf("string");
+        expect(dnssec.ds!.length).toBeGreaterThan(0);
 
-      // Out-of-band verify via the SDK.
-      const live = yield* getDnssec(zoneId);
-      expect(family(live.status)).toEqual("active");
+        // Out-of-band verify via the SDK.
+        const live = yield* getDnssec(zoneId);
+        expect(family(live.status)).toEqual("active");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // The zone was disabled before we managed it, so destroy deactivates.
-      // Deactivation is eventually consistent — typed bounded wait.
-      const restored = yield* getDnssec(zoneId).pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("2 seconds"),
-          until: (o) => family(o.status) === "disabled",
-          times: 15,
-        }),
-      );
-      expect(family(restored.status)).toEqual("disabled");
+        // The zone was disabled before we managed it, so destroy deactivates.
+        // Deactivation is eventually consistent — typed bounded wait.
+        const restored = yield* getDnssec(zoneId).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (o) => family(o.status) === "disabled",
+            times: 15,
+          }),
+        );
+        expect(family(restored.status)).toEqual("disabled");
 
-      // Re-running destroy is idempotent (DNSSEC already off).
-      yield* stack.destroy();
-      const still = yield* getDnssec(zoneId);
-      expect(family(still.status)).toEqual("disabled");
-    }).pipe(logLevel),
-  { timeout: 300_000 },
-);
+        // Re-running destroy is idempotent (DNSSEC already off).
+        yield* stack.destroy();
+        const still = yield* getDnssec(zoneId);
+        expect(family(still.status)).toEqual("disabled");
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
 
-test.provider(
-  "updates status in place — same zone singleton, no replacement",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider(
+    "updates status in place — same zone singleton, no replacement",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* normalizeDisabled(zoneId);
+        yield* stack.destroy();
+        yield* normalizeDisabled(zoneId);
 
-      const enabled = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Dnssec("ZoneDnssec", {
-            zoneId,
-            status: "active",
-          });
-        }),
-      );
-      expect(family(enabled.status)).toEqual("active");
-      expect(enabled.initialStatus).toEqual("disabled");
+        const enabled = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Dnssec("ZoneDnssec", {
+              zoneId,
+              status: "active",
+            });
+          }),
+        );
+        expect(family(enabled.status)).toEqual("active");
+        expect(enabled.initialStatus).toEqual("disabled");
 
-      // Flip the desired status in place — `zoneId` (the identity) is
-      // unchanged, so this patches the same singleton rather than
-      // replacing it.
-      const disabled = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Dnssec("ZoneDnssec", {
-            zoneId,
-            status: "disabled",
-          });
-        }),
-      );
-      expect(disabled.zoneId).toEqual(zoneId);
-      expect(family(disabled.status)).toEqual("disabled");
-      // The captured baseline survives the in-place update.
-      expect(disabled.initialStatus).toEqual("disabled");
+        // Flip the desired status in place — `zoneId` (the identity) is
+        // unchanged, so this patches the same singleton rather than
+        // replacing it.
+        const disabled = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Dnssec("ZoneDnssec", {
+              zoneId,
+              status: "disabled",
+            });
+          }),
+        );
+        expect(disabled.zoneId).toEqual(zoneId);
+        expect(family(disabled.status)).toEqual("disabled");
+        // The captured baseline survives the in-place update.
+        expect(disabled.initialStatus).toEqual("disabled");
 
-      const live = yield* getDnssec(zoneId);
-      expect(family(live.status)).toEqual("disabled");
+        const live = yield* getDnssec(zoneId);
+        expect(family(live.status)).toEqual("disabled");
 
-      // Destroy is a no-op here (baseline disabled, currently disabled).
-      yield* stack.destroy();
-      const after = yield* getDnssec(zoneId);
-      expect(family(after.status)).toEqual("disabled");
-    }).pipe(logLevel),
-  { timeout: 300_000 },
-);
+        // Destroy is a no-op here (baseline disabled, currently disabled).
+        yield* stack.destroy();
+        const after = yield* getDnssec(zoneId);
+        expect(family(after.status)).toEqual("disabled");
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+});

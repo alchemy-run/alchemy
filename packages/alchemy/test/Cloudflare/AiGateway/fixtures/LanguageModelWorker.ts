@@ -16,7 +16,12 @@ import { Gateway } from "./Gateway.ts";
 // `@cf/meta/llama-3.1-8b-instruct` was deprecated by Cloudflare on
 // 2026-05-30 (the API answers 410), so use the supported fast 3.3 model.
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
-const TOOL_MODEL = "@cf/moonshotai/kimi-k2.6";
+// Tool tests need a model that reliably honors `tool_choice: "required"`.
+// The previous choice (`@cf/moonshotai/kimi-k2.6`) is a reasoning model
+// that intermittently emitted reasoning/text and *no* tool call, flaking
+// the tool assertions. Llama 3.3 70B is non-reasoning and reliably returns
+// an OpenAI-shaped `tool_calls` array under `tool_choice: "required"`.
+const TOOL_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 const GetWeather = Tool.make("get_weather", {
   description:
@@ -122,6 +127,32 @@ export default class LanguageModelTestWorker extends Cloudflare.Worker<LanguageM
             includeUsage
               ? { stream_options: { include_usage: true } }
               : undefined,
+          );
+        }
+
+        if (url.pathname === "/raw-tool-stream") {
+          // Dump the raw Workers AI SSE for a streamed tool call so we can
+          // see exactly how the model encodes tool_calls in the stream.
+          return yield* dumpRawStream(
+            TOOL_MODEL,
+            [{ role: "user", content: prompt }],
+            {
+              tools: [
+                {
+                  type: "function",
+                  function: {
+                    name: "get_weather",
+                    description: "Get the current weather for a city.",
+                    parameters: {
+                      type: "object",
+                      properties: { city: { type: "string" } },
+                      required: ["city"],
+                    },
+                  },
+                },
+              ],
+              tool_choice: "required",
+            },
           );
         }
 

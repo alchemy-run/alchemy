@@ -7,6 +7,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -57,88 +58,93 @@ const setBaseline = (zoneId: string, value: "on" | "off") =>
     }),
   );
 
-test.provider(
-  "enables Smart Tiered Cache and restores the original value on destroy",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+// Both cases mutate the same zone-level Smart Tiered Cache singleton with
+// opposite baselines; run them serially so they don't corrupt each other's
+// captured `initialValue` under the global concurrent test config.
+describe.sequential("SmartTieredCache", () => {
+  test.provider(
+    "enables Smart Tiered Cache and restores the original value on destroy",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      // Known baseline: Smart Tiered Cache defaults to "off".
-      yield* setBaseline(zoneId, "off");
+        yield* stack.destroy();
+        // Known baseline: Smart Tiered Cache defaults to "off".
+        yield* setBaseline(zoneId, "off");
 
-      const setting = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.SmartTieredCache("SmartCache", {
-            zoneId,
-          });
-        }),
-      );
+        const setting = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.SmartTieredCache("SmartCache", {
+              zoneId,
+            });
+          }),
+        );
 
-      expect(setting.zoneId).toEqual(zoneId);
-      expect(setting.value).toEqual("on");
-      // The pre-management value was captured for restore-on-destroy.
-      expect(setting.initialValue).toEqual("off");
-      expect(setting.editable).toEqual(true);
+        expect(setting.zoneId).toEqual(zoneId);
+        expect(setting.value).toEqual("on");
+        // The pre-management value was captured for restore-on-destroy.
+        expect(setting.initialValue).toEqual("off");
+        expect(setting.editable).toEqual(true);
 
-      // Out-of-band verification via the distilled API.
-      const live = yield* getSmartTieredCache(zoneId);
-      expect(live.value).toEqual("on");
+        // Out-of-band verification via the distilled API.
+        const live = yield* getSmartTieredCache(zoneId);
+        expect(live.value).toEqual("on");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      // Destroy restored the value the setting had before we managed it.
-      const restored = yield* getSmartTieredCache(zoneId);
-      expect(restored.value).toEqual("off");
-    }).pipe(logLevel),
-);
+        // Destroy restored the value the setting had before we managed it.
+        const restored = yield* getSmartTieredCache(zoneId);
+        expect(restored.value).toEqual("off");
+      }).pipe(logLevel),
+  );
 
-test.provider(
-  "updates the setting in place and keeps the captured initial value",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider(
+    "updates the setting in place and keeps the captured initial value",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      // Known baseline: start from "on" so initialValue !== first desired
-      // value and the restore path is observable.
-      yield* setBaseline(zoneId, "on");
+        yield* stack.destroy();
+        // Known baseline: start from "on" so initialValue !== first desired
+        // value and the restore path is observable.
+        yield* setBaseline(zoneId, "on");
 
-      const initial = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.SmartTieredCache("SmartCache", {
-            zoneId,
-            enabled: false,
-          });
-        }),
-      );
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.SmartTieredCache("SmartCache", {
+              zoneId,
+              enabled: false,
+            });
+          }),
+        );
 
-      expect(initial.value).toEqual("off");
-      expect(initial.initialValue).toEqual("on");
+        expect(initial.value).toEqual("off");
+        expect(initial.initialValue).toEqual("on");
 
-      const updated = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.SmartTieredCache("SmartCache", {
-            zoneId,
-            enabled: true,
-          });
-        }),
-      );
+        const updated = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.SmartTieredCache("SmartCache", {
+              zoneId,
+              enabled: true,
+            });
+          }),
+        );
 
-      // Same singleton patched in place; the original value survives the
-      // update so destroy still restores the pre-management state.
-      expect(updated.value).toEqual("on");
-      expect(updated.initialValue).toEqual("on");
+        // Same singleton patched in place; the original value survives the
+        // update so destroy still restores the pre-management state.
+        expect(updated.value).toEqual("on");
+        expect(updated.initialValue).toEqual("on");
 
-      const live = yield* getSmartTieredCache(zoneId);
-      expect(live.value).toEqual("on");
+        const live = yield* getSmartTieredCache(zoneId);
+        expect(live.value).toEqual("on");
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const restored = yield* getSmartTieredCache(zoneId);
-      expect(restored.value).toEqual("on");
+        const restored = yield* getSmartTieredCache(zoneId);
+        expect(restored.value).toEqual("on");
 
-      // Leave the zone at its Cloudflare default ("off") for other suites.
-      yield* setBaseline(zoneId, "off");
-    }).pipe(logLevel),
-);
+        // Leave the zone at its Cloudflare default ("off") for other suites.
+        yield* setBaseline(zoneId, "off");
+      }).pipe(logLevel),
+  );
+});

@@ -9,6 +9,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { CERT_5, CERT_6, KEY_5, KEY_6 } from "./fixtures/certs.ts";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -156,126 +157,135 @@ const program = (opts: {
     return { cert5, cert6, association };
   });
 
-test.provider(
-  "associates a hostname, updates cert and enablement in place, voids on destroy",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+describe.sequential("HostnameAssociation", () => {
+  test.provider(
+    "associates a hostname, updates cert and enablement in place, voids on destroy",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* voidAssociation(zoneId, HOST_LIFECYCLE);
-      yield* purgeCertificates(zoneId, [CERT_5, CERT_6]);
+        yield* stack.destroy();
+        yield* voidAssociation(zoneId, HOST_LIFECYCLE);
+        yield* purgeCertificates(zoneId, [CERT_5, CERT_6]);
 
-      // Create — pin cert 5, enabled.
-      const initial = yield* stack.deploy(
-        program({ zoneId, hostname: HOST_LIFECYCLE, cert: "5", enabled: true }),
-      );
+        // Create — pin cert 5, enabled.
+        const initial = yield* stack.deploy(
+          program({
+            zoneId,
+            hostname: HOST_LIFECYCLE,
+            cert: "5",
+            enabled: true,
+          }),
+        );
 
-      expect(initial.association.zoneId).toEqual(zoneId);
-      expect(initial.association.hostname).toEqual(HOST_LIFECYCLE);
-      expect(initial.association.certId).toEqual(initial.cert5.certificateId);
-      expect(initial.association.enabled).toEqual(true);
+        expect(initial.association.zoneId).toEqual(zoneId);
+        expect(initial.association.hostname).toEqual(HOST_LIFECYCLE);
+        expect(initial.association.certId).toEqual(initial.cert5.certificateId);
+        expect(initial.association.enabled).toEqual(true);
 
-      const observed = yield* getAssociation(zoneId, HOST_LIFECYCLE);
-      expect(observed?.certId).toEqual(initial.cert5.certificateId);
-      expect(observed?.enabled).toEqual(true);
+        const observed = yield* getAssociation(zoneId, HOST_LIFECYCLE);
+        expect(observed?.certId).toEqual(initial.cert5.certificateId);
+        expect(observed?.enabled).toEqual(true);
 
-      // Update in place — repin to cert 6 and disable enforcement.
-      const updated = yield* stack.deploy(
-        program({
-          zoneId,
-          hostname: HOST_LIFECYCLE,
-          cert: "6",
-          enabled: false,
-        }),
-      );
+        // Update in place — repin to cert 6 and disable enforcement.
+        const updated = yield* stack.deploy(
+          program({
+            zoneId,
+            hostname: HOST_LIFECYCLE,
+            cert: "6",
+            enabled: false,
+          }),
+        );
 
-      expect(updated.association.hostname).toEqual(HOST_LIFECYCLE);
-      expect(updated.association.certId).toEqual(updated.cert6.certificateId);
-      expect(updated.association.enabled).toEqual(false);
+        expect(updated.association.hostname).toEqual(HOST_LIFECYCLE);
+        expect(updated.association.certId).toEqual(updated.cert6.certificateId);
+        expect(updated.association.enabled).toEqual(false);
 
-      const reobserved = yield* getAssociation(zoneId, HOST_LIFECYCLE);
-      expect(reobserved?.certId).toEqual(updated.cert6.certificateId);
-      expect(reobserved?.enabled).toEqual(false);
+        const reobserved = yield* getAssociation(zoneId, HOST_LIFECYCLE);
+        expect(reobserved?.certId).toEqual(updated.cert6.certificateId);
+        expect(reobserved?.enabled).toEqual(false);
 
-      // Destroy — the association is voided (`enabled: null`).
-      yield* stack.destroy();
+        // Destroy — the association is voided (`enabled: null`).
+        yield* stack.destroy();
 
-      const gone = yield* getAssociation(zoneId, HOST_LIFECYCLE).pipe(
-        Effect.flatMap((assoc) =>
-          assoc === undefined
-            ? Effect.void
-            : Effect.fail({ _tag: "AssociationNotVoided" } as const),
-        ),
-        Effect.retry({
-          while: (e) => e._tag === "AssociationNotVoided",
-          schedule: Schedule.exponential("500 millis"),
-          times: 10,
-        }),
-        Effect.map(() => true),
-      );
-      expect(gone).toEqual(true);
-    }).pipe(logLevel),
-  { timeout: 120_000 },
-);
+        const gone = yield* getAssociation(zoneId, HOST_LIFECYCLE).pipe(
+          Effect.flatMap((assoc) =>
+            assoc === undefined
+              ? Effect.void
+              : Effect.fail({ _tag: "AssociationNotVoided" } as const),
+          ),
+          Effect.retry({
+            while: (e) => e._tag === "AssociationNotVoided",
+            schedule: Schedule.exponential("500 millis"),
+            times: 10,
+          }),
+          Effect.map(() => true),
+        );
+        expect(gone).toEqual(true);
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
 
-test.provider(
-  "replaces the association when the hostname changes",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+  test.provider(
+    "replaces the association when the hostname changes",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      yield* voidAssociation(zoneId, HOST_REPLACE_A);
-      yield* voidAssociation(zoneId, HOST_REPLACE_B);
-      yield* purgeCertificates(zoneId, [CERT_5, CERT_6]);
+        yield* stack.destroy();
+        yield* voidAssociation(zoneId, HOST_REPLACE_A);
+        yield* voidAssociation(zoneId, HOST_REPLACE_B);
+        yield* purgeCertificates(zoneId, [CERT_5, CERT_6]);
 
-      const initial = yield* stack.deploy(
-        program({
-          zoneId,
-          hostname: HOST_REPLACE_A,
-          cert: "5",
-          enabled: true,
-        }),
-      );
-      expect(initial.association.hostname).toEqual(HOST_REPLACE_A);
+        const initial = yield* stack.deploy(
+          program({
+            zoneId,
+            hostname: HOST_REPLACE_A,
+            cert: "5",
+            enabled: true,
+          }),
+        );
+        expect(initial.association.hostname).toEqual(HOST_REPLACE_A);
 
-      // Changing the hostname is a replacement — the old hostname's
-      // association is voided and the new hostname gets its own entry.
-      const replaced = yield* stack.deploy(
-        program({
-          zoneId,
-          hostname: HOST_REPLACE_B,
-          cert: "5",
-          enabled: true,
-        }),
-      );
-      expect(replaced.association.hostname).toEqual(HOST_REPLACE_B);
-      expect(replaced.association.certId).toEqual(replaced.cert5.certificateId);
+        // Changing the hostname is a replacement — the old hostname's
+        // association is voided and the new hostname gets its own entry.
+        const replaced = yield* stack.deploy(
+          program({
+            zoneId,
+            hostname: HOST_REPLACE_B,
+            cert: "5",
+            enabled: true,
+          }),
+        );
+        expect(replaced.association.hostname).toEqual(HOST_REPLACE_B);
+        expect(replaced.association.certId).toEqual(
+          replaced.cert5.certificateId,
+        );
 
-      const observedNew = yield* getAssociation(zoneId, HOST_REPLACE_B);
-      expect(observedNew?.enabled).toEqual(true);
+        const observedNew = yield* getAssociation(zoneId, HOST_REPLACE_B);
+        expect(observedNew?.enabled).toEqual(true);
 
-      // The old hostname's association must be voided by the replacement.
-      const oldGone = yield* getAssociation(zoneId, HOST_REPLACE_A).pipe(
-        Effect.flatMap((assoc) =>
-          assoc === undefined
-            ? Effect.void
-            : Effect.fail({ _tag: "AssociationNotVoided" } as const),
-        ),
-        Effect.retry({
-          while: (e) => e._tag === "AssociationNotVoided",
-          schedule: Schedule.exponential("500 millis"),
-          times: 10,
-        }),
-        Effect.map(() => true),
-      );
-      expect(oldGone).toEqual(true);
+        // The old hostname's association must be voided by the replacement.
+        const oldGone = yield* getAssociation(zoneId, HOST_REPLACE_A).pipe(
+          Effect.flatMap((assoc) =>
+            assoc === undefined
+              ? Effect.void
+              : Effect.fail({ _tag: "AssociationNotVoided" } as const),
+          ),
+          Effect.retry({
+            while: (e) => e._tag === "AssociationNotVoided",
+            schedule: Schedule.exponential("500 millis"),
+            times: 10,
+          }),
+          Effect.map(() => true),
+        );
+        expect(oldGone).toEqual(true);
 
-      yield* stack.destroy();
+        yield* stack.destroy();
 
-      const newGone = yield* getAssociation(zoneId, HOST_REPLACE_B);
-      expect(newGone).toBeUndefined();
-    }).pipe(logLevel),
-  { timeout: 120_000 },
-);
+        const newGone = yield* getAssociation(zoneId, HOST_REPLACE_B);
+        expect(newGone).toBeUndefined();
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+});

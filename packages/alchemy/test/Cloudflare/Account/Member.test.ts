@@ -16,9 +16,14 @@ const logLevel = Effect.provideService(
 );
 
 // Deterministic invite addresses we own — invites stay `pending`, which is
-// fine; deleting the member cancels the invite.
-const memberEmail = "sam+alchemy-test-member@alchemy.run";
+// fine; deleting the member cancels the invite. Each test owns a distinct
+// address: the suites run concurrently against one shared account, so a
+// shared email would let one test's destroy/cleanup cancel another's invite
+// mid-flight (a `MemberNotFound` race).
+const crudEmail = "sam+alchemy-test-member-crud@alchemy.run";
+const replaceEmail = "sam+alchemy-test-member-replace@alchemy.run";
 const replacedEmail = "sam+alchemy-test-member-replaced@alchemy.run";
+const healEmail = "sam+alchemy-test-member-heal@alchemy.run";
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,
@@ -86,32 +91,32 @@ test.provider("create member, update roles in place, delete", (stack) =>
     const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
-    yield* cleanupEmail(accountId, memberEmail);
+    yield* cleanupEmail(accountId, crudEmail);
 
     const [roleA, roleB] = yield* pickTwoRoles(accountId);
 
     const member = yield* stack.deploy(
       Cloudflare.AccountMember("TestMember", {
-        email: memberEmail,
+        email: crudEmail,
         roles: [roleA.id],
       }),
     );
 
     expect(member.memberId).toBeTruthy();
     expect(member.accountId).toEqual(accountId);
-    expect(member.email.toLowerCase()).toEqual(memberEmail);
+    expect(member.email.toLowerCase()).toEqual(crudEmail);
     expect(member.status).toEqual("pending");
     expect(member.roles.map((r) => r.id)).toEqual([roleA.id]);
 
     // Out-of-band verify the invite exists with the assigned role.
     const live = yield* getMember(accountId, member.memberId);
-    expect(live.email?.toLowerCase()).toEqual(memberEmail);
+    expect(live.email?.toLowerCase()).toEqual(crudEmail);
     expect((live.roles ?? []).map((r) => r.id)).toEqual([roleA.id]);
 
     // Swap the role — same email, so the membership is updated in place.
     const updated = yield* stack.deploy(
       Cloudflare.AccountMember("TestMember", {
-        email: memberEmail,
+        email: crudEmail,
         roles: [roleB.id],
       }),
     );
@@ -124,7 +129,7 @@ test.provider("create member, update roles in place, delete", (stack) =>
     // Redeploying identical props is a no-op (same membership).
     const noop = yield* stack.deploy(
       Cloudflare.AccountMember("TestMember", {
-        email: memberEmail,
+        email: crudEmail,
         roles: [roleB.id],
       }),
     );
@@ -140,14 +145,14 @@ test.provider("replaces the member when the email changes", (stack) =>
     const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
-    yield* cleanupEmail(accountId, memberEmail);
+    yield* cleanupEmail(accountId, replaceEmail);
     yield* cleanupEmail(accountId, replacedEmail);
 
     const [roleA] = yield* pickTwoRoles(accountId);
 
     const original = yield* stack.deploy(
       Cloudflare.AccountMember("ReplaceMember", {
-        email: memberEmail,
+        email: replaceEmail,
         roles: [roleA.id],
       }),
     );
@@ -175,13 +180,13 @@ test.provider("recreates after out-of-band delete", (stack) =>
     const { accountId } = yield* yield* CloudflareEnvironment;
 
     yield* stack.destroy();
-    yield* cleanupEmail(accountId, memberEmail);
+    yield* cleanupEmail(accountId, healEmail);
 
     const [roleA, roleB] = yield* pickTwoRoles(accountId);
 
     const member = yield* stack.deploy(
       Cloudflare.AccountMember("HealMember", {
-        email: memberEmail,
+        email: healEmail,
         roles: [roleA.id],
       }),
     );
@@ -195,7 +200,7 @@ test.provider("recreates after out-of-band delete", (stack) =>
 
     const healed = yield* stack.deploy(
       Cloudflare.AccountMember("HealMember", {
-        email: memberEmail,
+        email: healEmail,
         roles: [roleB.id],
       }),
     );

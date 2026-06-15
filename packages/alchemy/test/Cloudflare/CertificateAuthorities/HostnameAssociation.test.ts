@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { CA_CERT_1, CA_CERT_2 } from "./fixtures/certs.ts";
+import { describe } from "vitest";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -106,152 +107,160 @@ const waitForCertDelete = (accountId: string, mtlsCertificateId: string) =>
     }),
   );
 
-test.provider(
-  "pins Managed CA hostnames, updates in place, and clears on destroy",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
+describe.sequential("HostnameAssociation", () => {
+  test.provider(
+    "pins Managed CA hostnames, updates in place, and clears on destroy",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
 
-      yield* stack.destroy();
-      // Known baseline: no Managed CA hostname associations.
-      yield* clearAssociation(zoneId);
+        yield* stack.destroy();
+        // Known baseline: no Managed CA hostname associations.
+        yield* clearAssociation(zoneId);
 
-      const created = yield* stack.deploy(
-        Cloudflare.HostnameAssociation("ManagedCaHosts", {
+        const created = yield* stack.deploy(
+          Cloudflare.HostnameAssociation("ManagedCaHosts", {
+            zoneId,
+            hostnames: [`mtls.${zoneName}`],
+          }),
+        );
+
+        expect(created.zoneId).toEqual(zoneId);
+        expect(created.mtlsCertificateId).toBeUndefined();
+        expect(created.hostnames).toEqual([`mtls.${zoneName}`]);
+
+        yield* waitForHostnames(zoneId, [`mtls.${zoneName}`]);
+
+        // In-place update — hostnames are the mutable aspect of the singleton.
+        const updated = yield* stack.deploy(
+          Cloudflare.HostnameAssociation("ManagedCaHosts", {
+            zoneId,
+            hostnames: [`mtls2.${zoneName}`, `mtls.${zoneName}`],
+          }),
+        );
+
+        expect([...updated.hostnames].sort()).toEqual([
+          `mtls.${zoneName}`,
+          `mtls2.${zoneName}`,
+        ]);
+
+        yield* waitForHostnames(zoneId, [
+          `mtls.${zoneName}`,
+          `mtls2.${zoneName}`,
+        ]);
+
+        yield* stack.destroy();
+
+        // Destroy cleared the association (PUT of an empty hostname list).
+        yield* waitForHostnames(zoneId, []);
+      }).pipe(logLevel),
+  );
+
+  test.provider(
+    "associates hostnames with an uploaded CA and destroys before the cert",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const zoneId = yield* resolveZoneId;
+
+        yield* stack.destroy();
+
+        const { cert, assoc } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const cert = yield* Cloudflare.MtlsCertificate("CertAuthCa", {
+              ca: true,
+              certificates: CA_CERT_1,
+            });
+            const assoc = yield* Cloudflare.HostnameAssociation("CaHosts", {
+              zoneId,
+              mtlsCertificateId: cert.mtlsCertificateId,
+              hostnames: [`mtls-ca.${zoneName}`],
+            });
+            return { cert, assoc };
+          }),
+        );
+
+        expect(cert.mtlsCertificateId).toBeDefined();
+        expect(assoc.mtlsCertificateId).toEqual(cert.mtlsCertificateId);
+        expect(assoc.hostnames).toEqual([`mtls-ca.${zoneName}`]);
+
+        yield* waitForHostnames(
           zoneId,
-          hostnames: [`mtls.${zoneName}`],
-        }),
-      );
+          [`mtls-ca.${zoneName}`],
+          cert.mtlsCertificateId,
+        );
 
-      expect(created.zoneId).toEqual(zoneId);
-      expect(created.mtlsCertificateId).toBeUndefined();
-      expect(created.hostnames).toEqual([`mtls.${zoneName}`]);
+        // Destroy must clear the association before deleting the certificate —
+        // Cloudflare refuses to delete a CA that hostnames still reference.
+        yield* stack.destroy();
 
-      yield* waitForHostnames(zoneId, [`mtls.${zoneName}`]);
+        yield* waitForCertDelete(accountId, cert.mtlsCertificateId);
+      }).pipe(logLevel),
+  );
 
-      // In-place update — hostnames are the mutable aspect of the singleton.
-      const updated = yield* stack.deploy(
-        Cloudflare.HostnameAssociation("ManagedCaHosts", {
+  test.provider(
+    "changing the certificate key replaces the association",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const zoneId = yield* resolveZoneId;
+
+        yield* stack.destroy();
+        yield* clearAssociation(zoneId);
+
+        const first = yield* stack.deploy(
+          Effect.gen(function* () {
+            const assoc = yield* Cloudflare.HostnameAssociation(
+              "ReplaceHosts",
+              {
+                zoneId,
+                hostnames: [`mtls-replace.${zoneName}`],
+              },
+            );
+            return { assoc };
+          }),
+        );
+
+        expect(first.assoc.mtlsCertificateId).toBeUndefined();
+        yield* waitForHostnames(zoneId, [`mtls-replace.${zoneName}`]);
+
+        // mtlsCertificateId keys the association — switching from the Managed
+        // CA to an uploaded CA is a replacement: the new keyed association is
+        // created and the old Managed CA list is cleared as the old instance
+        // deletes.
+        const second = yield* stack.deploy(
+          Effect.gen(function* () {
+            const cert = yield* Cloudflare.MtlsCertificate("ReplaceCa", {
+              ca: true,
+              certificates: CA_CERT_2,
+            });
+            const assoc = yield* Cloudflare.HostnameAssociation(
+              "ReplaceHosts",
+              {
+                zoneId,
+                mtlsCertificateId: cert.mtlsCertificateId,
+                hostnames: [`mtls-replace.${zoneName}`],
+              },
+            );
+            return { cert, assoc };
+          }),
+        );
+
+        expect(second.assoc.mtlsCertificateId).toEqual(
+          second.cert.mtlsCertificateId,
+        );
+
+        yield* waitForHostnames(
           zoneId,
-          hostnames: [`mtls2.${zoneName}`, `mtls.${zoneName}`],
-        }),
-      );
+          [`mtls-replace.${zoneName}`],
+          second.cert.mtlsCertificateId,
+        );
+        // The old Managed CA association was cleared by the replacement.
+        yield* waitForHostnames(zoneId, []);
 
-      expect([...updated.hostnames].sort()).toEqual([
-        `mtls.${zoneName}`,
-        `mtls2.${zoneName}`,
-      ]);
+        yield* stack.destroy();
 
-      yield* waitForHostnames(zoneId, [
-        `mtls.${zoneName}`,
-        `mtls2.${zoneName}`,
-      ]);
-
-      yield* stack.destroy();
-
-      // Destroy cleared the association (PUT of an empty hostname list).
-      yield* waitForHostnames(zoneId, []);
-    }).pipe(logLevel),
-);
-
-test.provider(
-  "associates hostnames with an uploaded CA and destroys before the cert",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      const zoneId = yield* resolveZoneId;
-
-      yield* stack.destroy();
-
-      const { cert, assoc } = yield* stack.deploy(
-        Effect.gen(function* () {
-          const cert = yield* Cloudflare.MtlsCertificate("CertAuthCa", {
-            ca: true,
-            certificates: CA_CERT_1,
-          });
-          const assoc = yield* Cloudflare.HostnameAssociation("CaHosts", {
-            zoneId,
-            mtlsCertificateId: cert.mtlsCertificateId,
-            hostnames: [`mtls-ca.${zoneName}`],
-          });
-          return { cert, assoc };
-        }),
-      );
-
-      expect(cert.mtlsCertificateId).toBeDefined();
-      expect(assoc.mtlsCertificateId).toEqual(cert.mtlsCertificateId);
-      expect(assoc.hostnames).toEqual([`mtls-ca.${zoneName}`]);
-
-      yield* waitForHostnames(
-        zoneId,
-        [`mtls-ca.${zoneName}`],
-        cert.mtlsCertificateId,
-      );
-
-      // Destroy must clear the association before deleting the certificate —
-      // Cloudflare refuses to delete a CA that hostnames still reference.
-      yield* stack.destroy();
-
-      yield* waitForCertDelete(accountId, cert.mtlsCertificateId);
-    }).pipe(logLevel),
-);
-
-test.provider(
-  "changing the certificate key replaces the association",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-      const zoneId = yield* resolveZoneId;
-
-      yield* stack.destroy();
-      yield* clearAssociation(zoneId);
-
-      const first = yield* stack.deploy(
-        Effect.gen(function* () {
-          const assoc = yield* Cloudflare.HostnameAssociation("ReplaceHosts", {
-            zoneId,
-            hostnames: [`mtls-replace.${zoneName}`],
-          });
-          return { assoc };
-        }),
-      );
-
-      expect(first.assoc.mtlsCertificateId).toBeUndefined();
-      yield* waitForHostnames(zoneId, [`mtls-replace.${zoneName}`]);
-
-      // mtlsCertificateId keys the association — switching from the Managed
-      // CA to an uploaded CA is a replacement: the new keyed association is
-      // created and the old Managed CA list is cleared as the old instance
-      // deletes.
-      const second = yield* stack.deploy(
-        Effect.gen(function* () {
-          const cert = yield* Cloudflare.MtlsCertificate("ReplaceCa", {
-            ca: true,
-            certificates: CA_CERT_2,
-          });
-          const assoc = yield* Cloudflare.HostnameAssociation("ReplaceHosts", {
-            zoneId,
-            mtlsCertificateId: cert.mtlsCertificateId,
-            hostnames: [`mtls-replace.${zoneName}`],
-          });
-          return { cert, assoc };
-        }),
-      );
-
-      expect(second.assoc.mtlsCertificateId).toEqual(
-        second.cert.mtlsCertificateId,
-      );
-
-      yield* waitForHostnames(
-        zoneId,
-        [`mtls-replace.${zoneName}`],
-        second.cert.mtlsCertificateId,
-      );
-      // The old Managed CA association was cleared by the replacement.
-      yield* waitForHostnames(zoneId, []);
-
-      yield* stack.destroy();
-
-      yield* waitForCertDelete(accountId, second.cert.mtlsCertificateId);
-    }).pipe(logLevel),
-);
+        yield* waitForCertDelete(accountId, second.cert.mtlsCertificateId);
+      }).pipe(logLevel),
+  );
+});

@@ -1,6 +1,7 @@
 import * as rum from "@distilled.cloud/cloudflare/rum";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -216,14 +217,28 @@ export const RumRuleProvider = () =>
       //    `priority`, so re-read the rule from the list for the complete
       //    state.
       if (!observed) {
-        const created = yield* rum.createRule({
-          accountId,
-          rulesetId,
-          host: news.host,
-          paths: news.paths ?? [],
-          inclusive: news.inclusive ?? true,
-          isPaused: news.isPaused ?? false,
-        });
+        const created = yield* rum
+          .createRule({
+            accountId,
+            rulesetId,
+            host: news.host,
+            paths: news.paths ?? [],
+            inclusive: news.inclusive ?? true,
+            isPaused: news.isPaused ?? false,
+          })
+          .pipe(
+            // The implicit ruleset of a freshly-created RumSite is eventually
+            // consistent: a createRule issued immediately after the site
+            // deploy can briefly 404 (`RulesetNotFound`, code
+            // `web_analytics.configuration.api.notFound`) before the ruleset is
+            // visible. Ride out the propagation window with a bounded retry.
+            Effect.retry({
+              while: (e) => e._tag === "RulesetNotFound",
+              schedule: Schedule.exponential("500 millis").pipe(
+                Schedule.both(Schedule.recurs(8)),
+              ),
+            }),
+          );
         const fresh = yield* listRules(accountId, rulesetId);
         observed =
           fresh?.find((rule) => rule.id === created.id) ?? toRule(created);
