@@ -349,12 +349,17 @@ const clearCommand = Command.make(
             }
           }
 
-          for (const target of targets) {
-            yield* state.deleteStack(target);
-            yield* Console.log(
-              `cleared ${target.stack}${target.stage ? `/${target.stage}` : ""}`,
-            );
-          }
+          yield* Effect.forEach(
+            targets,
+            (target) =>
+              Effect.gen(function* () {
+                yield* state.deleteStack(target);
+                yield* Console.log(
+                  `cleared ${target.stack}${target.stage ? `/${target.stage}` : ""}`,
+                );
+              }),
+            { concurrency: 32 },
+          );
         }),
       );
     }),
