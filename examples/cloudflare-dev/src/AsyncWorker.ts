@@ -27,10 +27,13 @@ export default {
         const messages = await storage.list();
         return Response.json(messages);
       }
-      default:
+      case "/counter": {
         const counter = env.COUNTER.getByName("my-counter");
         const count = await counter.increment();
         return new Response(`Hello, world! ${count}`);
+      }
+      default:
+        return env.ASSETS.fetch(request);
     }
   },
   async queue(batch, env) {

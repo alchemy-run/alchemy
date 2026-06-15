@@ -12,6 +12,10 @@ const AsyncWorker = Effect.gen(function* () {
   const queue = yield* Cloudflare.Queue("AsyncWorkerQueue");
   const worker = yield* Cloudflare.Worker("AsyncWorker", {
     main: "./src/AsyncWorker.ts",
+    assets: {
+      directory: "./assets",
+      runWorkerFirst: true,
+    },
     env: {
       COUNTER: Cloudflare.DurableObjectNamespace<Counter>("Counter", {
         className: "Counter",
