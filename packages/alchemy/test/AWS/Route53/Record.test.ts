@@ -117,7 +117,7 @@ test.provider(
             Schedule.both(Schedule.recurs(10)),
           ),
         }),
-        Effect.catchAll(() => Effect.succeed(false)),
+        Effect.catch(() => Effect.succeed(false)),
       );
 
       yield* changeRecord(hostedZoneId, "DELETE");

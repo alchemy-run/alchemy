@@ -175,7 +175,7 @@ describe("UserApiToken list probe", () => {
       const result = yield* Effect.result(provider.list());
       if (Result.isSuccess(result)) {
         // An entitled credential can list — that's fine, nothing to assert.
-        expect(Array.isArray(result.value)).toBe(true);
+        expect(Array.isArray(result.success)).toBe(true);
         return;
       }
       expect(result.failure._tag).toBe("Unauthorized");

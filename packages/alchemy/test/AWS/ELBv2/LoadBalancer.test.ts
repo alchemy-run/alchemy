@@ -1,5 +1,5 @@
 import * as AWS from "@/AWS";
-import { Subnet } from "@/AWS/EC2";
+import { Subnet, VpcId } from "@/AWS/EC2";
 import { LoadBalancer } from "@/AWS/ELBv2";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
@@ -40,7 +40,7 @@ test.provider(
         const prefix = Number(v.CidrBlock.split("/")[1]);
         return Number.isFinite(prefix) && prefix <= 23;
       });
-      const vpcId = vpc?.VpcId!;
+      const vpcId = VpcId(vpc?.VpcId!);
       expect(vpcId).toBeTruthy();
       const [a, b] = vpc!.CidrBlock!.split("/")[0].split(".");
 

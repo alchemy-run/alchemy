@@ -52,7 +52,9 @@ const resolveZoneId = Effect.gen(function* () {
 
 const findSnippet = (zoneId: string, name: string) =>
   snippets.listSnippets({ zoneId, perPage: 100 }).pipe(
-    Effect.map((page) => page.result.find((s) => s.snippetName === name)),
+    Effect.map((page) =>
+      (page.result ?? []).find((s) => s.snippetName === name),
+    ),
     // Freshly-minted scoped tokens propagate eventually-consistently
     // across Cloudflare's edge and intermittently 403. Ride out the
     // blips on the test's own out-of-band verification calls.

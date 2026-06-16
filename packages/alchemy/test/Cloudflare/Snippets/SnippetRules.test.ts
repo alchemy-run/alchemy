@@ -78,7 +78,9 @@ const listLiveRules = (zoneId: string) =>
 
 const findSnippet = (zoneId: string, name: string) =>
   snippets.listSnippets({ zoneId, perPage: 100 }).pipe(
-    Effect.map((page) => page.result.find((s) => s.snippetName === name)),
+    Effect.map((page) =>
+      (page.result ?? []).find((s) => s.snippetName === name),
+    ),
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       ...forbiddenRetryPolicy,
