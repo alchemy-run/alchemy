@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as originTls from "@distilled.cloud/cloudflare/origin-tls-client-auth";
 import { expect } from "@effect/vitest";
@@ -176,6 +177,39 @@ test.provider(
       yield* stack.destroy();
 
       yield* waitForGone(zoneId, replaced.certificateId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates the deployed hostname certificate",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeCertificates(zoneId, [CERT_3, CERT_4]);
+
+      const cert = yield* stack.deploy(
+        Cloudflare.OriginTlsClientAuthHostnameCertificate("ListHostCert", {
+          zoneId,
+          certificate: CERT_3,
+          privateKey: Redacted.make(KEY_3),
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.OriginTlsClientAuthHostnameCertificate,
+      );
+      const all = yield* provider.list();
+
+      const found = all.find((c) => c.certificateId === cert.certificateId);
+      expect(found).toBeDefined();
+      expect(found?.zoneId).toEqual(zoneId);
+
+      yield* stack.destroy();
+
+      yield* waitForGone(zoneId, cert.certificateId);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
