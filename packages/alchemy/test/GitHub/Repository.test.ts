@@ -1,5 +1,6 @@
 import * as GitHub from "@/GitHub";
 import { Octokit } from "@/GitHub/Octokit.ts";
+import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
@@ -114,6 +115,44 @@ test.provider.skipIf(!owner)(
       // Delete
       yield* stack.destroy();
       const afterDestroy = yield* getRepo(renamed);
+      expect(afterDestroy).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider.skipIf(!owner)(
+  "list enumerates the deployed repository",
+  (stack) =>
+    Effect.gen(function* () {
+      const name = "alchemy-effect-repo-list-test";
+
+      // Clean up any leftovers from a previous run before deploying.
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GitHub.Repository("ListRepo", {
+            owner,
+            name,
+            description: "alchemy-effect list integration test",
+            visibility: "private",
+            autoInit: true,
+          }).pipe(destroy());
+        }),
+      );
+
+      expect(deployed.repoId).toBeGreaterThan(0);
+
+      const provider = yield* Provider.findProvider(GitHub.Repository);
+      const all = yield* provider.list();
+
+      // The deployed repository must appear in the exhaustively-paginated result.
+      expect(all.some((r) => r.repoId === deployed.repoId)).toBe(true);
+      const found = all.find((r) => r.repoId === deployed.repoId);
+      expect(found?.fullName).toEqual(`${owner}/${name}`);
+
+      yield* stack.destroy();
+      const afterDestroy = yield* getRepo(name);
       expect(afterDestroy).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },
