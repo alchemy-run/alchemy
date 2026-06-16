@@ -157,3 +157,29 @@ test.provider.skipIf(!owner)(
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
+
+// Read-only enumeration: `list()` needs no owner — it walks every repository the
+// authenticated token can see. Gated on a non-interactive token so CI never
+// stalls on the auth-method prompt; exercises the live, exhaustively-paginated
+// list path without creating a repo.
+const hasToken = !!(process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN);
+test.provider.skipIf(!hasToken)(
+  "list returns the authenticated user's repositories",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(GitHub.Repository);
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      for (const repo of all) {
+        expect(typeof repo.repoId).toBe("number");
+        expect(typeof repo.fullName).toBe("string");
+        expect(repo.fullName).toContain("/");
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);

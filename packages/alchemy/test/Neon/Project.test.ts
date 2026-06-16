@@ -1,4 +1,5 @@
 import * as Neon from "@/Neon";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { getProject } from "@distilled.cloud/neon";
 import { expect } from "@effect/vitest";
@@ -66,6 +67,25 @@ test.provider("enable logical replication on update", (stack) =>
     expect(fetched.project.settings).toMatchObject({
       enable_logical_replication: true,
     });
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed project", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Neon.Project("ListProject");
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Neon.Project);
+    const all = yield* provider.list();
+
+    expect(all.some((p) => p.projectId === deployed.projectId)).toBe(true);
 
     yield* stack.destroy();
   }).pipe(logLevel),

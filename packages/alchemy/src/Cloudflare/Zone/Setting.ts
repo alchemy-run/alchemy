@@ -403,7 +403,19 @@ export const ZoneSettingProvider = () =>
               // Zone removed out-of-band or the setting is plan-gated / not
               // exposed to this token — skip it rather than fail the listing.
               Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () =>
-                Effect.succeed(undefined),
+                Effect.succeed<ZoneSettingAttributes | undefined>(undefined),
+              ),
+              // A handful of structured settings (e.g.
+              // `automatic_platform_optimization`) can return a scalar value
+              // (`"off"`) that distilled's `GetSettingResponse` union doesn't
+              // model, surfacing as an untyped `CloudflareHttpError` (status
+              // 200, "Schema decode failed"). The Cloudflare patch system only
+              // types errors, not response schemas, so this can't be patched
+              // here — skip the undecodable setting rather than failing the
+              // whole listing. See the agent report's neededPatch (widen the
+              // `GetSettingResponse` member to accept the scalar form).
+              Effect.catch(() =>
+                Effect.succeed<ZoneSettingAttributes | undefined>(undefined),
               ),
             ),
           { concurrency: 10 },
