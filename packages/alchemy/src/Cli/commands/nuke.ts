@@ -274,7 +274,6 @@ const nukeSession: ScopedPlanStatusSession = {
   done: () => Effect.void,
   note: () => Effect.void,
 };
-
 const nukeCommand = Command.make(
   "nuke",
   {
@@ -582,6 +581,8 @@ const nukeCommand = Command.make(
     }),
   ),
 ).pipe(
+  // hide the command because it's dangerous and we don't want agents to discover and use it
+  Command.withHidden,
   Command.withDescription(
     "Enumerate every live resource across the stack's providers and delete " +
       "them. DESTRUCTIVE — use --include/--exclude/--filter to scope it.",
