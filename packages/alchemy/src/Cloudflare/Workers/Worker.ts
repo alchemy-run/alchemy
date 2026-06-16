@@ -1917,15 +1917,41 @@ export const LiveWorkerProvider = () =>
           const cronsChanged =
             newCrons.length !== oldCrons.length ||
             newCrons.some((cron, index) => cron !== oldCrons[index]);
+          // `url` is `domains[0]`: the first custom domain in user order if
+          // any, otherwise the workers.dev URL (derived from the stable
+          // worker name + account subdomain). It's stable across this update
+          // exactly when that first domain is unchanged — which is NOT the
+          // same as "the domain set is unchanged": adding a second custom
+          // domain leaves `url` put, while reordering changes it even though
+          // the set is equal. Compute the resulting `url` and carry it
+          // forward as a stable only when it matches the old one, so
+          // downstream resources that reference `worker.url` (e.g. a GitHub
+          // Webhook delivery URL built via `Output.interpolate`) resolve it
+          // to a concrete value during planning instead of an unresolved
+          // Output — otherwise every worker update spuriously re-updates them.
+          const newCustomDomains = normalizeDomains(news.domain);
+          const newUrl =
+            newCustomDomains.length > 0
+              ? `https://${newCustomDomains[0]}`
+              : news.url !== false
+                ? (output.domains ?? []).find((u) => u.endsWith(".workers.dev"))
+                : undefined;
+          const urlStable = newUrl !== undefined && newUrl === output.url;
           if (
             domainsChanged ||
             cronsChanged ||
             (yield* hasChanged(id, news, output))
           ) {
+            const stables: string[] = [];
+            if (oldWorkerName === workerName) {
+              stables.push("workerName");
+            }
+            if (urlStable) {
+              stables.push("url");
+            }
             return {
               action: "update",
-              stables:
-                oldWorkerName === workerName ? ["workerName"] : undefined,
+              stables: stables.length > 0 ? stables : undefined,
             };
           }
         }),
