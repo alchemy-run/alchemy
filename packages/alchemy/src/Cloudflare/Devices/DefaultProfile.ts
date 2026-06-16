@@ -266,6 +266,7 @@ export const DeviceDefaultProfile = Resource<DeviceDefaultProfile>(
  */
 export const DeviceDefaultProfileProvider = () =>
   Provider.succeed(DeviceDefaultProfile, {
+    nuke: { singleton: true },
     stables: ["accountId"],
     reconcile: Effect.fn(function* ({ news = {} }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

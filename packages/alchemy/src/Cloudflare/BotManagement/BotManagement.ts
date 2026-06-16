@@ -254,6 +254,7 @@ type SettingsKey = (typeof SETTINGS_KEYS)[number];
 
 export const BotManagementProvider = () =>
   Provider.succeed(BotManagement, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialSettings"],
 
     list: Effect.fn(function* () {

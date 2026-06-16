@@ -183,6 +183,7 @@ type SettingsKey = (typeof SETTINGS_KEYS)[number];
 
 export const FraudDetectionSettingsProvider = () =>
   Provider.succeed(FraudDetectionSettings, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialSettings"],
 
     list: Effect.fn(function* () {

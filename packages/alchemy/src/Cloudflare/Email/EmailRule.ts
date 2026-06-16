@@ -100,7 +100,14 @@ export const EmailRuleProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((rule) => normalize(rule, zone.id)),
+                (page.result ?? [])
+                  // Cloudflare returns the zone's catch-all rule in this list,
+                  // but it's a managed singleton (owned by `EmailCatchAll`, via
+                  // `/rules/catch_all`) and rejects deletion through the regular
+                  // rule endpoint ("Invalid rule operation"). Identify it by its
+                  // sole `{ type: "all" }` matcher and exclude it.
+                  .filter((rule) => !isCatchAllRule(rule))
+                  .map((rule) => normalize(rule, zone.id)),
               ),
             ),
             // Zones without email routing (or otherwise non-routable) reject
@@ -176,14 +183,28 @@ export const EmailRuleProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       if (!output?.ruleId) return;
+      // Idempotent: a rule that's already gone is success. Any other error
+      // (e.g. a 409 because email routing is disabled) must surface so the
+      // engine reports the failure instead of falsely claiming deletion.
       yield* emailRouting
         .deleteRule({
           zoneId: output.zoneId,
           ruleIdentifier: output.ruleId,
         })
-        .pipe(Effect.catch(() => Effect.void));
+        .pipe(Effect.catchTag("EmailRoutingRuleNotFound", () => Effect.void));
     }),
   });
+
+/**
+ * The zone catch-all rule is surfaced by `listRules` but is a managed
+ * singleton — its sole matcher is `{ type: "all" }`. It can only be mutated
+ * via `/rules/catch_all` (the `EmailCatchAll` resource), so it must be
+ * excluded from the deletable `EmailRule` enumeration.
+ */
+const isCatchAllRule = (rule: {
+  matchers?: { type: string }[] | null;
+}): boolean =>
+  (rule.matchers ?? []).length === 1 && rule.matchers?.[0]?.type === "all";
 
 const normalize = (
   rule: {

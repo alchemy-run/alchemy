@@ -106,6 +106,7 @@ export const isOriginTlsClientAuthSetting = (
 
 export const OriginTlsClientAuthSettingProvider = () =>
   Provider.succeed(OriginTlsClientAuthSetting, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialEnabled"],
 
     list: Effect.fn(function* () {

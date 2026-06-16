@@ -103,6 +103,30 @@ export interface ProviderService<
    */
   version?: number;
   /**
+   * Account-wide teardown (`alchemy unsafe nuke`) behaviour. Providers whose
+   * resources can't meaningfully be deleted opt out here so nuke doesn't
+   * report an endless "deleted but still there" loop. `read`/import are
+   * unaffected.
+   */
+  nuke?: {
+    /**
+     * The resource is an account/zone **singleton setting** — always-present
+     * configuration (e.g. Bot Management, Email Routing, a zone's SSL
+     * settings) whose `delete` only *resets* it to defaults rather than
+     * removing a discrete resource. Skipped by nuke, since `list` always
+     * re-enumerates it and "deleting" it just resets config the operator
+     * never created.
+     */
+    singleton?: boolean;
+    /**
+     * The resource is skipped by nuke for any other reason — typically because
+     * it can never actually be deleted (no delete API, like RealtimeKit Apps;
+     * or a registration that is never released, like Registrar Domains). Unlike
+     * {@link singleton}, these are ordinary multi-instance resources.
+     */
+    skip?: boolean;
+  };
+  /**
    * Enumerates every existing resource of this type in the ambient scope
    * (account / region / zone resolved from the environment services), and
    * returns the full {@link ProviderService} `Attributes` shape for each —
@@ -317,6 +341,13 @@ export interface ProviderCollectionService {
   get<Resource extends ResourceLike>(
     service: string,
   ): ProviderService<Resource> | undefined;
+  /**
+   * Every provider in this collection keyed by its resource type
+   * (e.g. `"Cloudflare.Worker"`). Used by account-wide operations such
+   * as `alchemy unsafe nuke` to enumerate and filter providers — the
+   * collection's closure-captured map would otherwise be unreachable.
+   */
+  readonly providers: Record<string, ProviderService>;
 }
 
 export const collection = <
@@ -357,6 +388,7 @@ export const collection = <
     return {
       kind: "ProviderCollection" as const,
       get: (service: string) => providers[service],
+      providers,
     };
   }) as any;
 

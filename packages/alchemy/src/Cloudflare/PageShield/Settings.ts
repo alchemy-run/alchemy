@@ -161,6 +161,7 @@ const desiredSettings = (props: PageShieldSettingsProps): DesiredSettings => ({
 
 export const PageShieldSettingsProvider = () =>
   Provider.succeed(PageShieldSettings, {
+    nuke: { singleton: true },
     stables: [
       "zoneId",
       "initialEnabled",

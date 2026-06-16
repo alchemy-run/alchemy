@@ -190,6 +190,7 @@ export const AccessOrganization = Resource<AccessOrganization>(
 
 export const AccessOrganizationProvider = () =>
   Provider.succeed(AccessOrganization, {
+    nuke: { singleton: true },
     stables: ["accountId", "authDomain"],
     reconcile: Effect.fn(function* ({ news }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

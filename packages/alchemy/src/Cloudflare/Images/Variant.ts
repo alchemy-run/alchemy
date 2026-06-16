@@ -172,6 +172,10 @@ export const ImagesVariantProvider = () =>
       // works unchanged.
       const names = yield* images.listV1Variants({ accountId }).pipe(
         Effect.map(variantNamesFrom),
+        // The built-in `public` variant is not managed by this resource —
+        // Cloudflare silently ignores deletes of it (the DELETE returns 200
+        // but the variant persists), so exclude it from enumeration.
+        Effect.map((all) => all.filter((name) => name !== "public")),
         // Accounts without the Cloudflare Images entitlement reject the route
         // (code 5403) — there is nothing to enumerate.
         Effect.catchTag("ImagesAccessNotEnabled", () =>

@@ -185,6 +185,7 @@ export const isManagedTransforms = (
 
 export const ManagedTransformsProvider = () =>
   Provider.succeed(ManagedTransforms, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialRequestHeaders", "initialResponseHeaders"],
 
     list: Effect.fn(function* () {

@@ -131,6 +131,7 @@ export const isTotalTls = (value: unknown): value is TotalTls =>
 
 export const TotalTlsProvider = () =>
   Provider.succeed(TotalTls, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialEnabled", "initialCertificateAuthority"],
 
     list: Effect.fn(function* () {

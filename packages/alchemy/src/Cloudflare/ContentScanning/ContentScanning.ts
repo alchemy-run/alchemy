@@ -115,6 +115,7 @@ export const isContentScanning = (value: unknown): value is ContentScanning =>
 
 export const ContentScanningProvider = () =>
   Provider.succeed(ContentScanning, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialValue"],
 
     list: Effect.fn(function* () {

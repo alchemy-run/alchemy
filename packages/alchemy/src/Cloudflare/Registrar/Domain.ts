@@ -167,6 +167,10 @@ export const isRegistrarDomain = (value: unknown): value is RegistrarDomain =>
 
 export const RegistrarDomainProvider = () =>
   Provider.succeed(RegistrarDomain, {
+    // `delete` never releases the registration (it only restores settings), so
+    // a domain can never be removed by teardown and would re-appear on every
+    // `nuke` scan. Skip it in account-wide teardown.
+    nuke: { skip: true },
     stables: ["domainName", "accountId", "initialSettings"],
 
     diff: Effect.fn(function* ({ olds, news, output }) {

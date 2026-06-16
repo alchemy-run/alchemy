@@ -132,6 +132,7 @@ export const isEmailCatchAll = (value: unknown): value is EmailCatchAll =>
 
 export const EmailCatchAllProvider = () =>
   Provider.succeed(EmailCatchAll, {
+    nuke: { singleton: true },
     stables: [
       "ruleId",
       "zoneId",

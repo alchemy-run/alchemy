@@ -97,6 +97,7 @@ export const isUniversalSsl = (value: unknown): value is UniversalSsl =>
 
 export const UniversalSslProvider = () =>
   Provider.succeed(UniversalSsl, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialEnabled"],
 
     list: Effect.fn(function* () {

@@ -202,6 +202,7 @@ export const isGatewayConfiguration = (
 
 export const GatewayConfigurationProvider = () =>
   Provider.succeed(GatewayConfiguration, {
+    nuke: { singleton: true },
     stables: ["accountId", "initialSettings", "createdAt"],
 
     // Account-wide singleton: the Gateway configuration always exists for

@@ -89,6 +89,7 @@ export const isNetworkInterconnectSettings = (
 
 export const NetworkInterconnectSettingsProvider = () =>
   Provider.succeed(NetworkInterconnectSettings, {
+    nuke: { singleton: true },
     stables: ["accountId", "initialDefaultAsn"],
 
     // Account singleton — there is no enumeration API, just the single
