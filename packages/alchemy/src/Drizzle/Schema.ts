@@ -255,6 +255,11 @@ export const SchemaProvider = () =>
         });
 
       return {
+        // Non-listable: a Drizzle.Schema is a local build artifact (generated
+        // migration SQL under `out`, a path supplied entirely by props with no
+        // account/store to enumerate). There is no remote enumeration API, so
+        // there is nothing to discover out-of-band.
+        list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ news, output }) {
           if (!isResolved(news)) return undefined;
           if (!output) return undefined;

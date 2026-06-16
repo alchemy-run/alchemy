@@ -365,6 +365,53 @@ export const ZoneSettingProvider = () =>
         .patchSetting({ zoneId, settingId, value: initialValue })
         .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.void));
     }),
+
+    // Zone settings are keyed by (zoneId, settingId): every setting exists on
+    // every zone with a Cloudflare default. There is no account-wide list, so
+    // enumerate every zone via `listAllZones` and read each known setting with
+    // the same `getSetting` call `read` uses — emitting one Attributes per
+    // (zone, setting), exactly matching `read`'s keying.
+    //
+    // The distilled `zones` service exposes only a per-setting `getSetting`
+    // (no bulk `/zones/{id}/settings` list op), so we fan out across the known
+    // setting ids. Adding a bulk-list operation to distilled would collapse
+    // each zone's N gets into one call — see the agent report's neededPatch.
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const allZones = yield* listAllZones(accountId);
+        const pairs = allZones.flatMap((zone) =>
+          KNOWN_ZONE_SETTING_IDS.map((settingId) => ({
+            zoneId: zone.id,
+            settingId,
+          })),
+        );
+        const rows = yield* Effect.forEach(
+          pairs,
+          ({ zoneId, settingId }) =>
+            zones.getSetting({ zoneId, settingId }).pipe(
+              Effect.map((observed) =>
+                // Unmanaged at discovery time, so the observed value is the
+                // setting's pre-management value (mirrors a cold `read`).
+                toAttributes(
+                  zoneId,
+                  settingId,
+                  observed,
+                  settingValue(observed),
+                ),
+              ),
+              // Zone removed out-of-band or the setting is plan-gated / not
+              // exposed to this token — skip it rather than fail the listing.
+              Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () =>
+                Effect.succeed(undefined),
+              ),
+            ),
+          { concurrency: 10 },
+        );
+        return rows.filter(
+          (row): row is ZoneSettingAttributes => row !== undefined,
+        );
+      }),
   });
 
 /**

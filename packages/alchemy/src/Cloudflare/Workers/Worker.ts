@@ -1897,22 +1897,29 @@ export const LiveWorkerProvider = () =>
               Stream.runCollect,
               Effect.map((chunk) =>
                 Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).flatMap((script) =>
-                    script.id
-                      ? [
-                          {
-                            accountId,
-                            workerId: script.id,
-                            workerName: script.id,
-                            logpush: script.logpush ?? undefined,
-                            url: undefined,
-                            tags: script.tags ?? undefined,
-                            durableObjectNamespaces: {},
-                            domains: [],
-                            crons: [],
-                          } satisfies Worker["Attributes"],
-                        ]
-                      : [],
+                  // Annotate the element type as the full `Attributes` shape
+                  // (incl. the optional `hash`) so it matches `read` exactly.
+                  // `list()` is an inference source for the provider's resource
+                  // type; a narrower element (e.g. via `satisfies`, which omits
+                  // `hash`) would derail `Res` inference and cascade every
+                  // lifecycle method's requirement channel to `never`.
+                  (page.result ?? []).flatMap(
+                    (script): Worker["Attributes"][] =>
+                      script.id
+                        ? [
+                            {
+                              accountId,
+                              workerId: script.id,
+                              workerName: script.id,
+                              logpush: script.logpush ?? undefined,
+                              url: undefined,
+                              tags: script.tags ?? undefined,
+                              durableObjectNamespaces: {},
+                              domains: [],
+                              crons: [],
+                            },
+                          ]
+                        : [],
                   ),
                 ),
               ),
