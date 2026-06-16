@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import * as dns from "@distilled.cloud/cloudflare/dns";
@@ -186,6 +187,79 @@ test.provider(
       const gone = yield* getRegionalHostname(zoneId, HOSTNAME);
       expect(gone).toBeUndefined();
 
+      yield* purgeDnsRecord(zoneId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (zone-scoped collection): `list()` fans out over
+// every zone via `listAllZones` and exhaustively paginates each zone's
+// regional hostnames. Data Localization is entitlement-gated, so the deploy
+// is probe-gated: when the zone is entitled we assert the deployed hostname
+// appears in the result; otherwise we still assert `list()` returns a
+// well-typed (possibly empty) array.
+test.provider(
+  "list enumerates regional hostnames across zones",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* ensureDnsRecord(zoneId);
+      yield* deleteRegionalHostname(zoneId, HOSTNAME);
+
+      // Probe entitlement once: unentitled zones reject create with a typed tag.
+      const probe = yield* retryForbidden(
+        addressing.createRegionalHostname({
+          zoneId,
+          hostname: HOSTNAME,
+          regionKey: "eu",
+        }),
+      ).pipe(Effect.result);
+
+      const entitled = Result.isSuccess(probe);
+      if (!entitled) {
+        expect(["InvalidHostname", "RegionalHostnameEmpty"]).toContain(
+          probe.failure._tag,
+        );
+      } else {
+        // Remove the raw probe so the resource owns the hostname.
+        yield* deleteRegionalHostname(zoneId, HOSTNAME);
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.RegionalHostname("Regional", {
+              zoneId,
+              hostname: HOSTNAME,
+              regionKey: "eu",
+            });
+          }),
+        );
+      }
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.RegionalHostname,
+      );
+      const all = yield* provider.list();
+
+      // `list()` always returns the full Attributes shape for each item.
+      expect(Array.isArray(all)).toBe(true);
+      for (const item of all) {
+        expect(typeof item.zoneId).toBe("string");
+        expect(typeof item.hostname).toBe("string");
+        expect(typeof item.regionKey).toBe("string");
+      }
+
+      if (entitled) {
+        // The deployed hostname must appear in the exhaustively-paginated result.
+        expect(
+          all.some(
+            (item) => item.zoneId === zoneId && item.hostname === HOSTNAME,
+          ),
+        ).toBe(true);
+      }
+
+      yield* stack.destroy();
+      yield* deleteRegionalHostname(zoneId, HOSTNAME);
       yield* purgeDnsRecord(zoneId);
     }).pipe(logLevel),
   { timeout: 120_000 },

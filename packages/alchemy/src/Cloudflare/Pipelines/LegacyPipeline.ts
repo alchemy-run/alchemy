@@ -238,8 +238,24 @@ export const LegacyPipelineProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        const observed = yield* listAllLegacyPipelines(accountId);
-        return observed.map((p) => toAttributes(p, accountId));
+        // The list endpoint returns summary items (id/name/endpoint only),
+        // so hydrate each by name into the exact `read` Attributes shape
+        // with bounded concurrency and a typed per-item not-found skip
+        // (a pipeline can vanish between the list and the get).
+        const summaries = yield* listLegacyPipelineSummaries(accountId);
+        const rows = yield* Effect.forEach(
+          summaries,
+          (summary) =>
+            getLegacyPipeline(accountId, summary.name).pipe(
+              Effect.map((observed) =>
+                observed ? toAttributes(observed, accountId) : undefined,
+              ),
+            ),
+          { concurrency: 10 },
+        );
+        return rows.filter(
+          (row): row is LegacyPipelineAttributes => row !== undefined,
+        );
       }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
@@ -357,19 +373,26 @@ const getLegacyPipeline = (accountId: string, pipelineName: string) =>
     Effect.catchTag("PipelineNotExists", () => Effect.succeed(undefined)),
   );
 
+interface LegacyPipelineSummary {
+  id: string;
+  name: string;
+  endpoint: string;
+}
+
 /**
- * Enumerate every legacy pipeline in an account. The distilled
+ * Enumerate every legacy pipeline summary in an account. The distilled
  * `listPipelines` op is not stream-paginated, so walk the `page`/
  * `per_page` query params using `result_info.total_count` (falling back
- * to a short-page sentinel) until every page is collected.
+ * to a short-page sentinel) until every page is collected. The list
+ * endpoint caps `per_page` at 50 and returns only summary fields.
  */
-const listAllLegacyPipelines = (accountId: string) => {
-  const perPage = 100;
+const listLegacyPipelineSummaries = (accountId: string) => {
+  const perPage = 50;
   const collect = (
     page: number,
-    acc: ObservedLegacyPipeline[],
+    acc: LegacyPipelineSummary[],
   ): Effect.Effect<
-    ObservedLegacyPipeline[],
+    LegacyPipelineSummary[],
     pipelines.ListPipelinesError,
     Credentials | HttpClient.HttpClient
   > =>
@@ -379,7 +402,13 @@ const listAllLegacyPipelines = (accountId: string) => {
         page: String(page),
         perPage: String(perPage),
       });
-      const results = (response.results ?? []) as ObservedLegacyPipeline[];
+      const results = (response.results ?? []).map(
+        (p): LegacyPipelineSummary => ({
+          id: p.id,
+          name: p.name,
+          endpoint: p.endpoint,
+        }),
+      );
       const next = [...acc, ...results];
       const total = response.resultInfo?.totalCount;
       const done =

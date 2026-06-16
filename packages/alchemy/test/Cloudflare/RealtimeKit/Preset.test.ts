@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as realtimeKit from "@distilled.cloud/cloudflare/realtime-kit";
 import { expect } from "@effect/vitest";
@@ -146,6 +147,55 @@ test.provider(
       // delete API).
       yield* stack.destroy();
       yield* expectGone(accountId, v1.appId, v1.presetId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates the deployed preset",
+  (stack) =>
+    Effect.gen(function* () {
+      const entitled = yield* probeEntitlement;
+      if (!entitled) {
+        // RealtimeKit beta is entitlement-gated: an unentitled account gets the
+        // typed `Forbidden` (403) on `getApp`, which `list()` propagates. Skip
+        // the live assertion; the App suite pins the typed tag.
+        yield* Effect.logInfo(
+          "account is not RealtimeKit-entitled; skipping list",
+        );
+        return;
+      }
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const app = yield* Cloudflare.RealtimeKitApp("App", {
+            name: APP_NAME,
+          });
+          return yield* Cloudflare.RealtimeKitPreset("Preset", {
+            appId: app.appId,
+            name: PRESET_NAME,
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.RealtimeKitPreset,
+      );
+      const all = yield* provider.list();
+
+      expect(
+        all.some(
+          (p) => p.presetId === deployed.presetId && p.appId === deployed.appId,
+        ),
+      ).toBe(true);
+      const found = all.find((p) => p.presetId === deployed.presetId);
+      expect(found?.name).toEqual(PRESET_NAME);
+      expect(found?.config.viewType).toEqual("GROUP_CALL");
+
+      yield* stack.destroy();
+      yield* expectGone(deployed.accountId, deployed.appId, deployed.presetId);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
