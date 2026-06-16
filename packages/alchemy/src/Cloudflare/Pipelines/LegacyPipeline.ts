@@ -233,6 +233,13 @@ export const LegacyPipelineProvider = () =>
       return undefined;
     }),
 
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const observed = yield* listAllLegacyPipelines(accountId);
+        return observed.map((p) => toAttributes(p, accountId));
+      }),
+
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -347,6 +354,39 @@ const getLegacyPipeline = (accountId: string, pipelineName: string) =>
     Effect.map((p): ObservedLegacyPipeline | undefined => p),
     Effect.catchTag("PipelineNotExists", () => Effect.succeed(undefined)),
   );
+
+/**
+ * Enumerate every legacy pipeline in an account. The distilled
+ * `listPipelines` op is not stream-paginated, so walk the `page`/
+ * `per_page` query params using `result_info.total_count` (falling back
+ * to a short-page sentinel) until every page is collected.
+ */
+const listAllLegacyPipelines = (accountId: string) => {
+  const perPage = 100;
+  const collect = (
+    page: number,
+    acc: ObservedLegacyPipeline[],
+  ): Effect.Effect<
+    ObservedLegacyPipeline[],
+    pipelines.ListPipelinesError,
+    Provider.Credentials | HttpClient.HttpClient
+  > =>
+    Effect.gen(function* () {
+      const response = yield* pipelines.listPipelines({
+        accountId,
+        page: String(page),
+        perPage: String(perPage),
+      });
+      const results = (response.results ?? []) as ObservedLegacyPipeline[];
+      const next = [...acc, ...results];
+      const total = response.resultInfo?.totalCount;
+      const done =
+        results.length < perPage ||
+        (total !== undefined && next.length >= total);
+      return done ? next : yield* collect(page + 1, next);
+    });
+  return collect(1, []);
+};
 
 const defaultSources: LegacyPipelineSource[] = [
   { type: "http" },

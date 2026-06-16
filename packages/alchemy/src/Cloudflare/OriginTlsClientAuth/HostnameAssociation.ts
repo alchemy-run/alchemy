@@ -141,6 +141,15 @@ export const OriginTlsClientAuthHostnameAssociationProvider = () =>
   Provider.succeed(OriginTlsClientAuthHostnameAssociation, {
     stables: ["zoneId", "hostname"],
 
+    // Non-listable: an association is keyed entirely by {zoneId, hostname}
+    // and the only read op is `getHostname({ zoneId, hostname })`. Cloudflare
+    // exposes no endpoint that enumerates which hostnames in a zone have an
+    // AOP association (`listHostnameCertificates` lists certificates, which
+    // carry no hostname), so there is provably no way to discover the
+    // hostnames to read. Return [] rather than throwing.
+    list: () =>
+      Effect.succeed<OriginTlsClientAuthHostnameAssociationAttributes[]>([]),
+
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;
       // zoneId is Input<string>; compare only once both sides are concrete.

@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as pageShield from "@distilled.cloud/cloudflare/page-shield";
 import { expect } from "@effect/vitest";
@@ -93,6 +94,51 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates Page Shield policies across all zones",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.PageShieldPolicy,
+      );
+
+      // Page Shield CSP policies are an Enterprise add-on; the testing
+      // account has a zero rule quota, so we cannot deploy a policy to
+      // observe. Enumeration must still succeed (fanning out across every
+      // zone, skipping unentitled `Forbidden` zones) and return a
+      // well-typed array — empty when no policies exist.
+      if (entitledZoneId) {
+        const description = "alchemy-pageshield-list";
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            yield* Cloudflare.PageShieldSettings("PageShield", {
+              zoneId: entitledZoneId,
+            });
+            return yield* Cloudflare.PageShieldPolicy("ListPolicy", {
+              zoneId: entitledZoneId,
+              description,
+              action: "log",
+              expression: `http.host eq "${zoneName}"`,
+              value: "script-src 'self'",
+            });
+          }),
+        );
+
+        const all = yield* provider.list();
+        expect(Array.isArray(all)).toBe(true);
+        expect(all.some((p) => p.policyId === deployed.policyId)).toBe(true);
+      } else {
+        const all = yield* provider.list();
+        expect(Array.isArray(all)).toBe(true);
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );
 
 // Requires the Enterprise Page Shield CSP entitlement — unentitled zones have a zero

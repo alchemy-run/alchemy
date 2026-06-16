@@ -385,6 +385,23 @@ export const PipelineSinkProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* deleteSink(output.accountId, output.sinkId);
     }),
+
+    // Account collection: sinks are account-scoped and enumerable via
+    // `listSinks` (paginated, items in `result`). Hydrate each page item
+    // into the exact `read` Attributes shape. Credentials/token are
+    // write-only and never echoed, matching `read`.
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        return yield* pipelines.listSinks.pages({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((sink) => toAttributes(sink, accountId)),
+            ),
+          ),
+        );
+      }),
   });
 
 /**

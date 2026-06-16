@@ -203,6 +203,10 @@ test.provider(
       );
       const all = yield* provider.list();
 
+      yield* Effect.log(
+        `DEBUG list returned ${all.length}; want ${cert.certificateId} in zone ${zoneId}; ids=${JSON.stringify(all.map((c) => `${c.zoneId}:${c.certificateId}:${c.status}`))}`,
+      );
+
       const found = all.find((c) => c.certificateId === cert.certificateId);
       expect(found).toBeDefined();
       expect(found?.zoneId).toEqual(zoneId);
