@@ -195,7 +195,12 @@ export const GatewayLocationProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((l) => toAttributes(l, accountId)),
+            (page.result ?? [])
+              .map((l) => toAttributes(l, accountId))
+              // The account's default location can't be deleted while it is
+              // the client default (`CannotDeleteDefaultGatewayLocation`);
+              // never enumerate it for account-wide teardown.
+              .filter((l) => !l.clientDefault),
           ),
         ),
       );

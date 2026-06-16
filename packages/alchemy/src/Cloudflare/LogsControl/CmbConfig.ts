@@ -195,7 +195,11 @@ const getCmbConfig = (accountId: string) =>
         ? undefined
         : config,
     ),
-    Effect.catchTag("CmbConfigNotFound", () => Effect.succeed(undefined)),
+    // Accounts without the Compliance/CMB entitlement get
+    // `LogsControlNotAuthorized` — treat as unconfigured (nothing to manage).
+    Effect.catchTag(["CmbConfigNotFound", "LogsControlNotAuthorized"], () =>
+      Effect.succeed(undefined),
+    ),
   );
 
 const toAttributes = (

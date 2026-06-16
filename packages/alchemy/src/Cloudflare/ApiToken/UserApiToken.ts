@@ -210,6 +210,9 @@ export const UserApiTokenProvider = () =>
             ),
           ),
         ),
+        // User-scoped tokens require user-level auth; an account-scoped token
+        // (e.g. a CI profile) gets `Unauthorized` here — nothing to enumerate.
+        Effect.catchTag("Unauthorized", () => Effect.succeed([])),
       ),
   });
 

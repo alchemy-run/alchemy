@@ -218,7 +218,12 @@ export const AiSearchNamespaceProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((ns) => toAttributes(ns, accountId)),
+            (page.result ?? [])
+              // The account-provided `default` namespace can't be deleted
+              // (`cannot_modify_default_namespace`); never enumerate it for
+              // account-wide teardown.
+              .filter((ns) => ns.name !== "default")
+              .map((ns) => toAttributes(ns, accountId)),
           ),
         ),
       );

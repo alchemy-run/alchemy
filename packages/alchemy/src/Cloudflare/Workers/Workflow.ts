@@ -510,8 +510,10 @@ export const WorkflowProvider = () =>
                   (page.result ?? []).map((wf) => ({
                     workflowId: wf.id,
                     workflowName: wf.name,
-                    className: wf.className,
-                    scriptName: wf.scriptName,
+                    // `className`/`scriptName` can be null/absent in the list
+                    // payload on some accounts — fall back so listing succeeds.
+                    className: wf.className ?? "",
+                    scriptName: wf.scriptName ?? "",
                     accountId,
                   })),
                 ),

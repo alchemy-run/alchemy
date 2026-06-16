@@ -195,8 +195,13 @@ export const StreamLiveInputProvider = () =>
     // item into the same Attributes shape `read` produces.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
+      // Cloudflare returns this list either wrapped (`{ liveInputs: [...] }`)
+      // or as a bare `result` array depending on the account — handle both.
       const response = yield* stream.listLiveInputs({ accountId });
-      return (response.liveInputs ?? [])
+      const inputs = Array.isArray(response)
+        ? response
+        : (response.liveInputs ?? []);
+      return inputs
         .filter(
           (li): li is typeof li & { uid: string } =>
             li.uid !== null && li.uid !== undefined,

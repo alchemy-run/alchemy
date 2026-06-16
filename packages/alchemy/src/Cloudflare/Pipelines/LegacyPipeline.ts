@@ -404,8 +404,8 @@ const listLegacyPipelineSummaries = (accountId: string) => {
       const results = (response.results ?? []).map(
         (p): LegacyPipelineSummary => ({
           id: p.id,
-          name: p.name,
-          endpoint: p.endpoint,
+          name: p.name ?? "",
+          endpoint: p.endpoint ?? "",
         }),
       );
       const next = [...acc, ...results];

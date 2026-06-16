@@ -232,8 +232,12 @@ export const StreamLiveInputOutputProvider = () =>
       // Parent fan-out: outputs are sub-resources of a live input and
       // have no account-wide enumeration endpoint. Enumerate every live
       // input on the account, then list each input's outputs.
+      // Cloudflare returns this list either wrapped (`{ liveInputs: [...] }`)
+      // or as a bare `result` array depending on the account — handle both.
       const inputs = yield* stream.listLiveInputs({ accountId });
-      const liveInputIds = (inputs.liveInputs ?? [])
+      const liveInputIds = (
+        Array.isArray(inputs) ? inputs : (inputs.liveInputs ?? [])
+      )
         .map((input) => input.uid)
         .filter((uid): uid is string => typeof uid === "string");
 

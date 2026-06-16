@@ -854,21 +854,25 @@ export const R2BucketProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          for (const domain of output.domains ?? []) {
-            yield* r2
-              .deleteBucketDomainCustom({
-                accountId: output.accountId,
-                bucketName: output.bucketName,
-                domain: domain.domain,
-                jurisdiction: output.jurisdiction,
-              })
-              .pipe(
-                Effect.catchTag(
-                  ["DomainNotFound", "NoSuchBucket"],
-                  () => Effect.void,
+          yield* Effect.all(
+            (output.domains ?? []).map((domain) =>
+              r2
+                .deleteBucketDomainCustom({
+                  accountId: output.accountId,
+                  bucketName: output.bucketName,
+                  domain: domain.domain,
+                  jurisdiction: output.jurisdiction,
+                })
+                .pipe(
+                  Effect.catchTag(
+                    ["DomainNotFound", "NoSuchBucket"],
+                    () => Effect.void,
+                  ),
                 ),
-              );
-          }
+            ),
+            { concurrency: "unbounded" },
+          );
+
           yield* emptyBucket(output.bucketName, output.jurisdiction);
           yield* r2
             .deleteBucket({
