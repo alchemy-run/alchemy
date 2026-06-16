@@ -51,7 +51,7 @@
     "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",
     "test:benchmark": "bun run --filter alchemy test:benchmark",
     "test:canary": "SMOKE_CANARY=1 bun test --only-failures ./test/smoke.test.ts",
-    "test:examples": "bun run --filter ./examples/cloudflare-worker --filter ./examples/cloudflare-worker-async --filter ./examples/cloudflare-tanstack --filter ./examples/cloudflare-tanstack-start-solid --filter ./examples/aws-lambda test && bun format",
+    "test:examples": "bun run --filter ./examples/cloudflare-worker --filter ./examples/cloudflare-worker-auth --filter ./examples/cloudflare-worker-async --filter ./examples/cloudflare-tanstack --filter ./examples/cloudflare-tanstack-start-solid --filter ./examples/aws-lambda test && bun format",
     "test:fast": "NO_SLOW_TESTS=1 FAST=1 bun run test:live",
     "test:live": "bun run --filter alchemy test",
     "test:smoke": "bun test --only-failures ./test/smoke.test.ts",
