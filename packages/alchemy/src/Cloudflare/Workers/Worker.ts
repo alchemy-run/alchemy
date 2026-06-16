@@ -1968,15 +1968,73 @@ export const LiveWorkerProvider = () =>
           const cronsChanged =
             newCrons.length !== oldCrons.length ||
             newCrons.some((cron, index) => cron !== oldCrons[index]);
+          // `url` is `domains[0]`: the first custom domain in user order if
+          // any, otherwise the workers.dev URL (derived from the stable
+          // worker name + account subdomain). It's stable across this update
+          // exactly when that first domain is unchanged — which is NOT the
+          // same as "the domain set is unchanged": adding a second custom
+          // domain leaves `url` put, while reordering changes it even though
+          // the set is equal. Compute the resulting `url` and carry it
+          // forward as a stable only when it matches the old one, so
+          // downstream resources that reference `worker.url` (e.g. a GitHub
+          // Webhook delivery URL built via `Output.interpolate`) resolve it
+          // to a concrete value during planning instead of an unresolved
+          // Output — otherwise every worker update spuriously re-updates them.
+          const newCustomDomains = normalizeDomains(news.domain);
+          const newUrl =
+            newCustomDomains.length > 0
+              ? `https://${newCustomDomains[0]}`
+              : news.url !== false
+                ? (output.domains ?? []).find((u) => u.endsWith(".workers.dev"))
+                : undefined;
+          const urlStable = newUrl !== undefined && newUrl === output.url;
+          // `durableObjectNamespaces` maps each hosted DO class name to the
+          // namespace id Cloudflare assigned it. Those ids are permanent for
+          // the lifetime of a (worker, class) pair, so the map only changes
+          // when a class is added or removed — never on a plain code/config
+          // update. Carry it forward as a stable whenever the set of local DO
+          // class names is unchanged, for the same reason as `url` above:
+          // downstream resources that bind a DO namespace via
+          // `worker.durableObjectNamespaces[name]` (e.g. a Container attached
+          // to a DO) must resolve it to a concrete value during planning.
+          // Otherwise the binding holds an unresolved Output, which
+          // `diffBindings` treats as "changed", spuriously re-updating the
+          // bound resource on every deploy. Class names are structural (not the
+          // namespace id), so this comparison holds even when `newBindings` is
+          // otherwise unresolved.
+          const newDoClassNames = Array.isArray(newBindings)
+            ? getExpectedDurableObjectClassNames(
+                (newBindings as ResourceBinding<Worker["Binding"]>[]).flatMap(
+                  (b) => b.data.bindings ?? [],
+                ),
+                workerName,
+              ).sort()
+            : [];
+          const oldDoClassNames = Object.keys(
+            output.durableObjectNamespaces ?? {},
+          ).sort();
+          const doNamespacesStable =
+            oldWorkerName === workerName &&
+            newDoClassNames.length === oldDoClassNames.length &&
+            newDoClassNames.every((name, i) => name === oldDoClassNames[i]);
           if (
             domainsChanged ||
             cronsChanged ||
             (yield* hasChanged(id, news, output))
           ) {
+            const stables: string[] = [];
+            if (oldWorkerName === workerName) {
+              stables.push("workerName");
+            }
+            if (urlStable) {
+              stables.push("url");
+            }
+            if (doNamespacesStable) {
+              stables.push("durableObjectNamespaces");
+            }
             return {
               action: "update",
-              stables:
-                oldWorkerName === workerName ? ["workerName"] : undefined,
+              stables: stables.length > 0 ? stables : undefined,
             };
           }
         }),
