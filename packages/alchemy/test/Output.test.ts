@@ -840,6 +840,56 @@ describe("Output coercion guard", () => {
   });
 });
 
+describe("Redacted stack-output serialization (regression #598)", () => {
+  // A resource whose attribute is a `Redacted<string>` — e.g. `Random.text`,
+  // which pr-package's AuthTokenValue exposes. When such an attribute flows
+  // into a Stack output it is JSON-serialized for persistence to state /
+  // Doppler / GH secrets. `JSON.stringify(Redacted)` returns the literal
+  // string "<redacted>", so a publisher reading the output would send
+  // `Bearer <redacted>` instead of the real token. The fix is to unwrap with
+  // `Output.map(Redacted.value)` before returning it from the stack.
+  const SECRET = "1486c434bd35732a185d1712c587ddfafd9e1c8d7a94fb15cf6ece51128";
+  const redactedResource = () => {
+    const src = fakeResource<
+      "Alchemy.Random",
+      { text: Redacted.Redacted<string> }
+    >("Alchemy.Random", "AuthTokenValue");
+    return (Output.of(src) as any).text as Output.Output<
+      Redacted.Redacted<string>
+    >;
+  };
+  const env = { AuthTokenValue: { text: Redacted.make(SECRET) } };
+
+  it.effect(
+    'a raw Redacted output serializes to the literal "<redacted>" (the bug)',
+    () =>
+      provideState(
+        Effect.gen(function* () {
+          const result = yield* Output.evaluate(redactedResource(), env);
+          // The evaluated value is still a Redacted, and persisting it as a
+          // stack output (JSON) loses the real token.
+          expect(Redacted.isRedacted(result)).toBe(true);
+          expect(JSON.stringify({ authToken: result })).toBe(
+            '{"authToken":"<redacted>"}',
+          );
+        }),
+      ),
+  );
+
+  it.effect("Output.map(Redacted.value) emits the real token (the fix)", () =>
+    provideState(
+      Effect.gen(function* () {
+        const expr = redactedResource().pipe(Output.map(Redacted.value));
+        const result = yield* Output.evaluate(expr, env);
+        expect(result).toBe(SECRET);
+        expect(JSON.stringify({ authToken: result })).toBe(
+          `{"authToken":"${SECRET}"}`,
+        );
+      }),
+    ),
+  );
+});
+
 describe("Output.isOutput / isExpr", () => {
   it("identifies Output expressions", () => {
     expect(Output.isOutput(Output.literal(1))).toBe(true);

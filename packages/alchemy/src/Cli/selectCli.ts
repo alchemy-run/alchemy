@@ -1,7 +1,7 @@
+import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { Cli } from "./Cli.ts";
 import { LoggingCli } from "./LoggingCli.ts";
-import { inkCLI } from "./tui/InkCLI.tsx";
 
 /**
  * Returns true when the current process looks like it's being driven by a
@@ -30,4 +30,14 @@ export const isNonInteractive = (): boolean => {
 };
 
 export const selectCli = (): Layer.Layer<Cli> =>
-  isNonInteractive() ? LoggingCli : inkCLI();
+  isNonInteractive()
+    ? LoggingCli
+    : // Defer importing the Ink/React TUI (`./tui/InkCLI.tsx` pulls in `ink`)
+      // until we actually need the interactive renderer. Non-interactive runs
+      // (agents, CI, piped output) take the cheap `LoggingCli` branch and never
+      // pay the TUI import cost.
+      Layer.unwrap(
+        Effect.promise(() =>
+          import("./tui/InkCLI.tsx").then((m) => m.inkCLI()),
+        ),
+      );
