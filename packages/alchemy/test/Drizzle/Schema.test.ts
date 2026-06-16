@@ -26,6 +26,15 @@ const DRIFTED_SCHEMA_SOURCE =
   SCHEMA_SOURCE +
   `\nexport const posts = pgTable("posts", {\n  id: serial("id").primaryKey(),\n  title: text("title").notNull(),\n});\n`;
 
+const SQLITE_SCHEMA_SOURCE = `
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+
+export const users = sqliteTable("users", {
+  id: integer("id").primaryKey(),
+  name: text("name").notNull(),
+});
+`;
+
 const stageWorkspace = (initialSource: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -143,5 +152,25 @@ test.provider(
       const snapshots = yield* readSnapshots(ws.out);
       expect(snapshots).toHaveLength(2);
       expect(snapshots[1]?.prevIds).toEqual([initialSnapshot?.id]);
+    }),
+);
+
+test.provider(
+  "sqlite schemas generate migrations through the CLI fallback",
+  (stack) =>
+    Effect.gen(function* () {
+      const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
+
+      yield* stack.deploy(
+        Drizzle.Schema("sqlite-schema", {
+          dialect: "sqlite",
+          schema: ws.schemaPath,
+          out: ws.out,
+        }),
+      );
+
+      const snapshots = yield* readSnapshots(ws.out);
+      expect(snapshots).toHaveLength(1);
+      expect(snapshots[0]?.prevIds).toEqual([DRIZZLE_ORIGIN_UUID]);
     }),
 );

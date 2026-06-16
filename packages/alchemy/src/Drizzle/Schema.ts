@@ -1,17 +1,30 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { ChildProcess } from "effect/unstable/process";
 import * as crypto from "node:crypto";
+import * as NodePath from "node:path";
+import { fileURLToPath } from "node:url";
 import * as Artifacts from "../Artifacts.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { exec } from "../Util/exec.ts";
 import type { Providers } from "./Providers.ts";
 
 export type Dialect = "postgres" | "mysql" | "sqlite";
 
 type DrizzleSnapshot = {
   id?: string;
+};
+
+type DrizzleKitApi = {
+  generateDrizzleJson?: (
+    imports: Record<string, unknown>,
+    prevId?: string,
+    schemaFilters?: string[],
+  ) => Promise<unknown>;
+  generateMigration?: (prev: unknown, cur: unknown) => Promise<string[]>;
 };
 
 export type SchemaProps = {
@@ -140,21 +153,66 @@ export const SchemaProvider = () =>
       const loadKit = (dialect: Dialect) =>
         Effect.tryPromise({
           try: () =>
-            import(/* @vite-ignore */ dialectModule(dialect)) as Promise<{
-              generateDrizzleJson: (
-                imports: Record<string, unknown>,
-                prevId?: string,
-                schemaFilters?: string[],
-              ) => Promise<unknown>;
-              generateMigration: (
-                prev: unknown,
-                cur: unknown,
-              ) => Promise<string[]>;
-            }>,
+            import(
+              /* @vite-ignore */ dialectModule(dialect)
+            ) as Promise<DrizzleKitApi>,
           catch: (cause) =>
             new Error(
               `Failed to load drizzle-kit/${dialect} (is drizzle-kit installed?): ${cause}`,
             ),
+        });
+
+      const drizzleCliDialect = (dialect: Dialect) =>
+        dialect === "postgres" ? "postgresql" : dialect;
+
+      const drizzleKitBin = (dialect: Dialect) =>
+        Effect.sync(() => {
+          const apiUrl = import.meta.resolve(dialectModule(dialect));
+          return NodePath.join(
+            NodePath.dirname(fileURLToPath(apiUrl)),
+            "bin.cjs",
+          );
+        });
+
+      const runDrizzleGenerate = (props: SchemaProps, out: string) =>
+        Effect.gen(function* () {
+          const dialect = props.dialect ?? "postgres";
+          const bin = yield* drizzleKitBin(dialect);
+          const args = [
+            bin,
+            "generate",
+            "--dialect",
+            drizzleCliDialect(dialect),
+            "--schema",
+            resolveSchema(props),
+            "--out",
+            out,
+          ];
+          const result = yield* exec(
+            ChildProcess.make(process.execPath, args, {
+              cwd: process.cwd(),
+              env: {
+                NODE_PATH: [
+                  NodePath.join(process.cwd(), "node_modules"),
+                  process.env.NODE_PATH,
+                ]
+                  .filter((value): value is string => !!value)
+                  .join(NodePath.delimiter),
+              },
+              extendEnv: true,
+            }),
+          ).pipe(
+            Effect.mapError(
+              (cause) =>
+                new Error(`drizzle-kit generate failed: ${String(cause)}`),
+            ),
+          );
+          const output = `${result.stdout}\n${result.stderr}`;
+          if (result.exitCode !== 0 || /^Error:/m.test(output)) {
+            return yield* Effect.fail(
+              new Error(`drizzle-kit generate failed: ${output}`),
+            );
+          }
         });
 
       // List `<ts>_*` migration directories under `out`, sorted by numeric
@@ -183,6 +241,70 @@ export const SchemaProvider = () =>
           return undefined;
         });
 
+      const copyDirectory = (
+        from: string,
+        to: string,
+      ): Effect.Effect<void, any> =>
+        Effect.gen(function* () {
+          yield* fs.makeDirectory(to, { recursive: true });
+          const entries = yield* fs.readDirectory(from);
+          for (const entry of entries) {
+            const source = path.join(from, entry);
+            const target = path.join(to, entry);
+            const stat = yield* fs.stat(source);
+            if (stat.type === "Directory") {
+              yield* copyDirectory(source, target);
+            } else {
+              const contents = yield* fs.readFile(source);
+              yield* fs.writeFile(target, contents);
+            }
+          }
+        });
+
+      const splitSqlStatements = (sql: string) =>
+        sql
+          .split(/\n--> statement-breakpoint\n/g)
+          .map((statement) => statement.trim())
+          .filter((statement) => statement.length > 0);
+
+      const detectDriftWithCli = (props: SchemaProps) =>
+        Effect.gen(function* () {
+          const out = resolveOut(props);
+          const tmpOut = yield* fs.makeTempDirectory({
+            prefix: "alchemy-drizzle-generate-",
+          });
+          const outExists = yield* fs.exists(out);
+          if (outExists) {
+            yield* copyDirectory(out, tmpOut);
+          }
+
+          const before = yield* listMigrationDirs(tmpOut);
+          yield* runDrizzleGenerate(props, tmpOut);
+          const after = yield* listMigrationDirs(tmpOut);
+          const newDirs = after.filter((dir) => !before.includes(dir));
+          const latest = yield* readLatestSnapshot(tmpOut);
+          const sqlStatements: string[] = [];
+
+          for (const dir of newDirs) {
+            const migrationPath = path.join(tmpOut, dir, "migration.sql");
+            const exists = yield* fs.exists(migrationPath);
+            if (exists) {
+              sqlStatements.push(
+                ...splitSqlStatements(yield* fs.readFileString(migrationPath)),
+              );
+            }
+          }
+
+          yield* fs.remove(tmpOut, { recursive: true }).pipe(Effect.ignore);
+
+          return {
+            out,
+            cur: latest?.snapshot,
+            prevEntry: outExists ? yield* readLatestSnapshot(out) : undefined,
+            sqlStatements,
+          };
+        });
+
       /**
        * Run drizzle-kit's diff against the latest stored snapshot and
        * return whether any SQL statements would be emitted. Used by both
@@ -194,11 +316,17 @@ export const SchemaProvider = () =>
           const out = resolveOut(props);
           const dialect = props.dialect ?? "postgres";
           const kit = yield* loadKit(dialect);
+          if (!kit.generateDrizzleJson || !kit.generateMigration) {
+            return yield* detectDriftWithCli(props);
+          }
+          const generateDrizzleJson = kit.generateDrizzleJson;
+          const generateMigration = kit.generateMigration;
+
           const schemaModule = yield* loadSchemaModule(props);
           const prevEntry = yield* readLatestSnapshot(out);
           const cur = yield* Effect.tryPromise({
             try: () =>
-              kit.generateDrizzleJson(schemaModule, prevEntry?.snapshot.id),
+              generateDrizzleJson(schemaModule, prevEntry?.snapshot.id),
             catch: (cause) =>
               new Error(`drizzle-kit generateDrizzleJson failed: ${cause}`),
           });
@@ -209,14 +337,14 @@ export const SchemaProvider = () =>
           const prev =
             prevEntry?.snapshot ??
             (yield* Effect.tryPromise({
-              try: () => kit.generateDrizzleJson({}),
+              try: () => generateDrizzleJson({}),
               catch: (cause) =>
                 new Error(
                   `drizzle-kit generateDrizzleJson (empty baseline) failed: ${cause}`,
                 ),
             }));
           const sqlStatements = yield* Effect.tryPromise({
-            try: () => kit.generateMigration(prev, cur),
+            try: () => generateMigration(prev, cur),
             catch: (cause) =>
               new Error(`drizzle-kit generateMigration failed: ${cause}`),
           });
