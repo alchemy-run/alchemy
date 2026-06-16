@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as securityTxt from "@distilled.cloud/cloudflare/security-txt";
 import { expect } from "@effect/vitest";
@@ -217,5 +218,49 @@ describe.sequential("SecurityTxt", () => {
         const gone = yield* getSecurityTxt(zoneId);
         expect(gone).toEqual("");
       }).pipe(logLevel),
+  );
+
+  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+  // API for this per-zone file, so `list()` enumerates every zone via
+  // `listAllZones` and reads each. Only configured zones are emitted, so deploy
+  // a security.txt on the standing test zone and assert it appears.
+  test.provider("list enumerates configured security.txt files", (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* clearBaseline(zoneId);
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.SecurityTxt("SecurityTxt", {
+            zoneId,
+            contact,
+            expires,
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.SecurityTxt);
+      // Ride out token eventual-consistency 403s on the per-zone reads.
+      const all = yield* provider.list().pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+      );
+
+      expect(all.length).toBeGreaterThan(0);
+      const entry = all.find((s) => s.zoneId === deployed.zoneId);
+      expect(entry).toBeDefined();
+      expect(entry?.contact).toEqual(contact);
+      expect(entry?.expires).toEqual(expires);
+
+      yield* stack.destroy();
+
+      const gone = yield* getSecurityTxt(zoneId);
+      expect(gone).toEqual("");
+    }).pipe(logLevel),
   );
 });

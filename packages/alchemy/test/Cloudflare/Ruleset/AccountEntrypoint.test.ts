@@ -220,9 +220,7 @@ test.provider(
       );
 
       const all = yield* provider.list();
-      expect(
-        all.some((e) => e.rulesetId === deployed.rulesetId),
-      ).toBe(true);
+      expect(all.some((e) => e.rulesetId === deployed.rulesetId)).toBe(true);
       const found = all.find((e) => e.rulesetId === deployed.rulesetId)!;
       expect(found.accountId).toEqual(accountId);
       expect(found.phase).toEqual(phase);
