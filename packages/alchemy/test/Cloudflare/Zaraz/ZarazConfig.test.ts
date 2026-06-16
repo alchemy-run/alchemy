@@ -1,4 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
+import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { stripNullFields, stripUndefinedFields } from "@/Util/data";
 import * as zaraz from "@distilled.cloud/cloudflare/zaraz";
@@ -162,6 +165,41 @@ describe.sequential("ZarazConfig", () => {
               .pipe(Effect.ignore),
           ),
         );
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+  // API for the per-zone Zaraz config, so `list()` enumerates every zone via
+  // `listAllZones` and reads the singleton in each. Read-only — asserts the
+  // result is well-typed, non-empty, and contains the standing test zone.
+  test.provider(
+    "list enumerates Zaraz config across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const zone = yield* findZoneByName({ accountId, name: zoneName });
+        if (!zone) {
+          return yield* Effect.die(
+            new Error(`zone "${zoneName}" not found in account`),
+          );
+        }
+
+        yield* stack.destroy();
+
+        const provider = yield* Provider.findProvider(Cloudflare.ZarazConfig);
+        const all = yield* provider.list();
+
+        expect(all.length).toBeGreaterThan(0);
+        const row = all.find((c) => c.zoneId === zone.id);
+        expect(row).toBeDefined();
+        expect(typeof row!.zoneId).toBe("string");
+        expect(typeof row!.dataLayer).toBe("boolean");
+        expect(typeof row!.zarazVersion).toBe("number");
+        expect(row!.settings).toBeDefined();
+        expect(row!.workflow).toBeDefined();
+
+        yield* stack.destroy();
       }).pipe(logLevel),
     { timeout: 120_000 },
   );

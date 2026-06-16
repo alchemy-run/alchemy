@@ -136,18 +136,16 @@ export const DispatchNamespaceProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* wfp.listDispatchNamespaces
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((ns) =>
-                  toAttributes(ns, accountId, ns.namespaceName ?? ""),
-                ),
+        return yield* wfp.listDispatchNamespaces.pages({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((ns) =>
+                toAttributes(ns, accountId, ns.namespaceName ?? ""),
               ),
             ),
-          );
+          ),
+        );
       }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

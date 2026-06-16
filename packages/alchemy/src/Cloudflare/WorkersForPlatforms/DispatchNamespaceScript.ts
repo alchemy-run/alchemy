@@ -161,6 +161,13 @@ export const DispatchNamespaceScriptProvider = () =>
       }
       return undefined;
     }),
+    // Non-listable: a dispatch namespace script is keyed by
+    // (namespace, scriptName) and the Cloudflare API exposes no
+    // enumeration op for scripts within a namespace (only get/put/delete
+    // by exact scriptName). Even though namespaces themselves enumerate,
+    // the script names inside them cannot be discovered, so there is
+    // provably no way to list — return [] rather than throw.
+    list: () => Effect.succeed<DispatchNamespaceScriptAttributes[]>([]),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

@@ -4,7 +4,9 @@ import * as Predicate from "effect/Predicate";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "./lookup.ts";
 
 const ZoneSettingTypeId = "Cloudflare.Zone.Setting" as const;
 type ZoneSettingTypeId = typeof ZoneSettingTypeId;
@@ -79,6 +81,78 @@ export type ZoneSettingId =
   | "webp"
   | "websockets"
   | (string & {});
+
+/**
+ * The concrete, enumerable members of {@link ZoneSettingId}. Cloudflare has no
+ * "list all settings" operation in the distilled `zones` service (only a
+ * per-setting `getSetting`), so `list()` fans out a `getSetting` over this
+ * known set on every zone. Forward-compatible settings (the `(string & {})`
+ * tail) cannot be enumerated and are skipped by definition.
+ */
+const KNOWN_ZONE_SETTING_IDS = [
+  "0rtt",
+  "advanced_ddos",
+  "aegis",
+  "always_online",
+  "always_use_https",
+  "automatic_https_rewrites",
+  "automatic_platform_optimization",
+  "brotli",
+  "browser_cache_ttl",
+  "browser_check",
+  "cache_level",
+  "challenge_ttl",
+  "china_network_enabled",
+  "ciphers",
+  "cname_flattening",
+  "content_converter",
+  "development_mode",
+  "early_hints",
+  "edge_cache_ttl",
+  "email_obfuscation",
+  "h2_prioritization",
+  "hotlink_protection",
+  "http2",
+  "http3",
+  "image_resizing",
+  "ip_geolocation",
+  "ipv6",
+  "max_upload",
+  "min_tls_version",
+  "mirage",
+  "nel",
+  "opportunistic_encryption",
+  "opportunistic_onion",
+  "orange_to_orange",
+  "origin_error_page_pass_thru",
+  "origin_h2_max_streams",
+  "origin_max_http_version",
+  "polish",
+  "prefetch_preload",
+  "privacy_pass",
+  "proxy_read_timeout",
+  "pseudo_ipv4",
+  "redirects_for_ai_training",
+  "replace_insecure_js",
+  "response_buffering",
+  "rocket_loader",
+  "search_for_agents",
+  "security_header",
+  "security_level",
+  "server_side_exclude",
+  "sha1_support",
+  "sort_query_string_for_cache",
+  "ssl",
+  "tls_1_2_only",
+  "tls_1_3",
+  "tls_client_auth",
+  "transformations",
+  "transformations_allowed_origins",
+  "true_client_ip_header",
+  "waf",
+  "webp",
+  "websockets",
+] as const satisfies readonly ZoneSettingId[];
 
 export type ZoneSettingProps = {
   /**

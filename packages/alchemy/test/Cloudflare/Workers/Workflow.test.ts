@@ -7,6 +7,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "./fixtures/workflow/stack.ts";
+import WorkflowTestWorker from "./fixtures/workflow/workflow-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -101,4 +102,32 @@ test(
     expect(lastStatus.output?.envBindingCount).toBeGreaterThan(0);
   }).pipe(logLevel),
   { timeout: 30_000 },
+);
+
+// Canonical `list()` test (account collection): deploy the worker+workflow
+// fixture (which creates a `WorkflowResource` named "TestWorkflow"), then
+// enumerate every workflow in the account via the typed provider and assert the
+// deployed one is present. Bracket with destroy so the test is isolated.
+test.provider(
+  "list enumerates the deployed workflow",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* WorkflowTestWorker;
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.WorkflowResource,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((w) => w.workflowName === "TestWorkflow")).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
