@@ -1,6 +1,5 @@
 import * as GitHub from "@/GitHub";
 import * as Provider from "@/Provider";
-import { destroy } from "@/RemovalPolicy";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";

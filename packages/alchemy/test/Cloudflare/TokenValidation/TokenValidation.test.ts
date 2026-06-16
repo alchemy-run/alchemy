@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Output from "@/Output";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as tokenValidation from "@distilled.cloud/cloudflare/token-validation";
 import { expect } from "@effect/vitest";
@@ -95,6 +96,50 @@ test.provider(
         "00000000-0000-0000-0000-000000000000",
       ).pipe(Effect.flip);
       expect(ruleError._tag).toEqual("TokenValidationNotEntitled");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (zone-scoped collection): configurations live
+// inside a zone and the list op is keyed per zone, so `list()` enumerates
+// every zone via `listAllZones` and fans out the per-zone list, skipping
+// zones that reject with the typed `TokenValidationNotEntitled` / `Forbidden`
+// tags. On the unentitled testing account every zone is skipped, so the
+// result is an empty array — the assertion is that `list()` resolves to an
+// array (proving the typed skip path) rather than throwing. Presence of a
+// deployed configuration is asserted only on an entitled account (env-gated).
+test.provider(
+  "list enumerates configurations across all zones",
+  (stack) =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(
+        Cloudflare.TokenConfiguration,
+      );
+
+      if (!entitledZoneId) {
+        const all = yield* provider.list();
+        expect(Array.isArray(all)).toBe(true);
+        yield* stack.destroy();
+        return;
+      }
+
+      const zoneId = entitledZoneId;
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.TokenConfiguration("JwtConfigList", {
+            zoneId,
+            tokenSources: ['http.request.headers["authorization"][0]'],
+            keys: [JWKS_KEY_1],
+          });
+        }),
+      );
+
+      const all = yield* provider.list();
+      expect(all.some((c) => c.configId === deployed.configId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

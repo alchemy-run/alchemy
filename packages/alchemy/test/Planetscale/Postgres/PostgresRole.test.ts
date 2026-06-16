@@ -1,4 +1,5 @@
 import * as Planetscale from "@/Planetscale";
+import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Vitest";
 import * as ops from "@distilled.cloud/planetscale/Operations";
@@ -20,6 +21,94 @@ const logLevel = Effect.provideService(
 describe
   .skipIf(!process.env.PLANETSCALE_TEST)
   .concurrent("PostgresRole", () => {
+    test.provider(
+      "list enumerates the deployed default role",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database, role } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.PostgresDatabase("ListDb", {
+                name: "alchemy-pg-default-list",
+                clusterSize: "PS_10",
+                arch: "arm",
+              });
+              const role = yield* Planetscale.PostgresDefaultRole("ListRole", {
+                database,
+                forceReset: true,
+              });
+              return { database, role };
+            }),
+          );
+
+          const provider = yield* Provider.findProvider(
+            Planetscale.PostgresDefaultRole,
+          );
+          const all = yield* provider.list();
+
+          expect(
+            all.some(
+              (r) =>
+                r.organization === database.organization &&
+                r.database === database.name &&
+                r.branch === role.branch,
+            ),
+          ).toBe(true);
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(
+            database.name,
+            database.organization,
+          );
+        }).pipe(logLevel),
+      5_000_000,
+    );
+
+    test.provider(
+      "list enumerates the deployed role",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database, role } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.PostgresDatabase("ListDb", {
+                name: "alchemy-pg-role-list",
+                clusterSize: "PS_10",
+                arch: "arm",
+              });
+              const role = yield* Planetscale.PostgresRole("ListRole", {
+                database,
+                inheritedRoles: ["pg_read_all_data"],
+              });
+              return { database, role };
+            }),
+          );
+
+          const provider = yield* Provider.findProvider(
+            Planetscale.PostgresRole,
+          );
+          const all = yield* provider.list();
+
+          expect(
+            all.some(
+              (r) =>
+                r.organization === database.organization &&
+                r.database === database.name &&
+                r.id === role.id,
+            ),
+          ).toBe(true);
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(
+            database.name,
+            database.organization,
+          );
+        }).pipe(logLevel),
+      5_000_000,
+    );
+
     test.provider(
       "default role - create, duplicate fails, forceReset returns new id",
       (stack) =>

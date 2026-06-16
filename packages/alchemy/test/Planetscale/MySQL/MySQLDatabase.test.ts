@@ -1,5 +1,6 @@
 import { adopt } from "@/AdoptPolicy";
 import * as Planetscale from "@/Planetscale";
+import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Vitest";
 import * as ops from "@distilled.cloud/planetscale/Operations";
@@ -22,6 +23,65 @@ const fixturesDir = `${import.meta.dirname}/fixtures`;
 describe
   .skipIf(!process.env.PLANETSCALE_TEST)
   .concurrent("MySQLDatabase", () => {
+    // Read-only: exercises the real org-wide enumeration code path without
+    // provisioning anything (PlanetScale provisioning is extremely slow).
+    test.provider("list enumerates databases (read-only)", () =>
+      Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(
+          Planetscale.MySQLDatabase,
+        );
+        const all = yield* provider.list();
+
+        expect(Array.isArray(all)).toBe(true);
+        for (const db of all) {
+          expect(db).toMatchObject({
+            id: expect.any(String),
+            name: expect.any(String),
+            organization: expect.any(String),
+            region: { slug: expect.any(String) },
+          });
+        }
+      }).pipe(logLevel),
+    );
+
+    // Deploy-and-find coverage, opt-in only (slow provisioning).
+    test.provider.skipIf(!process.env.PLANETSCALE_DEPLOY_TEST)(
+      "list finds a freshly deployed database",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.MySQLDatabase(
+                "ListDatabase",
+                {
+                  name: "alchemy-mysql-db-list",
+                  clusterSize: "PS_10",
+                },
+              );
+              return { database };
+            }),
+          );
+
+          const provider = yield* Provider.findProvider(
+            Planetscale.MySQLDatabase,
+          );
+          const all = yield* provider.list();
+
+          expect(
+            all.some(
+              (db) =>
+                db.organization === database.organization &&
+                db.name === database.name,
+            ),
+          ).toBe(true);
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      5_000_000,
+    );
+
     test.provider("create database with minimal settings", (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();

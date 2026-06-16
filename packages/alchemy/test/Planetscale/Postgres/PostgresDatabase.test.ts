@@ -1,5 +1,6 @@
 import { adopt } from "@/AdoptPolicy";
 import * as Planetscale from "@/Planetscale";
+import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Vitest";
 import * as ops from "@distilled.cloud/planetscale/Operations";
@@ -22,6 +23,43 @@ const fixturesDir = `${import.meta.dirname}/fixtures`;
 describe
   .skipIf(!process.env.PLANETSCALE_TEST)
   .concurrent("PostgresDatabase", () => {
+    test.provider(
+      "list enumerates the deployed database",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.PostgresDatabase(
+                "ListDatabase",
+                {
+                  name: "alchemy-pg-db-list",
+                  clusterSize: "PS_10",
+                },
+              );
+              return { database };
+            }),
+          );
+
+          const provider = yield* Provider.findProvider(
+            Planetscale.PostgresDatabase,
+          );
+          const all = yield* provider.list();
+
+          expect(
+            all.some(
+              (db) =>
+                db.organization === database.organization &&
+                db.name === database.name,
+            ),
+          ).toBe(true);
+
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      5_000_000,
+    );
+
     test.provider(
       "create database with minimal settings",
       (stack) =>

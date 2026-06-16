@@ -1,4 +1,5 @@
 import * as Planetscale from "@/Planetscale";
+import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Vitest";
 import * as ops from "@distilled.cloud/planetscale/Operations";
@@ -21,6 +22,75 @@ const logLevel = Effect.provideService(
 describe
   .skipIf(!process.env.PLANETSCALE_TEST)
   .concurrent("MySQLPassword", () => {
+    // Read-only: PARENT FAN-OUT enumeration (org -> databases -> branches ->
+    // passwords) against the live org, without provisioning anything.
+    test.provider("list enumerates passwords (read-only)", () =>
+      Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(
+          Planetscale.MySQLPassword,
+        );
+        const all = yield* provider.list();
+
+        expect(Array.isArray(all)).toBe(true);
+        for (const p of all) {
+          expect(p).toMatchObject({
+            id: expect.any(String),
+            name: expect.any(String),
+            organization: expect.any(String),
+            database: expect.any(String),
+            branch: expect.any(String),
+          });
+        }
+      }).pipe(logLevel),
+    );
+
+    // Deploy-and-find coverage, opt-in only (slow provisioning).
+    test.provider.skipIf(!process.env.PLANETSCALE_DEPLOY_TEST)(
+      "list finds a freshly deployed password",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database, password } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.MySQLDatabase("ListDb", {
+                name: "alchemy-mysql-pw-list",
+                clusterSize: "PS_10",
+              });
+              const password = yield* Planetscale.MySQLPassword(
+                "ListPassword",
+                {
+                  database,
+                  role: "reader",
+                },
+              );
+              return { database, password };
+            }),
+          );
+
+          const provider = yield* Provider.findProvider(
+            Planetscale.MySQLPassword,
+          );
+          const all = yield* provider.list();
+
+          expect(
+            all.some(
+              (p) =>
+                p.organization === database.organization &&
+                p.database === database.name &&
+                p.id === password.id,
+            ),
+          ).toBe(true);
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(
+            database.name,
+            database.organization,
+          );
+        }).pipe(logLevel),
+      5_000_000,
+    );
+
     test.provider(
       "create, update, and delete password",
       (stack) =>
