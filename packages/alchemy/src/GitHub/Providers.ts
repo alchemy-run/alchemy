@@ -8,6 +8,7 @@ import * as Credentials from "./Credentials.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
 import { Secret, SecretProvider } from "./Secret.ts";
 import { Variable, VariableProvider } from "./Variable.ts";
+import { Webhook, WebhookProvider } from "./Webhook.ts";
 
 export { GitHubCredentials } from "./Credentials.ts";
 
@@ -24,7 +25,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 export const providers = () =>
   Layer.effect(
     Providers,
-    Provider.collection([Comment, Repository, Secret, Variable]),
+    Provider.collection([Comment, Repository, Secret, Variable, Webhook]),
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -32,6 +33,7 @@ export const providers = () =>
         RepositoryProvider(),
         SecretProvider(),
         VariableProvider(),
+        WebhookProvider(),
       ),
     ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
