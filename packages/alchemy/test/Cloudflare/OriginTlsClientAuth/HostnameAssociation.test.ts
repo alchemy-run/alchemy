@@ -174,7 +174,7 @@ describe.sequential("HostnameAssociation", () => {
       expect(all).toEqual([]);
 
       yield* stack.destroy();
-    }).pipe(logLevel),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
   );
 
   test.provider(
@@ -233,16 +233,25 @@ describe.sequential("HostnameAssociation", () => {
               ? Effect.void
               : Effect.fail({ _tag: "AssociationNotVoided" } as const),
           ),
+          // Frequent, bounded spaced poll (~120s): voiding settles through
+          // edge propagation asynchronously, so check every 5s rather than
+          // backing off exponentially (whose late gaps overshoot the timeout).
           Effect.retry({
             while: (e) => e._tag === "AssociationNotVoided",
-            schedule: Schedule.exponential("500 millis"),
-            times: 10,
+            schedule: Schedule.spaced("5 seconds"),
+            times: 24,
           }),
           Effect.map(() => true),
         );
         expect(gone).toEqual(true);
-      }).pipe(logLevel),
-    { timeout: 120_000 },
+      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+    // Two sequential deploys, each uploading two hostname client-certificates
+    // plus the association, on Cloudflare's per-zone-serialized client-cert
+    // API. Under a full concurrent `./test/Cloudflare` run this zone's cert
+    // mutations contend with the sibling Certificate/HostnameCertificate
+    // suites (each create/delete bounded-retries the per-zone 409), then a
+    // ~120s spaced void poll — give real headroom while staying bounded.
+    { timeout: 300_000 },
   );
 
   test.provider(
@@ -291,10 +300,13 @@ describe.sequential("HostnameAssociation", () => {
               ? Effect.void
               : Effect.fail({ _tag: "AssociationNotVoided" } as const),
           ),
+          // Frequent, bounded spaced poll (~120s): voiding settles through
+          // edge propagation asynchronously, so check every 5s rather than
+          // backing off exponentially (whose late gaps overshoot the timeout).
           Effect.retry({
             while: (e) => e._tag === "AssociationNotVoided",
-            schedule: Schedule.exponential("500 millis"),
-            times: 10,
+            schedule: Schedule.spaced("5 seconds"),
+            times: 24,
           }),
           Effect.map(() => true),
         );
@@ -302,9 +314,29 @@ describe.sequential("HostnameAssociation", () => {
 
         yield* stack.destroy();
 
-        const newGone = yield* getAssociation(zoneId, HOST_REPLACE_B);
-        expect(newGone).toBeUndefined();
-      }).pipe(logLevel),
-    { timeout: 120_000 },
+        // Voiding is asynchronous (the void PUT settles through edge
+        // propagation) — poll until the association reads as absent rather
+        // than asserting on a single (potentially stale) read.
+        const newGone = yield* getAssociation(zoneId, HOST_REPLACE_B).pipe(
+          Effect.flatMap((assoc) =>
+            assoc === undefined
+              ? Effect.void
+              : Effect.fail({ _tag: "AssociationNotVoided" } as const),
+          ),
+          // Frequent, bounded spaced poll (~120s): voiding settles through
+          // edge propagation asynchronously, so check every 5s rather than
+          // backing off exponentially (whose late gaps overshoot the timeout).
+          Effect.retry({
+            while: (e) => e._tag === "AssociationNotVoided",
+            schedule: Schedule.spaced("5 seconds"),
+            times: 24,
+          }),
+          Effect.map(() => true),
+        );
+        expect(newGone).toEqual(true);
+      }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+    // Same per-zone-serialized client-cert contention as the lifecycle case
+    // above, plus two spaced void polls — give real headroom under load.
+    { timeout: 300_000 },
   );
 });

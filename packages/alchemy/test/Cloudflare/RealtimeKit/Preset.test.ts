@@ -52,9 +52,13 @@ const expectGone = (accountId: string, appId: string, presetId: string) =>
   );
 
 // Deterministic names — apps cannot be deleted, so every run adopts the
-// same app instead of leaking a new one.
+// same app instead of leaking a new one. Each test gets its own preset
+// name: the suites run concurrently (`sequence.concurrent`) and a shared
+// preset name would make two stacks create the same preset in the same app
+// and race to a 409.
 const APP_NAME = "alchemy-rtk-test-app";
-const PRESET_NAME = "alchemy-rtk-test-preset";
+const LIFECYCLE_PRESET_NAME = "alchemy-rtk-test-preset-lifecycle";
+const LIST_PRESET_NAME = "alchemy-rtk-test-preset-list";
 
 test.provider(
   "create with defaults, verify out-of-band, update in place, destroy",
@@ -80,20 +84,20 @@ test.provider(
           });
           return yield* Cloudflare.RealtimeKitPreset("Preset", {
             appId: app.appId,
-            name: PRESET_NAME,
+            name: LIFECYCLE_PRESET_NAME,
           });
         }),
       );
 
       expect(v1.presetId).toBeTruthy();
       expect(v1.accountId).toEqual(accountId);
-      expect(v1.name).toEqual(PRESET_NAME);
+      expect(v1.name).toEqual(LIFECYCLE_PRESET_NAME);
       expect(v1.config.viewType).toEqual("GROUP_CALL");
       expect(v1.permissions?.canRecord).toBe(false);
 
       // Out-of-band verification via the distilled API.
       const live = yield* getPreset(accountId, v1.appId, v1.presetId);
-      expect(live.name).toEqual(PRESET_NAME);
+      expect(live.name).toEqual(LIFECYCLE_PRESET_NAME);
       expect(live.config.viewType).toEqual("GROUP_CALL");
 
       // In-place update — grant recording + moderation. Same preset (no
@@ -105,7 +109,7 @@ test.provider(
           });
           return yield* Cloudflare.RealtimeKitPreset("Preset", {
             appId: app.appId,
-            name: PRESET_NAME,
+            name: LIFECYCLE_PRESET_NAME,
             permissions: {
               ...Cloudflare.defaultRealtimeKitPresetPermissions(),
               canRecord: true,
@@ -131,7 +135,7 @@ test.provider(
           });
           return yield* Cloudflare.RealtimeKitPreset("Preset", {
             appId: app.appId,
-            name: PRESET_NAME,
+            name: LIFECYCLE_PRESET_NAME,
             permissions: {
               ...Cloudflare.defaultRealtimeKitPresetPermissions(),
               canRecord: true,
@@ -175,7 +179,7 @@ test.provider(
           });
           return yield* Cloudflare.RealtimeKitPreset("Preset", {
             appId: app.appId,
-            name: PRESET_NAME,
+            name: LIST_PRESET_NAME,
           });
         }),
       );
@@ -191,7 +195,7 @@ test.provider(
         ),
       ).toBe(true);
       const found = all.find((p) => p.presetId === deployed.presetId);
-      expect(found?.name).toEqual(PRESET_NAME);
+      expect(found?.name).toEqual(LIST_PRESET_NAME);
       expect(found?.config.viewType).toEqual("GROUP_CALL");
 
       yield* stack.destroy();

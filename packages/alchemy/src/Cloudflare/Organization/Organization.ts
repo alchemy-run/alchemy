@@ -198,7 +198,8 @@ export const OrganizationProvider = () =>
     // beyond the token), so there is no env scope to resolve — just paginate
     // exhaustively and map each row to the same `Attributes` shape `read`
     // returns. The op is entitlement-gated: on an unentitled account it
-    // rejects with the typed `Forbidden` error (which propagates).
+    // rejects with the typed `Forbidden` error, which `list()` tolerates
+    // (returns `[]`) so account-wide enumeration / `nuke` never blows up.
     list: () =>
       organizations.listOrganizations.pages({}).pipe(
         Stream.runCollect,

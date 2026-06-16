@@ -284,6 +284,9 @@ export const ZoneDnsSettingsProvider = () =>
               return attributes;
             }),
             // Plan-gated or partial zones reject the route; skip them.
+            // (Transient 403/429 "Authentication error" blips under
+            // concurrency are retried globally by the Cloudflare retry policy,
+            // so they never reach here as a real failure.)
             Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
           ),
         { concurrency: 10 },

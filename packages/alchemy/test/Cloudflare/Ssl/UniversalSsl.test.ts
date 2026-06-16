@@ -99,6 +99,7 @@ describe.sequential("UniversalSsl", () => {
         const restored = yield* getUniversal(zoneId);
         expect(restored.enabled).toEqual(true);
       }).pipe(logLevel),
+    { timeout: 180_000 },
   );
 
   test.provider(
@@ -144,6 +145,7 @@ describe.sequential("UniversalSsl", () => {
         const restored = yield* getUniversal(zoneId);
         expect(restored.enabled).toEqual(true);
       }).pipe(logLevel),
+    { timeout: 180_000 },
   );
 
   test.provider(
@@ -180,6 +182,7 @@ describe.sequential("UniversalSsl", () => {
         // Leave the zone in its default state for other suites.
         yield* setBaseline(zoneId, true);
       }).pipe(logLevel),
+    { timeout: 180_000 },
   );
 
   // Canonical `list()` test (zone-scoped singleton): there is no account-wide

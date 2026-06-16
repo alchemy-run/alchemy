@@ -1,6 +1,7 @@
 import * as resourceTagging from "@distilled.cloud/cloudflare/resource-tagging";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -13,6 +14,17 @@ import type { Providers } from "../Providers.ts";
 
 const ZoneResourceTagsTypeId = "Cloudflare.Tags.ZoneResourceTags" as const;
 type ZoneResourceTagsTypeId = typeof ZoneResourceTagsTypeId;
+
+// A target resource (e.g. a freshly-created DNS record) propagates
+// eventually-consistently to Cloudflare's tag index; the tag API answers
+// `ZoneTagResourceNotFound` (404) until it appears. Bounded-retry the tag
+// calls on that typed tag so reconcile waits out the propagation window.
+const targetVisibleRetry = {
+  while: (e: { _tag: string }) => e._tag === "ZoneTagResourceNotFound",
+  schedule: Schedule.exponential("500 millis").pipe(
+    Schedule.both(Schedule.recurs(10)),
+  ),
+} as const;
 
 /**
  * Zone-level resource types that can carry tags via Cloudflare's unified
@@ -226,12 +238,21 @@ export const ZoneResourceTagsProvider = () =>
         (olds?.accessApplicationId as string | undefined);
       if (!zoneId || !resourceId || !resourceType) return undefined;
 
-      const observed = yield* resourceTagging.getZoneTag({
-        zoneId,
-        resourceId,
-        resourceType,
-        accessApplicationId,
-      });
+      const observed = yield* resourceTagging
+        .getZoneTag({
+          zoneId,
+          resourceId,
+          resourceType,
+          accessApplicationId,
+        })
+        // A 404 means the target resource no longer exists; its tags are
+        // gone with it.
+        .pipe(
+          Effect.catchTag("ZoneTagResourceNotFound", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      if (observed === undefined) return undefined;
       const tags = narrowTags(observed.tags);
       // Cloudflare reports untagged (and unknown) resources as an empty
       // tag set — that is "gone" for this resource.
@@ -261,14 +282,19 @@ export const ZoneResourceTagsProvider = () =>
       const desired = resolveTags(news.tags);
 
       // Observe — cloud state is authoritative. The GET never 404s for a
-      // missing/untagged resource; it returns an empty tag set, so the
-      // same call covers greenfield, update, and adoption.
-      const observed = yield* resourceTagging.getZoneTag({
-        zoneId,
-        resourceId,
-        resourceType: news.resourceType,
-        accessApplicationId,
-      });
+      // valid-but-untagged resource (it returns an empty tag set), so the
+      // same call covers greenfield, update, and adoption. It *does* 404
+      // (`ZoneTagResourceNotFound`) when the target resource itself isn't
+      // visible yet — a freshly-created DNS record propagates eventually-
+      // consistently to the tag index — so bounded-retry until it appears.
+      const observed = yield* resourceTagging
+        .getZoneTag({
+          zoneId,
+          resourceId,
+          resourceType: news.resourceType,
+          accessApplicationId,
+        })
+        .pipe(Effect.retry(targetVisibleRetry));
 
       // Sync — PUT is a full replace, so the only decision is whether the
       // observed set already equals the desired set (skip the write).
@@ -283,13 +309,15 @@ export const ZoneResourceTagsProvider = () =>
         } satisfies ZoneResourceTagsAttributes;
       }
 
-      const updated = yield* resourceTagging.putZoneTag({
-        zoneId,
-        resourceId,
-        resourceType: news.resourceType,
-        accessApplicationId,
-        tags: desired,
-      });
+      const updated = yield* resourceTagging
+        .putZoneTag({
+          zoneId,
+          resourceId,
+          resourceType: news.resourceType,
+          accessApplicationId,
+          tags: desired,
+        })
+        .pipe(Effect.retry(targetVisibleRetry));
       return {
         zoneId,
         resourceType: news.resourceType,

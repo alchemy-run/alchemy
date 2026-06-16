@@ -143,7 +143,10 @@ export const OriginPostQuantumEncryptionProvider = () =>
             Effect.map((observed) =>
               toAttributes(zoneId, observed, toValue(observed.value)),
             ),
-            // Zone gone out-of-band / not resolvable — skip it.
+            // Zone gone out-of-band / not resolvable — skip it. (Transient
+            // 403/429 "Authentication error" blips under concurrency are
+            // retried globally by the Cloudflare retry policy, so they never
+            // reach here as a real failure.)
             Effect.catchTag("InvalidZoneIdentifier", () =>
               Effect.succeed(undefined),
             ),

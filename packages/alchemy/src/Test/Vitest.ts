@@ -131,8 +131,20 @@ export const make = <ROut = any>(options: MakeOptions<ROut>): TestApi => {
     fn: (stack: ScratchStack) => Effect.Effect<void, any, any>,
   ) => {
     const scratch = Core.scratchStack(options, name);
+    // Guarantee teardown. `test.provider` has no built-in cleanup, so a body
+    // that fails (assertion, API error like a 409/Unauthorized) or is
+    // interrupted (vitest timeout) BEFORE its trailing `stack.destroy()` would
+    // otherwise leak every cloud resource it deployed: the scratch's in-memory
+    // state is discarded with the process, so no later run can reclaim the
+    // orphan (only an account-wide `nuke` can). `scratch.destroy()` is
+    // idempotent (empty-plan apply against the shared scratch state) — a no-op
+    // when the body already destroyed, and it reclaims the orphans otherwise.
+    // `Effect.ensuring` runs the finalizer on success, failure, AND interruption.
+    const body = Core.withProviders(fn(scratch), options, scratch.name).pipe(
+      Effect.ensuring(scratch.destroy().pipe(Effect.ignore)),
+    );
     return Core.toEffect(
-      Core.withProviders(fn(scratch), options, scratch.name),
+      body,
       { ...options, state: scratch.state },
       sharedScope,
     );

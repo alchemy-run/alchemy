@@ -121,8 +121,10 @@ export const TieredCachingProvider = () =>
               toAttributes(zoneId, observed, toValue(observed.value)),
             ),
             // Zone deleted out-of-band between enumeration and read —
-            // the setting is gone with it; skip it.
-            Effect.catchTag("InvalidObjectIdentifier", () =>
+            // the setting is gone with it; skip it. A concurrently-purged
+            // zone surfaces as `ZoneNotFound` (404 "Invalid or missing
+            // zone") rather than the 7003 object-identifier code.
+            Effect.catchTag(["InvalidObjectIdentifier", "ZoneNotFound"], () =>
               Effect.succeed(undefined),
             ),
           ),

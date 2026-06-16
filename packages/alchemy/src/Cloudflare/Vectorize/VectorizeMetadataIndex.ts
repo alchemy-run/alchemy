@@ -188,6 +188,12 @@ export const VectorizeMetadataIndexProvider = () =>
               .filter((name): name is string => name != null),
           ),
         ),
+        // A parent index deleted by a concurrent operation mid-enumeration
+        // can fail the account-scoped pagination with "index deleted" (typed
+        // as Gone) — skip the whole enumeration rather than throw.
+        Effect.catchTag(["NotFound", "Gone"], () =>
+          Effect.succeed<string[]>([]),
+        ),
       );
 
       const rows = yield* Effect.forEach(

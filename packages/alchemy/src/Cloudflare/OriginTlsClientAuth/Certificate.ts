@@ -2,6 +2,7 @@ import * as originTls from "@distilled.cloud/cloudflare/origin-tls-client-auth";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
@@ -213,6 +214,26 @@ export const OriginTlsClientAuthCertificateProvider = () =>
                 return match;
               }),
             ),
+            // A destroy→deploy cycle re-uploading the same PEM hits 1406 while
+            // the prior certificate's tombstone is still `pending_deletion`
+            // (it settles to `deleted` within ~10s, after which the same PEM
+            // either resurrects under its old id or uploads fresh). Ride that
+            // window out with a bounded retry of the whole create-or-adopt
+            // step.
+            //
+            // Cloudflare serializes zone client-cert mutations per zone; when a
+            // sibling upload/delete on the SAME zone is in flight, a concurrent
+            // upload is rejected with HTTP 409 (`ZoneClientCertConflict`).
+            // Retry it on the same bounded (~50s) schedule so concurrent
+            // per-zone mutations serialize gracefully instead of failing the
+            // deploy.
+            Effect.retry({
+              while: (e) =>
+                e._tag === "CertificateAlreadyExists" ||
+                e._tag === "ZoneClientCertConflict",
+              schedule: Schedule.spaced("5 seconds"),
+              times: 10,
+            }),
           );
       }
 
@@ -259,6 +280,24 @@ export const OriginTlsClientAuthCertificateProvider = () =>
           certificateId: output.certificateId,
         })
         .pipe(
+          // A certificate still propagating its initial deployment answers
+          // code 1434 "Cannot delete resource while in pending deployment
+          // state." — this is why a destroy immediately after a deploy could
+          // leak the certificate. Deployment settles within seconds, so ride
+          // it out with a bounded (~60s) retry.
+          //
+          // Cloudflare serializes zone client-cert mutations per zone; a delete
+          // racing a sibling upload/delete on the SAME zone is rejected with
+          // HTTP 409 (`ZoneClientCertConflict`). Retry it on the same bounded
+          // schedule so the delete (and thus teardown) converges instead of
+          // leaking the certificate.
+          Effect.retry({
+            while: (e) =>
+              e._tag === "CertificatePendingDeployment" ||
+              e._tag === "ZoneClientCertConflict",
+            schedule: Schedule.spaced("5 seconds"),
+            times: 12,
+          }),
           Effect.catchTag(
             ["CertificateNotFound", "CertificateAlreadyDeleted"],
             () => Effect.void,
@@ -285,7 +324,9 @@ const observeById = (zoneId: string, certificateId: string) =>
 const findByContent = (zoneId: string, certificate: string) =>
   Effect.gen(function* () {
     const list = yield* originTls.listOriginTlsClientAuths({ zoneId });
-    return list.result.find(
+    // Cloudflare returns `result: null` (not `[]`) for a zone whose cert store
+    // is empty — treat it as no matches.
+    return (list.result ?? []).find(
       (c) =>
         isLive(c.status) &&
         normalizePem(c.certificate ?? "") === normalizePem(certificate),

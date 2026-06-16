@@ -1,9 +1,11 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
+import { poll } from "@/Util/poll.ts";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -37,7 +39,18 @@ test.provider("list enumerates the deployed email address", (stack) =>
     expect(address.email).toEqual(testEmail);
 
     const provider = yield* Provider.findProvider(Cloudflare.EmailAddress);
-    const all = yield* provider.list();
+
+    // A freshly-deployed address is eventually consistent in the account-wide
+    // list(); poll until it appears before asserting.
+    const all = yield* poll({
+      description: "list() includes the deployed email address",
+      effect: provider.list(),
+      predicate: (all) => all.some((a) => a.email === testEmail),
+      schedule: Schedule.both(
+        Schedule.spaced("3 seconds"),
+        Schedule.recurs(20),
+      ),
+    });
 
     expect(all.some((a) => a.addressId === address.addressId)).toBe(true);
     expect(all.some((a) => a.email === testEmail)).toBe(true);

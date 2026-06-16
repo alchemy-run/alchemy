@@ -1,6 +1,7 @@
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { deepEqual, isResolved } from "../../Diff.ts";
@@ -460,6 +461,7 @@ export const AiSearchInstanceProvider = () =>
             ...toMutableBody(news),
           })
           .pipe(
+            retryTokenPropagation,
             Effect.map((created) => ({
               created: true as const,
               instance: created as ObservedInstance,
@@ -497,12 +499,14 @@ export const AiSearchInstanceProvider = () =>
         return toAttributes(observed, acct);
       }
 
-      const updated = yield* aisearch.updateInstance({
-        accountId: acct,
-        id: instanceId,
-        ...preserveObserved(observed),
-        ...defined(desired),
-      });
+      const updated = yield* aisearch
+        .updateInstance({
+          accountId: acct,
+          id: instanceId,
+          ...preserveObserved(observed),
+          ...defined(desired),
+        })
+        .pipe(retryTokenPropagation);
       return toAttributes(updated, acct);
     }),
     delete: Effect.fn(function* ({ output }) {
@@ -513,6 +517,26 @@ export const AiSearchInstanceProvider = () =>
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
   });
+
+/**
+ * On a greenfield create Cloudflare auto-provisions an R2 service token for
+ * the instance to read its source bucket. That token is validated
+ * eventually-consistently, so the create/update PUT can transiently reject
+ * with `InvalidTokenCredentials` (code 7012, message
+ * `ai_search_instance_invalid_token`) before the token has propagated. Ride
+ * the blip out with a short, bounded retry; a genuinely invalid token still
+ * fails once the retries are exhausted.
+ */
+const retryTokenPropagation = <A, E extends { _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "InvalidTokenCredentials",
+      schedule: Schedule.exponential("1 second"),
+      times: 6,
+    }),
+  );
 
 type ObservedInstance = aisearch.ReadInstanceResponse;
 

@@ -264,8 +264,11 @@ export const CustomCertificateProvider = () =>
     // uploaded `type` are write-only (never echoed back), so — exactly like
     // `read`'s cold adoption path — the unknowable `type`/`contentHash`
     // default to `legacy_custom`/`""`. Plan-gated zones reject the route with
-    // the typed `PlanLevelNotAllowed` (custom certs are Business/Enterprise)
-    // and freshly-scoped tokens may blip `Forbidden`; both skip the zone.
+    // the typed `PlanLevelNotAllowed` (custom certs are Business/Enterprise),
+    // zones that can't host custom certs (partial/pending/deleted between
+    // list and read) reject with `ZoneNotFound` ("Cannot find a valid zone"),
+    // and freshly-scoped tokens may blip `Forbidden`; all three skip the zone
+    // so enumeration still returns every zone it can read.
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const zones = yield* listAllZones(accountId);
@@ -287,8 +290,9 @@ export const CustomCertificateProvider = () =>
                   ),
                 ),
               ),
-              Effect.catchTag(["PlanLevelNotAllowed", "Forbidden"], () =>
-                Effect.succeed([] as CustomCertificateAttributes[]),
+              Effect.catchTag(
+                ["PlanLevelNotAllowed", "ZoneNotFound", "Forbidden"],
+                () => Effect.succeed([] as CustomCertificateAttributes[]),
               ),
             ),
         { concurrency: 10 },

@@ -1,6 +1,7 @@
 import * as snippets from "@distilled.cloud/cloudflare/snippets";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -245,7 +246,20 @@ export const SnippetProvider = () =>
           zoneId: output.zoneId,
           snippetName: output.name,
         })
-        .pipe(Effect.catchTag("SnippetNotFound", () => Effect.void));
+        // A snippet can only be deleted once no snippet rule references it.
+        // The engine deletes referencing `SnippetRules` first (dependency
+        // edge via `snippetName`), but the rule removal is eventually
+        // consistent — Cloudflare may still report `snippet is still used`
+        // for a short window. Bounded-retry that lag before giving up.
+        .pipe(
+          Effect.retry({
+            while: (e) => e._tag === "SnippetInUse",
+            schedule: Schedule.exponential("1 second").pipe(
+              Schedule.both(Schedule.recurs(8)),
+            ),
+          }),
+          Effect.catchTag("SnippetNotFound", () => Effect.void),
+        );
     }),
   });
 

@@ -52,9 +52,17 @@ const expectGone = (accountId: string, appId: string, webhookId: string) =>
   );
 
 // Deterministic names — apps cannot be deleted, so every run adopts the
-// same app instead of leaking a new one.
+// same app instead of leaking a new one. Each test gets its own webhook
+// name AND url: the suites run concurrently (`sequence.concurrent`) and both
+// adopt the same singleton app, so they'd otherwise create webhooks in the
+// same app. RealtimeKit enforces a unique webhook url per app, so two suites
+// sharing a url race to a 409 (a shared name alone is not enough to collide).
 const APP_NAME = "alchemy-rtk-test-app";
-const WEBHOOK_NAME = "alchemy-rtk-test-webhook";
+const LIFECYCLE_WEBHOOK_NAME = "alchemy-rtk-test-webhook-lifecycle";
+const LIST_WEBHOOK_NAME = "alchemy-rtk-test-webhook-list";
+const LIFECYCLE_WEBHOOK_URL =
+  "https://example.com/alchemy-rtk-webhook-lifecycle";
+const LIST_WEBHOOK_URL = "https://example.com/alchemy-rtk-webhook-list";
 
 test.provider(
   "create, verify out-of-band, update in place, destroy",
@@ -80,8 +88,8 @@ test.provider(
           });
           return yield* Cloudflare.RealtimeKitWebhook("Webhook", {
             appId: app.appId,
-            name: WEBHOOK_NAME,
-            url: "https://example.com/alchemy-rtk-webhook",
+            name: LIFECYCLE_WEBHOOK_NAME,
+            url: LIFECYCLE_WEBHOOK_URL,
             events: ["meeting.started", "meeting.ended"],
           });
         }),
@@ -89,8 +97,8 @@ test.provider(
 
       expect(v1.webhookId).toBeTruthy();
       expect(v1.accountId).toEqual(accountId);
-      expect(v1.name).toEqual(WEBHOOK_NAME);
-      expect(v1.url).toEqual("https://example.com/alchemy-rtk-webhook");
+      expect(v1.name).toEqual(LIFECYCLE_WEBHOOK_NAME);
+      expect(v1.url).toEqual(LIFECYCLE_WEBHOOK_URL);
       expect([...v1.events].sort()).toEqual([
         "meeting.ended",
         "meeting.started",
@@ -99,8 +107,8 @@ test.provider(
 
       // Out-of-band verification via the distilled API.
       const live = yield* getWebhook(accountId, v1.appId, v1.webhookId);
-      expect(live.name).toEqual(WEBHOOK_NAME);
-      expect(live.url).toEqual("https://example.com/alchemy-rtk-webhook");
+      expect(live.name).toEqual(LIFECYCLE_WEBHOOK_NAME);
+      expect(live.url).toEqual(LIFECYCLE_WEBHOOK_URL);
 
       // In-place update — pause delivery and change the event set. Same
       // webhook (no replacement).
@@ -111,8 +119,8 @@ test.provider(
           });
           return yield* Cloudflare.RealtimeKitWebhook("Webhook", {
             appId: app.appId,
-            name: WEBHOOK_NAME,
-            url: "https://example.com/alchemy-rtk-webhook",
+            name: LIFECYCLE_WEBHOOK_NAME,
+            url: LIFECYCLE_WEBHOOK_URL,
             events: ["recording.statusUpdate"],
             enabled: false,
           });
@@ -135,8 +143,8 @@ test.provider(
           });
           return yield* Cloudflare.RealtimeKitWebhook("Webhook", {
             appId: app.appId,
-            name: WEBHOOK_NAME,
-            url: "https://example.com/alchemy-rtk-webhook",
+            name: LIFECYCLE_WEBHOOK_NAME,
+            url: LIFECYCLE_WEBHOOK_URL,
             events: ["recording.statusUpdate"],
             enabled: false,
           });
@@ -184,8 +192,8 @@ test.provider(
           });
           return yield* Cloudflare.RealtimeKitWebhook("Webhook", {
             appId: app.appId,
-            name: WEBHOOK_NAME,
-            url: "https://example.com/alchemy-rtk-webhook",
+            name: LIST_WEBHOOK_NAME,
+            url: LIST_WEBHOOK_URL,
             events: ["meeting.started", "meeting.ended"],
           });
         }),
@@ -194,8 +202,8 @@ test.provider(
       const all = yield* provider.list();
       expect(all.some((w) => w.webhookId === deployed.webhookId)).toBe(true);
       const found = all.find((w) => w.webhookId === deployed.webhookId);
-      expect(found?.name).toEqual(WEBHOOK_NAME);
-      expect(found?.url).toEqual("https://example.com/alchemy-rtk-webhook");
+      expect(found?.name).toEqual(LIST_WEBHOOK_NAME);
+      expect(found?.url).toEqual(LIST_WEBHOOK_URL);
       expect(found?.appId).toEqual(deployed.appId);
 
       yield* stack.destroy();

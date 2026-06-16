@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
+import { poll } from "@/Util/poll.ts";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -306,7 +307,18 @@ test.provider("list enumerates routes across all gateways", (stack) =>
     const provider = yield* Provider.findProvider(
       Cloudflare.AiGatewayDynamicRouting,
     );
-    const all = yield* provider.list();
+
+    // The route appears in list() shortly after deploy, but its element graph
+    // is materialized from a separate deployed-version lookup that propagates
+    // with its own eventual-consistency lag. Poll until the route is present
+    // AND its graph has propagated before asserting.
+    const all = yield* poll({
+      description: "list() includes the deployed route with its element graph",
+      effect: provider.list(),
+      predicate: (all) =>
+        (all.find((r) => r.routeId === deployed.route.routeId)?.elements
+          ?.length ?? 0) > 0,
+    });
 
     const found = all.find((r) => r.routeId === deployed.route.routeId);
     expect(found).toBeDefined();

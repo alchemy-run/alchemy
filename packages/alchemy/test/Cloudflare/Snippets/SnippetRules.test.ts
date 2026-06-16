@@ -4,6 +4,7 @@ import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
+import { poll } from "@/Util/poll";
 import * as snippets from "@distilled.cloud/cloudflare/snippets";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -76,6 +77,18 @@ const listLiveRules = (zoneId: string) =>
     }),
   );
 
+// The live rule list is eventually consistent after a PUT — poll the
+// out-of-band read until it reaches the expected length before asserting.
+const pollLiveRules = (zoneId: string, expectedLength: number) =>
+  poll({
+    description: `snippet rules length === ${expectedLength}`,
+    effect: listLiveRules(zoneId),
+    predicate: (rules) => rules.length === expectedLength,
+    schedule: Schedule.exponential("500 millis").pipe(
+      Schedule.both(Schedule.recurs(10)),
+    ),
+  });
+
 const findSnippet = (zoneId: string, name: string) =>
   snippets.listSnippets({ zoneId, perPage: 100 }).pipe(
     Effect.map((page) =>
@@ -98,8 +111,16 @@ const purgeRules = (zoneId: string) =>
     Effect.catchTag("SnippetRulesNotFound", () => Effect.void),
   );
 
+// The zone's snippet-rule list is a per-zone SINGLETON, and snippets are
+// keyed by name within a zone. There is only one standing test zone, so two
+// `test.provider` cases (which run CONCURRENTLY within a file) would fight
+// over the same singleton rule list and the same snippet name — one case's
+// `purgeRules`/`destroy` empties the other's freshly-PUT rule list, and one
+// case's snippet delete races the other's rule that still references it
+// (`snippet is still used`). They are therefore folded into ONE sequential
+// case: create/update/destroy lifecycle PLUS the `list()` enumeration.
 test.provider(
-  "snippet rules — create, update in place, destroy in dependency order",
+  "snippet rules — create, update, list, and destroy in dependency order",
   (stack) =>
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
@@ -135,10 +156,22 @@ test.provider(
       expect(initial.rules.rules[0].expression).toEqual(EXPRESSION_V1);
       expect(initial.rules.rules[0].enabled).toEqual(true);
 
-      const live = yield* listLiveRules(zoneId);
+      const live = yield* pollLiveRules(zoneId, 1);
       expect(live).toHaveLength(1);
       expect(live[0].snippet_name).toEqual(NAME_RULES_A);
       expect(live[0].expression).toEqual(EXPRESSION_V1);
+
+      // `list()` enumerates every zone (no account-wide rule-list API) and
+      // reads the rule list in each, skipping zones with no rules / no
+      // access. Our deployed rule list must surface for the test zone.
+      const provider = yield* Provider.findProvider(Cloudflare.SnippetRules);
+      const all = yield* provider.list();
+      expect(all.length).toBeGreaterThan(0);
+      const entry = all.find((r) => r.zoneId === zoneId);
+      expect(entry).toBeDefined();
+      expect(entry!.rules.some((r) => r.snippetName === NAME_RULES_A)).toBe(
+        true,
+      );
 
       // Update: change the expression and add a second snippet + rule.
       const updated = yield* stack.deploy(
@@ -177,67 +210,20 @@ test.provider(
       expect(updated.rules.rules[1].snippetName).toEqual(NAME_RULES_B);
       expect(updated.rules.rules[1].enabled).toEqual(false);
 
-      const liveUpdated = yield* listLiveRules(zoneId);
+      const liveUpdated = yield* pollLiveRules(zoneId, 2);
       expect(liveUpdated).toHaveLength(2);
       expect(liveUpdated[0].expression).toEqual(EXPRESSION_V2);
       expect(liveUpdated[1].snippet_name).toEqual(NAME_RULES_B);
 
       // Destroy — rules must be deleted before the snippets they
-      // reference (dependency ordering via the `snippetName` input).
+      // reference (dependency ordering via the `snippetName` input). The
+      // snippet delete bounded-retries the typed `SnippetInUse` lag.
       yield* stack.destroy();
 
-      const liveGone = yield* listLiveRules(zoneId);
+      const liveGone = yield* pollLiveRules(zoneId, 0);
       expect(liveGone).toHaveLength(0);
       expect(yield* findSnippet(zoneId, NAME_RULES_A)).toBeUndefined();
       expect(yield* findSnippet(zoneId, NAME_RULES_B)).toBeUndefined();
-    }).pipe(logLevel),
-  { timeout: 180_000 },
-);
-
-// Canonical `list()` test (zone-scoped singleton): there is no account-wide
-// API for the per-zone rule list, so `list()` enumerates every zone via
-// `listAllZones` and reads the rule list in each, skipping zones with no
-// rules. Deploy a rule list to the standing test zone and assert it appears.
-test.provider(
-  "list enumerates snippet rules across all zones",
-  (stack) =>
-    Effect.gen(function* () {
-      const zoneId = yield* resolveZoneId;
-
-      yield* stack.destroy();
-      yield* purgeRules(zoneId);
-
-      yield* stack.deploy(
-        Effect.gen(function* () {
-          const snippet = yield* Cloudflare.Snippet("RulesSnippetA", {
-            zoneId,
-            name: NAME_RULES_A,
-            code,
-          }).pipe(adopt(true));
-          return yield* Cloudflare.SnippetRules("Rules", {
-            zoneId,
-            rules: [
-              {
-                snippetName: snippet.name,
-                expression: EXPRESSION_V1,
-                description: "alchemy snippet rules list test",
-              },
-            ],
-          }).pipe(adopt(true));
-        }),
-      );
-
-      const provider = yield* Provider.findProvider(Cloudflare.SnippetRules);
-      const all = yield* provider.list();
-
-      expect(all.length).toBeGreaterThan(0);
-      const entry = all.find((r) => r.zoneId === zoneId);
-      expect(entry).toBeDefined();
-      expect(entry!.rules.some((r) => r.snippetName === NAME_RULES_A)).toBe(
-        true,
-      );
-
-      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 180_000 },
 );

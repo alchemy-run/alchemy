@@ -115,17 +115,19 @@ test.provider.skipIf(!entitled)(
 // `list()` reads the single CMB config and returns a one-element array when
 // set, `[]` when unconfigured. On unentitled accounts the underlying GET
 // fails with the typed `LogsControlNotAuthorized` error (Cloudflare code
-// 10000) — assert that the typed tag propagates so the probe proves both the
-// distilled patch and the gating, at near-zero cost.
+// 10000), which `list()` deliberately tolerates (returns `[]`) so that
+// account-wide enumeration / `nuke` never blows up on an unentitled account.
+// The raw-op probe test above already pins the typed tag; here we assert the
+// nuke-safe empty result.
 test.provider.skipIf(entitled)(
-  "list surfaces the typed LogsControlNotAuthorized error on unentitled accounts",
+  "list tolerates the typed LogsControlNotAuthorized error on unentitled accounts",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const provider = yield* Provider.findProvider(Cloudflare.LogsCmbConfig);
-      const error = yield* provider.list().pipe(Effect.flip);
-      expect(error._tag).toEqual("LogsControlNotAuthorized");
+      const all = yield* provider.list();
+      expect(all).toEqual([]);
 
       yield* stack.destroy();
     }).pipe(logLevel),

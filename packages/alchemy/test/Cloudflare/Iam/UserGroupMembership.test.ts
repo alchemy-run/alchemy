@@ -17,10 +17,6 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-// Deterministic names — the same on every run (never Date.now()/random).
-const GROUP_A_NAME = "alchemy-iam-ugm-group-a";
-const GROUP_B_NAME = "alchemy-iam-ugm-group-b";
-
 // The membership identity is an account-member id. Look one up from the
 // account's member roster (the testing account always has at least its
 // owner as an accepted member); pick deterministically.
@@ -73,14 +69,17 @@ const expectGone = (accountId: string, userGroupId: string, memberId: string) =>
 
 // Both groups stay deployed across both steps; only the membership's target
 // group flips, so the replacement is isolated to the membership itself.
+//
+// Group names are provider-generated (unique per stack instance) rather than
+// hardcoded constants: each `test.provider` runs in its own scratch stack, so
+// a shared deterministic name would make the two cases in this file adopt the
+// SAME physical group (user-group names are unique per account) and stomp on
+// each other when their lifecycles overlap. Letting the engine name them
+// keeps every test's groups isolated and self-healing.
 const program = (opts: { memberId: string; target: "A" | "B" }) =>
   Effect.gen(function* () {
-    const groupA = yield* Cloudflare.IamUserGroup("GroupA", {
-      name: GROUP_A_NAME,
-    });
-    const groupB = yield* Cloudflare.IamUserGroup("GroupB", {
-      name: GROUP_B_NAME,
-    });
+    const groupA = yield* Cloudflare.IamUserGroup("GroupA", {});
+    const groupB = yield* Cloudflare.IamUserGroup("GroupB", {});
     const membership = yield* Cloudflare.IamUserGroupMembership("Membership", {
       userGroup: opts.target === "A" ? groupA.userGroupId : groupB.userGroupId,
       memberId: opts.memberId,

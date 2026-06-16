@@ -470,14 +470,44 @@ export const RealtimeKitPresetProvider = () =>
 
       if (!observed) {
         // Ensure — greenfield (or out-of-band delete): create with the full
-        // desired body. Preset names are not unique so there is no
-        // AlreadyExists race to tolerate.
-        const created = yield* realtimeKit.createPreset({
+        // desired body. The API rejects a duplicate name in the same app
+        // with a 409 (`RealtimeKitPresetExists`); this happens when a prior
+        // run leaked a same-named preset (lost state) or when a retried
+        // create races a 500 that actually persisted. Adopt the existing
+        // preset by name and converge it to the desired body instead of
+        // leaking / failing.
+        const created = yield* realtimeKit
+          .createPreset({ accountId, appId, ...desired })
+          .pipe(
+            Effect.catchTag("RealtimeKitPresetExists", () =>
+              Effect.succeed(undefined),
+            ),
+          );
+        if (created) {
+          return toAttributes(created.data, accountId, appId);
+        }
+        const existing = yield* findByName(accountId, appId, name);
+        if (!existing?.id) {
+          // Conflict reported but the preset isn't visible yet — let the
+          // engine retry the reconcile rather than silently succeeding.
+          return yield* realtimeKit
+            .createPreset({ accountId, appId, ...desired })
+            .pipe(
+              Effect.map((res) => toAttributes(res.data, accountId, appId)),
+            );
+        }
+        yield* realtimeKit.patchPreset({
           accountId,
           appId,
+          presetId: existing.id,
           ...desired,
         });
-        return toAttributes(created.data, accountId, appId);
+        const adopted = yield* realtimeKit.getPresetByIdPreset({
+          accountId,
+          appId,
+          presetId: existing.id,
+        });
+        return toAttributes(adopted.data, accountId, appId);
       }
 
       // Sync — diff what the user asked for against observed cloud state.

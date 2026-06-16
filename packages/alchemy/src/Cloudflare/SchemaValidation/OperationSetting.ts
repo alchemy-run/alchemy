@@ -153,8 +153,11 @@ export const SchemaValidationOperationSettingProvider = () =>
                     ),
                 ),
               ),
-              // Zones without API Shield / schema validation reject the
-              // route; skip them rather than fail the whole enumeration.
+              // A zone with no API Shield / schema-validation entitlement
+              // rejects the route — skip it, keep the rest. (Transient
+              // code-10000 "Authentication error" blips under concurrency are
+              // retried globally by the Cloudflare retry policy, so they never
+              // reach here as a real failure.)
               Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
             ),
         { concurrency: 10 },

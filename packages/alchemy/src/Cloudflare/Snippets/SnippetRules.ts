@@ -135,9 +135,13 @@ export const SnippetRulesProvider = () =>
             Effect.map((rules): SnippetRulesAttributes | undefined =>
               rules.length === 0 ? undefined : { zoneId, rules },
             ),
-            // Plan-gated zones (and eventually-consistent token 403s)
-            // reject the route; skip them.
-            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+            // Plan-gated zones (and eventually-consistent token 401/403s)
+            // reject the route; skip them. (`listObservedRules` already maps
+            // the snippet-rules 404 to an empty list, which becomes
+            // `undefined` above.)
+            Effect.catchTag(["Forbidden", "Unauthorized"], () =>
+              Effect.succeed(undefined),
+            ),
           ),
         { concurrency: 10 },
       );

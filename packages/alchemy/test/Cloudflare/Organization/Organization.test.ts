@@ -74,12 +74,13 @@ test.provider(
 
 // Canonical `list()` test — ungated probe. `list()` enumerates every
 // organization reachable by the credentials. On an unentitled account the
-// `/organizations` collection rejects with the typed `Forbidden` tag (it is
-// the op's only declared error besides defaults); on an entitled account it
-// returns a well-typed `OrganizationAttributes[]`. Either way the typed
-// behavior is pinned without requiring the entitlement.
+// `/organizations` collection rejects with the typed `Forbidden` tag, which
+// the provider's `list()` deliberately tolerates (returning `[]`) so that
+// account-wide enumeration / `nuke` never blows up on a non-tenant account;
+// the raw-op probe test above already pins the typed tag. On an entitled
+// account it returns a well-typed `OrganizationAttributes[]`.
 test.provider(
-  "list either enumerates organizations or surfaces typed Forbidden",
+  "list either enumerates organizations or tolerates the unentitled account",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -97,8 +98,10 @@ test.provider(
           expect(typeof org.name).toBe("string");
         }
       } else {
-        const error = yield* provider.list().pipe(Effect.flip);
-        expect(error._tag).toEqual("Forbidden");
+        // Unentitled: list() swallows the typed Forbidden and reports an
+        // empty collection (nuke-safe), rather than propagating.
+        const all = yield* provider.list();
+        expect(all).toEqual([]);
       }
 
       yield* stack.destroy();

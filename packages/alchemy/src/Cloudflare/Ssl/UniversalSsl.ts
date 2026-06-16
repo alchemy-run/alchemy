@@ -1,6 +1,7 @@
 import * as ssl from "@distilled.cloud/cloudflare/ssl";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -95,6 +96,23 @@ export const UniversalSsl = Resource<UniversalSsl>(UniversalSslTypeId);
 export const isUniversalSsl = (value: unknown): value is UniversalSsl =>
   Predicate.hasProperty(value, "Type") && value.Type === UniversalSslTypeId;
 
+/**
+ * The Universal SSL "edit setting" endpoint enforces its OWN per-zone,
+ * per-operation rate limit ("Rate limit reached for the update operation.
+ * Please try again in a minute") — much longer than the engine's blanket
+ * retry budget (~40s). Ride it out patiently on the typed `TooManyRequests`
+ * within a bounded number of attempts (~120s total) so a concurrent or
+ * recent patch on the same zone's singleton doesn't fail the operation.
+ */
+const patchUniversal = (input: { zoneId: string; enabled: boolean }) =>
+  ssl.patchUniversalSetting(input).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "TooManyRequests",
+      schedule: Schedule.spaced("20 seconds"),
+      times: 6,
+    }),
+  );
+
 export const UniversalSslProvider = () =>
   Provider.succeed(UniversalSsl, {
     nuke: { singleton: true },
@@ -179,7 +197,7 @@ export const UniversalSslProvider = () =>
       if (enabled === news.enabled) {
         return { zoneId, enabled, initialEnabled };
       }
-      const patched = yield* ssl.patchUniversalSetting({
+      const patched = yield* patchUniversal({
         zoneId,
         enabled: news.enabled,
       });
@@ -196,9 +214,9 @@ export const UniversalSslProvider = () =>
       // Restore the pre-management value; skip the call when it already
       // matches (idempotent re-delete after a crashed run).
       if (observedEnabled(observed) === initialEnabled) return;
-      yield* ssl
-        .patchUniversalSetting({ zoneId, enabled: initialEnabled })
-        .pipe(Effect.catchTag("InvalidRoute", () => Effect.void));
+      yield* patchUniversal({ zoneId, enabled: initialEnabled }).pipe(
+        Effect.catchTag("InvalidRoute", () => Effect.void),
+      );
     }),
   });
 

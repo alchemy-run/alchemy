@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
+import { poll } from "@/Util/poll.ts";
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
@@ -294,7 +295,20 @@ test.provider("list enumerates the deployed flag", (stack) =>
     );
 
     const provider = yield* Provider.findProvider(Cloudflare.FlagshipFlag);
-    const all = yield* provider.list();
+
+    // A freshly-deployed flag is eventually consistent in the account-wide
+    // list(); poll until it appears before asserting.
+    const all = yield* poll({
+      description: "list() includes the deployed flag",
+      effect: provider.list(),
+      predicate: (all) =>
+        all.some(
+          (f) => f.appId === deployed.app.appId && f.key === deployed.flag.key,
+        ),
+      schedule: Schedule.spaced("3 seconds").pipe(
+        Schedule.both(Schedule.recurs(20)),
+      ),
+    });
 
     expect(
       all.some(

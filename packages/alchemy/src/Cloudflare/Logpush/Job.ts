@@ -373,8 +373,14 @@ export const LogpushJobProvider = () =>
                   ),
               ),
             ),
-            // Plan-gated / partial zones reject the route; skip them.
-            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+            // Best-effort account-wide fan-out: a zone the token can't read
+            // for Logpush (plan-gated route, missing permission, or a code-
+            // 10000 auth blip) must be skipped, not fail the whole
+            // enumeration. Drop only that zone and keep the rest.
+            Effect.catchTag(
+              ["InvalidRoute", "Unauthorized", "Forbidden", "NotFound"],
+              () => Effect.succeed([]),
+            ),
           ),
         { concurrency: 10 },
       );

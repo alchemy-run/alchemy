@@ -119,8 +119,15 @@ export const SmartTieredCacheProvider = () =>
             Effect.map((observed) =>
               toAttributes(zoneId, observed, observed.value),
             ),
-            // Plan-gated or partial zones reject the route; skip them.
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+            // Smart Tiered Cache is an Enterprise feature. When enumerating
+            // every zone in the account, zones that aren't entitled reject the
+            // read — as `InvalidRoute`, or as a persistent `Forbidden`/
+            // `Unauthorized` ("Access denied") on the gated route. These are
+            // not the transient code-10000 auth blips the global policy
+            // retries; the zone simply has no readable setting, so skip it.
+            Effect.catchTag(["InvalidRoute", "Forbidden", "Unauthorized"], () =>
+              Effect.succeed(undefined),
+            ),
           ),
         { concurrency: 10 },
       );

@@ -248,18 +248,54 @@ export const DnsRecordProvider = () =>
 
       // 3. Ensure.
       if (!observed) {
-        const created = yield* dns.createRecord({
-          zoneId,
-          name: body.name,
-          type: body.type,
-          content: body.content,
-          ttl: body.ttl,
-          proxied: body.proxied,
-          comment: body.comment,
-          tags: body.tags === undefined ? undefined : Array.from(body.tags),
-          priority: body.priority,
-        });
-        observed = narrowRecord(created as Parameters<typeof narrowRecord>[0]);
+        const created = yield* dns
+          .createRecord({
+            zoneId,
+            name: body.name,
+            type: body.type,
+            content: body.content,
+            ttl: body.ttl,
+            proxied: body.proxied,
+            comment: body.comment,
+            tags: body.tags === undefined ? undefined : Array.from(body.tags),
+            priority: body.priority,
+          })
+          .pipe(
+            Effect.map(
+              (r) =>
+                ({
+                  record: narrowRecord(r as Parameters<typeof narrowRecord>[0]),
+                  raced: false,
+                }) as const,
+            ),
+            // A record with this `(name, type)` can already exist that the
+            // scan above missed — a leftover from an interrupted run, or a
+            // concurrent reconcile that won the create race. Cloudflare
+            // answers `An identical record already exists.`
+            // (`DnsRecordAlreadyExists`). Self-heal: re-scan and adopt the
+            // existing record instead of failing the deploy. Ownership was
+            // already gated by `read`/the adopt policy upstream.
+            Effect.catchTag("DnsRecordAlreadyExists", () =>
+              findByNameType(zoneId, news.name, news.type).pipe(
+                Effect.flatMap((existing) =>
+                  existing
+                    ? Effect.succeed({ record: existing, raced: true } as const)
+                    : Effect.fail(
+                        new Error(
+                          `Cloudflare reported an identical DNS record for ` +
+                            `(${news.name}, ${news.type}) but it could not be found`,
+                        ),
+                      ),
+                ),
+              ),
+            ),
+          );
+        observed = created.record;
+        // A raced/adopted record is treated like a scanned-existing one so
+        // the sync step converges its mutable fields; a genuine fresh create
+        // keeps `foundByScan` false so the no-op first-reconcile suppression
+        // below still applies.
+        if (created.raced) foundByScan = true;
       }
 
       // 4. Sync — Cloudflare's update endpoint is PUT-style; resend

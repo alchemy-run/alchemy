@@ -18,6 +18,20 @@ const logLevel = Effect.provideService(
 const getHealthcheck = (accountId: string, id: string) =>
   diagnostics.getEndpointHealthcheck({ accountId, id });
 
+// A GET issued immediately after a create/update can transiently 404
+// (`EndpointHealthcheckNotFound`, code 1022) while the new state
+// propagates across Cloudflare's edge — bounded-retry the out-of-band
+// verification read until it resolves.
+const getHealthcheckLive = (accountId: string, id: string) =>
+  getHealthcheck(accountId, id).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "EndpointHealthcheckNotFound",
+      schedule: Schedule.exponential("500 millis").pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
+    }),
+  );
+
 // Poll until the healthcheck is gone after destroy. Cloudflare answers
 // GET for a missing healthcheck with the typed
 // `EndpointHealthcheckNotFound` (code 1022, 404).
@@ -107,7 +121,7 @@ test.provider(
       expect(check.name).toEqual("alchemy-diag-ehc");
 
       // Out-of-band verification via the distilled API.
-      const live = yield* getHealthcheck(accountId, check.healthcheckId);
+      const live = yield* getHealthcheckLive(accountId, check.healthcheckId);
       expect(live.endpoint).toEqual("10.77.0.1");
       expect(live.name).toEqual("alchemy-diag-ehc");
 
@@ -122,7 +136,10 @@ test.provider(
       expect(updated.endpoint).toEqual("10.77.0.2");
       expect(updated.name).toEqual("alchemy-diag-ehc");
 
-      const liveUpdated = yield* getHealthcheck(accountId, check.healthcheckId);
+      const liveUpdated = yield* getHealthcheckLive(
+        accountId,
+        check.healthcheckId,
+      );
       expect(liveUpdated.endpoint).toEqual("10.77.0.2");
       expect(liveUpdated.name).toEqual("alchemy-diag-ehc");
 
@@ -149,7 +166,7 @@ test.provider(
       expect(replaced.name).toEqual("alchemy-diag-ehc-v2");
       yield* expectGone(accountId, check.healthcheckId);
 
-      const liveReplaced = yield* getHealthcheck(
+      const liveReplaced = yield* getHealthcheckLive(
         accountId,
         replaced.healthcheckId,
       );

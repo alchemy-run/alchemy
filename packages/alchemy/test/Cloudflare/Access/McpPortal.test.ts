@@ -6,6 +6,7 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -15,9 +16,15 @@ const logLevel = Effect.provideService(
 );
 
 // Deterministic identifiers — the portal id is the API identity, so reruns
-// converge on the same portal instead of leaking.
+// converge on the same portal instead of leaking. The two cases run
+// concurrently, so they MUST use distinct portal ids AND distinct hostnames:
+// a hostname is a per-account unique constraint, so a shared hostname makes the
+// two deploys race on "This hostname is already in use in a different MCP
+// Portal".
 const PORTAL_ID = "alchemy-test-mcp-portal";
 const HOSTNAME = "alchemy-test-mcp.alchemy-test-2.us";
+const LIST_PORTAL_ID = "alchemy-test-mcp-portal-list";
+const LIST_HOSTNAME = "alchemy-test-mcp-list.alchemy-test-2.us";
 
 // Read a portal out-of-band, mapping "gone" to undefined.
 const getLivePortal = (accountId: string, id: string) =>
@@ -27,6 +34,30 @@ const getLivePortal = (accountId: string, id: string) =>
       Effect.catchTag("McpPortalNotFound", () => Effect.succeed(undefined)),
     );
 
+// Delete every portal currently occupying `hostname`, regardless of its portal
+// id. A per-stack `destroy()` only removes the portal tracked under this
+// stack's logical id, so an orphan left by a previously crashed run keeps the
+// hostname (a per-account unique constraint) reserved and the next create
+// fails with `McpPortalHostnameInUse`. Sweeping by hostname makes the suite
+// self-healing and leaves no dangling resources behind.
+const cleanupPortalsByHostname = (accountId: string, hostname: string) =>
+  zeroTrust.listAccessAiControlMcpPortals.pages({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk).flatMap((page) =>
+        (page.result ?? []).filter((p) => p.hostname === hostname),
+      ),
+    ),
+    Effect.flatMap((portals) =>
+      Effect.forEach(portals, (p) =>
+        zeroTrust
+          .deleteAccessAiControlMcpPortal({ accountId, id: p.id })
+          .pipe(Effect.catchTag("McpPortalNotFound", () => Effect.void)),
+      ),
+    ),
+    Effect.catchTag("Forbidden", () => Effect.void),
+  );
+
 test.provider(
   "create, update in place, and destroy an MCP portal",
   (stack) =>
@@ -34,6 +65,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
 
       yield* stack.destroy();
+      yield* cleanupPortalsByHostname(accountId, HOSTNAME);
 
       const portal = yield* stack.deploy(
         Effect.gen(function* () {
@@ -108,13 +140,16 @@ test.provider(
   "list enumerates the deployed MCP portal",
   (stack) =>
     Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
       yield* stack.destroy();
+      yield* cleanupPortalsByHostname(accountId, LIST_HOSTNAME);
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* Cloudflare.AccessMcpPortal("ListPortal", {
-            portalId: PORTAL_ID,
-            hostname: HOSTNAME,
+            portalId: LIST_PORTAL_ID,
+            hostname: LIST_HOSTNAME,
           });
         }),
       );
@@ -125,6 +160,9 @@ test.provider(
       expect(all.some((p) => p.portalId === deployed.portalId)).toBe(true);
 
       yield* stack.destroy();
+
+      const afterDestroy = yield* getLivePortal(accountId, LIST_PORTAL_ID);
+      expect(afterDestroy).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 90_000 },
 );

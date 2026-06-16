@@ -9,7 +9,14 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { CERT_3, CERT_4, KEY_3, KEY_4 } from "./fixtures/certs.ts";
+import {
+  CERT_3,
+  CERT_4,
+  CERT_8,
+  KEY_3,
+  KEY_4,
+  KEY_8,
+} from "./fixtures/certs.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -135,7 +142,7 @@ test.provider(
       yield* stack.destroy();
 
       yield* waitForGone(zoneId, cert.certificateId);
-    }).pipe(logLevel),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
   { timeout: 120_000 },
 );
 
@@ -177,7 +184,7 @@ test.provider(
       yield* stack.destroy();
 
       yield* waitForGone(zoneId, replaced.certificateId);
-    }).pipe(logLevel),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
   { timeout: 120_000 },
 );
 
@@ -188,21 +195,27 @@ test.provider(
       const zoneId = yield* resolveZoneId;
 
       yield* stack.destroy();
-      yield* purgeCertificates(zoneId, [CERT_3, CERT_4]);
+      yield* purgeCertificates(zoneId, [CERT_8]);
 
       const cert = yield* stack.deploy(
         Cloudflare.OriginTlsClientAuthHostnameCertificate("ListHostCert", {
           zoneId,
-          certificate: CERT_3,
-          privateKey: Redacted.make(KEY_3),
+          // Dedicated PEM (see fixtures/certs.ts): keeps this certificate out
+          // of the upload/delete churn the sibling tests put CERT_3 through,
+          // so it appears in the eventually-consistent list promptly.
+          certificate: CERT_8,
+          privateKey: Redacted.make(KEY_8),
         }),
       );
 
       const provider = yield* Provider.findProvider(
         Cloudflare.OriginTlsClientAuthHostnameCertificate,
       );
-      // A freshly uploaded certificate can lag the zone list endpoint by a
-      // few seconds (edge propagation) — poll list() until it appears.
+      // A freshly uploaded certificate can lag the zone list endpoint by
+      // tens of seconds — especially when the same PEM was recently deleted
+      // and re-created (the prior suites churn CERT_3), so the list endpoint
+      // keeps serving the stale "gone" view for a while. Poll list() until it
+      // appears, bounded to ~60s.
       const found = yield* provider.list().pipe(
         Effect.map((all) =>
           all.find((c) => c.certificateId === cert.certificateId),
@@ -214,8 +227,8 @@ test.provider(
         ),
         Effect.retry({
           while: (e) => e._tag === "CertificateNotListed",
-          schedule: Schedule.spaced("2 seconds"),
-          times: 10,
+          schedule: Schedule.spaced("3 seconds"),
+          times: 20,
         }),
       );
       expect(found.zoneId).toEqual(zoneId);
@@ -223,6 +236,6 @@ test.provider(
       yield* stack.destroy();
 
       yield* waitForGone(zoneId, cert.certificateId);
-    }).pipe(logLevel),
+    }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
   { timeout: 120_000 },
 );

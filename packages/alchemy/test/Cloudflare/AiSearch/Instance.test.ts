@@ -92,7 +92,25 @@ test.provider(
         "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       );
 
-      const liveUpdated = yield* getInstance(accountId, updated.instance.id);
+      // The update PUT returns the new settings immediately, but the
+      // out-of-band read endpoint reflects them eventually-consistently (it
+      // briefly serves `aiSearchModel: ""` right after the write). Poll the
+      // readback until the mutated props land before asserting, bounded.
+      const liveUpdated = yield* getInstance(
+        accountId,
+        updated.instance.id,
+      ).pipe(
+        Effect.flatMap((live) =>
+          live.aiSearchModel === "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+            ? Effect.succeed(live)
+            : Effect.fail({ _tag: "InstanceUpdateNotApplied" } as const),
+        ),
+        Effect.retry({
+          while: (e) => e._tag === "InstanceUpdateNotApplied",
+          schedule: Schedule.spaced("3 seconds"),
+          times: 20,
+        }),
+      );
       expect(liveUpdated.aiSearchModel).toEqual(
         "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       );

@@ -236,67 +236,18 @@ export const AiGatewayProviderConfigProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const gatewayId = news.gatewayId as string;
-      const secretId = news.secretId as string;
       const alias = yield* createAlias(id, news.alias);
-
-      // Observe — there is no get endpoint, so observe through the list.
-      // The providerConfigId cached on `output` is a hint, not a guarantee.
-      const configs = yield* listProviderConfigs(accountId, gatewayId);
-      const observed =
-        configs.find((c) => c.id === output?.providerConfigId) ??
-        configs.find(
-          (c) => c.alias === alias && c.providerSlug === news.providerSlug,
-        );
-
-      if (observed) {
-        const attrs = toAttributes(observed, accountId);
-        const converged =
-          attrs.secretId === secretId &&
-          attrs.defaultConfig === (news.defaultConfig ?? false) &&
-          attrs.rateLimit === news.rateLimit &&
-          (attrs.rateLimitPeriod ?? 60) === (news.rateLimitPeriod ?? 60);
-        if (converged) {
-          return attrs;
-        }
-        // Sync — provider configs have no update API and a gateway allows
-        // only one config per provider slug + alias, so converge by
-        // deleting the stale occupant before creating the desired config.
-        // (The engine's replacement flow creates the new generation first;
-        // without this, the old config would shadow the new settings.)
-        yield* aiGateway
-          .deleteProviderConfig({
-            accountId,
-            gatewayId,
-            id: observed.id,
-          })
-          .pipe(Effect.catchTag("ProviderConfigNotFound", () => Effect.void));
-      }
-
-      // Ensure — create. The referenced Secrets Store secret deploys
-      // asynchronously (status `pending` → `active`), so retry the typed
-      // "secret was not found" error with bounded backoff.
-      const created = yield* aiGateway
-        .createProviderConfig({
-          accountId,
-          gatewayId,
-          alias,
-          providerSlug: news.providerSlug,
-          secretId,
-          defaultConfig: news.defaultConfig ?? false,
-          ...(news.rateLimit !== undefined && { rateLimit: news.rateLimit }),
-          ...(news.rateLimitPeriod !== undefined && {
-            rateLimitPeriod: news.rateLimitPeriod,
-          }),
-        })
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "ProviderConfigSecretNotFound",
-            schedule: Schedule.spaced("5 seconds"),
-            times: 10,
-          }),
-        );
-      return toAttributes(created, accountId);
+      return yield* reconcileProviderConfig({
+        accountId,
+        gatewayId: news.gatewayId as string,
+        alias,
+        providerSlug: news.providerSlug as string,
+        secretId: news.secretId as string,
+        defaultConfig: news.defaultConfig ?? false,
+        rateLimit: news.rateLimit,
+        rateLimitPeriod: news.rateLimitPeriod,
+        currentId: output?.providerConfigId,
+      });
     }),
     delete: Effect.fn(function* ({ output }) {
       yield* aiGateway
@@ -348,6 +299,100 @@ export const AiGatewayProviderConfigProvider = () =>
       return rows.flat();
     }),
   });
+
+/**
+ * Reconcile a single BYOK provider config toward the desired props.
+ *
+ * A gateway allows only ONE config per (providerSlug, alias). There is no
+ * update API and no get endpoint, so we observe through the list and:
+ *   - already-desired occupant → adopt it (idempotent no-op / re-run)
+ *   - stale occupant           → delete it, then create the desired one
+ *   - no occupant              → create the desired one
+ *
+ * `createProviderConfig` can still race and fail with
+ * `ProviderConfigAlreadyExists` when a leftover/sibling config the list had
+ * not yet surfaced (eventual consistency) occupies the slot. Retrying the
+ * whole observe→delete→create flow re-observes the now-visible occupant and
+ * converges it, so re-runs and leftover state self-heal instead of failing.
+ * Bounded so the engine never hangs.
+ */
+const reconcileProviderConfig = (desired: {
+  accountId: string;
+  gatewayId: string;
+  alias: string;
+  providerSlug: string;
+  secretId: string;
+  defaultConfig: boolean;
+  rateLimit: number | undefined;
+  rateLimitPeriod: number | undefined;
+  currentId: string | undefined;
+}) => {
+  const {
+    accountId,
+    gatewayId,
+    alias,
+    providerSlug,
+    secretId,
+    defaultConfig,
+    rateLimit,
+    rateLimitPeriod,
+    currentId,
+  } = desired;
+
+  const matchesDesired = (attrs: AiGatewayProviderConfigAttributes) =>
+    attrs.secretId === secretId &&
+    attrs.defaultConfig === defaultConfig &&
+    attrs.rateLimit === rateLimit &&
+    (attrs.rateLimitPeriod ?? 60) === (rateLimitPeriod ?? 60);
+
+  return Effect.gen(function* () {
+    // Observe the config currently occupying this gateway's (slug, alias).
+    const configs = yield* listProviderConfigs(accountId, gatewayId);
+    const observed =
+      configs.find((c) => c.id === currentId) ??
+      configs.find((c) => c.alias === alias && c.providerSlug === providerSlug);
+
+    if (observed) {
+      const attrs = toAttributes(observed, accountId);
+      if (matchesDesired(attrs)) {
+        return attrs;
+      }
+      // No update API — delete the stale occupant before recreating.
+      yield* aiGateway
+        .deleteProviderConfig({ accountId, gatewayId, id: observed.id })
+        .pipe(Effect.catchTag("ProviderConfigNotFound", () => Effect.void));
+    }
+
+    // Ensure — create. The referenced Secrets Store secret deploys
+    // asynchronously (status `pending` → `active`), so retry the typed
+    // "secret was not found" error with bounded backoff.
+    const created = yield* aiGateway
+      .createProviderConfig({
+        accountId,
+        gatewayId,
+        alias,
+        providerSlug,
+        secretId,
+        defaultConfig,
+        ...(rateLimit !== undefined && { rateLimit }),
+        ...(rateLimitPeriod !== undefined && { rateLimitPeriod }),
+      })
+      .pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ProviderConfigSecretNotFound",
+          schedule: Schedule.spaced("5 seconds"),
+          times: 10,
+        }),
+      );
+    return toAttributes(created, accountId);
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "ProviderConfigAlreadyExists",
+      schedule: Schedule.spaced("1 second"),
+      times: 5,
+    }),
+  );
+};
 
 /**
  * List all provider configs on a gateway. A missing gateway returns an

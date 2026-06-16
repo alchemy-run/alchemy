@@ -90,7 +90,15 @@ test(
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
-      const values = yield* client.Count({ upto: 5 }).pipe(Stream.runCollect);
+      // First streaming call can race edge propagation and hit a Cloudflare
+      // HTML error page; retry the whole collect through a bounded schedule.
+      const values = yield* client.Count({ upto: 5 }).pipe(
+        Stream.runCollect,
+        Effect.retry({
+          schedule: Schedule.exponential("500 millis"),
+          times: 10,
+        }),
+      );
       expect(values).toEqual([1, 2, 3, 4, 5]);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
@@ -105,7 +113,15 @@ test(
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
       const messages = ["a", "b", "c", "d"];
-      const values = yield* client.Echo({ messages }).pipe(Stream.runCollect);
+      // First streaming call can race edge propagation and hit a Cloudflare
+      // HTML error page; retry the whole collect through a bounded schedule.
+      const values = yield* client.Echo({ messages }).pipe(
+        Stream.runCollect,
+        Effect.retry({
+          schedule: Schedule.exponential("500 millis"),
+          times: 10,
+        }),
+      );
       expect(values).toEqual(
         messages.map((message, index) => ({ index, message })),
       );
@@ -190,9 +206,15 @@ test(
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
-      const result = yield* client
-        .PingDO({ message: "hello-do" })
-        .pipe(Effect.tapError(Console.log));
+      // First DO call can race edge propagation and hit a Cloudflare HTML
+      // error page; retry through a bounded schedule.
+      const result = yield* client.PingDO({ message: "hello-do" }).pipe(
+        Effect.tapError(Console.log),
+        Effect.retry({
+          schedule: Schedule.exponential("500 millis"),
+          times: 10,
+        }),
+      );
       expect(result.echo).toBe("hello-do");
       expect(result.n).toBeGreaterThan(0);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
@@ -207,7 +229,15 @@ test(
 
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
-      const values = yield* client.CountDO({ upto: 5 }).pipe(Stream.runCollect);
+      // First DO streaming call can race edge propagation and hit a Cloudflare
+      // HTML error page; retry the whole collect through a bounded schedule.
+      const values = yield* client.CountDO({ upto: 5 }).pipe(
+        Stream.runCollect,
+        Effect.retry({
+          schedule: Schedule.exponential("500 millis"),
+          times: 10,
+        }),
+      );
       expect(values).toEqual([1, 2, 3, 4, 5]);
     }).pipe(Effect.scoped, Effect.provide(clientLayer(url)));
   }).pipe(logLevel),
@@ -222,7 +252,15 @@ test(
     yield* Effect.gen(function* () {
       const client = yield* RpcClient.make(WorkerRpcs);
       const messages = ["a", "b", "c", "d"];
-      const values = yield* client.EchoDO({ messages }).pipe(Stream.runCollect);
+      // First streaming call can race edge propagation and hit a Cloudflare
+      // HTML error page; retry the whole collect through a bounded schedule.
+      const values = yield* client.EchoDO({ messages }).pipe(
+        Stream.runCollect,
+        Effect.retry({
+          schedule: Schedule.exponential("500 millis"),
+          times: 10,
+        }),
+      );
       expect(values).toEqual(
         messages.map((message, index) => ({ index, message })),
       );

@@ -74,6 +74,21 @@ const toAttrs = (
   modified: result.modified ?? undefined,
 });
 
+// Authoritative account-wide lookup of a destination address by email. The
+// per-address `getAddress` identifier is the opaque address id (not the email),
+// so the only reliable way to find an address by its email is to enumerate the
+// account collection (the same call `list()` exhausts).
+const findByEmail = (accountId: string, email: string) =>
+  emailRouting.listAddresses.pages({ accountId }).pipe(
+    Stream.runCollect,
+    Effect.map((chunk) =>
+      Array.from(chunk)
+        .flatMap((page) => page.result ?? [])
+        .map((addr) => toAttrs(accountId, addr))
+        .find((a) => a.email === email),
+    ),
+  );
+
 export const EmailAddressProvider = () =>
   Provider.succeed(EmailAddress, {
     stables: ["addressId", "accountId", "email"],
@@ -150,11 +165,23 @@ export const EmailAddressProvider = () =>
 
       // Ensure — register the address if it doesn't already exist.
       if (!observed) {
-        const created = yield* emailRouting.createAddress({
-          accountId: acct,
-          email,
-        });
-        observed = toAttrs(acct, created);
+        observed = yield* emailRouting
+          .createAddress({ accountId: acct, email })
+          .pipe(
+            Effect.map((created) => toAttrs(acct, created)),
+            // Cloudflare rate-limits verification emails per destination
+            // address ("Verification email has been sent too recently"). When
+            // the same address was (re)created recently the address record
+            // already exists account-wide, so adopt it instead of failing.
+            // Re-raise if the address genuinely isn't present.
+            Effect.catchTag("TooManyRequests", (error) =>
+              findByEmail(acct, email).pipe(
+                Effect.flatMap((found) =>
+                  found ? Effect.succeed(found) : Effect.fail(error),
+                ),
+              ),
+            ),
+          );
       }
 
       return observed;
