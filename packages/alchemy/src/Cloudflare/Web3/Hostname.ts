@@ -153,6 +153,37 @@ export const Web3HostnameProvider = () =>
   Provider.succeed(Web3Hostname, {
     stables: ["hostnameId", "zoneId", "name", "target", "createdOn"],
 
+    // Web3 hostnames live inside a zone (`/zones/{id}/web3/hostnames`) with no
+    // account-wide enumeration API, so fan out over every zone via
+    // `listAllZones` and exhaustively paginate the per-zone list. Zones without
+    // the Web3 entitlement (or where the scoped token lacks access) answer
+    // `Forbidden` — skip them rather than failing the whole enumeration.
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const zones = yield* listAllZones(accountId);
+        const rows = yield* Effect.forEach(
+          zones,
+          (zone) =>
+            web3.listHostnames.pages({ zoneId: zone.id }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? [])
+                    .filter((raw) => raw.status !== "deleting")
+                    .map(
+                      (raw): Web3HostnameAttributes =>
+                        toAttributes(raw, zone.id),
+                    ),
+                ),
+              ),
+              Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            ),
+          { concurrency: 10 },
+        );
+        return rows.flat();
+      }),
+
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as Partial<Web3HostnameProps>;
       const n = news as Web3HostnameProps;

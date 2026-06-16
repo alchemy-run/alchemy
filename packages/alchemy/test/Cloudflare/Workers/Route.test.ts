@@ -2,6 +2,7 @@ import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "@effect/vitest";
@@ -246,6 +247,57 @@ test.provider(
       yield* stack.destroy();
 
       const gone = yield* findRoute(zoneId, PATTERN_ADOPT);
+      expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 300_000 },
+);
+
+const PATTERN_LIST = `alchemy-route-list.${zoneName}/*`;
+
+// Canonical `list()` test (zone-scoped collection): routes have no account-
+// wide enumeration API, so `list()` fans out over every zone via
+// `listAllZones`, paginates `listRoutes` per zone, and hydrates each into the
+// `read` Attributes shape. Deploy a real route and assert it appears in the
+// exhaustively-enumerated result.
+test.provider(
+  "list enumerates the deployed route across all zones",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeRoutes(zoneId, PATTERN_LIST);
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const worker = yield* Cloudflare.Worker("ListRouteWorker", {
+            main,
+            compatibility: { date: "2024-01-01" },
+          });
+          const route = yield* Cloudflare.WorkerRoute("ListRoute", {
+            zoneId,
+            pattern: PATTERN_LIST,
+            script: worker.workerName,
+          }).pipe(adopt(true));
+          return { worker, route };
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.WorkerRoute);
+      const all = yield* provider.list();
+
+      expect(
+        all.some(
+          (r) =>
+            r.routeId === deployed.route.routeId &&
+            r.zoneId === zoneId &&
+            r.pattern === PATTERN_LIST,
+        ),
+      ).toBe(true);
+
+      yield* stack.destroy();
+
+      const gone = yield* findRoute(zoneId, PATTERN_LIST);
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 300_000 },
