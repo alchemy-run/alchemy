@@ -108,7 +108,133 @@ test.provider(
   { timeout: 360_000 },
 );
 
+test.provider(
+  "updates function URL auth to AWS_IAM",
+  (stack) =>
+    Effect.gen(function* () {
+      const initial = yield* stack.deploy(
+        AWS.Lambda.Function<{}>()("IamUrlFn", {
+          main: timeoutHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          url: true,
+        }),
+      );
+
+      const invokePolicy = yield* getPolicyStatement(
+        initial.functionName,
+        "FunctionURLAllowPublicInvoke",
+      );
+      expect(invokePolicy.Condition).toEqual({
+        Bool: {
+          "lambda:InvokedViaFunctionUrl": "true",
+        },
+      });
+
+      const updated = yield* stack.deploy(
+        AWS.Lambda.Function<{}>()("IamUrlFn", {
+          main: timeoutHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          url: {
+            authType: "AWS_IAM",
+            cors: {
+              AllowHeaders: ["authorization", "content-type"],
+              AllowMethods: ["GET", "POST"],
+              AllowOrigins: ["https://example.com"],
+              ExposeHeaders: ["x-request-id"],
+              MaxAge: 300,
+            },
+            invokeMode: "RESPONSE_STREAM",
+          },
+        }),
+      );
+
+      expect(updated.functionName).toBe(initial.functionName);
+      expect(updated.functionUrl).toBeTruthy();
+
+      const config = yield* getFunctionUrlConfigWithAuth(
+        updated.functionName,
+        "AWS_IAM",
+      );
+      expect(config.AuthType).toBe("AWS_IAM");
+      expect(config.InvokeMode).toBe("RESPONSE_STREAM");
+      expect(config.Cors).toEqual({
+        AllowHeaders: ["authorization", "content-type"],
+        AllowMethods: ["GET", "POST"],
+        AllowOrigins: ["https://example.com"],
+        ExposeHeaders: ["x-request-id"],
+        MaxAge: 300,
+      });
+
+      yield* waitForPolicyStatementAbsent(
+        updated.functionName,
+        "FunctionURLAllowPublicAccess",
+      );
+      yield* waitForPolicyStatementAbsent(
+        updated.functionName,
+        "FunctionURLAllowPublicInvoke",
+      );
+
+      const response = yield* HttpClient.get(updated.functionUrl!).pipe(
+        Effect.flatMap((response) =>
+          response.status === 403
+            ? Effect.succeed(response)
+            : Effect.fail(
+                new Error(`IAM Function URL returned ${response.status}`),
+              ),
+        ),
+        Effect.retry({
+          schedule: Schedule.exponential(500).pipe(
+            Schedule.both(Schedule.recurs(10)),
+          ),
+        }),
+      );
+      expect(response.status).toBe(403);
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { timeout: 360_000 },
+);
+
 const getPolicyStatement = Effect.fn(function* (
+  functionName: string,
+  statementId: string,
+) {
+  return yield* findPolicyStatement(functionName, statementId).pipe(
+    Effect.flatMap((statement) =>
+      statement
+        ? Effect.succeed(statement)
+        : Effect.fail(new Error(`Policy statement ${statementId} not found`)),
+    ),
+    Effect.retry({
+      schedule: Schedule.exponential(500).pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
+    }),
+  );
+});
+
+const waitForPolicyStatementAbsent = Effect.fn(function* (
+  functionName: string,
+  statementId: string,
+) {
+  yield* findPolicyStatement(functionName, statementId).pipe(
+    Effect.flatMap((statement) =>
+      statement
+        ? Effect.fail(new Error(`Policy statement ${statementId} still exists`))
+        : Effect.void,
+    ),
+    Effect.retry({
+      schedule: Schedule.exponential(500).pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
+    }),
+  );
+});
+
+const findPolicyStatement = Effect.fn(function* (
   functionName: string,
   statementId: string,
 ) {
@@ -122,17 +248,30 @@ const getPolicyStatement = Effect.fn(function* (
               Condition?: unknown;
             }>;
           };
-          const statement = policy.Statement?.find(
+          return policy.Statement?.find(
             (statement) => statement.Sid === statementId,
           );
-          if (!statement) {
-            throw new Error(`Policy statement ${statementId} not found`);
-          }
-          return statement;
         },
         catch: (cause) =>
           cause instanceof Error ? cause : new Error(String(cause)),
       }),
+    ),
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed(undefined),
+    ),
+  );
+});
+
+const getFunctionUrlConfigWithAuth = Effect.fn(function* (
+  functionName: string,
+  authType: Lambda.FunctionUrlAuthType,
+) {
+  return yield* Lambda.getFunctionUrlConfig({
+    FunctionName: functionName,
+  }).pipe(
+    Effect.filterOrFail(
+      (config) => config.AuthType === authType,
+      () => new Error("Function URL auth has not propagated yet"),
     ),
     Effect.retry({
       schedule: Schedule.exponential(500).pipe(
