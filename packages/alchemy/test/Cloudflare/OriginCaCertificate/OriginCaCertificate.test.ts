@@ -119,17 +119,15 @@ test.provider("list enumerates issued certificates", (stack) =>
     // `list()` is account-wide but enumerated per zone with the `zone_id`
     // query param; a zone the scoped token can't read for Origin CA rejects
     // with the typed `Forbidden` tag, which is swallowed so that zone simply
-    // contributes []. When the standing token can list the test zone, the
+    // contributes []. The standing token can list the test zone, so the
     // freshly issued certificate must appear in the exhaustively-paginated
-    // result. An empty array means listing was gated for these credentials.
+    // result in the `read` Attributes shape.
     expect(Array.isArray(all)).toBe(true);
-    yield* Effect.logInfo(`ORIGINCA_LIST_LEN=${all.length}`);
-    if (all.length > 0) {
-      const match = all.find((c) => c.certificateId === cert.certificateId);
-      expect(match).toBeDefined();
-      expect(match!.hostnames).toEqual([hostname]);
-      expect(match!.certificateId).toEqual(cert.certificateId);
-    }
+    const match = all.find((c) => c.certificateId === cert.certificateId);
+    expect(match).toBeDefined();
+    expect(match!.certificateId).toEqual(cert.certificateId);
+    expect(match!.hostnames).toEqual([hostname]);
+    expect(match!.requestType).toEqual("origin-rsa");
 
     yield* stack.destroy();
     yield* expectRevoked(cert.certificateId);
