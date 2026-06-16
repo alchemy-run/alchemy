@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
+import * as Output from "@/Output";
 import { Stack } from "@/Stack";
 import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
@@ -859,5 +860,56 @@ describe.concurrent("Cloudflare.Worker", () => {
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
       }).pipe(logLevel),
+  );
+
+  test.provider(
+    "downstream referencing worker.url is not re-updated when the worker changes",
+    (stack) =>
+      // Regression: a downstream resource that references `worker.url` as a
+      // plain prop (e.g. a GitHub Webhook delivery URL built via
+      // `Output.interpolate`) must not spuriously re-update every time the
+      // upstream worker changes. The worker's url is stable across a
+      // code/config change, so the planner must resolve `worker.url` to a
+      // concrete value (rather than an unresolved Output, which would make
+      // `havePropsChanged` short-circuit on `Output.hasOutputs` and force a
+      // phantom update) and plan the downstream as a no-op.
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        // A worker plus a notification webhook whose `url` prop points at the
+        // worker (a plain prop dependency, exactly like a GitHub webhook's
+        // delivery URL). `crons` is the only thing that varies between the
+        // deploy and the re-plan — it forces the worker to plan as an
+        // `update` while leaving its url untouched.
+        const program = (crons: string[]) =>
+          Effect.gen(function* () {
+            const worker = yield* Cloudflare.Worker("Upstream", {
+              main,
+              crons,
+              compatibility: { date: "2024-01-01" },
+            });
+            yield* Cloudflare.NotificationWebhook("Hook", {
+              url: Output.interpolate`${worker.url}`,
+            });
+          });
+
+        yield* stack.deploy(program([]));
+
+        // Re-plan with the worker changed (a new cron forces an update) but
+        // the webhook identical. The plan is never applied, so the cron is
+        // never actually deployed.
+        const plan = yield* stack.plan(program(["*/10 * * * *"]));
+
+        const actionOf = (logicalId: string) =>
+          Object.values(plan.resources).find(
+            (node) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        expect(actionOf("Upstream")).toBe("update");
+        expect(actionOf("Hook")).toBe("noop");
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 180_000 },
   );
 });
