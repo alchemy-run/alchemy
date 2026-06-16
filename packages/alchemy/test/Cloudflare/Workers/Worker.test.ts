@@ -23,6 +23,7 @@ import {
   getWorkerTags,
   waitForWorkerToBeDeleted,
 } from "../Utils/Worker.ts";
+import type { Counter, Meter } from "./fixtures/do-counter-worker.ts";
 import InternalWorker from "./fixtures/internal-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -33,6 +34,10 @@ const logLevel = Effect.provideService(
 );
 
 const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
+const doMain = pathe.resolve(
+  import.meta.dirname,
+  "fixtures/do-counter-worker.ts",
+);
 
 describe.concurrent("Cloudflare.Worker", () => {
   test.provider("create, update, delete worker", (stack) =>
@@ -911,5 +916,189 @@ describe.concurrent("Cloudflare.Worker", () => {
         yield* stack.destroy();
       }).pipe(logLevel),
     { timeout: 180_000 },
+  );
+
+  test.provider(
+    "worker.durableObjectNamespaces stability across DO and worker changes",
+    (stack) =>
+      // Exercises plan actions for a downstream resource whose props reference
+      // `worker.durableObjectNamespaces.<ClassName>`. Scenarios:
+      //
+      // | Step                         | Worker     | Hook       |
+      // |------------------------------|------------|------------|
+      // | First deploy (no DO)         | create     | —          |
+      // | Add first DO + hook          | update     | create     |
+      // | Worker-only change           | update     | noop       |
+      // | Add another DO class         | update     | noop       |
+      // | Remove a DO class            | update     | update     |
+      // | Worker-only change (restored)| update     | noop       |
+      // | Swap DO class (add+remove)   | update     | noop       |
+      // | Deploy swap + hook follows   | (apply)    | (apply)    |
+      // | No further changes           | noop       | noop       |
+      // | Remove last DO class         | update     | update     |
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        type DoClass = "Counter" | "Meter";
+
+        const program = (opts: {
+          crons: string[];
+          dos: ReadonlyArray<DoClass>;
+          hookRef: DoClass | null;
+        }) =>
+          Effect.gen(function* () {
+            const bindings: any = {};
+            if (opts.dos.includes("Counter")) {
+              bindings.Counter =
+                Cloudflare.DurableObjectNamespace<Counter>("Counter");
+            }
+            if (opts.dos.includes("Meter")) {
+              bindings.Meter =
+                Cloudflare.DurableObjectNamespace<Meter>("Meter");
+            }
+
+            const worker = yield* Cloudflare.Worker("Upstream", {
+              main: doMain,
+              crons: opts.crons,
+              compatibility: { date: "2024-09-23" },
+              bindings,
+            } as any);
+
+            if (opts.hookRef !== null) {
+              // Embed the DO namespace id in the (real, reachable) worker URL so
+              // the webhook's live URL validation passes while still depending on
+              // `durableObjectNamespaces`. The worker responds 200 to any path.
+              yield* Cloudflare.NotificationWebhook("Hook", {
+                url: Output.interpolate`${worker.url}/${worker.durableObjectNamespaces.pipe(
+                  Output.map((namespaces) => namespaces[opts.hookRef!]),
+                )}`,
+              });
+            }
+          });
+
+        const actionOf = (plan: any, logicalId: string) =>
+          (Object.values(plan.resources) as any[]).find(
+            (node: any) => node.resource.LogicalId === logicalId,
+          )?.action;
+
+        // ── First deploy: worker with no DO classes yet ──
+        const workerOnlyFirstPlan = yield* stack.plan(
+          program({ crons: [], dos: [], hookRef: null }),
+        );
+        expect(actionOf(workerOnlyFirstPlan, "Upstream")).toBe("create");
+        expect(actionOf(workerOnlyFirstPlan, "Hook")).toBeUndefined();
+
+        yield* stack.deploy(program({ crons: [], dos: [], hookRef: null }));
+
+        // ── Add the first DO class + hook referencing it ──
+        const addFirstDoPlan = yield* stack.plan(
+          program({ crons: [], dos: ["Counter"], hookRef: "Counter" }),
+        );
+        expect(actionOf(addFirstDoPlan, "Upstream")).toBe("update");
+        expect(actionOf(addFirstDoPlan, "Hook")).toBe("create");
+
+        yield* stack.deploy(
+          program({ crons: [], dos: ["Counter"], hookRef: "Counter" }),
+        );
+
+        // ── Worker-only change, same DO set → hook noop ──
+        const workerOnlyPlan = yield* stack.plan(
+          program({
+            crons: ["*/10 * * * *"],
+            dos: ["Counter"],
+            hookRef: "Counter",
+          }),
+        );
+        expect(actionOf(workerOnlyPlan, "Upstream")).toBe("update");
+        expect(actionOf(workerOnlyPlan, "Hook")).toBe("noop");
+
+        // ── Add a DO class (Meter) while hook still refs Counter → Counter's
+        // namespace id is unchanged, so the hook is a noop even though the
+        // worker must update to register the new class ──
+        const addDoPlan = yield* stack.plan(
+          program({
+            crons: ["*/10 * * * *"],
+            dos: ["Counter", "Meter"],
+            hookRef: "Counter",
+          }),
+        );
+        expect(actionOf(addDoPlan, "Upstream")).toBe("update");
+        expect(actionOf(addDoPlan, "Hook")).toBe("noop");
+
+        yield* stack.deploy(
+          program({
+            crons: ["*/10 * * * *"],
+            dos: ["Counter", "Meter"],
+            hookRef: "Counter",
+          }),
+        );
+
+        // ── Remove a DO class (Meter) while hook still refs Counter → DO set
+        // changed, so the hook must re-plan even though Counter's id is
+        // unchanged in the cloud ──
+        const removeDoPlan = yield* stack.plan(
+          program({
+            crons: ["*/10 * * * *"],
+            dos: ["Counter"],
+            hookRef: "Counter",
+          }),
+        );
+        expect(actionOf(removeDoPlan, "Upstream")).toBe("update");
+        expect(actionOf(removeDoPlan, "Hook")).toBe("update");
+
+        yield* stack.deploy(
+          program({
+            crons: ["*/10 * * * *"],
+            dos: ["Counter"],
+            hookRef: "Counter",
+          }),
+        );
+
+        // ── Same DO set restored → hook noop on another worker-only change ──
+        const stableAgainPlan = yield* stack.plan(
+          program({ crons: [], dos: ["Counter"], hookRef: "Counter" }),
+        );
+        expect(actionOf(stableAgainPlan, "Upstream")).toBe("update");
+        expect(actionOf(stableAgainPlan, "Hook")).toBe("noop");
+
+        // ── Swap Counter → Meter (add & remove in one step), hook still refs
+        // Counter. The worker must update; the hook plans as noop because the
+        // persisted Counter namespace id is still carried in state until apply ──
+        const swapDoPlan = yield* stack.plan(
+          program({
+            crons: [],
+            dos: ["Meter"],
+            hookRef: "Counter",
+          }),
+        );
+        expect(actionOf(swapDoPlan, "Upstream")).toBe("update");
+        expect(actionOf(swapDoPlan, "Hook")).toBe("noop");
+
+        yield* stack.deploy(
+          program({
+            crons: [],
+            dos: ["Meter"],
+            hookRef: "Meter",
+          }),
+        );
+
+        // ── No further changes → noop ──
+        const hookFollowsDoPlan = yield* stack.plan(
+          program({ crons: [], dos: ["Meter"], hookRef: "Meter" }),
+        );
+        expect(actionOf(hookFollowsDoPlan, "Upstream")).toBe("noop");
+        expect(actionOf(hookFollowsDoPlan, "Hook")).toBe("noop");
+
+        // ── Remove the last DO class entirely while hook still refs Meter →
+        // hook must update (plan-only; URL would be invalid to deploy) ──
+        const removeLastDoPlan = yield* stack.plan(
+          program({ crons: [], dos: [], hookRef: "Meter" }),
+        );
+        expect(actionOf(removeLastDoPlan, "Upstream")).toBe("update");
+        expect(actionOf(removeLastDoPlan, "Hook")).toBe("update");
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 360_000 },
   );
 });

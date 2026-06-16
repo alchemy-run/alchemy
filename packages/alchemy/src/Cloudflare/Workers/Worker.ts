@@ -1937,6 +1937,35 @@ export const LiveWorkerProvider = () =>
                 ? (output.domains ?? []).find((u) => u.endsWith(".workers.dev"))
                 : undefined;
           const urlStable = newUrl !== undefined && newUrl === output.url;
+          // `durableObjectNamespaces` maps each hosted DO class name to the
+          // namespace id Cloudflare assigned it. Those ids are permanent for
+          // the lifetime of a (worker, class) pair, so the map only changes
+          // when a class is added or removed — never on a plain code/config
+          // update. Carry it forward as a stable whenever the set of local DO
+          // class names is unchanged, for the same reason as `url` above:
+          // downstream resources that bind a DO namespace via
+          // `worker.durableObjectNamespaces[name]` (e.g. a Container attached
+          // to a DO) must resolve it to a concrete value during planning.
+          // Otherwise the binding holds an unresolved Output, which
+          // `diffBindings` treats as "changed", spuriously re-updating the
+          // bound resource on every deploy. Class names are structural (not the
+          // namespace id), so this comparison holds even when `newBindings` is
+          // otherwise unresolved.
+          const newDoClassNames = Array.isArray(newBindings)
+            ? getExpectedDurableObjectClassNames(
+                (newBindings as ResourceBinding<Worker["Binding"]>[]).flatMap(
+                  (b) => b.data.bindings ?? [],
+                ),
+                workerName,
+              ).sort()
+            : [];
+          const oldDoClassNames = Object.keys(
+            output.durableObjectNamespaces ?? {},
+          ).sort();
+          const doNamespacesStable =
+            oldWorkerName === workerName &&
+            newDoClassNames.length === oldDoClassNames.length &&
+            newDoClassNames.every((name, i) => name === oldDoClassNames[i]);
           if (
             domainsChanged ||
             cronsChanged ||
@@ -1948,6 +1977,9 @@ export const LiveWorkerProvider = () =>
             }
             if (urlStable) {
               stables.push("url");
+            }
+            if (doNamespacesStable) {
+              stables.push("durableObjectNamespaces");
             }
             return {
               action: "update",
