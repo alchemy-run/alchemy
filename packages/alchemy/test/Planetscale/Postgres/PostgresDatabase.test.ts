@@ -23,8 +23,31 @@ const fixturesDir = `${import.meta.dirname}/fixtures`;
 describe
   .skipIf(!process.env.PLANETSCALE_TEST)
   .concurrent("PostgresDatabase", () => {
-    test.provider(
-      "list enumerates the deployed database",
+    // Read-only: exercises the real org-wide enumeration code path (with the
+    // per-database default-branch hydration) without provisioning anything.
+    test.provider("list enumerates databases (read-only)", () =>
+      Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(
+          Planetscale.PostgresDatabase,
+        );
+        const all = yield* provider.list();
+
+        expect(Array.isArray(all)).toBe(true);
+        for (const db of all) {
+          expect(db).toMatchObject({
+            id: expect.any(String),
+            name: expect.any(String),
+            organization: expect.any(String),
+            region: { slug: expect.any(String) },
+            arch: expect.stringMatching(/^(x86|arm)$/),
+          });
+        }
+      }).pipe(logLevel),
+    );
+
+    // Deploy-and-find coverage, opt-in only (slow provisioning).
+    test.provider.skipIf(!process.env.PLANETSCALE_DEPLOY_TEST)(
+      "list finds a freshly deployed database",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();

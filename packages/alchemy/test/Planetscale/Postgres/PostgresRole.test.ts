@@ -21,8 +21,31 @@ const logLevel = Effect.provideService(
 describe
   .skipIf(!process.env.PLANETSCALE_TEST)
   .concurrent("PostgresRole", () => {
-    test.provider(
-      "list enumerates the deployed default role",
+    // Read-only: PARENT FAN-OUT enumeration (org -> databases -> branches ->
+    // default role) against the live org, without provisioning anything.
+    test.provider("list enumerates default roles (read-only)", () =>
+      Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(
+          Planetscale.PostgresDefaultRole,
+        );
+        const all = yield* provider.list();
+
+        expect(Array.isArray(all)).toBe(true);
+        for (const r of all) {
+          expect(r).toMatchObject({
+            id: expect.any(String),
+            name: expect.any(String),
+            organization: expect.any(String),
+            database: expect.any(String),
+            branch: expect.any(String),
+          });
+        }
+      }).pipe(logLevel),
+    );
+
+    // Deploy-and-find coverage, opt-in only (slow provisioning).
+    test.provider.skipIf(!process.env.PLANETSCALE_DEPLOY_TEST)(
+      "list finds a freshly deployed default role",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
@@ -65,8 +88,30 @@ describe
       5_000_000,
     );
 
-    test.provider(
-      "list enumerates the deployed role",
+    // Read-only: PARENT FAN-OUT enumeration (org -> databases -> branches ->
+    // roles, excluding the default role) against the live org, without
+    // provisioning anything.
+    test.provider("list enumerates roles (read-only)", () =>
+      Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(Planetscale.PostgresRole);
+        const all = yield* provider.list();
+
+        expect(Array.isArray(all)).toBe(true);
+        for (const r of all) {
+          expect(r).toMatchObject({
+            id: expect.any(String),
+            name: expect.any(String),
+            organization: expect.any(String),
+            database: expect.any(String),
+            branch: expect.any(String),
+          });
+        }
+      }).pipe(logLevel),
+    );
+
+    // Deploy-and-find coverage, opt-in only (slow provisioning).
+    test.provider.skipIf(!process.env.PLANETSCALE_DEPLOY_TEST)(
+      "list finds a freshly deployed role",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
