@@ -120,7 +120,8 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
   grep -a "Found" /tmp/tsgo-watch.log | tail -1      # settled error count
   grep -a "error TS" /tmp/tsgo-watch.log | tail -20  # current errors
   ```
-- Because the distilled packages are **project references** in the root build graph, the watcher automatically rebuilds `distilled/packages/{cloud}/lib/` within ~15–30s of a `src` regeneration. This matters because **vitest loads distilled from `lib/`** (the forks pool resolves the `default` export condition, not `bun` — and a blanket `resolve.conditions: ["bun"]` breaks npm packages whose `bun` condition points at TS sources under `node_modules`). So: after regenerating a service, give the watcher ~30s before re-running tests if the patch changed **response schemas**; error-tag-only patches usually tolerate a stale lib.
+- **vitest resolves distilled from `src/*.ts` directly, NOT the built `lib/`.** So a regenerated service is **immediately test-visible** the moment `bun scripts/generate.ts --service {service}` (+ oxlint/oxfmt) finishes — there is nothing to rebuild and **nothing to wait for**. Do NOT sleep, do NOT poll the watch log for a `lib/` rebuild, and do NOT gate a test re-run on the watcher after regenerating. This applies to response-schema patches as well as error-tag-only patches.
+- The watcher therefore exists purely for **type-state monitoring**; it is never on the critical path for making a distilled change test-visible. If it dies, tests are unaffected.
 - Watch-mode occasionally reports a spurious `TS6059` rootDir error with a lowercase-mangled path — a one-shot `bun tsgo -b` is the authoritative check, run by the coordinator at wave boundaries.
 
 ## Speed doctrine: never wait on a hang
@@ -847,7 +848,7 @@ nohup bun tsgo -b -w > /tmp/tsgo-watch.log 2>&1 &
 ```
 
 - Agents read type state from the log (`grep -a "Found" /tmp/tsgo-watch.log | tail -1`) instead of invoking the compiler.
-- The watcher also rebuilds `distilled/packages/*/lib` automatically after a service regeneration (~15–30s), which is what vitest actually loads — so distilled response-schema patches become test-visible without anyone running `bun run build`.
+- The watcher is **only** for type-state monitoring. vitest resolves distilled from `src/*.ts` directly, so a regenerated service is test-visible immediately — no `lib/` rebuild and no watcher wait is ever required before re-running tests (see the "Resource budget" section above). If the watcher dies, tests are unaffected; just restart it (or run a one-shot `bun tsgo -b`) when you next want a type check.
 - Watch mode occasionally emits a spurious `TS6059` rootDir error with a lowercase-mangled path; a one-shot `bun tsgo -b` at wave boundaries is the authoritative check.
 
 ## Build Commands
