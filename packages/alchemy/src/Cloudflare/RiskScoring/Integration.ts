@@ -189,6 +189,29 @@ export const RiskScoringIntegrationProvider = () =>
           Effect.catchTag("RiskScoringIntegrationNotFound", () => Effect.void),
         );
     }),
+
+    // Account collection (pattern b). Enumerate every risk-scoring
+    // integration in the ambient account, exhaustively paginating the
+    // distilled list op. Accounts lacking the Zero Trust risk-scoring
+    // entitlement reject the route with a typed `Forbidden` — treat that
+    // as "nothing to list" and return [].
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        return yield* zeroTrust.listRiskScoringIntegrations
+          .pages({ accountId })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((integration) =>
+                  toAttributes(integration, accountId),
+                ),
+              ),
+            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          );
+      }),
   });
 
 /**

@@ -664,7 +664,12 @@ export const R2BucketProvider = () =>
               jurisdictions,
               (jurisdiction) =>
                 listBucketsInJurisdiction(accountId, jurisdiction).pipe(
-                  Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+                  // An account not entitled to a jurisdiction rejects the list
+                  // route with `Forbidden` ("Access Denied") or `InvalidRoute`
+                  // — there are simply no buckets there, so treat as empty.
+                  Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
+                    Effect.succeed([]),
+                  ),
                 ),
               { concurrency: jurisdictions.length },
             );

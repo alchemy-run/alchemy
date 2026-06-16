@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -94,6 +95,66 @@ test.provider.skipIf(!entitled)(
         })
         .pipe(Effect.flip);
       expect(gone._tag).toEqual("RiskScoringIntegrationNotFound");
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+// Read-only list assertion. Always runs: on an unentitled account the
+// account-scoped list route 403s and `list()` returns [] (Forbidden is
+// caught typed); on an entitled account it returns the live integrations
+// in the exact `read` Attributes shape. Either way the result is a
+// well-typed array.
+test.provider(
+  "list enumerates risk scoring integrations",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.RiskScoringIntegration,
+      );
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      for (const item of all) {
+        expect(typeof item.integrationId).toBe("string");
+        expect(typeof item.accountId).toBe("string");
+        expect(item.integrationType).toBe("Okta");
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+// Entitled-account variant: deploy an integration and assert `list()`
+// surfaces it (presence in the exhaustively-paginated result).
+test.provider.skipIf(!entitled)(
+  "list includes a freshly deployed integration",
+  (stack) =>
+    Effect.gen(function* () {
+      const tenantUrl = process.env.CLOUDFLARE_TEST_OKTA_TENANT_URL!;
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.RiskScoringIntegration("OktaSsf", {
+            tenantUrl,
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.RiskScoringIntegration,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((x) => x.integrationId === deployed.integrationId)).toBe(
+        true,
+      );
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 90_000 },
 );

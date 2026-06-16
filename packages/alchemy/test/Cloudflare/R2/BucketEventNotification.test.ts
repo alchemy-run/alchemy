@@ -303,6 +303,10 @@ test.provider(
       );
       const all = yield* provider.list();
 
+      yield* Effect.log(
+        `LIST DEBUG total=${all.length} wantBucket=${deployed.bucket.bucketName} wantQueue=${deployed.queue.queueId} buckets=${JSON.stringify(all.map((n) => ({ b: n.bucketName, q: n.queueId })))}`,
+      );
+
       const found = all.find(
         (n) =>
           n.bucketName === deployed.bucket.bucketName &&
