@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import { expect } from "@effect/vitest";
@@ -75,6 +76,46 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+// Canonical `list()` test (account collection): Magic WAN sites are
+// account-scoped, so `list()` paginates the account-wide sites API and
+// hydrates each into the `read` Attributes shape. On unentitled accounts
+// enumeration is rejected with the typed `MagicWanUnauthorized` (1025) or
+// `Forbidden` (403) and `list()` returns a well-typed `[]`. On entitled
+// accounts (CLOUDFLARE_TEST_MAGIC_WAN=1) we deploy a site and assert it
+// appears in the exhaustively-paginated result.
+test.provider(
+  "list enumerates account Magic WAN sites",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.MagicSite);
+
+      if (!entitled) {
+        // Unentitled account — `list()` swallows the typed entitlement /
+        // permission rejection and yields an empty, well-typed array.
+        const all = yield* provider.list();
+        expect(all).toEqual([]);
+        yield* stack.destroy();
+        return;
+      }
+
+      const site = yield* stack.deploy(
+        Cloudflare.MagicSite("ListSite", {
+          name: "alchemy-magic-site-list",
+          description: "alchemy magic site list test",
+        }),
+      );
+      expect(site.siteId).toBeTruthy();
+
+      const all = yield* provider.list();
+      expect(all.some((s) => s.siteId === site.siteId)).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );
 
 test.provider.skipIf(!entitled)(

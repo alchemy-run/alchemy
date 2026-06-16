@@ -1,5 +1,6 @@
 import * as autoscaling from "@distilled.cloud/aws/auto-scaling";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -128,6 +129,18 @@ export const ScalingPolicyProvider = () =>
 
       return {
         stables: ["policyArn", "policyName", "autoScalingGroupName"],
+        // `describePolicies` enumerates every scaling policy across all Auto
+        // Scaling Groups in the account/region when no AutoScalingGroupName
+        // filter is supplied, so no parent enumeration is needed.
+        list: () =>
+          autoscaling.describePolicies.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.ScalingPolicies ?? []).map(toAttributes),
+              ),
+            ),
+          ),
         diff: Effect.fn(function* ({ id, olds, news: _news }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as typeof olds;

@@ -1,5 +1,6 @@
 import * as organizations from "@distilled.cloud/aws/organizations";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -58,6 +59,57 @@ export const RootProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["rootId", "rootArn"],
+        // Enumerate every organization root via `listRoots` (paginated) and
+        // hydrate each into the exact `read` Attributes shape, fetching tags
+        // with bounded concurrency. Degrades to `[]` when the caller isn't an
+        // organization management account (the account isn't in an org, or
+        // lacks Organizations permissions) via the typed catches below.
+        list: () =>
+          Effect.gen(function* () {
+            const roots = yield* retryOrganizations(
+              organizations.listRoots.pages({}).pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) => page.Roots ?? []),
+                ),
+              ),
+            ).pipe(
+              Effect.catchTags({
+                AWSOrganizationsNotInUseException: () => Effect.succeed([]),
+                AccessDeniedException: () => Effect.succeed([]),
+              }),
+            );
+
+            const valid = roots.filter(
+              (
+                root,
+              ): root is organizations.Root & {
+                Id: string;
+                Arn: string;
+                Name: string;
+              } => root.Id != null && root.Arn != null && root.Name != null,
+            );
+
+            return yield* Effect.forEach(
+              valid,
+              (root) =>
+                Effect.gen(function* () {
+                  const tags = yield* readResourceTags(root.Id).pipe(
+                    Effect.catchTag("TargetNotFoundException", () =>
+                      Effect.succeed({}),
+                    ),
+                  );
+                  return {
+                    rootId: root.Id,
+                    rootArn: root.Arn,
+                    rootName: root.Name,
+                    policyTypes: root.PolicyTypes ?? [],
+                    tags,
+                  } satisfies Root["Attributes"];
+                }),
+              { concurrency: 10 },
+            );
+          }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
           if (olds?.rootId !== news?.rootId) {

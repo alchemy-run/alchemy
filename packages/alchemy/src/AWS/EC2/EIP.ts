@@ -122,6 +122,31 @@ export const EIPProvider = () =>
       return {
         stables: ["allocationId", "eipArn", "publicIp"],
 
+        list: () =>
+          Effect.gen(function* () {
+            const { region, accountId } = yield* AWSEnvironment.current;
+            // describeAddresses is non-paginated and returns every Elastic IP
+            // in the account/region in a single response.
+            const result = yield* ec2.describeAddresses({});
+            return (result.Addresses ?? [])
+              .filter(
+                (a): a is ec2.Address & { AllocationId: string } =>
+                  a.AllocationId != null,
+              )
+              .map((address): EIP["Attributes"] => ({
+                allocationId: address.AllocationId as AllocationId,
+                eipArn:
+                  `arn:aws:ec2:${region}:${accountId}:elastic-ip/${address.AllocationId}` as EIPArn,
+                publicIp: address.PublicIp!,
+                publicIpv4Pool: address.PublicIpv4Pool,
+                domain: (address.Domain as "vpc" | "standard") ?? "vpc",
+                networkBorderGroup: address.NetworkBorderGroup,
+                customerOwnedIp: address.CustomerOwnedIp,
+                customerOwnedIpv4Pool: address.CustomerOwnedIpv4Pool,
+                carrierIp: address.CarrierIp,
+              }));
+          }),
+
         read: Effect.fn(function* ({ output }) {
           const { region, accountId } = yield* AWSEnvironment.current;
 

@@ -1,5 +1,6 @@
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -243,6 +244,69 @@ export const RepositoryProvider = () =>
             tags: desiredTags,
           };
         }),
+        // Enumerate every repository in the account/region. `describeRepositories`
+        // is paginated (items under `repositories`); for each repo we fetch the
+        // tags and lifecycle policy so each element matches the full Attributes
+        // shape `read` produces and is directly usable by `delete`.
+        list: () =>
+          Effect.gen(function* () {
+            const repositories = yield* ecr.describeRepositories.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.repositories ?? []),
+              ),
+            );
+            return yield* Effect.forEach(
+              repositories.filter(
+                (
+                  r,
+                ): r is ecr.Repository & {
+                  repositoryName: string;
+                  repositoryArn: string;
+                  repositoryUri: string;
+                } =>
+                  r.repositoryName != null &&
+                  r.repositoryArn != null &&
+                  r.repositoryUri != null,
+              ),
+              (repository) =>
+                Effect.gen(function* () {
+                  const listedTags = yield* ecr.listTagsForResource({
+                    resourceArn: repository.repositoryArn,
+                  });
+                  const tags = Object.fromEntries(
+                    (listedTags.tags ?? [])
+                      .filter(
+                        (t): t is { Key: string; Value: string } =>
+                          typeof t.Key === "string" &&
+                          typeof t.Value === "string",
+                      )
+                      .map((t) => [t.Key, t.Value]),
+                  );
+                  const lifecyclePolicyText = yield* ecr
+                    .getLifecyclePolicy({
+                      repositoryName: repository.repositoryName,
+                    })
+                    .pipe(
+                      Effect.map((res) => res.lifecyclePolicyText),
+                      Effect.catchTag("LifecyclePolicyNotFoundException", () =>
+                        Effect.succeed(undefined),
+                      ),
+                    );
+                  return {
+                    repositoryName: repository.repositoryName,
+                    repositoryArn: repository.repositoryArn as RepositoryArn,
+                    repositoryUri: repository.repositoryUri as RepositoryUri,
+                    registryId: repository.registryId!,
+                    imageTagMutability:
+                      repository.imageTagMutability ?? "MUTABLE",
+                    lifecyclePolicyText,
+                    tags,
+                  };
+                }),
+              { concurrency: 10 },
+            );
+          }),
         delete: Effect.fn(function* ({ output }) {
           yield* ecr
             .deleteRepository({

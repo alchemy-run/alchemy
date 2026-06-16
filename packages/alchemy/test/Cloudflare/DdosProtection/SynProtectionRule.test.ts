@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as ddos from "@distilled.cloud/cloudflare/ddos-protection";
 import { expect } from "@effect/vitest";
@@ -81,6 +82,58 @@ test.provider.skipIf(!magicTransit)(
         })
         .pipe(Effect.flip);
       expect(error._tag).toEqual("SynProtectionRuleNotFound");
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Ungated: list() enumerates every rule in the ambient account. On the
+// unentitled testing account the typed `AdvancedTcpProtectionNotEntitled`
+// (Cloudflare code 8888) / `Forbidden` rejection is caught and surfaces as a
+// well-typed empty array — proving list() is resilient on accounts without
+// the Advanced TCP Protection entitlement.
+test.provider(
+  "list returns a well-typed array of SYN protection rules",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(
+        Cloudflare.SynProtectionRule,
+      );
+      const all = yield* provider.list();
+      expect(Array.isArray(all)).toBe(true);
+      for (const r of all) {
+        expect(typeof r.ruleId).toBe("string");
+        expect(typeof r.accountId).toBe("string");
+      }
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Gated full lifecycle: on an entitled account, a deployed rule must appear
+// in the exhaustively-paginated list().
+test.provider.skipIf(!magicTransit)(
+  "list enumerates the deployed SYN protection rule",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const rule = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.SynProtectionRule("ListRule", {
+            scope: "global",
+            mode: "monitoring",
+            burstSensitivity: "medium",
+            rateSensitivity: "medium",
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.SynProtectionRule,
+      );
+      const all = yield* provider.list();
+      expect(all.some((r) => r.ruleId === rule.ruleId)).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

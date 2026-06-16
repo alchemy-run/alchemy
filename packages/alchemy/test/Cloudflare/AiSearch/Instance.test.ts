@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import { expect } from "@effect/vitest";
@@ -191,6 +192,32 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(accountId, healed.instance.id);
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+// Canonical `list()` test (account collection): `list()` enumerates every
+// AI Search instance in the account via `listInstances`, paginating
+// exhaustively, and hydrates each into the `read` Attributes shape. Deploy
+// an instance and assert its id appears in the result.
+test.provider(
+  "list enumerates the deployed instance",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(program());
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.AiSearchInstance,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((x) => x.id === deployed.instance.id)).toBe(true);
+
+      yield* stack.destroy();
+
+      yield* expectGone(deployed.instance.accountId, deployed.instance.id);
     }).pipe(logLevel),
   { timeout: 240_000 },
 );

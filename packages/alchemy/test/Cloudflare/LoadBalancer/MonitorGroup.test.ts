@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as loadBalancers from "@distilled.cloud/cloudflare/load-balancers";
 import { expect } from "@effect/vitest";
@@ -92,6 +93,54 @@ test.provider.skipIf(monitorGroupsEnabled)(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+);
+
+// Ungated probe: monitor group enumeration is account-scoped and works
+// regardless of the Enterprise entitlement — a non-entitled account simply
+// has no groups, so `list()` returns an array (typically empty here).
+test.provider("list returns an array of monitor groups", () =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(
+      Cloudflare.LoadBalancerMonitorGroup,
+    );
+    const all = yield* provider.list();
+    expect(Array.isArray(all)).toBe(true);
+  }).pipe(logLevel),
+);
+
+test.provider.skipIf(!monitorGroupsEnabled)(
+  "list enumerates the deployed monitor group",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const monitor = yield* Cloudflare.LoadBalancerMonitor("Monitor", {
+            description: NAME_MONITOR,
+            type: "https",
+            path: "/health",
+            expectedCodes: "2xx",
+          });
+          const group = yield* Cloudflare.LoadBalancerMonitorGroup("Group", {
+            description: NAME_LIFECYCLE,
+            members: [{ monitorId: monitor.monitorId }],
+          });
+          return { monitor, group };
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.LoadBalancerMonitorGroup,
+      );
+      const all = yield* provider.list();
+      expect(
+        all.some((g) => g.monitorGroupId === deployed.group.monitorGroupId),
+      ).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!monitorGroupsEnabled)(

@@ -2,6 +2,7 @@ import type * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -226,6 +227,47 @@ export const RouteProvider = () =>
             coreNetworkArn: route?.CoreNetworkArn,
           };
         }),
+
+        // Routes are entries embedded inside RouteTables. Enumerate by
+        // flattening describeRouteTables -> RouteTables[].Routes[], pairing each
+        // route with its parent routeTableId. Skip the implicit local route
+        // (GatewayId === "local", Origin "CreateRouteTable") that AWS creates
+        // automatically and that this provider does not manage.
+        list: () =>
+          Effect.gen(function* () {
+            return yield* ec2.describeRouteTables.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.RouteTables ?? []).flatMap((rt) => {
+                    const routeTableId = rt.RouteTableId;
+                    if (routeTableId === undefined) return [];
+                    return (rt.Routes ?? [])
+                      .filter((r) => r.GatewayId !== "local")
+                      .map((r) => ({
+                        routeTableId: routeTableId as RouteTableId,
+                        destinationCidrBlock: r.DestinationCidrBlock,
+                        destinationIpv6CidrBlock: r.DestinationIpv6CidrBlock,
+                        destinationPrefixListId: r.DestinationPrefixListId,
+                        origin: r.Origin ?? "CreateRoute",
+                        state: r.State ?? "active",
+                        gatewayId: r.GatewayId,
+                        natGatewayId: r.NatGatewayId,
+                        instanceId: r.InstanceId,
+                        networkInterfaceId: r.NetworkInterfaceId,
+                        vpcPeeringConnectionId: r.VpcPeeringConnectionId,
+                        transitGatewayId: r.TransitGatewayId,
+                        localGatewayId: r.LocalGatewayId,
+                        carrierGatewayId: r.CarrierGatewayId,
+                        egressOnlyInternetGatewayId:
+                          r.EgressOnlyInternetGatewayId,
+                        coreNetworkArn: r.CoreNetworkArn,
+                      }));
+                  }),
+                ),
+              ),
+            );
+          }),
 
         delete: Effect.fn(function* ({ output, session }) {
           const dest =

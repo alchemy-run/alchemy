@@ -1,5 +1,6 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -161,6 +162,32 @@ export const MetricStreamProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every metric stream in the account/region. The list
+            // op only returns summary entries, so re-read each by name to
+            // produce the full Attributes shape `read` returns.
+            const entries = yield* cloudwatch.listMetricStreams.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.Entries ?? []),
+              ),
+            );
+
+            const results = yield* Effect.forEach(
+              entries,
+              (entry) =>
+                entry.Name
+                  ? readMetricStream(entry.Name)
+                  : Effect.succeed(undefined),
+              { concurrency: 10 },
+            );
+
+            return results.filter(
+              (state): state is NonNullable<typeof state> =>
+                state !== undefined,
+            );
+          }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.metricStreamName ??

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -152,5 +153,34 @@ test.provider("recreates after out-of-band delete", (stack) =>
 
     yield* stack.destroy();
     yield* expectGone(accountId, healed.locationId);
+  }).pipe(logLevel),
+);
+
+// Canonical `list()` test (account-scoped collection): deploy a location,
+// then enumerate every Gateway location in the account via the typed
+// provider and assert the deployed one is present in the exhaustively
+// paginated result.
+test.provider("list enumerates deployed gateway locations", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const location = yield* stack.deploy(
+      Cloudflare.GatewayLocation("ListLocation", {
+        name: "alchemy-zt-location-list",
+        ecsSupport: false,
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.GatewayLocation);
+    const all = yield* provider.list();
+
+    // The deployed location appears with the exact `read` Attributes shape.
+    const found = all.find((l) => l.locationId === location.locationId);
+    expect(found).toBeDefined();
+    expect(found?.name).toEqual("alchemy-zt-location-list");
+    expect(found?.accountId).toEqual(location.accountId);
+
+    yield* stack.destroy();
+    yield* expectGone(location.accountId, location.locationId);
   }).pipe(logLevel),
 );

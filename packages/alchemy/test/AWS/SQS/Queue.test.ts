@@ -1,6 +1,7 @@
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Queue } from "@/AWS/SQS";
+import * as Provider from "@/Provider";
 import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as SQS from "@distilled.cloud/aws/sqs";
@@ -286,6 +287,45 @@ test.provider(
       yield* assertQueueDeleted(takenOver.queueUrl);
     }),
 );
+
+test.provider(
+  "list enumerates the deployed queue",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("ListQueue");
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Queue);
+
+      // SQS is eventually consistent: a freshly-created queue may not appear in
+      // listQueues immediately. Retry the list assertion on a bounded schedule.
+      yield* Effect.gen(function* () {
+        const all = yield* provider.list();
+        if (!all.some((q) => q.queueArn === deployed.queueArn)) {
+          return yield* Effect.fail(new QueueNotListed());
+        }
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "QueueNotListed",
+          schedule: Schedule.fixed("3 seconds").pipe(
+            Schedule.both(Schedule.recurs(20)),
+          ),
+        }),
+      );
+
+      yield* stack.destroy();
+
+      yield* assertQueueDeleted(deployed.queueUrl);
+    }),
+  { timeout: 120_000 },
+);
+
+class QueueNotListed extends Data.TaggedError("QueueNotListed") {}
 
 class QueueStillExists extends Data.TaggedError("QueueStillExists") {}
 

@@ -1,5 +1,6 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -260,6 +261,43 @@ export const AuthorizerProvider = () =>
             type: final.type!,
           };
         }),
+        // Authorizers are sub-resources of a RestApi and can only be listed
+        // per-parent (`GET /restapis/{restApiId}/authorizers`). Enumerate every
+        // RestApi (paginated), then fan out the per-api authorizer list.
+        list: () =>
+          Effect.gen(function* () {
+            const restApiIds = yield* ag.getRestApis.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.items ?? [])
+                    .map((api) => api.id)
+                    .filter((id): id is string => id != null),
+                ),
+              ),
+            );
+            const rows = yield* Effect.forEach(
+              restApiIds,
+              (restApiId) =>
+                ag.getAuthorizers({ restApiId }).pipe(
+                  Effect.map((res) =>
+                    (res.items ?? [])
+                      .filter(
+                        (a): a is ag.Authorizer & { id: string } =>
+                          a.id != null,
+                      )
+                      .map((a) => ({
+                        authorizerId: a.id,
+                        restApiId,
+                        name: a.name!,
+                        type: a.type!,
+                      })),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+            return rows.flat();
+          }),
         delete: Effect.fn(function* ({ output, session }) {
           yield* ag
             .deleteAuthorizer({

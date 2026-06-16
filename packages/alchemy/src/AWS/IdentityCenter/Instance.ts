@@ -85,6 +85,32 @@ export const InstanceProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["instanceArn", "identityStoreId", "ownerAccountId", "mode"],
+        // Enumerate every Identity Center instance visible to the calling
+        // account (organization + account instances). `ListInstances` is
+        // paginated and fully hydrates each `InstanceMetadata`, so no
+        // per-item read is needed. Accounts with no SSO enabled return an
+        // empty list (not an error). Each item is mapped to the exact `read`
+        // Attributes shape; `mode` defaults to "existing" since enumeration
+        // only observes pre-existing instances.
+        list: () =>
+          Effect.gen(function* () {
+            const instances = yield* listInstances();
+            return instances
+              .filter(
+                (
+                  instance,
+                ): instance is ssoAdmin.InstanceMetadata & {
+                  InstanceArn: string;
+                  IdentityStoreId: string;
+                } =>
+                  instance.InstanceArn != null &&
+                  instance.IdentityStoreId != null,
+              )
+              .map((instance) => ({
+                ...toInstanceAttributes(instance),
+                mode: "existing" as const,
+              }));
+          }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
           if (

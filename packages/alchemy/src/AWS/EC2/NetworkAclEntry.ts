@@ -1,6 +1,7 @@
 import type * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -155,6 +156,44 @@ export const NetworkAclEntryProvider = () =>
 
       return {
         stables: [],
+
+        // Entries are embedded in describeNetworkAcls (each NetworkAcl owns an
+        // Entries[]). Flatten every ACL's entries into the full Attributes
+        // shape. Skip the AWS-managed default-deny rule (32767) since it is not
+        // a user-manageable entry.
+        list: () =>
+          ec2.describeNetworkAcls.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.NetworkAcls ?? []).flatMap((acl) =>
+                  (acl.Entries ?? [])
+                    .filter((e) => e.RuleNumber !== 32767)
+                    .map((entry) => ({
+                      networkAclId: acl.NetworkAclId as NetworkAclId,
+                      ruleNumber: entry.RuleNumber!,
+                      egress: entry.Egress!,
+                      protocol: entry.Protocol!,
+                      ruleAction: entry.RuleAction!,
+                      cidrBlock: entry.CidrBlock,
+                      ipv6CidrBlock: entry.Ipv6CidrBlock,
+                      icmpTypeCode: entry.IcmpTypeCode
+                        ? {
+                            code: entry.IcmpTypeCode.Code,
+                            type: entry.IcmpTypeCode.Type,
+                          }
+                        : undefined,
+                      portRange: entry.PortRange
+                        ? {
+                            from: entry.PortRange.From,
+                            to: entry.PortRange.To,
+                          }
+                        : undefined,
+                    })),
+                ),
+              ),
+            ),
+          ),
 
         read: Effect.fn(function* ({ olds, output }) {
           if (!output) return undefined;

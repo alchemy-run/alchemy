@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as dnsFirewall from "@distilled.cloud/cloudflare/dns-firewall";
 import { expect } from "@effect/vitest";
@@ -186,6 +187,54 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       yield* expectGone(accountId, renamed.dnsFirewallId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (account collection): the enumeration endpoint
+// (`GET /accounts/{id}/dns_firewall`) is NOT entitlement-gated — only
+// cluster *creation* is — so `list()` runs on the unentitled testing
+// account and returns the (empty) cluster Attributes array. This read-only
+// assertion proves `list()` exhaustively paginates and produces the exact
+// `read` Attributes shape.
+test.provider(
+  "list returns the DNS firewall cluster Attributes array",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.DnsFirewall);
+      const all = yield* provider.list();
+      expect(Array.isArray(all)).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);
+
+// Entitled accounts: deploy a real cluster and assert it appears in the
+// exhaustively-paginated `list()` result with the exact `read` Attributes.
+test.provider.skipIf(!entitled)(
+  "list enumerates the deployed DNS firewall cluster",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Cloudflare.DnsFirewall("ListCluster", {
+          name: "alchemy-dnsfw-list",
+          upstreamIps: ["192.0.2.1"],
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.DnsFirewall);
+      const all = yield* provider.list();
+
+      const found = all.find((c) => c.dnsFirewallId === deployed.dnsFirewallId);
+      expect(found).toBeTruthy();
+      expect(found?.name).toEqual("alchemy-dnsfw-list");
+      expect(found?.accountId).toEqual(deployed.accountId);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

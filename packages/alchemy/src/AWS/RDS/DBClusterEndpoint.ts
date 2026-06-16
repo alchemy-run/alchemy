@@ -1,5 +1,6 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -103,6 +104,23 @@ export const DBClusterEndpointProvider = () =>
 
       return {
         stables: ["dbClusterEndpointArn", "dbClusterEndpointIdentifier"],
+        // Enumerate every custom cluster endpoint in the account/region.
+        // `describeDBClusterEndpoints` with no filter returns custom endpoints
+        // across all clusters; system endpoints (EndpointType WRITER/READER)
+        // aren't managed via createDBClusterEndpoint, so we keep only CUSTOM
+        // ones. Tags aren't returned by describe, so each item carries `{}`
+        // (matching `read`'s default when there is no recorded tag set).
+        list: () =>
+          rds.describeDBClusterEndpoints.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.DBClusterEndpoints ?? [])
+                  .filter((endpoint) => endpoint.EndpointType === "CUSTOM")
+                  .map((endpoint) => toAttrs({ endpoint, tags: {} })),
+              ),
+            ),
+          ),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (

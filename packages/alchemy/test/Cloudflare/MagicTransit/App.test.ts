@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import { expect } from "@effect/vitest";
@@ -136,6 +137,55 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       yield* expectGone(accountId, app.appId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Read-only list assertion. Always safe: on an unentitled account the
+// account-scoped apps list rejects with the typed `MagicWanUnauthorized` /
+// `Forbidden`, which `list()` maps to a well-typed empty array.
+test.provider(
+  "list enumerates account apps (well-typed [] when unentitled)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.MagicApp);
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      for (const app of all) {
+        expect(typeof app.appId).toBe("string");
+        expect(typeof app.accountId).toBe("string");
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Entitled-account variant: deploy a real app and assert it appears in the
+// exhaustively-paginated list result.
+test.provider.skipIf(!entitled)(
+  "list includes a deployed custom app",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Cloudflare.MagicApp("ListApp", {
+          name: "alchemy-magic-list-app",
+          type: "Collaboration",
+          hostnames: ["list.alchemy.test"],
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.MagicApp);
+      const all = yield* provider.list();
+
+      expect(all.some((app) => app.appId === deployed.appId)).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

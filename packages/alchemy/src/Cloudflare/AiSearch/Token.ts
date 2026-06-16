@@ -224,6 +224,28 @@ export const AiSearchTokenProvider = () =>
         .pipe(retryTokenPropagation);
       return toAttributes(updated, acct);
     }),
+    list: () =>
+      // Service tokens are account-scoped (`/accounts/{id}/ai-search/tokens`),
+      // not nested under an instance — one paginated list per account.
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        return yield* aisearch.listTokens
+          .pages({ accountId, perPage: 50 })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                // The list item shape matches the create/read response, so the
+                // emitted Attributes are identical to `read` (the write-only
+                // `cfApiKey` is never part of Attributes anyway).
+                (page.result ?? []).map((t) => toAttributes(t, accountId)),
+              ),
+            ),
+            // AI Search isn't enabled on every account — the route is gated
+            // rather than returning an empty list. Treat it as "none".
+            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+          );
+      }),
     delete: Effect.fn(function* ({ output }) {
       // A missing token (already deleted) is success. An AI Search
       // instance that referenced this token may still be deleting

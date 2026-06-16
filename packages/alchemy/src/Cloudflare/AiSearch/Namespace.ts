@@ -1,6 +1,7 @@
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -208,6 +209,21 @@ export const AiSearchNamespaceProvider = () =>
         .deleteNamespace({ accountId: output.accountId, name: output.name })
         .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.void));
     }),
+    // Account-scoped collection: namespaces are enumerated directly under
+    // the account (no parent fan-out). Exhaustively paginate `listNamespaces`
+    // and hydrate each item into the exact `read` Attributes shape.
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        return yield* aisearch.listNamespaces.pages({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((ns) => toAttributes(ns, accountId)),
+            ),
+          ),
+        );
+      }),
   });
 
 type ObservedNamespace = aisearch.ReadNamespaceResponse;

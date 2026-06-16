@@ -1,6 +1,7 @@
 import * as mnm from "@distilled.cloud/cloudflare/magic-network-monitoring";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -349,6 +350,30 @@ export const MagicNetworkMonitoringRuleProvider = () =>
           Effect.catchTag("MnmRuleNotFound", () => Effect.void),
         );
     }),
+
+    // MNM rules are account-scoped: enumerate every rule in the ambient
+    // account. `listRules` paginates in "single" mode, so collect every
+    // page and flatten its `result` array, hydrating each item into the
+    // exact `read` Attributes shape. Accounts not onboarded to Magic
+    // Network Monitoring reject the route with `Forbidden` (HTTP 403) —
+    // treat that as "nothing to list" rather than an error.
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        return yield* mnm.listRules.pages({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter(
+                  (rule): rule is NonNullable<typeof rule> => rule != null,
+                )
+                .map((rule) => toAttributes(rule, accountId)),
+            ),
+          ),
+          Effect.catchTag("Forbidden", () => Effect.succeed([])),
+        );
+      }),
   });
 
 type ObservedRule = mnm.GetRuleResponse;

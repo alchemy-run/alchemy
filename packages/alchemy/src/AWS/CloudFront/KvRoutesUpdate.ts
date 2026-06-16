@@ -226,6 +226,11 @@ export const KvRoutesUpdateProvider = () =>
         );
 
       return {
+        // Non-listable: this resource is an update operation that manages a
+        // single route entry inside a JSON array stored at a KV store key. It is
+        // keyed entirely by {store, namespace, key, entry}; there is no API that
+        // enumerates individual route-entry updates, so list returns [].
+        list: () => Effect.succeed([]),
         read: withKvsRegionFn(
           Effect.fn(function* ({ output }) {
             return output;

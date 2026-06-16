@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as cache from "@distilled.cloud/cloudflare/cache";
 import { expect } from "@effect/vitest";
@@ -127,6 +128,50 @@ describe.sequential("CacheReserve", () => {
         // Destroy restored the value the setting had before we managed it.
         const restored = yield* getCacheReserve(zoneId);
         expect(restored.value).toEqual("off");
+      }).pipe(logLevel),
+  );
+
+  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+  // API for this per-zone setting, so `list()` enumerates every zone via
+  // `listAllZones` and reads the singleton in each. Cache Reserve is an
+  // entitlement-gated add-on, so unentitled zones are filtered out via the
+  // typed `SettingUnavailableForPlan` skip — on the standard testing account
+  // the result is therefore an array (possibly empty) and must not throw.
+  test.provider("list enumerates Cache Reserve across all zones", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.CacheReserve);
+      const all = yield* provider.list();
+
+      // Enumeration + typed entitlement skip succeed: a plain array, every
+      // element carrying the full Attributes shape.
+      expect(Array.isArray(all)).toBe(true);
+      for (const entry of all) {
+        expect(typeof entry.zoneId).toBe("string");
+        expect(typeof entry.value).toBe("string");
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  );
+
+  // On an entitled account, the entitled zone's singleton is returned by
+  // `list()`. Gated behind the same env var as the lifecycle test.
+  test.provider.skipIf(!entitledZoneId)(
+    "list includes the entitled zone's Cache Reserve setting",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = entitledZoneId!;
+
+        const provider = yield* Provider.findProvider(Cloudflare.CacheReserve);
+        const all = yield* provider.list();
+
+        expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+
+        // `stack` is unused (the singleton always exists on entitled zones),
+        // but keep the destroy bookend so the harness state stays clean.
+        yield* stack.destroy();
       }).pipe(logLevel),
   );
 });

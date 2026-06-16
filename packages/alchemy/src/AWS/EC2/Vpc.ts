@@ -3,6 +3,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -164,6 +165,57 @@ export interface Vpc extends Resource<
 > {}
 export const Vpc = Resource<Vpc>("AWS.EC2.VPC");
 
+/**
+ * Map a raw EC2 VPC (as returned by `describeVpcs`) plus its tags to the
+ * resource's `Attributes` shape. DNS support/hostnames are not part of the
+ * `Attributes` contract, so the full shape is derivable from the describe
+ * response alone — no per-VPC `describeVpcAttribute` call is required.
+ */
+const vpcToAttributes = (
+  vpc: EC2.Vpc,
+  region: RegionID,
+  accountId: AccountID,
+  tags: Record<string, string> | undefined,
+): Vpc["Attributes"] => {
+  const vpcId = vpc.VpcId! as VpcId;
+  return {
+    vpcId,
+    vpcArn: `arn:aws:ec2:${region}:${accountId}:vpc/${vpcId}` as VpcArn,
+    cidrBlock: vpc.CidrBlock!,
+    dhcpOptionsId: vpc.DhcpOptionsId!,
+    state: vpc.State!,
+    isDefault: vpc.IsDefault ?? false,
+    ownerId: vpc.OwnerId,
+    cidrBlockAssociationSet: vpc.CidrBlockAssociationSet?.map((assoc) => ({
+      associationId: assoc.AssociationId!,
+      cidrBlock: assoc.CidrBlock!,
+      cidrBlockState: {
+        state: assoc.CidrBlockState!.State!,
+        statusMessage: assoc.CidrBlockState!.StatusMessage,
+      },
+    })),
+    ipv6CidrBlockAssociationSet: vpc.Ipv6CidrBlockAssociationSet?.map(
+      (assoc) => ({
+        associationId: assoc.AssociationId!,
+        ipv6CidrBlock: assoc.Ipv6CidrBlock!,
+        ipv6CidrBlockState: {
+          state: assoc.Ipv6CidrBlockState!.State!,
+          statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
+        },
+        networkBorderGroup: assoc.NetworkBorderGroup,
+        ipv6Pool: assoc.Ipv6Pool,
+      }),
+    ),
+    tags,
+  };
+};
+
+/** Map the `Tags` array on a describe response to a plain record. */
+const tagsFromVpc = (vpc: EC2.Vpc): Record<string, string> =>
+  Object.fromEntries(
+    (vpc.Tags ?? []).map((tag: EC2.Tag) => [tag.Key!, tag.Value!]),
+  );
+
 export const VpcProvider = () =>
   Provider.effect(
     Vpc,
@@ -313,38 +365,26 @@ export const VpcProvider = () =>
             );
           }
 
-          return {
-            vpcId,
-            vpcArn: `arn:aws:ec2:${region}:${accountId}:vpc/${vpcId}` as VpcArn,
-            cidrBlock: finalVpc.CidrBlock!,
-            dhcpOptionsId: finalVpc.DhcpOptionsId!,
-            state: finalVpc.State!,
-            isDefault: finalVpc.IsDefault ?? false,
-            ownerId: finalVpc.OwnerId,
-            cidrBlockAssociationSet: finalVpc.CidrBlockAssociationSet?.map(
-              (assoc) => ({
-                associationId: assoc.AssociationId!,
-                cidrBlock: assoc.CidrBlock!,
-                cidrBlockState: {
-                  state: assoc.CidrBlockState!.State!,
-                  statusMessage: assoc.CidrBlockState!.StatusMessage,
-                },
-              }),
-            ),
-            ipv6CidrBlockAssociationSet:
-              finalVpc.Ipv6CidrBlockAssociationSet?.map((assoc) => ({
-                associationId: assoc.AssociationId!,
-                ipv6CidrBlock: assoc.Ipv6CidrBlock!,
-                ipv6CidrBlockState: {
-                  state: assoc.Ipv6CidrBlockState!.State!,
-                  statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
-                },
-                networkBorderGroup: assoc.NetworkBorderGroup,
-                ipv6Pool: assoc.Ipv6Pool,
-              })),
-            tags: desiredTags,
-          };
+          return vpcToAttributes(finalVpc, region, accountId, desiredTags);
         }),
+
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            // Enumerate every VPC in this account/region, paginating
+            // exhaustively. Each item is hydrated to the full `Attributes`
+            // shape via the shared mapper so it's directly usable by `delete`.
+            return yield* ec2.describeVpcs.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.Vpcs ?? []).map((vpc) =>
+                    vpcToAttributes(vpc, region, accountId, tagsFromVpc(vpc)),
+                  ),
+                ),
+              ),
+            );
+          }),
 
         delete: Effect.fn(function* ({ output, session }) {
           const vpcId = output.vpcId;

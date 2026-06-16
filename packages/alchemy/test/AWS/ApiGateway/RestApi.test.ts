@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
@@ -88,6 +89,32 @@ test.provider.skipIf(!runLive)(
       expect(
         remote.binaryMediaTypes?.includes("application/octet-stream"),
       ).toBe(false);
+
+      yield* stack.destroy();
+    }),
+);
+
+// Canonical `list()` test (AWS account/region-scoped collection): deploy a
+// real REST API, resolve the typed provider via `findProvider`, call `list()`,
+// and assert the deployed API appears in the exhaustively-paginated result.
+test.provider.skipIf(!runLive)(
+  "list enumerates the deployed REST API",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const api = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* AWS.ApiGateway.RestApi("AgRestApiList", {
+            endpointConfiguration: { types: ["REGIONAL"] },
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(AWS.ApiGateway.RestApi);
+      const all = yield* provider.list();
+
+      expect(all.some((a) => a.restApiId === api.restApiId)).toBe(true);
 
       yield* stack.destroy();
     }),

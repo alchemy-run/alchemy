@@ -195,6 +195,11 @@ export const KvEntriesProvider = () =>
       });
 
       return {
+        // Non-listable: a KvEntries resource is a logical group of key/value
+        // data keyed entirely by its parent store ARN + namespace (both chosen
+        // by the user). There is no account-wide API to enumerate these groups,
+        // and the entries are managed content rather than nuke-able infra.
+        list: () => Effect.succeed([]),
         read: withKvsRegionFn(
           Effect.fn(function* ({ output }) {
             return output;

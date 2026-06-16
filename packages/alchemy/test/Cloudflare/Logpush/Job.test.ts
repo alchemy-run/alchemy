@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Output from "@/Output";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as logpush from "@distilled.cloud/cloudflare/logpush";
 import * as user from "@distilled.cloud/cloudflare/user";
@@ -182,6 +183,44 @@ test.provider(
       yield* waitForDelete(accountId, initial.job.jobId);
 
       // Destroy again — delete must be idempotent (the job is already gone).
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+test.provider(
+  "list enumerates the deployed Logpush job",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const creds = yield* r2Credentials;
+
+      yield* stack.destroy();
+
+      const deployed = yield* retryAuthBlip(
+        stack.deploy(
+          program(creds, {
+            dataset: "workers_trace_events",
+            enabled: false,
+          }),
+        ),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.LogpushJob);
+      const all = yield* provider.list();
+
+      // The account-scoped job we just deployed is present in the
+      // exhaustively-paginated (account + per-zone fan-out) result.
+      const found = all.find((job) => job.jobId === deployed.job.jobId);
+      expect(found).toBeDefined();
+      expect(found?.accountId).toEqual(accountId);
+      expect(found?.zoneId).toBeUndefined();
+      expect(found?.dataset).toEqual("workers_trace_events");
+
+      yield* stack.destroy();
+
+      yield* waitForDelete(accountId, deployed.job.jobId);
+
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 180_000 },

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as iam from "@distilled.cloud/cloudflare/iam";
@@ -134,6 +135,41 @@ test.provider(
 
       // Destroy removed the membership (and the groups themselves).
       yield* expectGone(accountId, v2.groupB.userGroupId, memberId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates memberships across all user groups in the account",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const memberId = yield* findMemberId(accountId);
+
+      yield* stack.destroy();
+
+      // Deploy a membership so there is at least one to enumerate.
+      const deployed = yield* stack.deploy(program({ memberId, target: "A" }));
+
+      // Resolve the provider with the typed helper — element type is the
+      // resource's exact Attributes shape (no `any`).
+      const provider = yield* Provider.findProvider(
+        Cloudflare.IamUserGroupMembership,
+      );
+
+      // Parent fan-out + per-group pagination must surface our deployed
+      // membership somewhere in the exhaustively-collected result.
+      const all = yield* provider.list();
+      expect(
+        all.some(
+          (m) =>
+            m.userGroupId === deployed.membership.userGroupId &&
+            m.memberId === memberId &&
+            m.accountId === accountId,
+        ),
+      ).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

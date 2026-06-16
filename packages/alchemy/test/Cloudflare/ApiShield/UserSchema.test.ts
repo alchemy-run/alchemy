@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
 import { expect } from "@effect/vitest";
@@ -25,6 +26,7 @@ const zoneName =
 // Deterministic per-test schema names.
 const NAME_DEFAULT = "alch-userschema-default";
 const NAME_REPLACE = "alch-userschema-replace";
+const NAME_LIST = "alch-userschema-list";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -188,6 +190,46 @@ test.provider(
 
       const gone = yield* getSchema(zoneId, replaced.schemaId);
       expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (zone-scoped collection): `list()` fans out over
+// every zone via `listAllZones` and exhaustively paginates each zone's
+// schemas. Deploy a schema, then assert its id appears in the result.
+test.provider(
+  "list enumerates the deployed user schema",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+      const source = yield* fixture("openapi-v1.json");
+
+      yield* stack.destroy();
+      yield* purgeSchemasNamed(zoneId, NAME_LIST);
+
+      const schema = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.ApiShieldUserSchema("ListSchema", {
+            zoneId,
+            name: NAME_LIST,
+            schema: source,
+          }).pipe(adopt(true));
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ApiShieldUserSchema,
+      );
+      const all = yield* provider.list();
+
+      const found = all.find((s) => s.schemaId === schema.schemaId);
+      expect(found).toBeDefined();
+      expect(found?.zoneId).toEqual(zoneId);
+      expect(found?.name).toEqual(NAME_LIST);
+      expect(found?.kind).toEqual("openapi_v3");
+      expect(found?.source).toEqual(source);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

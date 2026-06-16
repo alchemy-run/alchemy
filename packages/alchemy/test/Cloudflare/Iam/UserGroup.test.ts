@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as iam from "@distilled.cloud/cloudflare/iam";
 import { expect } from "@effect/vitest";
@@ -170,6 +171,37 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(accountId, v1.group.userGroupId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+const UG_LIST_NAME = "alchemy-iam-ug-list";
+
+test.provider(
+  "list enumerates the deployed user group",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.IamUserGroup("ListGroup", {
+            name: UG_LIST_NAME,
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.IamUserGroup);
+      const all = yield* provider.list();
+
+      // Exhaustively-paginated account collection contains the deployed
+      // group, hydrated into the exact `read` Attributes shape.
+      const found = all.find((g) => g.userGroupId === deployed.userGroupId);
+      expect(found).toBeTruthy();
+      expect(found!.name).toEqual(UG_LIST_NAME);
+      expect(found!.accountId).toEqual(deployed.accountId);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

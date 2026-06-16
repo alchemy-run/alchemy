@@ -1,6 +1,7 @@
 import * as user from "@distilled.cloud/cloudflare/user";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -194,6 +195,22 @@ export const UserApiTokenProvider = () =>
         Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
       );
     }),
+    // User-scoped: enumerate every token owned by the authenticated user via
+    // `GET /user/tokens` (no account scope). The list API never returns the
+    // plaintext token value — it is only emitted once at creation — so we
+    // hydrate the read shape with an empty Redacted value, matching what
+    // `read` produces when the secret was never captured.
+    list: () =>
+      user.listTokens.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((token) =>
+              buildAttributes(token, Redacted.make("")),
+            ),
+          ),
+        ),
+      ),
   });
 
 const resolveName = (id: string, name: string | undefined) =>

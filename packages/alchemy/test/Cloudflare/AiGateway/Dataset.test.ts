@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import { expect } from "@effect/vitest";
@@ -247,5 +248,38 @@ test.provider("recreates a dataset after out-of-band delete", (stack) =>
     yield* stack.destroy();
 
     yield* expectGone(accountId, GATEWAY_ID, healed.dataset.datasetId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates datasets across gateways", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        const gateway = yield* Cloudflare.AiGateway("ListGateway", {
+          id: GATEWAY_ID,
+        });
+        const dataset = yield* Cloudflare.AiGatewayDataset("ListDataset", {
+          gatewayId: gateway.gatewayId,
+          name: "alchemy-test-dataset-list",
+          filters: [{ key: "success", operator: "eq", value: [true] }],
+        });
+        return { dataset };
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.AiGatewayDataset);
+    const all = yield* provider.list();
+
+    expect(all.some((d) => d.datasetId === deployed.dataset.datasetId)).toBe(
+      true,
+    );
+
+    yield* stack.destroy();
+
+    yield* expectGone(accountId, GATEWAY_ID, deployed.dataset.datasetId);
   }).pipe(logLevel),
 );

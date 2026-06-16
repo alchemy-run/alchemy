@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import { expect } from "@effect/vitest";
@@ -133,5 +134,51 @@ test.provider("create, noop, replace, delete a BYOK provider config", (stack) =>
     yield* stack.destroy();
 
     yield* expectGone(accountId, GATEWAY_ID, limited.config.providerConfigId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed provider config", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        const store = yield* Cloudflare.SecretsStore("PcListStore");
+        const gateway = yield* Cloudflare.AiGateway("PcListGateway", {
+          id: GATEWAY_ID,
+          storeId: store.storeId,
+        });
+        const secret = yield* Cloudflare.Secret("PcListSecret", {
+          store,
+          name: SECRET_NAME,
+          value: Redacted.make(SECRET_VALUE),
+          scopes: ["ai_gateway"],
+        });
+        return yield* Cloudflare.AiGatewayProviderConfig("ByokList", {
+          gatewayId: gateway.gatewayId,
+          providerSlug: PROVIDER_SLUG,
+          alias: ALIAS,
+          secretId: secret.secretId,
+          defaultConfig: true,
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.AiGatewayProviderConfig,
+    );
+    const all = yield* provider.list();
+
+    expect(
+      all.some((c) => c.providerConfigId === deployed.providerConfigId),
+    ).toBe(true);
+    const found = all.find(
+      (c) => c.providerConfigId === deployed.providerConfigId,
+    )!;
+    expect(found.gatewayId).toEqual(GATEWAY_ID);
+    expect(found.providerSlug).toEqual(PROVIDER_SLUG);
+    expect(found.alias).toEqual(ALIAS);
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );

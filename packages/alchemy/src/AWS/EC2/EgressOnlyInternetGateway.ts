@@ -1,6 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -125,6 +126,43 @@ export const EgressOnlyInternetGatewayProvider = () =>
           "egressOnlyInternetGatewayId",
           "egressOnlyInternetGatewayArn",
         ],
+
+        list: () =>
+          Effect.gen(function* () {
+            const env = yield* AWSEnvironment.current;
+            const items = yield* ec2.describeEgressOnlyInternetGateways
+              .pages({})
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) =>
+                    (page.EgressOnlyInternetGateways ?? [])
+                      .filter(
+                        (
+                          gw,
+                        ): gw is ec2.EgressOnlyInternetGateway & {
+                          EgressOnlyInternetGatewayId: string;
+                        } => gw.EgressOnlyInternetGatewayId != null,
+                      )
+                      .map((gw) => ({
+                        egressOnlyInternetGatewayId:
+                          gw.EgressOnlyInternetGatewayId as EgressOnlyInternetGatewayId,
+                        egressOnlyInternetGatewayArn:
+                          `arn:aws:ec2:${env.region}:${env.accountId}:egress-only-internet-gateway/${gw.EgressOnlyInternetGatewayId}` as EgressOnlyInternetGatewayArn,
+                        attachments: gw.Attachments?.map((a) => ({
+                          state: a.State as
+                            | "attaching"
+                            | "attached"
+                            | "detaching"
+                            | "detached",
+                          vpcId: a.VpcId as VpcId,
+                        })),
+                      })),
+                  ),
+                ),
+              );
+            return items satisfies EgressOnlyInternetGateway["Attributes"][];
+          }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;

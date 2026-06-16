@@ -1,5 +1,6 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
@@ -81,6 +82,47 @@ export const GatewayResponseProvider = () =>
             statusCode: g.statusCode,
           };
         }),
+        // GatewayResponses are sub-resources of a RestApi, so enumerate every
+        // RestApi first (paginated), then list the gateway responses per api.
+        list: () =>
+          Effect.gen(function* () {
+            const restApiIds = yield* ag.getRestApis.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.items ?? [])
+                    .map((a) => a.id)
+                    .filter((id): id is string => id != null),
+                ),
+              ),
+            );
+            const rows = yield* Effect.forEach(
+              restApiIds,
+              (restApiId) =>
+                ag.getGatewayResponses({ restApiId }).pipe(
+                  Effect.map((res) =>
+                    (res.items ?? [])
+                      .filter(
+                        (
+                          g,
+                        ): g is ag.GatewayResponse & {
+                          responseType: ag.GatewayResponseType;
+                        } => g.responseType != null,
+                      )
+                      .map((g) => ({
+                        restApiId,
+                        responseType: g.responseType,
+                        statusCode: g.statusCode,
+                      })),
+                  ),
+                  Effect.catchTag("NotFoundException", () =>
+                    Effect.succeed([]),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+            return rows.flat();
+          }),
         reconcile: Effect.fn(function* ({ news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("GatewayResponse props were not resolved");

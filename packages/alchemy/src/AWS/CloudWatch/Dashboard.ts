@@ -1,5 +1,6 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -258,6 +259,33 @@ export const DashboardProvider = () =>
             }),
           ).pipe(Effect.catchTag("DashboardNotFoundError", () => Effect.void));
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // `listDashboards` only returns entry metadata (name/arn/size),
+            // not the body, so we re-read each dashboard to produce the full
+            // Attributes shape `read` returns.
+            const names = yield* cloudwatch.listDashboards.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.DashboardEntries ?? [])
+                    .map((entry) => entry.DashboardName)
+                    .filter((name): name is string => name != null),
+                ),
+              ),
+            );
+
+            const states = yield* Effect.forEach(
+              names,
+              (name) => readDashboard(name),
+              { concurrency: 10 },
+            );
+
+            return states.filter(
+              (state): state is NonNullable<typeof state> =>
+                state !== undefined,
+            );
+          }),
       };
     }),
   );

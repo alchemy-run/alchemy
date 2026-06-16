@@ -75,10 +75,21 @@ export const NotifierProvider = () =>
       const create = yield* Axiom.createNotifier;
       const update = yield* Axiom.updateNotifier;
       const get = yield* Axiom.getNotifier;
+      const listNotifiers = yield* Axiom.getNotifiers;
       const del = yield* Axiom.deleteNotifier;
 
       return {
         stables: ["id"],
+        // Enumerate every notifier in the org. Axiom exposes a single
+        // account-wide `GET /v2/notifiers` collection op (no pagination), so we
+        // fetch it once and hydrate each row into the exact `read` Attributes
+        // shape (`CreateNotifierOutput & { id: string }`) — directly usable by
+        // `delete` with no follow-up get.
+        list: () =>
+          Effect.gen(function* () {
+            const notifiers = yield* listNotifiers({});
+            return notifiers.map((n) => ({ ...n, id: n.id ?? "" }));
+          }),
         reconcile: Effect.fn(function* ({ news, output }) {
           // Observe — Axiom assigns the notifier id server-side, so the
           // only handle to a previously-created notifier is the cached

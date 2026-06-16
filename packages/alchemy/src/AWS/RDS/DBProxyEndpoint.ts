@@ -1,6 +1,7 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -136,6 +137,48 @@ export const DBProxyEndpointProvider = () =>
 
       return {
         stables: ["dbProxyEndpointArn", "dbProxyEndpointName"],
+        list: () =>
+          Effect.gen(function* () {
+            // Endpoints are keyed under a parent proxy. Enumerate every proxy,
+            // then fan out `describeDBProxyEndpoints` per proxy (bounded
+            // concurrency) and flatten. `describe` does not surface tags
+            // inline, so each item hydrates with `tags: {}` — the same shape
+            // `read` returns when no prior tags are recorded.
+            const proxyNames = yield* rds.describeDBProxies.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.DBProxies ?? [])
+                    .map((proxy) => proxy.DBProxyName)
+                    .filter((name): name is string => name != null),
+                ),
+              ),
+            );
+            const rows = yield* Effect.forEach(
+              proxyNames,
+              (dbProxyName) =>
+                rds.describeDBProxyEndpoints
+                  .pages({ DBProxyName: dbProxyName })
+                  .pipe(
+                    Stream.runCollect,
+                    Effect.map((chunk) =>
+                      Array.from(chunk).flatMap((page) =>
+                        (page.DBProxyEndpoints ?? []).map((endpoint) =>
+                          toAttrs({ endpoint, tags: {} }),
+                        ),
+                      ),
+                    ),
+                    // A proxy (or its endpoints) may be deleted mid-enumeration.
+                    Effect.catchTag(
+                      ["DBProxyNotFoundFault", "DBProxyEndpointNotFoundFault"],
+                      () =>
+                        Effect.succeed([] as DBProxyEndpoint["Attributes"][]),
+                    ),
+                  ),
+              { concurrency: 10 },
+            );
+            return rows.flat();
+          }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
           if (

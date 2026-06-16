@@ -196,6 +196,33 @@ export const CachePolicyProvider = () =>
           if (!found) return undefined;
           return toAttrs(found.id, found.config, found.etag);
         }),
+        // CloudFront is global (no region). `listCachePolicies` returns both
+        // AWS-managed and custom policies; we filter to `Type: "custom"` since
+        // those are the only ones we create/delete. The op is marker-paginated
+        // (no `.pages`), so we loop until `NextMarker` is exhausted and hydrate
+        // each summary's ETag via `getById` so every row matches read().
+        list: () =>
+          Effect.gen(function* () {
+            const items: ReturnType<typeof toAttrs>[] = [];
+            let marker: string | undefined = undefined;
+            do {
+              const listed: cloudfront.ListCachePoliciesResult =
+                yield* cloudfront.listCachePolicies({
+                  Type: "custom",
+                  Marker: marker,
+                });
+              for (const summary of listed.CachePolicyList?.Items ?? []) {
+                if (summary.Type !== "custom") continue;
+                const id = summary.CachePolicy?.Id;
+                const config = summary.CachePolicy?.CachePolicyConfig;
+                if (!id || !config) continue;
+                const found = yield* getById(id);
+                items.push(toAttrs(id, found?.config ?? config, found?.etag));
+              }
+              marker = listed.CachePolicyList?.NextMarker;
+            } while (marker);
+            return items;
+          }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* createName(id, news);
 

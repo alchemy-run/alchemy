@@ -1,5 +1,6 @@
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -118,6 +119,20 @@ export const KeyValueStoreProvider = () =>
           }
           return toAttrs(current.KeyValueStore, current.ETag, name);
         }),
+        // CloudFront is global; `listKeyValueStores` enumerates every store in
+        // the account. The list summary carries no ETag, so it's undefined here
+        // (matches the `etag: string | undefined` attribute).
+        list: () =>
+          cloudfront.listKeyValueStores.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.KeyValueStoreList?.Items ?? []).map((store) =>
+                  toAttrs(store, undefined, store.Name),
+                ),
+              ),
+            ),
+          ),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name =
             output?.keyValueStoreName ?? (yield* createName(id, news));

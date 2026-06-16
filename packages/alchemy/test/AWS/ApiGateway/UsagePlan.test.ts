@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
@@ -50,4 +51,25 @@ test.provider.skipIf(!runLive)(
 
       yield* stack.destroy();
     }),
+);
+
+test.provider("list enumerates the deployed usage plan", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const plan = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* AWS.ApiGateway.UsagePlan("AgUsagePlanList", {
+          description: "list test plan",
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(AWS.ApiGateway.UsagePlan);
+    const all = yield* provider.list();
+
+    expect(all.some((p) => p.id === plan.id)).toBe(true);
+
+    yield* stack.destroy();
+  }),
 );

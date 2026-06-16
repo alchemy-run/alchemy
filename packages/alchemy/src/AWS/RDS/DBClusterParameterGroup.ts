@@ -1,5 +1,6 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -71,6 +72,37 @@ export const DBClusterParameterGroupProvider = () =>
 
       return {
         stables: ["dbClusterParameterGroupArn", "dbClusterParameterGroupName"],
+        list: () =>
+          // AWS account/region collection (pattern (a)): exhaustively paginate
+          // describeDBClusterParameterGroups and map each group to the exact
+          // `read` Attributes shape. `read` derives `tags` from the cached
+          // output (the describe response does not surface tags), so list
+          // returns `tags: {}` to match — a future read/delete can hydrate
+          // them via listTagsForResource. Per-item not-found
+          // (DBParameterGroupNotFoundFault) cannot occur here: enumeration
+          // passes no name, so the describe never targets a single group.
+          rds.describeDBClusterParameterGroups.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.DBClusterParameterGroups ?? [])
+                  .filter(
+                    (
+                      g,
+                    ): g is rds.DBClusterParameterGroup & {
+                      DBClusterParameterGroupName: string;
+                    } => g.DBClusterParameterGroupName != null,
+                  )
+                  .map((g) => ({
+                    dbClusterParameterGroupName: g.DBClusterParameterGroupName,
+                    dbClusterParameterGroupArn: g.DBClusterParameterGroupArn,
+                    family: g.DBParameterGroupFamily ?? "",
+                    description: g.Description,
+                    tags: {} as Record<string, string>,
+                  })),
+              ),
+            ),
+          ),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (

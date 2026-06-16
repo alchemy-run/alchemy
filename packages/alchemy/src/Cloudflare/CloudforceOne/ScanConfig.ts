@@ -1,6 +1,7 @@
 import * as cloudforceOne from "@distilled.cloud/cloudflare/cloudforce-one";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -137,6 +138,23 @@ export const CloudforceOneScanConfigProvider = () =>
       const observed = yield* findConfig(acct, output.configId);
       return observed ? toAttributes(observed, acct) : undefined;
     }),
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        return yield* cloudforceOne.listScanConfigs.pages({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((c) => toAttributes(c, accountId)),
+            ),
+          ),
+          // Accounts without the cfone.port_scan entitlement reject every
+          // scan-config call with the typed Unauthorized — treat as "none".
+          Effect.catchTag("Unauthorized", () =>
+            Effect.succeed<ScanConfigAttributes[]>([]),
+          ),
+        );
+      }),
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as logs from "@distilled.cloud/cloudflare/logs";
 import { expect } from "@effect/vitest";
@@ -106,6 +107,58 @@ test.provider.skipIf(!entitled)(
         }),
       );
       expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Account-singleton `list()`: there is no account-wide collection API, so
+// `list()` reads the single CMB config and returns a one-element array when
+// set, `[]` when unconfigured. On unentitled accounts the underlying GET
+// fails with the typed `LogsControlNotAuthorized` error (Cloudflare code
+// 10000) — assert that the typed tag propagates so the probe proves both the
+// distilled patch and the gating, at near-zero cost.
+test.provider.skipIf(entitled)(
+  "list surfaces the typed LogsControlNotAuthorized error on unentitled accounts",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.LogsCmbConfig);
+      const error = yield* provider.list().pipe(Effect.flip);
+      expect(error._tag).toEqual("LogsControlNotAuthorized");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);
+
+// Live `list()` on an entitled account: deploy the singleton, then assert
+// it appears in the enumerated result as a well-typed Attributes array.
+test.provider.skipIf(!entitled)(
+  "list enumerates the account CMB config singleton",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        Cloudflare.LogsCmbConfig("Cmb", {
+          regions: "eu",
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.LogsCmbConfig);
+      const all = yield* provider.list();
+
+      expect(all.length).toEqual(1);
+      expect(all[0]?.accountId).toEqual(accountId);
+      expect(all[0]?.regions).toEqual("eu");
+
+      yield* stack.destroy();
+
+      // After destroy the singleton is unconfigured — `list()` returns `[]`.
+      const empty = yield* provider.list();
+      expect(empty).toEqual([]);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

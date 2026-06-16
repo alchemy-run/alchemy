@@ -1,5 +1,6 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
@@ -384,6 +385,69 @@ export const MethodProvider = () =>
             httpMethod: output.httpMethod,
           });
         }),
+        // Methods are sub-resources keyed by (restApiId, resourceId,
+        // httpMethod) with no dedicated list-methods API. Enumerate every
+        // RestApi -> each Resource (embedding its method verbs) -> read each
+        // method snapshot so every item matches the exact `read` Attributes
+        // shape (including integration), directly usable by `delete`.
+        list: () =>
+          Effect.gen(function* () {
+            const restApis = yield* ag.getRestApis.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.items ?? []).filter(
+                    (api): api is ag.RestApi & { id: string } => api.id != null,
+                  ),
+                ),
+              ),
+            );
+
+            const perApi = yield* Effect.forEach(
+              restApis,
+              (api) =>
+                Effect.gen(function* () {
+                  const resources = yield* ag.getResources
+                    .pages({ restApiId: api.id, embed: ["methods"] })
+                    .pipe(
+                      Stream.runCollect,
+                      Effect.map((chunk) =>
+                        Array.from(chunk).flatMap((page) => page.items ?? []),
+                      ),
+                    );
+
+                  const keys = resources.flatMap((resource) =>
+                    resource.id
+                      ? Object.keys(resource.resourceMethods ?? {}).map(
+                          (httpMethod) => ({
+                            resourceId: resource.id as string,
+                            httpMethod,
+                          }),
+                        )
+                      : [],
+                  );
+
+                  const snaps = yield* Effect.forEach(
+                    keys,
+                    (key) =>
+                      readMethodSnapshot({
+                        restApiId: api.id,
+                        resourceId: key.resourceId,
+                        httpMethod: key.httpMethod,
+                      }),
+                    { concurrency: 10 },
+                  );
+
+                  return snaps.filter(
+                    (snap): snap is NonNullable<typeof snap> =>
+                      snap !== undefined,
+                  );
+                }),
+              { concurrency: 5 },
+            );
+
+            return perApi.flat();
+          }),
         reconcile: Effect.fn(function* ({ news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("Method props were not resolved");

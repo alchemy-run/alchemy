@@ -143,6 +143,48 @@ export const OriginAccessControlProvider = () =>
 
       return {
         stables: ["originAccessControlId"],
+        list: () =>
+          Effect.gen(function* () {
+            const items: ReturnType<typeof toAttrs>[] = [];
+            let marker: string | undefined = undefined;
+            do {
+              const listed: cloudfront.ListOriginAccessControlsResult =
+                yield* cloudfront.listOriginAccessControls({ Marker: marker });
+              for (const summary of listed.OriginAccessControlList?.Items ??
+                []) {
+                if (!summary.Id) continue;
+                // Fetch per-item config for the fresh ETag (the list summary
+                // omits it). Tolerate a concurrent delete between list and get.
+                const config = yield* cloudfront
+                  .getOriginAccessControlConfig({ Id: summary.Id })
+                  .pipe(
+                    Effect.catchTag("NoSuchOriginAccessControl", () =>
+                      Effect.succeed(undefined),
+                    ),
+                  );
+                items.push(
+                  toAttrs(
+                    {
+                      Id: summary.Id,
+                      OriginAccessControlConfig:
+                        config?.OriginAccessControlConfig ?? {
+                          Name: summary.Name,
+                          Description: summary.Description,
+                          OriginAccessControlOriginType:
+                            summary.OriginAccessControlOriginType,
+                          SigningBehavior: summary.SigningBehavior,
+                          SigningProtocol: summary.SigningProtocol,
+                        },
+                    },
+                    config?.ETag,
+                    summary.Name,
+                  ),
+                );
+              }
+              marker = listed.OriginAccessControlList?.NextMarker;
+            } while (marker);
+            return items;
+          }),
         diff: Effect.fn(function* ({ id, olds, news: _news }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as typeof olds;

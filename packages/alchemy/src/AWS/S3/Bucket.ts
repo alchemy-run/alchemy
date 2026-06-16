@@ -5,6 +5,7 @@ import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
@@ -553,6 +554,30 @@ export const BucketProvider = () =>
         // the bucket exists in our account, so a successful response is itself
         // proof of account-level ownership — there is no separate ownership
         // signal to surface as `Unowned`.
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            return yield* s3.listBuckets.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.Buckets ?? [])
+                    .filter(
+                      (b): b is s3.Bucket & { Name: string } => b.Name != null,
+                    )
+                    .map((b) => ({
+                      bucketName: b.Name,
+                      bucketArn: `arn:aws:s3:::${b.Name}` as const,
+                      bucketDomainName: `${b.Name}.s3.amazonaws.com` as const,
+                      bucketRegionalDomainName:
+                        `${b.Name}.s3.${region}.amazonaws.com` as const,
+                      region,
+                      accountId,
+                    })),
+                ),
+              ),
+            );
+          }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const bucketName =
             output?.bucketName ?? (yield* createBucketName(id, olds ?? {}));

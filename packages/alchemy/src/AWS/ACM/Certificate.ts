@@ -3,6 +3,7 @@ import * as acm from "@distilled.cloud/aws/acm";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -307,6 +308,53 @@ export const CertificateProvider = () =>
 
       return {
         stables: ["certificateArn"],
+        list: () =>
+          Effect.gen(function* () {
+            // ACM certificates for CloudFront live in us-east-1; enumerate
+            // every certificate in the ambient account/region, then hydrate
+            // each to the full Attributes shape via describe + list tags.
+            const summaries = yield* withAcmRegion(
+              acm.listCertificates.pages({}).pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap(
+                    (page) => page.CertificateSummaryList ?? [],
+                  ),
+                ),
+              ),
+            );
+            const rows = yield* Effect.forEach(
+              summaries,
+              (summary) =>
+                Effect.gen(function* () {
+                  if (!summary.CertificateArn) {
+                    return undefined;
+                  }
+                  const detail = yield* describeCertificate(
+                    summary.CertificateArn,
+                  );
+                  if (!detail?.CertificateArn) {
+                    return undefined;
+                  }
+                  const tags = yield* listCertificateTags(
+                    detail.CertificateArn,
+                  );
+                  return toAttrs(
+                    {
+                      domainName: detail.DomainName ?? "",
+                      validationMethod:
+                        detail.DomainValidationOptions?.[0]?.ValidationMethod,
+                    },
+                    detail,
+                    tags,
+                  );
+                }),
+              { concurrency: 10 },
+            );
+            return rows.filter(
+              (row): row is ReturnType<typeof toAttrs> => row !== undefined,
+            );
+          }),
         diff: Effect.fn(function* ({ olds, news: _news }) {
           if (!isResolved(_news)) return undefined;
           const news = _news as typeof olds;
@@ -468,7 +516,10 @@ const ACM_REGION = "us-east-1" as const;
 const defaultValidationMethod = "DNS" as const;
 
 const withAcmRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.provideService(AwsRegion, ACM_REGION as any));
+  // `AwsRegion`'s service value is an `Effect<RegionName>` (see
+  // `@distilled.cloud/aws/Region`), so it must be provided as an effect, not a
+  // bare string — providing a raw string yields a primitive into the run loop.
+  effect.pipe(Effect.provideService(AwsRegion, Effect.succeed(ACM_REGION)));
 
 const normalizeHostedZoneId = (hostedZoneId: string) =>
   hostedZoneId.replace(/^\/hostedzone\//, "");

@@ -129,6 +129,11 @@ export const CommandProvider = () =>
 
       return Command.Provider.of({
         stables: ["outdir"],
+        // Non-listable: a Build.Command is a local build/exec step whose
+        // artifact is a directory on the local filesystem keyed by the hash of
+        // its inputs. There is no remote enumeration API to discover existing
+        // build commands, so list returns an empty array.
+        list: () => Effect.succeed([]),
         diff: Effect.fnUntraced(function* ({ news, output }) {
           if (!isResolved(news)) return undefined;
           if (!output) {

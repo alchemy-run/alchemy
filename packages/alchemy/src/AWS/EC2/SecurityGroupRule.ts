@@ -1,5 +1,6 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -204,6 +205,26 @@ export const SecurityGroupRuleProvider = () =>
           const rule = yield* describeRule(output.securityGroupRuleId);
           return toAttrs(rule);
         }),
+
+        // Account/region-scoped: every rule is enumerable via
+        // describeSecurityGroupRules with no filter. Paginate exhaustively.
+        list: () =>
+          ec2.describeSecurityGroupRules.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.SecurityGroupRules ?? [])
+                  .filter(
+                    (
+                      rule,
+                    ): rule is ec2.SecurityGroupRule & {
+                      SecurityGroupRuleId: string;
+                    } => rule.SecurityGroupRuleId != null,
+                  )
+                  .map((rule) => toAttrs(rule)),
+              ),
+            ),
+          ),
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;

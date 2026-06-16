@@ -2,6 +2,7 @@ import type * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
@@ -178,6 +179,73 @@ export const RouteTableProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["routeTableId", "ownerId", "routeTableArn", "vpcId"],
+
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            return yield* ec2.describeRouteTables.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.RouteTables ?? [])
+                    .filter(
+                      (rt): rt is ec2.RouteTable & { RouteTableId: string } =>
+                        rt.RouteTableId != null,
+                    )
+                    .map((rt) => {
+                      const routeTableId = rt.RouteTableId as RouteTableId;
+                      return {
+                        routeTableId,
+                        routeTableArn:
+                          `arn:aws:ec2:${region}:${accountId}:route-table/${routeTableId}` as `arn:aws:ec2:${RegionID}:${AccountID}:route-table/${string}`,
+                        vpcId: rt.VpcId as VpcId,
+                        ownerId: rt.OwnerId,
+                        associations: rt.Associations?.map((assoc) => ({
+                          main: assoc.Main ?? false,
+                          routeTableAssociationId:
+                            assoc.RouteTableAssociationId,
+                          routeTableId: assoc.RouteTableId,
+                          subnetId: assoc.SubnetId,
+                          gatewayId: assoc.GatewayId,
+                          associationState: assoc.AssociationState
+                            ? {
+                                state: assoc.AssociationState.State!,
+                                statusMessage:
+                                  assoc.AssociationState.StatusMessage,
+                              }
+                            : undefined,
+                        })),
+                        routes: rt.Routes?.map((route) => ({
+                          destinationCidrBlock: route.DestinationCidrBlock,
+                          destinationIpv6CidrBlock:
+                            route.DestinationIpv6CidrBlock,
+                          destinationPrefixListId:
+                            route.DestinationPrefixListId,
+                          egressOnlyInternetGatewayId:
+                            route.EgressOnlyInternetGatewayId,
+                          gatewayId: route.GatewayId,
+                          instanceId: route.InstanceId,
+                          instanceOwnerId: route.InstanceOwnerId,
+                          natGatewayId: route.NatGatewayId,
+                          transitGatewayId: route.TransitGatewayId,
+                          localGatewayId: route.LocalGatewayId,
+                          carrierGatewayId: route.CarrierGatewayId,
+                          networkInterfaceId: route.NetworkInterfaceId,
+                          origin: route.Origin!,
+                          state: route.State!,
+                          vpcPeeringConnectionId: route.VpcPeeringConnectionId,
+                          coreNetworkArn: route.CoreNetworkArn,
+                        })),
+                        propagatingVgws: rt.PropagatingVgws?.map((vgw) => ({
+                          gatewayId: vgw.GatewayId!,
+                        })),
+                      };
+                    }),
+                ),
+              ),
+            );
+          }),
+
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
           // VpcId change requires replacement

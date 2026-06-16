@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as calls from "@distilled.cloud/cloudflare/calls";
 import { expect } from "@effect/vitest";
@@ -108,6 +109,33 @@ test.provider("update name in place (same appId, secret preserved)", (stack) =>
     yield* stack.destroy();
 
     yield* expectGone(accountId, initial.appId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed app", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const app = yield* stack.deploy(
+      Cloudflare.CallsApp("ListApp", {
+        name: "alchemy-calls-app-list",
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.CallsApp);
+    const all = yield* provider.list();
+
+    // The account-scoped enumeration must contain the just-deployed app.
+    const found = all.find((a) => a.appId === app.appId);
+    expect(found).toBeDefined();
+    expect(found?.accountId).toEqual(accountId);
+    expect(found?.name).toEqual("alchemy-calls-app-list");
+
+    yield* stack.destroy();
+
+    yield* expectGone(accountId, app.appId);
   }).pipe(logLevel),
 );
 

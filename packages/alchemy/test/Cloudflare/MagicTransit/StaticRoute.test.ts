@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import { expect } from "@effect/vitest";
@@ -78,6 +79,68 @@ test.provider(
       );
 
       yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Read-only: list() must resolve via the typed provider and return a
+// well-typed array even on unentitled accounts (the account-scoped
+// `MagicTransitNotOnboarded` gate is mapped to `[]`).
+test.provider("list returns a well-typed array of routes", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const provider = yield* Provider.findProvider(Cloudflare.MagicStaticRoute);
+    const all = yield* provider.list();
+    expect(Array.isArray(all)).toBe(true);
+    for (const route of all) {
+      expect(typeof route.routeId).toBe("string");
+      expect(typeof route.accountId).toBe("string");
+    }
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+test.provider.skipIf(!entitled)(
+  "list enumerates the deployed static route",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        Cloudflare.GreTunnel("ListRouteGre", {
+          name: "alch-gre-listroute1",
+          cloudflareGreEndpoint: cfEndpoint,
+          customerGreEndpoint: "198.51.100.31",
+          interfaceAddress: "10.213.14.10/31",
+        }),
+      );
+
+      const route = yield* stack.deploy(
+        Cloudflare.MagicStaticRoute("ListRoute", {
+          prefix: "10.114.0.0/24",
+          nexthop: "10.213.14.11",
+          priority: 100,
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.MagicStaticRoute,
+      );
+      const all = yield* provider.list();
+
+      const found = all.find((r) => r.routeId === route.routeId);
+      expect(found).toBeDefined();
+      expect(found?.accountId).toEqual(accountId);
+      expect(found?.prefix).toEqual("10.114.0.0/24");
+      expect(found?.nexthop).toEqual("10.213.14.11");
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, route.routeId);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

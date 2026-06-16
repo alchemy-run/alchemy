@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as argo from "@distilled.cloud/cloudflare/argo";
 import { expect } from "@effect/vitest";
@@ -128,5 +129,33 @@ describe.sequential("SmartRouting", () => {
         const restored = yield* getSmartRouting(zoneId);
         expect(restored.value).toEqual("off");
       }).pipe(logLevel),
+  );
+
+  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+  // API for this per-zone setting, so `list()` enumerates every zone via
+  // `listAllZones` and reads the singleton in each, skipping zones without the
+  // paid Argo subscription (typed `NotAuthorized`, code 1015). On the standard
+  // testing account no zone is Argo-entitled, so `list()` returns an empty
+  // array without throwing; when an entitled zone id is supplied via env, its
+  // entry must be present.
+  test.provider("list enumerates Argo-entitled zones", (stack) =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(Cloudflare.SmartRouting);
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      // Every returned entry is a real, entitled zone's setting.
+      for (const row of all) {
+        expect(typeof row.zoneId).toBe("string");
+        expect(["on", "off"]).toContain(row.value);
+      }
+      if (entitledZoneId) {
+        expect(all.some((s) => s.zoneId === entitledZoneId)).toBe(true);
+      }
+
+      // `stack` is unused here (the singleton always exists on every
+      // entitled zone); keep the destroy bookend so harness state stays clean.
+      yield* stack.destroy();
+    }).pipe(logLevel),
   );
 });

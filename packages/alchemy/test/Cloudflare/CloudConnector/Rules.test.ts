@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as cloudConnector from "@distilled.cloud/cloudflare/cloud-connector";
 import { expect } from "@effect/vitest";
@@ -195,6 +196,53 @@ describe.sequential("Rules", () => {
 
         const liveGone = yield* listLiveRules(zoneId);
         expect(liveGone).toHaveLength(0);
+      }).pipe(logLevel),
+    { timeout: 180_000 },
+  );
+
+  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+  // API for the per-zone Cloud Connector rule list, so `list()` enumerates
+  // every zone via `listAllZones` and reads its rules. Deploy a rule on the
+  // standing test zone, then assert the test zone appears in the result with
+  // the rule we created.
+  test.provider(
+    "list enumerates rule lists across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
+
+        yield* stack.destroy();
+        yield* purgeRules(zoneId);
+
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.CloudConnectorRules("Rules", {
+              zoneId,
+              rules: [
+                {
+                  provider: "aws_s3",
+                  expression: EXPRESSION_V1,
+                  host: HOST_A,
+                  description: "alchemy cloud connector list test",
+                },
+              ],
+            }).pipe(adopt(true));
+          }),
+        );
+
+        const provider = yield* Provider.findProvider(
+          Cloudflare.CloudConnectorRules,
+        );
+        const all = yield* provider.list();
+
+        const entry = all.find((r) => r.zoneId === zoneId);
+        expect(entry).toBeDefined();
+        expect(
+          entry!.rules.some((rule) => rule.expression === EXPRESSION_V1),
+        ).toBe(true);
+
+        yield* stack.destroy();
+        yield* purgeRules(zoneId);
       }).pipe(logLevel),
     { timeout: 180_000 },
   );

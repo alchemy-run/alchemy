@@ -2,6 +2,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
@@ -255,6 +256,22 @@ export const NatGatewayProvider = () =>
           // Not found
           return undefined;
         }),
+
+        list: () =>
+          Effect.gen(function* () {
+            // describeNatGateways enumerates every NAT gateway in the
+            // account/region; paginate exhaustively and drop deleted ones.
+            const pages = yield* ec2.describeNatGateways
+              .pages({})
+              .pipe(Stream.runCollect);
+            const gateways = Array.from(pages).flatMap((page) =>
+              (page.NatGateways ?? []).filter(
+                (gw): gw is ec2.NatGateway & { NatGatewayId: string } =>
+                  gw.NatGatewayId != null && gw.State !== "deleted",
+              ),
+            );
+            return yield* Effect.forEach(gateways, (gw) => toAttrs(gw));
+          }),
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;

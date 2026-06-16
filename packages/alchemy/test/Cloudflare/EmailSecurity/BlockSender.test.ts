@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as emailSecurity from "@distilled.cloud/cloudflare/email-security";
 import { expect } from "@effect/vitest";
@@ -88,6 +89,44 @@ test.provider.skipIf(!entitled)(
         }),
       );
       expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// list() enumerates the account's blocked senders. On the entitled account it
+// asserts the freshly-deployed entry is present; on the standard (un-entitled)
+// account the typed `EmailSecurityNotEntitled` is caught and list() yields the
+// well-typed empty array.
+test.provider(
+  "list enumerates the deployed block sender",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.EmailSecurityBlockSender,
+      );
+
+      if (entitled) {
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.EmailSecurityBlockSender("ListBlocked", {
+              pattern,
+              patternType: "EMAIL",
+            });
+          }),
+        );
+
+        const all = yield* provider.list();
+        expect(
+          all.some((x) => x.blockSenderId === deployed.blockSenderId),
+        ).toBe(true);
+      } else {
+        const all = yield* provider.list();
+        expect(all).toEqual([]);
+      }
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

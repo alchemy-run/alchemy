@@ -2,6 +2,7 @@ import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -176,6 +177,23 @@ export const ZoneTransferTsigProvider = () =>
         })
         .pipe(Effect.catchTag("TsigNotFound", () => Effect.void));
     }),
+
+    // Account collection — enumerate every TSIG in the account via the
+    // account-scoped list API, paginate exhaustively, and hydrate each into
+    // the same Attributes shape `read` returns (the secret is write-only and
+    // never persisted).
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        return yield* dns.listZoneTransferTsigs.pages({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((tsig) => toAttributes(tsig, accountId)),
+            ),
+          ),
+        );
+      }),
   });
 
 type ObservedTsig =

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as mcn from "@distilled.cloud/cloudflare/magic-cloud-networking";
 import { expect } from "@effect/vitest";
@@ -138,6 +139,46 @@ test.provider.skipIf(!entitled)(
       yield* stack.destroy();
 
       yield* expectGone(accountId, sync.syncId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// On unentitled accounts `list()` swallows the typed `FeatureNotEnabled`
+// error and returns `[]`, so the read-only assertion runs everywhere. On an
+// entitled account we additionally deploy a sync and assert it shows up in
+// the exhaustively-paginated result.
+test.provider(
+  "list enumerates account catalog syncs",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.CatalogSync);
+
+      const before = yield* provider.list();
+      expect(Array.isArray(before)).toBe(true);
+
+      if (!entitled) {
+        // Unentitled — FeatureNotEnabled is caught and mapped to [].
+        expect(before).toEqual([]);
+        yield* stack.destroy();
+        return;
+      }
+
+      const deployed = yield* stack.deploy(
+        Cloudflare.CatalogSync("ListSync", {
+          name: "alchemy-mcn-catalog-sync-list",
+          destinationType: "NONE",
+          updateMode: "MANUAL",
+        }),
+      );
+
+      const all = yield* provider.list();
+      expect(all.some((s) => s.syncId === deployed.syncId)).toBe(true);
+
+      yield* stack.destroy();
+
+      yield* expectGone(deployed.accountId, deployed.syncId);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

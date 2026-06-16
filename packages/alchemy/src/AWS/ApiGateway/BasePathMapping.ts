@@ -1,5 +1,6 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
@@ -175,6 +176,69 @@ export const BasePathMappingProvider = () =>
             stage: final.stage,
           };
         }),
+        // BasePathMappings are sub-resources keyed by their parent domain
+        // name. There is no account-wide list, so enumerate every custom
+        // domain name first (getDomainNames) and then list the mappings under
+        // each (getBasePathMappings), flattening to the full Attributes shape.
+        list: () =>
+          Effect.gen(function* () {
+            const domains = yield* ag.getDomainNames.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.items ?? []).filter(
+                    (d): d is ag.DomainName & { domainName: string } =>
+                      d.domainName != null,
+                  ),
+                ),
+              ),
+            );
+            const rows = yield* Effect.forEach(
+              domains,
+              (domain) =>
+                ag.getBasePathMappings
+                  .pages({
+                    domainName: domain.domainName,
+                    domainNameId: domain.domainNameId,
+                  })
+                  .pipe(
+                    Stream.runCollect,
+                    Effect.map((chunk) =>
+                      Array.from(chunk).flatMap((page) =>
+                        (page.items ?? [])
+                          .filter(
+                            (
+                              m,
+                            ): m is ag.BasePathMapping & {
+                              restApiId: string;
+                            } => m.restApiId != null,
+                          )
+                          .map((m) => ({
+                            domainName: domain.domainName,
+                            domainNameId: domain.domainNameId,
+                            basePath: normalizeBasePath(m.basePath),
+                            restApiId: m.restApiId,
+                            stage: m.stage,
+                          })),
+                      ),
+                    ),
+                    // A domain can disappear between enumeration and listing.
+                    Effect.catchTag("NotFoundException", () =>
+                      Effect.succeed(
+                        [] as {
+                          domainName: string;
+                          domainNameId: string | undefined;
+                          basePath: string;
+                          restApiId: string;
+                          stage: string | undefined;
+                        }[],
+                      ),
+                    ),
+                  ),
+              { concurrency: 10 },
+            );
+            return rows.flat();
+          }),
         delete: Effect.fn(function* ({ output, session }) {
           yield* ag
             .deleteBasePathMapping({

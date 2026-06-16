@@ -3,6 +3,7 @@ import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -236,6 +237,26 @@ export const DBClusterProvider = () =>
 
       return {
         stables: ["dbClusterArn", "dbClusterIdentifier"],
+        // AWS account/region collection (pattern a): exhaustively paginate
+        // `describeDBClusters` and map each cluster to the exact `read`
+        // Attributes shape. Tags come inline on `DBCluster.TagList`, so no
+        // per-item `listTagsForResource` hydration is needed (matching `read`).
+        list: () =>
+          Effect.gen(function* () {
+            return yield* rds.describeDBClusters.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.DBClusters ?? []).map((cluster) =>
+                    toAttrs({
+                      cluster,
+                      tags: toTagRecord(cluster.TagList),
+                    }),
+                  ),
+                ),
+              ),
+            );
+          }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (

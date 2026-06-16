@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -131,5 +132,32 @@ test.provider("adopts an out-of-band reusable policy", (stack) =>
       .getAccessPolicy({ accountId, policyId: preExisting.id! })
       .pipe(Effect.catch(() => Effect.succeed(undefined)));
     expect(afterDestroy).toBeUndefined();
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed reusable policy", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const policy = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.AccessPolicy("ListPolicy", {
+          decision: "allow",
+          include: [{ emailDomain: { domain: "example.com" } }],
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.AccessPolicy);
+    const all = yield* provider.list();
+
+    const match = all.find((p) => p.policyId === policy.policyId);
+    expect(match).toBeDefined();
+    expect(match?.accountId).toEqual(accountId);
+    expect(match?.decision).toEqual("allow");
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );

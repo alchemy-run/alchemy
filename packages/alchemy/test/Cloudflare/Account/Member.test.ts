@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import { expect } from "@effect/vitest";
@@ -85,6 +86,29 @@ const pickTwoRoles = (accountId: string) =>
       return [roles[0]!, roles[1]!] as const;
     }),
   );
+
+// Read-only: enumerating account members sends no invites. The account
+// owner is always an accepted member, so `list()` must return a non-empty,
+// well-typed `Attributes[]` containing at least one accepted membership.
+test.provider("list enumerates the account members", (_stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    const provider = yield* Provider.findProvider(Cloudflare.AccountMember);
+    const all = yield* provider.list().pipe(Effect.retry(forbiddenRetry));
+
+    expect(all.length).toBeGreaterThan(0);
+    // Every element is the exact `read` shape, scoped to this account.
+    for (const member of all) {
+      expect(member.memberId).toBeTruthy();
+      expect(member.accountId).toEqual(accountId);
+      expect(typeof member.email).toBe("string");
+      expect(Array.isArray(member.roles)).toBe(true);
+    }
+    // The account owner is an accepted member.
+    expect(all.some((member) => member.status === "accepted")).toBe(true);
+  }).pipe(logLevel),
+);
 
 test.provider("create member, update roles in place, delete", (stack) =>
   Effect.gen(function* () {

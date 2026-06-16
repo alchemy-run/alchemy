@@ -1,5 +1,6 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -263,6 +264,27 @@ export const UsagePlanProvider = () =>
             tags: tagRecord(p.tags),
           };
         }),
+        list: () =>
+          ag.getUsagePlans.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.items ?? [])
+                  .filter(
+                    (p): p is ag.UsagePlan & { id: string } => p.id != null,
+                  )
+                  .map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    description: p.description,
+                    apiStages: p.apiStages,
+                    throttle: p.throttle,
+                    quota: p.quota,
+                    tags: tagRecord(p.tags),
+                  })),
+              ),
+            ),
+          ),
         reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
           const { region } = yield* AWSEnvironment.current;
           if (!isResolved(newsIn)) {

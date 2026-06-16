@@ -2,6 +2,7 @@ import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -460,6 +461,44 @@ export const DistributionProvider = () =>
 
           return toAttrs(current.distribution, current.etag, current.tags);
         }),
+        // CloudFront is a global service (no region). Enumerate every
+        // distribution in the account via the paginated `listDistributions`
+        // op, then resolve each summary to the full `read`-shaped Attributes
+        // (distribution + config + tags) so callers get a `delete`-ready item.
+        list: () =>
+          Effect.gen(function* () {
+            const summaries = yield* cloudfront.listDistributions
+              .pages({})
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap(
+                    (page) => page.DistributionList?.Items ?? [],
+                  ),
+                ),
+              );
+
+            const rows = yield* Effect.forEach(
+              summaries,
+              (summary) =>
+                getCurrent(summary.Id).pipe(
+                  Effect.map((current) =>
+                    current
+                      ? toAttrs(
+                          current.distribution,
+                          current.etag,
+                          current.tags,
+                        )
+                      : undefined,
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+
+            return rows.filter(
+              (row): row is Distribution["Attributes"] => row !== undefined,
+            );
+          }),
         reconcile: Effect.fn(function* ({
           id,
           instanceId,

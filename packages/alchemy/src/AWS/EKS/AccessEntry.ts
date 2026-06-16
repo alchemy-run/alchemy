@@ -1,5 +1,6 @@
 import * as eks from "@distilled.cloud/aws/eks";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -111,6 +112,40 @@ export const AccessEntryProvider = () =>
         return { action: "replace" } as const;
       }
     }),
+    // Enumerate every access entry across every cluster in the account/region.
+    // `listAccessEntries` requires a cluster name, so enumerate clusters first
+    // (`listClusters`), then list access entry principal ARNs per cluster, then
+    // hydrate each one through `readAccessEntry` (describe + associated policies)
+    // to produce the full `read`-shaped Attributes. All pagination is exhausted.
+    list: () =>
+      Effect.gen(function* () {
+        const clusterNames = yield* eks.listClusters.items({}).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
+
+        const perCluster = yield* Effect.forEach(
+          clusterNames,
+          (clusterName) =>
+            eks.listAccessEntries.items({ clusterName }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+              Effect.flatMap((principalArns) =>
+                Effect.forEach(
+                  principalArns,
+                  (principalArn) =>
+                    readAccessEntry({ clusterName, principalArn }),
+                  { concurrency: 5 },
+                ),
+              ),
+            ),
+          { concurrency: 5 },
+        );
+
+        return perCluster
+          .flat()
+          .filter((entry): entry is NonNullable<typeof entry> => entry != null);
+      }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const state = yield* readAccessEntry({
         clusterName: (output?.clusterName ?? olds.clusterName) as string,

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as mcn from "@distilled.cloud/cloudflare/magic-cloud-networking";
 import { expect } from "@effect/vitest";
@@ -86,6 +87,53 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+);
+
+test.provider("list returns a well-typed array of integrations", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const provider = yield* Provider.findProvider(Cloudflare.CloudIntegration);
+    const all = yield* provider.list();
+
+    // On an unentitled account `list()` catches the typed `FeatureNotEnabled`
+    // tag and yields `[]`; on an entitled account it enumerates every
+    // integration. Either way the result is the full Attributes array.
+    expect(Array.isArray(all)).toBe(true);
+    for (const item of all) {
+      expect(typeof item.integrationId).toBe("string");
+      expect(typeof item.accountId).toBe("string");
+    }
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+test.provider.skipIf(!entitled)(
+  "list enumerates the deployed integration",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Cloudflare.CloudIntegration("ListIntegration", {
+          cloudType: "AWS",
+          friendlyName: "alchemy-mcn-cloud-integration-list",
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.CloudIntegration,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((x) => x.integrationId === deployed.integrationId)).toBe(
+        true,
+      );
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!entitled)(

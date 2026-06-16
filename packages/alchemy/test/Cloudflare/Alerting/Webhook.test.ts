@@ -1,5 +1,6 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import { expect } from "@effect/vitest";
@@ -87,6 +88,43 @@ test.provider("create, update, delete webhook destination", (stack) =>
     yield* stack.destroy();
 
     yield* waitForWebhookDeleted(accountId, webhook.webhookId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed webhook destination", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    // Deploy the receiving worker, wait for it to serve, then create the
+    // webhook destination pointing at it.
+    const receiver = yield* stack.deploy(Receiver());
+    expect(receiver.url).toBeDefined();
+    yield* expectUrlContains(receiver.url!, "webhook-ok", {
+      label: "webhook receiver",
+    });
+
+    const webhook = yield* stack.deploy(
+      Effect.gen(function* () {
+        const worker = yield* Receiver();
+        return yield* Cloudflare.NotificationWebhook("ListWebhook", {
+          url: worker.url.as<string>(),
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.NotificationWebhook,
+    );
+    const all = yield* provider.list();
+
+    const match = all.find((w) => w.webhookId === webhook.webhookId);
+    expect(match).toBeDefined();
+    expect(match!.name).toEqual(webhook.name);
+    expect(match!.url).toEqual(webhook.url);
+
+    yield* stack.destroy();
+
+    yield* waitForWebhookDeleted(webhook.accountId, webhook.webhookId);
   }).pipe(logLevel),
 );
 

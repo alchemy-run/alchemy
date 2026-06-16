@@ -174,6 +174,12 @@ export const AssetDeploymentProvider = () =>
       });
 
       return {
+        // Non-listable: an AssetDeployment is an action (uploading a local
+        // directory into a bucket under a prefix), keyed by {bucketName,
+        // prefix}, not a standalone cloud resource. There is no AWS API that
+        // enumerates "asset deployments" — the uploaded objects are plain S3
+        // objects owned by their bucket — so there is nothing to enumerate.
+        list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ output }) {
           return output;
         }),

@@ -1,6 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -294,6 +295,35 @@ export const SecurityGroupProvider = () =>
           const rulesResult = yield* describeSecurityGroupRules(output.groupId);
           return yield* toAttrs(sg, rulesResult.SecurityGroupRules ?? []);
         }),
+
+        list: () =>
+          Effect.gen(function* () {
+            const groups = yield* ec2.describeSecurityGroups.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.SecurityGroups ?? []).filter(
+                    (sg): sg is ec2.SecurityGroup & { GroupId: string } =>
+                      sg.GroupId != null,
+                  ),
+                ),
+              ),
+            );
+            return yield* Effect.forEach(
+              groups,
+              (sg) =>
+                Effect.gen(function* () {
+                  const rulesResult = yield* describeSecurityGroupRules(
+                    sg.GroupId,
+                  );
+                  return yield* toAttrs(
+                    sg,
+                    rulesResult.SecurityGroupRules ?? [],
+                  );
+                }),
+              { concurrency: 10 },
+            );
+          }),
 
         diff: Effect.fn(function* ({ id, news, olds, output }) {
           if (!isResolved(news)) return;

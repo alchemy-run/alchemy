@@ -1,6 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -71,6 +72,49 @@ export const InternetGatewayProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["internetGatewayId", "internetGatewayArn", "ownerId"],
+
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            return yield* ec2.describeInternetGateways.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.InternetGateways ?? [])
+                    .filter(
+                      (
+                        igw,
+                      ): igw is ec2.InternetGateway & {
+                        InternetGatewayId: string;
+                      } => igw.InternetGatewayId != null,
+                    )
+                    .map((igw) => {
+                      const internetGatewayId =
+                        igw.InternetGatewayId as InternetGatewayId;
+                      const attachedVpcId = igw.Attachments?.find(
+                        (a) =>
+                          a.State === "available" || a.State === "attaching",
+                      )?.VpcId as VpcId | undefined;
+                      return {
+                        internetGatewayId,
+                        internetGatewayArn:
+                          `arn:aws:ec2:${region}:${accountId}:internet-gateway/${internetGatewayId}` as const,
+                        vpcId: attachedVpcId,
+                        ownerId: igw.OwnerId,
+                        attachments: igw.Attachments?.map((a) => ({
+                          state: a.State! as
+                            | "attaching"
+                            | "available"
+                            | "detaching"
+                            | "detached",
+                          vpcId: a.VpcId!,
+                        })),
+                      };
+                    }),
+                ),
+              ),
+            );
+          }),
 
         reconcile: Effect.fn(function* ({ id, news = {}, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;

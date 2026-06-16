@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as intel from "@distilled.cloud/cloudflare/intel";
 import { expect } from "@effect/vitest";
@@ -82,6 +83,62 @@ test.provider.skipIf(entitled)(
         .getIndicatorFeed({ accountId, feedId: 99999999 })
         .pipe(Effect.flip);
       expect(notFound._tag).toEqual("IndicatorFeedNotFound");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (account collection). Enumeration is NOT gated by
+// the feed-provider entitlement (only creation is), so this runs on the
+// standard testing account and returns a well-typed (typically empty) array.
+// On an unentitled account the account simply owns no feeds.
+test.provider(
+  "list returns a well-typed array of indicator feeds",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.IndicatorFeed);
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      // Every element is the exact `read` Attributes shape.
+      for (const feed of all) {
+        expect(typeof feed.feedId).toEqual("number");
+        expect(feed.accountId).toBeTruthy();
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Requires a Cloudforce One feed-provider account to create the feed under
+// test; unlock with CLOUDFLARE_TEST_INTEL_FEEDS=1. Asserts the deployed feed
+// is present in the exhaustively-paginated list().
+test.provider.skipIf(!entitled)(
+  "list enumerates the deployed indicator feed",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const feed = yield* stack.deploy(
+        Cloudflare.IndicatorFeed("ListFeed", {
+          name: FEED_NAME,
+          description: "alchemy intel list feed",
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.IndicatorFeed);
+      const all = yield* provider.list();
+
+      const found = all.find((f) => f.feedId === feed.feedId);
+      expect(found).toBeDefined();
+      expect(found?.accountId).toEqual(accountId);
+      expect(found?.name).toEqual(FEED_NAME);
 
       yield* stack.destroy();
     }).pipe(logLevel),

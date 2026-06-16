@@ -2,6 +2,7 @@ import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -143,6 +144,21 @@ const describeDetector = Effect.fn(function* (
 export const AnomalyDetectorProvider = () =>
   Provider.succeed(AnomalyDetector, {
     stables: ["detectorId"],
+    list: () =>
+      // `describeAnomalyDetectors` is paginated and account/region-scoped;
+      // collect every page and flatten the `AnomalyDetectors` array into the
+      // full `Attributes` shape `read` produces (keyed by detector identity).
+      cloudwatch.describeAnomalyDetectors.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.AnomalyDetectors ?? []).map((detector) => ({
+              detectorId: detectorIdentity(detector),
+              anomalyDetector: detector,
+            })),
+          ),
+        ),
+      ),
     diff: Effect.fn(function* ({ olds = {}, news = {} }) {
       if (!isResolved(news)) return undefined;
       if (detectorIdentity(olds) !== detectorIdentity(news)) {

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import type { GatewayCertificateAttributes } from "@/Cloudflare/Gateway/Certificate";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
@@ -186,6 +187,49 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(accountId, second.certificateId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates the deployed gateway certificate",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const cert = yield* deployUnlessQuotaReached(
+        stack,
+        Cloudflare.GatewayCertificate("ListCa", {
+          validityPeriodDays: 30,
+          activate: false,
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.GatewayCertificate,
+      );
+      const all = yield* provider.list();
+
+      // Always a well-typed array of Attributes scoped to this account.
+      expect(Array.isArray(all)).toBe(true);
+      expect(all.every((c) => c.accountId === accountId)).toBe(true);
+
+      if (cert === undefined) {
+        // Same-day reruns can exhaust the 3-per-24h creation quota; the
+        // read-only list assertion above still proves enumeration works.
+        yield* logQuotaSkip("list presence assertion");
+        yield* stack.destroy();
+        return;
+      }
+
+      const found = all.find((c) => c.certificateId === cert.certificateId);
+      expect(found).toBeDefined();
+      expect(found?.accountId).toEqual(accountId);
+
+      yield* stack.destroy();
+      yield* expectGone(accountId, cert.certificateId);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

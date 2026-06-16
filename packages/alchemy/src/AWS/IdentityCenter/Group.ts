@@ -65,6 +65,27 @@ export const GroupProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["identityStoreId", "groupId"],
+        list: () =>
+          Effect.gen(function* () {
+            // Identity Center groups live in the instance's identity store.
+            // Resolve it from the (single) enabled SSO instance, then
+            // enumerate every group and hydrate each into the exact `read`
+            // shape via `describeGroup` (bounded concurrency, typed
+            // per-item not-found handled inside `readGroupById`).
+            const identityStoreId = yield* resolveIdentityStoreId({});
+            const groups = yield* listGroups(identityStoreId);
+            const rows = yield* Effect.forEach(
+              groups,
+              (group) =>
+                group.GroupId
+                  ? readGroupById(identityStoreId, group.GroupId)
+                  : Effect.succeed(undefined),
+              { concurrency: 10 },
+            );
+            return rows.filter(
+              (row): row is Group["Attributes"] => row !== undefined,
+            );
+          }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
           if (olds?.identityStoreId !== news.identityStoreId) {

@@ -1,5 +1,6 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import { expect } from "@effect/vitest";
@@ -153,6 +154,38 @@ test.provider("replaces silence when the policy changes", (stack) =>
     yield* stack.destroy();
 
     yield* waitForSilenceDeleted(accountId, replaced.silence.silenceId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed silence", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const { start, end } = yield* silenceWindow;
+
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        const policy = yield* Cloudflare.NotificationPolicy("ListedPolicy", {
+          alertType: "universal_ssl_event_type",
+          mechanisms: { email: [{ id: EMAIL }] },
+        });
+        return yield* Cloudflare.Silence("ListedSilence", {
+          policyId: policy.policyId,
+          startTime: start,
+          endTime: end,
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.Silence);
+    const all = yield* provider.list();
+
+    expect(all.some((s) => s.silenceId === deployed.silenceId)).toBe(true);
+
+    yield* stack.destroy();
+
+    yield* waitForSilenceDeleted(accountId, deployed.silenceId);
   }).pipe(logLevel),
 );
 

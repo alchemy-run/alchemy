@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -86,6 +87,33 @@ test.provider(
       expect(restored.settingsByRuleType?.dns?.logAll ?? undefined).toEqual(
         baselineDnsLogAll,
       );
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (account singleton): there is no enumeration API
+// for the Gateway logging settings — the object always exists for the
+// account. `list()` reads the single instance and returns it as a
+// one-element array. Assert exactly one well-typed Attributes for the
+// ambient account.
+test.provider(
+  "list returns the account's Gateway logging singleton",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.GatewayLogging);
+      const all = yield* provider.list();
+
+      expect(all.length).toEqual(1);
+      const [settings] = all;
+      expect(settings.accountId).toEqual(accountId);
+      // The singleton's observed snapshot is its own restore target.
+      expect(settings.initialSettings).toBeDefined();
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

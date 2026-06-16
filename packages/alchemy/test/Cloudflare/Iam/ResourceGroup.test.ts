@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as iam from "@distilled.cloud/cloudflare/iam";
 import { expect } from "@effect/vitest";
@@ -126,6 +127,44 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(accountId, v1.resourceGroupId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates the deployed resource group",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const accountScopeKey = `com.cloudflare.api.account.${accountId}`;
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.IamResourceGroup("ListRg", {
+            name: "alchemy-iam-rg-list",
+            scope: {
+              key: accountScopeKey,
+              objects: [{ key: "*" }],
+            },
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.IamResourceGroup,
+      );
+      const all = yield* provider.list();
+
+      // Each element is the full `read` Attributes shape, usable by delete.
+      expect(
+        all.some((g) => g.resourceGroupId === deployed.resourceGroupId),
+      ).toBe(true);
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, deployed.resourceGroupId);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

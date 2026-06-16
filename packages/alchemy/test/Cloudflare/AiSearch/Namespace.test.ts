@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import { expect } from "@effect/vitest";
@@ -163,6 +164,30 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(accountId, nameB);
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+// Canonical `list()` test (account-scoped collection): deploy a real
+// namespace, resolve the provider from context via the typed
+// `findProvider`, call `list()`, and assert the deployed namespace
+// appears in the exhaustively-paginated result.
+test.provider(
+  "list enumerates the deployed namespace",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(program());
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.AiSearchNamespace,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((ns) => ns.name === deployed.namespace.name)).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 240_000 },
 );

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -126,6 +127,83 @@ test.provider.skipIf(!external)(
         })
         .pipe(Effect.flip);
       expect(gone._tag).toEqual("DevicePostureIntegrationNotFound");
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+// Canonical `list()` test (account collection): `list()` enumerates every
+// posture integration in the ambient account via the distilled paginated
+// list op and returns the exact `read` Attributes shape. This read-only
+// assertion always runs — without an entitled account / external provider
+// the account simply has no integrations, so `list()` returns a well-typed
+// empty array (Zero Trust `Forbidden` is mapped to `[]`).
+test.provider(
+  "list enumerates posture integrations in the account",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.DevicePostureIntegration,
+      );
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      for (const item of all) {
+        expect(typeof item.integrationId).toBe("string");
+        expect(typeof item.accountId).toBe("string");
+        expect(typeof item.type).toBe("string");
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+// When an entitled account + reachable external provider is supplied via
+// env, deploy a real integration and assert `list()` includes it.
+test.provider.skipIf(!external)(
+  "list includes a deployed posture integration",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const apiUrl = process.env.CLOUDFLARE_TEST_POSTURE_API_URL!;
+      const secret = process.env.CLOUDFLARE_TEST_POSTURE_SECRET!;
+
+      const { integration } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const token = yield* Cloudflare.AccessServiceToken("ListS2sToken", {
+            name: "alchemy-test-posture-list-token",
+          });
+          const integration = yield* Cloudflare.DevicePostureIntegration(
+            "ListCustom",
+            {
+              name: "alchemy-test-posture-list-integration",
+              type: "custom_s2s",
+              interval: "10m",
+              config: {
+                apiUrl,
+                clientSecret: Redacted.make(secret),
+                accessClientId: token.clientId,
+                accessClientSecret: token.clientSecret!,
+              },
+            },
+          );
+          return { integration };
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.DevicePostureIntegration,
+      );
+      const all = yield* provider.list();
+
+      expect(
+        all.some((i) => i.integrationId === integration.integrationId),
+      ).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 90_000 },
 );

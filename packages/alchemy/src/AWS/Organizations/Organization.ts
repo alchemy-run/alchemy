@@ -64,6 +64,15 @@ export const OrganizationProvider = () =>
           const org = yield* readOrganization();
           return org?.Id && org.Arn ? toAttrs(org) : undefined;
         }),
+        // Account singleton: there is at most one organization per management
+        // account and no list API. `describeOrganization` (via `readOrganization`)
+        // returns the single org, or the typed `AWSOrganizationsNotInUseException`
+        // is caught to `undefined` when the account isn't a management account.
+        list: () =>
+          Effect.gen(function* () {
+            const org = yield* readOrganization();
+            return org?.Id && org.Arn ? [toAttrs(org)] : [];
+          }),
         reconcile: Effect.fn(function* ({ news, session }) {
           const desiredFeatureSet = news.featureSet ?? "ALL";
 

@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -239,6 +240,63 @@ export const RoleProvider = () =>
 
       return {
         stables: ["roleArn", "roleName"],
+        list: () =>
+          Effect.gen(function* () {
+            // IAM is global; `listRoles` enumerates every role in the
+            // account. Paginate exhaustively, then hydrate each role's
+            // managed/inline policies and tags (the list summary omits
+            // them) to produce the same Attributes shape `read` returns.
+            const roles = yield* iam.listRoles.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.Roles ?? []),
+              ),
+            );
+
+            const hydrated = yield* Effect.forEach(
+              roles,
+              (role) =>
+                Effect.gen(function* () {
+                  const assumeRolePolicyDocument = parsePolicyDocument(
+                    role.AssumeRolePolicyDocument,
+                  );
+                  if (!assumeRolePolicyDocument) {
+                    return undefined;
+                  }
+                  const [managedPolicyArns, inlinePolicies, tags] =
+                    yield* Effect.all([
+                      readManagedPolicies(role.RoleName),
+                      readInlinePolicies(role.RoleName),
+                      readTags(role.RoleName),
+                    ]);
+                  return {
+                    roleArn: role.Arn as RoleArn,
+                    roleName: role.RoleName,
+                    roleId: role.RoleId,
+                    path: role.Path,
+                    assumeRolePolicyDocument,
+                    managedPolicyArns,
+                    inlinePolicies,
+                    description: role.Description,
+                    maxSessionDuration: role.MaxSessionDuration,
+                    permissionsBoundary:
+                      role.PermissionsBoundary?.PermissionsBoundaryArn,
+                    tags,
+                  };
+                }).pipe(
+                  // A role may be deleted concurrently mid-hydration.
+                  Effect.catchTag("NoSuchEntityException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                ),
+              { concurrency: 8 },
+            );
+
+            return hydrated.filter(
+              (attrs): attrs is NonNullable<typeof attrs> =>
+                attrs !== undefined,
+            );
+          }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (

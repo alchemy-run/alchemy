@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import { expect } from "@effect/vitest";
@@ -114,6 +115,76 @@ test.provider(
       yield* stack.destroy();
       const gone = yield* getMap(accountId, created.addressMapId);
       expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// `list()` enumerates every Address Map on the account (paginated) and
+// hydrates each into the full `read` shape. Requires the same BYOIP /
+// static-IP entitlement as the lifecycle: unentitled accounts can't create
+// a map to observe, so we probe once and assert the typed `FeatureNotEnabled`
+// tag (clean skip); entitled accounts run the full deploy + list assertion.
+test.provider(
+  "list enumerates the deployed address map",
+  (stack) =>
+    Effect.gen(function* () {
+      const accountId = yield* resolveAccountId;
+
+      yield* stack.destroy();
+
+      const probe = yield* addressing
+        .createAddressMap({
+          accountId,
+          description: "alchemy-addressmap-list-probe",
+          enabled: false,
+        })
+        .pipe(
+          Effect.retry({
+            while: (e) => e._tag === "Forbidden",
+            schedule: forbiddenRetrySchedule,
+            times: 8,
+          }),
+          Effect.result,
+        );
+
+      if (Result.isFailure(probe)) {
+        // Unentitled — the distilled call must fail with the typed
+        // entitlement tag, never an untyped catch-all.
+        expect(probe.failure._tag).toEqual("FeatureNotEnabled");
+        yield* stack.destroy();
+        return;
+      }
+
+      // Entitled — clean up the probe map and run the full lifecycle.
+      if (probe.success.id) {
+        yield* addressing
+          .deleteAddressMap({ accountId, addressMapId: probe.success.id })
+          .pipe(Effect.catchTag("AddressMapNotFound", () => Effect.void));
+      }
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.AddressMap("ListMap", {
+            description: "alchemy-addressmap-list",
+            enabled: false,
+          });
+        }),
+      );
+      expect(deployed.addressMapId).toBeDefined();
+
+      const provider = yield* Provider.findProvider(Cloudflare.AddressMap);
+      const all = yield* provider.list();
+
+      // The deployed map appears in the exhaustively-paginated result, fully
+      // hydrated into the `read` shape (ips/memberships present).
+      const found = all.find((m) => m.addressMapId === deployed.addressMapId);
+      expect(found).toBeDefined();
+      expect(found?.accountId).toEqual(accountId);
+      expect(found?.description).toEqual("alchemy-addressmap-list");
+      expect(found?.ips).toBeDefined();
+      expect(found?.memberships).toBeDefined();
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

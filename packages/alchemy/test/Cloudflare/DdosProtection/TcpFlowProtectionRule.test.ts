@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as ddos from "@distilled.cloud/cloudflare/ddos-protection";
 import { expect } from "@effect/vitest";
@@ -82,6 +83,67 @@ test.provider.skipIf(!magicTransit)(
         })
         .pipe(Effect.flip);
       expect(error._tag).toEqual("TcpFlowProtectionRuleNotFound");
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Account-scoped collection `list()` (pattern (b)): enumerate every TCP flow
+// protection rule under the ambient account. On accounts without the Magic
+// Transit / Advanced TCP Protection entitlement the enumeration API rejects
+// with the typed `AdvancedTcpProtectionNotEntitled` error (Cloudflare code
+// 8888), which `list()` maps to a well-typed empty array — assert that here,
+// ungated.
+test.provider(
+  "list returns a well-typed empty array without Magic Transit",
+  (stack) =>
+    Effect.gen(function* () {
+      if (magicTransit) return;
+
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.TcpFlowProtectionRule,
+      );
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      expect(all).toEqual([]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);
+
+// Entitled accounts (CLOUDFLARE_TEST_MAGIC_TRANSIT set): deploy a rule and
+// assert it appears in the exhaustively-paginated `list()` result, carrying
+// the exact `read` Attributes shape.
+test.provider.skipIf(!magicTransit)(
+  "list enumerates the deployed TCP flow protection rule",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.TcpFlowProtectionRule("ListRule", {
+            scope: "global",
+            mode: "monitoring",
+            burstSensitivity: "medium",
+            rateSensitivity: "medium",
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.TcpFlowProtectionRule,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((x) => x.ruleId === deployed.ruleId)).toBe(true);
+      const found = all.find((x) => x.ruleId === deployed.ruleId)!;
+      expect(found.scope).toEqual("global");
+      expect(found.name).toEqual("global");
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

@@ -1,5 +1,6 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -50,7 +51,7 @@ export interface AlarmMuteRule extends Resource<
  * const rule = yield* AlarmMuteRule("NightlyMute", {
  *   Rule: {
  *     Schedule: {
- *       Expression: "cron(0 2 * * ? *)",
+ *       Expression: "0 2 * * SUN",
  *       Duration: "PT1H",
  *     },
  *   },
@@ -118,6 +119,40 @@ export const AlarmMuteRuleProvider = () =>
             (yield* createMuteRuleName(id, olds ?? {}));
           return yield* readAlarmMuteRule(name);
         }),
+        // AWS account/region collection: `listAlarmMuteRules` paginates every
+        // mute rule in the region. The summary only carries the ARN, so we
+        // derive the name from it and re-read each rule to return the full
+        // `Attributes` shape (identical to `read`).
+        list: () =>
+          Effect.gen(function* () {
+            const summaries = yield* cloudwatch.listAlarmMuteRules
+              .pages({})
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap(
+                    (page) => page.AlarmMuteRuleSummaries ?? [],
+                  ),
+                ),
+              );
+
+            const rows = yield* Effect.forEach(
+              summaries,
+              (summary) => {
+                const name =
+                  summary.AlarmMuteRuleArn?.split(":alarm-mute-rule:")[1];
+                if (!name) {
+                  return Effect.succeed(undefined);
+                }
+                return readAlarmMuteRule(name);
+              },
+              { concurrency: 10 },
+            );
+
+            return rows.filter(
+              (row): row is NonNullable<typeof row> => row !== undefined,
+            );
+          }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           // Observe — pin the physical name from `output` if we already
           // have one; otherwise derive it from desired props.

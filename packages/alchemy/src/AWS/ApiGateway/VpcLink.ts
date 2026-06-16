@@ -1,6 +1,7 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -117,6 +118,17 @@ export const VpcLinkProvider = () =>
           if (!v?.id) return undefined;
           return snapshotFromVpcLink(v, tagRecord(v.tags));
         }),
+        list: () =>
+          ag.getVpcLinks.pages({ limit: 500 }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.items ?? [])
+                  .filter((v): v is ag.VpcLink & { id: string } => !!v.id)
+                  .map((v) => snapshotFromVpcLink(v, tagRecord(v.tags))),
+              ),
+            ),
+          ),
         reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
           if (!isResolved(newsIn)) {
             return yield* Effect.die("VpcLink props were not resolved");

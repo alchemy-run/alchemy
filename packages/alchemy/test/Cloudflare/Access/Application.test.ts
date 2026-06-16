@@ -1,6 +1,7 @@
 import * as AdoptPolicy from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -114,6 +115,42 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed access application", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const domain = `alchemy-test-list-app.${zoneName}`;
+    const app = yield* stack.deploy(
+      Effect.gen(function* () {
+        yield* Cloudflare.Zone("TestZone", {
+          name: zoneName,
+        }).pipe(AdoptPolicy.adopt(true));
+        const policy = yield* Cloudflare.AccessPolicy("ListAllowDomain", {
+          name: "Allow example.com",
+          decision: "allow",
+          include: [{ emailDomain: { domain: "example.com" } }],
+        });
+        return yield* Cloudflare.AccessApplication("ListApp", {
+          type: "self_hosted",
+          domain,
+          sessionDuration: "24h",
+          policies: [policy.policyId],
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.AccessApplication);
+    const all = yield* provider.list();
+
+    const match = all.find((a) => a.applicationId === app.applicationId);
+    expect(match).toBeDefined();
+    expect(match?.type).toEqual("self_hosted");
+    expect(match?.aud.length).toBeGreaterThan(0);
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 test.provider(

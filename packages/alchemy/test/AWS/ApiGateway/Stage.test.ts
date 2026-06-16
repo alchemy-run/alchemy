@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
@@ -170,4 +171,49 @@ test.provider.skipIf(!runLive)(
 
       yield* stack.destroy();
     }),
+);
+
+// Canonical `list()` test: deploy a real stage (plus its parent RestApi +
+// Deployment), resolve the typed provider from context, call `list()`, and
+// assert the deployed stage appears in the result (enumerated by walking
+// every parent RestApi then listing stages per api).
+test.provider.skipIf(!runLive)("list enumerates the deployed stage", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const { stage } = yield* stack.deploy(
+      Effect.gen(function* () {
+        const api = yield* AWS.ApiGateway.RestApi("AgStageListApi", {
+          endpointConfiguration: { types: ["REGIONAL"] },
+        });
+        yield* AWS.ApiGateway.Method("AgStageListMock", {
+          restApi: api,
+          httpMethod: "GET",
+          authorizationType: "NONE",
+          integration: { type: "MOCK" },
+        });
+        const deployment = yield* AWS.ApiGateway.Deployment("AgStageListDep", {
+          restApi: api,
+        });
+        const stage = yield* AWS.ApiGateway.Stage("AgStageListDev", {
+          restApi: api,
+          stageName: "dev",
+          deploymentId: deployment.deploymentId,
+        });
+        return { stage };
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(AWS.ApiGateway.StageResource);
+    const all = yield* provider.list();
+
+    expect(
+      all.some(
+        (s) =>
+          s.restApiId === stage.restApiId && s.stageName === stage.stageName,
+      ),
+    ).toBe(true);
+
+    yield* stack.destroy();
+  }),
 );

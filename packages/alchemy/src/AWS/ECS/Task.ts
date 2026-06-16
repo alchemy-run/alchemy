@@ -7,6 +7,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
@@ -684,6 +685,60 @@ await Effect.runPromise(program);
         return taskDefinition;
       });
 
+      // Reconstruct the full `Task` Attributes shape from a described task
+      // definition. Returns `undefined` for task definitions that don't match
+      // the shape this provider produces (single container whose image is an
+      // ECR `<repoUri>:<hash>`, task/execution role ARNs, an awslogs log group)
+      // so foreign task definitions in the account are skipped by `list()`.
+      const toListAttributes = (
+        taskDefinition: ecs.TaskDefinition,
+        region: string,
+        accountId: string,
+      ): Task["Attributes"] | undefined => {
+        if (!taskDefinition.taskDefinitionArn || !taskDefinition.family) {
+          return undefined;
+        }
+        const container = taskDefinition.containerDefinitions?.[0];
+        const image = container?.image;
+        const taskRoleArn = taskDefinition.taskRoleArn;
+        const executionRoleArn = taskDefinition.executionRoleArn;
+        const logGroupName =
+          container?.logConfiguration?.options?.["awslogs-group"];
+        if (
+          !container?.name ||
+          !image ||
+          !image.includes(":") ||
+          !taskRoleArn ||
+          !executionRoleArn ||
+          !logGroupName
+        ) {
+          return undefined;
+        }
+        const lastColon = image.lastIndexOf(":");
+        const repositoryUri = image.slice(0, lastColon);
+        const hash = image.slice(lastColon + 1);
+        const repositoryName = repositoryUri.split("/").slice(1).join("/");
+        const taskRoleName = taskRoleArn.split(":role/")[1] ?? taskRoleArn;
+        const executionRoleName =
+          executionRoleArn.split(":role/")[1] ?? executionRoleArn;
+        return {
+          taskDefinitionArn: taskDefinition.taskDefinitionArn,
+          taskFamily: taskDefinition.family,
+          containerName: container.name,
+          port: container.portMappings?.[0]?.containerPort ?? 3000,
+          imageUri: image,
+          repositoryName,
+          repositoryUri,
+          taskRoleArn,
+          taskRoleName,
+          executionRoleArn,
+          executionRoleName,
+          logGroupName,
+          logGroupArn: `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`,
+          code: { hash },
+        };
+      };
+
       return {
         stables: [
           "repositoryName",
@@ -863,6 +918,46 @@ await Effect.runPromise(program);
             },
           };
         }),
+        // Enumerate every ACTIVE task definition in the account/region,
+        // hydrate each via `describeTaskDefinition`, and reconstruct the full
+        // Attributes shape. Foreign task definitions that don't match the shape
+        // this provider produces are skipped (see `toListAttributes`).
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            const arns = yield* ecs.listTaskDefinitions
+              .pages({ status: "ACTIVE" })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap(
+                    (page) => page.taskDefinitionArns ?? [],
+                  ),
+                ),
+              );
+            const rows = yield* Effect.forEach(
+              arns,
+              (arn) =>
+                ecs.describeTaskDefinition({ taskDefinition: arn }).pipe(
+                  Effect.map((described) =>
+                    described.taskDefinition
+                      ? toListAttributes(
+                          described.taskDefinition,
+                          region,
+                          accountId,
+                        )
+                      : undefined,
+                  ),
+                  Effect.catchTag("ClientException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+            return rows.filter(
+              (row): row is Task["Attributes"] => row !== undefined,
+            );
+          }),
         delete: Effect.fn(function* ({ output }) {
           yield* ecs
             .deregisterTaskDefinition({

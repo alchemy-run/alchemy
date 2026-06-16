@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as mcn from "@distilled.cloud/cloudflare/magic-cloud-networking";
 import { expect } from "@effect/vitest";
@@ -143,6 +144,69 @@ test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
       expect(updated.name).toEqual("alchemy-mcn-onramp-v2");
       expect(updated.installRoutesInMagicWan).toBe(true);
       expect(updated.description).toEqual("alchemy on-ramp test v2");
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, onramp.onRampId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Read-only list assertion that runs on every account. On an unentitled
+// account `list()` catches the typed `FeatureNotEnabled` and returns a
+// well-typed `[]`; on an entitled account it returns the account's on-ramps
+// as the exact `read` Attributes shape (an array, possibly empty).
+test.provider("list returns on-ramps or a typed [] when unentitled", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const canList = yield* mcn.listOnRamps({ accountId }).pipe(
+      Effect.as(true),
+      Effect.catchTag("FeatureNotEnabled", () => Effect.succeed(false)),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.OnRamp);
+    const all = yield* provider.list();
+
+    if (!canList) {
+      // Unentitled — FeatureNotEnabled makes the account non-listable.
+      expect(all).toEqual([]);
+    } else {
+      expect(Array.isArray(all)).toBe(true);
+    }
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+test.provider.skipIf(!entitled || !vpcId || !vpcRegion)(
+  "list enumerates the deployed on-ramp",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const onramp = yield* stack.deploy(
+        Cloudflare.OnRamp("ListRamp", {
+          name: "alchemy-mcn-list-onramp",
+          cloudType: "AWS",
+          type: "OnrampTypeSingle",
+          region: vpcRegion!,
+          vpc: vpcId!,
+          dynamicRouting: false,
+          installRoutesInCloud: false,
+          installRoutesInMagicWan: false,
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.OnRamp);
+      const all = yield* provider.list();
+
+      expect(all.some((x) => x.onRampId === onramp.onRampId)).toBe(true);
+      expect(all.some((x) => x.name === "alchemy-mcn-list-onramp")).toBe(true);
 
       yield* stack.destroy();
 

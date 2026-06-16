@@ -1,5 +1,6 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -74,6 +75,60 @@ export const LogGroupProvider = () =>
 
       return {
         stables: ["logGroupArn", "logGroupName"],
+        // AWS account/region collection: paginate `describeLogGroups`
+        // exhaustively, then hydrate each group's tags via
+        // `listTagsForResource` (bounded concurrency) into the exact `read`
+        // Attributes shape.
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            const groups = yield* logs.describeLogGroups.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.logGroups ?? []),
+              ),
+            );
+
+            return yield* Effect.forEach(
+              groups.filter(
+                (
+                  group,
+                ): group is logs.LogGroup & {
+                  logGroupName: string;
+                  arn: string;
+                } => group.logGroupName != null && group.arn != null,
+              ),
+              (group) =>
+                Effect.gen(function* () {
+                  const tagArn =
+                    `arn:aws:logs:${region}:${accountId}:log-group:${group.logGroupName}` as LogGroupArn;
+                  const tags = yield* logs
+                    .listTagsForResource({ resourceArn: tagArn })
+                    .pipe(
+                      Effect.map(
+                        (r): Record<string, string> =>
+                          Object.fromEntries(
+                            Object.entries(r.tags ?? {}).filter(
+                              (entry): entry is [string, string] =>
+                                typeof entry[1] === "string",
+                            ),
+                          ),
+                      ),
+                      Effect.catchTag("ResourceNotFoundException", () =>
+                        Effect.succeed({} as Record<string, string>),
+                      ),
+                    );
+                  return {
+                    logGroupName: group.logGroupName,
+                    logGroupArn: group.arn as LogGroupArn,
+                    retentionInDays: group.retentionInDays,
+                    kmsKeyId: group.kmsKeyId,
+                    tags,
+                  };
+                }),
+              { concurrency: 10 },
+            );
+          }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (

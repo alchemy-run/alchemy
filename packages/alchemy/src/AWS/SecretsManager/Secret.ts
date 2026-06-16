@@ -1,6 +1,7 @@
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -293,6 +294,37 @@ export const SecretProvider = () =>
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
         }),
+        // `listSecrets` returns full secret metadata (ARN, name, description,
+        // KMS key, and tags) inline, so we hydrate the exact `read` Attributes
+        // shape directly — without fetching plaintext values via
+        // `getSecretValue`. `versionId` is per-value state not surfaced by the
+        // list API, so it is `undefined` (matching `read` when there is no
+        // prior output).
+        list: () =>
+          secretsmanager.listSecrets.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.SecretList ?? [])
+                  .filter(
+                    (
+                      entry,
+                    ): entry is secretsmanager.SecretListEntry & {
+                      ARN: string;
+                      Name: string;
+                    } => entry.ARN != null && entry.Name != null,
+                  )
+                  .map((entry) => ({
+                    secretArn: entry.ARN,
+                    secretName: entry.Name,
+                    versionId: undefined,
+                    description: entry.Description,
+                    kmsKeyId: entry.KmsKeyId,
+                    tags: toTagRecord(entry.Tags),
+                  })),
+              ),
+            ),
+          ),
       };
     }),
   );

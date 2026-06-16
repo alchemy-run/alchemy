@@ -1,5 +1,6 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -69,6 +70,39 @@ export const NetworkAclAssociationProvider = () =>
 
       return NetworkAclAssociation.Provider.of({
         stables: ["subnetId"],
+
+        // NACL associations are embedded in describeNetworkAcls. Each NetworkAcl
+        // carries an Associations[] of {subnet, acl, associationId}; flatten
+        // every page's associations to enumerate them all in the region.
+        list: () =>
+          ec2.describeNetworkAcls.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.NetworkAcls ?? []).flatMap((acl) =>
+                  (acl.Associations ?? [])
+                    .filter(
+                      (
+                        a,
+                      ): a is ec2.NetworkAclAssociation & {
+                        NetworkAclAssociationId: string;
+                        NetworkAclId: string;
+                        SubnetId: string;
+                      } =>
+                        a.NetworkAclAssociationId != null &&
+                        a.NetworkAclId != null &&
+                        a.SubnetId != null,
+                    )
+                    .map((a) => ({
+                      associationId:
+                        a.NetworkAclAssociationId as NetworkAclAssociationId,
+                      networkAclId: a.NetworkAclId as NetworkAclId,
+                      subnetId: a.SubnetId as SubnetId,
+                    })),
+                ),
+              ),
+            ),
+          ),
 
         read: Effect.fn(function* ({ olds }) {
           if (!olds) return undefined;

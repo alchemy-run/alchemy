@@ -1,5 +1,6 @@
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -474,6 +475,24 @@ export const AiGatewayProvider = () =>
           Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
         );
     }),
+    // AI Gateways are account-scoped; the list API returns the full gateway
+    // object for every gateway in the account in one paginated collection.
+    // Exhaustively paginate and hydrate each item into the same Attributes
+    // shape `read` produces (via `mapGateway`).
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        return yield* aiGateway.listAiGateways.pages({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((gateway) =>
+                mapGateway(gateway, accountId),
+              ),
+            ),
+          ),
+        );
+      }),
   });
 
 const createGatewayId = (id: string, gatewayId: string | undefined) =>

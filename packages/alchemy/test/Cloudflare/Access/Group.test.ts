@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -109,6 +110,30 @@ test.provider("rename updates the group in place", (stack) =>
       groupId: group.groupId,
     });
     expect(actual.name).toEqual("alchemy-test-access-group-rename-b");
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed access group", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const group = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.AccessGroup("ListGroup", {
+          include: [{ emailDomain: { domain: "example.com" } }],
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.AccessGroup);
+    const all = yield* provider.list();
+
+    const found = all.find((g) => g.groupId === group.groupId);
+    expect(found).toBeDefined();
+    expect(found?.accountId).toEqual(group.accountId);
+    expect(found?.name).toEqual(group.name);
 
     yield* stack.destroy();
   }).pipe(logLevel),

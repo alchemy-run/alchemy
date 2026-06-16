@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -143,6 +144,27 @@ export const InstanceProfileProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        // IAM is global; `listInstanceProfiles` enumerates every instance
+        // profile in the account. Paginate exhaustively and map each item to
+        // the same Attributes shape `read` produces.
+        list: () =>
+          iam.listInstanceProfiles.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.InstanceProfiles ?? []).map((profile) => ({
+                  instanceProfileArn: profile.Arn,
+                  instanceProfileName: profile.InstanceProfileName,
+                  instanceProfileId: profile.InstanceProfileId as
+                    | string
+                    | undefined,
+                  path: profile.Path as string | undefined,
+                  roleName: profile.Roles?.[0]?.RoleName,
+                  tags: toTagRecord(profile.Tags),
+                })),
+              ),
+            ),
+          ),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.instanceProfileName ??

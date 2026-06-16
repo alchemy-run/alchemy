@@ -341,6 +341,29 @@ export const GreTunnelProvider = () =>
         })
         .pipe(Effect.catchTag("GreTunnelNotFound", () => Effect.void));
     }),
+
+    // Account-scoped collection. `listGreTunnels` returns the full set in one
+    // (non-paginated) call, so there is nothing to paginate. Accounts without
+    // a Magic Transit subscription reject with the typed
+    // `MagicTransitNotOnboarded` tag (code 1012) — and, depending on token
+    // scope, a typed `Forbidden` (403). Both mean the account cannot enumerate
+    // Magic Transit, so treat them as non-listable → [].
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        return yield* magicTransit
+          .listGreTunnels({ accountId, xMagicNewHcTarget: true })
+          .pipe(
+            Effect.map((r): GreTunnelAttributes[] =>
+              (r.greTunnels ?? []).map((tunnel) =>
+                toAttributes(tunnel, accountId),
+              ),
+            ),
+            Effect.catchTag(["MagicTransitNotOnboarded", "Forbidden"], () =>
+              Effect.succeed<GreTunnelAttributes[]>([]),
+            ),
+          );
+      }),
   });
 
 interface ObservedGreTunnel {

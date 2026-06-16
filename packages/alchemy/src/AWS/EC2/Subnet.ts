@@ -2,6 +2,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved, somePropsAreDifferent } from "../../Diff.ts";
@@ -386,46 +387,21 @@ export const SubnetProvider = () =>
               new Error(`Subnet ${subnetId} disappeared during reconcile`),
             );
           }
-          return {
-            subnetId,
-            subnetArn: final.SubnetArn! as SubnetArn,
-            cidrBlock: final.CidrBlock!,
-            vpcId: news.vpcId,
-            availabilityZone: final.AvailabilityZone!,
-            availabilityZoneId: final.AvailabilityZoneId,
-            state: final.State!,
-            availableIpAddressCount: final.AvailableIpAddressCount ?? 0,
-            mapPublicIpOnLaunch: final.MapPublicIpOnLaunch ?? false,
-            assignIpv6AddressOnCreation:
-              final.AssignIpv6AddressOnCreation ?? false,
-            defaultForAz: final.DefaultForAz ?? false,
-            ownerId: final.OwnerId,
-            ipv6CidrBlockAssociationSet: final.Ipv6CidrBlockAssociationSet?.map(
-              (assoc) => ({
-                associationId: assoc.AssociationId!,
-                ipv6CidrBlock: assoc.Ipv6CidrBlock!,
-                ipv6CidrBlockState: {
-                  state: assoc.Ipv6CidrBlockState!.State!,
-                  statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
-                },
-              }),
-            ),
-            enableDns64: final.EnableDns64,
-            ipv6Native: final.Ipv6Native,
-            privateDnsNameOptionsOnLaunch: final.PrivateDnsNameOptionsOnLaunch
-              ? {
-                  hostnameType:
-                    final.PrivateDnsNameOptionsOnLaunch.HostnameType,
-                  enableResourceNameDnsARecord:
-                    final.PrivateDnsNameOptionsOnLaunch
-                      .EnableResourceNameDnsARecord,
-                  enableResourceNameDnsAAAARecord:
-                    final.PrivateDnsNameOptionsOnLaunch
-                      .EnableResourceNameDnsAAAARecord,
-                }
-              : undefined,
-          };
+          return toSubnetAttributes(final);
         }),
+
+        // Enumerate every subnet in the ambient account/region, paginating
+        // exhaustively. Each item is mapped to the full Attributes shape
+        // produced by `reconcile`/`read`.
+        list: () =>
+          ec2.describeSubnets.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.Subnets ?? []).map(toSubnetAttributes),
+              ),
+            ),
+          ),
 
         delete: Effect.fn(function* ({ output, session }) {
           const subnetId = output.subnetId;
@@ -467,6 +443,46 @@ export const SubnetProvider = () =>
       };
     }),
   );
+
+/**
+ * Map a distilled `ec2.Subnet` to the full Subnet `Attributes` shape that
+ * `reconcile`/`read` produce.
+ */
+const toSubnetAttributes = (subnet: ec2.Subnet): Subnet["Attributes"] => ({
+  subnetId: subnet.SubnetId! as SubnetId,
+  subnetArn: subnet.SubnetArn! as SubnetArn,
+  cidrBlock: subnet.CidrBlock!,
+  vpcId: subnet.VpcId! as VpcId,
+  availabilityZone: subnet.AvailabilityZone!,
+  availabilityZoneId: subnet.AvailabilityZoneId,
+  state: subnet.State!,
+  availableIpAddressCount: subnet.AvailableIpAddressCount ?? 0,
+  mapPublicIpOnLaunch: subnet.MapPublicIpOnLaunch ?? false,
+  assignIpv6AddressOnCreation: subnet.AssignIpv6AddressOnCreation ?? false,
+  defaultForAz: subnet.DefaultForAz ?? false,
+  ownerId: subnet.OwnerId,
+  ipv6CidrBlockAssociationSet: subnet.Ipv6CidrBlockAssociationSet?.map(
+    (assoc) => ({
+      associationId: assoc.AssociationId!,
+      ipv6CidrBlock: assoc.Ipv6CidrBlock!,
+      ipv6CidrBlockState: {
+        state: assoc.Ipv6CidrBlockState!.State!,
+        statusMessage: assoc.Ipv6CidrBlockState!.StatusMessage,
+      },
+    }),
+  ),
+  enableDns64: subnet.EnableDns64,
+  ipv6Native: subnet.Ipv6Native,
+  privateDnsNameOptionsOnLaunch: subnet.PrivateDnsNameOptionsOnLaunch
+    ? {
+        hostnameType: subnet.PrivateDnsNameOptionsOnLaunch.HostnameType,
+        enableResourceNameDnsARecord:
+          subnet.PrivateDnsNameOptionsOnLaunch.EnableResourceNameDnsARecord,
+        enableResourceNameDnsAAAARecord:
+          subnet.PrivateDnsNameOptionsOnLaunch.EnableResourceNameDnsAAAARecord,
+      }
+    : undefined,
+});
 
 // Retryable error: Subnet is still pending
 class SubnetPending extends Data.TaggedError("SubnetPending")<{

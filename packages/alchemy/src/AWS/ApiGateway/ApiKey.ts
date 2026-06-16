@@ -141,6 +141,22 @@ export const ApiKeyProvider = () =>
             tags: tagRecord(k.tags),
           };
         }),
+        list: () =>
+          ag.getApiKeys.pages({ limit: 500, includeValues: false }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.items ?? [])
+                  .filter((k): k is ag.ApiKey & { id: string } => !!k.id)
+                  .map((k) => ({
+                    id: k.id,
+                    name: k.name,
+                    enabled: k.enabled,
+                    tags: tagRecord(k.tags),
+                  })),
+              ),
+            ),
+          ),
         reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
           const { region } = yield* AWSEnvironment.current;
           if (!isResolved(newsIn)) {

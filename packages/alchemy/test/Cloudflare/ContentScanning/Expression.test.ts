@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as contentScanning from "@distilled.cloud/cloudflare/content-scanning";
 import { expect } from "@effect/vitest";
@@ -158,6 +159,75 @@ describe.sequential("Expression", () => {
             false,
           );
         }
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  // list() fans out over every zone and skips zones without Content Scanning
+  // (typed ContentScanningNotEnabled/Forbidden) or deleted zones (InvalidRoute).
+  // The standing test zone has scanning disabled, so this returns a well-typed
+  // array (empty for un-entitled zones) without throwing — proving the
+  // pagination + typed-skip wiring end-to-end.
+  test.provider(
+    "list returns a well-typed array across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const provider = yield* Provider.findProvider(
+          Cloudflare.ContentScanningExpression,
+        );
+        const all = yield* provider.list();
+
+        expect(Array.isArray(all)).toBe(true);
+        for (const item of all) {
+          expect(typeof item.zoneId).toBe("string");
+          expect(typeof item.payload).toBe("string");
+          expect(typeof item.expressionId).toBe("string");
+        }
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  // Requires WAF Content Scanning (Enterprise paid add-on) on the zone — without
+  // it payload calls fail with the typed ContentScanningNotEnabled. Unlock with
+  // CLOUDFLARE_TEST_CONTENT_SCANNING_ZONE_ID=<zone id>.
+  test.provider.skipIf(!entitledZoneId)(
+    "list enumerates the deployed expression",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = entitledZoneId!;
+
+        yield* stack.destroy();
+
+        const payload = 'lookup_json_string(http.request.body.raw, "file")';
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const scanning = yield* Cloudflare.ContentScanning(
+              "UploadScanning",
+              { zoneId },
+            );
+            return yield* Cloudflare.ContentScanningExpression("ListField", {
+              zoneId: scanning.zoneId,
+              payload,
+            });
+          }),
+        );
+
+        const provider = yield* Provider.findProvider(
+          Cloudflare.ContentScanningExpression,
+        );
+        const all = yield* provider.list();
+
+        const found = all.find((e) => e.expressionId === deployed.expressionId);
+        expect(found).toBeDefined();
+        expect(found?.zoneId).toEqual(zoneId);
+        expect(found?.payload).toEqual(payload);
+
+        yield* stack.destroy();
       }).pipe(logLevel),
     { timeout: 120_000 },
   );

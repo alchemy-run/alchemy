@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -116,6 +117,29 @@ test.provider(
       expect(restored.settings?.protocolDetection?.enabled).toEqual(
         baselineProtocolDetection,
       );
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list returns the account Gateway configuration singleton",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.GatewayConfiguration,
+      );
+      const all = yield* provider.list();
+
+      // Account-wide singleton: exactly one element for the ambient account.
+      expect(all.length).toEqual(1);
+      expect(all[0]!.accountId).toEqual(accountId);
+      expect(all[0]!.initialSettings).toEqual({});
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

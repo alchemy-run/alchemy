@@ -1,5 +1,7 @@
 import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -179,6 +181,27 @@ export const ScheduleProvider = () =>
             ActionAfterCompletion: news.actionAfterCompletion,
           };
 
+          const baseClient = yield* HttpClient.HttpClient;
+          const debugClient = baseClient.pipe(
+            HttpClient.tapRequest((req) =>
+              Effect.logError(
+                "DEBUG REQ",
+                `${req.method} ${req.url}`,
+                JSON.stringify(req.headers),
+              ),
+            ),
+            HttpClient.tap((res) =>
+              res.status >= 400
+                ? res.text.pipe(
+                    Effect.flatMap((t) =>
+                      Effect.logError("DEBUG RESP", res.status, t),
+                    ),
+                    Effect.catch(() => Effect.void),
+                  )
+                : Effect.void,
+            ),
+          );
+
           // Observe — fetch live schedule.
           let observed = yield* scheduler
             .getSchedule({ Name: scheduleName, GroupName: groupNameParam })
@@ -199,6 +222,7 @@ export const ScheduleProvider = () =>
                 ...desiredConfig,
               })
               .pipe(
+                Effect.provideService(HttpClient.HttpClient, debugClient),
                 Effect.catchTag("ConflictException", () =>
                   scheduler
                     .getSchedule({
@@ -294,6 +318,57 @@ export const ScheduleProvider = () =>
             state: news.state ?? observed.State,
           };
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every schedule in the account/region. Omitting
+            // GroupName makes ListSchedules return summaries across all
+            // schedule groups, paginated.
+            const summaries = yield* scheduler.listSchedules.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.Schedules ?? []).filter(
+                    (s): s is scheduler.ScheduleSummary & { Name: string } =>
+                      s.Name != null,
+                  ),
+                ),
+              ),
+            );
+
+            // Hydrate each summary via GetSchedule into the exact `read`
+            // shape. Skip schedules deleted between list and get.
+            const rows = yield* Effect.forEach(
+              summaries,
+              (summary) => {
+                const groupName = summary.GroupName ?? "default";
+                return scheduler
+                  .getSchedule({
+                    Name: summary.Name,
+                    GroupName: groupName !== "default" ? groupName : undefined,
+                  })
+                  .pipe(
+                    Effect.map((described) =>
+                      described.Arn && described.Name
+                        ? {
+                            scheduleArn: described.Arn,
+                            scheduleName: described.Name,
+                            groupName: described.GroupName ?? groupName,
+                            state: described.State,
+                          }
+                        : undefined,
+                    ),
+                    Effect.catchTag("ResourceNotFoundException", () =>
+                      Effect.succeed(undefined),
+                    ),
+                  );
+              },
+              { concurrency: 10 },
+            );
+
+            return rows.filter(
+              (row): row is Schedule["Attributes"] => row !== undefined,
+            );
+          }),
         delete: Effect.fn(function* ({ output }) {
           yield* scheduler
             .deleteSchedule({

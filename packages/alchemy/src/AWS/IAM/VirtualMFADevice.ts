@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -124,6 +125,48 @@ export const VirtualMFADeviceProvider = () =>
 
       return {
         stables: ["serialNumber"],
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every virtual MFA device in the account. The list op
+            // does not return tags, so hydrate them per-device via
+            // listMFADeviceTags (matching the exact shape `read` returns).
+            const devices = yield* iam.listVirtualMFADevices.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap(
+                  (page) => page.VirtualMFADevices ?? [],
+                ),
+              ),
+            );
+            return yield* Effect.forEach(
+              devices,
+              (device) =>
+                Effect.gen(function* () {
+                  const tags = yield* iam
+                    .listMFADeviceTags({
+                      SerialNumber: device.SerialNumber,
+                    })
+                    .pipe(
+                      Effect.map((resp) => resp.Tags),
+                      // The device may vanish between listing and tag lookup.
+                      Effect.catchTag("NoSuchEntityException", () =>
+                        Effect.succeed<iam.Tag[]>([]),
+                      ),
+                    );
+                  return {
+                    serialNumber: device.SerialNumber,
+                    userName: device.User?.UserName,
+                    enableDate: device.EnableDate,
+                    // The seed and QR code are only returned at creation time
+                    // and are never available from enumeration.
+                    base32StringSeed: undefined,
+                    qrCodePNG: undefined,
+                    tags: toTagRecord(tags),
+                  };
+                }),
+              { concurrency: 10 },
+            );
+          }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (

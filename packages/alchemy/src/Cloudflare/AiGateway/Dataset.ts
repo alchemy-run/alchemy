@@ -1,6 +1,7 @@
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -285,6 +286,42 @@ export const AiGatewayDatasetProvider = () =>
         // with code 7002 on this endpoint — either way it's already gone.
         .pipe(Effect.catchTag("DatasetNotFound", () => Effect.void));
     }),
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        // Datasets are scoped under a gateway and there is no account-wide
+        // dataset list, so fan out: enumerate every account gateway, then
+        // exhaustively list each gateway's datasets.
+        const gateways = yield* aiGateway.listAiGateways
+          .pages({ accountId })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) => page.result ?? []),
+            ),
+          );
+        const rows = yield* Effect.forEach(
+          gateways,
+          (gateway) =>
+            aiGateway.listDatasets
+              .pages({ accountId, gatewayId: gateway.id })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) =>
+                    (page.result ?? []).map((d) => toAttributes(d, accountId)),
+                  ),
+                ),
+                // A gateway removed between enumeration and its dataset list
+                // is gone — skip it rather than failing the whole listing.
+                Effect.catchTag("GatewayNotFound", () =>
+                  Effect.succeed([] as AiGatewayDatasetAttributes[]),
+                ),
+              ),
+          { concurrency: 10 },
+        );
+        return rows.flat();
+      }),
   });
 
 /**

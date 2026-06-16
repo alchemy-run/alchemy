@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as acm from "@distilled.cloud/cloudflare/acm";
 import { expect } from "@effect/vitest";
@@ -91,6 +92,64 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+);
+
+// Canonical `list()` test (zone-scoped collection): `list()` enumerates
+// every zone via `listAllZones` and lists the trust store certificates in
+// each, paginating exhaustively. Zones lacking the ACM add-on reject the
+// route with the typed `AdvancedCertificateManagerRequired` tag, which
+// `list()` skips. On a standard testing account (no entitled zones) the
+// result is empty — assert the enumeration itself succeeds (an array) and
+// surfaces no untyped errors.
+test.provider(
+  "list enumerates trust store certificates across zones",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.CustomTrustStore,
+      );
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);
+
+// On an entitled zone, `list()` must contain the deployed certificate.
+test.provider.skipIf(!entitledZoneId)(
+  "list includes the deployed trust store certificate on an entitled zone",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = entitledZoneId!;
+      const fs = yield* FileSystem.FileSystem;
+      const certificate = yield* fs.readFileString(ROOT_CA_PEM);
+
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.CustomTrustStore("RootCa", {
+            zoneId,
+            certificate,
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.CustomTrustStore,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((c) => c.id === created.id && c.zoneId === zoneId)).toBe(
+        true,
+      );
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!entitledZoneId)(
