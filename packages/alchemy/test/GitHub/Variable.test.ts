@@ -28,13 +28,17 @@ test.provider.skipIf(!owner)(
 
       yield* stack.deploy(
         Effect.gen(function* () {
+          // `Repository` defaults to `retain`, so we intentionally do NOT pipe
+          // `destroy()` here: the test only needs a repo to host the variable,
+          // and deleting it would require `delete_repo`/admin rights. The repo
+          // is created once and reused (reconcile is idempotent).
           const repository = yield* GitHub.Repository("Repo", {
             owner,
             name: repo,
             description: "alchemy-effect variable list test",
             visibility: "private",
             autoInit: true,
-          }).pipe(destroy());
+          });
 
           return yield* GitHub.Variable("Variable", {
             owner,
