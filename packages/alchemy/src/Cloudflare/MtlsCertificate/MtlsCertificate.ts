@@ -229,7 +229,16 @@ export const MtlsCertificateProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((cert) => toAttributes(cert, accountId)),
+            (page.result ?? [])
+              // Cloudflare-managed certificates (e.g. the gateway/access
+              // managed CAs) reject deletion with `Unauthorized`; only
+              // enumerate user-uploaded `custom` certificates for teardown.
+              .filter(
+                (cert) =>
+                  cert.type !== "gateway_managed" &&
+                  cert.type !== "access_managed",
+              )
+              .map((cert) => toAttributes(cert, accountId)),
           ),
         ),
       );

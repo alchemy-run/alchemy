@@ -243,6 +243,10 @@ export const TunnelVirtualNetworkProvider = () =>
             Array.from(chunk).flatMap((page) =>
               (page.result ?? [])
                 .filter((v) => !v.deletedAt)
+                // The account's default virtual network can't be deleted
+                // ("it is the default virtual network"); never enumerate it
+                // for account-wide teardown.
+                .filter((v) => !v.isDefaultNetwork)
                 .map(
                   (v): TunnelVirtualNetworkAttributes => ({
                     virtualNetworkId: v.id,

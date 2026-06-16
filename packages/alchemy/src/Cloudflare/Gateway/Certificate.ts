@@ -184,7 +184,13 @@ export const GatewayCertificateProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((cert) => toAttributes(cert, accountId)),
+            (page.result ?? [])
+              .map((cert) => toAttributes(cert, accountId))
+              // A certificate bound to the Gateway config (the active
+              // inspection CA) can't be deactivated/deleted while in use
+              // (`GatewayCertificateInUse`), and account-wide teardown does
+              // not remove the singleton Gateway config — skip in-use certs.
+              .filter((cert) => !cert.inUse),
           ),
         ),
       );
