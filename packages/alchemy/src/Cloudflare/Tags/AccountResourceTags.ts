@@ -159,32 +159,29 @@ export const AccountResourceTagsProvider = () =>
     // Account-wide enumeration: `GET /accounts/{id}/tags/resources` returns
     // every tagged resource in the account, so the tag set of each is directly
     // hydratable into the `read` Attributes shape.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* resourceTagging.listResourceTaggings
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map(
-                  (item): AccountResourceTagsAttributes => ({
-                    accountId,
-                    resourceType: item.type,
-                    resourceId: item.id,
-                    workerId:
-                      "workerId" in item
-                        ? (item.workerId as string)
-                        : undefined,
-                    tags: narrowTags(item.tags),
-                    etag: item.etag,
-                  }),
-                ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* resourceTagging.listResourceTaggings
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map(
+                (item): AccountResourceTagsAttributes => ({
+                  accountId,
+                  resourceType: item.type,
+                  resourceId: item.id,
+                  workerId:
+                    "workerId" in item ? (item.workerId as string) : undefined,
+                  tags: narrowTags(item.tags),
+                  etag: item.etag,
+                }),
               ),
             ),
-          );
-      }),
+          ),
+        );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as Partial<AccountResourceTagsProps>;

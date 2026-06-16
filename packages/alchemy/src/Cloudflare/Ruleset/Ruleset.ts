@@ -184,54 +184,53 @@ export const RulesetProvider = () =>
     // via `listAllZones`, list that zone's rulesets, keep the entrypoints,
     // and hydrate each into the full Attributes shape (the list response
     // omits `rules`) via `getPhasForZone`.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            rulesets.listRulesetsForZone.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).filter((r) => r.kind === "zone"),
-                ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          rulesets.listRulesetsForZone.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).filter((r) => r.kind === "zone"),
               ),
-              Effect.flatMap((entrypoints) =>
-                Effect.forEach(
-                  entrypoints,
-                  (entry) =>
-                    rulesets
-                      .getPhasForZone({
-                        zoneId: zone.id,
-                        rulesetPhase: entry.phase,
-                      })
-                      .pipe(
-                        Effect.map((ruleset) =>
-                          toRulesetAttributes(zone.id, ruleset),
-                        ),
-                        // Per-item not-found / plan-gated entrypoints are
-                        // skipped rather than failing the whole enumeration.
-                        Effect.catchTag(["RulesetNotFound", "Forbidden"], () =>
-                          Effect.succeed(undefined),
-                        ),
-                      ),
-                  { concurrency: 10 },
-                ),
-              ),
-              Effect.map((items) =>
-                items.filter(
-                  (item): item is Ruleset["Attributes"] => item !== undefined,
-                ),
-              ),
-              // Plan-gated / partially-provisioned zones reject the route.
-              Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            Effect.flatMap((entrypoints) =>
+              Effect.forEach(
+                entrypoints,
+                (entry) =>
+                  rulesets
+                    .getPhasForZone({
+                      zoneId: zone.id,
+                      rulesetPhase: entry.phase,
+                    })
+                    .pipe(
+                      Effect.map((ruleset) =>
+                        toRulesetAttributes(zone.id, ruleset),
+                      ),
+                      // Per-item not-found / plan-gated entrypoints are
+                      // skipped rather than failing the whole enumeration.
+                      Effect.catchTag(["RulesetNotFound", "Forbidden"], () =>
+                        Effect.succeed(undefined),
+                      ),
+                    ),
+                { concurrency: 10 },
+              ),
+            ),
+            Effect.map((items) =>
+              items.filter(
+                (item): item is Ruleset["Attributes"] => item !== undefined,
+              ),
+            ),
+            // Plan-gated / partially-provisioned zones reject the route.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 const createRulesetName = (id: string, name: string | undefined) =>

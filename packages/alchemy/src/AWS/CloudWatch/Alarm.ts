@@ -139,11 +139,11 @@ export const AlarmProvider = () =>
                 ),
               );
 
-            return yield* Effect.forEach(
+            const attrs: Alarm["Attributes"][] = yield* Effect.forEach(
               alarms.filter(
                 (
                   metricAlarm,
-                ): metricAlarm is cloudwatch.MetricAlarm & {
+                ): metricAlarm is typeof metricAlarm & {
                   AlarmName: string;
                   AlarmArn: string;
                 } =>
@@ -169,6 +169,7 @@ export const AlarmProvider = () =>
                 }),
               { concurrency: 10 },
             );
+            return attrs;
           }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

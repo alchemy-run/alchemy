@@ -224,26 +224,25 @@ export const VectorizeIndexProvider = () =>
         })
         .pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.void));
     }),
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* vectorize.listIndexes.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (
-                    index,
-                  ): index is (typeof page.result)[number] & {
-                    name: string;
-                  } => index.name != null,
-                )
-                .map((index) => toAttributes(index, index.name, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* vectorize.listIndexes.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter(
+                (
+                  index,
+                ): index is (typeof page.result)[number] & {
+                  name: string;
+                } => index.name != null,
+              )
+              .map((index) => toAttributes(index, index.name, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
   });
 
 const toAttributes = (

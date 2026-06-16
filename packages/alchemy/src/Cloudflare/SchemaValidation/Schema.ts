@@ -279,32 +279,31 @@ export const SchemaValidationSchemaProvider = () =>
     // Attributes shape. Zones whose route is invalid (deleted/partial) reject
     // with the typed `InvalidRoute` — skip them rather than failing the whole
     // enumeration.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            schemaValidation.listSchemas
-              .pages({ zoneId: zone.id, omitSource: false })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.result ?? []).map((schema) =>
-                      toAttributes(zone.id, schema),
-                    ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          schemaValidation.listSchemas
+            .pages({ zoneId: zone.id, omitSource: false })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? []).map((schema) =>
+                    toAttributes(zone.id, schema),
                   ),
                 ),
-                Effect.catchTag("InvalidRoute", () =>
-                  Effect.succeed<SchemaValidationSchemaAttributes[]>([]),
-                ),
               ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+              Effect.catchTag("InvalidRoute", () =>
+                Effect.succeed<SchemaValidationSchemaAttributes[]>([]),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 /**

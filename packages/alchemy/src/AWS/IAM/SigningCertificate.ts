@@ -68,39 +68,36 @@ export const SigningCertificateProvider = () =>
     // The list response carries the full certificate body, so each entry maps
     // directly to the `Attributes` shape `read` returns without further
     // hydration.
-    list: () =>
-      Effect.gen(function* () {
-        const users = yield* iam.listUsers.pages({}).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.Users ?? []),
-          ),
-        );
-        const perUser = yield* Effect.forEach(
-          users,
-          (user) =>
-            iam.listSigningCertificates.pages({ UserName: user.UserName }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk)
-                  .flatMap((page) => page.Certificates ?? [])
-                  .map((cert) => ({
-                    userName: cert.UserName,
-                    certificateId: cert.CertificateId,
-                    certificateBody: cert.CertificateBody,
-                    status: cert.Status,
-                    uploadDate: cert.UploadDate,
-                  })),
-              ),
-              // The user may be deleted between enumeration and per-user list.
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed([]),
-              ),
+    list: Effect.fn(function* () {
+      const users = yield* iam.listUsers.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.Users ?? []),
+        ),
+      );
+      const perUser = yield* Effect.forEach(
+        users,
+        (user) =>
+          iam.listSigningCertificates.pages({ UserName: user.UserName }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk)
+                .flatMap((page) => page.Certificates ?? [])
+                .map((cert) => ({
+                  userName: cert.UserName,
+                  certificateId: cert.CertificateId,
+                  certificateBody: cert.CertificateBody,
+                  status: cert.Status,
+                  uploadDate: cert.UploadDate,
+                })),
             ),
-          { concurrency: 10 },
-        );
-        return perUser.flat();
-      }),
+            // The user may be deleted between enumeration and per-user list.
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return perUser.flat();
+    }),
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;
       if (

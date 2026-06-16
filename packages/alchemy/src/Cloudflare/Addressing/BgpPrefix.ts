@@ -178,42 +178,39 @@ export const AddressingBgpPrefixProvider = () =>
     // prefix, then exhaustively page the BGP prefixes under each. Accounts
     // without BYOIP simply have no parent prefixes, so the result is
     // naturally empty.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        const prefixIds = yield* addressing.listPrefixes
-          .items({ accountId })
-          .pipe(
+      const prefixIds = yield* addressing.listPrefixes
+        .items({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk)
+              .map((p) => p.id)
+              .filter((id): id is string => typeof id === "string"),
+          ),
+        );
+
+      const rows = yield* Effect.forEach(
+        prefixIds,
+        (prefixId) =>
+          addressing.listPrefixBgpPrefixes.items({ accountId, prefixId }).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
-              Array.from(chunk)
-                .map((p) => p.id)
-                .filter((id): id is string => typeof id === "string"),
-            ),
-          );
-
-        const rows = yield* Effect.forEach(
-          prefixIds,
-          (prefixId) =>
-            addressing.listPrefixBgpPrefixes
-              .items({ accountId, prefixId })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).map((bgp) =>
-                    toAttributes(bgp, prefixId, accountId),
-                  ),
-                ),
-                // Parent prefix removed mid-enumeration — skip it.
-                Effect.catchTag("PrefixNotFound", () =>
-                  Effect.succeed([] as AddressingBgpPrefixAttributes[]),
-                ),
+              Array.from(chunk).map((bgp) =>
+                toAttributes(bgp, prefixId, accountId),
               ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            ),
+            // Parent prefix removed mid-enumeration — skip it.
+            Effect.catchTag("PrefixNotFound", () =>
+              Effect.succeed([] as AddressingBgpPrefixAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

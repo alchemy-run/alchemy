@@ -136,23 +136,20 @@ export const NotificationWebhookProvider = () =>
     // the account and hydrate each into the same Attributes shape `read`
     // returns. The secret is write-only (never returned by Cloudflare), so it
     // is absent from Attributes and there is nothing extra to fetch per item.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* alerting.listDestinationWebhooks
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? [])
-                  .map(narrowWebhook)
-                  .filter((w): w is ObservedWebhook => w !== undefined)
-                  .map((w) => toWebhookAttributes(w, accountId)),
-              ),
-            ),
-          );
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* alerting.listDestinationWebhooks.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map(narrowWebhook)
+              .filter((w): w is ObservedWebhook => w !== undefined)
+              .map((w) => toWebhookAttributes(w, accountId)),
+          ),
+        ),
+      );
+    }),
 
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

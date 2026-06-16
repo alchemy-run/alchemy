@@ -6,9 +6,9 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type TopicName = string;
@@ -141,34 +141,33 @@ export const TopicProvider = () =>
     // (attributes + tags + data protection policy). Per-item not-found is
     // handled inside `readTopic` (returns undefined) for topics deleted
     // between enumeration and hydration.
-    list: () =>
-      Effect.gen(function* () {
-        const topicArns = yield* sns.listTopics.pages({}).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.Topics ?? [])
-                .map((topic) => topic.TopicArn)
-                .filter((arn): arn is string => typeof arn === "string"),
-            ),
+    list: Effect.fn(function* () {
+      const topicArns = yield* sns.listTopics.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.Topics ?? [])
+              .map((topic) => topic.TopicArn)
+              .filter((arn): arn is string => typeof arn === "string"),
           ),
-        );
+        ),
+      );
 
-        const rows = yield* Effect.forEach(
-          topicArns,
-          (topicArn) =>
-            readTopic({
-              id: "",
-              topicArn,
-              topicName: topicArn.split(":").at(-1) ?? topicArn,
-            }),
-          { concurrency: 10 },
-        );
+      const rows = yield* Effect.forEach(
+        topicArns,
+        (topicArn) =>
+          readTopic({
+            id: "",
+            topicArn,
+            topicName: topicArn.split(":").at(-1) ?? topicArn,
+          }),
+        { concurrency: 10 },
+      );
 
-        return rows.filter(
-          (row): row is NonNullable<typeof row> => row !== undefined,
-        );
-      }),
+      return rows.filter(
+        (row): row is NonNullable<typeof row> => row !== undefined,
+      );
+    }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const topicName =
         output?.topicName ?? (yield* toTopicName(id, olds ?? {}));

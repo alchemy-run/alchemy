@@ -124,31 +124,30 @@ export const SchemaValidationSettingsProvider = () =>
       "initialOverrideMitigationAction",
     ],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this zone singleton — enumerate every
-        // zone in the account and read its setting (every zone has one,
-        // defaulting to `none`).
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            schemaValidation.getSetting({ zoneId }).pipe(
-              // A cold read adopts freely; the observed state is the
-              // initial state (nothing has been managed yet).
-              Effect.map((observed) =>
-                toAttributes(zoneId, observed, observedState(observed)),
-              ),
-              // A scoped token may lack access to some zones; skip them.
-              Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its setting (every zone has one,
+      // defaulting to `none`).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          schemaValidation.getSetting({ zoneId }).pipe(
+            // A cold read adopts freely; the observed state is the
+            // initial state (nothing has been managed yet).
+            Effect.map((observed) =>
+              toAttributes(zoneId, observed, observedState(observed)),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is SchemaValidationSettingsAttributes => row !== undefined,
-        );
-      }),
+            // A scoped token may lack access to some zones; skip them.
+            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is SchemaValidationSettingsAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as SchemaValidationSettingsProps;

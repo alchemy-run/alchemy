@@ -84,41 +84,40 @@ export const SubscriptionProvider = () =>
     // `getSubscriptionAttributes` (inside `readSubscription`) so each element
     // matches the exact `read` Attributes shape. Pending-confirmation entries
     // have no real ARN to hydrate or delete against, so they are skipped.
-    list: () =>
-      Effect.gen(function* () {
-        const subscriptions = yield* sns.listSubscriptions.pages({}).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.Subscriptions ?? []),
-          ),
-        );
+    list: Effect.fn(function* () {
+      const subscriptions = yield* sns.listSubscriptions.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.Subscriptions ?? []),
+        ),
+      );
 
-        const concrete = subscriptions.filter(
-          (
-            subscription,
-          ): subscription is sns.Subscription & {
-            SubscriptionArn: string;
-          } =>
-            typeof subscription.SubscriptionArn === "string" &&
-            !isPendingConfirmation(subscription.SubscriptionArn),
-        );
+      const concrete = subscriptions.filter(
+        (
+          subscription,
+        ): subscription is sns.Subscription & {
+          SubscriptionArn: string;
+        } =>
+          typeof subscription.SubscriptionArn === "string" &&
+          !isPendingConfirmation(subscription.SubscriptionArn),
+      );
 
-        const rows = yield* Effect.forEach(
-          concrete,
-          (subscription) =>
-            readSubscription({
-              subscriptionArn: subscription.SubscriptionArn,
-              topicArn: subscription.TopicArn,
-              protocol: subscription.Protocol,
-              endpoint: subscription.Endpoint,
-            }),
-          { concurrency: 10 },
-        );
+      const rows = yield* Effect.forEach(
+        concrete,
+        (subscription) =>
+          readSubscription({
+            subscriptionArn: subscription.SubscriptionArn,
+            topicArn: subscription.TopicArn,
+            protocol: subscription.Protocol,
+            endpoint: subscription.Endpoint,
+          }),
+        { concurrency: 10 },
+      );
 
-        return rows.filter(
-          (row): row is NonNullable<typeof row> => row !== undefined,
-        );
-      }),
+      return rows.filter(
+        (row): row is NonNullable<typeof row> => row !== undefined,
+      );
+    }),
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return undefined;
       if (news.protocol !== olds.protocol) {

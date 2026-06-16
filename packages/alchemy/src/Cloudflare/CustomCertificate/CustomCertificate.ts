@@ -266,36 +266,35 @@ export const CustomCertificateProvider = () =>
     // default to `legacy_custom`/`""`. Plan-gated zones reject the route with
     // the typed `PlanLevelNotAllowed` (custom certs are Business/Enterprise)
     // and freshly-scoped tokens may blip `Forbidden`; both skip the zone.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            customCertificates.listCustomCertificates
-              .pages({ zoneId: zone.id })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.result ?? []).map(
-                      (cert): CustomCertificateAttributes =>
-                        toAttributes(cert, {
-                          type: "legacy_custom",
-                          contentHash: "",
-                        }),
-                    ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          customCertificates.listCustomCertificates
+            .pages({ zoneId: zone.id })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? []).map(
+                    (cert): CustomCertificateAttributes =>
+                      toAttributes(cert, {
+                        type: "legacy_custom",
+                        contentHash: "",
+                      }),
                   ),
                 ),
-                Effect.catchTag(["PlanLevelNotAllowed", "Forbidden"], () =>
-                  Effect.succeed([] as CustomCertificateAttributes[]),
-                ),
               ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+              Effect.catchTag(["PlanLevelNotAllowed", "Forbidden"], () =>
+                Effect.succeed([] as CustomCertificateAttributes[]),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

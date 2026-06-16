@@ -83,17 +83,18 @@ export const RootProvider = () =>
             const valid = roots.filter(
               (
                 root,
-              ): root is organizations.Root & {
+              ): root is typeof root & {
                 Id: string;
                 Arn: string;
                 Name: string;
               } => root.Id != null && root.Arn != null && root.Name != null,
             );
 
-            return yield* Effect.forEach(
-              valid,
-              (root) =>
-                Effect.gen(function* () {
+            const attrs: (Root["Attributes"] | undefined)[] =
+              yield* Effect.forEach(
+                valid,
+                Effect.fnUntraced(function* (root) {
+                  if (!root.Id || !root.Arn || !root.Name) return undefined;
                   const tags = yield* readResourceTags(root.Id).pipe(
                     Effect.catchTag("TargetNotFoundException", () =>
                       Effect.succeed({}),
@@ -105,9 +106,12 @@ export const RootProvider = () =>
                     rootName: root.Name,
                     policyTypes: root.PolicyTypes ?? [],
                     tags,
-                  } satisfies Root["Attributes"];
+                  };
                 }),
-              { concurrency: 10 },
+                { concurrency: 10 },
+              );
+            return attrs.filter(
+              (attr): attr is Root["Attributes"] => attr !== undefined,
             );
           }),
         diff: Effect.fn(function* ({ olds, news }) {

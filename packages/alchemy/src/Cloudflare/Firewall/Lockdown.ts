@@ -286,24 +286,23 @@ export const LockdownProvider = () =>
     // hydrating each into the same Attributes shape `read` returns. Zone
     // Lockdown is a Pro+ feature, so plan-gated zones reject the route with a
     // typed `Forbidden` — skip those rather than failing the whole list.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            firewall.listLockdowns.items({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).map((rule) => toAttributes(rule, zone.id)),
-              ),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          firewall.listLockdowns.items({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).map((rule) => toAttributes(rule, zone.id)),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     delete: Effect.fn(function* ({ output }) {
       // Cloudflare's DELETE is naturally idempotent (an already-gone rule

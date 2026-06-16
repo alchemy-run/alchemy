@@ -276,25 +276,22 @@ export const EmailSecurityDomainProvider = () =>
     // `read` Attributes shape. Accounts without the Email Security add-on
     // (`EmailSecurityNotEntitled`) or lacking access (`Forbidden`) have
     // nothing to enumerate — return [].
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* emailSecurity.listSettingDomains
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((d) =>
-                  toAttributes(d as ObservedDomain, accountId),
-                ),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* emailSecurity.listSettingDomains.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((d) =>
+              toAttributes(d as ObservedDomain, accountId),
             ),
-            Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
-              Effect.succeed([] as EmailSecurityDomainAttributes[]),
-            ),
-          );
-      }),
+          ),
+        ),
+        Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
+          Effect.succeed([] as EmailSecurityDomainAttributes[]),
+        ),
+      );
+    }),
   });
 
 type ObservedDomain = emailSecurity.GetSettingDomainResponse;

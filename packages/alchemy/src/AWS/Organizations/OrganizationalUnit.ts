@@ -100,9 +100,10 @@ export const OrganizationalUnitProvider = () =>
               (ouId) => readOUById(ouId),
               { concurrency: 10 },
             );
-            return hydrated.filter(
-              (ou): ou is OrganizationalUnit["Attributes"] => ou !== undefined,
+            const result: OrganizationalUnit["Attributes"][] = hydrated.filter(
+              (ou): ou is NonNullable<typeof ou> => ou !== undefined,
             );
+            return result;
           }).pipe(
             Effect.catchTags({
               AWSOrganizationsNotInUseException: () =>
@@ -247,8 +248,8 @@ const collectDescendantOUIds = (
   parentIds: readonly string[],
 ): Effect.Effect<
   string[],
-  Effect.Effect.Error<ReturnType<typeof listOUsForParent>>,
-  Effect.Effect.Context<ReturnType<typeof listOUsForParent>>
+  Effect.Error<ReturnType<typeof listOUsForParent>>,
+  Effect.Services<ReturnType<typeof listOUsForParent>>
 > =>
   Effect.gen(function* () {
     if (parentIds.length === 0) return [];

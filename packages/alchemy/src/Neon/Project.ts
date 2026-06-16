@@ -21,13 +21,13 @@ import { isResolved } from "../Diff.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { recordsEqual } from "../Util/equal.ts";
 import {
   hashImports,
   hashMigrations,
   listSqlFiles,
   readSqlFile,
 } from "../Sql/SqlFile.ts";
+import { recordsEqual } from "../Util/equal.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
 import type { Providers } from "./Providers.ts";
@@ -211,26 +211,23 @@ export const Project = Resource<Project>("Neon.Project");
 export const ProjectProvider = () =>
   Provider.succeed(Project, {
     stables: ["projectId", "defaultBranchId"],
-    list: () =>
-      Effect.gen(function* () {
-        // Account-scoped collection: enumerate every project via the Neon
-        // projects list API, then hydrate each into the exact `read`
-        // Attributes shape with bounded concurrency.
-        const projects = yield* listAllProjects;
-        const rows = yield* Effect.forEach(
-          projects,
-          (project) =>
-            hydrateProjectAttributes(project).pipe(
-              // A project can be deleted between the list call and
-              // hydration — skip it rather than fail the whole enumeration.
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-            ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is ProjectAttributes => row !== undefined,
-        );
-      }),
+    list: Effect.fn(function* () {
+      // Account-scoped collection: enumerate every project via the Neon
+      // projects list API, then hydrate each into the exact `read`
+      // Attributes shape with bounded concurrency.
+      const projects = yield* listAllProjects;
+      const rows = yield* Effect.forEach(
+        projects,
+        (project) =>
+          hydrateProjectAttributes(project).pipe(
+            // A project can be deleted between the list call and
+            // hydration — skip it rather than fail the whole enumeration.
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter((row): row is ProjectAttributes => row !== undefined);
+    }),
     diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
       if (!isResolved(news)) return undefined;
       const name = yield* createProjectName(id, news.name);

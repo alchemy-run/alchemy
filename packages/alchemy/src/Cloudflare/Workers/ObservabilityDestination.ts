@@ -335,20 +335,19 @@ export const ObservabilityDestinationProvider = () =>
     // page and hydrate each item into the exact `read` Attributes shape via
     // `toAttributes`. The destination's stored credentials/headers token are
     // write-only on the API, so — like `read` — they never appear here.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* workers.listObservabilityDestinations
-          .items({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).map((observed) =>
-                toAttributes(observed, accountId),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* workers.listObservabilityDestinations
+        .items({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).map((observed) =>
+              toAttributes(observed, accountId),
             ),
-          );
-      }),
+          ),
+        );
+    }),
   });
 
 type ObservedDestination =

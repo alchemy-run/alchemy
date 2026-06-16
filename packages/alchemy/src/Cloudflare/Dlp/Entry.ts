@@ -135,23 +135,22 @@ export const DlpEntryProvider = () =>
     // response is a union of entry variants; only the `custom` variant is
     // an alchemy-managed DlpEntry, so we narrow to it and hydrate into the
     // exact `read` Attributes shape.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* zeroTrust.listDlpEntryCustoms.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (entry): entry is ObservedEntry & { type: "custom" } =>
-                    "type" in entry && entry.type === "custom",
-                )
-                .map((entry) => toAttributes(entry, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listDlpEntryCustoms.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter(
+                (entry): entry is typeof entry & { type: "custom" } =>
+                  "type" in entry && entry.type === "custom",
+              )
+              .map((entry) => toAttributes(entry, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

@@ -334,45 +334,44 @@ export const MagicSiteLanProvider = () =>
     // individual sites) without Magic WAN entitlement reject with the typed
     // `MagicWanUnauthorized` (Cloudflare code 1025) — nothing to enumerate,
     // so skip → [].
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        const siteIds = yield* magicTransit.listSites.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .map((site) => site.id)
-                .filter((id): id is string => typeof id === "string"),
-            ),
+      const siteIds = yield* magicTransit.listSites.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map((site) => site.id)
+              .filter((id): id is string => typeof id === "string"),
           ),
-          Effect.catchTag("MagicWanUnauthorized", () =>
-            Effect.succeed([] as string[]),
-          ),
-        );
+        ),
+        Effect.catchTag("MagicWanUnauthorized", () =>
+          Effect.succeed([] as string[]),
+        ),
+      );
 
-        const rows = yield* Effect.forEach(
-          siteIds,
-          (siteId) =>
-            magicTransit.listSiteLans.pages({ accountId, siteId }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((lan) =>
-                    toAttributes(lan, siteId, accountId),
-                  ),
+      const rows = yield* Effect.forEach(
+        siteIds,
+        (siteId) =>
+          magicTransit.listSiteLans.pages({ accountId, siteId }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((lan) =>
+                  toAttributes(lan, siteId, accountId),
                 ),
               ),
-              Effect.catchTag("MagicWanUnauthorized", () =>
-                Effect.succeed([] as MagicSiteLanAttributes[]),
-              ),
             ),
-          { concurrency: 10 },
-        );
+            Effect.catchTag("MagicWanUnauthorized", () =>
+              Effect.succeed([] as MagicSiteLanAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
 
-        return rows.flat();
-      }),
+      return rows.flat();
+    }),
   });
 
 interface ObservedLan {

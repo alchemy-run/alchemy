@@ -498,32 +498,31 @@ export const DeviceCustomProfileProvider = () =>
     // per-profile split-tunnel/fallback lists are fetched too). Bounded
     // concurrency keeps the fan-out polite; a profile that vanishes
     // mid-enumeration is dropped via the typed `DevicePolicyNotFound` map.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const items = yield* zeroTrust.listDevicePolicyCustoms
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.result ?? []),
-            ),
-          );
-        const rows = yield* Effect.forEach(
-          items.filter((p) => p.policyId != null),
-          (p) =>
-            Effect.gen(function* () {
-              const observed = yield* observeProfile(accountId, p.policyId!);
-              return observed
-                ? yield* buildAttrs(accountId, observed)
-                : undefined;
-            }),
-          { concurrency: 10 },
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const items = yield* zeroTrust.listDevicePolicyCustoms
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) => page.result ?? []),
+          ),
         );
-        return rows.filter(
-          (row): row is DeviceCustomProfileAttributes => row !== undefined,
-        );
-      }),
+      const rows = yield* Effect.forEach(
+        items.filter((p) => p.policyId != null),
+        (p) =>
+          Effect.gen(function* () {
+            const observed = yield* observeProfile(accountId, p.policyId!);
+            return observed
+              ? yield* buildAttrs(accountId, observed)
+              : undefined;
+          }),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is DeviceCustomProfileAttributes => row !== undefined,
+      );
+    }),
   });
 
 type ObservedProfile = NonNullable<zeroTrust.GetDevicePolicyCustomResponse>;

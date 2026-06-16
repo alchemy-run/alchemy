@@ -300,32 +300,31 @@ export const TurnstileWidgetProvider = () =>
         })
         .pipe(Effect.catchTag("WidgetNotFound", () => Effect.void));
     }),
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Enumerate every widget in the account, paginating exhaustively.
-        const pages = yield* turnstile.listWidgets
-          .pages({ accountId })
-          .pipe(Stream.runCollect);
-        const sitekeys = Array.from(pages).flatMap((page) =>
-          (page.result ?? []).map((w) => w.sitekey),
-        );
-        // The list payload omits the write-only `secret`, so hydrate each
-        // widget via `getWidget` to produce the exact `read` Attributes
-        // shape. A widget deleted between list and get surfaces as
-        // `WidgetNotFound` (mapped to `undefined` by `getWidget`).
-        const rows = yield* Effect.forEach(
-          sitekeys,
-          (sitekey) =>
-            getWidget(accountId, sitekey).pipe(
-              Effect.map((w) => (w ? toAttributes(w, accountId) : undefined)),
-            ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is TurnstileWidgetAttributes => row !== undefined,
-        );
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Enumerate every widget in the account, paginating exhaustively.
+      const pages = yield* turnstile.listWidgets
+        .pages({ accountId })
+        .pipe(Stream.runCollect);
+      const sitekeys = Array.from(pages).flatMap((page) =>
+        (page.result ?? []).map((w) => w.sitekey),
+      );
+      // The list payload omits the write-only `secret`, so hydrate each
+      // widget via `getWidget` to produce the exact `read` Attributes
+      // shape. A widget deleted between list and get surfaces as
+      // `WidgetNotFound` (mapped to `undefined` by `getWidget`).
+      const rows = yield* Effect.forEach(
+        sitekeys,
+        (sitekey) =>
+          getWidget(accountId, sitekey).pipe(
+            Effect.map((w) => (w ? toAttributes(w, accountId) : undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is TurnstileWidgetAttributes => row !== undefined,
+      );
+    }),
   });
 
 type ObservedWidget = turnstile.GetWidgetResponse & { accountId: string };

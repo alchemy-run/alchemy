@@ -197,22 +197,21 @@ export const ShareProvider = () =>
     // (the ones we own and can delete), exhaustively paginated, mapped
     // into the same Attributes shape `read` returns. Deleted shares are
     // excluded since they no longer exist.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* resourceSharing.listResourceSharings
-          .pages({ accountId, kind: "sent", perPage: 50 })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? [])
-                  .filter((s) => s.status !== "deleted")
-                  .map((s) => toAttributes(s, accountId)),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* resourceSharing.listResourceSharings
+        .pages({ accountId, kind: "sent", perPage: 50 })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter((s) => s.status !== "deleted")
+                .map((s) => toAttributes(s, accountId)),
             ),
-          );
-      }),
+          ),
+        );
+    }),
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;

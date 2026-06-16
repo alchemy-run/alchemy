@@ -86,39 +86,38 @@ export const StreamSigningKeyProvider = () =>
   Provider.succeed(StreamSigningKey, {
     stables: ["keyId", "accountId", "created", "pem", "jwk"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Account-scoped collection: the keys list endpoint only returns
-        // `id` + `created`. The key material (pem/jwk) is create-only and
-        // can never be re-read, so — matching `read` for a key with no
-        // cached state — we surface it as empty redacted values.
-        return yield* stream.getKey.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (key): key is { id: string; created?: string | null } =>
-                    typeof key.id === "string",
-                )
-                .map(
-                  (key) =>
-                    ({
-                      keyId: key.id,
-                      accountId,
-                      created: key.created ?? undefined,
-                      pem: Redacted.make(""),
-                      jwk: Redacted.make(""),
-                    }) satisfies StreamSigningKeyAttributes,
-                ),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection: the keys list endpoint only returns
+      // `id` + `created`. The key material (pem/jwk) is create-only and
+      // can never be re-read, so — matching `read` for a key with no
+      // cached state — we surface it as empty redacted values.
+      return yield* stream.getKey.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter(
+                (key): key is { id: string; created?: string | null } =>
+                  typeof key.id === "string",
+              )
+              .map(
+                (key) =>
+                  ({
+                    keyId: key.id,
+                    accountId,
+                    created: key.created ?? undefined,
+                    pem: Redacted.make(""),
+                    jwk: Redacted.make(""),
+                  }) satisfies StreamSigningKeyAttributes,
+              ),
           ),
-          // Accounts without the Stream subscription are forbidden from the
-          // keys endpoint — treat as an empty collection.
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
-      }),
+        ),
+        // Accounts without the Stream subscription are forbidden from the
+        // keys endpoint — treat as an empty collection.
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
+    }),
 
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

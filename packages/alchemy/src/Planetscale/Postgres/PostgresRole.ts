@@ -357,80 +357,79 @@ export const PostgresRoleProvider = () =>
         );
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const { organization } = yield* yield* Credentials;
+    list: Effect.fn(function* () {
+      const { organization } = yield* yield* Credentials;
 
-        const databases = yield* planetscale.listDatabases
-          .pages({ organization })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                page.data.filter((db) => db.kind === "postgresql"),
-              ),
+      const databases = yield* planetscale.listDatabases
+        .pages({ organization })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              page.data.filter((db) => db.kind === "postgresql"),
             ),
-          );
-
-        const rows = yield* Effect.forEach(
-          databases,
-          (db) =>
-            planetscale.listBranches
-              .pages({ organization, database: db.name })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((branchPages) =>
-                  Array.from(branchPages).flatMap((page) =>
-                    page.data.filter((branch) => branch.kind === "postgresql"),
-                  ),
-                ),
-                Effect.catchTag("NotFound", () =>
-                  Effect.succeed([{ name: db.default_branch ?? "main" }]),
-                ),
-                Effect.flatMap((branches) =>
-                  Effect.forEach(
-                    branches,
-                    (branch) =>
-                      planetscale.listRoles
-                        .pages({
-                          organization,
-                          database: db.name,
-                          branch: branch.name,
-                        })
-                        .pipe(
-                          Stream.runCollect,
-                          Effect.map((rolePages): PostgresRoleAttributes[] =>
-                            Array.from(rolePages).flatMap((page) =>
-                              page.data
-                                .filter((role) => !role.default)
-                                .map((role) =>
-                                  buildAttributes(role, Redacted.make(""), {
-                                    inheritedRoles:
-                                      role.inherited_roles as InheritedRole[],
-                                    successor: "postgres",
-                                    organization,
-                                    database: db.name,
-                                    branch: branch.name,
-                                  }),
-                                ),
-                            ),
-                          ),
-                          Effect.catchTag("NotFound", () =>
-                            Effect.succeed([] as PostgresRoleAttributes[]),
-                          ),
-                          Effect.catchTag("Forbidden", () =>
-                            Effect.succeed([] as PostgresRoleAttributes[]),
-                          ),
-                        ),
-                    { concurrency: 10 },
-                  ).pipe(Effect.map((perBranch) => perBranch.flat())),
-                ),
-              ),
-          { concurrency: 10 },
+          ),
         );
 
-        return rows.flat();
-      }),
+      const rows = yield* Effect.forEach(
+        databases,
+        (db) =>
+          planetscale.listBranches
+            .pages({ organization, database: db.name })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((branchPages) =>
+                Array.from(branchPages).flatMap((page) =>
+                  page.data.filter((branch) => branch.kind === "postgresql"),
+                ),
+              ),
+              Effect.catchTag("NotFound", () =>
+                Effect.succeed([{ name: db.default_branch ?? "main" }]),
+              ),
+              Effect.flatMap((branches) =>
+                Effect.forEach(
+                  branches,
+                  (branch) =>
+                    planetscale.listRoles
+                      .pages({
+                        organization,
+                        database: db.name,
+                        branch: branch.name,
+                      })
+                      .pipe(
+                        Stream.runCollect,
+                        Effect.map((rolePages): PostgresRoleAttributes[] =>
+                          Array.from(rolePages).flatMap((page) =>
+                            page.data
+                              .filter((role) => !role.default)
+                              .map((role) =>
+                                buildAttributes(role, Redacted.make(""), {
+                                  inheritedRoles:
+                                    role.inherited_roles as InheritedRole[],
+                                  successor: "postgres",
+                                  organization,
+                                  database: db.name,
+                                  branch: branch.name,
+                                }),
+                              ),
+                          ),
+                        ),
+                        Effect.catchTag("NotFound", () =>
+                          Effect.succeed([] as PostgresRoleAttributes[]),
+                        ),
+                        Effect.catchTag("Forbidden", () =>
+                          Effect.succeed([] as PostgresRoleAttributes[]),
+                        ),
+                      ),
+                  { concurrency: 10 },
+                ).pipe(Effect.map((perBranch) => perBranch.flat())),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+
+      return rows.flat();
+    }),
   });
 
 // Structural shapes for runtime-resolved Resource references — see notes

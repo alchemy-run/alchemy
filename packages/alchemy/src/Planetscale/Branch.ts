@@ -193,61 +193,58 @@ export const makeBranchProvider = <R extends ResourceLike>(opts: {
     // database's branches concurrently (bounded), exhaustively paginating
     // both levels, and keep only the branches whose engine kind matches this
     // resource. Each item is hydrated into the exact `read` Attributes shape.
-    list: () =>
-      Effect.gen(function* () {
-        const { organization } = yield* yield* Credentials;
+    list: Effect.fn(function* () {
+      const { organization } = yield* yield* Credentials;
 
-        const databases = yield* planetscale.listDatabases
-          .pages({ organization })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.data),
-            ),
-          );
-
-        const rows = yield* Effect.forEach(
-          databases,
-          (db) =>
-            planetscale.listBranches
-              .pages({ organization, database: db.name })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    page.data
-                      .filter((branch) => branch.kind === opts.expectedKind)
-                      .map(
-                        (branch) =>
-                          ({
-                            name: branch.name,
-                            organization,
-                            database: db.name,
-                            parentBranch: branch.parent_branch ?? "main",
-                            production: branch.production,
-                            createdAt: branch.created_at,
-                            updatedAt: branch.updated_at,
-                            htmlUrl: branch.html_url,
-                            region: { slug: branch.region.slug },
-                            migrationsDir: undefined,
-                            migrationsTable: undefined,
-                            migrationsHashes: {},
-                            importHashes: {},
-                          }) satisfies BaseBranchAttributes,
-                      ),
-                  ),
-                ),
-                // A database can be deleted between enumeration and the
-                // per-database branch list — skip it rather than fail.
-                Effect.catchTag("NotFound", () =>
-                  Effect.succeed([] as BaseBranchAttributes[]),
-                ),
-              ),
-          { concurrency: 10 },
+      const databases = yield* planetscale.listDatabases
+        .pages({ organization })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.data)),
         );
 
-        return rows.flat();
-      }),
+      const rows = yield* Effect.forEach(
+        databases,
+        (db) =>
+          planetscale.listBranches
+            .pages({ organization, database: db.name })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  page.data
+                    .filter((branch) => branch.kind === opts.expectedKind)
+                    .map(
+                      (branch) =>
+                        ({
+                          name: branch.name,
+                          organization,
+                          database: db.name,
+                          parentBranch: branch.parent_branch ?? "main",
+                          production: branch.production,
+                          createdAt: branch.created_at,
+                          updatedAt: branch.updated_at,
+                          htmlUrl: branch.html_url,
+                          region: { slug: branch.region.slug },
+                          migrationsDir: undefined,
+                          migrationsTable: undefined,
+                          migrationsHashes: {},
+                          importHashes: {},
+                        }) satisfies BaseBranchAttributes,
+                    ),
+                ),
+              ),
+              // A database can be deleted between enumeration and the
+              // per-database branch list — skip it rather than fail.
+              Effect.catchTag("NotFound", () =>
+                Effect.succeed([] as BaseBranchAttributes[]),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ news, olds, output }: any) {
       if (!isResolved(news)) return undefined;

@@ -117,28 +117,27 @@ export const ContentScanningProvider = () =>
   Provider.succeed(ContentScanning, {
     stables: ["zoneId", "initialValue"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this zone singleton — enumerate every
-        // zone in the account and read its status (every zone has one).
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            contentScanning.getContentScanning({ zoneId }).pipe(
-              Effect.map((observed) =>
-                toAttributes(zoneId, observed, statusOf(observed)),
-              ),
-              // Plan-gated or partial zones reject the route; skip them.
-              Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its status (every zone has one).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          contentScanning.getContentScanning({ zoneId }).pipe(
+            Effect.map((observed) =>
+              toAttributes(zoneId, observed, statusOf(observed)),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is ContentScanningAttributes => row !== undefined,
-        );
-      }),
+            // Plan-gated or partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ContentScanningAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       // zoneId is Input<string>; compare only once both sides are concrete.

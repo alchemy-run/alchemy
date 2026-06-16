@@ -92,22 +92,21 @@ export const AccessKeyConfigurationProvider = () =>
   Provider.succeed(AccessKeyConfiguration, {
     stables: ["accountId", "initialKeyRotationIntervalDays"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Per-account singleton: the key configuration always exists with a
-        // Cloudflare default and there is no enumeration API — read the one
-        // instance and return it as a one-element array. The observed
-        // interval becomes the value restored on destroy (adoption read).
-        const observed = yield* zeroTrust.getAccessKey({ accountId });
-        return [
-          toAttributes(
-            accountId,
-            observed,
-            observed.keyRotationIntervalDays ?? undefined,
-          ),
-        ];
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Per-account singleton: the key configuration always exists with a
+      // Cloudflare default and there is no enumeration API — read the one
+      // instance and return it as a one-element array. The observed
+      // interval becomes the value restored on destroy (adoption read).
+      const observed = yield* zeroTrust.getAccessKey({ accountId });
+      return [
+        toAttributes(
+          accountId,
+          observed,
+          observed.keyRotationIntervalDays ?? undefined,
+        ),
+      ];
+    }),
 
     diff: Effect.fn(function* ({ output }) {
       // The configuration is an account singleton — its identity is the

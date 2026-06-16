@@ -171,22 +171,21 @@ export const DevicePostureRuleProvider = () =>
   Provider.succeed(DevicePostureRule, {
     stables: ["postureRuleId", "accountId", "type"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Account-scoped collection: exhaustively paginate the device
-        // posture rules list and hydrate each into the `read` shape.
-        return yield* zeroTrust.listDevicePostures.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((rule) => toAttributes(rule, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection: exhaustively paginate the device
+      // posture rules list and hydrate each into the `read` shape.
+      return yield* zeroTrust.listDevicePostures.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((rule) => toAttributes(rule, accountId)),
           ),
-          // Account lacks the Zero Trust / device posture entitlement.
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
-      }),
+        ),
+        // Account lacks the Zero Trust / device posture entitlement.
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

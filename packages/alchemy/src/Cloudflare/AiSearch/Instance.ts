@@ -407,37 +407,36 @@ export const AiSearchInstanceProvider = () =>
       const observed = yield* getInstance(acct, instanceId);
       return observed ? toAttributes(observed, acct) : undefined;
     }),
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Enumerate every instance id in the account, paginating
-        // exhaustively (the list payload omits some fields `read`
-        // returns).
-        const ids = yield* aisearch.listInstances.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((instance) => instance.id),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Enumerate every instance id in the account, paginating
+      // exhaustively (the list payload omits some fields `read`
+      // returns).
+      const ids = yield* aisearch.listInstances.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((instance) => instance.id),
+          ),
+        ),
+      );
+      // Hydrate each into the exact `read` Attributes shape; an item
+      // that vanished between list and read (typed NotFound) is
+      // dropped.
+      const rows = yield* Effect.forEach(
+        ids,
+        (instanceId) =>
+          getInstance(accountId, instanceId).pipe(
+            Effect.map((observed) =>
+              observed ? toAttributes(observed, accountId) : undefined,
             ),
           ),
-        );
-        // Hydrate each into the exact `read` Attributes shape; an item
-        // that vanished between list and read (typed NotFound) is
-        // dropped.
-        const rows = yield* Effect.forEach(
-          ids,
-          (instanceId) =>
-            getInstance(accountId, instanceId).pipe(
-              Effect.map((observed) =>
-                observed ? toAttributes(observed, accountId) : undefined,
-              ),
-            ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is AiSearchInstanceAttributes => row !== undefined,
-        );
-      }),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is AiSearchInstanceAttributes => row !== undefined,
+      );
+    }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

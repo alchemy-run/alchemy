@@ -98,39 +98,38 @@ export const LogsRetentionFlagProvider = () =>
   Provider.succeed(LogsRetentionFlag, {
     stables: ["zoneId", "initialFlag"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this zone singleton — enumerate every
-        // zone in the account and read its retention flag (every zone has
-        // one). The observed value at enumeration time is the zone's
-        // original, so it doubles as `initialFlag`.
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            getFlag(zoneId).pipe(
-              Effect.map((flag) =>
-                flag === undefined
-                  ? undefined
-                  : ({
-                      zoneId,
-                      flag,
-                      initialFlag: flag,
-                    } satisfies LogsRetentionFlagAttributes),
-              ),
-              // Logpull is Enterprise-only; unentitled zones reject with the
-              // typed error — skip them rather than fail the whole listing.
-              Effect.catchTag("LogsControlNotAuthorized", () =>
-                Effect.succeed(undefined),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its retention flag (every zone has
+      // one). The observed value at enumeration time is the zone's
+      // original, so it doubles as `initialFlag`.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          getFlag(zoneId).pipe(
+            Effect.map((flag) =>
+              flag === undefined
+                ? undefined
+                : ({
+                    zoneId,
+                    flag,
+                    initialFlag: flag,
+                  } satisfies LogsRetentionFlagAttributes),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is LogsRetentionFlagAttributes => row !== undefined,
-        );
-      }),
+            // Logpull is Enterprise-only; unentitled zones reject with the
+            // typed error — skip them rather than fail the whole listing.
+            Effect.catchTag("LogsControlNotAuthorized", () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is LogsRetentionFlagAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;

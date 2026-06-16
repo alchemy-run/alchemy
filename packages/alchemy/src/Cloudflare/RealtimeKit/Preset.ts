@@ -514,39 +514,38 @@ export const RealtimeKitPresetProvider = () =>
     // account, then list every preset within each app. The per-app preset
     // list returns only a slim `{ id, name }` shape, so each row is hydrated
     // via `getPresetByIdPreset` into the full `read` Attributes shape.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const apps = yield* listAllApps(accountId);
-        const rows = yield* Effect.forEach(
-          apps,
-          (app) =>
-            Effect.gen(function* () {
-              const appId = app.id;
-              if (!appId) return [];
-              const presets = yield* listAllPresets(accountId, appId);
-              const hydrated = yield* Effect.forEach(
-                presets,
-                (preset) =>
-                  preset.id
-                    ? getPreset(accountId, appId, preset.id).pipe(
-                        Effect.map((observed) =>
-                          observed
-                            ? toAttributes(observed, accountId, appId)
-                            : undefined,
-                        ),
-                      )
-                    : Effect.succeed(undefined),
-                { concurrency: 10 },
-              );
-              return hydrated.filter(
-                (row): row is RealtimeKitPresetAttributes => row !== undefined,
-              );
-            }),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const apps = yield* listAllApps(accountId);
+      const rows = yield* Effect.forEach(
+        apps,
+        (app) =>
+          Effect.gen(function* () {
+            const appId = app.id;
+            if (!appId) return [];
+            const presets = yield* listAllPresets(accountId, appId);
+            const hydrated = yield* Effect.forEach(
+              presets,
+              (preset) =>
+                preset.id
+                  ? getPreset(accountId, appId, preset.id).pipe(
+                      Effect.map((observed) =>
+                        observed
+                          ? toAttributes(observed, accountId, appId)
+                          : undefined,
+                      ),
+                    )
+                  : Effect.succeed(undefined),
+              { concurrency: 10 },
+            );
+            return hydrated.filter(
+              (row): row is RealtimeKitPresetAttributes => row !== undefined,
+            );
+          }),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 const LIST_PER_PAGE = 100;

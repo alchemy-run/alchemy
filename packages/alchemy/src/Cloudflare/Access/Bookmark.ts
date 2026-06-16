@@ -213,22 +213,21 @@ export const AccessBookmarkProvider = () =>
         })
         .pipe(Effect.catchTag("AccessBookmarkNotFound", () => Effect.void));
     }),
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* zeroTrust.listAccessBookmarks.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter((b): b is ObservedBookmark & { id: string } =>
-                  Predicate.isNotNullable(b.id),
-                )
-                .map((b) => toAttrs(b, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listAccessBookmarks.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((b): b is ObservedBookmark & { id: string } =>
+                Predicate.isNotNullish(b.id),
+              )
+              .map((b) => toAttrs(b, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
   });
 
 const createBookmarkName = (id: string, name: string | undefined) =>

@@ -220,21 +220,20 @@ export const MtlsCertificateProvider = () =>
       const match = yield* findByName(acct, name);
       return match ? toAttributes(match, acct) : undefined;
     }),
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Account-scoped collection — exhaustively paginate the mTLS
-        // certificate store and hydrate each item into the read Attributes
-        // shape (the private key is write-only and never returned).
-        return yield* mtls.listMtlsCertificates.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((cert) => toAttributes(cert, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection — exhaustively paginate the mTLS
+      // certificate store and hydrate each item into the read Attributes
+      // shape (the private key is write-only and never returned).
+      return yield* mtls.listMtlsCertificates.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((cert) => toAttributes(cert, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name =

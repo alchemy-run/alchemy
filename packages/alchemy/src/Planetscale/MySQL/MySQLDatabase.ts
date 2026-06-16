@@ -419,49 +419,47 @@ export const MySQLDatabaseProvider = () =>
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const { organization } = yield* yield* Credentials;
+    list: Effect.fn(function* () {
+      const { organization } = yield* yield* Credentials;
 
-        return yield* planetscale.listDatabases.pages({ organization }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              page.data
-                .filter((db) => db.kind === "mysql")
-                .map((data): MySQLDatabase["Attributes"] => ({
-                  id: data.id,
-                  name: data.name,
-                  organization,
-                  state: data.state,
-                  defaultBranch: data.default_branch ?? "main",
-                  plan: data.plan ?? "hobby",
-                  createdAt: data.created_at,
-                  updatedAt: data.updated_at,
-                  htmlUrl: data.html_url,
-                  region: { slug: data.region.slug },
-                  migrationsDir: undefined,
-                  migrationsTable: undefined,
-                  migrationsHashes: {},
-                  importHashes: {},
-                  clusterSize: "",
-                  requireApprovalForDeploy:
-                    data.require_approval_for_deploy ?? false,
-                  restrictBranchRegion: data.restrict_branch_region ?? false,
-                  insightsRawQueries: data.insights_raw_queries ?? false,
-                  productionBranchWebConsole:
-                    data.production_branch_web_console ?? false,
-                  automaticMigrations: data.automatic_migrations ?? false,
-                  migrationFramework: data.migration_framework ?? undefined,
-                  migrationTableName: data.migration_table_name ?? undefined,
-                  allowDataBranching: data.allow_data_branching ?? false,
-                  allowForeignKeyConstraints:
-                    data.foreign_keys_enabled ?? false,
-                })),
-            ),
+      return yield* planetscale.listDatabases.pages({ organization }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            page.data
+              .filter((db) => db.kind === "mysql")
+              .map((data): MySQLDatabase["Attributes"] => ({
+                id: data.id,
+                name: data.name,
+                organization,
+                state: data.state,
+                defaultBranch: data.default_branch ?? "main",
+                plan: data.plan ?? "hobby",
+                createdAt: data.created_at,
+                updatedAt: data.updated_at,
+                htmlUrl: data.html_url,
+                region: { slug: data.region.slug },
+                migrationsDir: undefined,
+                migrationsTable: undefined,
+                migrationsHashes: {},
+                importHashes: {},
+                clusterSize: "",
+                requireApprovalForDeploy:
+                  data.require_approval_for_deploy ?? false,
+                restrictBranchRegion: data.restrict_branch_region ?? false,
+                insightsRawQueries: data.insights_raw_queries ?? false,
+                productionBranchWebConsole:
+                  data.production_branch_web_console ?? false,
+                automaticMigrations: data.automatic_migrations ?? false,
+                migrationFramework: data.migration_framework ?? undefined,
+                migrationTableName: data.migration_table_name ?? undefined,
+                allowDataBranching: data.allow_data_branching ?? false,
+                allowForeignKeyConstraints: data.foreign_keys_enabled ?? false,
+              })),
           ),
-        );
-      }),
+        ),
+      );
+    }),
   });
 
 const createDatabaseName = (id: string, name: string | undefined) =>

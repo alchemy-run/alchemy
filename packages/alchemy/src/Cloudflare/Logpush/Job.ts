@@ -333,19 +333,39 @@ export const LogpushJobProvider = () =>
     // account, zone-scoped jobs under each zone. Enumerate both — the account
     // collection plus a fan-out over every zone — and hydrate each into the
     // same Attributes shape `read` returns.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        const accountRows = yield* logpush.listJobsForAccount
-          .pages({ accountId })
-          .pipe(
+      const accountRows = yield* logpush.listJobsForAccount
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter((job): job is NonNullable<typeof job> => job != null)
+                .map((job) =>
+                  toAttributes(job, { accountId, zoneId: undefined }),
+                )
+                .filter(
+                  (attrs): attrs is LogpushJobAttributes => attrs !== undefined,
+                ),
+            ),
+          ),
+        );
+
+      const zones = yield* listAllZones(accountId);
+      const zoneRows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          logpush.listJobsForZone.pages({ zoneId: zone.id }).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.result ?? [])
+                  .filter((job): job is NonNullable<typeof job> => job != null)
                   .map((job) =>
-                    toAttributes(job, { accountId, zoneId: undefined }),
+                    toAttributes(job, { accountId, zoneId: zone.id }),
                   )
                   .filter(
                     (attrs): attrs is LogpushJobAttributes =>
@@ -353,34 +373,14 @@ export const LogpushJobProvider = () =>
                   ),
               ),
             ),
-          );
+            // Plan-gated / partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
 
-        const zones = yield* listAllZones(accountId);
-        const zoneRows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            logpush.listJobsForZone.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? [])
-                    .map((job) =>
-                      toAttributes(job, { accountId, zoneId: zone.id }),
-                    )
-                    .filter(
-                      (attrs): attrs is LogpushJobAttributes =>
-                        attrs !== undefined,
-                    ),
-                ),
-              ),
-              // Plan-gated / partial zones reject the route; skip them.
-              Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
-            ),
-          { concurrency: 10 },
-        );
-
-        return [...accountRows, ...zoneRows.flat()];
-      }),
+      return [...accountRows, ...zoneRows.flat()];
+    }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

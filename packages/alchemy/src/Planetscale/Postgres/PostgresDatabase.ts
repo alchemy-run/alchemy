@@ -380,70 +380,69 @@ export const PostgresDatabaseProvider = () =>
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const { organization } = yield* yield* Credentials;
+    list: Effect.fn(function* () {
+      const { organization } = yield* yield* Credentials;
 
-        const databases = yield* planetscale.listDatabases
-          .pages({ organization })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                page.data.filter((db) => db.kind === "postgresql"),
-              ),
+      const databases = yield* planetscale.listDatabases
+        .pages({ organization })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              page.data.filter((db) => db.kind === "postgresql"),
             ),
-          );
-
-        const rows = yield* Effect.forEach(
-          databases,
-          (data) =>
-            Effect.gen(function* () {
-              const defaultBranch = data.default_branch ?? "main";
-              const branch = yield* planetscale
-                .getBranch({
-                  organization,
-                  database: data.name,
-                  branch: defaultBranch,
-                })
-                .pipe(
-                  Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-                );
-
-              const arch: "x86" | "arm" =
-                branch?.cluster_architecture === "aarch64" ? "arm" : "x86";
-              const clusterSize = branch?.cluster_name ?? "";
-
-              const attrs: PostgresDatabase["Attributes"] = {
-                id: data.id,
-                name: data.name,
-                organization,
-                state: data.state,
-                defaultBranch,
-                plan: data.plan ?? "hobby",
-                createdAt: data.created_at,
-                updatedAt: data.updated_at,
-                htmlUrl: data.html_url,
-                region: { slug: data.region.slug },
-                clusterSize,
-                migrationsDir: undefined,
-                migrationsTable: undefined,
-                migrationsHashes: {},
-                importHashes: {},
-                arch,
-                requireApprovalForDeploy:
-                  data.require_approval_for_deploy ?? false,
-                restrictBranchRegion: data.restrict_branch_region ?? false,
-                productionBranchWebConsole:
-                  data.production_branch_web_console ?? false,
-              };
-              return attrs;
-            }),
-          { concurrency: 10 },
+          ),
         );
 
-        return rows;
-      }),
+      const rows = yield* Effect.forEach(
+        databases,
+        (data) =>
+          Effect.gen(function* () {
+            const defaultBranch = data.default_branch ?? "main";
+            const branch = yield* planetscale
+              .getBranch({
+                organization,
+                database: data.name,
+                branch: defaultBranch,
+              })
+              .pipe(
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              );
+
+            const arch: "x86" | "arm" =
+              branch?.cluster_architecture === "aarch64" ? "arm" : "x86";
+            const clusterSize = branch?.cluster_name ?? "";
+
+            const attrs: PostgresDatabase["Attributes"] = {
+              id: data.id,
+              name: data.name,
+              organization,
+              state: data.state,
+              defaultBranch,
+              plan: data.plan ?? "hobby",
+              createdAt: data.created_at,
+              updatedAt: data.updated_at,
+              htmlUrl: data.html_url,
+              region: { slug: data.region.slug },
+              clusterSize,
+              migrationsDir: undefined,
+              migrationsTable: undefined,
+              migrationsHashes: {},
+              importHashes: {},
+              arch,
+              requireApprovalForDeploy:
+                data.require_approval_for_deploy ?? false,
+              restrictBranchRegion: data.restrict_branch_region ?? false,
+              productionBranchWebConsole:
+                data.production_branch_web_console ?? false,
+            };
+            return attrs;
+          }),
+        { concurrency: 10 },
+      );
+
+      return rows;
+    }),
   });
 
 const createDatabaseName = (id: string, name: string | undefined) =>

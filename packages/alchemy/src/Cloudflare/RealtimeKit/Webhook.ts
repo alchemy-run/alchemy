@@ -266,35 +266,34 @@ export const RealtimeKitWebhookProvider = () =>
     // account, then list each app's webhooks and flatten. The apps endpoint
     // 403s (`Forbidden`) when RealtimeKit isn't enabled on the account — an
     // unentitled account simply has no webhooks. Neither endpoint paginates.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const appIds = yield* realtimeKit.getApp({ accountId }).pipe(
-          Effect.map((apps) =>
-            (apps.data ?? [])
-              .map((app) => app?.id)
-              .filter((id): id is string => typeof id === "string"),
-          ),
-          Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
-        );
-        const perApp = yield* Effect.forEach(
-          appIds,
-          (appId) =>
-            realtimeKit.getWebhooksWebhook({ accountId, appId }).pipe(
-              Effect.map((res) =>
-                res.data.map((webhook) =>
-                  toAttributes(webhook, accountId, appId),
-                ),
-              ),
-              // An app with no webhooks 404s (`RealtimeKitWebhookNotFound`).
-              Effect.catchTag("RealtimeKitWebhookNotFound", () =>
-                Effect.succeed([] as RealtimeKitWebhookAttributes[]),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const appIds = yield* realtimeKit.getApp({ accountId }).pipe(
+        Effect.map((apps) =>
+          (apps.data ?? [])
+            .map((app) => app?.id)
+            .filter((id): id is string => typeof id === "string"),
+        ),
+        Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
+      );
+      const perApp = yield* Effect.forEach(
+        appIds,
+        (appId) =>
+          realtimeKit.getWebhooksWebhook({ accountId, appId }).pipe(
+            Effect.map((res) =>
+              res.data.map((webhook) =>
+                toAttributes(webhook, accountId, appId),
               ),
             ),
-          { concurrency: 10 },
-        );
-        return perApp.flat();
-      }),
+            // An app with no webhooks 404s (`RealtimeKitWebhookNotFound`).
+            Effect.catchTag("RealtimeKitWebhookNotFound", () =>
+              Effect.succeed([] as RealtimeKitWebhookAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return perApp.flat();
+    }),
   });
 
 type ObservedWebhook = realtimeKit.GetWebhookByIdWebhookResponse["data"];

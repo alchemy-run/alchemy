@@ -298,46 +298,45 @@ export const FirewallAccessRuleProvider = () =>
     // undefined) plus per-zone rules. Enumerate both — the account
     // collection, then fan out across every zone — and tag each item with
     // its scope so the result matches the exact `read` Attributes shape.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        const accountRules = yield* firewall.listAccessRulesForAccount
-          .pages({ accountId })
-          .pipe(
+      const accountRules = yield* firewall.listAccessRulesForAccount
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((rule) =>
+                toAttributes(rule, undefined, accountId),
+              ),
+            ),
+          ),
+          // No permission to read account-level rules — skip them.
+          Effect.catchTag("Forbidden", () => Effect.succeed([])),
+        );
+
+      const zones = yield* listAllZones(accountId);
+      const zoneRuleGroups = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          firewall.listAccessRulesForZone.pages({ zoneId: zone.id }).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
                 (page.result ?? []).map((rule) =>
-                  toAttributes(rule, undefined, accountId),
+                  toAttributes(rule, zone.id, accountId),
                 ),
               ),
             ),
-            // No permission to read account-level rules — skip them.
+            // Plan-gated / partial zones reject the route; skip them.
             Effect.catchTag("Forbidden", () => Effect.succeed([])),
-          );
+          ),
+        { concurrency: 10 },
+      );
 
-        const zones = yield* listAllZones(accountId);
-        const zoneRuleGroups = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            firewall.listAccessRulesForZone.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((rule) =>
-                    toAttributes(rule, zone.id, accountId),
-                  ),
-                ),
-              ),
-              // Plan-gated / partial zones reject the route; skip them.
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
-            ),
-          { concurrency: 10 },
-        );
-
-        return [...accountRules, ...zoneRuleGroups.flat()];
-      }),
+      return [...accountRules, ...zoneRuleGroups.flat()];
+    }),
 
     delete: Effect.fn(function* ({ output }) {
       // Cloudflare answers DELETE for an already-gone rule with HTTP 200

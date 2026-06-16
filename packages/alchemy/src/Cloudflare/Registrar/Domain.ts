@@ -261,30 +261,29 @@ export const RegistrarDomainProvider = () =>
     // hydrate each into the exact `read` Attributes shape. There is no prior
     // managed state for an enumerated domain, so — exactly like a cold
     // adoption read — the observed settings become the `initialSettings`.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* registrar.listDomains.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (domain): domain is ObservedDomain & { name: string } =>
-                    typeof domain.name === "string",
-                )
-                .map((domain) =>
-                  toAttributes(
-                    domain.name,
-                    accountId,
-                    domain,
-                    captureSettings(domain),
-                  ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* registrar.listDomains.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter(
+                (domain): domain is ObservedDomain & { name: string } =>
+                  typeof domain.name === "string",
+              )
+              .map((domain) =>
+                toAttributes(
+                  domain.name,
+                  accountId,
+                  domain,
+                  captureSettings(domain),
                 ),
-            ),
+              ),
           ),
-        );
-      }),
+        ),
+      );
+    }),
   });
 
 // ---------------------------------------------------------------------------

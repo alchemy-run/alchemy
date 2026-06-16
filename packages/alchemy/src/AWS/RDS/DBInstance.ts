@@ -180,8 +180,11 @@ export const DBInstanceProvider = () =>
               Array.from(chunk).flatMap((page) =>
                 (page.DBInstances ?? [])
                   .filter(
-                    (instance): instance is rds.DBInstance =>
-                      instance.DBInstanceArn != null,
+                    (
+                      instance,
+                    ): instance is typeof instance & {
+                      DBInstanceArn: string;
+                    } => instance.DBInstanceArn != null,
                   )
                   .map((instance) =>
                     toAttrs({

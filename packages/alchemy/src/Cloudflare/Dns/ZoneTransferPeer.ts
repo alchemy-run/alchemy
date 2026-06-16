@@ -131,21 +131,20 @@ export const ZoneTransferPeerProvider = () =>
   Provider.succeed(ZoneTransferPeer, {
     stables: ["peerId", "accountId"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Account-scoped collection (pattern b) — secondary_dns peers
-        // live under the account, not a zone. Exhaustively paginate and
-        // hydrate each row into the exact `read` Attributes shape.
-        return yield* dns.listZoneTransferPeers.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((peer) => toAttributes(peer, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection (pattern b) — secondary_dns peers
+      // live under the account, not a zone. Exhaustively paginate and
+      // hydrate each row into the exact `read` Attributes shape.
+      return yield* dns.listZoneTransferPeers.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((peer) => toAttributes(peer, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
 
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

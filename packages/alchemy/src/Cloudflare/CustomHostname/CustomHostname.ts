@@ -295,32 +295,29 @@ export const CustomHostnameProvider = () =>
     // hostnames, and hydrate each into the same Attributes shape `read`
     // produces. Zones without the SaaS entitlement reject with the typed
     // `SaasQuotaNotAllocated`/`Forbidden` errors — skip them.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            customHostnames.listCustomHostnames.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map(
-                    (raw): CustomHostnameAttributes =>
-                      toAttributes(narrowHostname(raw), zone.id),
-                  ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          customHostnames.listCustomHostnames.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map(
+                  (raw): CustomHostnameAttributes =>
+                    toAttributes(narrowHostname(raw), zone.id),
                 ),
               ),
-              Effect.catchTag("SaasQuotaNotAllocated", () =>
-                Effect.succeed([]),
-              ),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            Effect.catchTag("SaasQuotaNotAllocated", () => Effect.succeed([])),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as CustomHostnameProps;

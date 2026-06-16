@@ -158,43 +158,42 @@ export const ImagesVariantProvider = () =>
   Provider.succeed(ImagesVariant, {
     stables: ["variantName", "accountId"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        // Enumerate variant names from the account-scoped list endpoint, then
-        // hydrate each via the per-variant GET (whose schema is correct) into
-        // the exact `read` Attributes shape.
-        //
-        // NOTE: distilled mis-types this response as a single variant, but the
-        // real body is a keyed `variants` map — so the strict decode currently
-        // fails. The fix is a distilled response-schema patch (see neededPatch
-        // in the agent report); once applied, the successful-decode path below
-        // works unchanged.
-        const names = yield* images.listV1Variants({ accountId }).pipe(
-          Effect.map(variantNamesFrom),
-          // Accounts without the Cloudflare Images entitlement reject the route
-          // (code 5403) — there is nothing to enumerate.
-          Effect.catchTag("ImagesAccessNotEnabled", () =>
-            Effect.succeed<string[]>([]),
-          ),
-        );
+      // Enumerate variant names from the account-scoped list endpoint, then
+      // hydrate each via the per-variant GET (whose schema is correct) into
+      // the exact `read` Attributes shape.
+      //
+      // NOTE: distilled mis-types this response as a single variant, but the
+      // real body is a keyed `variants` map — so the strict decode currently
+      // fails. The fix is a distilled response-schema patch (see neededPatch
+      // in the agent report); once applied, the successful-decode path below
+      // works unchanged.
+      const names = yield* images.listV1Variants({ accountId }).pipe(
+        Effect.map(variantNamesFrom),
+        // Accounts without the Cloudflare Images entitlement reject the route
+        // (code 5403) — there is nothing to enumerate.
+        Effect.catchTag("ImagesAccessNotEnabled", () =>
+          Effect.succeed<string[]>([]),
+        ),
+      );
 
-        const rows = yield* Effect.forEach(
-          names,
-          (name) =>
-            getVariant(accountId, name).pipe(
-              Effect.map((variant) =>
-                variant ? toAttributes(variant, accountId) : undefined,
-              ),
+      const rows = yield* Effect.forEach(
+        names,
+        (name) =>
+          getVariant(accountId, name).pipe(
+            Effect.map((variant) =>
+              variant ? toAttributes(variant, accountId) : undefined,
             ),
-          { concurrency: 10 },
-        );
+          ),
+        { concurrency: 10 },
+      );
 
-        return rows.filter(
-          (row): row is ImagesVariantAttributes => row !== undefined,
-        );
-      }),
+      return rows.filter(
+        (row): row is ImagesVariantAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       // News may still contain unresolved plan-time expressions — defer to

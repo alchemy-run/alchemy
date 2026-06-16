@@ -255,24 +255,23 @@ export const AccountApiTokenProvider = () =>
           Effect.catchTag("TokenNotFound", () => Effect.void),
         );
     }),
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // The plaintext token value is only returned by Cloudflare once, at
-        // creation time. The list/get APIs never expose it, so we hydrate an
-        // empty redacted placeholder — matching what `read` returns when it
-        // re-observes a token whose value we no longer hold.
-        return yield* accounts.listTokens.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((token) =>
-                buildAttributes(token, Redacted.make(""), accountId),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // The plaintext token value is only returned by Cloudflare once, at
+      // creation time. The list/get APIs never expose it, so we hydrate an
+      // empty redacted placeholder — matching what `read` returns when it
+      // re-observes a token whose value we no longer hold.
+      return yield* accounts.listTokens.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((token) =>
+              buildAttributes(token, Redacted.make(""), accountId),
             ),
           ),
-        );
-      }),
+        ),
+      );
+    }),
     read: Effect.fn(function* ({ output }) {
       if (!output?.tokenId) return undefined;
       return yield* accounts

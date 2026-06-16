@@ -97,25 +97,24 @@ export const ZoneTransferAclProvider = () =>
     // Account-scoped collection: enumerate every ACL in the ambient
     // account, paginating exhaustively, and hydrate into the exact `read`
     // Attributes shape.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* dns.listZoneTransferAcls.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map(
-                (acl): ZoneTransferAclAttributes => ({
-                  aclId: acl.id,
-                  accountId,
-                  name: acl.name,
-                  ipRange: acl.ipRange,
-                }),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* dns.listZoneTransferAcls.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map(
+              (acl): ZoneTransferAclAttributes => ({
+                aclId: acl.id,
+                accountId,
+                name: acl.name,
+                ipRange: acl.ipRange,
+              }),
             ),
           ),
-        );
-      }),
+        ),
+      );
+    }),
 
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

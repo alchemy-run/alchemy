@@ -78,18 +78,17 @@ export const EmailAddressProvider = () =>
   Provider.succeed(EmailAddress, {
     stables: ["addressId", "accountId", "email"],
     // Account collection: destination addresses are enumerable account-wide.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* emailRouting.listAddresses.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((addr) => toAttrs(accountId, addr)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* emailRouting.listAddresses.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((addr) => toAttrs(accountId, addr)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!output) return undefined;

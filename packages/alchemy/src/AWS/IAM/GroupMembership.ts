@@ -140,45 +140,44 @@ export const GroupMembershipProvider = () =>
         userNames: desiredUsers,
       };
     }),
-    list: () =>
-      Effect.gen(function* () {
-        // The membership resource is keyed by groupName and its Attributes are
-        // the full set of users in that group, so enumerate every IAM group
-        // and read each group's user list — one item per group, matching the
-        // shape `read` produces.
-        const groups = yield* iam.listGroups.pages({}).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.Groups ?? []),
-          ),
-        );
-        const rows = yield* Effect.forEach(
-          groups,
-          (group) =>
-            iam.getGroup.pages({ GroupName: group.GroupName }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) => ({
-                groupName: group.GroupName,
-                userNames: Array.from(chunk)
-                  .flatMap((page) => page.Users ?? [])
-                  .map((user) => user.UserName)
-                  .filter(
-                    (userName): userName is string =>
-                      typeof userName === "string",
-                  ),
-              })),
-              // The group may be deleted between listGroups and getGroup.
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
+    list: Effect.fn(function* () {
+      // The membership resource is keyed by groupName and its Attributes are
+      // the full set of users in that group, so enumerate every IAM group
+      // and read each group's user list — one item per group, matching the
+      // shape `read` produces.
+      const groups = yield* iam.listGroups.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.Groups ?? []),
+        ),
+      );
+      const rows = yield* Effect.forEach(
+        groups,
+        (group) =>
+          iam.getGroup.pages({ GroupName: group.GroupName }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => ({
+              groupName: group.GroupName,
+              userNames: Array.from(chunk)
+                .flatMap((page) => page.Users ?? [])
+                .map((user) => user.UserName)
+                .filter(
+                  (userName): userName is string =>
+                    typeof userName === "string",
+                ),
+            })),
+            // The group may be deleted between listGroups and getGroup.
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed(undefined),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is { groupName: string; userNames: string[] } =>
-            row !== undefined,
-        );
-      }),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is { groupName: string; userNames: string[] } =>
+          row !== undefined,
+      );
+    }),
     delete: Effect.fn(function* ({ output }) {
       for (const userName of output.userNames) {
         yield* iam

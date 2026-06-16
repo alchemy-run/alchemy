@@ -205,33 +205,32 @@ export const ClientCertificateProvider = () =>
     // produces. Revoked certificates stay listed forever but revocation is the
     // delete semantic, so they are filtered out. Zones where API Shield is not
     // entitled reject with the typed `Forbidden` error — skip them.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            clientCertificates.listClientCertificates
-              .pages({ zoneId: zone.id, status: "all" })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.result ?? [])
-                      .filter((cert) => cert.status !== "revoked")
-                      .map(
-                        (cert): ClientCertificateAttributes =>
-                          toAttributes(cert, zone.id),
-                      ),
-                  ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          clientCertificates.listClientCertificates
+            .pages({ zoneId: zone.id, status: "all" })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? [])
+                    .filter((cert) => cert.status !== "revoked")
+                    .map(
+                      (cert): ClientCertificateAttributes =>
+                        toAttributes(cert, zone.id),
+                    ),
                 ),
-                Effect.catchTag("Forbidden", () => Effect.succeed([])),
               ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+              Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as ClientCertificateProps;

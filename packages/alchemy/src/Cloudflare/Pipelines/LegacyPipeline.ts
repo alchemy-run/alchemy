@@ -235,28 +235,27 @@ export const LegacyPipelineProvider = () =>
       return undefined;
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // The list endpoint returns summary items (id/name/endpoint only),
-        // so hydrate each by name into the exact `read` Attributes shape
-        // with bounded concurrency and a typed per-item not-found skip
-        // (a pipeline can vanish between the list and the get).
-        const summaries = yield* listLegacyPipelineSummaries(accountId);
-        const rows = yield* Effect.forEach(
-          summaries,
-          (summary) =>
-            getLegacyPipeline(accountId, summary.name).pipe(
-              Effect.map((observed) =>
-                observed ? toAttributes(observed, accountId) : undefined,
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // The list endpoint returns summary items (id/name/endpoint only),
+      // so hydrate each by name into the exact `read` Attributes shape
+      // with bounded concurrency and a typed per-item not-found skip
+      // (a pipeline can vanish between the list and the get).
+      const summaries = yield* listLegacyPipelineSummaries(accountId);
+      const rows = yield* Effect.forEach(
+        summaries,
+        (summary) =>
+          getLegacyPipeline(accountId, summary.name).pipe(
+            Effect.map((observed) =>
+              observed ? toAttributes(observed, accountId) : undefined,
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is LegacyPipelineAttributes => row !== undefined,
-        );
-      }),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is LegacyPipelineAttributes => row !== undefined,
+      );
+    }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

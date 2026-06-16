@@ -107,24 +107,23 @@ export const isCallsApp = (value: unknown): value is CallsApp =>
 export const CallsAppProvider = () =>
   Provider.succeed(CallsApp, {
     stables: ["appId", "accountId", "secret", "created"],
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Account-scoped collection: enumerate every Calls app under the
-        // account, exhaustively paginating `result`. The create-only secret
-        // is never returned by the list endpoint, so — matching `read` for a
-        // resource without prior state — hydrate it as an empty Redacted.
-        return yield* calls.listSfus.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((app) =>
-                toAttributes(app, accountId, Redacted.make("")),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection: enumerate every Calls app under the
+      // account, exhaustively paginating `result`. The create-only secret
+      // is never returned by the list endpoint, so — matching `read` for a
+      // resource without prior state — hydrate it as an empty Redacted.
+      return yield* calls.listSfus.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((app) =>
+              toAttributes(app, accountId, Redacted.make("")),
             ),
           ),
-        );
-      }),
+        ),
+      );
+    }),
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (output !== undefined && output.accountId !== accountId) {

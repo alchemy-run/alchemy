@@ -390,18 +390,17 @@ export const PipelineSinkProvider = () =>
     // `listSinks` (paginated, items in `result`). Hydrate each page item
     // into the exact `read` Attributes shape. Credentials/token are
     // write-only and never echoed, matching `read`.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* pipelines.listSinks.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((sink) => toAttributes(sink, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* pipelines.listSinks.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((sink) => toAttributes(sink, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
   });
 
 /**

@@ -198,26 +198,25 @@ export const ZarazConfig = Object.assign(
 export const ZarazConfigProvider = () =>
   Provider.succeed(ZarazConfig, {
     stables: ["zoneId"],
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Zaraz config is a zone-level singleton with no account-wide list
-        // API — enumerate every zone and read its config (one per zone).
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            observe(zoneId).pipe(
-              // Zones where Zaraz isn't provisioned (e.g. partial setups)
-              // reject the route; skip them.
-              Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-            ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is ZarazConfig["Attributes"] => row !== undefined,
-        );
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Zaraz config is a zone-level singleton with no account-wide list
+      // API — enumerate every zone and read its config (one per zone).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          observe(zoneId).pipe(
+            // Zones where Zaraz isn't provisioned (e.g. partial setups)
+            // reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ZarazConfig["Attributes"] => row !== undefined,
+      );
+    }),
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!output) return undefined;
       if (!isResolved(news)) return undefined;

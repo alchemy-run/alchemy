@@ -144,29 +144,28 @@ export const CustomNameserverProvider = () =>
   Provider.succeed(CustomNameserver, {
     stables: ["nsName", "accountId", "nsSet", "zoneTag"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Account collection: `getCustomNameserver` is a paginated list
-        // endpoint despite its name. Enumerate every page and hydrate each
-        // nameserver into the exact `read` Attributes shape.
-        return yield* customNameservers.getCustomNameserver
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                page.result.map((ns) => toAttributes(ns, accountId)),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account collection: `getCustomNameserver` is a paginated list
+      // endpoint despite its name. Enumerate every page and hydrate each
+      // nameserver into the exact `read` Attributes shape.
+      return yield* customNameservers.getCustomNameserver
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              page.result.map((ns) => toAttributes(ns, accountId)),
             ),
-            // Unentitled accounts have no custom nameservers at all — the
-            // collection endpoint rejects with a typed entitlement error.
-            // Treat that as an empty collection rather than failing `list`.
-            Effect.catchTag("CustomNameserversNotEnabled", () =>
-              Effect.succeed([] as CustomNameserverAttributes[]),
-            ),
-          );
-      }),
+          ),
+          // Unentitled accounts have no custom nameservers at all — the
+          // collection endpoint rejects with a typed entitlement error.
+          // Treat that as an empty collection rather than failing `list`.
+          Effect.catchTag("CustomNameserversNotEnabled", () =>
+            Effect.succeed([] as CustomNameserverAttributes[]),
+          ),
+        );
+    }),
 
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;

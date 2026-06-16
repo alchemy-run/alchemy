@@ -268,21 +268,20 @@ export const CatalogSyncProvider = () =>
     // representation, so it defaults to `true`. Magic Cloud Networking is an
     // entitlement-gated add-on; an unentitled account rejects the list with
     // the typed `FeatureNotEnabled` error — treat that as "nothing to list".
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* mcn.listCatalogSyncs.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((sync) =>
-                toAttributes(sync, accountId, true),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* mcn.listCatalogSyncs.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((sync) =>
+              toAttributes(sync, accountId, true),
             ),
           ),
-          Effect.catchTag("FeatureNotEnabled", () => Effect.succeed([])),
-        );
-      }),
+        ),
+        Effect.catchTag("FeatureNotEnabled", () => Effect.succeed([])),
+      );
+    }),
   });
 
 type ObservedSync = mcn.GetCatalogSyncResponse | mcn.CreateCatalogSyncResponse;

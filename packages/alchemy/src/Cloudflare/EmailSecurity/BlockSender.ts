@@ -198,26 +198,23 @@ export const EmailSecurityBlockSenderProvider = () =>
     // no per-item follow-up. Email Security is a paid add-on, so accounts
     // without the entitlement (or without permission) have nothing to
     // enumerate and yield an empty array.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* emailSecurity.listSettingBlockSenders
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((entry) =>
-                  toAttributes(entry, accountId),
-                ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* emailSecurity.listSettingBlockSenders
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((entry) =>
+                toAttributes(entry, accountId),
               ),
             ),
-            Effect.catchTag("EmailSecurityNotEntitled", () =>
-              Effect.succeed([]),
-            ),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
-          );
-      }),
+          ),
+          Effect.catchTag("EmailSecurityNotEntitled", () => Effect.succeed([])),
+          Effect.catchTag("Forbidden", () => Effect.succeed([])),
+        );
+    }),
   });
 
 type ObservedBlockSender = emailSecurity.GetSettingBlockSenderResponse;

@@ -248,20 +248,19 @@ export const AccountDnsSettingsProvider = () =>
     // object and return it as a one-element array (mirrors `read` with no
     // prior output: the observed snapshot is its own `initialSettings`,
     // nothing is being managed yet).
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const observed = yield* dns.getSettingAccount({ accountId });
-        const snapshot = toSnapshot(observed);
-        return [
-          {
-            accountId,
-            ...snapshot,
-            initialSettings: snapshot,
-            managedKeys: [],
-          } satisfies AccountDnsSettingsAttributes,
-        ];
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* dns.getSettingAccount({ accountId });
+      const snapshot = toSnapshot(observed);
+      return [
+        {
+          accountId,
+          ...snapshot,
+          initialSettings: snapshot,
+          managedKeys: [],
+        } satisfies AccountDnsSettingsAttributes,
+      ];
+    }),
 
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

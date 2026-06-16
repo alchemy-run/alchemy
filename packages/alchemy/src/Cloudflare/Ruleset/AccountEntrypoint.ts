@@ -161,42 +161,41 @@ export const RulesetAccountEntrypointProvider = () =>
       }
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Account phase entrypoints are the `root`-kind rulesets in the
-        // account's ruleset list. The list response omits the rules, so
-        // hydrate each entrypoint via `getPhasForAccount` (the same call
-        // `read` uses) to produce the exact `read` Attributes shape.
-        const entrypoints = yield* rulesets.listRulesetsForAccount
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).filter((r) => r.kind === "root"),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account phase entrypoints are the `root`-kind rulesets in the
+      // account's ruleset list. The list response omits the rules, so
+      // hydrate each entrypoint via `getPhasForAccount` (the same call
+      // `read` uses) to produce the exact `read` Attributes shape.
+      const entrypoints = yield* rulesets.listRulesetsForAccount
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).filter((r) => r.kind === "root"),
             ),
-          );
-        const rows = yield* Effect.forEach(
-          entrypoints,
-          (entry) =>
-            rulesets
-              .getPhasForAccount({ accountId, rulesetPhase: entry.phase })
-              .pipe(
-                Effect.map((ruleset) => toAttributes(accountId, ruleset)),
-                // Removed/empty out-of-band or plan-gated phases are skipped.
-                Effect.catchTag("RulesetNotFound", () =>
-                  Effect.succeed(undefined),
-                ),
-                Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+          ),
+        );
+      const rows = yield* Effect.forEach(
+        entrypoints,
+        (entry) =>
+          rulesets
+            .getPhasForAccount({ accountId, rulesetPhase: entry.phase })
+            .pipe(
+              Effect.map((ruleset) => toAttributes(accountId, ruleset)),
+              // Removed/empty out-of-band or plan-gated phases are skipped.
+              Effect.catchTag("RulesetNotFound", () =>
+                Effect.succeed(undefined),
               ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is RulesetAccountEntrypointAttributes => row !== undefined,
-        );
-      }),
+              Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is RulesetAccountEntrypointAttributes => row !== undefined,
+      );
+    }),
 
     read: Effect.fn(function* ({ olds, output }) {
       const accountId =

@@ -222,34 +222,33 @@ export const PageShieldPolicyProvider = () =>
       return toAttributes(zoneId, updated);
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        // Page Shield policies are zone-scoped
-        // (`/zones/{zone_id}/page_shield/policies`). Fan out across every
-        // zone in the account, exhaustively paginate each, and hydrate into
-        // the same Attributes shape `read` produces. Zones without Page
-        // Shield entitlement reject with the typed `Forbidden` tag — skip
-        // them rather than failing the whole enumeration.
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            pageShield.listPolicies.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((policy) =>
-                    toAttributes(zone.id, policy),
-                  ),
+    list: Effect.fn(function* () {
+      // Page Shield policies are zone-scoped
+      // (`/zones/{zone_id}/page_shield/policies`). Fan out across every
+      // zone in the account, exhaustively paginate each, and hydrate into
+      // the same Attributes shape `read` produces. Zones without Page
+      // Shield entitlement reject with the typed `Forbidden` tag — skip
+      // them rather than failing the whole enumeration.
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          pageShield.listPolicies.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((policy) =>
+                  toAttributes(zone.id, policy),
                 ),
               ),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     delete: Effect.fn(function* ({ output }) {
       // Cloudflare returns 204 even for missing policies, but ride out a

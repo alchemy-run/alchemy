@@ -141,40 +141,37 @@ export const GoogleTagGatewayProvider = () =>
   Provider.succeed(GoogleTagGateway, {
     stables: ["zoneId", "initialConfig"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this per-zone singleton — enumerate every
-        // zone in the account and read its config. Unlike a true singleton,
-        // the config is `null` for zones that never configured the feature,
-        // so those zones contribute no row.
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            googleTagGateway.getConfig({ zoneId }).pipe(
-              Effect.map((observed) => {
-                // `null` — the zone has never configured Google Tag Gateway.
-                if (observed === null) return undefined;
-                const config = toConfig(observed);
-                return {
-                  zoneId,
-                  ...config,
-                  initialConfig: config,
-                } satisfies GoogleTagGatewayAttributes;
-              }),
-              // Zone deleted out-of-band, or the scoped token can't see this
-              // zone — skip it rather than failing the whole enumeration.
-              Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
-                Effect.succeed(undefined),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this per-zone singleton — enumerate every
+      // zone in the account and read its config. Unlike a true singleton,
+      // the config is `null` for zones that never configured the feature,
+      // so those zones contribute no row.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          googleTagGateway.getConfig({ zoneId }).pipe(
+            Effect.map((observed) => {
+              // `null` — the zone has never configured Google Tag Gateway.
+              if (observed === null) return undefined;
+              const config = toConfig(observed);
+              return {
+                zoneId,
+                ...config,
+                initialConfig: config,
+              } satisfies GoogleTagGatewayAttributes;
+            }),
+            // Zone deleted out-of-band, or the scoped token can't see this
+            // zone — skip it rather than failing the whole enumeration.
+            Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
+              Effect.succeed(undefined),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is GoogleTagGatewayAttributes => row !== undefined,
-        );
-      }),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter((row) => row !== undefined);
+    }),
 
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;

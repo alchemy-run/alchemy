@@ -153,35 +153,33 @@ export const LoginProfileProvider = () =>
     // `getLoginProfile`; users without console access return a typed
     // `NoSuchEntityException`, which we skip. Bounded concurrency keeps the
     // fan-out reasonable.
-    list: () =>
-      Effect.gen(function* () {
-        const users = yield* iam.listUsers.pages({}).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.Users),
-          ),
-        );
-        const profiles = yield* Effect.forEach(
-          users,
-          (user) =>
-            iam.getLoginProfile({ UserName: user.UserName }).pipe(
-              Effect.map((response) => ({
-                userName: response.LoginProfile.UserName,
-                createDate: response.LoginProfile.CreateDate,
-                passwordResetRequired:
-                  response.LoginProfile.PasswordResetRequired,
-              })),
-              // The user has no console login profile, or was deleted between
-              // enumeration and the per-user probe.
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed(undefined),
-              ),
+    list: Effect.fn(function* () {
+      const users = yield* iam.listUsers.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Users)),
+      );
+      const profiles = yield* Effect.forEach(
+        users,
+        (user) =>
+          iam.getLoginProfile({ UserName: user.UserName }).pipe(
+            Effect.map((response) => ({
+              userName: response.LoginProfile.UserName,
+              createDate: response.LoginProfile.CreateDate,
+              passwordResetRequired:
+                response.LoginProfile.PasswordResetRequired,
+            })),
+            // The user has no console login profile, or was deleted between
+            // enumeration and the per-user probe.
+            Effect.catchTag("NoSuchEntityException", () =>
+              Effect.succeed(undefined),
             ),
-          { concurrency: 10 },
-        );
-        return profiles.filter(
-          (profile): profile is LoginProfile["Attributes"] =>
-            profile !== undefined,
-        );
-      }),
+          ),
+        { concurrency: 10 },
+      );
+      const result: LoginProfile["Attributes"][] = profiles.filter(
+        (profile): profile is NonNullable<typeof profile> =>
+          profile !== undefined,
+      );
+      return result;
+    }),
   });

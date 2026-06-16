@@ -287,38 +287,37 @@ export const CustomRulesetProvider = () =>
     // so filter to `custom` and hydrate each via `getRulesetForAccount` to
     // produce the full `read` Attributes shape. Per-item not-found / Forbidden
     // blips skip that ruleset rather than failing the whole enumeration.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const summaries = yield* rulesets.listRulesetsForAccount
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).filter((r) => r.kind === "custom"),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const summaries = yield* rulesets.listRulesetsForAccount
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).filter((r) => r.kind === "custom"),
+            ),
+          ),
+        );
+      const hydrated = yield* Effect.forEach(
+        summaries,
+        (summary) =>
+          rulesets
+            .getRulesetForAccount({ accountId, rulesetId: summary.id })
+            .pipe(
+              Effect.map((ruleset) =>
+                toCustomRulesetAttributes(accountId, ruleset),
+              ),
+              Effect.catchTag(["RulesetNotFound", "Forbidden"], () =>
+                Effect.succeed(undefined),
               ),
             ),
-          );
-        const hydrated = yield* Effect.forEach(
-          summaries,
-          (summary) =>
-            rulesets
-              .getRulesetForAccount({ accountId, rulesetId: summary.id })
-              .pipe(
-                Effect.map((ruleset) =>
-                  toCustomRulesetAttributes(accountId, ruleset),
-                ),
-                Effect.catchTag(["RulesetNotFound", "Forbidden"], () =>
-                  Effect.succeed(undefined),
-                ),
-              ),
-          { concurrency: 10 },
-        );
-        return hydrated.filter(
-          (row): row is CustomRulesetAttributes => row !== undefined,
-        );
-      }),
+        { concurrency: 10 },
+      );
+      return hydrated.filter(
+        (row): row is CustomRulesetAttributes => row !== undefined,
+      );
+    }),
   });
 
 const toCustomRulesetAttributes = (

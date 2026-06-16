@@ -9,13 +9,13 @@ import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import {
   createInternalTags,
   diffTags,
   hasAlchemyTags,
   type Tags,
 } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 import type { StreamArn } from "./Stream.ts";
 
 export type ConsumerName = string;
@@ -374,66 +374,65 @@ export const StreamConsumerProvider = () =>
     // Consumers are stream-scoped: listStreamConsumers requires a StreamARN.
     // Fan out — enumerate every stream in the account/region, then list the
     // consumers registered on each stream, then hydrate tags per consumer.
-    list: () =>
-      Effect.gen(function* () {
-        const streamArns = yield* kinesis.listStreams.pages({}).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.StreamSummaries ?? [])
-                .map((summary) => summary.StreamARN)
-                .filter((arn): arn is string => typeof arn === "string"),
+    list: Effect.fn(function* () {
+      const streamArns = yield* kinesis.listStreams.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.StreamSummaries ?? [])
+              .map((summary) => summary.StreamARN)
+              .filter((arn): arn is string => typeof arn === "string"),
+          ),
+        ),
+      );
+
+      const consumers = yield* Effect.forEach(
+        streamArns,
+        (streamArn) =>
+          kinesis.listStreamConsumers.pages({ StreamARN: streamArn }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.Consumers ?? []).map((consumer) => ({
+                  streamArn,
+                  consumer,
+                })),
+              ),
+            ),
+            // A stream may be deleted mid-enumeration; skip it.
+            Effect.catchTag("ResourceNotFoundException", () =>
+              Effect.succeed(
+                [] as { streamArn: string; consumer: kinesis.Consumer }[],
+              ),
             ),
           ),
-        );
+        { concurrency: 10 },
+      ).pipe(Effect.map((rows) => rows.flat()));
 
-        const consumers = yield* Effect.forEach(
-          streamArns,
-          (streamArn) =>
-            kinesis.listStreamConsumers.pages({ StreamARN: streamArn }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.Consumers ?? []).map((consumer) => ({
-                    streamArn,
-                    consumer,
-                  })),
-                ),
-              ),
-              // A stream may be deleted mid-enumeration; skip it.
+      const hydrated = yield* Effect.forEach(
+        consumers,
+        ({ streamArn, consumer }) =>
+          kinesis
+            .listTagsForResource({ ResourceARN: consumer.ConsumerARN })
+            .pipe(
+              Effect.map((tagsResponse): StreamConsumer["Attributes"] => ({
+                consumerName: consumer.ConsumerName,
+                consumerArn: consumer.ConsumerARN,
+                consumerStatus: consumer.ConsumerStatus as ConsumerStatus,
+                streamArn: streamArn as StreamArn,
+                consumerCreationTimestamp: consumer.ConsumerCreationTimestamp,
+                tags: toTagRecord(tagsResponse.Tags),
+              })),
+              // A consumer may be deregistered between list and tag fetch.
               Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed(
-                  [] as { streamArn: string; consumer: kinesis.Consumer }[],
-                ),
+                Effect.succeed(undefined),
               ),
             ),
-          { concurrency: 10 },
-        ).pipe(Effect.map((rows) => rows.flat()));
+        { concurrency: 10 },
+      );
 
-        const hydrated = yield* Effect.forEach(
-          consumers,
-          ({ streamArn, consumer }) =>
-            kinesis
-              .listTagsForResource({ ResourceARN: consumer.ConsumerARN })
-              .pipe(
-                Effect.map((tagsResponse): StreamConsumer["Attributes"] => ({
-                  consumerName: consumer.ConsumerName,
-                  consumerArn: consumer.ConsumerARN,
-                  consumerStatus: consumer.ConsumerStatus as ConsumerStatus,
-                  streamArn: streamArn as StreamArn,
-                  consumerCreationTimestamp: consumer.ConsumerCreationTimestamp,
-                  tags: toTagRecord(tagsResponse.Tags),
-                })),
-                // A consumer may be deregistered between list and tag fetch.
-                Effect.catchTag("ResourceNotFoundException", () =>
-                  Effect.succeed(undefined),
-                ),
-              ),
-          { concurrency: 10 },
-        );
-
-        return hydrated.filter(
-          (row): row is StreamConsumer["Attributes"] => row !== undefined,
-        );
-      }),
+      return hydrated.filter(
+        (row): row is StreamConsumer["Attributes"] => row !== undefined,
+      );
+    }),
   });

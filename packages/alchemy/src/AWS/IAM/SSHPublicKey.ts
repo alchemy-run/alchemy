@@ -165,65 +165,59 @@ export const SSHPublicKeyProvider = () =>
     // (also paginated) with bounded concurrency. The list metadata omits the
     // fingerprint and key body, so each key is hydrated with `getSSHPublicKey`
     // to produce the full `Attributes` shape that `read` returns.
-    list: () =>
-      Effect.gen(function* () {
-        const users = yield* iam.listUsers.pages({}).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.Users),
-          ),
-        );
-        const perUser = yield* Effect.forEach(
-          users,
-          (user) =>
-            iam.listSSHPublicKeys.pages({ UserName: user.UserName }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) => page.SSHPublicKeys ?? []),
-              ),
-              Effect.flatMap((metas) =>
-                Effect.forEach(
-                  metas,
-                  (meta) =>
-                    iam
-                      .getSSHPublicKey({
-                        UserName: meta.UserName,
-                        SSHPublicKeyId: meta.SSHPublicKeyId,
-                        Encoding: "SSH",
-                      })
-                      .pipe(
-                        Effect.map((r) => r.SSHPublicKey),
-                        // The key may be deleted between enumeration and
-                        // hydration.
-                        Effect.catchTag("NoSuchEntityException", () =>
-                          Effect.succeed(undefined),
-                        ),
+    list: Effect.fn(function* () {
+      const users = yield* iam.listUsers.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Users)),
+      );
+      const perUser = yield* Effect.forEach(
+        users,
+        (user) =>
+          iam.listSSHPublicKeys.pages({ UserName: user.UserName }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) => page.SSHPublicKeys ?? []),
+            ),
+            Effect.flatMap((metas) =>
+              Effect.forEach(
+                metas,
+                (meta) =>
+                  iam
+                    .getSSHPublicKey({
+                      UserName: meta.UserName,
+                      SSHPublicKeyId: meta.SSHPublicKeyId,
+                      Encoding: "SSH",
+                    })
+                    .pipe(
+                      Effect.map((r) => r.SSHPublicKey),
+                      // The key may be deleted between enumeration and
+                      // hydration.
+                      Effect.catchTag("NoSuchEntityException", () =>
+                        Effect.succeed(undefined),
                       ),
-                  { concurrency: 10 },
-                ),
-              ),
-              Effect.map((keys) =>
-                keys
-                  .filter(
-                    (key): key is iam.SSHPublicKey =>
-                      key?.SSHPublicKeyId != null,
-                  )
-                  .map((key) => ({
-                    userName: key.UserName,
-                    sshPublicKeyId: key.SSHPublicKeyId,
-                    fingerprint: key.Fingerprint,
-                    sshPublicKeyBody: key.SSHPublicKeyBody,
-                    status: key.Status,
-                    uploadDate: key.UploadDate,
-                  })),
-              ),
-              // The user may be deleted between enumeration and per-user list.
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed([]),
+                    ),
+                { concurrency: 10 },
               ),
             ),
-          { concurrency: 10 },
-        );
-        return perUser.flat();
-      }),
+            Effect.map((keys) =>
+              keys
+                .filter(
+                  (key): key is iam.SSHPublicKey => key?.SSHPublicKeyId != null,
+                )
+                .map((key) => ({
+                  userName: key.UserName,
+                  sshPublicKeyId: key.SSHPublicKeyId,
+                  fingerprint: key.Fingerprint,
+                  sshPublicKeyBody: key.SSHPublicKeyBody,
+                  status: key.Status,
+                  uploadDate: key.UploadDate,
+                })),
+            ),
+            // The user may be deleted between enumeration and per-user list.
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return perUser.flat();
+    }),
   });

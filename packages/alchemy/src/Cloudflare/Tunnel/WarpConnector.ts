@@ -144,35 +144,34 @@ export const TunnelWarpConnectorProvider = () =>
     // each live tunnel into the exact `read` Attributes shape (token
     // included). A tunnel deleted out from under us between the list and the
     // token fetch surfaces as a typed TunnelNotFound — skip it.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const observed = yield* zeroTrust.listTunnelWarpConnectors
-          .pages({ accountId, isDeleted: false })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).filter(
-                  (t): t is ObservedConnector & { id: string } =>
-                    !t.deletedAt && typeof t.id === "string",
-                ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* zeroTrust.listTunnelWarpConnectors
+        .pages({ accountId, isDeleted: false })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).filter(
+                (t): t is ObservedConnector & { id: string } =>
+                  !t.deletedAt && typeof t.id === "string",
               ),
             ),
-          );
-        const rows = yield* Effect.forEach(
-          observed,
-          (t) =>
-            toAttributes(t, accountId).pipe(
-              Effect.map(Option.some),
-              Effect.catchTag("TunnelNotFound", () =>
-                Effect.succeed(Option.none<TunnelWarpConnectorAttributes>()),
-              ),
-            ),
-          { concurrency: 10 },
+          ),
         );
-        return rows.flatMap((row) => (Option.isSome(row) ? [row.value] : []));
-      }),
+      const rows = yield* Effect.forEach(
+        observed,
+        (t) =>
+          toAttributes(t, accountId).pipe(
+            Effect.map(Option.some),
+            Effect.catchTag("TunnelNotFound", () =>
+              Effect.succeed(Option.none<TunnelWarpConnectorAttributes>()),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flatMap((row) => (Option.isSome(row) ? [row.value] : []));
+    }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

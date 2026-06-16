@@ -120,20 +120,19 @@ export const DeviceManagedNetworkProvider = () =>
     // Account collection: managed networks are account-scoped and the
     // distilled list op paginates (items: "result"). Enumerate every page
     // and hydrate into the exact `read` Attributes shape via `toAttributes`.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* zeroTrust.listDeviceNetworks.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter((n) => n.networkId != null)
-                .map((n) => toAttributes(n, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listDeviceNetworks.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((n) => n.networkId != null)
+              .map((n) => toAttributes(n, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

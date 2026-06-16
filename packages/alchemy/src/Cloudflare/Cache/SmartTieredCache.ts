@@ -106,28 +106,27 @@ export const SmartTieredCacheProvider = () =>
   Provider.succeed(SmartTieredCache, {
     stables: ["zoneId", "initialValue"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this zone singleton — enumerate every
-        // zone in the account and read its setting (every zone has one).
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            cache.getSmartTieredCache({ zoneId }).pipe(
-              Effect.map((observed) =>
-                toAttributes(zoneId, observed, observed.value),
-              ),
-              // Plan-gated or partial zones reject the route; skip them.
-              Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its setting (every zone has one).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          cache.getSmartTieredCache({ zoneId }).pipe(
+            Effect.map((observed) =>
+              toAttributes(zoneId, observed, observed.value),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is SmartTieredCacheAttributes => row !== undefined,
-        );
-      }),
+            // Plan-gated or partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is SmartTieredCacheAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as SmartTieredCacheProps;

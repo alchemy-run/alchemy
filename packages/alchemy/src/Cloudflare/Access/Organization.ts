@@ -321,21 +321,20 @@ export const AccessOrganizationProvider = () =>
     // the same `observe` path `read` uses and return the one-element array
     // (or `[]` when the account has never enabled Zero Trust). `observe`
     // already swallows the typed `OrganizationNotFound` error.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        const observed = yield* observe();
-        if (!observed) return [];
-        return [
-          toAttrs(
-            accountId,
-            observed,
-            observed.authDomain ?? "",
-            observed.name ?? observed.authDomain ?? "",
-          ),
-        ];
-      }),
+      const observed = yield* observe();
+      if (!observed) return [];
+      return [
+        toAttrs(
+          accountId,
+          observed,
+          observed.authDomain ?? "",
+          observed.name ?? observed.authDomain ?? "",
+        ),
+      ];
+    }),
   });
 
 const observe = Effect.fn(function* () {

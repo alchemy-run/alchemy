@@ -208,14 +208,13 @@ export const GatewayConfigurationProvider = () =>
     // the ambient account, so enumeration is a single read returning a
     // one-element array. There is no prior management context, so the
     // restore snapshot is empty.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const observed = yield* zeroTrust.getGatewayConfiguration({
-          accountId,
-        });
-        return [toAttributes(accountId, observed, {})];
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* zeroTrust.getGatewayConfiguration({
+        accountId,
+      });
+      return [toAttributes(accountId, observed, {})];
+    }),
 
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

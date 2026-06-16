@@ -348,22 +348,21 @@ export const GreTunnelProvider = () =>
     // `MagicTransitNotOnboarded` tag (code 1012) — and, depending on token
     // scope, a typed `Forbidden` (403). Both mean the account cannot enumerate
     // Magic Transit, so treat them as non-listable → [].
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* magicTransit
-          .listGreTunnels({ accountId, xMagicNewHcTarget: true })
-          .pipe(
-            Effect.map((r): GreTunnelAttributes[] =>
-              (r.greTunnels ?? []).map((tunnel) =>
-                toAttributes(tunnel, accountId),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* magicTransit
+        .listGreTunnels({ accountId, xMagicNewHcTarget: true })
+        .pipe(
+          Effect.map((r): GreTunnelAttributes[] =>
+            (r.greTunnels ?? []).map((tunnel) =>
+              toAttributes(tunnel, accountId),
             ),
-            Effect.catchTag(["MagicTransitNotOnboarded", "Forbidden"], () =>
-              Effect.succeed<GreTunnelAttributes[]>([]),
-            ),
-          );
-      }),
+          ),
+          Effect.catchTag(["MagicTransitNotOnboarded", "Forbidden"], () =>
+            Effect.succeed<GreTunnelAttributes[]>([]),
+          ),
+        );
+    }),
   });
 
 interface ObservedGreTunnel {

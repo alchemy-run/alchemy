@@ -124,34 +124,33 @@ export const CacheReserveProvider = () =>
   Provider.succeed(CacheReserve, {
     stables: ["zoneId", "initialValue"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this zone singleton — enumerate every
-        // zone in the account and read its setting. Cache Reserve is an
-        // entitlement-gated add-on, so non-subscribed zones reject the
-        // route (`SettingUnavailableForPlan`); skip those.
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            cache.getCacheReserve({ zoneId }).pipe(
-              Effect.map((observed) =>
-                toAttributes(zoneId, observed, observed.value),
-              ),
-              // Plan-gated zones (no Cache Reserve subscription) and
-              // partial/deleted zones reject the route; skip them.
-              Effect.catchTag("SettingUnavailableForPlan", () =>
-                Effect.succeed(undefined),
-              ),
-              Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its setting. Cache Reserve is an
+      // entitlement-gated add-on, so non-subscribed zones reject the
+      // route (`SettingUnavailableForPlan`); skip those.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          cache.getCacheReserve({ zoneId }).pipe(
+            Effect.map((observed) =>
+              toAttributes(zoneId, observed, observed.value),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is CacheReserveAttributes => row !== undefined,
-        );
-      }),
+            // Plan-gated zones (no Cache Reserve subscription) and
+            // partial/deleted zones reject the route; skip them.
+            Effect.catchTag("SettingUnavailableForPlan", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is CacheReserveAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as CacheReserveProps;

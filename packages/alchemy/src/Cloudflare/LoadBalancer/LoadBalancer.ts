@@ -335,28 +335,24 @@ export const LoadBalancerProvider = () =>
     // exhaustively paginate each zone's load balancers, hydrating each into the
     // same Attributes shape `read` returns. Zones without the Load Balancing
     // subscription reject the route (Forbidden) and are skipped.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            loadBalancers.listLoadBalancers.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((lb) => toAttributes(lb, zone.id)),
-                ),
-              ),
-              Effect.catchTag("Forbidden", () =>
-                Effect.succeed([] as LoadBalancerAttributes[]),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          loadBalancers.listLoadBalancers.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((lb) => toAttributes(lb, zone.id)),
               ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 type ObservedLoadBalancer =

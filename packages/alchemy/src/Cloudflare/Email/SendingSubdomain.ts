@@ -134,33 +134,32 @@ export const EmailSendingSubdomainProvider = () =>
       "created",
     ],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Sending subdomains are zone-scoped (`/zones/{id}/email/sending/
-        // subdomains`) with no account-wide list — enumerate every zone and
-        // list its subdomains, then flatten.
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            emailSending.listSubdomains.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((subdomain) =>
-                    toAttributes(subdomain, zone.id),
-                  ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Sending subdomains are zone-scoped (`/zones/{id}/email/sending/
+      // subdomains`) with no account-wide list — enumerate every zone and
+      // list its subdomains, then flatten.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          emailSending.listSubdomains.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((subdomain) =>
+                  toAttributes(subdomain, zone.id),
                 ),
               ),
-              // Email Sending may be unavailable / plan-gated on a zone —
-              // skip those zones rather than fail the whole enumeration.
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            // Email Sending may be unavailable / plan-gated on a zone —
+            // skip those zones rather than fail the whole enumeration.
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as EmailSendingSubdomainProps;

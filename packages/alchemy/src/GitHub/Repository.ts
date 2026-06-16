@@ -514,22 +514,21 @@ export const RepositoryProvider = () =>
     // owners/orgs the token is a member of). `octokit.paginate` walks every page
     // exhaustively. Each list item is a full repository object, so it hydrates
     // directly into the same `Attributes` shape `read` returns.
-    list: () =>
-      Effect.gen(function* () {
-        const octokit = yield* Octokit;
+    list: Effect.fn(function* () {
+      const octokit = yield* Octokit;
 
-        const repos = yield* Effect.tryPromise({
-          try: () =>
-            octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-              per_page: 100,
-            }),
-          catch: (e) => e as Error,
-        });
+      const repos = yield* Effect.tryPromise({
+        try: () =>
+          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
+            per_page: 100,
+          }),
+        catch: (e) => e as Error,
+      });
 
-        return repos.map((repo) =>
-          attrsOf(repo as Parameters<typeof attrsOf>[0]),
-        );
-      }),
+      return repos.map((repo) =>
+        attrsOf(repo as Parameters<typeof attrsOf>[0]),
+      );
+    }),
 
     // Read by the numeric repository ID, which is stable across renames. This
     // refreshes the output attributes (including the current name) so that a

@@ -234,36 +234,35 @@ export const KeylessCertificateProvider = () =>
     // list its Keyless SSL configurations, and hydrate each into the exact
     // `read` Attributes shape. Zones without the Enterprise entitlement reject
     // the route with the typed `Forbidden` error — skip them.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            keylessCertificates.listKeylessCertificates
-              .pages({ zoneId: zone.id })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.result ?? [])
-                      .filter((keyless) => keyless.status !== "deleted")
-                      .map((keyless) =>
-                        toAttributes(
-                          { ...keyless, permissions: [...keyless.permissions] },
-                          zone.id,
-                        ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          keylessCertificates.listKeylessCertificates
+            .pages({ zoneId: zone.id })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? [])
+                    .filter((keyless) => keyless.status !== "deleted")
+                    .map((keyless) =>
+                      toAttributes(
+                        { ...keyless, permissions: [...keyless.permissions] },
+                        zone.id,
                       ),
-                  ),
+                    ),
                 ),
-                // Non-entitled / plan-gated zones reject Keyless SSL listing.
-                Effect.catchTag("Forbidden", () => Effect.succeed([])),
               ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+              // Non-entitled / plan-gated zones reject Keyless SSL listing.
+              Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news }) {
       // diff runs during plan — `news` may still contain unresolved Outputs.

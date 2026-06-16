@@ -242,39 +242,29 @@ export const PostgresDefaultRoleProvider = () =>
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const { organization } = yield* yield* Credentials;
+    list: Effect.fn(function* () {
+      const { organization } = yield* yield* Credentials;
 
-        const databases = yield* planetscale.listDatabases
-          .pages({ organization })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                page.data.filter((db) => db.kind === "postgresql"),
-              ),
-            ),
-          );
-
-        const rows = yield* Effect.forEach(
-          databases,
-          (db) =>
-            planetscale.listBranches
-              .pages({ organization, database: db.name })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((branchPages) =>
-                  Array.from(branchPages).flatMap((page) =>
+      const roles = yield* planetscale.listDatabases
+        .pages({ organization })
+        .pipe(
+          Stream.map((page) =>
+            page.data.filter((db) => db.kind === "postgresql"),
+          ),
+          Stream.flattenIterable,
+          Stream.flatMap(
+            (db) =>
+              planetscale.listBranches
+                .pages({ organization, database: db.name })
+                .pipe(
+                  Stream.map((page) =>
                     page.data.filter((branch) => branch.kind === "postgresql"),
                   ),
-                ),
-                Effect.catchTag("NotFound", () =>
-                  Effect.succeed([{ name: db.default_branch ?? "main" }]),
-                ),
-                Effect.flatMap((branches) =>
-                  Effect.forEach(
-                    branches,
+                  Stream.flattenIterable,
+                  Stream.catchTag("NotFound", () =>
+                    Stream.succeed({ name: db.default_branch ?? "main" }),
+                  ),
+                  Stream.flatMap(
                     (branch) =>
                       planetscale.listRoles
                         .pages({
@@ -283,53 +273,46 @@ export const PostgresDefaultRoleProvider = () =>
                           branch: branch.name,
                         })
                         .pipe(
-                          Stream.runCollect,
-                          Effect.map((rolePages) =>
-                            Array.from(rolePages).flatMap((page) =>
-                              page.data
-                                .filter((role) => role.default)
-                                .map(
-                                  (role) =>
-                                    ({
-                                      id: role.id,
-                                      name: role.name,
-                                      expiresAt: role.expires_at,
-                                      host: role.access_host_url,
-                                      username: role.username,
-                                      password: Redacted.make(""),
-                                      ttl: role.ttl,
-                                      databaseName: role.database_name,
-                                      connectionUrl: Redacted.make(""),
-                                      connectionUrlPooled: Redacted.make(""),
-                                      inheritedRoles:
-                                        role.inherited_roles as InheritedRole[],
-                                      organization,
-                                      database: db.name,
-                                      branch: branch.name,
-                                    }) satisfies PostgresDefaultRoleAttributes,
-                                ),
-                            ),
+                          Stream.map((page) =>
+                            page.data
+                              .filter((role) => role.default)
+                              .map(
+                                (role) =>
+                                  ({
+                                    id: role.id,
+                                    name: role.name,
+                                    expiresAt: role.expires_at,
+                                    host: role.access_host_url,
+                                    username: role.username,
+                                    password: Redacted.make(""),
+                                    ttl: role.ttl,
+                                    databaseName: role.database_name,
+                                    connectionUrl: Redacted.make(""),
+                                    connectionUrlPooled: Redacted.make(""),
+                                    inheritedRoles:
+                                      role.inherited_roles as InheritedRole[],
+                                    organization,
+                                    database: db.name,
+                                    branch: branch.name,
+                                  }) satisfies PostgresDefaultRoleAttributes as PostgresDefaultRoleAttributes,
+                              ),
                           ),
-                          Effect.catchTag("NotFound", () =>
-                            Effect.succeed(
-                              [] as PostgresDefaultRoleAttributes[],
-                            ),
-                          ),
-                          Effect.catchTag("Forbidden", () =>
-                            Effect.succeed(
-                              [] as PostgresDefaultRoleAttributes[],
-                            ),
-                          ),
+                          Stream.flattenIterable,
+                          Stream.catchTags({
+                            NotFound: () => Stream.empty,
+                            Forbidden: () => Stream.empty,
+                          }),
                         ),
                     { concurrency: 10 },
                   ),
                 ),
-              ),
-          { concurrency: 10 },
+            { concurrency: 10 },
+          ),
+          Stream.runCollect,
         );
 
-        return rows.flat();
-      }),
+      return Array.from(roles);
+    }),
   });
 
 // Structural shapes for runtime-resolved Resource references — see

@@ -240,32 +240,31 @@ export const ApiShieldUserSchemaProvider = () =>
     // Schemas live inside a zone; there is no account-wide list. Fan out
     // over every zone in the account and exhaustively paginate each zone's
     // schemas, hydrating into the same `Attributes` shape `read` produces.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            apiGateway.listUserSchemas.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((schema) =>
-                    toAttributes(schema, zone.id),
-                  ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          apiGateway.listUserSchemas.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((schema) =>
+                  toAttributes(schema, zone.id),
                 ),
               ),
-              // Zones without the API Shield entitlement reject the listing
-              // route; skip them rather than failing the whole enumeration.
-              Effect.catchTag("Forbidden", () =>
-                Effect.succeed([] as ApiShieldUserSchemaAttributes[]),
-              ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            // Zones without the API Shield entitlement reject the listing
+            // route; skip them rather than failing the whole enumeration.
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as ApiShieldUserSchemaAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 type ObservedSchema = Pick<

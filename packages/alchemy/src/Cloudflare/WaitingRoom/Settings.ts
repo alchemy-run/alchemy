@@ -99,32 +99,31 @@ export const WaitingRoomSettingsProvider = () =>
   Provider.succeed(WaitingRoomSettings, {
     stables: ["zoneId", "initialSearchEngineCrawlerBypass"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this zone singleton — enumerate every
-        // zone in the account and read its settings (every zone has one).
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            waitingRooms.getSetting({ zoneId }).pipe(
-              Effect.map((observed) =>
-                toAttributes(
-                  zoneId,
-                  observed.searchEngineCrawlerBypass,
-                  observed.searchEngineCrawlerBypass,
-                ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its settings (every zone has one).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          waitingRooms.getSetting({ zoneId }).pipe(
+            Effect.map((observed) =>
+              toAttributes(
+                zoneId,
+                observed.searchEngineCrawlerBypass,
+                observed.searchEngineCrawlerBypass,
               ),
-              // Plan-gated or partial zones reject the route; skip them.
-              Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is WaitingRoomSettingsAttributes => row !== undefined,
-        );
-      }),
+            // Plan-gated or partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is WaitingRoomSettingsAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as WaitingRoomSettingsProps;

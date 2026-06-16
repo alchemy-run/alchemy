@@ -117,28 +117,27 @@ export const AccessMcpPortalProvider = () =>
   Provider.succeed(AccessMcpPortal, {
     stables: ["portalId", "accountId", "createdAt"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Account-scoped collection; exhaustively paginate. The list rows
-        // carry the full portal shape, so each maps directly into the same
-        // Attributes `read` returns. Accounts without the AI Controls
-        // entitlement reject the route with the typed `Forbidden` — treat
-        // them as having no portals.
-        return yield* zeroTrust.listAccessAiControlMcpPortals
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((portal) =>
-                  toAttributes(portal, accountId),
-                ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection; exhaustively paginate. The list rows
+      // carry the full portal shape, so each maps directly into the same
+      // Attributes `read` returns. Accounts without the AI Controls
+      // entitlement reject the route with the typed `Forbidden` — treat
+      // them as having no portals.
+      return yield* zeroTrust.listAccessAiControlMcpPortals
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((portal) =>
+                toAttributes(portal, accountId),
               ),
             ),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
-          );
-      }),
+          ),
+          Effect.catchTag("Forbidden", () => Effect.succeed([])),
+        );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

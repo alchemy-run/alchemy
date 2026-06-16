@@ -185,30 +185,29 @@ export const FraudDetectionSettingsProvider = () =>
   Provider.succeed(FraudDetectionSettings, {
     stables: ["zoneId", "initialSettings"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this zone singleton — enumerate every
-        // zone in the account and read its settings (every live zone has
-        // exactly one). `getFraud` only reads, so the entitlement gate
-        // (which is on `putFraud`) never trips here.
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            observe(zoneId).pipe(
-              Effect.map((observed) =>
-                observed === undefined
-                  ? undefined
-                  : toAttributes(zoneId, observed, pickSettings(observed)),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its settings (every live zone has
+      // exactly one). `getFraud` only reads, so the entitlement gate
+      // (which is on `putFraud`) never trips here.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          observe(zoneId).pipe(
+            Effect.map((observed) =>
+              observed === undefined
+                ? undefined
+                : toAttributes(zoneId, observed, pickSettings(observed)),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is FraudDetectionSettingsAttributes => row !== undefined,
-        );
-      }),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is FraudDetectionSettingsAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

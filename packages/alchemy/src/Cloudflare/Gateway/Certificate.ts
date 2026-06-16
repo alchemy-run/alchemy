@@ -178,22 +178,17 @@ export const GatewayCertificateProvider = () =>
     // certificate in the ambient account. The list response already carries
     // the full certificate shape, so each row maps straight to the `read`
     // Attributes — no per-item hydration is required.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* zeroTrust.listGatewayCertificates
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((cert) =>
-                  toAttributes(cert, accountId),
-                ),
-              ),
-            ),
-          );
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listGatewayCertificates.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((cert) => toAttributes(cert, accountId)),
+          ),
+        ),
+      );
+    }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

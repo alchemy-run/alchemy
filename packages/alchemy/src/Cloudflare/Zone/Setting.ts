@@ -376,54 +376,48 @@ export const ZoneSettingProvider = () =>
     // (no bulk `/zones/{id}/settings` list op), so we fan out across the known
     // setting ids. Adding a bulk-list operation to distilled would collapse
     // each zone's N gets into one call — see the agent report's neededPatch.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const allZones = yield* listAllZones(accountId);
-        const pairs = allZones.flatMap((zone) =>
-          KNOWN_ZONE_SETTING_IDS.map((settingId) => ({
-            zoneId: zone.id,
-            settingId,
-          })),
-        );
-        const rows = yield* Effect.forEach(
-          pairs,
-          ({ zoneId, settingId }) =>
-            zones.getSetting({ zoneId, settingId }).pipe(
-              Effect.map((observed) =>
-                // Unmanaged at discovery time, so the observed value is the
-                // setting's pre-management value (mirrors a cold `read`).
-                toAttributes(
-                  zoneId,
-                  settingId,
-                  observed,
-                  settingValue(observed),
-                ),
-              ),
-              // Zone removed out-of-band or the setting is plan-gated / not
-              // exposed to this token — skip it rather than fail the listing.
-              Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () =>
-                Effect.succeed<ZoneSettingAttributes | undefined>(undefined),
-              ),
-              // A handful of structured settings (e.g.
-              // `automatic_platform_optimization`) can return a scalar value
-              // (`"off"`) that distilled's `GetSettingResponse` union doesn't
-              // model, surfacing as an untyped `CloudflareHttpError` (status
-              // 200, "Schema decode failed"). The Cloudflare patch system only
-              // types errors, not response schemas, so this can't be patched
-              // here — skip the undecodable setting rather than failing the
-              // whole listing. See the agent report's neededPatch (widen the
-              // `GetSettingResponse` member to accept the scalar form).
-              Effect.catch(() =>
-                Effect.succeed<ZoneSettingAttributes | undefined>(undefined),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const allZones = yield* listAllZones(accountId);
+      const pairs = allZones.flatMap((zone) =>
+        KNOWN_ZONE_SETTING_IDS.map((settingId) => ({
+          zoneId: zone.id,
+          settingId,
+        })),
+      );
+      const rows = yield* Effect.forEach(
+        pairs,
+        ({ zoneId, settingId }) =>
+          zones.getSetting({ zoneId, settingId }).pipe(
+            Effect.map((observed) =>
+              // Unmanaged at discovery time, so the observed value is the
+              // setting's pre-management value (mirrors a cold `read`).
+              toAttributes(zoneId, settingId, observed, settingValue(observed)),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is ZoneSettingAttributes => row !== undefined,
-        );
-      }),
+            // Zone removed out-of-band or the setting is plan-gated / not
+            // exposed to this token — skip it rather than fail the listing.
+            Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () =>
+              Effect.succeed<ZoneSettingAttributes | undefined>(undefined),
+            ),
+            // A handful of structured settings (e.g.
+            // `automatic_platform_optimization`) can return a scalar value
+            // (`"off"`) that distilled's `GetSettingResponse` union doesn't
+            // model, surfacing as an untyped `CloudflareHttpError` (status
+            // 200, "Schema decode failed"). The Cloudflare patch system only
+            // types errors, not response schemas, so this can't be patched
+            // here — skip the undecodable setting rather than failing the
+            // whole listing. See the agent report's neededPatch (widen the
+            // `GetSettingResponse` member to accept the scalar form).
+            Effect.catch(() =>
+              Effect.succeed<ZoneSettingAttributes | undefined>(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ZoneSettingAttributes => row !== undefined,
+      );
+    }),
   });
 
 /**

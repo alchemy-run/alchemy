@@ -577,7 +577,7 @@ export const R2BucketProvider = () =>
           let startAfter: string | undefined = undefined;
           const perPage = 1000;
           for (;;) {
-            const response = yield* r2.listBuckets({
+            const response: r2.ListBucketsResponse = yield* r2.listBuckets({
               accountId,
               jurisdiction,
               perPage,
@@ -667,6 +667,7 @@ export const R2BucketProvider = () =>
                   // An account not entitled to a jurisdiction rejects the list
                   // route with `Forbidden` ("Access Denied") or `InvalidRoute`
                   // — there are simply no buckets there, so treat as empty.
+                  // @ts-expect-error
                   Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
                     Effect.succeed([]),
                   ),

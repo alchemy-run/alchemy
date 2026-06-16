@@ -105,35 +105,32 @@ export const ApiShieldLabelProvider = () =>
   Provider.succeed(ApiShieldLabel, {
     stables: ["zoneId", "name", "source", "createdAt"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Labels are zone-scoped — fan out over every zone and list its
-        // user labels. Only `user`-sourced labels are enumerated;
-        // `managed` labels are Cloudflare-curated and not ours to delete.
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            apiGateway.listLabels
-              .pages({ zoneId: zone.id, source: "user" })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.result ?? []).map((label) =>
-                      toAttributes(label, zone.id),
-                    ),
-                  ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Labels are zone-scoped — fan out over every zone and list its
+      // user labels. Only `user`-sourced labels are enumerated;
+      // `managed` labels are Cloudflare-curated and not ours to delete.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          apiGateway.listLabels.pages({ zoneId: zone.id, source: "user" }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((label) =>
+                  toAttributes(label, zone.id),
                 ),
-                // Zones without the API Shield entitlement reject the
-                // route; skip them rather than fail the whole enumeration.
-                Effect.catchTag("Forbidden", () => Effect.succeed([])),
               ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            ),
+            // Zones without the API Shield entitlement reject the
+            // route; skip them rather than fail the whole enumeration.
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const o = olds as ApiShieldLabelProps | undefined;

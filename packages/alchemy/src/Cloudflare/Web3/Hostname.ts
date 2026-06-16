@@ -158,31 +158,29 @@ export const Web3HostnameProvider = () =>
     // `listAllZones` and exhaustively paginate the per-zone list. Zones without
     // the Web3 entitlement (or where the scoped token lacks access) answer
     // `Forbidden` — skip them rather than failing the whole enumeration.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            web3.listHostnames.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? [])
-                    .filter((raw) => raw.status !== "deleting")
-                    .map(
-                      (raw): Web3HostnameAttributes =>
-                        toAttributes(raw, zone.id),
-                    ),
-                ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          web3.listHostnames.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  .filter((raw) => raw.status !== "deleting")
+                  .map(
+                    (raw): Web3HostnameAttributes => toAttributes(raw, zone.id),
+                  ),
               ),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as Partial<Web3HostnameProps>;

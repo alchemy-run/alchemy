@@ -143,38 +143,37 @@ export const ApiShieldOperationProvider = () =>
     // last-updated timestamp survives any non-replacing deploy.
     stables: ["operationId", "zoneId", "method", "host", "endpoint"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Operations live inside a zone (`/zones/{id}/api_gateway/operations`)
-        // with no account-wide enumeration API — fan out over every zone and
-        // exhaustively paginate each zone's operations.
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            apiGateway.listOperations.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((op) => toAttributes(op, zone.id)),
-                ),
-              ),
-              // A freshly-minted scoped token can transiently 403; ride out
-              // the blip, then skip zones the token genuinely can't read.
-              Effect.retry({
-                while: (e) => e._tag === "Forbidden",
-                schedule: Schedule.exponential("500 millis"),
-                times: 5,
-              }),
-              Effect.catchTag("Forbidden", () =>
-                Effect.succeed([] as ApiShieldOperationAttributes[]),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Operations live inside a zone (`/zones/{id}/api_gateway/operations`)
+      // with no account-wide enumeration API — fan out over every zone and
+      // exhaustively paginate each zone's operations.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          apiGateway.listOperations.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((op) => toAttributes(op, zone.id)),
               ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            // A freshly-minted scoped token can transiently 403; ride out
+            // the blip, then skip zones the token genuinely can't read.
+            Effect.retry({
+              while: (e) => e._tag === "Forbidden",
+              schedule: Schedule.exponential("500 millis"),
+              times: 5,
+            }),
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as ApiShieldOperationAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news }) {
       const o = olds as ApiShieldOperationProps | undefined;

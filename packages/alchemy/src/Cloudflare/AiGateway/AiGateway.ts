@@ -479,20 +479,19 @@ export const AiGatewayProvider = () =>
     // object for every gateway in the account in one paginated collection.
     // Exhaustively paginate and hydrate each item into the same Attributes
     // shape `read` produces (via `mapGateway`).
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* aiGateway.listAiGateways.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((gateway) =>
-                mapGateway(gateway, accountId),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* aiGateway.listAiGateways.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((gateway) =>
+              mapGateway(gateway, accountId),
             ),
           ),
-        );
-      }),
+        ),
+      );
+    }),
   });
 
 const createGatewayId = (id: string, gatewayId: string | undefined) =>

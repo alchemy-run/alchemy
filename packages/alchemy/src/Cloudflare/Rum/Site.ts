@@ -283,18 +283,17 @@ export const RumSiteProvider = () =>
     // `read` Attributes shape — the list response carries the same fields
     // (siteTag/siteToken/snippet/ruleset/host) so no per-item re-read is
     // needed.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* rum.listSiteInfos.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((site) => toAttributes(site, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* rum.listSiteInfos.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((site) => toAttributes(site, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
   });
 
 type ObservedSite =

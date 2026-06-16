@@ -113,26 +113,25 @@ export const SynProtectionFilterProvider = () =>
     // account. Accounts without the Advanced TCP Protection entitlement (or
     // lacking read permission) yield no filters — treat the typed rejection
     // as an empty enumeration rather than an error.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* ddos.listAdvancedTcpProtectionSynProtectionFilters
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((filter) =>
-                  toAttributes(filter, accountId),
-                ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* ddos.listAdvancedTcpProtectionSynProtectionFilters
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((filter) =>
+                toAttributes(filter, accountId),
               ),
             ),
-            Effect.catchTags({
-              AdvancedTcpProtectionNotEntitled: () => Effect.succeed([]),
-              Forbidden: () => Effect.succeed([]),
-            }),
-          );
-      }),
+          ),
+          Effect.catchTags({
+            AdvancedTcpProtectionNotEntitled: () => Effect.succeed([]),
+            Forbidden: () => Effect.succeed([]),
+          }),
+        );
+    }),
 
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

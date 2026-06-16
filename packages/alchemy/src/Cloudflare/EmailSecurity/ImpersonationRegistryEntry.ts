@@ -126,27 +126,26 @@ export const EmailSecurityImpersonationRegistryEntryProvider = () =>
     // list and hydrate each row into the exact `read` Attributes shape.
     // Accounts without the Email Security add-on return the typed
     // `EmailSecurityNotEntitled` error → treat as an empty registry.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* emailSecurity.listSettingImpersonationRegistries
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((entry) =>
-                  toAttributes(entry, accountId),
-                ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* emailSecurity.listSettingImpersonationRegistries
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((entry) =>
+                toAttributes(entry, accountId),
               ),
             ),
-            Effect.catchTag("EmailSecurityNotEntitled", () =>
-              Effect.succeed(
-                [] as EmailSecurityImpersonationRegistryEntryAttributes[],
-              ),
+          ),
+          Effect.catchTag("EmailSecurityNotEntitled", () =>
+            Effect.succeed(
+              [] as EmailSecurityImpersonationRegistryEntryAttributes[],
             ),
-          );
-      }),
+          ),
+        );
+    }),
 
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

@@ -177,46 +177,41 @@ export const AccessKeyProvider = () =>
     // key and last-used details are not part of the list metadata — the secret
     // is only returned at creation and cannot be re-read — so those fields are
     // left undefined here.
-    list: () =>
-      Effect.gen(function* () {
-        const users = yield* iam.listUsers.pages({}).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.Users),
-          ),
-        );
-        const perUser = yield* Effect.forEach(
-          users,
-          (user) =>
-            iam.listAccessKeys.pages({ UserName: user.UserName }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  page.AccessKeyMetadata.filter(
-                    (
-                      entry,
-                    ): entry is iam.AccessKeyMetadata & {
-                      AccessKeyId: string;
-                    } => entry.AccessKeyId != null,
-                  ).map((entry) => ({
-                    userName: entry.UserName ?? user.UserName,
-                    accessKeyId: entry.AccessKeyId,
-                    status: entry.Status ?? "Active",
-                    createDate: entry.CreateDate,
-                    secretAccessKey: undefined,
-                    lastUsedDate: undefined,
-                    lastUsedServiceName: undefined,
-                    lastUsedRegion: undefined,
-                  })),
-                ),
-              ),
-              // The user may be deleted between enumeration and per-user list.
-              Effect.catchTag("NoSuchEntityException", () =>
-                Effect.succeed([]),
+    list: Effect.fn(function* () {
+      const users = yield* iam.listUsers.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Users)),
+      );
+      const perUser = yield* Effect.forEach(
+        users,
+        (user) =>
+          iam.listAccessKeys.pages({ UserName: user.UserName }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                page.AccessKeyMetadata.filter(
+                  (
+                    entry,
+                  ): entry is iam.AccessKeyMetadata & {
+                    AccessKeyId: string;
+                  } => entry.AccessKeyId != null,
+                ).map((entry) => ({
+                  userName: entry.UserName ?? user.UserName,
+                  accessKeyId: entry.AccessKeyId,
+                  status: entry.Status ?? "Active",
+                  createDate: entry.CreateDate,
+                  secretAccessKey: undefined,
+                  lastUsedDate: undefined,
+                  lastUsedServiceName: undefined,
+                  lastUsedRegion: undefined,
+                })),
               ),
             ),
-          { concurrency: 10 },
-        );
-        return perUser.flat();
-      }),
+            // The user may be deleted between enumeration and per-user list.
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return perUser.flat();
+    }),
   });

@@ -177,23 +177,22 @@ export const MagicAppProvider = () =>
     // and hydrate each account app into the `read` Attributes shape. Magic WAN
     // is entitlement-gated; unentitled accounts reject with a typed error, in
     // which case there are no apps to enumerate → [].
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* magicTransit.listApps.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(isAccountApp)
-                .map((app) => toAttributes(app, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* magicTransit.listApps.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter(isAccountApp)
+              .map((app) => toAttributes(app, accountId)),
           ),
-          Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
-            Effect.succeed([] as MagicAppAttributes[]),
-          ),
-        );
-      }),
+        ),
+        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+          Effect.succeed([] as MagicAppAttributes[]),
+        ),
+      );
+    }),
   });
 
 interface ObservedApp {

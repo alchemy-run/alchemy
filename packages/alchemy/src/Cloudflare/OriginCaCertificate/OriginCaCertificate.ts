@@ -180,33 +180,31 @@ export const OriginCaCertificateProvider = () =>
     // Origin CA Key auth; a zone we can't enumerate rejects with `Forbidden`,
     // which we skip rather than fail (the array stays as complete as the
     // credentials allow).
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            originCa.listOriginCaCertificates.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? [])
-                    .filter((cert) => cert.id != null)
-                    .map(
-                      (cert): OriginCaCertificateAttributes =>
-                        toAttributes(cert),
-                    ),
-                ),
-              ),
-              Effect.catchTag("Forbidden", () =>
-                Effect.succeed([] as OriginCaCertificateAttributes[]),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          originCa.listOriginCaCertificates.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  .filter((cert) => cert.id != null)
+                  .map(
+                    (cert): OriginCaCertificateAttributes => toAttributes(cert),
+                  ),
               ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as OriginCaCertificateAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news }) {
       const o = olds as OriginCaCertificateProps | undefined;

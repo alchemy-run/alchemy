@@ -95,40 +95,39 @@ export const IamUserGroupMembershipProvider = () =>
     // there is no account-wide membership enumeration API. Enumerate every
     // user group in the account (account-scoped), then list each group's
     // members with bounded concurrency, paginating both levels exhaustively.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const groups = yield* iam.listUserGroups.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.result ?? []),
-          ),
-        );
-        const rows = yield* Effect.forEach(
-          groups,
-          (group) =>
-            iam.listUserGroupMembers
-              .pages({ accountId, userGroupId: group.id })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.result ?? []).map(
-                      (member): IamUserGroupMembershipAttributes =>
-                        toAttributes(member, group.id, accountId),
-                    ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const groups = yield* iam.listUserGroups.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.result ?? []),
+        ),
+      );
+      const rows = yield* Effect.forEach(
+        groups,
+        (group) =>
+          iam.listUserGroupMembers
+            .pages({ accountId, userGroupId: group.id })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? []).map(
+                    (member): IamUserGroupMembershipAttributes =>
+                      toAttributes(member, group.id, accountId),
                   ),
                 ),
-                // Group removed out-of-band between enumeration and member
-                // listing — skip it.
-                Effect.catchTag("UserGroupNotFound", () =>
-                  Effect.succeed([] as IamUserGroupMembershipAttributes[]),
-                ),
               ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+              // Group removed out-of-band between enumeration and member
+              // listing — skip it.
+              Effect.catchTag("UserGroupNotFound", () =>
+                Effect.succeed([] as IamUserGroupMembershipAttributes[]),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;

@@ -111,25 +111,24 @@ export const AccessCertificateProvider = () =>
     // Account-scoped collection (pattern b). Cloudflare never returns the
     // certificate PEM body, so the persisted `certificate` field is empty for
     // enumerated items — every other attribute matches the `read` shape.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* zeroTrust.listAccessCertificatesForAccount
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? [])
-                  .filter(
-                    (c): c is ObservedCertificate & { id: string } =>
-                      c.id != null,
-                  )
-                  .map((c) => toAttrs(c, accountId, "")),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listAccessCertificatesForAccount
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter(
+                  (c): c is ObservedCertificate & { id: string } =>
+                    c.id != null,
+                )
+                .map((c) => toAttrs(c, accountId, "")),
             ),
-          );
-      }),
+          ),
+        );
+    }),
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;

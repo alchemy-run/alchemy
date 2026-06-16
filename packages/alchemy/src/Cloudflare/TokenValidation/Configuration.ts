@@ -205,30 +205,29 @@ export const TokenConfigurationProvider = () =>
   Provider.succeed(TokenConfiguration, {
     stables: ["configId", "zoneId", "tokenType", "createdAt"],
 
-    list: (): Effect.Effect<TokenConfigurationAttributes[], any, Providers> =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Configurations are zone-scoped; the list op is keyed per zone.
-        // Enumerate every zone, fan out the per-zone list, and flatten.
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            tokenValidation.listConfigurations.items({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).map((c) => toAttributes(c, zone.id)),
-              ),
-              // JWT validation is entitlement-gated and freshly minted tokens
-              // can briefly 403 — skip zones we can't enumerate.
-              Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () =>
-                Effect.succeed([]),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Configurations are zone-scoped; the list op is keyed per zone.
+      // Enumerate every zone, fan out the per-zone list, and flatten.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          tokenValidation.listConfigurations.items({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).map((c) => toAttributes(c, zone.id)),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            // JWT validation is entitlement-gated and freshly minted tokens
+            // can briefly 403 — skip zones we can't enumerate.
+            Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () =>
+              Effect.succeed([]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

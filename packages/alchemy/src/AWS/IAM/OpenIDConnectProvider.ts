@@ -125,10 +125,10 @@ export const OpenIDConnectProviderProvider = () =>
             const rows = yield* Effect.forEach(arns, hydrate, {
               concurrency: 10,
             });
-            return rows.filter(
-              (row): row is OpenIDConnectProvider["Attributes"] =>
-                row !== undefined,
+            const result: OpenIDConnectProvider["Attributes"][] = rows.filter(
+              (row): row is NonNullable<typeof row> => row !== undefined,
             );
+            return result;
           }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;

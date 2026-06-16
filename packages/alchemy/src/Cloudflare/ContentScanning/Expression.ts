@@ -123,32 +123,31 @@ export const ContentScanningExpressionProvider = () =>
     // produces. Zones without Content Scanning enabled (or not entitled) reject
     // payload calls with the typed `ContentScanningNotEnabled`/`Forbidden`
     // tags, and a deleted zone with `InvalidRoute` — skip all three.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones,
-          (zone) =>
-            contentScanning.listPayloads.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((expression) =>
-                    toAttributes(zone.id, expression),
-                  ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones,
+        (zone) =>
+          contentScanning.listPayloads.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((expression) =>
+                  toAttributes(zone.id, expression),
                 ),
               ),
-              Effect.catchTag("ContentScanningNotEnabled", () =>
-                Effect.succeed([]),
-              ),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
-              Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            Effect.catchTag("ContentScanningNotEnabled", () =>
+              Effect.succeed([]),
+            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       // zoneId is Input<string>; compare only once both sides are concrete.

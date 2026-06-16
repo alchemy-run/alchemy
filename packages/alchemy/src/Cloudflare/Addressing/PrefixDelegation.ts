@@ -196,36 +196,35 @@ export const AddressingPrefixDelegationProvider = () =>
     // delegations on each prefix (bounded concurrency). A prefix that has
     // gone away between the two calls reads as an empty list (typed
     // `PrefixNotFound`, handled in `listDelegations`).
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        const prefixIds = yield* addressing.listPrefixes
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? [])
-                  .map((p) => p.id)
-                  .filter((id): id is string => typeof id === "string"),
-              ),
+      const prefixIds = yield* addressing.listPrefixes
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .map((p) => p.id)
+                .filter((id): id is string => typeof id === "string"),
             ),
-          );
-
-        const rows = yield* Effect.forEach(
-          prefixIds,
-          (prefixId) =>
-            listDelegations(accountId, prefixId).pipe(
-              Effect.map((delegations) =>
-                delegations.map((d) => toAttributes(d, prefixId, accountId)),
-              ),
-            ),
-          { concurrency: 10 },
+          ),
         );
 
-        return rows.flat();
-      }),
+      const rows = yield* Effect.forEach(
+        prefixIds,
+        (prefixId) =>
+          listDelegations(accountId, prefixId).pipe(
+            Effect.map((delegations) =>
+              delegations.map((d) => toAttributes(d, prefixId, accountId)),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+
+      return rows.flat();
+    }),
   });
 
 interface ObservedDelegation {

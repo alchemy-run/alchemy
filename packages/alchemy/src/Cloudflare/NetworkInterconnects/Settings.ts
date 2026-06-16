@@ -97,21 +97,20 @@ export const NetworkInterconnectSettingsProvider = () =>
     // `initialDefaultAsn` is the observed value). CNI is an enterprise
     // feature: accounts without the entitlement reject the route with the
     // typed `Forbidden` error — treat that as "unset" and return `[]`.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const observed = yield* cni
-          .getSetting({ accountId })
-          .pipe(Effect.catchTag("Forbidden", () => Effect.succeed(undefined)));
-        if (observed === undefined) return [];
-        return [
-          {
-            accountId,
-            defaultAsn: observed.defaultAsn,
-            initialDefaultAsn: observed.defaultAsn,
-          },
-        ];
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* cni
+        .getSetting({ accountId })
+        .pipe(Effect.catchTag("Forbidden", () => Effect.succeed(undefined)));
+      if (observed === undefined) return [];
+      return [
+        {
+          accountId,
+          defaultAsn: observed.defaultAsn,
+          initialDefaultAsn: observed.defaultAsn,
+        },
+      ];
+    }),
 
     read: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

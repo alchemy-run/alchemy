@@ -124,42 +124,41 @@ export const SnippetProvider = () =>
   Provider.succeed(Snippet, {
     stables: ["name", "zoneId", "createdOn"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Snippets live inside a zone with no account-wide enumeration
-        // API — fan out across every zone and list snippets per zone.
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            snippets.listSnippets.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map(
-                    (s): SnippetAttributes => ({
-                      name: s.snippetName,
-                      zoneId: zone.id,
-                      // The list response carries no main module; snippets
-                      // upload under the engine default and `read` falls
-                      // back to it too, so report the same here.
-                      mainModule: DEFAULT_MAIN_MODULE,
-                      createdOn: s.createdOn,
-                      modifiedOn: s.modifiedOn ?? undefined,
-                    }),
-                  ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Snippets live inside a zone with no account-wide enumeration
+      // API — fan out across every zone and list snippets per zone.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          snippets.listSnippets.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map(
+                  (s): SnippetAttributes => ({
+                    name: s.snippetName,
+                    zoneId: zone.id,
+                    // The list response carries no main module; snippets
+                    // upload under the engine default and `read` falls
+                    // back to it too, so report the same here.
+                    mainModule: DEFAULT_MAIN_MODULE,
+                    createdOn: s.createdOn,
+                    modifiedOn: s.modifiedOn ?? undefined,
+                  }),
                 ),
               ),
-              // Plan-gated / partial-permission zones reject the route; skip.
-              Effect.catchTag("Forbidden", () =>
-                Effect.succeed([] as SnippetAttributes[]),
-              ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            // Plan-gated / partial-permission zones reject the route; skip.
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as SnippetAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       if (!isResolved(news)) return undefined;

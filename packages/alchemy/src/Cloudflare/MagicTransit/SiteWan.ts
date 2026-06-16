@@ -246,44 +246,43 @@ export const MagicSiteWanProvider = () =>
     // each list exhaustively. Magic WAN-gated accounts (and partial-scope
     // tokens) reject these routes with the typed `MagicWanUnauthorized`
     // (code 1025) / `Forbidden` tags — treat those as "nothing to list".
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        const siteIds = yield* magicTransit.listSites.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).flatMap((site) => (site.id ? [site.id] : [])),
-            ),
+      const siteIds = yield* magicTransit.listSites.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).flatMap((site) => (site.id ? [site.id] : [])),
           ),
-          Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
-            Effect.succeed([] as string[]),
-          ),
-        );
+        ),
+        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+          Effect.succeed([] as string[]),
+        ),
+      );
 
-        const rows = yield* Effect.forEach(
-          siteIds,
-          (siteId) =>
-            magicTransit.listSiteWans.pages({ accountId, siteId }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((wan) =>
-                    toAttributes(wan, siteId, accountId),
-                  ),
+      const rows = yield* Effect.forEach(
+        siteIds,
+        (siteId) =>
+          magicTransit.listSiteWans.pages({ accountId, siteId }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((wan) =>
+                  toAttributes(wan, siteId, accountId),
                 ),
               ),
-              // Site vanished or became inaccessible mid-enumeration — skip it.
-              Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
-                Effect.succeed([] as MagicSiteWanAttributes[]),
-              ),
             ),
-          { concurrency: 10 },
-        );
+            // Site vanished or became inaccessible mid-enumeration — skip it.
+            Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+              Effect.succeed([] as MagicSiteWanAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
 
-        return rows.flat();
-      }),
+      return rows.flat();
+    }),
   });
 
 interface ObservedWan {

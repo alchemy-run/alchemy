@@ -133,36 +133,33 @@ export const TotalTlsProvider = () =>
   Provider.succeed(TotalTls, {
     stables: ["zoneId", "initialEnabled", "initialCertificateAuthority"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this zone singleton — enumerate every
-        // zone in the account and read its setting (every zone has one,
-        // defaulting to disabled; reads succeed even without the ACM
-        // entitlement).
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            acm.getTotalTl({ zoneId }).pipe(
-              Effect.map((observed) =>
-                toAttributes(
-                  zoneId,
-                  observed,
-                  initialStateOf(undefined, observed),
-                ),
-              ),
-              // Zone deleted out-of-band between enumeration and read.
-              Effect.catchTag("InvalidObjectIdentifier", () =>
-                Effect.succeed(undefined),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its setting (every zone has one,
+      // defaulting to disabled; reads succeed even without the ACM
+      // entitlement).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          acm.getTotalTl({ zoneId }).pipe(
+            Effect.map((observed) =>
+              toAttributes(
+                zoneId,
+                observed,
+                initialStateOf(undefined, observed),
               ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is TotalTlsAttributes => row !== undefined,
-        );
-      }),
+            // Zone deleted out-of-band between enumeration and read.
+            Effect.catchTag("InvalidObjectIdentifier", () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter((row): row is TotalTlsAttributes => row !== undefined);
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

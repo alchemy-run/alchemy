@@ -431,31 +431,30 @@ export const HealthcheckProvider = () =>
     // zone. A scoped token may lack permission on a zone (eventual consistency)
     // or a zone may be partially provisioned — skip those zones (-> []) rather
     // than failing the whole enumeration.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            healthchecks.listHealthchecks.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).flatMap((h) => {
-                    const attrs = toAttributes(h, zone.id);
-                    return attrs ? [attrs] : [];
-                  }),
-                ),
-              ),
-              Effect.catchTag("Forbidden", () =>
-                Effect.succeed([] as HealthcheckAttributes[]),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          healthchecks.listHealthchecks.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).flatMap((h) => {
+                  const attrs = toAttributes(h, zone.id);
+                  return attrs ? [attrs] : [];
+                }),
               ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as HealthcheckAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 type ObservedHealthcheck = healthchecks.GetHealthcheckResponse;

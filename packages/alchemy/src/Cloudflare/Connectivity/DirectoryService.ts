@@ -389,22 +389,21 @@ export const DirectoryServiceProvider = () =>
     // Account-scoped collection: enumerate every directory service in the
     // account, exhaustively paginating the list API, and hydrate each into
     // the same Attributes shape `read` returns.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* connectivity.listDirectoryServices
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((service) =>
-                  toAttributes(service, accountId),
-                ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* connectivity.listDirectoryServices
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((service) =>
+                toAttributes(service, accountId),
               ),
             ),
-          );
-      }),
+          ),
+        );
+    }),
   });
 
 type ObservedService = connectivity.GetDirectoryServiceResponse;

@@ -433,29 +433,28 @@ export const BranchProvider = () =>
     // account-wide branch enumeration API. Enumerate every project, then
     // list+hydrate the branches of each (bounded concurrency), producing
     // the exact `read` Attributes shape for each branch.
-    list: () =>
-      Effect.gen(function* () {
-        const projects = yield* listAllProjects;
-        const perProject = yield* Effect.forEach(
-          projects,
-          (project) =>
-            Effect.gen(function* () {
-              const branches = yield* listAllBranches(project.id);
-              return yield* Effect.forEach(
-                branches,
-                (branch) => hydrateBranch(project.id, branch),
-                { concurrency: 10 },
-              );
-            }).pipe(
-              // The project may be deleted between enumeration and listing.
-              Effect.catchTag("NotFound", () => Effect.succeed([])),
-            ),
-          { concurrency: 10 },
-        );
-        return perProject
-          .flat()
-          .filter((row): row is Branch["Attributes"] => row !== undefined);
-      }),
+    list: Effect.fn(function* () {
+      const projects = yield* listAllProjects;
+      const perProject = yield* Effect.forEach(
+        projects,
+        (project) =>
+          Effect.gen(function* () {
+            const branches = yield* listAllBranches(project.id);
+            return yield* Effect.forEach(
+              branches,
+              (branch) => hydrateBranch(project.id, branch),
+              { concurrency: 10 },
+            );
+          }).pipe(
+            // The project may be deleted between enumeration and listing.
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return perProject
+        .flat()
+        .filter((row): row is Branch["Attributes"] => row !== undefined);
+    }),
   });
 
 const listAllProjects = Effect.gen(function* () {
@@ -514,7 +513,7 @@ const hydrateBranch = (
       db.name,
       db.owner_name,
     );
-    return {
+    const attributes: Branch["Attributes"] = {
       branchId: branch.id,
       branchName: branch.name,
       projectId,
@@ -537,7 +536,8 @@ const hydrateBranch = (
       migrationsTable: undefined,
       migrationsHashes: {},
       importHashes: {},
-    } satisfies Branch["Attributes"];
+    };
+    return attributes;
   }).pipe(
     // A branch/database/endpoint can disappear mid-enumeration — skip it.
     Effect.catchTag("NotFound", () => Effect.succeed(undefined)),

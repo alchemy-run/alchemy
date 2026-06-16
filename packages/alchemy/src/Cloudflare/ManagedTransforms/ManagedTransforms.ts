@@ -187,36 +187,35 @@ export const ManagedTransformsProvider = () =>
   Provider.succeed(ManagedTransforms, {
     stables: ["zoneId", "initialRequestHeaders", "initialResponseHeaders"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // The managed-transforms catalog is a per-zone singleton with no
-        // account-wide list — enumerate every zone and read its catalog.
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            observe(zoneId).pipe(
-              Effect.map((observed) =>
-                observed === undefined
-                  ? undefined
-                  : // Cold enumeration adopts the singleton freely — the
-                    // observed enabled states become the snapshot baseline,
-                    // matching the `read` cold-adopt path.
-                    toAttributes(
-                      zoneId,
-                      observed,
-                      snapshot(observed.managedRequestHeaders),
-                      snapshot(observed.managedResponseHeaders),
-                    ),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // The managed-transforms catalog is a per-zone singleton with no
+      // account-wide list — enumerate every zone and read its catalog.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          observe(zoneId).pipe(
+            Effect.map((observed) =>
+              observed === undefined
+                ? undefined
+                : // Cold enumeration adopts the singleton freely — the
+                  // observed enabled states become the snapshot baseline,
+                  // matching the `read` cold-adopt path.
+                  toAttributes(
+                    zoneId,
+                    observed,
+                    snapshot(observed.managedRequestHeaders),
+                    snapshot(observed.managedResponseHeaders),
+                  ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is ManagedTransformsAttributes => row !== undefined,
-        );
-      }),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ManagedTransformsAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as ManagedTransformsProps;

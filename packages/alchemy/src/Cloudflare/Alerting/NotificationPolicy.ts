@@ -180,21 +180,20 @@ export const NotificationPolicyProvider = () =>
 
     // Account-scoped collection: exhaustively paginate the account's
     // notification policies and hydrate each into the `read` attribute shape.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* alerting.listPolicies.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .map(narrowPolicy)
-                .filter((p): p is ObservedPolicy => p !== undefined)
-                .map((p) => toPolicyAttributes(p, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* alerting.listPolicies.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map(narrowPolicy)
+              .filter((p): p is ObservedPolicy => p !== undefined)
+              .map((p) => toPolicyAttributes(p, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

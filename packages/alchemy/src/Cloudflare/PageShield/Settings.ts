@@ -168,32 +168,29 @@ export const PageShieldSettingsProvider = () =>
       "initialUseConnectionUrlPath",
     ],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this zone singleton — enumerate every
-        // zone in the account and read its configuration (every zone has
-        // one, defaulting to disabled).
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            pageShield.getPageShield({ zoneId }).pipe(
-              // On a cold enumeration the observed flags are the zone's
-              // current state and double as the `initial*` baseline.
-              Effect.map((observed) =>
-                toAttributes(zoneId, observed, observed),
-              ),
-              // Zones the scoped token can't read (partial / restricted)
-              // reject with the typed `Forbidden` error; skip them.
-              Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
-            ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is PageShieldSettingsAttributes => row !== undefined,
-        );
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its configuration (every zone has
+      // one, defaulting to disabled).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          pageShield.getPageShield({ zoneId }).pipe(
+            // On a cold enumeration the observed flags are the zone's
+            // current state and double as the `initial*` baseline.
+            Effect.map((observed) => toAttributes(zoneId, observed, observed)),
+            // Zones the scoped token can't read (partial / restricted)
+            // reject with the typed `Forbidden` error; skip them.
+            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is PageShieldSettingsAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;

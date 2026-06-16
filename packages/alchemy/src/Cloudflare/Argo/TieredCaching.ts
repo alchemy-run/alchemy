@@ -106,32 +106,31 @@ export const TieredCachingProvider = () =>
   Provider.succeed(TieredCaching, {
     stables: ["zoneId", "initialValue"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this zone singleton — enumerate every
-        // zone in the account and read its setting (every zone has one,
-        // tiered caching is available on all plans).
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            argo.getTieredCaching({ zoneId }).pipe(
-              Effect.map((observed) =>
-                toAttributes(zoneId, observed, toValue(observed.value)),
-              ),
-              // Zone deleted out-of-band between enumeration and read —
-              // the setting is gone with it; skip it.
-              Effect.catchTag("InvalidObjectIdentifier", () =>
-                Effect.succeed(undefined),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its setting (every zone has one,
+      // tiered caching is available on all plans).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          argo.getTieredCaching({ zoneId }).pipe(
+            Effect.map((observed) =>
+              toAttributes(zoneId, observed, toValue(observed.value)),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is TieredCachingAttributes => row !== undefined,
-        );
-      }),
+            // Zone deleted out-of-band between enumeration and read —
+            // the setting is gone with it; skip it.
+            Effect.catchTag("InvalidObjectIdentifier", () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is TieredCachingAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as TieredCachingProps;

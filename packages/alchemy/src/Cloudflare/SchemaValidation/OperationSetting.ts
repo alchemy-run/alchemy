@@ -124,44 +124,43 @@ export const SchemaValidationOperationSettingProvider = () =>
   Provider.succeed(SchemaValidationOperationSetting, {
     stables: ["zoneId", "operationId"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Per-operation overrides live inside a zone with no account-wide
-        // enumeration API — fan out over every zone and list its operation
-        // settings, exhaustively paginated.
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            schemaValidation.listSettingOperations
-              .pages({ zoneId: zone.id })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.result ?? [])
-                      // An operation with no override reports a nullish action;
-                      // skip it so the result mirrors what `read` returns.
-                      .filter((op) => op.mitigationAction != null)
-                      .map((op) =>
-                        toAttributes(zone.id, {
-                          operationId: op.operationId,
-                          // Distilled widens the generated enum to an open union.
-                          mitigationAction:
-                            op.mitigationAction as SchemaValidationOperationMitigationAction,
-                        }),
-                      ),
-                  ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Per-operation overrides live inside a zone with no account-wide
+      // enumeration API — fan out over every zone and list its operation
+      // settings, exhaustively paginated.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          schemaValidation.listSettingOperations
+            .pages({ zoneId: zone.id })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? [])
+                    // An operation with no override reports a nullish action;
+                    // skip it so the result mirrors what `read` returns.
+                    .filter((op) => op.mitigationAction != null)
+                    .map((op) =>
+                      toAttributes(zone.id, {
+                        operationId: op.operationId,
+                        // Distilled widens the generated enum to an open union.
+                        mitigationAction:
+                          op.mitigationAction as SchemaValidationOperationMitigationAction,
+                      }),
+                    ),
                 ),
-                // Zones without API Shield / schema validation reject the
-                // route; skip them rather than fail the whole enumeration.
-                Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
               ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+              // Zones without API Shield / schema validation reject the
+              // route; skip them rather than fail the whole enumeration.
+              Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;

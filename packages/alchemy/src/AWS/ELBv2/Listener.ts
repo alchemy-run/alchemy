@@ -5,8 +5,8 @@ import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import type { AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { LoadBalancer, LoadBalancerArn } from "./LoadBalancer.ts";
 import type { TargetGroup, TargetGroupArn } from "./TargetGroup.ts";
@@ -80,62 +80,62 @@ export const ListenerProvider = () =>
     // Listeners belong to a load balancer; describeListeners requires a
     // LoadBalancerArn. Enumerate every load balancer first, then exhaustively
     // page listeners per LB with bounded concurrency.
-    list: () =>
-      Effect.gen(function* () {
-        const loadBalancerArns = yield* elbv2.describeLoadBalancers
-          .pages({})
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.LoadBalancers ?? []).flatMap((lb) =>
-                  lb.LoadBalancerArn ? [lb.LoadBalancerArn] : [],
-                ),
+    list: Effect.fn(function* () {
+      const loadBalancerArns = yield* elbv2.describeLoadBalancers
+        .pages({})
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.LoadBalancers ?? []).flatMap((lb) =>
+                lb.LoadBalancerArn ? [lb.LoadBalancerArn] : [],
               ),
             ),
-          );
-        const rows = yield* Effect.forEach(
-          loadBalancerArns,
-          (loadBalancerArn) =>
-            elbv2.describeListeners
-              .pages({ LoadBalancerArn: loadBalancerArn })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((chunk) =>
-                  Array.from(chunk).flatMap((page) =>
-                    (page.Listeners ?? [])
-                      .filter(
-                        (l): l is elbv2.Listener & { ListenerArn: string } =>
-                          l.ListenerArn != null,
-                      )
-                      .map((listener) => {
-                        const defaultForward = (
-                          listener.DefaultActions ?? []
-                        ).find((action) => action.Type === "forward");
-                        return {
-                          listenerArn: listener.ListenerArn as ListenerArn,
-                          loadBalancerArn:
-                            listener.LoadBalancerArn as LoadBalancerArn,
-                          targetGroupArn: (defaultForward?.TargetGroupArn ??
-                            "") as TargetGroupArn,
-                          port: listener.Port!,
-                          protocol: listener.Protocol!,
-                        };
-                      }),
-                  ),
-                ),
-                // The LB may vanish between enumeration and per-LB listing.
-                Effect.catchTag("LoadBalancerNotFoundException", () =>
-                  Effect.succeed([]),
-                ),
-                Effect.catchTag("ListenerNotFoundException", () =>
-                  Effect.succeed([]),
+          ),
+        );
+      const rows = yield* Effect.forEach(
+        loadBalancerArns,
+        (loadBalancerArn) =>
+          elbv2.describeListeners
+            .pages({ LoadBalancerArn: loadBalancerArn })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.Listeners ?? [])
+                    .filter(
+                      (l): l is typeof l & { ListenerArn: string } =>
+                        l.ListenerArn != null,
+                    )
+                    .map((listener) => {
+                      const defaultForward = (
+                        listener.DefaultActions ?? []
+                      ).find((action) => action.Type === "forward");
+                      return {
+                        listenerArn: listener.ListenerArn as ListenerArn,
+                        loadBalancerArn:
+                          listener.LoadBalancerArn as LoadBalancerArn,
+                        targetGroupArn: (defaultForward?.TargetGroupArn ??
+                          "") as TargetGroupArn,
+                        port: listener.Port!,
+                        protocol: listener.Protocol!,
+                      };
+                    }),
                 ),
               ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+              // The LB may vanish between enumeration and per-LB listing.
+              Effect.catchTag("LoadBalancerNotFoundException", () =>
+                Effect.succeed([]),
+              ),
+              Effect.catchTag("ListenerNotFoundException", () =>
+                Effect.succeed([]),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      const result: Listener["Attributes"][] = rows.flat();
+      return result;
+    }),
     reconcile: Effect.fn(function* ({ news, output, session }) {
       const loadBalancerArn = news.loadBalancerArn as LoadBalancerArn;
       const desiredTargetGroupArn = news.targetGroupArn as TargetGroupArn;

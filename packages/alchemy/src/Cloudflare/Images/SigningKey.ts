@@ -150,18 +150,17 @@ export const ImagesSigningKeyProvider = () =>
     // call; map each entry to the same Attributes shape `read` produces.
     // Accounts without the Images signing-keys entitlement have no keys to
     // enumerate — treat as an empty set rather than a hard failure.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* images.listV1Keys({ accountId }).pipe(
-          Effect.map((response): ImagesSigningKeyAttributes[] =>
-            (response.keys ?? []).map((key) => toAttributes(key, accountId)),
-          ),
-          Effect.catchTag("ImagesAccessNotEnabled", () =>
-            Effect.succeed<ImagesSigningKeyAttributes[]>([]),
-          ),
-        );
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* images.listV1Keys({ accountId }).pipe(
+        Effect.map((response): ImagesSigningKeyAttributes[] =>
+          (response.keys ?? []).map((key) => toAttributes(key, accountId)),
+        ),
+        Effect.catchTag("ImagesAccessNotEnabled", () =>
+          Effect.succeed<ImagesSigningKeyAttributes[]>([]),
+        ),
+      );
+    }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

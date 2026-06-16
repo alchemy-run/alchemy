@@ -186,30 +186,27 @@ export const PageRuleProvider = () =>
   Provider.succeed(PageRule, {
     stables: ["pageRuleId", "zoneId", "createdOn"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Page Rules live inside a zone (`/zones/{id}/pagerules`) with no
-        // account-wide enumeration API. Fan out over every zone and list
-        // its rules; `listPageRules` is non-paginated (returns the whole
-        // array in one response). Skip plan-gated zones with the typed
-        // `Forbidden` tag.
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            pageRules.listPageRules({ zoneId: zone.id }).pipe(
-              Effect.map((rules) =>
-                rules.map((rule) =>
-                  toAttributes(rule as ObservedRule, zone.id),
-                ),
-              ),
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Page Rules live inside a zone (`/zones/{id}/pagerules`) with no
+      // account-wide enumeration API. Fan out over every zone and list
+      // its rules; `listPageRules` is non-paginated (returns the whole
+      // array in one response). Skip plan-gated zones with the typed
+      // `Forbidden` tag.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          pageRules.listPageRules({ zoneId: zone.id }).pipe(
+            Effect.map((rules) =>
+              rules.map((rule) => toAttributes(rule as ObservedRule, zone.id)),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as PageRuleProps;

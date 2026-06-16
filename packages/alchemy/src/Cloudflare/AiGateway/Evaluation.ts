@@ -267,36 +267,35 @@ export const AiGatewayEvaluationProvider = () =>
     // required. We pass `[]` for known type ids: the listed evaluation only
     // echoes type ids back once results exist, and `toAttributes` falls back
     // to the result-derived ids otherwise.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const gatewayIds = yield* aiGateway.listAiGateways
-          .pages({ accountId })
-          .pipe(
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const gatewayIds = yield* aiGateway.listAiGateways
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((gateway) => gateway.id),
+            ),
+          ),
+        );
+      const rows = yield* Effect.forEach(
+        gatewayIds,
+        (gatewayId) =>
+          aiGateway.listEvaluations.pages({ accountId, gatewayId }).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((gateway) => gateway.id),
-              ),
-            ),
-          );
-        const rows = yield* Effect.forEach(
-          gatewayIds,
-          (gatewayId) =>
-            aiGateway.listEvaluations.pages({ accountId, gatewayId }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((evaluation) =>
-                    toAttributes(evaluation, accountId, []),
-                  ),
+                (page.result ?? []).map((evaluation) =>
+                  toAttributes(evaluation, accountId, []),
                 ),
               ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 /**

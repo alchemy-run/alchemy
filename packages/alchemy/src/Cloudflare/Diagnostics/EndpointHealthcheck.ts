@@ -206,19 +206,16 @@ export const EndpointHealthcheckProvider = () =>
       );
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Account-scoped, non-paginated list (the whole collection comes
-        // back in one response array). Skip accounts that lack the Magic
-        // Transit / WAN entitlement (typed `Forbidden`) with an empty list.
-        return yield* diagnostics.listEndpointHealthchecks({ accountId }).pipe(
-          Effect.map((checks) =>
-            checks.map((hc) => toAttributes(hc, accountId)),
-          ),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped, non-paginated list (the whole collection comes
+      // back in one response array). Skip accounts that lack the Magic
+      // Transit / WAN entitlement (typed `Forbidden`) with an empty list.
+      return yield* diagnostics.listEndpointHealthchecks({ accountId }).pipe(
+        Effect.map((checks) => checks.map((hc) => toAttributes(hc, accountId))),
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
+    }),
 
     delete: Effect.fn(function* ({ output }) {
       yield* diagnostics

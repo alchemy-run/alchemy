@@ -182,18 +182,17 @@ export const ZoneTransferTsigProvider = () =>
     // account-scoped list API, paginate exhaustively, and hydrate each into
     // the same Attributes shape `read` returns (the secret is write-only and
     // never persisted).
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* dns.listZoneTransferTsigs.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((tsig) => toAttributes(tsig, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* dns.listZoneTransferTsigs.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((tsig) => toAttributes(tsig, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
   });
 
 type ObservedTsig =

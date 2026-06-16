@@ -121,31 +121,30 @@ export const SnippetRulesProvider = () =>
   Provider.succeed(SnippetRules, {
     stables: ["zoneId"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Snippet rules are a per-zone singleton with no account-wide list
-        // API — enumerate every zone and read its rule list. Zones with no
-        // rules have nothing to manage (matches `read` returning undefined
-        // for an empty list), so skip them.
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            listObservedRules(zoneId).pipe(
-              Effect.map((rules): SnippetRulesAttributes | undefined =>
-                rules.length === 0 ? undefined : { zoneId, rules },
-              ),
-              // Plan-gated zones (and eventually-consistent token 403s)
-              // reject the route; skip them.
-              Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Snippet rules are a per-zone singleton with no account-wide list
+      // API — enumerate every zone and read its rule list. Zones with no
+      // rules have nothing to manage (matches `read` returning undefined
+      // for an empty list), so skip them.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          listObservedRules(zoneId).pipe(
+            Effect.map((rules): SnippetRulesAttributes | undefined =>
+              rules.length === 0 ? undefined : { zoneId, rules },
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is SnippetRulesAttributes => row !== undefined,
-        );
-      }),
+            // Plan-gated zones (and eventually-consistent token 403s)
+            // reject the route; skip them.
+            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is SnippetRulesAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       const o = olds as SnippetRulesProps;

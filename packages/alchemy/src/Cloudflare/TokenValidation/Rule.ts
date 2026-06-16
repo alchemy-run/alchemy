@@ -307,37 +307,36 @@ export const TokenValidationRuleProvider = () =>
         );
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Token validation rules live inside a zone with no account-wide
-        // enumeration API — fan out across every zone and list rules per
-        // zone, paginating each zone exhaustively.
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            tokenValidation.listRules.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map(
-                    (rule): TokenValidationRuleAttributes =>
-                      toAttributes(rule, zone.id),
-                  ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Token validation rules live inside a zone with no account-wide
+      // enumeration API — fan out across every zone and list rules per
+      // zone, paginating each zone exhaustively.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          tokenValidation.listRules.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map(
+                  (rule): TokenValidationRuleAttributes =>
+                    toAttributes(rule, zone.id),
                 ),
               ),
-              // JWT validation is an API Shield (Enterprise) feature; zones
-              // without the entitlement, or with partial permissions, reject
-              // the route — skip them rather than failing the whole listing.
-              Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () =>
-                Effect.succeed([] as TokenValidationRuleAttributes[]),
-              ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            // JWT validation is an API Shield (Enterprise) feature; zones
+            // without the entitlement, or with partial permissions, reject
+            // the route — skip them rather than failing the whole listing.
+            Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () =>
+              Effect.succeed([] as TokenValidationRuleAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 type ObservedRule = tokenValidation.GetRuleResponse;

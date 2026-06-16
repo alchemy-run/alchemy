@@ -313,33 +313,32 @@ export const DatabaseProvider = () =>
     // Account-scoped collection — D1 databases live under an account and the
     // distilled `listDatabases` op paginates them. Hydrate each row into the
     // same Attributes shape `read`'s name-lookup branch returns.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* d1.listDatabases.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (db): db is (typeof page.result)[number] & { uuid: string } =>
-                    db.uuid != null,
-                )
-                .map((db) => ({
-                  databaseId: db.uuid,
-                  databaseName: db.name ?? db.uuid,
-                  jurisdiction: (db.jurisdiction ?? "default") as Jurisdiction,
-                  readReplication: undefined,
-                  accountId,
-                  migrationsDir: undefined,
-                  migrationsTable: undefined,
-                  migrationsHashes: {},
-                  importHashes: {},
-                })),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* d1.listDatabases.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter(
+                (db): db is (typeof page.result)[number] & { uuid: string } =>
+                  db.uuid != null,
+              )
+              .map((db) => ({
+                databaseId: db.uuid,
+                databaseName: db.name ?? db.uuid,
+                jurisdiction: (db.jurisdiction ?? "default") as Jurisdiction,
+                readReplication: undefined,
+                accountId,
+                migrationsDir: undefined,
+                migrationsTable: undefined,
+                migrationsHashes: {},
+                importHashes: {},
+              })),
           ),
-        );
-      }),
+        ),
+      );
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (output?.databaseId) {

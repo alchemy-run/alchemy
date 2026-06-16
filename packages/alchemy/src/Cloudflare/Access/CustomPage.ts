@@ -97,20 +97,19 @@ export const AccessCustomPageProvider = () =>
     // Account-scoped collection (pattern b). The list response items already
     // carry every Attribute field (uid/name/type) — read's Attributes don't
     // include customHtml — so no per-item get is needed to match the read shape.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* zeroTrust.listAccessCustomPages.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter((p): p is typeof p & { uid: string } => p.uid != null)
-                .map((p) => toAttrs(p, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listAccessCustomPages.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((p): p is typeof p & { uid: string } => p.uid != null)
+              .map((p) => toAttrs(p, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;

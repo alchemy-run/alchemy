@@ -225,18 +225,17 @@ export const FlagshipAppProvider = () =>
     // Account-scoped collection (pattern b): enumerate every app in the
     // ambient account via the paginated listApps op. The list item shape
     // matches GetAppResponse, so each maps directly into Attributes.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* flagship.listApps.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((app) => toAttributes(app, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* flagship.listApps.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((app) => toAttributes(app, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
   });
 
 /**

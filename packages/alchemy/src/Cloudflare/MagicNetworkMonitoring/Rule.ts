@@ -357,23 +357,20 @@ export const MagicNetworkMonitoringRuleProvider = () =>
     // exact `read` Attributes shape. Accounts not onboarded to Magic
     // Network Monitoring reject the route with `Forbidden` (HTTP 403) —
     // treat that as "nothing to list" rather than an error.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* mnm.listRules.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter(
-                  (rule): rule is NonNullable<typeof rule> => rule != null,
-                )
-                .map((rule) => toAttributes(rule, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* mnm.listRules.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((rule): rule is NonNullable<typeof rule> => rule != null)
+              .map((rule) => toAttributes(rule, accountId)),
           ),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
-      }),
+        ),
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
+    }),
   });
 
 type ObservedRule = mnm.GetRuleResponse;

@@ -221,32 +221,31 @@ export const OriginTlsClientAuthCertificateProvider = () =>
       return toAttributes(observed, zoneId);
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            originTls.listOriginTlsClientAuths.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? [])
-                    // Match `read`: tombstoned (deleted / pending_deletion)
-                    // certificates no longer satisfy the desired state.
-                    .filter((cert) => isLive(cert.status))
-                    .map((cert) => toAttributes(cert, zone.id)),
-                ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          originTls.listOriginTlsClientAuths.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  // Match `read`: tombstoned (deleted / pending_deletion)
+                  // certificates no longer satisfy the desired state.
+                  .filter((cert) => isLive(cert.status))
+                  .map((cert) => toAttributes(cert, zone.id)),
               ),
-              // A zone the scoped token can't access rejects with the typed
-              // Forbidden tag; skip it rather than failing the whole enumeration.
-              Effect.catchTag("Forbidden", () => Effect.succeed([])),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            // A zone the scoped token can't access rejects with the typed
+            // Forbidden tag; skip it rather than failing the whole enumeration.
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     delete: Effect.fn(function* ({ output }) {
       // Deletion is idempotent: a certificate that is already gone surfaces

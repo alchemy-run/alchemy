@@ -206,31 +206,30 @@ export const DnssecProvider = () =>
       "initialUseNsec3",
     ],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this zone singleton — enumerate every
-        // zone in the account and read its DNSSEC config (every zone has
-        // one). Disabled zones are "not created" for this resource (same
-        // as a cold `read`), so they're skipped; the observed state of an
-        // active zone becomes its captured initial state.
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            dns.getDnssec({ zoneId }).pipe(
-              Effect.map((observed) =>
-                statusFamily(observed.status) === "disabled"
-                  ? undefined
-                  : toAttributes(zoneId, observed, captureInitial(observed)),
-              ),
-              // Plan-gated or partial zones reject the route; skip them.
-              Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its DNSSEC config (every zone has
+      // one). Disabled zones are "not created" for this resource (same
+      // as a cold `read`), so they're skipped; the observed state of an
+      // active zone becomes its captured initial state.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          dns.getDnssec({ zoneId }).pipe(
+            Effect.map((observed) =>
+              statusFamily(observed.status) === "disabled"
+                ? undefined
+                : toAttributes(zoneId, observed, captureInitial(observed)),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter((row): row is DnssecAttributes => row !== undefined);
-      }),
+            // Plan-gated or partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter((row): row is DnssecAttributes => row !== undefined);
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as DnssecProps;

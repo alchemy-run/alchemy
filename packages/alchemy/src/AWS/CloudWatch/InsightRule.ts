@@ -245,7 +245,7 @@ export const InsightRuleProvider = () =>
                   (page.InsightRules ?? []).filter(
                     (
                       candidate,
-                    ): candidate is cloudwatch.InsightRule & {
+                    ): candidate is typeof candidate & {
                       Name: string;
                     } => candidate.Name != null,
                   ),
@@ -253,7 +253,7 @@ export const InsightRuleProvider = () =>
               ),
             );
 
-            return yield* Effect.forEach(
+            const attrs: InsightRule["Attributes"][] = yield* Effect.forEach(
               rules,
               (insightRule) => {
                 const arn =
@@ -273,6 +273,7 @@ export const InsightRuleProvider = () =>
               },
               { concurrency: 10 },
             );
+            return attrs;
           }),
         delete: Effect.fn(function* ({ output }) {
           const existing = yield* readInsightRule(output.ruleName);

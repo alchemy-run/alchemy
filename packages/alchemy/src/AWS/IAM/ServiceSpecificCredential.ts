@@ -75,53 +75,44 @@ export const ServiceSpecificCredential = Resource<ServiceSpecificCredential>(
 export const ServiceSpecificCredentialProvider = () =>
   Provider.succeed(ServiceSpecificCredential, {
     stables: ["serviceSpecificCredentialId"],
-    list: () =>
-      Effect.gen(function* () {
-        // Service-specific credentials are owned per IAM user and IAM is a
-        // global service, so enumerate every user in the account
-        // (`listUsers`) and fan out `listServiceSpecificCredentials` per user
-        // (bounded concurrency). Omit `ServiceName` to capture credentials
-        // across all services. The credential secret is only returned at
-        // creation, so list cannot recover it — match `read` and leave the
-        // redacted secret fields undefined.
-        const users = yield* iam.listUsers.pages({}).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) => page.Users),
+    list: Effect.fn(function* () {
+      // Service-specific credentials are owned per IAM user and IAM is a
+      // global service, so enumerate every user in the account
+      // (`listUsers`) and fan out `listServiceSpecificCredentials` per user
+      // (bounded concurrency). Omit `ServiceName` to capture credentials
+      // across all services. The credential secret is only returned at
+      // creation, so list cannot recover it — match `read` and leave the
+      // redacted secret fields undefined.
+      const users = yield* iam.listUsers.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk).flatMap((page) => page.Users)),
+      );
+      const perUser = yield* Effect.forEach(
+        users,
+        (user) =>
+          iam.listServiceSpecificCredentials({ UserName: user.UserName }).pipe(
+            Effect.map((response) =>
+              (response.ServiceSpecificCredentials ?? []).map((metadata) => ({
+                userName: metadata.UserName,
+                serviceName: metadata.ServiceName,
+                serviceSpecificCredentialId:
+                  metadata.ServiceSpecificCredentialId,
+                status: metadata.Status,
+                createDate: metadata.CreateDate,
+                expirationDate: metadata.ExpirationDate,
+                serviceUserName: metadata.ServiceUserName,
+                serviceCredentialAlias: metadata.ServiceCredentialAlias,
+                servicePassword: undefined,
+                serviceCredentialSecret: undefined,
+              })),
+            ),
+            // The user may be deleted between enumeration and per-user list.
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed([])),
           ),
-        );
-        const perUser = yield* Effect.forEach(
-          users,
-          (user) =>
-            iam
-              .listServiceSpecificCredentials({ UserName: user.UserName })
-              .pipe(
-                Effect.map((response) =>
-                  (response.ServiceSpecificCredentials ?? []).map(
-                    (metadata) => ({
-                      userName: metadata.UserName,
-                      serviceName: metadata.ServiceName,
-                      serviceSpecificCredentialId:
-                        metadata.ServiceSpecificCredentialId,
-                      status: metadata.Status,
-                      createDate: metadata.CreateDate,
-                      expirationDate: metadata.ExpirationDate,
-                      serviceUserName: metadata.ServiceUserName,
-                      serviceCredentialAlias: metadata.ServiceCredentialAlias,
-                      servicePassword: undefined,
-                      serviceCredentialSecret: undefined,
-                    }),
-                  ),
-                ),
-                // The user may be deleted between enumeration and per-user list.
-                Effect.catchTag("NoSuchEntityException", () =>
-                  Effect.succeed([]),
-                ),
-              ),
-          { concurrency: 10 },
-        );
-        return perUser.flat();
-      }),
+        { concurrency: 10 },
+      );
+      return perUser.flat();
+    }),
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;
       if (

@@ -189,18 +189,17 @@ export const GatewayLocationProvider = () =>
     // ambient account, exhaustively paginating, and hydrate each into the
     // exact `read` Attributes shape. The list response already carries the
     // full per-location state, so no follow-up get is needed.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* zeroTrust.listGatewayLocations.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((l) => toAttributes(l, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listGatewayLocations.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((l) => toAttributes(l, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
 
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

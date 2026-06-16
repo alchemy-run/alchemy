@@ -177,14 +177,11 @@ export const RealtimeKitAppProvider = () =>
     // Attributes shape. Unentitled accounts reject the list with the typed
     // `Forbidden` (403) which propagates — the suite gates the live assertion
     // behind an entitlement probe.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const apps = yield* listAllApps(accountId);
-        return apps.map((app) =>
-          toAttributes({ ...app, accountId }, accountId),
-        );
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const apps = yield* listAllApps(accountId);
+      return apps.map((app) => toAttributes({ ...app, accountId }, accountId));
+    }),
   });
 
 const LIST_PER_PAGE = 100;

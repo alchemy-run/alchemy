@@ -107,29 +107,26 @@ export const ZoneHoldProvider = () =>
   Provider.succeed(ZoneHold, {
     stables: ["zoneId"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // A hold is a per-zone singleton — `getHold` always returns a record
-        // for every zone (default `hold: false`), and there is no account-wide
-        // enumeration API. Enumerate every zone and read its hold state.
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            zones.getHold({ zoneId }).pipe(
-              Effect.map((observed) => toAttributes(zoneId, observed)),
-              // Zone deleted out-of-band mid-enumeration — drop it.
-              Effect.catchTag("InvalidZoneIdentifier", () =>
-                Effect.succeed(undefined),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // A hold is a per-zone singleton — `getHold` always returns a record
+      // for every zone (default `hold: false`), and there is no account-wide
+      // enumeration API. Enumerate every zone and read its hold state.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          zones.getHold({ zoneId }).pipe(
+            Effect.map((observed) => toAttributes(zoneId, observed)),
+            // Zone deleted out-of-band mid-enumeration — drop it.
+            Effect.catchTag("InvalidZoneIdentifier", () =>
+              Effect.succeed(undefined),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is ZoneHoldAttributes => row !== undefined,
-        );
-      }),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter((row): row is ZoneHoldAttributes => row !== undefined);
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as ZoneHoldProps;

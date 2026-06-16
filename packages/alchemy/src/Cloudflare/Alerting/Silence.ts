@@ -119,21 +119,20 @@ export const SilenceProvider = () =>
     // Silences are account-scoped; listSilences enumerates every silence in
     // the account and the response carries the full attribute shape, so no
     // per-item hydration is needed.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* alerting.listSilences.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .map(narrowSilence)
-                .filter((s): s is ObservedSilence => s !== undefined)
-                .map((s) => toSilenceAttributes(s, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* alerting.listSilences.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map(narrowSilence)
+              .filter((s): s is ObservedSilence => s !== undefined)
+              .map((s) => toSilenceAttributes(s, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

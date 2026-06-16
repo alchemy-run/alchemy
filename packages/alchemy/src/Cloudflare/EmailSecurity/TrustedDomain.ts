@@ -123,25 +123,24 @@ export const EmailSecurityTrustedDomainProvider = () =>
     // domains and hydrate each into the `read` Attributes shape. Accounts
     // without the Email Security add-on surface the typed
     // `EmailSecurityNotEntitled` error — treat that as an empty enumeration.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* emailSecurity.listSettingTrustedDomains
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((entry) =>
-                  toAttributes(entry, accountId),
-                ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* emailSecurity.listSettingTrustedDomains
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((entry) =>
+                toAttributes(entry, accountId),
               ),
             ),
-            Effect.catchTag("EmailSecurityNotEntitled", () =>
-              Effect.succeed([] as EmailSecurityTrustedDomainAttributes[]),
-            ),
-          );
-      }),
+          ),
+          Effect.catchTag("EmailSecurityNotEntitled", () =>
+            Effect.succeed([] as EmailSecurityTrustedDomainAttributes[]),
+          ),
+        );
+    }),
 
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

@@ -136,18 +136,17 @@ export const LoadBalancerMonitorGroupProvider = () =>
     // Monitor groups are an account-scoped collection — paginate the
     // account-wide list and hydrate each into the exact `read` Attributes
     // shape (pattern (b) in processes/list-support.md).
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* loadBalancers.listMonitorGroups.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? []).map((g) => toAttributes(g, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* loadBalancers.listMonitorGroups.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((g) => toAttributes(g, accountId)),
           ),
-        );
-      }),
+        ),
+      );
+    }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

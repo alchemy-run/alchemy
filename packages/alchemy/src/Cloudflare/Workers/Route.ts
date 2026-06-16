@@ -223,30 +223,29 @@ export const WorkerRouteProvider = () =>
     // same Attributes shape `read` returns. Zones the scoped token can't
     // reach (Forbidden) or that reject the route (InvalidRoute) are skipped
     // with a typed catch rather than failing the whole enumeration.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            workers.listRoutes.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((route) =>
-                    toAttributes(normalizeRoute(route), zone.id),
-                  ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          workers.listRoutes.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((route) =>
+                  toAttributes(normalizeRoute(route), zone.id),
                 ),
               ),
-              Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
-                Effect.succeed([] as WorkerRouteAttributes[]),
-              ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
+              Effect.succeed([] as WorkerRouteAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 interface ObservedRoute {

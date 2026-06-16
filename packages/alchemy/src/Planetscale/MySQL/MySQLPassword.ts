@@ -294,73 +294,71 @@ export const MySQLPasswordProvider = () =>
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
 
-    list: () =>
-      Effect.gen(function* () {
-        const { organization } = yield* yield* Credentials;
+    list: Effect.fn(function* () {
+      const { organization } = yield* yield* Credentials;
 
-        const databases = yield* planetscale.listDatabases
-          .pages({ organization })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                page.data.filter((db) => db.kind === "mysql"),
-              ),
+      const databases = yield* planetscale.listDatabases
+        .pages({ organization })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              page.data.filter((db) => db.kind === "mysql"),
             ),
-          );
-
-        const rows = yield* Effect.forEach(
-          databases,
-          (db) =>
-            planetscale.listBranches
-              .pages({ organization, database: db.name })
-              .pipe(
-                Stream.runCollect,
-                Effect.map((branchPages) =>
-                  Array.from(branchPages).flatMap((page) =>
-                    page.data.filter((branch) => branch.kind === "mysql"),
-                  ),
-                ),
-                Effect.catchTag("NotFound", () =>
-                  Effect.succeed([{ name: db.default_branch ?? "main" }]),
-                ),
-                Effect.flatMap((branches) =>
-                  Effect.forEach(
-                    branches,
-                    (branch) =>
-                      planetscale.listPasswords
-                        .pages({
-                          organization,
-                          database: db.name,
-                          branch: branch.name,
-                        })
-                        .pipe(
-                          Stream.runCollect,
-                          Effect.map(
-                            (passwordPages): MySQLPasswordAttributes[] =>
-                              Array.from(passwordPages).flatMap((page) =>
-                                page.data.map((password) =>
-                                  buildAttributes(password, Redacted.make(""), {
-                                    organization,
-                                    database: db.name,
-                                    branch: branch.name,
-                                  }),
-                                ),
-                              ),
-                          ),
-                          Effect.catchTag("NotFound", () =>
-                            Effect.succeed([] as MySQLPasswordAttributes[]),
-                          ),
-                        ),
-                    { concurrency: 10 },
-                  ).pipe(Effect.map((perBranch) => perBranch.flat())),
-                ),
-              ),
-          { concurrency: 10 },
+          ),
         );
 
-        return rows.flat();
-      }),
+      const rows = yield* Effect.forEach(
+        databases,
+        (db) =>
+          planetscale.listBranches
+            .pages({ organization, database: db.name })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((branchPages) =>
+                Array.from(branchPages).flatMap((page) =>
+                  page.data.filter((branch) => branch.kind === "mysql"),
+                ),
+              ),
+              Effect.catchTag("NotFound", () =>
+                Effect.succeed([{ name: db.default_branch ?? "main" }]),
+              ),
+              Effect.flatMap((branches) =>
+                Effect.forEach(
+                  branches,
+                  (branch) =>
+                    planetscale.listPasswords
+                      .pages({
+                        organization,
+                        database: db.name,
+                        branch: branch.name,
+                      })
+                      .pipe(
+                        Stream.runCollect,
+                        Effect.map((passwordPages): MySQLPasswordAttributes[] =>
+                          Array.from(passwordPages).flatMap((page) =>
+                            page.data.map((password) =>
+                              buildAttributes(password, Redacted.make(""), {
+                                organization,
+                                database: db.name,
+                                branch: branch.name,
+                              }),
+                            ),
+                          ),
+                        ),
+                        Effect.catchTag("NotFound", () =>
+                          Effect.succeed([] as MySQLPasswordAttributes[]),
+                        ),
+                      ),
+                  { concurrency: 10 },
+                ).pipe(Effect.map((perBranch) => perBranch.flat())),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+
+      return rows.flat();
+    }),
   });
 
 // At runtime, Resource references in props are resolved to their full

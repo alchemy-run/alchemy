@@ -173,34 +173,33 @@ export const DnsRecordProvider = () =>
     // the same `Attributes` shape `read` produces. A fresh scoped token can 403
     // a zone (eventual consistency) or a zone may be partially provisioned —
     // skip those zones (-> []) rather than failing the whole enumeration.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            dns.listRecords.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).flatMap((r) => {
-                    const attrs = toAttributes(
-                      narrowRecord(r as Parameters<typeof narrowRecord>[0]),
-                      zone.id,
-                    );
-                    return attrs ? [attrs] : [];
-                  }),
-                ),
-              ),
-              Effect.catchTag("Forbidden", () =>
-                Effect.succeed([] as DnsRecordAttributes[]),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          dns.listRecords.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).flatMap((r) => {
+                  const attrs = toAttributes(
+                    narrowRecord(r as Parameters<typeof narrowRecord>[0]),
+                    zone.id,
+                  );
+                  return attrs ? [attrs] : [];
+                }),
               ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as DnsRecordAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as DnsRecordProps;

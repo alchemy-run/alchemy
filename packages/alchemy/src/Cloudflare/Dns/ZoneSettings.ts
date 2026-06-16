@@ -262,36 +262,36 @@ export const ZoneDnsSettingsProvider = () =>
   Provider.succeed(ZoneDnsSettings, {
     stables: ["zoneId", "initialSettings", "managedKeys"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // The settings object is a per-zone singleton with no account-wide
-        // list API — enumerate every zone and read its settings (every live
-        // zone always has one). Unmanaged here, so the observed snapshot is
-        // both the current state and the captured baseline.
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            dns.getSettingZone({ zoneId }).pipe(
-              Effect.map((observed) => {
-                const snapshot = toSnapshot(observed);
-                return {
-                  zoneId,
-                  ...snapshot,
-                  initialSettings: snapshot,
-                  managedKeys: [],
-                } satisfies ZoneDnsSettingsAttributes;
-              }),
-              // Plan-gated or partial zones reject the route; skip them.
-              Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-            ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is ZoneDnsSettingsAttributes => row !== undefined,
-        );
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // The settings object is a per-zone singleton with no account-wide
+      // list API — enumerate every zone and read its settings (every live
+      // zone always has one). Unmanaged here, so the observed snapshot is
+      // both the current state and the captured baseline.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          dns.getSettingZone({ zoneId }).pipe(
+            Effect.map((observed) => {
+              const snapshot = toSnapshot(observed);
+              const attributes: ZoneDnsSettingsAttributes = {
+                zoneId,
+                ...snapshot,
+                initialSettings: snapshot,
+                managedKeys: [],
+              };
+              return attributes;
+            }),
+            // Plan-gated or partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ZoneDnsSettingsAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as ZoneDnsSettingsProps;

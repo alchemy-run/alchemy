@@ -190,21 +190,20 @@ export const DevicePostureIntegrationProvider = () =>
     // ambient account, exhaustively paginating the distilled list op.
     // Zero Trust is plan-gated; a `Forbidden` rejection means the account
     // lacks the entitlement, so treat it as "nothing to list".
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* zeroTrust.listDevicePostureIntegrations
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((i) => toAttributes(i, accountId)),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listDevicePostureIntegrations
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((i) => toAttributes(i, accountId)),
             ),
-            Effect.catchTag("Forbidden", () => Effect.succeed([])),
-          );
-      }),
+          ),
+          Effect.catchTag("Forbidden", () => Effect.succeed([])),
+        );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

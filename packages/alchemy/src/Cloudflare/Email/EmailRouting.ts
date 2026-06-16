@@ -83,27 +83,26 @@ const resolve = Effect.fnUntraced(function* (zone: ZoneReference) {
 export const EmailRoutingProvider = () =>
   Provider.succeed(EmailRouting, {
     stables: ["zoneId", "routingId"],
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Email Routing settings are a per-zone singleton — no account-wide
-        // enumeration API. Enumerate every zone in the account and read the
-        // settings in each (every zone has one).
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            emailRouting.getEmailRouting({ zoneId }).pipe(
-              Effect.map((result) => toAttributes(zoneId, result)),
-              // Plan-gated or partial zones reject the route; skip them.
-              Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
-            ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is EmailRoutingAttributes => row !== undefined,
-        );
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Email Routing settings are a per-zone singleton — no account-wide
+      // enumeration API. Enumerate every zone in the account and read the
+      // settings in each (every zone has one).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          emailRouting.getEmailRouting({ zoneId }).pipe(
+            Effect.map((result) => toAttributes(zoneId, result)),
+            // Plan-gated or partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is EmailRoutingAttributes => row !== undefined,
+      );
+    }),
     diff: Effect.fn(function* ({ news, output }) {
       if (!output) return undefined;
       if (!isResolved(news)) return undefined;

@@ -117,44 +117,39 @@ export const AiSecurityCustomTopicsProvider = () =>
   Provider.succeed(AiSecurityCustomTopics, {
     stables: ["zoneId", "initialTopics"],
 
-    list: (): Effect.Effect<
-      AiSecurityCustomTopicsAttributes[],
-      any,
-      Providers
-    > =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this zone singleton — enumerate every
-        // zone in the account and read its custom-topics list (the list
-        // always exists, defaulting to empty, on every entitled zone).
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            aiSecurity.getCustomTopic({ zoneId }).pipe(
-              Effect.map((observed) => {
-                const topics = normalizeTopics(observed.topics);
-                return {
-                  zoneId,
-                  topics,
-                  // A freshly listed item adopts its observed list as the
-                  // pre-management baseline, mirroring a cold `read`.
-                  initialTopics: topics,
-                };
-              }),
-              // AI Security is entitlement-gated and zones may be partial
-              // or deleted out-of-band — skip any zone we can't read.
-              Effect.catchTag(
-                ["AiSecurityNotEntitled", "ZoneNotAuthorized", "Forbidden"],
-                () => Effect.succeed(undefined),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its custom-topics list (the list
+      // always exists, defaulting to empty, on every entitled zone).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          aiSecurity.getCustomTopic({ zoneId }).pipe(
+            Effect.map((observed) => {
+              const topics = normalizeTopics(observed.topics);
+              return {
+                zoneId,
+                topics,
+                // A freshly listed item adopts its observed list as the
+                // pre-management baseline, mirroring a cold `read`.
+                initialTopics: topics,
+              };
+            }),
+            // AI Security is entitlement-gated and zones may be partial
+            // or deleted out-of-band — skip any zone we can't read.
+            Effect.catchTag(
+              ["AiSecurityNotEntitled", "ZoneNotAuthorized", "Forbidden"],
+              () => Effect.succeed(undefined),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is AiSecurityCustomTopicsAttributes => row !== undefined,
-        );
-      }),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is AiSecurityCustomTopicsAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as AiSecurityCustomTopicsProps;

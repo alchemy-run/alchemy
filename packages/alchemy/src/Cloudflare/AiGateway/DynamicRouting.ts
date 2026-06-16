@@ -454,34 +454,33 @@ export const AiGatewayDynamicRoutingProvider = () =>
           Effect.catchTag("GatewayNotFound", () => Effect.void),
         );
     }),
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // Routes are scoped under a gateway and there is no account-wide
-        // route list, so fan out: enumerate every account gateway, then
-        // exhaustively list each gateway's routes.
-        const gateways = yield* aiGateway.listAiGateways
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) => page.result ?? []),
-            ),
-          );
-        const rows = yield* Effect.forEach(
-          gateways,
-          (gateway) =>
-            listRoutes(accountId, gateway.id).pipe(
-              // A gateway removed between enumeration and its route list is
-              // gone — skip it rather than failing the whole listing.
-              Effect.catchTag("GatewayNotFound", () =>
-                Effect.succeed([] as AiGatewayDynamicRoutingAttributes[]),
-              ),
-            ),
-          { concurrency: 10 },
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Routes are scoped under a gateway and there is no account-wide
+      // route list, so fan out: enumerate every account gateway, then
+      // exhaustively list each gateway's routes.
+      const gateways = yield* aiGateway.listAiGateways
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) => page.result ?? []),
+          ),
         );
-        return rows.flat();
-      }),
+      const rows = yield* Effect.forEach(
+        gateways,
+        (gateway) =>
+          listRoutes(accountId, gateway.id).pipe(
+            // A gateway removed between enumeration and its route list is
+            // gone — skip it rather than failing the whole listing.
+            Effect.catchTag("GatewayNotFound", () =>
+              Effect.succeed([] as AiGatewayDynamicRoutingAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 /**

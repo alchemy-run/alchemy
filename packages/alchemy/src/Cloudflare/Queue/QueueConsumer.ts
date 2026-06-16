@@ -137,63 +137,62 @@ export const QueueConsumerProviderLive = () =>
     // enumeration API, so fan out: list every queue in the account, then
     // list each queue's consumers and keep the worker ones (the only kind
     // this resource manages, matching `read`/`reconcile`).
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const queueIds = yield* queues.listQueues.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .map((q) => q.queueId)
-                .filter((id): id is string => id != null),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const queueIds = yield* queues.listQueues.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map((q) => q.queueId)
+              .filter((id): id is string => id != null),
           ),
-          // Account not entitled for Queues — nothing to enumerate.
-          Effect.catchTag("InvalidRoute", () => Effect.succeed<string[]>([])),
-        );
-        const rows = yield* Effect.forEach(
-          queueIds,
-          (queueId) =>
-            queues.listConsumers.pages({ accountId, queueId }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).flatMap(
-                    (c): QueueConsumer["Attributes"][] => {
-                      if (c.type !== "worker" || !c.consumerId) return [];
-                      const s = c.settings ?? undefined;
-                      return [
-                        {
-                          consumerId: c.consumerId,
-                          queueId,
-                          scriptName: c.scriptName ?? "",
-                          accountId,
-                          deadLetterQueue: c.deadLetterQueue ?? undefined,
-                          settings: s
-                            ? {
-                                batchSize: s.batchSize ?? undefined,
-                                maxConcurrency: s.maxConcurrency ?? undefined,
-                                maxRetries: s.maxRetries ?? undefined,
-                                maxWaitTimeMs: s.maxWaitTimeMs ?? undefined,
-                                retryDelay: s.retryDelay ?? undefined,
-                              }
-                            : undefined,
-                        },
-                      ];
-                    },
-                  ),
+        ),
+        // Account not entitled for Queues — nothing to enumerate.
+        Effect.catchTag("InvalidRoute", () => Effect.succeed<string[]>([])),
+      );
+      const rows = yield* Effect.forEach(
+        queueIds,
+        (queueId) =>
+          queues.listConsumers.pages({ accountId, queueId }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).flatMap(
+                  (c): QueueConsumer["Attributes"][] => {
+                    if (c.type !== "worker" || !c.consumerId) return [];
+                    const s = c.settings ?? undefined;
+                    return [
+                      {
+                        consumerId: c.consumerId,
+                        queueId,
+                        scriptName: c.scriptName ?? "",
+                        accountId,
+                        deadLetterQueue: c.deadLetterQueue ?? undefined,
+                        settings: s
+                          ? {
+                              batchSize: s.batchSize ?? undefined,
+                              maxConcurrency: s.maxConcurrency ?? undefined,
+                              maxRetries: s.maxRetries ?? undefined,
+                              maxWaitTimeMs: s.maxWaitTimeMs ?? undefined,
+                              retryDelay: s.retryDelay ?? undefined,
+                            }
+                          : undefined,
+                      },
+                    ];
+                  },
                 ),
               ),
-              // Queue deleted mid-list or partial entitlement — skip it.
-              Effect.catchTag(["QueueNotFound", "InvalidRoute"], () =>
-                Effect.succeed<QueueConsumer["Attributes"][]>([]),
-              ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            // Queue deleted mid-list or partial entitlement — skip it.
+            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () =>
+              Effect.succeed<QueueConsumer["Attributes"][]>([]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
     diff: Effect.fn(function* ({ olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;

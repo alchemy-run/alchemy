@@ -243,38 +243,37 @@ export const DlpProfileProvider = () =>
     // The list endpoint also returns predefined / integration profiles —
     // only `custom` profiles are modelled by this resource, so the rest
     // are filtered out.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        const profileIds = yield* zeroTrust.listDlpProfiles
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).flatMap((profile) =>
-                  profile.type === "custom" ? [profile.id] : [],
-                ),
+      const profileIds = yield* zeroTrust.listDlpProfiles
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).flatMap((profile) =>
+                profile.type === "custom" ? [profile.id] : [],
               ),
             ),
-          );
+          ),
+        );
 
-        const rows = yield* Effect.forEach(
-          profileIds,
-          (profileId) =>
-            observeProfile(accountId, profileId).pipe(
-              Effect.map((observed) =>
-                observed ? toAttributes(observed, accountId) : undefined,
-              ),
+      const rows = yield* Effect.forEach(
+        profileIds,
+        (profileId) =>
+          observeProfile(accountId, profileId).pipe(
+            Effect.map((observed) =>
+              observed ? toAttributes(observed, accountId) : undefined,
             ),
-          { concurrency: 10 },
-        );
+          ),
+        { concurrency: 10 },
+      );
 
-        return rows.filter(
-          (row): row is DlpProfileAttributes => row !== undefined,
-        );
-      }),
+      return rows.filter(
+        (row): row is DlpProfileAttributes => row !== undefined,
+      );
+    }),
   });
 
 /**

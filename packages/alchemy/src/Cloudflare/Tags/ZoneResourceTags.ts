@@ -151,39 +151,38 @@ export const ZoneResourceTagsProvider = () =>
   Provider.succeed(ZoneResourceTags, {
     stables: ["zoneId", "resourceType", "resourceId", "accessApplicationId"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // The account-wide `GET /accounts/{id}/tags/resources` enumerates
-        // every tagged resource in the account in one paginated call. The
-        // zone-scoped variants (the ones this resource manages) are exactly
-        // those that carry a `zoneId` in the response union; account-level
-        // variants (worker, kv_namespace, …) lack it and are filtered out.
-        return yield* resourceTagging.listResourceTaggings
-          .pages({ accountId })
-          .pipe(
-            Stream.runCollect,
-            Effect.map((chunk) =>
-              Array.from(chunk).flatMap((page) =>
-                (page.result ?? [])
-                  .filter((item): item is ZoneScopedTagging => "zoneId" in item)
-                  .map(
-                    (item): ZoneResourceTagsAttributes => ({
-                      zoneId: item.zoneId,
-                      resourceType: item.type,
-                      resourceId: item.id,
-                      accessApplicationId:
-                        "accessApplicationId" in item
-                          ? item.accessApplicationId
-                          : undefined,
-                      tags: narrowTags(item.tags),
-                      etag: item.etag,
-                    }),
-                  ),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // The account-wide `GET /accounts/{id}/tags/resources` enumerates
+      // every tagged resource in the account in one paginated call. The
+      // zone-scoped variants (the ones this resource manages) are exactly
+      // those that carry a `zoneId` in the response union; account-level
+      // variants (worker, kv_namespace, …) lack it and are filtered out.
+      return yield* resourceTagging.listResourceTaggings
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter((item): item is ZoneScopedTagging => "zoneId" in item)
+                .map(
+                  (item): ZoneResourceTagsAttributes => ({
+                    zoneId: item.zoneId,
+                    resourceType: item.type,
+                    resourceId: item.id,
+                    accessApplicationId:
+                      "accessApplicationId" in item
+                        ? item.accessApplicationId
+                        : undefined,
+                    tags: narrowTags(item.tags),
+                    etag: item.etag,
+                  }),
+                ),
             ),
-          );
-      }),
+          ),
+        );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as Partial<ZoneResourceTagsProps>;

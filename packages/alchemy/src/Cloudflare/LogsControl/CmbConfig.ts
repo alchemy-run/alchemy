@@ -129,14 +129,11 @@ export const LogsCmbConfigProvider = () =>
     // single `/logs/control/cmb/config` GET. Mirror `read` exactly — return a
     // one-element array when the config is set, `[]` when the account is
     // unconfigured.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const observed = yield* getCmbConfig(accountId);
-        return observed === undefined
-          ? []
-          : [toAttributes(accountId, observed)];
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* getCmbConfig(accountId);
+      return observed === undefined ? [] : [toAttributes(accountId, observed)];
+    }),
 
     reconcile: Effect.fn(function* ({ news }) {
       const { accountId: envAccountId } = yield* yield* CloudflareEnvironment;

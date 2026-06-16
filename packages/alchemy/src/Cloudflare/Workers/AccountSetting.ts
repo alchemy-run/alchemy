@@ -141,19 +141,18 @@ export const WorkersAccountSettingProvider = () =>
     // object always exists once per account. Read the single live object and
     // return it as a one-element array, exactly mirroring `read` (a cold
     // observation where the observed values are the initial values).
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const observed = yield* workers.getAccountSetting({ accountId });
-        return [
-          toAttributes(
-            accountId,
-            observed,
-            observed.defaultUsageModel ?? undefined,
-            observed.greenCompute ?? undefined,
-          ),
-        ];
-      }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* workers.getAccountSetting({ accountId });
+      return [
+        toAttributes(
+          accountId,
+          observed,
+          observed.defaultUsageModel ?? undefined,
+          observed.greenCompute ?? undefined,
+        ),
+      ];
+    }),
 
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

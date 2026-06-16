@@ -182,37 +182,34 @@ export const VariantsProvider = () =>
   Provider.succeed(Variants, {
     stables: ["zoneId"],
 
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        // No account-wide API for this per-zone setting — enumerate every
-        // zone in the account and read its variants setting. Unlike most
-        // zone singletons, Variants has true create/delete semantics, so a
-        // zone that never configured it returns `VariantsNotConfigured`;
-        // those zones (and plan-gated / deleted zones) are skipped.
-        const allZones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          allZones.map((zone) => zone.id),
-          (zoneId) =>
-            cache.getVariant({ zoneId }).pipe(
-              Effect.map((observed) => toAttributes(zoneId, observed)),
-              // Setting never configured on this zone — nothing to enumerate.
-              Effect.catchTag("VariantsNotConfigured", () =>
-                Effect.succeed(undefined),
-              ),
-              // Plan-gated zones reject the setting (`Forbidden`, code 1135
-              // "not available for your plan type") or the route entirely
-              // (`InvalidRoute`); skip them.
-              Effect.catchTag(["Forbidden", "InvalidRoute"], () =>
-                Effect.succeed(undefined),
-              ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this per-zone setting — enumerate every
+      // zone in the account and read its variants setting. Unlike most
+      // zone singletons, Variants has true create/delete semantics, so a
+      // zone that never configured it returns `VariantsNotConfigured`;
+      // those zones (and plan-gated / deleted zones) are skipped.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          cache.getVariant({ zoneId }).pipe(
+            Effect.map((observed) => toAttributes(zoneId, observed)),
+            // Setting never configured on this zone — nothing to enumerate.
+            Effect.catchTag("VariantsNotConfigured", () =>
+              Effect.succeed(undefined),
             ),
-          { concurrency: 10 },
-        );
-        return rows.filter(
-          (row): row is VariantsAttributes => row !== undefined,
-        );
-      }),
+            // Plan-gated zones reject the setting (`Forbidden`, code 1135
+            // "not available for your plan type") or the route entirely
+            // (`InvalidRoute`); skip them.
+            Effect.catchTag(["Forbidden", "InvalidRoute"], () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter((row): row is VariantsAttributes => row !== undefined);
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as VariantsProps;

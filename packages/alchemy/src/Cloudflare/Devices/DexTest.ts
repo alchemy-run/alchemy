@@ -147,21 +147,20 @@ export const DeviceDexTestProvider = () =>
     // requires the Digital Experience Monitoring entitlement; on unentitled
     // accounts the list rejects with the typed `Forbidden`
     // (dex.api.entitlements.missing), so treat that as "nothing to enumerate".
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* zeroTrust.listDeviceDexTests.pages({ accountId }).pipe(
-          Stream.runCollect,
-          Effect.map((chunk) =>
-            Array.from(chunk).flatMap((page) =>
-              (page.result ?? [])
-                .filter((t) => t.testId != null)
-                .map((t) => toAttributes(t, accountId)),
-            ),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listDeviceDexTests.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((t) => t.testId != null)
+              .map((t) => toAttributes(t, accountId)),
           ),
-          Effect.catchTag("Forbidden", () => Effect.succeed([])),
-        );
-      }),
+        ),
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
+    }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

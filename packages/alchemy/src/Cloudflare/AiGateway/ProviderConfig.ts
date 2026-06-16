@@ -316,38 +316,37 @@ export const AiGatewayProviderConfigProvider = () =>
     // `read` produces (via `toAttributes`). A gateway that disappears between
     // enumeration and listing returns an empty list, so no per-item not-found
     // mapping is needed.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
 
-        const gatewayIds = yield* aiGateway.listAiGateways
-          .pages({ accountId })
-          .pipe(
+      const gatewayIds = yield* aiGateway.listAiGateways
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((gateway) => gateway.id),
+            ),
+          ),
+        );
+
+      const rows = yield* Effect.forEach(
+        gatewayIds,
+        (gatewayId) =>
+          aiGateway.listProviderConfigs.pages({ accountId, gatewayId }).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>
               Array.from(chunk).flatMap((page) =>
-                (page.result ?? []).map((gateway) => gateway.id),
-              ),
-            ),
-          );
-
-        const rows = yield* Effect.forEach(
-          gatewayIds,
-          (gatewayId) =>
-            aiGateway.listProviderConfigs.pages({ accountId, gatewayId }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((config) =>
-                    toAttributes(config, accountId),
-                  ),
+                (page.result ?? []).map((config) =>
+                  toAttributes(config, accountId),
                 ),
               ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 /**

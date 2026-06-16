@@ -375,28 +375,27 @@ export const SpectrumApplicationProvider = () =>
     // zone, exhaustively paginate each zone's apps, and hydrate into the same
     // `Attributes` shape `read` returns. Zones without Spectrum entitlement
     // reject the route with the typed `Forbidden` tag — skip them.
-    list: () =>
-      Effect.gen(function* () {
-        const { accountId } = yield* yield* CloudflareEnvironment;
-        const zones = yield* listAllZones(accountId);
-        const rows = yield* Effect.forEach(
-          zones,
-          (zone) =>
-            spectrum.listApps.pages({ zoneId: zone.id }).pipe(
-              Stream.runCollect,
-              Effect.map((chunk) =>
-                Array.from(chunk).flatMap((page) =>
-                  (page.result ?? []).map((app) => toAttributes(app, zone.id)),
-                ),
-              ),
-              Effect.catchTag("Forbidden", () =>
-                Effect.succeed([] as SpectrumApplicationAttributes[]),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          spectrum.listApps.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((app) => toAttributes(app, zone.id)),
               ),
             ),
-          { concurrency: 10 },
-        );
-        return rows.flat();
-      }),
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as SpectrumApplicationAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 // ---------------------------------------------------------------------------
