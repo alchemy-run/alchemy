@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import { expect } from "@effect/vitest";
@@ -103,6 +104,30 @@ test.provider("replaces index when dimensions change", (stack) =>
     yield* stack.destroy();
 
     yield* waitForDelete(accountId, replaced.indexName);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed index", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const index = yield* stack.deploy(
+      Cloudflare.VectorizeIndex("ListIndex", {
+        dimensions: 768,
+        metric: "cosine",
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.VectorizeIndex);
+    const all = yield* provider.list();
+
+    expect(all.some((x) => x.indexName === index.indexName)).toBe(true);
+
+    yield* stack.destroy();
+
+    yield* waitForDelete(accountId, index.indexName);
   }).pipe(logLevel),
 );
 
