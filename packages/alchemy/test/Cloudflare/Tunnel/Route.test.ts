@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -21,6 +22,7 @@ const logLevel = Effect.provideService(
 const NETWORK_DEFAULT = "10.99.1.0/24";
 const NETWORK_UPDATE = "10.99.2.0/24";
 const NETWORK_ADOPT = "10.99.3.0/24";
+const NETWORK_LIST = "10.99.4.0/24";
 
 test.provider("create and delete route with default props", (stack) =>
   Effect.gen(function* () {
@@ -173,6 +175,38 @@ test.provider("adopt: takes over a pre-existing route", (stack) =>
 
     expect(adopted.route.routeId).toEqual(pre?.id);
     expect(adopted.route.network).toEqual(NETWORK_ADOPT);
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed route", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const { route } = yield* stack.deploy(
+      Effect.gen(function* () {
+        const tunnel = yield* Cloudflare.Tunnel("RouteListTunnel", {
+          adopt: true,
+        });
+        const route = yield* Cloudflare.TunnelRoute("ListRoute", {
+          tunnelId: tunnel.tunnelId,
+          network: NETWORK_LIST,
+          adopt: true,
+        });
+        return { route };
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.TunnelRoute);
+    const all = yield* provider.list();
+
+    const found = all.find((r) => r.routeId === route.routeId);
+    expect(found).toBeDefined();
+    expect(found?.network).toEqual(NETWORK_LIST);
+    expect(found?.accountId).toEqual(accountId);
 
     yield* stack.destroy();
   }).pipe(logLevel),

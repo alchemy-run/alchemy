@@ -3,6 +3,7 @@ import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import type { SpeedTestScheduleAttributes } from "@/Cloudflare/Speed/TestSchedule";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as speed from "@distilled.cloud/cloudflare/speed";
 import { expect } from "@effect/vitest";
@@ -33,6 +34,7 @@ const URL_CREATE = `${zoneName}/speed-create`;
 const URL_FREQ = `${zoneName}/speed-freq`;
 const URL_REGION = `${zoneName}/speed-region`;
 const URL_TAKEOVER = `${zoneName}/speed-takeover`;
+const URL_LIST = `${zoneName}/speed-list`;
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -361,6 +363,62 @@ test.provider(
       yield* stack.destroy();
 
       const gone = yield* findSchedule(zoneId, URL_TAKEOVER);
+      expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates the deployed schedule across zones",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeSchedule(zoneId, URL_LIST);
+
+      const schedule = yield* deployUnlessQuotaReached(
+        stack,
+        Effect.gen(function* () {
+          return yield* Cloudflare.SpeedTestSchedule("ListSchedule", {
+            zoneId,
+            url: URL_LIST,
+            frequency: "WEEKLY",
+          }).pipe(adopt(true));
+        }),
+      );
+
+      if (schedule === undefined) {
+        yield* logQuotaSkip("list assertions");
+        yield* stack.destroy();
+        return;
+      }
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.SpeedTestSchedule,
+      );
+      // Ride out fresh-token 403 blips on the account-wide enumeration.
+      const all = yield* provider.list().pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+      );
+
+      // Each element is the exact `read` Attributes shape, usable by delete.
+      expect(
+        all.some(
+          (s) =>
+            s.zoneId === schedule.zoneId &&
+            s.url === schedule.url &&
+            s.region === schedule.region,
+        ),
+      ).toBe(true);
+
+      yield* stack.destroy();
+
+      const gone = yield* findSchedule(zoneId, URL_LIST);
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
   { timeout: 120_000 },

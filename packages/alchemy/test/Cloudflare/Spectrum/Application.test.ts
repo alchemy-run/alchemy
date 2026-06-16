@@ -2,6 +2,7 @@ import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as spectrum from "@distilled.cloud/cloudflare/spectrum";
 import * as zones from "@distilled.cloud/cloudflare/zones";
@@ -260,6 +261,73 @@ test.provider.skipIf(!entitledZoneId)(
 
       const gone = yield* findApp(zoneId, dnsName, "tcp/22");
       expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (zone-scoped collection): `list()` fans out over
+// every zone via `listAllZones`, exhaustively paginates the Spectrum apps in
+// each, and hydrates them into the exact `read` Attributes shape. Listing is
+// not entitlement-gated — the standing test zone (no Spectrum) simply yields
+// no apps for that zone — so this read-only assertion runs unconditionally:
+// `list()` must resolve to a well-typed array without throwing.
+test.provider(
+  "list enumerates Spectrum applications across all zones",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.SpectrumApplication,
+      );
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      // Every hydrated item carries the full `read` Attributes shape.
+      for (const app of all) {
+        expect(typeof app.appId).toBe("string");
+        expect(typeof app.zoneId).toBe("string");
+        expect(typeof app.protocol).toBe("string");
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);
+
+// Full deploy + list assertion: requires a Spectrum-entitled zone (create is
+// gated by `SpectrumProtocolNotAvailable`, Cloudflare code 13002, on
+// unentitled zones). When supplied, deploy a tcp/22 app and assert `list()`
+// surfaces it.
+test.provider.skipIf(!entitledZoneId)(
+  "list surfaces a deployed Spectrum application (entitled zone)",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = entitledZoneId!;
+      const entitledZoneName = yield* resolveEntitledZoneName(zoneId);
+      const dnsName = `alchemy-spectrum-list.${entitledZoneName}`;
+
+      yield* stack.destroy();
+      yield* purgeApps(zoneId, dnsName, "tcp/22");
+
+      const app = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.SpectrumApplication("Listed", {
+            zoneId,
+            dns: { type: "CNAME", name: dnsName },
+            protocol: "tcp/22",
+            originDirect: ["tcp://192.0.2.1:22"],
+          }).pipe(adopt(true));
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.SpectrumApplication,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((a) => a.appId === app.appId)).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

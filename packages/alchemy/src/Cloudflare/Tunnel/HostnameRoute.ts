@@ -1,6 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
@@ -164,6 +165,26 @@ export const TunnelHostnameRouteProvider = () =>
         })
         .pipe(Effect.catchTag("HostnameRouteNotFound", () => Effect.void));
     }),
+
+    // Account collection — hostname routes are enumerated account-wide via
+    // the Zero Trust list API. Paginate exhaustively, drop tombstoned/idless
+    // rows, and hydrate each into the exact `read` Attributes shape.
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        return yield* zeroTrust.listNetworkHostnameRoutes
+          .pages({ accountId })
+          .pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  .filter((r) => r.id != null && r.deletedAt == null)
+                  .map((r) => toAttributes(r, accountId)),
+              ),
+            ),
+          );
+      }),
   });
 
 /**

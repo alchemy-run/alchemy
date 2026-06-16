@@ -313,6 +313,18 @@ export const ZoneResourceTagsProvider = () =>
     }),
   });
 
+/**
+ * The zone-scoped variants of the `listResourceTaggings` response union —
+ * the items that carry a `zoneId` (dns_record, custom_hostname,
+ * custom_certificate, managed_client_certificate, access_application_policy,
+ * api_gateway_operation, zone). These are exactly the resources this provider
+ * manages tags for.
+ */
+type ZoneScopedTagging = Extract<
+  resourceTagging.ListResourceTaggingsResponse["result"][number],
+  { zoneId: string }
+>;
+
 /** Narrow distilled's `Record<string, unknown>` tag values to strings. */
 const narrowTags = (tags: Record<string, unknown>): Record<string, string> =>
   Object.fromEntries(
