@@ -2,6 +2,7 @@ import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -219,6 +220,21 @@ export const MtlsCertificateProvider = () =>
       const match = yield* findByName(acct, name);
       return match ? toAttributes(match, acct) : undefined;
     }),
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        // Account-scoped collection — exhaustively paginate the mTLS
+        // certificate store and hydrate each item into the read Attributes
+        // shape (the private key is write-only and never returned).
+        return yield* mtls.listMtlsCertificates.pages({ accountId }).pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((cert) => toAttributes(cert, accountId)),
+            ),
+          ),
+        );
+      }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name =

@@ -8,7 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { findZoneByName } from "../Zone/lookup.ts";
+import { findZoneByName, listAllZones } from "../Zone/lookup.ts";
 
 const OriginCaCertificateTypeId = "Cloudflare.OriginCaCertificate" as const;
 type OriginCaCertificateTypeId = typeof OriginCaCertificateTypeId;

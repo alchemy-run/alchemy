@@ -128,9 +128,15 @@ test.provider("ip-kind endpoints surface the typed entitlement error", () =>
   }).pipe(logLevel),
 );
 
-test.provider("cleanup orphan proxy endpoint", () =>
+test.provider("list enumerates the deployed proxy endpoint", (stack) =>
   Effect.gen(function* () {
     const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    // Self-heal: remove any same-named endpoint left orphaned in the cloud by a
+    // previously-interrupted run so the deploy below doesn't trip the
+    // "OwnedBySomeoneElse" adoption guard.
     const orphans = yield* zeroTrust.listGatewayProxyEndpoints
       .items({ accountId })
       .pipe(
@@ -143,15 +149,6 @@ test.provider("cleanup orphan proxy endpoint", () =>
         .deleteGatewayProxyEndpoint({ accountId, proxyEndpointId: o.id ?? "" })
         .pipe(Effect.catchTag("ProxyEndpointNotFound", () => Effect.void)),
     );
-    expect(true).toBe(true);
-  }).pipe(logLevel),
-);
-
-test.provider("list enumerates the deployed proxy endpoint", (stack) =>
-  Effect.gen(function* () {
-    const { accountId } = yield* yield* CloudflareEnvironment;
-
-    yield* stack.destroy();
 
     // identity-kind endpoints work on all Zero Trust plans, so this deploy is
     // not entitlement-gated (unlike ip-kind, which needs Enterprise).
