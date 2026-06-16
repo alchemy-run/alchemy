@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as user from "@distilled.cloud/cloudflare/user";
@@ -193,4 +194,36 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 420_000 },
+);
+
+test.provider(
+  "list enumerates the deployed legacy pipeline",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const creds = yield* r2Credentials;
+
+      yield* stack.destroy();
+
+      const deployed = yield* retryAuthBlip(stack.deploy(legacy(creds)));
+      expect(deployed.pipeline.pipelineId).toBeTruthy();
+
+      // Account collection: list() exhaustively paginates every legacy
+      // pipeline in the account and hydrates each into the read
+      // Attributes shape.
+      const provider = yield* Provider.findProvider(Cloudflare.LegacyPipeline);
+      const all = yield* provider.list();
+
+      const match = all.find(
+        (p) => p.pipelineId === deployed.pipeline.pipelineId,
+      );
+      expect(match).toBeDefined();
+      expect(match?.name).toEqual(deployed.pipeline.name);
+      expect(match?.accountId).toEqual(accountId);
+      expect(match?.bucket).toEqual(deployed.bucket.bucketName);
+      expect(match?.endpoint).toEqual(deployed.pipeline.endpoint);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 300_000 },
 );

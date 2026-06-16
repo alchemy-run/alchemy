@@ -1,7 +1,9 @@
+import { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -369,7 +371,7 @@ const listAllLegacyPipelines = (accountId: string) => {
   ): Effect.Effect<
     ObservedLegacyPipeline[],
     pipelines.ListPipelinesError,
-    Provider.Credentials | HttpClient.HttpClient
+    Credentials | HttpClient.HttpClient
   > =>
     Effect.gen(function* () {
       const response = yield* pipelines.listPipelines({

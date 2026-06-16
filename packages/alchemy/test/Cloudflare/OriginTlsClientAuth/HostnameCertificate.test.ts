@@ -201,15 +201,24 @@ test.provider(
       const provider = yield* Provider.findProvider(
         Cloudflare.OriginTlsClientAuthHostnameCertificate,
       );
-      const all = yield* provider.list();
-
-      yield* Effect.log(
-        `DEBUG list returned ${all.length}; want ${cert.certificateId} in zone ${zoneId}; ids=${JSON.stringify(all.map((c) => `${c.zoneId}:${c.certificateId}:${c.status}`))}`,
+      // A freshly uploaded certificate can lag the zone list endpoint by a
+      // few seconds (edge propagation) — poll list() until it appears.
+      const found = yield* provider.list().pipe(
+        Effect.map((all) =>
+          all.find((c) => c.certificateId === cert.certificateId),
+        ),
+        Effect.flatMap((match) =>
+          match
+            ? Effect.succeed(match)
+            : Effect.fail({ _tag: "CertificateNotListed" } as const),
+        ),
+        Effect.retry({
+          while: (e) => e._tag === "CertificateNotListed",
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
+        }),
       );
-
-      const found = all.find((c) => c.certificateId === cert.certificateId);
-      expect(found).toBeDefined();
-      expect(found?.zoneId).toEqual(zoneId);
+      expect(found.zoneId).toEqual(zoneId);
 
       yield* stack.destroy();
 

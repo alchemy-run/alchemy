@@ -1,6 +1,7 @@
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as pages from "@distilled.cloud/cloudflare/pages";
 import { expect } from "@effect/vitest";
@@ -19,6 +20,10 @@ const logLevel = Effect.provideService(
 // Project names form globally-unique *.pages.dev subdomains, so it carries
 // an alchemy-e3 prefix to avoid collisions.
 const PROJECT_NAME = "alchemy-e3-pages-deployment";
+
+// Separate project for the `list` suite so the two tests never contend for
+// the same deterministically-named project.
+const LIST_PROJECT_NAME = "alchemy-e3-pages-deploy-list";
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,
@@ -163,6 +168,58 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectProjectGone(accountId, PROJECT_NAME);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates deployments across Pages projects",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+      yield* purgeProject(accountId, LIST_PROJECT_NAME);
+
+      const deployed = (yield* stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Cloudflare.PagesProject("ListDeployProject", {
+            name: LIST_PROJECT_NAME,
+          }).pipe(adopt(true));
+          const deployment = yield* Cloudflare.PagesDeployment(
+            "ListDeployment",
+            { projectName: project.name },
+          );
+          return { deployment };
+        }),
+      )).deployment;
+
+      const provider = yield* Provider.findProvider(Cloudflare.PagesDeployment);
+      // The deployment fans out across all account projects; ride out edge
+      // propagation of the freshly-created project before asserting presence.
+      const all = yield* provider.list().pipe(
+        Effect.flatMap((rows) =>
+          rows.some((d) => d.deploymentId === deployed.deploymentId)
+            ? Effect.succeed(rows)
+            : Effect.fail({ _tag: "DeploymentNotListedYet" } as const),
+        ),
+        Effect.retry({
+          while: (e) => e._tag === "DeploymentNotListedYet",
+          schedule: Schedule.exponential("500 millis").pipe(
+            Schedule.both(Schedule.recurs(8)),
+          ),
+        }),
+      );
+
+      const found = all.find((d) => d.deploymentId === deployed.deploymentId);
+      expect(found).toBeDefined();
+      expect(found?.accountId).toEqual(accountId);
+      expect(found?.projectName).toEqual(LIST_PROJECT_NAME);
+      expect(found?.url).toEqual(deployed.url);
+      expect(found?.shortId).toEqual(deployed.shortId);
+
+      yield* stack.destroy();
+      yield* expectProjectGone(accountId, LIST_PROJECT_NAME);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
