@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { expect } from "@effect/vitest";
@@ -106,6 +107,38 @@ test.provider(
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
   { timeout: 360_000 },
+);
+
+// Canonical `list()` test (AWS account/region-scoped collection): deploy a
+// real function, resolve the provider from context via the typed
+// `Provider.findProvider`, call `list()`, and assert the deployed function
+// appears in the exhaustively-paginated result.
+test.provider(
+  "list enumerates the deployed function",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        AWS.Lambda.Function<{}>()("ListFn", {
+          main: timeoutHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          url: false,
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(AWS.Lambda.Function);
+      const all = yield* provider.list();
+
+      expect(all.some((f) => f.functionName === deployed.functionName)).toBe(
+        true,
+      );
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { timeout: 180_000 },
 );
 
 test.provider(

@@ -146,6 +146,23 @@ export const IamUserGroupProvider = () =>
   Provider.succeed(IamUserGroup, {
     stables: ["userGroupId", "accountId", "createdOn"],
 
+    // Account-scoped collection: exhaustively paginate the account's
+    // user-groups list. Each page item already carries the full shape
+    // (`id`/`name`/`policies`/`createdOn`/`modifiedOn`) identical to the
+    // single-get response, so it hydrates directly into `read`'s
+    // Attributes via `toAttributes` — no per-item re-fetch needed.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* iam.listUserGroups.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((group) => toAttributes(group, accountId)),
+          ),
+        ),
+      );
+    }),
+
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

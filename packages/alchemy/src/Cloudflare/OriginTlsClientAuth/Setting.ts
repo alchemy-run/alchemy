@@ -4,7 +4,9 @@ import * as Predicate from "effect/Predicate";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const OriginTlsClientAuthSettingTypeId =
   "Cloudflare.OriginTlsClientAuth.Setting" as const;
@@ -105,6 +107,31 @@ export const isOriginTlsClientAuthSetting = (
 export const OriginTlsClientAuthSettingProvider = () =>
   Provider.succeed(OriginTlsClientAuthSetting, {
     stables: ["zoneId", "initialEnabled"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its setting (every zone has one).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          originTls.getSetting({ zoneId }).pipe(
+            Effect.map((observed): OriginTlsClientAuthSettingAttributes => {
+              const enabled = observed.enabled ?? false;
+              // Enumeration adopts the live value as the pre-management
+              // baseline, mirroring a cold `read`.
+              return { zoneId, enabled, initialEnabled: enabled };
+            }),
+            // Plan-gated or partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is OriginTlsClientAuthSettingAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as OriginTlsClientAuthSettingProps;

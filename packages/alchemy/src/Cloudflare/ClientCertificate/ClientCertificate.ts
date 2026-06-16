@@ -7,7 +7,9 @@ import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const ClientCertificateTypeId = "Cloudflare.ClientCertificate" as const;
 type ClientCertificateTypeId = typeof ClientCertificateTypeId;
@@ -196,6 +198,39 @@ export const ClientCertificateProvider = () =>
       "certificateAuthorityId",
       "certificateAuthorityName",
     ],
+
+    // Client certificates are a zone-scoped API Shield feature. Fan out over
+    // every zone in the account, exhaustively paginate each zone's
+    // certificates, and hydrate each into the same Attributes shape `read`
+    // produces. Revoked certificates stay listed forever but revocation is the
+    // delete semantic, so they are filtered out. Zones where API Shield is not
+    // entitled reject with the typed `Forbidden` error — skip them.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          clientCertificates.listClientCertificates
+            .pages({ zoneId: zone.id, status: "all" })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? [])
+                    .filter((cert) => cert.status !== "revoked")
+                    .map(
+                      (cert): ClientCertificateAttributes =>
+                        toAttributes(cert, zone.id),
+                    ),
+                ),
+              ),
+              Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as ClientCertificateProps;

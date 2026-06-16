@@ -277,6 +277,23 @@ export const RumSiteProvider = () =>
         })
         .pipe(Effect.catchTag("SiteNotFound", () => Effect.void));
     }),
+
+    // Account collection: Web Analytics sites are enumerated account-wide
+    // via the paginated site-info list. Hydrate each row into the exact
+    // `read` Attributes shape — the list response carries the same fields
+    // (siteTag/siteToken/snippet/ruleset/host) so no per-item re-read is
+    // needed.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* rum.listSiteInfos.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((site) => toAttributes(site, accountId)),
+          ),
+        ),
+      );
+    }),
   });
 
 type ObservedSite =

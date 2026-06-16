@@ -59,6 +59,12 @@ export const AccountAliasProvider = () =>
       }
       return { accountAlias };
     }),
+    // Account singleton: an AWS account has at most one alias. Enumerate the
+    // single alias (if set) as a one-element array, or [] when none is set.
+    list: Effect.fn(function* () {
+      const accountAlias = yield* readAccountAlias;
+      return accountAlias ? [{ accountAlias }] : [];
+    }),
     reconcile: Effect.fn(function* ({ news, session }) {
       // Observe — the account alias is a singleton; the only way to know
       // which alias is set is to list and take the first entry.

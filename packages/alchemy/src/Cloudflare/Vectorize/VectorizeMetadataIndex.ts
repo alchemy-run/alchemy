@@ -1,5 +1,6 @@
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -171,6 +172,55 @@ export const VectorizeMetadataIndexProvider = () =>
             () => Effect.void,
           ),
         );
+    }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      // Parent fan-out: metadata indexes are sub-resources of a Vectorize
+      // index. Enumerate every parent index (account-scoped, paginated),
+      // then list metadata indexes per index with bounded concurrency.
+      const indexNames = yield* vectorize.listIndexes.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map((index) => index.name)
+              .filter((name): name is string => name != null),
+          ),
+        ),
+      );
+
+      const rows = yield* Effect.forEach(
+        indexNames,
+        (indexName) =>
+          vectorize.listIndexMetadataIndexes({ accountId, indexName }).pipe(
+            Effect.map((res) =>
+              (res.metadataIndexes ?? []).flatMap(
+                (m): VectorizeMetadataIndexAttributes[] => {
+                  if (m.propertyName == null || m.indexType == null) {
+                    return [];
+                  }
+                  return [
+                    {
+                      propertyName: m.propertyName,
+                      indexType: m.indexType.toLowerCase() as MetadataIndexType,
+                      indexName,
+                      accountId,
+                      mutationId: undefined,
+                    },
+                  ];
+                },
+              ),
+            ),
+            // Parent index removed between enumeration and read; skip it.
+            Effect.catchTag(["NotFound", "Gone"], () =>
+              Effect.succeed<VectorizeMetadataIndexAttributes[]>([]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+
+      return rows.flat();
     }),
   });
 

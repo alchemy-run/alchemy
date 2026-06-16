@@ -1,5 +1,7 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -288,6 +290,67 @@ export const CapacityProviderProvider = () =>
             tags: desiredTags,
           };
         }),
+
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every capacity provider in the account/region.
+            // `describeCapacityProviders` with no filter returns all providers
+            // and paginates via `nextToken`; it is a plain operation (no
+            // `.pages`), so drive the pagination with `Stream.paginate`.
+            const all = yield* Stream.paginate(
+              undefined as string | undefined,
+              (token) =>
+                ecs
+                  .describeCapacityProviders({
+                    include: ["TAGS"],
+                    ...(token ? { nextToken: token } : {}),
+                  })
+                  .pipe(
+                    Effect.map(
+                      (res) =>
+                        [
+                          res.capacityProviders ?? [],
+                          res.nextToken
+                            ? Option.some(res.nextToken)
+                            : Option.none<string>(),
+                        ] as const,
+                    ),
+                  ),
+            ).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+            );
+
+            return all
+              .filter(
+                (
+                  p,
+                ): p is ecs.CapacityProvider & {
+                  name: string;
+                  capacityProviderArn: string;
+                } =>
+                  p.name != null &&
+                  p.capacityProviderArn != null &&
+                  // FARGATE / FARGATE_SPOT are AWS-managed reserved providers
+                  // that this resource does not create or own.
+                  p.name !== "FARGATE" &&
+                  p.name !== "FARGATE_SPOT",
+              )
+              .map((p) => ({
+                capacityProviderArn:
+                  p.capacityProviderArn as CapacityProviderArn,
+                name: p.name,
+                status: (p.status ?? "ACTIVE") as ecs.CapacityProviderStatus,
+                updateStatus: p.updateStatus,
+                autoScalingGroupArn:
+                  p.autoScalingGroupProvider?.autoScalingGroupArn ?? "",
+                managedScaling: p.autoScalingGroupProvider?.managedScaling,
+                managedTerminationProtection:
+                  p.autoScalingGroupProvider?.managedTerminationProtection,
+                managedDraining: p.autoScalingGroupProvider?.managedDraining,
+                tags: fromEcsTags(p.tags),
+              }));
+          }),
 
         delete: Effect.fn(function* ({ output }) {
           yield* ecs

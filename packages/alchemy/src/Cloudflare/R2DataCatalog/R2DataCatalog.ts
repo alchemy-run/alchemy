@@ -245,6 +245,21 @@ export const R2DataCatalogProvider = () =>
       // `Unowned` so the engine gates takeover behind the adopt policy.
       return output ? attrs : Unowned(attrs);
     }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // R2 Data Catalog is an account-scoped collection: one warehouse per
+      // bucket that has the catalog enabled. Only `active` warehouses map to
+      // a live resource — `read` treats `inactive` (disabled) as gone.
+      return yield* rdc.listR2DataCatalogs({ accountId }).pipe(
+        Effect.map(({ warehouses }) =>
+          warehouses
+            .filter((w) => w.status === "active")
+            .map((w) => toAttributes(w, accountId)),
+        ),
+        // Accounts without R2 Data Catalog access reject the route entirely.
+        Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+      );
+    }),
     reconcile: Effect.fn(function* ({ news, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

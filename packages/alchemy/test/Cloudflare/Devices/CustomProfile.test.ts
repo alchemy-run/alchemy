@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -115,4 +116,35 @@ test.provider(
       yield* stack.destroy();
       yield* expectGone(accountId, profile.policyId);
     }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed custom device profile", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Cloudflare.DeviceCustomProfile("ListProfile", {
+        name: "alchemy-test-custom-profile-list",
+        match: 'identity.email == "list@alchemy-test-2.us"',
+        precedence: 12011,
+        description: "Alchemy list() test profile",
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.DeviceCustomProfile,
+    );
+    const all = yield* provider.list();
+
+    // Exhaustively paginated account collection must contain the profile we
+    // just deployed, hydrated into the exact `read` Attributes shape.
+    const found = all.find((p) => p.policyId === deployed.policyId);
+    expect(found).toBeDefined();
+    expect(found?.name).toEqual("alchemy-test-custom-profile-list");
+    expect(found?.match).toEqual('identity.email == "list@alchemy-test-2.us"');
+    expect(found?.accountId).toEqual(deployed.accountId);
+    expect(found?.default).toEqual(false);
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );

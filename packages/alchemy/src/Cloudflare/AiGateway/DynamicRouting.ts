@@ -1,6 +1,7 @@
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -453,6 +454,59 @@ export const AiGatewayDynamicRoutingProvider = () =>
           Effect.catchTag("GatewayNotFound", () => Effect.void),
         );
     }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Routes are scoped under a gateway and there is no account-wide
+      // route list, so fan out: enumerate every account gateway, then
+      // exhaustively list each gateway's routes.
+      const gateways = yield* aiGateway.listAiGateways
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) => page.result ?? []),
+          ),
+        );
+      const rows = yield* Effect.forEach(
+        gateways,
+        (gateway) =>
+          listRoutes(accountId, gateway.id).pipe(
+            // A gateway removed between enumeration and its route list is
+            // gone — skip it rather than failing the whole listing.
+            Effect.catchTag("GatewayNotFound", () =>
+              Effect.succeed([] as AiGatewayDynamicRoutingAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
+  });
+
+/**
+ * Exhaustively list every route in a gateway. `listDynamicRoutings` is not a
+ * paginated distilled operation (the Cloudflare response carries only
+ * `page`/`per_page`, no total), so page manually until a short page signals
+ * the end. Each route item is hydrated into the exact `read` Attributes shape.
+ */
+const listRoutes = (accountId: string, gatewayId: string) =>
+  Effect.gen(function* () {
+    const perPage = 50;
+    const acc: AiGatewayDynamicRoutingAttributes[] = [];
+    for (let page = 1; ; page++) {
+      const response = yield* aiGateway.listDynamicRoutings({
+        accountId,
+        gatewayId,
+        page,
+        perPage,
+      });
+      const routes = response.data.routes;
+      for (const route of routes) {
+        acc.push(toAttributes(route, accountId));
+      }
+      if (routes.length < perPage) break;
+    }
+    return acc;
   });
 
 /**

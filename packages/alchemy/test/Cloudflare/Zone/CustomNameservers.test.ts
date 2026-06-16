@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import { expect } from "@effect/vitest";
@@ -124,6 +125,72 @@ test.provider(
           Effect.flip,
         );
       expect(error._tag).toEqual("CustomNameserverSetNotFound");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);
+
+// Canonical `list()` test (zone-scoped singleton). There is no account-wide
+// API for the per-zone ACNS toggle, so `list()` enumerates every zone via
+// `listAllZones` and reads the singleton in each — emitting one Attributes
+// only for zones that actively use account custom nameservers (skipping the
+// default-disabled ones, mirroring `read`). The read-only shape assertion
+// always runs; the testing account has no ACNS entitlement, so the array is
+// typically empty.
+test.provider(
+  "list enumerates zones using account custom nameservers",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ZoneCustomNameservers,
+      );
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      for (const item of all) {
+        expect(typeof item.zoneId).toBe("string");
+        // `list()` only emits zones with ACNS actively enabled.
+        expect(item.enabled).toBe(true);
+        expect(typeof item.initialEnabled).toBe("boolean");
+        expect(item.nsSet === undefined || typeof item.nsSet === "number").toBe(
+          true,
+        );
+        expect(
+          item.initialNsSet === undefined ||
+            typeof item.initialNsSet === "number",
+        ).toBe(true);
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+);
+
+// In an ACNS-entitled account, `list()` must surface the enabled zone.
+test.provider.skipIf(!acnsZoneId)(
+  "list includes a zone with account custom nameservers enabled",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = acnsZoneId!;
+
+      yield* stack.destroy();
+
+      const enabled = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.ZoneCustomNameservers("AcnsList", {
+            zoneId,
+            enabled: true,
+          });
+        }),
+      );
+      expect(enabled.enabled).toEqual(true);
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ZoneCustomNameservers,
+      );
+      const all = yield* provider.list();
+      expect(all.some((x) => x.zoneId === zoneId && x.enabled)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

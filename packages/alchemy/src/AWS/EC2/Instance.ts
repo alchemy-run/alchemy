@@ -572,6 +572,28 @@ export const InstanceProvider = () =>
 
       return {
         stables: ["instanceId", "instanceArn", "vpcId", "subnetId"],
+        list: () =>
+          Effect.gen(function* () {
+            // describeInstances paginates; each page nests instances under
+            // Reservations[].Instances[]. Enumerate every non-terminated
+            // instance in the ambient account/region.
+            const instances = yield* ec2.describeInstances.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.Reservations ?? []).flatMap(
+                    (reservation) => reservation.Instances ?? [],
+                  ),
+                ),
+              ),
+            );
+            return yield* Effect.forEach(
+              instances.filter(
+                (instance) => instance.State?.Name !== "terminated",
+              ),
+              (instance) => toAttributes(instance),
+            );
+          }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
           const hostModeChanged = Boolean(olds.main) !== Boolean(news.main);
@@ -727,6 +749,7 @@ export const InstanceProvider = () =>
           );
           if (
             desiredSecurityGroups &&
+            desiredSecurityGroups.length > 0 &&
             JSON.stringify([...observedSecurityGroups].sort()) !==
               JSON.stringify([...desiredSecurityGroups].sort())
           ) {

@@ -214,6 +214,21 @@ export const PipelineProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       yield* deletePipeline(output.accountId, output.pipelineId);
     }),
+
+    // Account collection — pipelines are account-scoped. Exhaustively
+    // paginate the account-wide list and hydrate each row into the same
+    // Attributes shape `read` returns.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* pipelines.listV1Pipeline.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((p) => toAttributes(p, accountId)),
+          ),
+        ),
+      );
+    }),
   });
 
 /**

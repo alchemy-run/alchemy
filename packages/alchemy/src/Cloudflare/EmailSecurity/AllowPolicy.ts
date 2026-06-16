@@ -158,6 +158,27 @@ export const EmailSecurityAllowPolicyProvider = () =>
   Provider.succeed(EmailSecurityAllowPolicy, {
     stables: ["policyId", "accountId", "createdAt"],
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* emailSecurity.listSettingAllowPolicies
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((policy) =>
+                toAttributes(policy, accountId),
+              ),
+            ),
+          ),
+          // Email Security is a paid add-on; accounts without the
+          // entitlement can't enumerate policies — treat as empty.
+          Effect.catchTag("EmailSecurityNotEntitled", () =>
+            Effect.succeed([] as EmailSecurityAllowPolicyAttributes[]),
+          ),
+        );
+    }),
+
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

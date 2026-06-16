@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
@@ -26,5 +27,18 @@ test.provider.skipIf(!runLive)("patch API Gateway account settings", (stack) =>
 
     const after = yield* ag.getAccount({});
     expect(after.cloudwatchRoleArn).toEqual(before.cloudwatchRoleArn);
+  }),
+);
+
+test.provider("list returns the account settings singleton", (stack) =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(AWS.ApiGateway.Account);
+    const all = yield* provider.list();
+
+    // Account settings are an account/region singleton — always exactly one.
+    expect(all.length).toBe(1);
+    expect(all[0]).toHaveProperty("managesCloudwatchRoleArn");
+
+    yield* stack.destroy();
   }),
 );

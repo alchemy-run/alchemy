@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as pqe from "@distilled.cloud/cloudflare/origin-post-quantum-encryption";
 import { expect } from "@effect/vitest";
@@ -185,5 +186,27 @@ describe.sequential("OriginPostQuantumEncryption", () => {
         const restored = yield* getSetting(zoneId);
         expect(restored.value).toEqual("supported");
       }).pipe(logLevel),
+  );
+
+  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+  // API for this per-zone setting, so `list()` enumerates every zone via
+  // `listAllZones` and reads the singleton in each. Assert the result is
+  // non-empty and contains the standing test zone.
+  test.provider("list enumerates the setting across all zones", (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.OriginPostQuantumEncryption,
+      );
+      const all = yield* provider.list();
+
+      expect(all.length).toBeGreaterThan(0);
+      expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+
+      // `stack` is unused here (the singleton always exists on every zone),
+      // but keep the destroy bookend so the harness state stays clean.
+      yield* stack.destroy();
+    }).pipe(logLevel),
   );
 });

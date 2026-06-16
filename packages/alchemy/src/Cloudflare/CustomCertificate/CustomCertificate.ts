@@ -10,7 +10,9 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const CustomCertificateTypeId = "Cloudflare.CustomCertificate" as const;
 type CustomCertificateTypeId = typeof CustomCertificateTypeId;
@@ -256,6 +258,43 @@ export const isCustomCertificate = (
 export const CustomCertificateProvider = () =>
   Provider.succeed(CustomCertificate, {
     stables: ["certificateId", "zoneId", "type", "uploadedOn"],
+
+    // Zone-scoped collection: fan out over every zone and exhaustively
+    // paginate that zone's custom certificates. The PEM contents and the
+    // uploaded `type` are write-only (never echoed back), so — exactly like
+    // `read`'s cold adoption path — the unknowable `type`/`contentHash`
+    // default to `legacy_custom`/`""`. Plan-gated zones reject the route with
+    // the typed `PlanLevelNotAllowed` (custom certs are Business/Enterprise)
+    // and freshly-scoped tokens may blip `Forbidden`; both skip the zone.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          customCertificates.listCustomCertificates
+            .pages({ zoneId: zone.id })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? []).map(
+                    (cert): CustomCertificateAttributes =>
+                      toAttributes(cert, {
+                        type: "legacy_custom",
+                        contentHash: "",
+                      }),
+                  ),
+                ),
+              ),
+              Effect.catchTag(["PlanLevelNotAllowed", "Forbidden"], () =>
+                Effect.succeed([] as CustomCertificateAttributes[]),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

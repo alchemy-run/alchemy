@@ -433,6 +433,14 @@ export const DeviceDefaultProfileProvider = () =>
       const obs = yield* observe();
       return buildAttrs(accountId, obs);
     }),
+    // Account-scoped singleton: there is exactly one default device profile
+    // per account and no enumeration API. Mirror `read` and return the single
+    // profile as a one-element array.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const obs = yield* observe();
+      return [buildAttrs(accountId, obs)];
+    }),
   });
 
 // Cloudflare returns `{result: null, success: true}` (NOT `[]`) when

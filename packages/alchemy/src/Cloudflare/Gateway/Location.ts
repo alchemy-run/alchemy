@@ -185,6 +185,27 @@ export const GatewayLocationProvider = () =>
   Provider.succeed(GatewayLocation, {
     stables: ["locationId", "accountId", "dohSubdomain", "ip", "createdAt"],
 
+    // Account-scoped collection: enumerate every Gateway location in the
+    // ambient account, exhaustively paginating, and hydrate each into the
+    // exact `read` Attributes shape. The list response already carries the
+    // full per-location state, so no follow-up get is needed.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listGatewayLocations.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map((l) => toAttributes(l, accountId))
+              // The account's default location can't be deleted while it is
+              // the client default (`CannotDeleteDefaultGatewayLocation`);
+              // never enumerate it for account-wide teardown.
+              .filter((l) => !l.clientDefault),
+          ),
+        ),
+      );
+    }),
+
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
@@ -389,8 +410,15 @@ const sameEndpoints = (
   );
 };
 
+type ListedLocation = NonNullable<
+  zeroTrust.ListGatewayLocationsResponse["result"]
+>[number];
+
 const toAttributes = (
-  location: ObservedLocation | zeroTrust.UpdateGatewayLocationResponse,
+  location:
+    | ObservedLocation
+    | zeroTrust.UpdateGatewayLocationResponse
+    | ListedLocation,
   accountId: string,
 ): GatewayLocationAttributes => ({
   locationId: location.id ?? "",

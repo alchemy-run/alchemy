@@ -1,6 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -75,6 +76,20 @@ export const isAccessTag = (value: unknown): value is AccessTag =>
 export const AccessTagProvider = () =>
   Provider.succeed(AccessTag, {
     stables: ["name", "accountId"],
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listAccessTags.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((tag) => ({
+              name: tag.name,
+              accountId,
+            })),
+          ),
+        ),
+      );
+    }),
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;

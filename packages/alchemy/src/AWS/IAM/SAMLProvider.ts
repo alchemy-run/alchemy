@@ -101,6 +101,44 @@ export const SAMLProviderProvider = () =>
         tags: toTagRecord(tags.Tags),
       };
     }),
+    list: Effect.fn(function* () {
+      // IAM is global; `listSAMLProviders` enumerates every provider in the
+      // account but only returns the ARN, so hydrate each via
+      // `getSAMLProvider` + `listSAMLProviderTags` for the full Attributes.
+      const { SAMLProviderList } = yield* iam.listSAMLProviders({});
+      const arns = (SAMLProviderList ?? []).flatMap((entry) =>
+        entry.Arn ? [entry.Arn] : [],
+      );
+      const rows = yield* Effect.forEach(
+        arns,
+        (samlProviderArn) =>
+          Effect.gen(function* () {
+            const response = yield* iam
+              .getSAMLProvider({ SAMLProviderArn: samlProviderArn })
+              .pipe(
+                Effect.catchTag("NoSuchEntityException", () =>
+                  Effect.succeed(undefined),
+                ),
+              );
+            if (!response) {
+              return undefined;
+            }
+            const tags = yield* iam.listSAMLProviderTags({
+              SAMLProviderArn: samlProviderArn,
+            });
+            return {
+              samlProviderArn,
+              name: samlProviderArn.split("saml-provider/").pop() ?? "",
+              samlProviderUUID: response.SAMLProviderUUID,
+              samlMetadataDocument: response.SAMLMetadataDocument,
+              assertionEncryptionMode: response.AssertionEncryptionMode,
+              tags: toTagRecord(tags.Tags),
+            };
+          }),
+        { concurrency: 10 },
+      );
+      return rows.filter((row) => row !== undefined);
+    }),
     reconcile: Effect.fn(function* ({ id, news, output, session }) {
       const internalTags = yield* createInternalTags(id);
       const desiredTags = {

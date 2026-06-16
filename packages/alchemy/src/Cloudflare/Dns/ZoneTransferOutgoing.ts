@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const ZoneTransferOutgoingTypeId =
   "Cloudflare.Dns.ZoneTransferOutgoing" as const;
@@ -125,6 +127,38 @@ export const isZoneTransferOutgoing = (
 export const ZoneTransferOutgoingProvider = () =>
   Provider.succeed(ZoneTransferOutgoing, {
     stables: ["zoneId", "id", "createdTime"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // The outgoing transfer config is a per-zone singleton with no
+      // account-wide enumeration API — walk every zone and read its
+      // config. Most zones have none (or lack the Secondary DNS
+      // entitlement); skip those via the typed not-found/not-allowed
+      // tags rather than failing the whole enumeration.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          getOutgoing(zoneId).pipe(
+            Effect.catchTag("OutgoingZoneTransfersNotAllowed", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.flatMap((observed) =>
+              observed === undefined
+                ? Effect.succeed(undefined)
+                : getEnabled(zoneId).pipe(
+                    Effect.map((enabled) =>
+                      toAttributes(observed, zoneId, enabled),
+                    ),
+                  ),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ZoneTransferOutgoingAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as ZoneTransferOutgoingProps;

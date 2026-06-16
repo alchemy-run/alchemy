@@ -1,6 +1,7 @@
 import * as resourceTagging from "@distilled.cloud/cloudflare/resource-tagging";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import type { Input } from "../../Input.ts";
@@ -154,6 +155,33 @@ export const isAccountResourceTags = (
 export const AccountResourceTagsProvider = () =>
   Provider.succeed(AccountResourceTags, {
     stables: ["accountId", "resourceType", "resourceId", "workerId"],
+
+    // Account-wide enumeration: `GET /accounts/{id}/tags/resources` returns
+    // every tagged resource in the account, so the tag set of each is directly
+    // hydratable into the `read` Attributes shape.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* resourceTagging.listResourceTaggings
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map(
+                (item): AccountResourceTagsAttributes => ({
+                  accountId,
+                  resourceType: item.type,
+                  resourceId: item.id,
+                  workerId:
+                    "workerId" in item ? (item.workerId as string) : undefined,
+                  tags: narrowTags(item.tags),
+                  etag: item.etag,
+                }),
+              ),
+            ),
+          ),
+        );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as Partial<AccountResourceTagsProps>;

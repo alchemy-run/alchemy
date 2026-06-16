@@ -1,6 +1,7 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -138,6 +139,22 @@ export const NetworkAclProvider = () =>
           const acl = yield* describeNetworkAcl(output.networkAclId);
           return yield* toAttrs(acl);
         }),
+
+        list: () =>
+          Effect.gen(function* () {
+            const acls = yield* ec2.describeNetworkAcls.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.NetworkAcls ?? []).filter(
+                    (acl): acl is ec2.NetworkAcl & { NetworkAclId: string } =>
+                      acl.NetworkAclId != null,
+                  ),
+                ),
+              ),
+            );
+            return yield* Effect.forEach(acls, (acl) => toAttrs(acl));
+          }),
 
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as resourceSharing from "@distilled.cloud/cloudflare/resource-sharing";
 import { expect } from "@effect/vitest";
@@ -127,6 +128,65 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates the account's sent shares (typed Attributes), and includes a deployed share when entitled",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.Share);
+
+      // Reads (list) succeed without the Resource Sharing Edit permission,
+      // so the read-only assertion always runs: list() returns the full,
+      // exhaustively-paginated set of sent shares in the read Attributes
+      // shape.
+      const before = yield* provider.list();
+      expect(Array.isArray(before)).toBe(true);
+      for (const share of before) {
+        expect(typeof share.shareId).toBe("string");
+        expect(share.accountId).toEqual(accountId);
+        expect(typeof share.name).toBe("string");
+        // Deleted shares are filtered out — never surfaced by list().
+        expect(share.status).not.toEqual("deleted");
+      }
+
+      // Writes are permission-gated (and need a second recipient account),
+      // so only assert presence of a freshly-deployed share when an entitled
+      // recipient account is provided. On the standard testing token the
+      // deploy would fail with the typed `Forbidden` (HTTP 403, code 10000).
+      if (recipientAccountId) {
+        const policy = yield* stack.deploy(
+          Cloudflare.GatewayRule("ListSharePolicy", {
+            action: "block",
+            traffic: 'dns.fqdn == "list-share.alchemy-test.example"',
+            filters: ["dns"],
+            enabled: false,
+          }),
+        );
+        const deployed = yield* stack.deploy(
+          Cloudflare.Share("ListShare", {
+            name: "alchemy-list-share",
+            recipients: [{ accountId: recipientAccountId }],
+            resources: [
+              { resourceType: "gateway-policy", resourceId: policy.ruleId },
+            ],
+          }),
+        );
+
+        const all = yield* provider.list();
+        expect(all.some((s) => s.shareId === deployed.shareId)).toBe(true);
+
+        yield* stack.destroy();
+        yield* expectGone(accountId, deployed.shareId);
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
 );
 
 test.provider.skipIf(!recipientAccountId)(

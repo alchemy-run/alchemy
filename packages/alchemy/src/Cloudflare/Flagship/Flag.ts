@@ -1,6 +1,7 @@
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -427,6 +428,39 @@ export const FlagshipFlagProvider = () =>
           ),
         );
     }),
+    // Flags are sub-resources keyed by (accountId, appId, key). There is no
+    // account-wide flag enumeration, so enumerate every Flagship app first,
+    // then fan out the per-app flag list and flatten.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const apps = yield* flagship.listApps.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.result ?? []),
+        ),
+      );
+      const rows = yield* Effect.forEach(
+        apps,
+        (app) =>
+          flagship.listAppFlags.pages({ accountId, appId: app.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((flag) =>
+                  toAttributes(flag, accountId, app.id),
+                ),
+              ),
+            ),
+            // The parent app can be deleted between enumeration and the
+            // per-app flag list; treat a gone app as having no flags.
+            Effect.catchTag("FlagshipAppNotFound", () =>
+              Effect.succeed<FlagshipFlagAttributes[]>([]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 /**
@@ -514,7 +548,8 @@ const toAttributes = (
   flag:
     | flagship.GetAppFlagResponse
     | flagship.CreateAppFlagResponse
-    | flagship.UpdateAppFlagResponse,
+    | flagship.UpdateAppFlagResponse
+    | flagship.ListAppFlagsResponse["result"][number],
   accountId: string,
   appId: string,
 ): FlagshipFlagAttributes => ({

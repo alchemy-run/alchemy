@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as snippets from "@distilled.cloud/cloudflare/snippets";
 import { expect } from "@effect/vitest";
@@ -77,7 +78,9 @@ const listLiveRules = (zoneId: string) =>
 
 const findSnippet = (zoneId: string, name: string) =>
   snippets.listSnippets({ zoneId, perPage: 100 }).pipe(
-    Effect.map((page) => page.result.find((s) => s.snippetName === name)),
+    Effect.map((page) =>
+      (page.result ?? []).find((s) => s.snippetName === name),
+    ),
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       ...forbiddenRetryPolicy,
@@ -187,6 +190,54 @@ test.provider(
       expect(liveGone).toHaveLength(0);
       expect(yield* findSnippet(zoneId, NAME_RULES_A)).toBeUndefined();
       expect(yield* findSnippet(zoneId, NAME_RULES_B)).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 180_000 },
+);
+
+// Canonical `list()` test (zone-scoped singleton): there is no account-wide
+// API for the per-zone rule list, so `list()` enumerates every zone via
+// `listAllZones` and reads the rule list in each, skipping zones with no
+// rules. Deploy a rule list to the standing test zone and assert it appears.
+test.provider(
+  "list enumerates snippet rules across all zones",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeRules(zoneId);
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const snippet = yield* Cloudflare.Snippet("RulesSnippetA", {
+            zoneId,
+            name: NAME_RULES_A,
+            code,
+          }).pipe(adopt(true));
+          return yield* Cloudflare.SnippetRules("Rules", {
+            zoneId,
+            rules: [
+              {
+                snippetName: snippet.name,
+                expression: EXPRESSION_V1,
+                description: "alchemy snippet rules list test",
+              },
+            ],
+          }).pipe(adopt(true));
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.SnippetRules);
+      const all = yield* provider.list();
+
+      expect(all.length).toBeGreaterThan(0);
+      const entry = all.find((r) => r.zoneId === zoneId);
+      expect(entry).toBeDefined();
+      expect(entry!.rules.some((r) => r.snippetName === NAME_RULES_A)).toBe(
+        true,
+      );
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 180_000 },
 );

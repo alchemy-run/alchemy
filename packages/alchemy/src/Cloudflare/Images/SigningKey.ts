@@ -145,6 +145,23 @@ export const ImagesSigningKeyProvider = () =>
       return output?.keyName ? attrs : Unowned(attrs);
     }),
 
+    // Account-scoped collection (Cloudflare caps it at two keys per
+    // account). The non-paginated `listV1Keys` returns the whole set in one
+    // call; map each entry to the same Attributes shape `read` produces.
+    // Accounts without the Images signing-keys entitlement have no keys to
+    // enumerate — treat as an empty set rather than a hard failure.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* images.listV1Keys({ accountId }).pipe(
+        Effect.map((response): ImagesSigningKeyAttributes[] =>
+          (response.keys ?? []).map((key) => toAttributes(key, accountId)),
+        ),
+        Effect.catchTag("ImagesAccessNotEnabled", () =>
+          Effect.succeed<ImagesSigningKeyAttributes[]>([]),
+        ),
+      );
+    }),
+
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.

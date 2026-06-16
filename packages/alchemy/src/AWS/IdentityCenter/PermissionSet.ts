@@ -70,6 +70,35 @@ export const PermissionSetProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["permissionSetArn", "instanceArn"],
+        list: () =>
+          Effect.gen(function* () {
+            // Permission sets live on an Identity Center instance. Resolve
+            // the single enabled SSO instance, enumerate every permission
+            // set ARN via `listPermissionSets` (exhaustively paginated by
+            // the distilled `.items` stream), then hydrate each into the
+            // exact `read` shape via `describePermissionSet` (bounded
+            // concurrency, typed per-item not-found handled inside
+            // `readPermissionSetByArn`).
+            const instance = yield* resolveInstance();
+            const arns = yield* ssoAdmin.listPermissionSets
+              .items({
+                InstanceArn: instance.InstanceArn!,
+                MaxResults: 100,
+              })
+              .pipe(Stream.runCollect);
+            const rows = yield* Effect.forEach(
+              arns,
+              (permissionSetArn) =>
+                readPermissionSetByArn({
+                  instanceArn: instance.InstanceArn!,
+                  permissionSetArn,
+                }),
+              { concurrency: 10 },
+            );
+            return rows.filter(
+              (row): row is PermissionSet["Attributes"] => row !== undefined,
+            );
+          }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
           if (

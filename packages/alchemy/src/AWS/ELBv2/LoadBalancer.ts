@@ -1,5 +1,6 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -124,6 +125,80 @@ export const LoadBalancerProvider = () =>
               ) ?? [],
           };
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every load balancer in the account/region, paginating
+            // exhaustively.
+            const loadBalancers = yield* elbv2.describeLoadBalancers
+              .pages({})
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) => page.LoadBalancers ?? []),
+                ),
+              );
+            const owned = loadBalancers.filter(
+              (lb): lb is elbv2.LoadBalancer & { LoadBalancerArn: string } =>
+                lb.LoadBalancerArn != null,
+            );
+            if (owned.length === 0) {
+              return [];
+            }
+
+            // describeTags accepts at most 20 ARNs per call, so batch.
+            const batches: (typeof owned)[] = [];
+            for (let i = 0; i < owned.length; i += 20) {
+              batches.push(owned.slice(i, i + 20));
+            }
+            const tagDescriptions = yield* Effect.forEach(
+              batches,
+              (batch) =>
+                elbv2
+                  .describeTags({
+                    ResourceArns: batch.map((lb) => lb.LoadBalancerArn),
+                  })
+                  .pipe(Effect.map((res) => res.TagDescriptions ?? [])),
+              { concurrency: 5 },
+            );
+            const tagsByArn = new Map(
+              tagDescriptions
+                .flat()
+                .flatMap((desc) =>
+                  desc.ResourceArn
+                    ? ([
+                        [
+                          desc.ResourceArn,
+                          Object.fromEntries(
+                            (desc.Tags ?? [])
+                              .filter(
+                                (t): t is { Key: string; Value: string } =>
+                                  typeof t.Key === "string" &&
+                                  typeof t.Value === "string",
+                              )
+                              .map((t) => [t.Key, t.Value]),
+                          ),
+                        ],
+                      ] as const)
+                    : [],
+                ),
+            );
+
+            return owned.map((lb) => ({
+              loadBalancerArn: lb.LoadBalancerArn as LoadBalancerArn,
+              loadBalancerName: lb.LoadBalancerName!,
+              dnsName: lb.DNSName!,
+              canonicalHostedZoneId: lb.CanonicalHostedZoneId!,
+              vpcId: lb.VpcId!,
+              scheme: lb.Scheme!,
+              type: lb.Type!,
+              securityGroups: lb.SecurityGroups ?? [],
+              subnets:
+                lb.AvailabilityZones?.flatMap((zone) =>
+                  zone.SubnetId ? [zone.SubnetId] : [],
+                ) ?? [],
+              tags: tagsByArn.get(lb.LoadBalancerArn) ?? {},
+            }));
+          }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
           const name = yield* toName(id, news);
           const desiredTags = {

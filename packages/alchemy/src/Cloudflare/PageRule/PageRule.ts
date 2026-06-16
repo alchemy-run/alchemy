@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const PageRuleTypeId = "Cloudflare.PageRule" as const;
 type PageRuleTypeId = typeof PageRuleTypeId;
@@ -183,6 +185,28 @@ export const isPageRule = (value: unknown): value is PageRule =>
 export const PageRuleProvider = () =>
   Provider.succeed(PageRule, {
     stables: ["pageRuleId", "zoneId", "createdOn"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Page Rules live inside a zone (`/zones/{id}/pagerules`) with no
+      // account-wide enumeration API. Fan out over every zone and list
+      // its rules; `listPageRules` is non-paginated (returns the whole
+      // array in one response). Skip plan-gated zones with the typed
+      // `Forbidden` tag.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          pageRules.listPageRules({ zoneId: zone.id }).pipe(
+            Effect.map((rules) =>
+              rules.map((rule) => toAttributes(rule as ObservedRule, zone.id)),
+            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as PageRuleProps;

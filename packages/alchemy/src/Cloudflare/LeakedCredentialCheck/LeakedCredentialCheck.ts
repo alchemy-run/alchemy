@@ -4,7 +4,9 @@ import * as Predicate from "effect/Predicate";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const LeakedCredentialCheckTypeId = "Cloudflare.LeakedCredentialCheck" as const;
 type LeakedCredentialCheckTypeId = typeof LeakedCredentialCheckTypeId;
@@ -105,6 +107,35 @@ const desiredEnabled = (props: LeakedCredentialCheckProps): boolean =>
 export const LeakedCredentialCheckProvider = () =>
   Provider.succeed(LeakedCredentialCheck, {
     stables: ["zoneId", "initialEnabled"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its setting (every zone has one).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          lcc.getLeakedCredentialCheck({ zoneId }).pipe(
+            Effect.map((observed) => {
+              const enabled = observed.enabled ?? false;
+              // The singleton always exists; with no managed history its
+              // observed value is also its pre-management value.
+              return {
+                zoneId,
+                enabled,
+                initialEnabled: enabled,
+              } satisfies LeakedCredentialCheckAttributes;
+            }),
+            // Zone deleted out-of-band or plan-gated route; skip it.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is LeakedCredentialCheckAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as LeakedCredentialCheckProps;

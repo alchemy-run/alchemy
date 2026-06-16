@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -93,6 +94,40 @@ test.provider(
         initial.route.hostnameRouteId,
       );
       expect(afterDestroy).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+test.provider(
+  "list enumerates the deployed hostname route",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const tunnel = yield* Cloudflare.Tunnel("HrTunnel", {
+            adopt: true,
+          });
+          const route = yield* Cloudflare.TunnelHostnameRoute("AppRoute", {
+            hostname: HOSTNAME,
+            tunnelId: tunnel.tunnelId,
+            comment: "list",
+          });
+          return { route };
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.TunnelHostnameRoute,
+      );
+      const all = yield* provider.list();
+
+      expect(
+        all.some((r) => r.hostnameRouteId === deployed.route.hostnameRouteId),
+      ).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 90_000 },
 );

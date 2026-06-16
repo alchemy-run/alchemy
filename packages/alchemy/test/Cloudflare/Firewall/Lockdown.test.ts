@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as firewall from "@distilled.cloud/cloudflare/firewall";
 import { expect } from "@effect/vitest";
@@ -29,6 +30,9 @@ const URL_LIFECYCLE_V1 = `${zoneName}/alchemy-lockdown-lifecycle*`;
 const URL_LIFECYCLE_V2 = `${zoneName}/alchemy-lockdown-lifecycle-v2*`;
 const IP_V1 = "198.51.100.111";
 const RANGE_V2 = "203.0.113.0/24";
+
+const URL_LIST = `${zoneName}/alchemy-lockdown-list*`;
+const IP_LIST = "198.51.100.222";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -181,4 +185,40 @@ test.provider(
 
       yield* expectLockdownGone(zoneId, initial.lockdownId);
     }).pipe(logLevel),
+);
+
+// Canonical `list()` test (zone-scoped collection): `list()` fans out over
+// every zone via `listAllZones`, exhaustively paginates each zone's lockdown
+// rules, and hydrates them into the `read` Attributes shape. Deploy a rule and
+// assert it appears in the enumerated result.
+test.provider("list enumerates the deployed lockdown rule", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
+
+    yield* stack.destroy();
+    yield* purgeLockdowns(zoneId, [URL_LIST]);
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.Lockdown("ListLockdown", {
+          zoneId,
+          urls: [URL_LIST],
+          configurations: [{ target: "ip", value: IP_LIST }],
+          description: "alchemy lockdown list test",
+        }).pipe(adopt(true));
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.Lockdown);
+    const all = yield* provider.list();
+
+    expect(all.some((r) => r.lockdownId === deployed.lockdownId)).toBe(true);
+    const found = all.find((r) => r.lockdownId === deployed.lockdownId);
+    expect(found?.zoneId).toEqual(zoneId);
+    expect(found?.urls).toEqual([URL_LIST]);
+
+    yield* stack.destroy();
+
+    yield* expectLockdownGone(zoneId, deployed.lockdownId);
+  }).pipe(logLevel),
 );

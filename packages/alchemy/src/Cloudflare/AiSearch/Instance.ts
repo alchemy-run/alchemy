@@ -1,6 +1,7 @@
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -405,6 +406,36 @@ export const AiSearchInstanceProvider = () =>
         output?.id ?? (yield* createInstanceId(id, olds?.instanceId));
       const observed = yield* getInstance(acct, instanceId);
       return observed ? toAttributes(observed, acct) : undefined;
+    }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Enumerate every instance id in the account, paginating
+      // exhaustively (the list payload omits some fields `read`
+      // returns).
+      const ids = yield* aisearch.listInstances.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((instance) => instance.id),
+          ),
+        ),
+      );
+      // Hydrate each into the exact `read` Attributes shape; an item
+      // that vanished between list and read (typed NotFound) is
+      // dropped.
+      const rows = yield* Effect.forEach(
+        ids,
+        (instanceId) =>
+          getInstance(accountId, instanceId).pipe(
+            Effect.map((observed) =>
+              observed ? toAttributes(observed, accountId) : undefined,
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is AiSearchInstanceAttributes => row !== undefined,
+      );
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

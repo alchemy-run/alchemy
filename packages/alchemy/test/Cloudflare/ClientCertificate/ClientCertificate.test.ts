@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as clientCertificates from "@distilled.cloud/cloudflare/client-certificates";
 import { expect } from "@effect/vitest";
@@ -180,4 +181,34 @@ test.provider(
       );
       expect(revoked.status).toEqual("revoked");
     }).pipe(logLevel),
+);
+
+test.provider("list enumerates client certificates across zones", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
+
+    yield* stack.destroy();
+
+    const cert = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.ClientCertificate("ListCert", {
+          zoneId,
+          csr: CSR_A,
+          validityDays: 90,
+        }).pipe(adopt(true));
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.ClientCertificate);
+    const all = yield* provider.list();
+
+    const found = all.find(
+      (c) => c.clientCertificateId === cert.clientCertificateId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.zoneId).toEqual(zoneId);
+    expect(found?.status).not.toEqual("revoked");
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );

@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as loadBalancers from "@distilled.cloud/cloudflare/load-balancers";
 import { expect } from "@effect/vitest";
@@ -173,6 +174,84 @@ test.provider.skipIf(!lbEnabled)(
       yield* stack.destroy();
 
       yield* expectGone(zoneId, initial.lb.loadBalancerId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test, ungated read-only half: load balancers are
+// zone-scoped, so `list()` fans out over every zone and exhaustively
+// paginates each zone's load balancers. The testing account's zones lack
+// the Load Balancing subscription, so the per-zone list yields no rows
+// (and any `Forbidden` zone is skipped) — assert a well-typed array whose
+// elements (if any) match the `read` Attributes shape.
+test.provider(
+  "list returns a well-typed array of load balancers",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer);
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      for (const lb of all) {
+        expect(typeof lb.loadBalancerId).toBe("string");
+        expect(typeof lb.zoneId).toBe("string");
+        expect(typeof lb.name).toBe("string");
+        expect(typeof lb.enabled).toBe("boolean");
+        expect(typeof lb.proxied).toBe("boolean");
+        expect(typeof lb.steeringPolicy).toBe("string");
+        expect(Array.isArray(lb.defaultPools)).toBe(true);
+        expect(typeof lb.fallbackPool).toBe("string");
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Entitlement-gated half: with the Load Balancing subscription enabled,
+// deploy a real pool + load balancer and assert the deployed item appears
+// in the exhaustively-paginated, fanned-out `list()` result.
+test.provider.skipIf(!lbEnabled)(
+  "list enumerates the deployed load balancer",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const pool = yield* Cloudflare.LoadBalancerPool("Pool", {
+            name: NAME_POOL,
+            origins: [{ name: "origin-1", address: "203.0.113.10" }],
+          });
+          const lb = yield* Cloudflare.LoadBalancer("Lb", {
+            zoneId,
+            name: NAME_LIFECYCLE,
+            defaultPools: [pool.poolId],
+            fallbackPool: pool.poolId,
+            proxied: false,
+            ttl: 30,
+          });
+          return { pool, lb };
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.LoadBalancer);
+      const all = yield* provider.list();
+
+      const row = all.find(
+        (lb) => lb.loadBalancerId === deployed.lb.loadBalancerId,
+      );
+      expect(row).toBeDefined();
+      expect(row!.zoneId).toEqual(zoneId);
+      expect(row!.name).toEqual(NAME_LIFECYCLE);
+
+      yield* stack.destroy();
+
+      yield* expectGone(zoneId, deployed.lb.loadBalancerId);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

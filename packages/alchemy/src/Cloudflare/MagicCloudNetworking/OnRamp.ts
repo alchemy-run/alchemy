@@ -436,6 +436,36 @@ export const OnRampProvider = () =>
         })
         .pipe(Effect.catchTag("OnRampNotFound", () => Effect.void));
     }),
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection: exhaustively paginate the on-ramp list,
+      // then hydrate each id into the exact `read` Attributes shape via
+      // `getOnRamp`. The list item omits some fields (`vpc`, `region`), so
+      // a per-item get is required for a fully-faithful Attributes object.
+      // Magic Cloud Networking is an entitlement-gated add-on; on accounts
+      // without it every call fails with `FeatureNotEnabled` — treat that
+      // as a non-listable account and return `[]`.
+      const ids = yield* mcn.listOnRamps.items({ accountId }).pipe(
+        Stream.map((onramp) => onramp.id),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.catchTag("FeatureNotEnabled", () =>
+          Effect.succeed([] as string[]),
+        ),
+      );
+      const rows = yield* Effect.forEach(
+        ids,
+        (onRampId) =>
+          getOnRamp(accountId, onRampId).pipe(
+            Effect.map((observed) =>
+              observed ? toAttributes(observed, accountId, false) : undefined,
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter((row): row is OnRampAttributes => row !== undefined);
+    }),
   });
 
 type ObservedOnRamp = Pick<

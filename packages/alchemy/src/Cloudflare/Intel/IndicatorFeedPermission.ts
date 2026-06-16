@@ -87,6 +87,15 @@ export const IndicatorFeedPermissionProvider = () =>
   Provider.succeed(IndicatorFeedPermission, {
     stables: ["feedId", "accountTag", "accountId"],
 
+    // Non-listable: a grant is keyed by {feedId, accountTag} from the
+    // granting account's side, and Cloudflare exposes no provider-side API
+    // to enumerate a feed's grantees. The only related collection op
+    // (`listIndicatorFeedPermissions`, the `/permissions/view` endpoint)
+    // returns feeds the *calling* account can consume — feed metadata
+    // (id/name/flags) with no `accountTag` — which is the inverse
+    // relationship and cannot reconstruct the `read` Attributes shape.
+    list: () => Effect.succeed<IndicatorFeedPermissionAttributes[]>([]),
+
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;
       // Identity change — both props are the resource's identity, so any

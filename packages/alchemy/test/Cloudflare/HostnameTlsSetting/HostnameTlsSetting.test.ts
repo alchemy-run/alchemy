@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as hostnames from "@distilled.cloud/cloudflare/hostnames";
 import { expect } from "@effect/vitest";
@@ -95,6 +96,55 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+);
+
+// Canonical `list()` test (zone-scoped collection): there is no account-wide
+// API for per-hostname overrides, so `list()` enumerates every zone via
+// `listAllZones` and lists each of the three TLS settings, paginating
+// exhaustively. The standing test zone has no ACM entitlement and therefore
+// no overrides, so the well-typed result is normally empty; when an entitled
+// zone + hostname is supplied via env we deploy one and assert its presence.
+test.provider(
+  "list enumerates per-hostname TLS overrides",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      if (acmZoneId && acmHostname) {
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.HostnameTlsSetting("ListMinTls", {
+              zoneId: acmZoneId,
+              settingId: "min_tls_version",
+              hostname: acmHostname,
+              value: "1.2",
+            });
+          }),
+        );
+      }
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.HostnameTlsSetting,
+      );
+      const all = yield* provider.list();
+
+      // Always a well-typed array (possibly empty on an unentitled account).
+      expect(Array.isArray(all)).toBe(true);
+
+      if (acmZoneId && acmHostname) {
+        expect(
+          all.some(
+            (s) =>
+              s.zoneId === acmZoneId &&
+              s.settingId === "min_tls_version" &&
+              s.hostname === acmHostname,
+          ),
+        ).toBe(true);
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!acmZoneId || !acmHostname)(

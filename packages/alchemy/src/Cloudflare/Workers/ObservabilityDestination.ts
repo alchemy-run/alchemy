@@ -329,6 +329,25 @@ export const ObservabilityDestinationProvider = () =>
           ),
         );
     }),
+
+    // Account collection. Observability destinations are account-scoped and
+    // the distilled list op paginates on `result`; exhaustively collect every
+    // page and hydrate each item into the exact `read` Attributes shape via
+    // `toAttributes`. The destination's stored credentials/headers token are
+    // write-only on the API, so — like `read` — they never appear here.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* workers.listObservabilityDestinations
+        .items({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).map((observed) =>
+              toAttributes(observed, accountId),
+            ),
+          ),
+        );
+    }),
   });
 
 type ObservedDestination =

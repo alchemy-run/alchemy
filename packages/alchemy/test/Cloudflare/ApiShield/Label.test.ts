@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
 import { expect } from "@effect/vitest";
@@ -23,6 +24,7 @@ const zoneName =
 const NAME_DEFAULT = "alch-apishield-default";
 const NAME_RENAME_A = "alch-apishield-ren-a";
 const NAME_RENAME_B = "alch-apishield-ren-b";
+const NAME_LIST = "alch-apishield-list";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -188,4 +190,34 @@ test.provider(
       const gone = yield* getLabel(zoneId, label.name);
       expect(gone).toBeUndefined();
     }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed label", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
+
+    yield* stack.destroy();
+    yield* purgeLabel(zoneId, NAME_LIST);
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.ApiShieldLabel("ListLabel", {
+          zoneId,
+          name: NAME_LIST,
+          description: "listed",
+        }).pipe(adopt(true));
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.ApiShieldLabel);
+    const all = yield* provider.list();
+
+    expect(
+      all.some(
+        (label) => label.zoneId === zoneId && label.name === deployed.name,
+      ),
+    ).toBe(true);
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );

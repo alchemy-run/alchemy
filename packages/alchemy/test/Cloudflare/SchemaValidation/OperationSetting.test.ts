@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as schemaValidation from "@distilled.cloud/cloudflare/schema-validation";
 import { expect } from "@effect/vitest";
@@ -95,6 +96,58 @@ test.provider(
         .getSettingOperation({ zoneId, operationId })
         .pipe(Effect.flip);
       expect(gone._tag).toEqual("OperationNotFound");
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (zone-scoped collection): there is no account-wide
+// API for per-operation overrides, so `list()` enumerates every zone via
+// `listAllZones` and exhaustively paginates each zone's operation settings.
+// Deploy one override and assert it appears in the result, keyed by its
+// (zoneId, operationId) identity.
+test.provider(
+  "list enumerates the deployed per-operation override",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const op = yield* Cloudflare.ApiShieldOperation("ListOp", {
+            zoneId,
+            method: "GET",
+            host: zoneName,
+            endpoint: "/alchemy-sv-operation-setting-list-test",
+          });
+          const override = yield* Cloudflare.SchemaValidationOperationSetting(
+            "ListOverride",
+            {
+              zoneId,
+              operationId: op.operationId,
+              mitigationAction: "block",
+            },
+          );
+          return { op, override };
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.SchemaValidationOperationSetting,
+      );
+      const all = yield* provider.list();
+
+      expect(
+        all.some(
+          (o) =>
+            o.zoneId === zoneId &&
+            o.operationId === deployed.op.operationId &&
+            o.mitigationAction === "block",
+        ),
+      ).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

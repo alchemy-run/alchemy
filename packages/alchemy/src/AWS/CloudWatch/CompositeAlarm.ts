@@ -1,5 +1,6 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -173,6 +174,50 @@ export const CompositeAlarmProvider = () =>
             }),
           );
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every composite alarm in the account/region by
+            // exhaustively paginating `describeAlarms` filtered to composite
+            // alarms (items live under the `CompositeAlarms` field).
+            const alarms = yield* cloudwatch.describeAlarms
+              .pages({ AlarmTypes: ["CompositeAlarm"] })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) =>
+                    (page.CompositeAlarms ?? []).filter(
+                      (
+                        candidate,
+                      ): candidate is cloudwatch.CompositeAlarm & {
+                        AlarmName: string;
+                        AlarmArn: string;
+                      } =>
+                        candidate.AlarmName != null &&
+                        candidate.AlarmArn != null,
+                    ),
+                  ),
+                ),
+              );
+
+            return yield* Effect.forEach(
+              alarms,
+              (compositeAlarm) =>
+                readResourceTags(compositeAlarm.AlarmArn).pipe(
+                  Effect.catchTag("ResourceNotFoundException", () =>
+                    Effect.succeed({}),
+                  ),
+                  Effect.map((tags) => ({
+                    alarmName: compositeAlarm.AlarmName,
+                    alarmArn: compositeAlarm.AlarmArn as AlarmArn,
+                    stateValue: compositeAlarm.StateValue,
+                    stateReason: compositeAlarm.StateReason,
+                    compositeAlarm,
+                    tags,
+                  })),
+                ),
+              { concurrency: 10 },
+            );
+          }),
       };
     }),
   );

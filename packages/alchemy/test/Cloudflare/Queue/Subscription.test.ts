@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import { expect } from "@effect/vitest";
@@ -252,6 +253,46 @@ describe.sequential("Subscription", () => {
       yield* stack.destroy();
 
       yield* expectGone(accountId, replaced.subscription.subscriptionId);
+    }).pipe(logLevel),
+  );
+
+  // Canonical `list()` test (account collection): deploy a subscription,
+  // then enumerate every subscription in the account via the typed provider
+  // and assert the deployed one is present in the exhaustively-paginated
+  // result.
+  test.provider("list enumerates the deployed subscription", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const queue = yield* Cloudflare.Queue("ListSubQueue", {
+            name: "alchemy-test-list-sub-queue",
+          });
+          const subscription = yield* Cloudflare.QueueSubscription(
+            "ListR2Events",
+            {
+              source: { type: "r2" },
+              events: ["bucket.created"],
+              queueId: queue.queueId,
+            },
+          );
+          return { queue, subscription };
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.QueueSubscription,
+      );
+      const all = yield* provider.list();
+
+      expect(
+        all.some(
+          (s) => s.subscriptionId === deployed.subscription.subscriptionId,
+        ),
+      ).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   );
 });

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { expect } from "@effect/vitest";
@@ -132,6 +133,32 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(accountId, peer.peerId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates the deployed peer",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Cloudflare.ZoneTransferPeer("ListPeer", {
+          name: "alchemy-dnszt-peer-list",
+          ip: "192.0.2.55",
+          port: 53,
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.ZoneTransferPeer,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((p) => p.peerId === deployed.peerId)).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

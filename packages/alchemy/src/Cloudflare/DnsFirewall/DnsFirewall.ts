@@ -288,6 +288,25 @@ export const DnsFirewallProvider = () =>
           : undefined;
       return Unowned(toAttributes(match, acct, reverseDns));
     }),
+    list: Effect.fn(function* () {
+      // Account-scoped collection: exhaustively paginate the DNS Firewall
+      // list for the ambient account. Each list item already carries the
+      // full cluster shape (identical to `getDnsFirewall`), so it maps
+      // directly into the `read` Attributes shape — no per-item hydration
+      // needed. `reverseDns` is left `undefined` (the same shape `read`
+      // produces when no managed PTR map is tracked).
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* dnsFirewall.listDnsFirewalls.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            page.result.map((cluster) =>
+              toAttributes({ ...cluster, accountId }, accountId, undefined),
+            ),
+          ),
+        ),
+      );
+    }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createClusterName(id, news.name);

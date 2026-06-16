@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { normalizeEndpoint } from "@/Cloudflare/ApiShield/Operation";
+import * as Provider from "@/Provider";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
 import * as Test from "@/Test/Vitest";
 import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
@@ -25,6 +26,7 @@ const zoneName =
 // and parallel runs never collide (never derive identity from Date.now()).
 const ENDPOINT_DEFAULT = "/alchemy-apishield/default/{thingId}";
 const ENDPOINT_REPLACE = "/alchemy-apishield/replace";
+const ENDPOINT_LIST = "/alchemy-apishield/list";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -200,6 +202,51 @@ test.provider("changing the method triggers replacement", (stack) =>
     yield* stack.destroy();
 
     const gone = yield* findOperation(zoneId, postTuple);
+    expect(gone).toBeUndefined();
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed API Shield operation", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
+    const tuple = {
+      method: "GET",
+      host: zoneName,
+      endpoint: ENDPOINT_LIST,
+    };
+
+    yield* stack.destroy();
+    yield* purgeOperation(zoneId, tuple);
+
+    const op = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.ApiShieldOperation("ListOp", {
+          zoneId,
+          method: "GET",
+          host: zoneName,
+          endpoint: ENDPOINT_LIST,
+        }).pipe(adopt(true));
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.ApiShieldOperation,
+    );
+    const all = yield* provider.list();
+
+    // The deployed operation appears in the exhaustively-paginated,
+    // all-zones result with the exact `read` shape.
+    const found = all.find((x) => x.operationId === op.operationId);
+    expect(found).toBeDefined();
+    expect(found?.zoneId).toEqual(zoneId);
+    expect(found?.method).toEqual("GET");
+    expect(found?.host).toEqual(zoneName);
+    expect(found?.endpoint).toEqual("/alchemy-apishield/list");
+    expect(found?.lastUpdated).toBeDefined();
+
+    yield* stack.destroy();
+
+    const gone = yield* findOperation(zoneId, tuple);
     expect(gone).toBeUndefined();
   }).pipe(logLevel),
 );

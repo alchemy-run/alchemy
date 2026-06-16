@@ -158,6 +158,43 @@ export const ImagesVariantProvider = () =>
   Provider.succeed(ImagesVariant, {
     stables: ["variantName", "accountId"],
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      // Enumerate variant names from the account-scoped list endpoint, then
+      // hydrate each via the per-variant GET (whose schema is correct) into
+      // the exact `read` Attributes shape.
+      //
+      // NOTE: distilled mis-types this response as a single variant, but the
+      // real body is a keyed `variants` map — so the strict decode currently
+      // fails. The fix is a distilled response-schema patch (see neededPatch
+      // in the agent report); once applied, the successful-decode path below
+      // works unchanged.
+      const names = yield* images.listV1Variants({ accountId }).pipe(
+        Effect.map(variantNamesFrom),
+        // Accounts without the Cloudflare Images entitlement reject the route
+        // (code 5403) — there is nothing to enumerate.
+        Effect.catchTag("ImagesAccessNotEnabled", () =>
+          Effect.succeed<string[]>([]),
+        ),
+      );
+
+      const rows = yield* Effect.forEach(
+        names,
+        (name) =>
+          getVariant(accountId, name).pipe(
+            Effect.map((variant) =>
+              variant ? toAttributes(variant, accountId) : undefined,
+            ),
+          ),
+        { concurrency: 10 },
+      );
+
+      return rows.filter(
+        (row): row is ImagesVariantAttributes => row !== undefined,
+      );
+    }),
+
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       // News may still contain unresolved plan-time expressions — defer to
       // the engine's default update logic until everything is concrete.
@@ -290,6 +327,29 @@ const getVariant = (accountId: string, variantId: string) =>
     Effect.map((response) => response.variant ?? undefined),
     Effect.catchTag("VariantNotFound", () => Effect.succeed(undefined)),
   );
+
+/**
+ * Extract variant names — the keys of the `variants` map — from a list-variants
+ * payload. The endpoint returns `result.variants` as a keyed object map of
+ * variantId -> variant (not an array), so accept either the unwrapped `result`
+ * (`{ variants: {...} }`) or the full raw body (`{ result: { variants: {...} } }`).
+ */
+const variantNamesFrom = (value: unknown): string[] => {
+  const root =
+    Predicate.hasProperty(value, "result") &&
+    typeof value.result === "object" &&
+    value.result !== null
+      ? value.result
+      : value;
+  if (
+    Predicate.hasProperty(root, "variants") &&
+    typeof root.variants === "object" &&
+    root.variants !== null
+  ) {
+    return Object.keys(root.variants);
+  }
+  return [];
+};
 
 const desiredOptions = (news: ImagesVariantProps) => ({
   fit: news.fit,

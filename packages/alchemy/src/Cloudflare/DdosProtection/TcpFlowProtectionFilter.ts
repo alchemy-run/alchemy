@@ -168,6 +168,28 @@ export const TcpFlowProtectionFilterProvider = () =>
       return toAttributes(observed, accountId);
     }),
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* ddos.listAdvancedTcpProtectionTcpFlowProtectionFilters
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((filter) =>
+                toAttributes(filter, accountId),
+              ),
+            ),
+          ),
+          // Accounts without the Magic Transit / Advanced TCP Protection
+          // entitlement reject the enumeration API; there is nothing to list.
+          Effect.catchTag(
+            ["AdvancedTcpProtectionNotEntitled", "Forbidden"],
+            () => Effect.succeed<TcpFlowProtectionFilterAttributes[]>([]),
+          ),
+        );
+    }),
+
     delete: Effect.fn(function* ({ output }) {
       yield* ddos
         .deleteAdvancedTcpProtectionTcpFlowProtectionFilterItem({

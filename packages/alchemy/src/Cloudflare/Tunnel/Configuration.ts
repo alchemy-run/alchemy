@@ -1,6 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -367,6 +368,51 @@ export const TunnelConfigurationProvider = () =>
             version: observed.version,
           } satisfies TunnelConfigurationAttributes;
         }),
+
+        // The configuration is a per-tunnel singleton with no account-wide
+        // enumeration API — fan out from the parent. Enumerate every
+        // (non-deleted) cfd_tunnel in the account, then read each tunnel's
+        // configuration document with bounded concurrency. Tunnels without a
+        // config (`TunnelConfigurationNotFound`, handled inside `observe`) are
+        // skipped, exactly mirroring `read`.
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId } = yield* env;
+
+            const tunnelIds = yield* zeroTrust.listTunnelCloudflareds
+              .pages({ accountId, isDeleted: false })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) =>
+                    (page.result ?? []).flatMap((t) =>
+                      t.id != null && t.deletedAt == null ? [t.id] : [],
+                    ),
+                  ),
+                ),
+              );
+
+            const rows = yield* Effect.forEach(
+              tunnelIds,
+              (tunnelId) =>
+                observe(accountId, tunnelId).pipe(
+                  Effect.map((observed) =>
+                    observed === undefined
+                      ? undefined
+                      : ({
+                          tunnelId,
+                          accountId,
+                          version: observed.version,
+                        } satisfies TunnelConfigurationAttributes),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+
+            return rows.filter(
+              (row): row is TunnelConfigurationAttributes => row !== undefined,
+            );
+          }),
       };
     }),
   );

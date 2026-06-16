@@ -58,6 +58,48 @@ export const RootPolicyTypeProvider = () =>
             policyType: output?.policyType ?? olds!.policyType,
           });
         }),
+        // A RootPolicyType is the enable/disable state of one policy type on
+        // one organization root. `listRoots` already returns each root's
+        // `PolicyTypes` array inline, so we enumerate roots and emit one
+        // `Attributes` per (rootId, policyType) — no per-root fan-out needed.
+        // Outside an org management account `listRoots` rejects with a typed
+        // error, which we degrade to [].
+        list: () =>
+          collectPages(
+            (NextToken) => organizations.listRoots({ NextToken }),
+            (page) => page.Roots,
+          ).pipe(
+            retryOrganizations,
+            Effect.map((roots) =>
+              roots.flatMap((root) =>
+                root.Id == null
+                  ? []
+                  : (root.PolicyTypes ?? [])
+                      .filter(
+                        (
+                          summary,
+                        ): summary is organizations.PolicyTypeSummary & {
+                          Type: organizations.PolicyType;
+                        } => summary.Type != null,
+                      )
+                      .map(
+                        (summary) =>
+                          ({
+                            rootId: root.Id!,
+                            rootArn: root.Arn,
+                            policyType: summary.Type,
+                            status: summary.Status,
+                          }) satisfies RootPolicyType["Attributes"],
+                      ),
+              ),
+            ),
+            Effect.catchTags({
+              AWSOrganizationsNotInUseException: () =>
+                Effect.succeed<RootPolicyType["Attributes"][]>([]),
+              AccessDeniedException: () =>
+                Effect.succeed<RootPolicyType["Attributes"][]>([]),
+            }),
+          ),
         reconcile: Effect.fn(function* ({ news, session }) {
           // Observe — read the root's policy-type list to see whether our
           // type is already enabled. Both `rootId` and `policyType` are

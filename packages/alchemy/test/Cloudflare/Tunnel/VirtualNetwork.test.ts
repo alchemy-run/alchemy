@@ -1,6 +1,7 @@
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -158,5 +159,34 @@ test.provider("recreates after out-of-band delete", (stack) =>
 
     yield* stack.destroy();
     yield* expectGone(accountId, healed.virtualNetworkId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed virtual network", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Cloudflare.TunnelVirtualNetwork("ListVnet", {
+        name: "alchemy-zt-vnet-list",
+        comment: "alchemy list test vnet",
+      }).pipe(adopt(true)),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.TunnelVirtualNetwork,
+    );
+    const all = yield* provider.list();
+
+    expect(
+      all.some((v) => v.virtualNetworkId === deployed.virtualNetworkId),
+    ).toBe(true);
+    const found = all.find(
+      (v) => v.virtualNetworkId === deployed.virtualNetworkId,
+    );
+    expect(found?.name).toEqual("alchemy-zt-vnet-list");
+
+    yield* stack.destroy();
+    yield* expectGone(deployed.accountId, deployed.virtualNetworkId);
   }).pipe(logLevel),
 );

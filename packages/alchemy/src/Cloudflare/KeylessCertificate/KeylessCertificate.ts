@@ -7,7 +7,9 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const KeylessCertificateTypeId = "Cloudflare.KeylessCertificate" as const;
 type KeylessCertificateTypeId = typeof KeylessCertificateTypeId;
@@ -226,6 +228,41 @@ export const isKeylessCertificate = (
 export const KeylessCertificateProvider = () =>
   Provider.succeed(KeylessCertificate, {
     stables: ["keylessCertificateId", "zoneId", "createdOn"],
+
+    // Keyless SSL is zone-scoped (`/zones/{id}/keyless_certificates`) with no
+    // account-wide enumeration API. Fan out over every zone in the account,
+    // list its Keyless SSL configurations, and hydrate each into the exact
+    // `read` Attributes shape. Zones without the Enterprise entitlement reject
+    // the route with the typed `Forbidden` error — skip them.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          keylessCertificates.listKeylessCertificates
+            .pages({ zoneId: zone.id })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? [])
+                    .filter((keyless) => keyless.status !== "deleted")
+                    .map((keyless) =>
+                      toAttributes(
+                        { ...keyless, permissions: [...keyless.permissions] },
+                        zone.id,
+                      ),
+                    ),
+                ),
+              ),
+              // Non-entitled / plan-gated zones reject Keyless SSL listing.
+              Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news }) {
       // diff runs during plan — `news` may still contain unresolved Outputs.

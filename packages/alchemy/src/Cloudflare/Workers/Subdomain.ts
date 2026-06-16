@@ -117,6 +117,23 @@ export const WorkersSubdomainProvider = () =>
       };
     }),
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account singleton — at most one workers.dev subdomain per account.
+      // Mirror `read` with no prior output: the observed name is also the
+      // `initialSubdomain`. Return a one-element array when registered, `[]`
+      // when the account has never claimed a subdomain.
+      const observed = yield* getSubdomain(accountId);
+      if (observed === undefined) return [];
+      return [
+        {
+          accountId,
+          subdomain: observed,
+          initialSubdomain: observed,
+        },
+      ];
+    }),
+
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 

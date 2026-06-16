@@ -6,7 +6,9 @@ import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const UaRuleTypeId = "Cloudflare.Firewall.UaRule" as const;
 type UaRuleTypeId = typeof UaRuleTypeId;
@@ -139,6 +141,32 @@ export const isUaRule = (value: unknown): value is UaRule =>
 export const UaRuleProvider = () =>
   Provider.succeed(UaRule, {
     stables: ["uaRuleId", "zoneId"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // UA rules live inside a zone (`/zones/{zone_id}/firewall/ua_rules`)
+      // with no account-wide list — enumerate every zone and exhaustively
+      // paginate each one's rules.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          firewall.listUaRules.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((rule) => toAttributes(rule, zone.id)),
+              ),
+            ),
+            // Plan-gated / partial zones (eventually-consistent scoped
+            // tokens) reject the route; skip them rather than fail the
+            // whole enumeration.
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as UaRuleProps;

@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { generateLocalId, isLiveId } from "@/Cloudflare/LocalRuntime";
+import * as Provider from "@/Provider";
 import { State } from "@/State";
 import type { CreatedResourceState } from "@/State/ResourceState";
 import * as Test from "@/Test/Vitest";
@@ -119,6 +120,29 @@ test.provider("promotes a dev queue to a live queue on deploy", (stack) =>
       queues.getQueue({ accountId, queueId: deployed.queue.queueId }),
     );
     expect(Exit.isFailure(exit)).toBe(true);
+  }).pipe(logLevel),
+);
+
+// Canonical `list()` test (account-scoped collection): deploy a real
+// queue, resolve the provider from context via `findProvider`, call
+// `list()`, and assert the deployed queue appears in the exhaustively-
+// paginated result.
+test.provider("list enumerates the deployed queue", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.Queue("ListQueue");
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.Queue);
+    const all = yield* provider.list();
+
+    expect(all.some((q) => q.queueId === deployed.queueId)).toBe(true);
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );
 

@@ -2,11 +2,14 @@ import * as originTls from "@distilled.cloud/cloudflare/origin-tls-client-auth";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const OriginTlsClientAuthCertificateTypeId =
   "Cloudflare.OriginTlsClientAuth.Certificate" as const;
@@ -216,6 +219,32 @@ export const OriginTlsClientAuthCertificateProvider = () =>
       // 3. Return — deployment is asynchronous (`pending_deployment` →
       //    `active`); we do not block on activation.
       return toAttributes(observed, zoneId);
+    }),
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          originTls.listOriginTlsClientAuths.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  // Match `read`: tombstoned (deleted / pending_deletion)
+                  // certificates no longer satisfy the desired state.
+                  .filter((cert) => isLive(cert.status))
+                  .map((cert) => toAttributes(cert, zone.id)),
+              ),
+            ),
+            // A zone the scoped token can't access rejects with the typed
+            // Forbidden tag; skip it rather than failing the whole enumeration.
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -1,12 +1,15 @@
 import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const ApiShieldLabelTypeId = "Cloudflare.ApiShield.Label" as const;
 type ApiShieldLabelTypeId = typeof ApiShieldLabelTypeId;
@@ -101,6 +104,33 @@ export const isApiShieldLabel = (value: unknown): value is ApiShieldLabel =>
 export const ApiShieldLabelProvider = () =>
   Provider.succeed(ApiShieldLabel, {
     stables: ["zoneId", "name", "source", "createdAt"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Labels are zone-scoped — fan out over every zone and list its
+      // user labels. Only `user`-sourced labels are enumerated;
+      // `managed` labels are Cloudflare-curated and not ours to delete.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          apiGateway.listLabels.pages({ zoneId: zone.id, source: "user" }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((label) =>
+                  toAttributes(label, zone.id),
+                ),
+              ),
+            ),
+            // Zones without the API Shield entitlement reject the
+            // route; skip them rather than fail the whole enumeration.
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const o = olds as ApiShieldLabelProps | undefined;

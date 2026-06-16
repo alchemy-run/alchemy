@@ -1,6 +1,7 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -125,6 +126,28 @@ export const DomainNameProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        list: () =>
+          ag.getDomainNames.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.items ?? [])
+                  .filter(
+                    (d): d is ag.DomainName & { domainName: string } =>
+                      d.domainName != null,
+                  )
+                  .map((d) => ({
+                    domainName: d.domainName,
+                    regionalDomainName: d.regionalDomainName,
+                    regionalHostedZoneId: d.regionalHostedZoneId,
+                    distributionDomainName: d.distributionDomainName,
+                    distributionHostedZoneId: d.distributionHostedZoneId,
+                    domainNameArn: d.domainNameArn,
+                    tags: tagRecord(d.tags),
+                  })),
+              ),
+            ),
+          ),
         read: Effect.fn(function* ({ output }) {
           if (!output?.domainName) return undefined;
           const d = yield* ag

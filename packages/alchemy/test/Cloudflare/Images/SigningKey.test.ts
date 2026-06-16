@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as images from "@distilled.cloud/cloudflare/images";
 import { expect } from "@effect/vitest";
@@ -45,6 +46,30 @@ const expectGone = (accountId: string, name: string) =>
       ),
     }),
   );
+
+// Read-only enumeration is always exercised (not entitlement-gated):
+// `list()` swallows the `ImagesAccessNotEnabled` 5403 and returns `[]` on
+// unentitled accounts, so the result is a well-typed Attributes[] in either
+// case. On an entitled account it additionally contains the deployed key.
+test.provider("list enumerates the account's signing keys", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const provider = yield* Provider.findProvider(Cloudflare.ImagesSigningKey);
+    const all = yield* provider.list();
+
+    expect(Array.isArray(all)).toBe(true);
+    for (const key of all) {
+      expect(typeof key.keyName).toBe("string");
+      expect(key.accountId).toEqual(accountId);
+      expect(typeof Redacted.value(key.value)).toBe("string");
+    }
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
 
 test.provider.skipIf(keysEntitled)(
   "surfaces the typed ImagesAccessNotEnabled error on unentitled accounts",

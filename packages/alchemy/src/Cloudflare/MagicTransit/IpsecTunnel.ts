@@ -274,6 +274,28 @@ export const IpsecTunnelProvider = () =>
         })
         .pipe(Effect.catchTag("IpsecTunnelNotFound", () => Effect.void));
     }),
+
+    // Account-scoped collection. The list API returns the full tunnel set in
+    // a single response (non-paginated). The PSK is write-only and never
+    // returned, so it is `undefined` here — matching `read`'s cold-read shape.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* magicTransit
+        .listIpsecTunnels({ accountId, xMagicNewHcTarget: true })
+        .pipe(
+          Effect.map((r) =>
+            (r.ipsecTunnels ?? []).map((tunnel) =>
+              toAttributes(tunnel, accountId, undefined),
+            ),
+          ),
+          // Accounts that aren't onboarded onto Magic Transit (code 1012)
+          // or lack the entitlement can't enumerate tunnels — treat as none.
+          Effect.catchTag(
+            ["MagicTransitNotOnboarded", "Forbidden"],
+            (): Effect.Effect<IpsecTunnelAttributes[]> => Effect.succeed([]),
+          ),
+        );
+    }),
   });
 
 interface ObservedIpsecTunnel {

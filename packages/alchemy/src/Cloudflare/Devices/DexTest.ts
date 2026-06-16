@@ -1,6 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -140,6 +141,26 @@ export const isDeviceDexTest = (value: unknown): value is DeviceDexTest =>
 export const DeviceDexTestProvider = () =>
   Provider.succeed(DeviceDexTest, {
     stables: ["testId", "accountId"],
+
+    // Account-scoped collection: paginate the DEX tests list and hydrate each
+    // row (which already carries the full read shape) into Attributes. DEX
+    // requires the Digital Experience Monitoring entitlement; on unentitled
+    // accounts the list rejects with the typed `Forbidden`
+    // (dex.api.entitlements.missing), so treat that as "nothing to enumerate".
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listDeviceDexTests.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((t) => t.testId != null)
+              .map((t) => toAttributes(t, accountId)),
+          ),
+        ),
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
+    }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

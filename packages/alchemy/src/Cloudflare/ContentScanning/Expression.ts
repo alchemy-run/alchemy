@@ -2,12 +2,15 @@ import * as contentScanning from "@distilled.cloud/cloudflare/content-scanning";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const ContentScanningExpressionTypeId =
   "Cloudflare.ContentScanning.Expression" as const;
@@ -113,6 +116,38 @@ export class ContentScanningExpressionCreateAnomaly extends Data.TaggedError(
 export const ContentScanningExpressionProvider = () =>
   Provider.succeed(ContentScanningExpression, {
     stables: ["expressionId", "zoneId", "payload"],
+
+    // Custom scan expressions are a zone-scoped Content Scanning feature. Fan
+    // out over every zone in the account, exhaustively paginate each zone's
+    // payloads, and hydrate each into the same Attributes shape `read`
+    // produces. Zones without Content Scanning enabled (or not entitled) reject
+    // payload calls with the typed `ContentScanningNotEnabled`/`Forbidden`
+    // tags, and a deleted zone with `InvalidRoute` — skip all three.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones,
+        (zone) =>
+          contentScanning.listPayloads.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((expression) =>
+                  toAttributes(zone.id, expression),
+                ),
+              ),
+            ),
+            Effect.catchTag("ContentScanningNotEnabled", () =>
+              Effect.succeed([]),
+            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       // zoneId is Input<string>; compare only once both sides are concrete.

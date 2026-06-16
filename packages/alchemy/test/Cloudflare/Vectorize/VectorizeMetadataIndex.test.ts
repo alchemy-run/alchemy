@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { poll } from "@/Util/poll.ts";
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
@@ -179,6 +180,53 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)(
 
           yield* stack.destroy();
         }).pipe(logLevel),
+    );
+
+    test.provider("list enumerates the deployed metadata index", (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const { index } = yield* stack.deploy(
+          Effect.gen(function* () {
+            const index = yield* Cloudflare.VectorizeIndex("ListParent", {
+              dimensions: 32,
+              metric: "cosine",
+            });
+            yield* Cloudflare.VectorizeMetadataIndex("ListMeta", {
+              indexName: index.indexName,
+              propertyName: "category",
+              indexType: "string",
+            });
+            return { index };
+          }),
+        );
+
+        const provider = yield* Provider.findProvider(
+          Cloudflare.VectorizeMetadataIndex,
+        );
+
+        // Cloudflare processes the create as an async mutation, so the entry
+        // appears in list() once the mutation is applied.
+        const all = yield* poll({
+          description: "list() includes the deployed metadata index",
+          effect: provider.list(),
+          predicate: (all) =>
+            all.some(
+              (x) =>
+                x.indexName === index.indexName &&
+                x.propertyName === "category",
+            ),
+        });
+
+        const entry = all.find(
+          (x) =>
+            x.indexName === index.indexName && x.propertyName === "category",
+        );
+        expect(entry?.indexType).toBe("string");
+        expect(entry?.accountId).toBeDefined();
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
     );
 
     test.provider(

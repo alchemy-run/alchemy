@@ -1,12 +1,15 @@
 import * as apiGateway from "@distilled.cloud/cloudflare/api-gateway";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const ApiShieldOperationTypeId = "Cloudflare.ApiShield.Operation" as const;
 type ApiShieldOperationTypeId = typeof ApiShieldOperationTypeId;
@@ -139,6 +142,38 @@ export const ApiShieldOperationProvider = () =>
     // An operation has no mutable aspect — every attribute except the
     // last-updated timestamp survives any non-replacing deploy.
     stables: ["operationId", "zoneId", "method", "host", "endpoint"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Operations live inside a zone (`/zones/{id}/api_gateway/operations`)
+      // with no account-wide enumeration API — fan out over every zone and
+      // exhaustively paginate each zone's operations.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          apiGateway.listOperations.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((op) => toAttributes(op, zone.id)),
+              ),
+            ),
+            // A freshly-minted scoped token can transiently 403; ride out
+            // the blip, then skip zones the token genuinely can't read.
+            Effect.retry({
+              while: (e) => e._tag === "Forbidden",
+              schedule: Schedule.exponential("500 millis"),
+              times: 5,
+            }),
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as ApiShieldOperationAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news }) {
       const o = olds as ApiShieldOperationProps | undefined;

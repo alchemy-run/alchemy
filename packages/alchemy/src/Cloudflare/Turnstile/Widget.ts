@@ -2,6 +2,7 @@ import * as turnstile from "@distilled.cloud/cloudflare/turnstile";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -298,6 +299,31 @@ export const TurnstileWidgetProvider = () =>
           sitekey: output.sitekey,
         })
         .pipe(Effect.catchTag("WidgetNotFound", () => Effect.void));
+    }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Enumerate every widget in the account, paginating exhaustively.
+      const pages = yield* turnstile.listWidgets
+        .pages({ accountId })
+        .pipe(Stream.runCollect);
+      const sitekeys = Array.from(pages).flatMap((page) =>
+        (page.result ?? []).map((w) => w.sitekey),
+      );
+      // The list payload omits the write-only `secret`, so hydrate each
+      // widget via `getWidget` to produce the exact `read` Attributes
+      // shape. A widget deleted between list and get surfaces as
+      // `WidgetNotFound` (mapped to `undefined` by `getWidget`).
+      const rows = yield* Effect.forEach(
+        sitekeys,
+        (sitekey) =>
+          getWidget(accountId, sitekey).pipe(
+            Effect.map((w) => (w ? toAttributes(w, accountId) : undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is TurnstileWidgetAttributes => row !== undefined,
+      );
     }),
   });
 

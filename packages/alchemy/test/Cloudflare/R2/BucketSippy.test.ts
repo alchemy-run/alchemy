@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "@effect/vitest";
@@ -135,6 +136,56 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
+);
+
+// list() — parent fan-out singleton. Ungated path: without external creds
+// no bucket has Sippy enabled, so the enumeration is a well-typed array that
+// must NOT contain the freshly-deployed (Sippy-disabled) bucket. This still
+// exercises the bucket fan-out + per-item typed skip end-to-end.
+test.provider(
+  "list enumerates buckets that have Sippy enabled",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { bucket } = yield* stack.deploy(program({ sippy: false }));
+
+      const provider = yield* Provider.findProvider(Cloudflare.R2BucketSippy);
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      // Sippy was never enabled on this bucket, so it must be absent and
+      // every returned item must report `enabled: true` (matching `read`).
+      expect(all.some((s) => s.bucketName === bucket.bucketName)).toBe(false);
+      expect(all.every((s) => s.enabled === true)).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Gated list() — with real creds the enabled bucket must appear in the
+// account-wide enumeration.
+test.provider.skipIf(!sippyCreds)(
+  "list includes a bucket with Sippy enabled",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(program({ sippy: true }));
+
+      const provider = yield* Provider.findProvider(Cloudflare.R2BucketSippy);
+      const all = yield* provider.list();
+
+      expect(
+        all.some(
+          (s) => s.bucketName === created.bucket.bucketName && s.enabled,
+        ),
+      ).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 300_000 },
 );
 
 // Full lifecycle — requires env-supplied AWS source + R2 destination

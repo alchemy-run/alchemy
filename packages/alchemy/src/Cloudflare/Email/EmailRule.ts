@@ -1,11 +1,13 @@
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 export type EmailMatcher =
   | { type: "all" }
@@ -85,6 +87,30 @@ export const EmailRule = Resource<EmailRule>("Cloudflare.EmailRule");
 export const EmailRuleProvider = () =>
   Provider.succeed(EmailRule, {
     stables: ["ruleId", "zoneId"],
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Email routing rules are zone-scoped (`/zones/{id}/email/routing/rules`)
+      // with no account-wide enumeration API — fan out over every zone and
+      // exhaustively paginate each zone's rules.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          emailRouting.listRules.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((rule) => normalize(rule, zone.id)),
+              ),
+            ),
+            // Zones without email routing (or otherwise non-routable) reject
+            // the route; skip them rather than failing the whole listing.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
     diff: Effect.fn(function* ({ news, output }) {
       if (!output) return undefined;
       if (!isResolved(news)) return undefined;

@@ -1,11 +1,14 @@
 import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const RegionalHostnameTypeId = "Cloudflare.RegionalHostname" as const;
 type RegionalHostnameTypeId = typeof RegionalHostnameTypeId;
@@ -103,6 +106,43 @@ export const isRegionalHostname = (value: unknown): value is RegionalHostname =>
 export const RegionalHostnameProvider = () =>
   Provider.succeed(RegionalHostname, {
     stables: ["zoneId", "hostname", "createdOn"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Regional hostnames are zone-scoped (/zones/{id}/addressing/
+      // regional_hostnames) with no account-wide enumeration API — fan out
+      // over every zone and list each zone's regional hostnames.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          addressing.listRegionalHostnames.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map(
+                  (item): RegionalHostnameAttributes => ({
+                    zoneId: zone.id,
+                    hostname: item.hostname,
+                    regionKey: item.regionKey,
+                    routing: item.routing ?? undefined,
+                    createdOn: item.createdOn,
+                  }),
+                ),
+              ),
+            ),
+            // Plan-gated zones (no Data Localization Suite entitlement)
+            // reject the route, and zones the ambient token cannot access
+            // return a 403 `Forbidden`; skip both rather than failing the
+            // whole list.
+            Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
+              Effect.succeed([]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (olds === undefined) return undefined;

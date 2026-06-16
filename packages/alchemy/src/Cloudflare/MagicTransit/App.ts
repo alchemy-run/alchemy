@@ -1,6 +1,7 @@
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
@@ -170,6 +171,27 @@ export const MagicAppProvider = () =>
           accountAppId: output.appId,
         })
         .pipe(Effect.catchTag("AppNotFound", () => Effect.void));
+    }),
+
+    // Account collection — exhaustively paginate the account-scoped apps list
+    // and hydrate each account app into the `read` Attributes shape. Magic WAN
+    // is entitlement-gated; unentitled accounts reject with a typed error, in
+    // which case there are no apps to enumerate → [].
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* magicTransit.listApps.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter(isAccountApp)
+              .map((app) => toAttributes(app, accountId)),
+          ),
+        ),
+        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+          Effect.succeed([] as MagicAppAttributes[]),
+        ),
+      );
     }),
   });
 

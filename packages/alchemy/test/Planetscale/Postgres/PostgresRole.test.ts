@@ -1,4 +1,5 @@
 import * as Planetscale from "@/Planetscale";
+import * as Provider from "@/Provider";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Vitest";
 import * as ops from "@distilled.cloud/planetscale/Operations";
@@ -20,6 +21,139 @@ const logLevel = Effect.provideService(
 describe
   .skipIf(!process.env.PLANETSCALE_TEST)
   .concurrent("PostgresRole", () => {
+    // Read-only: PARENT FAN-OUT enumeration (org -> databases -> branches ->
+    // default role) against the live org, without provisioning anything.
+    test.provider("list enumerates default roles (read-only)", () =>
+      Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(
+          Planetscale.PostgresDefaultRole,
+        );
+        const all = yield* provider.list();
+
+        expect(Array.isArray(all)).toBe(true);
+        for (const r of all) {
+          expect(r).toMatchObject({
+            id: expect.any(String),
+            name: expect.any(String),
+            organization: expect.any(String),
+            database: expect.any(String),
+            branch: expect.any(String),
+          });
+        }
+      }).pipe(logLevel),
+    );
+
+    // Deploy-and-find coverage, opt-in only (slow provisioning).
+    test.provider.skipIf(!process.env.PLANETSCALE_DEPLOY_TEST)(
+      "list finds a freshly deployed default role",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database, role } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.PostgresDatabase("ListDb", {
+                name: "alchemy-pg-default-list",
+                clusterSize: "PS_10",
+                arch: "arm",
+              });
+              const role = yield* Planetscale.PostgresDefaultRole("ListRole", {
+                database,
+                forceReset: true,
+              });
+              return { database, role };
+            }),
+          );
+
+          const provider = yield* Provider.findProvider(
+            Planetscale.PostgresDefaultRole,
+          );
+          const all = yield* provider.list();
+
+          expect(
+            all.some(
+              (r) =>
+                r.organization === database.organization &&
+                r.database === database.name &&
+                r.branch === role.branch,
+            ),
+          ).toBe(true);
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(
+            database.name,
+            database.organization,
+          );
+        }).pipe(logLevel),
+      5_000_000,
+    );
+
+    // Read-only: PARENT FAN-OUT enumeration (org -> databases -> branches ->
+    // roles, excluding the default role) against the live org, without
+    // provisioning anything.
+    test.provider("list enumerates roles (read-only)", () =>
+      Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(Planetscale.PostgresRole);
+        const all = yield* provider.list();
+
+        expect(Array.isArray(all)).toBe(true);
+        for (const r of all) {
+          expect(r).toMatchObject({
+            id: expect.any(String),
+            name: expect.any(String),
+            organization: expect.any(String),
+            database: expect.any(String),
+            branch: expect.any(String),
+          });
+        }
+      }).pipe(logLevel),
+    );
+
+    // Deploy-and-find coverage, opt-in only (slow provisioning).
+    test.provider.skipIf(!process.env.PLANETSCALE_DEPLOY_TEST)(
+      "list finds a freshly deployed role",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const { database, role } = yield* stack.deploy(
+            Effect.gen(function* () {
+              const database = yield* Planetscale.PostgresDatabase("ListDb", {
+                name: "alchemy-pg-role-list",
+                clusterSize: "PS_10",
+                arch: "arm",
+              });
+              const role = yield* Planetscale.PostgresRole("ListRole", {
+                database,
+                inheritedRoles: ["pg_read_all_data"],
+              });
+              return { database, role };
+            }),
+          );
+
+          const provider = yield* Provider.findProvider(
+            Planetscale.PostgresRole,
+          );
+          const all = yield* provider.list();
+
+          expect(
+            all.some(
+              (r) =>
+                r.organization === database.organization &&
+                r.database === database.name &&
+                r.id === role.id,
+            ),
+          ).toBe(true);
+
+          yield* stack.destroy();
+          yield* waitForDatabaseToBeDeleted(
+            database.name,
+            database.organization,
+          );
+        }).pipe(logLevel),
+      5_000_000,
+    );
+
     test.provider(
       "default role - create, duplicate fails, forceReset returns new id",
       (stack) =>

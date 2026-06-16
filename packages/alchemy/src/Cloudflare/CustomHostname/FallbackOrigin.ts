@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 export interface FallbackOriginProps {
   /**
@@ -83,6 +85,43 @@ export const isFallbackOrigin = (value: unknown): value is FallbackOrigin =>
 export const FallbackOriginProvider = () =>
   Provider.succeed(FallbackOrigin, {
     stables: ["zoneId"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Zone singleton — no account-wide list. Enumerate every zone and
+      // read its fallback origin; zones without one configured (or
+      // without Cloudflare for SaaS access) are skipped.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          observeFallbackOrigin(zoneId).pipe(
+            Effect.map((observed): FallbackOriginAttributes | undefined => {
+              if (
+                observed?.origin === undefined ||
+                observed.status === "pending_deletion" ||
+                observed.status === "deletion_timed_out"
+              ) {
+                return undefined;
+              }
+              return {
+                zoneId,
+                origin: observed.origin,
+                status: observed.status,
+              };
+            }),
+            // Zones without Cloudflare for SaaS entitlement reject the
+            // route; skip them rather than failing the whole enumeration.
+            Effect.catchTag(["SaasAccessNotGranted", "Forbidden"], () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is FallbackOriginAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as FallbackOriginProps;

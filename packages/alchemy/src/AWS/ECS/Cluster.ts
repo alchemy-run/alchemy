@@ -1,5 +1,6 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -150,6 +151,66 @@ export const ClusterProvider = () =>
             tags: output?.tags ?? {},
           };
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every cluster ARN in the account/region, paginating
+            // listClusters exhaustively.
+            const arns = yield* ecs.listClusters.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.clusterArns ?? []),
+              ),
+            );
+            if (arns.length === 0) {
+              return [];
+            }
+            // describeClusters accepts at most 100 clusters per call; batch.
+            const batches: string[][] = [];
+            for (let i = 0; i < arns.length; i += 100) {
+              batches.push(arns.slice(i, i + 100));
+            }
+            const described = yield* Effect.forEach(
+              batches,
+              (clusters) =>
+                ecs
+                  .describeClusters({
+                    clusters,
+                    include: ["SETTINGS", "TAGS", "CONFIGURATIONS"],
+                  })
+                  .pipe(Effect.map((res) => res.clusters ?? [])),
+              { concurrency: 5 },
+            );
+            return described.flat().flatMap((cluster) => {
+              if (!cluster.clusterArn) {
+                return [];
+              }
+              const tags = Object.fromEntries(
+                (cluster.tags ?? [])
+                  .filter(
+                    (t): t is { key: string; value: string } =>
+                      typeof t.key === "string" && typeof t.value === "string",
+                  )
+                  .map((t) => [t.key, t.value]),
+              );
+              return [
+                {
+                  clusterArn: cluster.clusterArn as ClusterArn,
+                  clusterName: cluster.clusterName!,
+                  status: cluster.status ?? "ACTIVE",
+                  settings: cluster.settings ?? [],
+                  configuration: cluster.configuration,
+                  capacityProviders: cluster.capacityProviders ?? [],
+                  defaultCapacityProviderStrategy:
+                    cluster.defaultCapacityProviderStrategy ?? [],
+                  serviceConnectDefaults: cluster.serviceConnectDefaults
+                    ?.namespace
+                    ? { namespace: cluster.serviceConnectDefaults.namespace }
+                    : undefined,
+                  tags,
+                },
+              ];
+            });
+          }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const clusterName = yield* toClusterName(id, news);

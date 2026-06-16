@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import { expect } from "@effect/vitest";
@@ -193,6 +194,37 @@ test.provider(
 
       yield* expectScriptGone(accountId, namespaceName, scriptName);
       yield* expectNamespaceGone(accountId, namespaceName);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates the deployed dispatch namespace",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Cloudflare.DispatchNamespace("ListNs", {
+          name: "alchemy-wfp-test-list-ns",
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.DispatchNamespace,
+      );
+      const all = yield* provider.list();
+
+      const match = all.find((ns) => ns.namespaceId === deployed.namespaceId);
+      expect(match).toBeDefined();
+      expect(match?.name).toEqual("alchemy-wfp-test-list-ns");
+      expect(match?.accountId).toEqual(accountId);
+
+      yield* stack.destroy();
+
+      yield* expectNamespaceGone(accountId, "alchemy-wfp-test-list-ns");
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

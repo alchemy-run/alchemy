@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as originTls from "@distilled.cloud/cloudflare/origin-tls-client-auth";
 import { expect } from "@effect/vitest";
@@ -176,6 +177,52 @@ test.provider(
       yield* stack.destroy();
 
       yield* waitForGone(zoneId, replaced.certificateId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates the deployed hostname certificate",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* purgeCertificates(zoneId, [CERT_3, CERT_4]);
+
+      const cert = yield* stack.deploy(
+        Cloudflare.OriginTlsClientAuthHostnameCertificate("ListHostCert", {
+          zoneId,
+          certificate: CERT_3,
+          privateKey: Redacted.make(KEY_3),
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.OriginTlsClientAuthHostnameCertificate,
+      );
+      // A freshly uploaded certificate can lag the zone list endpoint by a
+      // few seconds (edge propagation) — poll list() until it appears.
+      const found = yield* provider.list().pipe(
+        Effect.map((all) =>
+          all.find((c) => c.certificateId === cert.certificateId),
+        ),
+        Effect.flatMap((match) =>
+          match
+            ? Effect.succeed(match)
+            : Effect.fail({ _tag: "CertificateNotListed" } as const),
+        ),
+        Effect.retry({
+          while: (e) => e._tag === "CertificateNotListed",
+          schedule: Schedule.spaced("2 seconds"),
+          times: 10,
+        }),
+      );
+      expect(found.zoneId).toEqual(zoneId);
+
+      yield* stack.destroy();
+
+      yield* waitForGone(zoneId, cert.certificateId);
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

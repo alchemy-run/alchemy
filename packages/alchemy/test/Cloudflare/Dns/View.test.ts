@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { expect } from "@effect/vitest";
@@ -67,6 +68,49 @@ test.provider.skipIf(internalDnsEntitled)(
         }),
       ).pipe(Effect.flip);
       expect(error._tag).toEqual("InternalDnsNotAvailable");
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// The list endpoint (GET) is enumerable on any account; on unentitled
+// accounts it simply returns no views. We can therefore always assert a
+// well-typed array, and only assert presence of a deployed view when the
+// account carries the Internal DNS entitlement.
+test.provider(
+  "list returns a well-typed array of internal DNS views",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.DnsView);
+      const all = yield* provider.list();
+      expect(Array.isArray(all)).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider.skipIf(!internalDnsEntitled)(
+  "list enumerates a deployed internal DNS view",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Cloudflare.DnsView("ListView", {
+          name: "alchemy-dns-view-list",
+          zones: [zoneId],
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.DnsView);
+      const all = yield* provider.list();
+      expect(all.some((v) => v.viewId === deployed.viewId)).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

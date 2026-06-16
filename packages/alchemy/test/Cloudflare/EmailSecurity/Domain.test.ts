@@ -1,6 +1,7 @@
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as emailSecurity from "@distilled.cloud/cloudflare/email-security";
 import { expect } from "@effect/vitest";
@@ -91,6 +92,38 @@ test.provider.skipIf(!sacrificialDomain)(
         }),
       );
       expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Read-only list assertion — safe to run on any account. Email Security is
+// a paid add-on; on accounts without the entitlement the account-scoped
+// list op rejects with EmailSecurityNotEntitled / Forbidden, which the
+// provider's `list()` maps to a well-typed []. On entitled accounts every
+// onboarded domain is returned in the exact `read` Attributes shape.
+test.provider(
+  "list enumerates Email Security domains (or [] when unentitled)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.EmailSecurityDomain,
+      );
+      const all = yield* provider.list();
+      expect(Array.isArray(all)).toBe(true);
+
+      // When an entitled sacrificial domain is configured, it must appear in
+      // the exhaustively-paginated result in the read Attributes shape.
+      if (sacrificialDomain) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const baseline = yield* findDomain(accountId, sacrificialDomain);
+        if (baseline) {
+          expect(all.some((d) => d.domainId === baseline.id)).toBe(true);
+        }
+      }
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

@@ -8,6 +8,7 @@ import type * as lambda from "aws-lambda";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import { havePropsChanged, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -933,6 +934,35 @@ export const TableProvider = () =>
 
       return Table.Provider.of({
         stables: ["tableName", "tableId", "tableArn"],
+        // Enumerate every table in the ambient account/region. `listTables`
+        // returns only names, so each is hydrated to the full Attributes shape
+        // via the same multi-API read helper (`readTableState`) `read` uses.
+        list: () =>
+          Effect.gen(function* () {
+            const names = yield* dynamodb.listTables.items({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+            );
+            const states = yield* Effect.forEach(
+              names,
+              (tableName) =>
+                readTableState(tableName).pipe(
+                  // Hydrating every table fires four describe calls each;
+                  // across a busy account that trips DynamoDB's read throttle.
+                  Effect.retry({
+                    while: (e) => e._tag === "ThrottlingException",
+                    schedule: Schedule.exponential(250).pipe(
+                      Schedule.jittered,
+                      Schedule.both(Schedule.recurs(12)),
+                    ),
+                  }),
+                ),
+              { concurrency: 8 },
+            );
+            return states
+              .filter((state) => state !== undefined)
+              .map((state) => toAttrs(state));
+          }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const tableName =
             output?.tableName ??

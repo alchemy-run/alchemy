@@ -2,6 +2,7 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -173,6 +174,28 @@ export const GatewayCertificateProvider = () =>
       return toAttributes(observed, acct);
     }),
 
+    // Account-scoped collection (pattern b): enumerate every Gateway
+    // certificate in the ambient account. The list response already carries
+    // the full certificate shape, so each row maps straight to the `read`
+    // Attributes — no per-item hydration is required.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listGatewayCertificates.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map((cert) => toAttributes(cert, accountId))
+              // A certificate bound to the Gateway config (the active
+              // inspection CA) can't be deactivated/deleted while in use
+              // (`GatewayCertificateInUse`), and account-wide teardown does
+              // not remove the singleton Gateway config — skip in-use certs.
+              .filter((cert) => !cert.inUse),
+          ),
+        ),
+      );
+    }),
+
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 
@@ -248,7 +271,8 @@ export const GatewayCertificateProvider = () =>
 type ObservedCertificate =
   | zeroTrust.GetGatewayCertificateResponse
   | zeroTrust.CreateGatewayCertificateResponse
-  | zeroTrust.DeactivateGatewayCertificateResponse;
+  | zeroTrust.DeactivateGatewayCertificateResponse
+  | zeroTrust.ListGatewayCertificatesResponse["result"][number];
 
 /**
  * Read a certificate by id, mapping "gone" (`GatewayCertificateNotFound`,

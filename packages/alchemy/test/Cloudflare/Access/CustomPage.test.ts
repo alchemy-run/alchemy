@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -131,6 +132,50 @@ test.provider.skipIf(!entitled)(
           ),
         );
       expect(afterDestroy?.uid ?? undefined).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// The custom-pages list endpoint is available on every account (it returns
+// `[]` when there are no records), so the ungated case always exercises
+// `list()` and asserts it hydrates the `read` shape. The entitled path
+// additionally deploys a page and asserts its presence.
+test.provider(
+  "list enumerates access custom pages at the account scope",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.AccessCustomPage,
+      );
+
+      if (!entitled) {
+        const all = yield* provider.list();
+        expect(Array.isArray(all)).toBe(true);
+        for (const p of all) {
+          expect(typeof p.customPageId).toBe("string");
+          expect(typeof p.accountId).toBe("string");
+          expect(typeof p.name).toBe("string");
+        }
+        return;
+      }
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.AccessCustomPage("ListPage", {
+            type: "forbidden",
+            customHtml: HTML_A,
+          });
+        }),
+      );
+
+      const all = yield* provider.list();
+      expect(all.some((p) => p.customPageId === deployed.customPageId)).toBe(
+        true,
+      );
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

@@ -454,6 +454,16 @@ export const LocalWorkerProvider = () =>
       });
 
       return {
+        // Local dev provider: there is no cloud enumeration API. The set of
+        // locally running Workers is the in-memory `instances` map; each
+        // instance's fiber resolves to the Worker Attributes once it has
+        // started, so enumerate that local state.
+        list: () =>
+          Effect.forEach(
+            Array.from(instances.values()),
+            (instance) => Fiber.join(instance.fiber),
+            { concurrency: "unbounded" },
+          ),
         diff: Effect.fn(function* ({ id, news, newBindings, output }) {
           if (!isResolved(news) || !isResolved(newBindings)) return undefined;
           const options = {

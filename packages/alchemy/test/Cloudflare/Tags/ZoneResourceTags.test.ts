@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as resourceTagging from "@distilled.cloud/cloudflare/resource-tagging";
 import { expect } from "@effect/vitest";
@@ -163,5 +164,53 @@ test.provider("tag the zone itself and clear on destroy", (stack) =>
     yield* stack.destroy();
 
     yield* expectTagsCleared(zoneId, zoneId, "zone");
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates tagged zone-scoped resources", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
+
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        const record = yield* Cloudflare.DnsRecord("TaggedRecord", {
+          zoneId,
+          name: RECORD_NAME,
+          type: "A",
+          content: "203.0.113.50",
+        }).pipe(adopt(true));
+        const tags = yield* Cloudflare.ZoneResourceTags("RecordTags", {
+          zoneId,
+          resourceType: "dns_record",
+          resourceId: record.recordId,
+          tags: { env: "test", team: "alchemy" },
+        }).pipe(adopt(true));
+        return { record, tags };
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.ZoneResourceTags);
+
+    // The account-wide tag index is eventually consistent — poll until the
+    // freshly-tagged record shows up (bounded so it fails fast).
+    const all = yield* provider.list().pipe(
+      Effect.repeat({
+        schedule: Schedule.exponential("1 second"),
+        until: (rows) =>
+          rows.some((r) => r.resourceId === deployed.record.recordId),
+        times: 8,
+      }),
+    );
+
+    const found = all.find((r) => r.resourceId === deployed.record.recordId);
+    expect(found).toBeDefined();
+    expect(found?.zoneId).toEqual(zoneId);
+    expect(found?.resourceType).toEqual("dns_record");
+    expect(found?.tags).toEqual({ env: "test", team: "alchemy" });
+    expect(found?.etag).toBeTruthy();
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );

@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as ssl from "@distilled.cloud/cloudflare/ssl";
 import { expect } from "@effect/vitest";
@@ -99,6 +100,65 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+);
+
+test.provider(
+  "list enumerates advanced certificate packs across zones",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // list() fans out over every zone in the account and returns the
+      // exact `read` Attributes shape for each advanced pack. The standard
+      // testing zone has no ACM subscription (so no advanced packs), but
+      // list() must still return a well-typed, exhaustively-paginated array.
+      const provider = yield* Provider.findProvider(Cloudflare.CertificatePack);
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      for (const pack of all) {
+        expect(typeof pack.certificatePackId).toBe("string");
+        expect(typeof pack.zoneId).toBe("string");
+        expect(Array.isArray(pack.hosts)).toBe(true);
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider.skipIf(!acmZoneName)(
+  "list includes a deployed advanced certificate pack",
+  (stack) =>
+    Effect.gen(function* () {
+      const name = acmZoneName!;
+      const zoneId = yield* resolveZoneId(name);
+      const hosts = [name, `acmlist.${name}`];
+
+      yield* stack.destroy();
+
+      const pack = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.CertificatePack("ListPack", {
+            zoneId,
+            certificateAuthority: "google",
+            hosts,
+            validationMethod: "txt",
+            validityDays: 90,
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.CertificatePack);
+      const all = yield* provider.list();
+
+      expect(
+        all.some((p) => p.certificatePackId === pack.certificatePackId),
+      ).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!acmZoneName)(

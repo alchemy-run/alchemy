@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Alchemy from "@/index.ts";
+import * as Provider from "@/Provider";
 import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
@@ -108,6 +109,30 @@ test.provider("create, update, delete ai gateway", (stack) =>
     yield* stack.destroy();
 
     yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed ai gateway", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const gatewayId = "alchemy-test-ai-gateway-list";
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.AiGateway("ListGateway", {
+          id: gatewayId,
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.AiGateway);
+    const all = yield* provider.list();
+
+    expect(all.some((g) => g.gatewayId === deployed.gatewayId)).toBe(true);
+
+    yield* stack.destroy();
+    yield* waitForGatewayToBeDeleted(deployed.gatewayId, deployed.accountId);
   }).pipe(logLevel),
 );
 

@@ -1,6 +1,7 @@
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as resourceTagging from "@distilled.cloud/cloudflare/resource-tagging";
 import { expect } from "@effect/vitest";
@@ -253,6 +254,53 @@ test.provider(
 
       yield* expectTagsCleared(accountId, accountId, "account");
     }).pipe(logLevel),
+);
+
+const KV_TITLE_LIST = "alchemy-account-tags-list";
+
+test.provider("list enumerates account-wide tagged resources", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        const kv = yield* Cloudflare.KVNamespace("ListKv", {
+          title: KV_TITLE_LIST,
+        });
+        const tags = yield* Cloudflare.AccountResourceTags("ListTags", {
+          resourceType: "kv_namespace",
+          resourceId: kv.namespaceId,
+          tags: { env: "list-test", team: "alchemy" },
+        }).pipe(adopt(true));
+        return { kv, tags };
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.AccountResourceTags,
+    );
+    const all = yield* provider.list();
+
+    const match = all.find(
+      (x) =>
+        x.resourceType === "kv_namespace" &&
+        x.resourceId === deployed.kv.namespaceId,
+    );
+    expect(match).toBeDefined();
+    expect(match?.accountId).toEqual(accountId);
+    expect(match?.tags).toEqual({ env: "list-test", team: "alchemy" });
+    expect(match?.etag).toBeTruthy();
+
+    yield* stack.destroy();
+
+    yield* expectTagsCleared(
+      accountId,
+      deployed.kv.namespaceId,
+      "kv_namespace",
+    );
+  }).pipe(logLevel),
 );
 
 /**

@@ -3,6 +3,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
@@ -297,6 +298,22 @@ export const VpcEndpointProvider = () =>
           return yield* toAttrs(ep);
         }),
 
+        list: () =>
+          Effect.gen(function* () {
+            const endpoints = yield* ec2.describeVpcEndpoints.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.VpcEndpoints ?? []).filter(
+                    (ep): ep is ec2.VpcEndpoint & { VpcEndpointId: string } =>
+                      ep.VpcEndpointId != null,
+                  ),
+                ),
+              ),
+            );
+            return yield* Effect.forEach(endpoints, (ep) => toAttrs(ep));
+          }),
+
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
           // Core properties require replacement
@@ -459,8 +476,13 @@ export const VpcEndpointProvider = () =>
           }
 
           if ((ep.PolicyDocument ?? undefined) !== news.policyDocument) {
-            modifications.PolicyDocument = news.policyDocument ?? "";
-            modifications.ResetPolicy = !news.policyDocument;
+            // AWS rejects passing both a policy document and the reset flag in
+            // the same call — choose exactly one.
+            if (news.policyDocument) {
+              modifications.PolicyDocument = news.policyDocument;
+            } else {
+              modifications.ResetPolicy = true;
+            }
             hasModifications = true;
           }
 

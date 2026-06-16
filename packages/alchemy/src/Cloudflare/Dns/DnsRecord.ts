@@ -6,7 +6,9 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { arrayEqualsUnordered } from "../../Util/equal.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 /**
  * DNS record type literal — every value Cloudflare recognises. Stable
@@ -164,6 +166,40 @@ export const DnsRecord = Resource<DnsRecord>("Cloudflare.Dns.Record");
 export const DnsRecordProvider = () =>
   Provider.succeed(DnsRecord, {
     stables: ["recordId", "zoneId", "type", "name"],
+
+    // Zone-scoped collection: DNS records live under `/zones/{id}/dns_records`
+    // with no account-wide enumeration API. Fan out over every zone in the
+    // account, exhaustively paginate each zone's records, and hydrate each into
+    // the same `Attributes` shape `read` produces. A fresh scoped token can 403
+    // a zone (eventual consistency) or a zone may be partially provisioned —
+    // skip those zones (-> []) rather than failing the whole enumeration.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          dns.listRecords.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).flatMap((r) => {
+                  const attrs = toAttributes(
+                    narrowRecord(r as Parameters<typeof narrowRecord>[0]),
+                    zone.id,
+                  );
+                  return attrs ? [attrs] : [];
+                }),
+              ),
+            ),
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as DnsRecordAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as DnsRecordProps;

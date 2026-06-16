@@ -4,7 +4,9 @@ import * as Predicate from "effect/Predicate";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const RegionalTieredCacheTypeId =
   "Cloudflare.Cache.RegionalTieredCache" as const;
@@ -113,6 +115,33 @@ const desiredValue = (props: RegionalTieredCacheProps): "on" | "off" =>
 export const RegionalTieredCacheProvider = () =>
   Provider.succeed(RegionalTieredCache, {
     stables: ["zoneId", "initialValue"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its setting. Regional Tiered Cache
+      // is Enterprise-only, so non-entitled zones reject the route with
+      // the typed `SettingUnavailableForPlan` error and are skipped.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          cache.getRegionalTieredCache({ zoneId }).pipe(
+            Effect.map((observed) =>
+              toAttributes(zoneId, observed, observed.value),
+            ),
+            // Zone deleted out-of-band or plan-gated: skip it.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+            Effect.catchTag("SettingUnavailableForPlan", () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is RegionalTieredCacheAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as RegionalTieredCacheProps;

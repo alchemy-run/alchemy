@@ -1,6 +1,7 @@
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -176,6 +177,23 @@ export const isNotificationPolicy = (
 export const NotificationPolicyProvider = () =>
   Provider.succeed(NotificationPolicy, {
     stables: ["policyId", "accountId", "alertType"],
+
+    // Account-scoped collection: exhaustively paginate the account's
+    // notification policies and hydrate each into the `read` attribute shape.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* alerting.listPolicies.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map(narrowPolicy)
+              .filter((p): p is ObservedPolicy => p !== undefined)
+              .map((p) => toPolicyAttributes(p, accountId)),
+          ),
+        ),
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

@@ -62,6 +62,16 @@ export const OrganizationResourcePolicyProvider = () =>
         read: Effect.fn(function* () {
           return yield* readResourcePolicy();
         }),
+        // Org singleton: there is no list API. Describe the single resource
+        // policy and return a one-element array if it exists, else []. A
+        // missing policy or an account that isn't an org both yield [].
+        list: () =>
+          readResourcePolicy().pipe(
+            Effect.map((policy) => (policy ? [policy] : [])),
+            Effect.catchTag("AWSOrganizationsNotInUseException", () =>
+              Effect.succeed([] as OrganizationResourcePolicy["Attributes"][]),
+            ),
+          ),
         reconcile: Effect.fn(function* ({ news, session }) {
           const desiredContent = JSON.stringify(news.document);
 

@@ -20,6 +20,7 @@ import * as AccessCert from "./Access/Certificate.ts";
 import * as AccessCustomPage from "./Access/CustomPage.ts";
 import * as AccessGroup from "./Access/Group.ts";
 import * as AccessIdp from "./Access/IdentityProvider.ts";
+import * as AccessInfraTarget from "./Access/InfrastructureTarget.ts";
 import * as AccessKeyConfig from "./Access/KeyConfiguration.ts";
 import * as AccessMcpPortal from "./Access/McpPortal.ts";
 import * as AccessOrg from "./Access/Organization.ts";
@@ -159,6 +160,7 @@ export const providers = () =>
       AccessCustomPage.AccessCustomPage,
       AccessGroup.AccessGroup,
       AccessIdp.AccessIdentityProvider,
+      AccessInfraTarget.AccessInfrastructureTarget,
       AccessKeyConfig.AccessKeyConfiguration,
       AccessMcpPortal.AccessMcpPortal,
       AccessOrg.AccessOrganization,
@@ -501,6 +503,7 @@ export const providers = () =>
           AccessCustomPage.AccessCustomPageProvider(),
           AccessGroup.AccessGroupProvider(),
           AccessIdp.AccessIdentityProviderProvider(),
+          AccessInfraTarget.AccessInfrastructureTargetProvider(),
           AccessKeyConfig.AccessKeyConfigurationProvider(),
           AccessMcpPortal.AccessMcpPortalProvider(),
           AccessOrg.AccessOrganizationProvider(),

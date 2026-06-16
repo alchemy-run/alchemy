@@ -1,6 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -115,6 +116,23 @@ export const isDeviceManagedNetwork = (
 export const DeviceManagedNetworkProvider = () =>
   Provider.succeed(DeviceManagedNetwork, {
     stables: ["networkId", "accountId", "type"],
+
+    // Account collection: managed networks are account-scoped and the
+    // distilled list op paginates (items: "result"). Enumerate every page
+    // and hydrate into the exact `read` Attributes shape via `toAttributes`.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listDeviceNetworks.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter((n) => n.networkId != null)
+              .map((n) => toAttributes(n, accountId)),
+          ),
+        ),
+      );
+    }),
 
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

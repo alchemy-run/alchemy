@@ -2,6 +2,7 @@ import * as eks from "@distilled.cloud/aws/eks";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import {
@@ -399,6 +400,28 @@ export const ClusterProvider = () =>
 
       return {
         stables: ["clusterArn", "clusterName"],
+        // Enumerate every cluster in the ambient account/region. `listClusters`
+        // returns only names, so we paginate it exhaustively then hydrate each
+        // name through `readCluster` (describe + tags) to produce the full
+        // `Attributes` shape `read` returns. Concurrency is bounded so we don't
+        // stampede `describeCluster`.
+        list: () =>
+          Effect.gen(function* () {
+            const names = yield* eks.listClusters.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.clusters ?? []),
+              ),
+            );
+            const states = yield* Effect.forEach(
+              names,
+              (clusterName) => readCluster({ clusterName }),
+              { concurrency: 8 },
+            );
+            return states.filter(
+              (state): state is Cluster["Attributes"] => state !== undefined,
+            );
+          }),
         diff: Effect.fn(function* ({ id, olds = {} as ClusterProps, news }) {
           if (!isResolved(news)) return;
           if (

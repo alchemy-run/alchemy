@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const CloudConnectorRulesTypeId = "Cloudflare.CloudConnector.Rules" as const;
 type CloudConnectorRulesTypeId = typeof CloudConnectorRulesTypeId;
@@ -170,6 +172,30 @@ export const isCloudConnectorRules = (
 export const CloudConnectorRulesProvider = () =>
   Provider.succeed(CloudConnectorRules, {
     stables: ["zoneId"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for Cloud Connector rules — the rule list is
+      // a per-zone singleton, so enumerate every zone and read its list.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          listObservedRules(zone.id).pipe(
+            Effect.map((rules): CloudConnectorRulesAttributes | undefined =>
+              // A zone with no rules has nothing to manage — same as
+              // `read` returning `undefined` for an empty list.
+              rules.length === 0 ? undefined : { zoneId: zone.id, rules },
+            ),
+            // Plan-gated zones reject the route; skip them.
+            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is CloudConnectorRulesAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       const o = olds as CloudConnectorRulesProps;

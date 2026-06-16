@@ -2,6 +2,7 @@ import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { ExecutionContext } from "../../ExecutionContext.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
@@ -495,6 +496,30 @@ export const WorkflowProvider = () =>
       return WorkflowResource.Provider.of({
         // The `workflowId` is no longer marked as stable because if you start in dev mode, the ID will change on first deploy.
         stables: ["accountId"],
+        // Workflows are account-scoped. Enumerate every workflow in the account
+        // via the paginated list API and hydrate each into the same Attributes
+        // shape `reconcile` returns (id/name/className/scriptName are all on the
+        // list item, so no per-item get is needed).
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            return yield* workflows.listWorkflows.pages({ accountId }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? []).map((wf) => ({
+                    workflowId: wf.id,
+                    workflowName: wf.name,
+                    // `className`/`scriptName` can be null/absent in the list
+                    // payload on some accounts — fall back so listing succeeds.
+                    className: wf.className ?? "",
+                    scriptName: wf.scriptName ?? "",
+                    accountId,
+                  })),
+                ),
+              ),
+            );
+          }),
         diff: Effect.fnUntraced(function* ({ output }) {
           // If the workflowId starts with "dev:", and we're not in dev mode, trigger an update so the workflow is created.
           if (output?.workflowId.startsWith("dev:") && !ctx.dev) {

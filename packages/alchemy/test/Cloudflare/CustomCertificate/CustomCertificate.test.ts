@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as customCertificates from "@distilled.cloud/cloudflare/custom-certificates";
 import { expect } from "@effect/vitest";
@@ -95,6 +96,56 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+);
+
+// `list()` fans out over every zone in the account, paginates each zone's
+// custom certificates, and skips plan-gated zones via the typed
+// `PlanLevelNotAllowed`/`Forbidden` tags. On the testing account (no
+// Business/Enterprise zones) every zone is skipped, so the call must still
+// succeed and return a well-typed array (empty here) rather than throwing.
+test.provider(
+  "list enumerates custom certificates across zones",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.CustomCertificate,
+      );
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      // Every item carries the full read Attributes shape.
+      for (const cert of all) {
+        expect(typeof cert.certificateId).toBe("string");
+        expect(typeof cert.zoneId).toBe("string");
+      }
+
+      // On an entitled zone, the certificate we deploy must appear in the
+      // exhaustively-paginated result.
+      if (entitledZoneId) {
+        const cert1 = yield* readFixture("cert1.pem");
+        const key1 = yield* readFixture("key1.pem");
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.CustomCertificate("ListEdgeCert", {
+              zoneId: entitledZoneId,
+              certificate: cert1,
+              privateKey: Redacted.make(key1),
+              type: "sni_custom",
+              bundleMethod: "force",
+            });
+          }),
+        );
+        const after = yield* provider.list();
+        expect(
+          after.some((c) => c.certificateId === deployed.certificateId),
+        ).toBe(true);
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!entitledZoneId)(

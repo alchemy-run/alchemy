@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as cache from "@distilled.cloud/cloudflare/cache";
 import { expect } from "@effect/vitest";
@@ -191,5 +192,38 @@ describe.sequential("Variants", () => {
         const gone = yield* getVariants(zoneId);
         expect(gone).toBeUndefined();
       }).pipe(logLevel),
+  );
+
+  // Canonical `list()` test (zone-scoped singleton with create/delete
+  // semantics): there is no account-wide API, so `list()` enumerates every
+  // zone via `listAllZones` and reads the setting in each, skipping zones
+  // where it was never configured. Deploy the setting on the standing test
+  // zone first so it appears in the enumeration, then assert it is present.
+  test.provider("list enumerates the configured variants settings", (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+      yield* resetBaseline(zoneId);
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Variants("ImageVariants", {
+            zoneId,
+            jpeg: ["image/webp"],
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.Variants);
+      const all = yield* provider.list();
+
+      expect(all.length).toBeGreaterThan(0);
+      const entry = all.find((v) => v.zoneId === zoneId);
+      expect(entry).toBeDefined();
+      expect(entry!.value.jpeg).toEqual(["image/webp"]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
   );
 });

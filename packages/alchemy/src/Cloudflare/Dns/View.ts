@@ -1,6 +1,7 @@
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -91,6 +92,21 @@ export const isDnsView = (value: unknown): value is DnsView =>
 export const DnsViewProvider = () =>
   Provider.succeed(DnsView, {
     stables: ["viewId", "accountId", "createdTime"],
+
+    // Account collection — internal DNS views are enumerated per account
+    // via the paginated list endpoint. Each item already carries the full
+    // observed shape, so map straight into the `read` Attributes.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* dns.listSettingAccountViews.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((view) => toAttributes(view, accountId)),
+          ),
+        ),
+      );
+    }),
 
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

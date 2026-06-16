@@ -205,6 +205,30 @@ export const DdosAllowlistEntryProvider = () =>
         })
         .pipe(Effect.catchTag("AllowlistEntryNotFound", () => Effect.void));
     }),
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* ddos.listAdvancedTcpProtectionAllowlists
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((entry) =>
+                toAttributes(entry, accountId),
+              ),
+            ),
+          ),
+          // Accounts without the Magic Transit / Advanced TCP Protection
+          // entitlement cannot enumerate allowlist entries — there is
+          // provably nothing to list, so return an empty array.
+          Effect.catchTag(
+            "AdvancedTcpProtectionNotEntitled",
+            (): Effect.Effect<DdosAllowlistEntryAttributes[]> =>
+              Effect.succeed([]),
+          ),
+        );
+    }),
   });
 
 type ObservedEntry = ddos.GetAdvancedTcpProtectionAllowlistItemResponse;

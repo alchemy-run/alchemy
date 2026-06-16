@@ -1,11 +1,13 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -123,5 +125,53 @@ test.provider("ip-kind endpoints surface the typed entitlement error", () =>
     } else {
       expect(outcome.error._tag).toEqual("IpProxyEndpointsRequireEnterprise");
     }
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed proxy endpoint", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    // Self-heal: remove any same-named endpoint left orphaned in the cloud by a
+    // previously-interrupted run so the deploy below doesn't trip the
+    // "OwnedBySomeoneElse" adoption guard.
+    const orphans = yield* zeroTrust.listGatewayProxyEndpoints
+      .items({ accountId })
+      .pipe(
+        Stream.filter((e) => e.name === "alchemy-zt-proxy-list"),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+      );
+    yield* Effect.forEach(orphans, (o) =>
+      zeroTrust
+        .deleteGatewayProxyEndpoint({ accountId, proxyEndpointId: o.id ?? "" })
+        .pipe(Effect.catchTag("ProxyEndpointNotFound", () => Effect.void)),
+    );
+
+    // identity-kind endpoints work on all Zero Trust plans, so this deploy is
+    // not entitlement-gated (unlike ip-kind, which needs Enterprise).
+    const endpoint = yield* stack.deploy(
+      Cloudflare.GatewayProxyEndpoint("ListProxy", {
+        name: "alchemy-zt-proxy-list",
+        kind: "identity",
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.GatewayProxyEndpoint,
+    );
+    const all = yield* provider.list();
+
+    const match = all.find(
+      (x) => x.proxyEndpointId === endpoint.proxyEndpointId,
+    );
+    expect(match).toBeDefined();
+    expect(match?.accountId).toEqual(accountId);
+    expect(match?.name).toEqual("alchemy-zt-proxy-list");
+    expect(match?.kind).toEqual("identity");
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );

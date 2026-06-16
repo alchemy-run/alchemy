@@ -2,6 +2,7 @@ import * as zones from "@distilled.cloud/cloudflare/zones";
 import * as Array from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Equivalence from "effect/Equivalence";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -311,6 +312,37 @@ export const ZoneProvider = () =>
             Effect.catchTag("InvalidZoneIdentifier", () => Effect.void),
           );
         }),
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            // Enumerate every zone in the account, paginating exhaustively.
+            const zoneIds = yield* zones.listZones
+              .pages({ account: { id: accountId } })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.fromIterable(chunk).flatMap((page) =>
+                    (page.result ?? []).map((zone) => zone.id),
+                  ),
+                ),
+              );
+            // Hydrate each into the exact `read` Attributes shape via getZone,
+            // tolerating zones that vanish mid-enumeration.
+            const rows = yield* Effect.forEach(
+              zoneIds,
+              (zoneId) =>
+                zones.getZone({ zoneId }).pipe(
+                  Effect.map((result) => toZoneAttributes(result, accountId)),
+                  Effect.catchTag("InvalidZoneIdentifier", () =>
+                    Effect.succeed(undefined),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+            return rows.filter(
+              (row): row is ZoneAttributes => row !== undefined,
+            );
+          }),
       };
     }),
   );

@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const ContentScanningTypeId = "Cloudflare.ContentScanning" as const;
 type ContentScanningTypeId = typeof ContentScanningTypeId;
@@ -114,6 +116,28 @@ export const isContentScanning = (value: unknown): value is ContentScanning =>
 export const ContentScanningProvider = () =>
   Provider.succeed(ContentScanning, {
     stables: ["zoneId", "initialValue"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its status (every zone has one).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          contentScanning.getContentScanning({ zoneId }).pipe(
+            Effect.map((observed) =>
+              toAttributes(zoneId, observed, statusOf(observed)),
+            ),
+            // Plan-gated or partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ContentScanningAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       // zoneId is Input<string>; compare only once both sides are concrete.

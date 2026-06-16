@@ -1,6 +1,7 @@
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -258,6 +259,50 @@ export const MagicSiteAclProvider = () =>
           aclId: output.aclId,
         })
         .pipe(Effect.catchTag("SiteAclNotFound", () => Effect.void));
+    }),
+
+    // Parent fan-out: ACLs are sub-resources keyed by site, and there is no
+    // account-wide ACL enumeration API. Enumerate every Magic site (account
+    // scope), then list ACLs per site with bounded concurrency, paginating
+    // each list exhaustively. Magic WAN-gated accounts (and partial-scope
+    // tokens) reject these routes with the typed `MagicWanUnauthorized`
+    // (code 1025) / `Forbidden` tags — treat those as "nothing to list".
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const siteIds = yield* magicTransit.listSites.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).flatMap((site) => (site.id ? [site.id] : [])),
+          ),
+        ),
+        Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+          Effect.succeed([] as string[]),
+        ),
+      );
+
+      const rows = yield* Effect.forEach(
+        siteIds,
+        (siteId) =>
+          magicTransit.listSiteAcls.pages({ accountId, siteId }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((acl) =>
+                  toAttributes(acl, siteId, accountId),
+                ),
+              ),
+            ),
+            // Site vanished or became inaccessible mid-enumeration — skip it.
+            Effect.catchTag(["MagicWanUnauthorized", "Forbidden"], () =>
+              Effect.succeed([] as MagicSiteAclAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+
+      return rows.flat();
     }),
   });
 

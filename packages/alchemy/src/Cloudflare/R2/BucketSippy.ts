@@ -316,6 +316,44 @@ export const R2BucketSippyProvider = () =>
         })
         .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void));
     }),
+
+    // Sippy is a per-bucket singleton with no account-wide enumeration
+    // API, so fan out from the parent: enumerate every R2 bucket, read its
+    // Sippy config with bounded concurrency, and emit one item per bucket
+    // that actually has Sippy enabled (mirroring `read`, which treats a
+    // disabled/absent config as "not present").
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const { buckets } = yield* r2.listBuckets({ accountId });
+      const perBucket = yield* Effect.forEach(
+        buckets ?? [],
+        (bucket) => {
+          const bucketName = bucket.name;
+          if (bucketName == null) {
+            return Effect.succeed([] as R2BucketSippyAttributes[]);
+          }
+          const jurisdiction = (bucket.jurisdiction ??
+            "default") as R2Bucket.Jurisdiction;
+          return r2
+            .getBucketSippy({ accountId, bucketName, jurisdiction })
+            .pipe(
+              Effect.map((config) =>
+                config.enabled === true
+                  ? [toAttributes(config, accountId, bucketName, jurisdiction)]
+                  : [],
+              ),
+              // A bucket that vanished mid-enumeration, or one whose plan
+              // rejects the Sippy route, contributes nothing — skip it.
+              Effect.catchTag(
+                ["NoSuchBucket", "InvalidRoute", "Forbidden"],
+                () => Effect.succeed([] as R2BucketSippyAttributes[]),
+              ),
+            );
+        },
+        { concurrency: 10 },
+      );
+      return perBucket.flat();
+    }),
   });
 
 /**

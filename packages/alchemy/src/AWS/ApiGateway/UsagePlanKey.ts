@@ -1,5 +1,6 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
@@ -126,6 +127,48 @@ export const UsagePlanKeyProvider = () =>
             name: observed.name,
           };
         }),
+        // UsagePlanKey is a sub-resource keyed by {usagePlanId, keyId}. There
+        // is no account-wide enumeration, so enumerate every usage plan first
+        // (getUsagePlans) then list keys per plan (getUsagePlanKeys).
+        list: () =>
+          Effect.gen(function* () {
+            const usagePlanIds = yield* ag.getUsagePlans.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.items ?? [])
+                    .filter(
+                      (p): p is ag.UsagePlan & { id: string } => p.id != null,
+                    )
+                    .map((p) => p.id),
+                ),
+              ),
+            );
+            const rows = yield* Effect.forEach(
+              usagePlanIds,
+              (usagePlanId) =>
+                ag.getUsagePlanKeys.pages({ usagePlanId }).pipe(
+                  Stream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk).flatMap((page) =>
+                      (page.items ?? [])
+                        .filter(
+                          (k): k is ag.UsagePlanKey & { id: string } =>
+                            k.id != null,
+                        )
+                        .map((k) => ({
+                          usagePlanId,
+                          keyId: k.id,
+                          keyType: k.type ?? "API_KEY",
+                          name: k.name,
+                        })),
+                    ),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+            return rows.flat();
+          }),
         delete: Effect.fn(function* ({ output, session }) {
           yield* ag
             .deleteUsagePlanKey({

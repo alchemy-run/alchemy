@@ -4,7 +4,9 @@ import * as Predicate from "effect/Predicate";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const OriginPostQuantumEncryptionTypeId =
   "Cloudflare.OriginPostQuantumEncryption" as const;
@@ -127,6 +129,31 @@ export const isOriginPostQuantumEncryption = (
 export const OriginPostQuantumEncryptionProvider = () =>
   Provider.succeed(OriginPostQuantumEncryption, {
     stables: ["zoneId", "initialValue"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its setting (every zone has one).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          pqe.getOriginPostQuantumEncryption({ zoneId }).pipe(
+            Effect.map((observed) =>
+              toAttributes(zoneId, observed, toValue(observed.value)),
+            ),
+            // Zone gone out-of-band / not resolvable — skip it.
+            Effect.catchTag("InvalidZoneIdentifier", () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is OriginPostQuantumEncryptionAttributes =>
+          row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as OriginPostQuantumEncryptionProps;

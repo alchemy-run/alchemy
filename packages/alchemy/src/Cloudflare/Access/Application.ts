@@ -422,6 +422,40 @@ export const AccessApplicationProvider = () =>
       } satisfies AccessApplicationAttributes;
     }),
 
+    // Account-scoped collection (pattern (b)): enumerate every Access
+    // application in the ambient account, exhaustively paginated, and hydrate
+    // each into the exact `read`/`reconcile` Attributes shape. Items missing
+    // the mandatory id/aud/type triplet are skipped (typed per-item drop).
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listAccessApplicationsForAccount
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).flatMap((raw) => {
+                const app = narrowApp(raw as Parameters<typeof narrowApp>[0]);
+                if (!app.id || !app.aud || !app.type) return [];
+                return [
+                  {
+                    applicationId: app.id,
+                    aud: app.aud,
+                    domain: app.domain ?? "",
+                    destinations: app.destinations,
+                    type: app.type,
+                    name: app.name ?? "",
+                    accountId,
+                    createdAt: app.createdAt,
+                    updatedAt: app.updatedAt,
+                  } satisfies AccessApplicationAttributes,
+                ];
+              }),
+            ),
+          ),
+        );
+    }),
+
     delete: Effect.fn(function* ({ output }) {
       yield* zeroTrust
         .deleteAccessApplicationForAccount({

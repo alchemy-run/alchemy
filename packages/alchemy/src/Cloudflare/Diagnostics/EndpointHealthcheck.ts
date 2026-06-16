@@ -206,6 +206,17 @@ export const EndpointHealthcheckProvider = () =>
       );
     }),
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped, non-paginated list (the whole collection comes
+      // back in one response array). Skip accounts that lack the Magic
+      // Transit / WAN entitlement (typed `Forbidden`) with an empty list.
+      return yield* diagnostics.listEndpointHealthchecks({ accountId }).pipe(
+        Effect.map((checks) => checks.map((hc) => toAttributes(hc, accountId))),
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
+    }),
+
     delete: Effect.fn(function* ({ output }) {
       yield* diagnostics
         .deleteEndpointHealthcheck({
@@ -260,7 +271,8 @@ const toAttributes = (
   hc:
     | ObservedHealthcheck
     | diagnostics.CreateEndpointHealthcheckResponse
-    | diagnostics.UpdateEndpointHealthcheckResponse,
+    | diagnostics.UpdateEndpointHealthcheckResponse
+    | diagnostics.ListEndpointHealthchecksResponse[number],
   accountId: string,
 ): EndpointHealthcheckAttributes => ({
   healthcheckId: hc.id ?? "",

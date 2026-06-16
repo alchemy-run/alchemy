@@ -1,6 +1,7 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -166,6 +167,37 @@ export const DBInstanceProvider = () =>
 
       return {
         stables: ["dbInstanceArn", "dbInstanceIdentifier"],
+        // Pattern (a) AWS account/region collection: `describeDBInstances` is
+        // paginated (items: "DBInstances") and returns each instance's
+        // `TagList` inline, so we hydrate directly into the same shape `read`
+        // produces — no per-item tag fetch needed. An empty/no-instances
+        // account simply yields no pages. `DBInstanceNotFoundFault` is in the
+        // op's typed error union; treat a stray one as "nothing to list".
+        list: () =>
+          rds.describeDBInstances.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.DBInstances ?? [])
+                  .filter(
+                    (
+                      instance,
+                    ): instance is typeof instance & {
+                      DBInstanceArn: string;
+                    } => instance.DBInstanceArn != null,
+                  )
+                  .map((instance) =>
+                    toAttrs({
+                      instance,
+                      tags: toTagRecord(instance.TagList),
+                    }),
+                  ),
+              ),
+            ),
+            Effect.catchTag("DBInstanceNotFoundFault", () =>
+              Effect.succeed([] as DBInstance["Attributes"][]),
+            ),
+          ),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
           if (

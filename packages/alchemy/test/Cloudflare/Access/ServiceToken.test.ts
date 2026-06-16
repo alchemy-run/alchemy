@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -79,6 +80,33 @@ test.provider("create, update duration, and delete service token", (stack) =>
         ),
       );
     expect(afterDestroy?.id ?? undefined).toBeUndefined();
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed service token", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const token = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.AccessServiceToken("ListToken", {});
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.AccessServiceToken,
+    );
+    const all = yield* provider.list();
+
+    expect(all.some((t) => t.serviceTokenId === token.serviceTokenId)).toBe(
+      true,
+    );
+    // Enumeration never exposes the one-time secret — it matches read.
+    const found = all.find((t) => t.serviceTokenId === token.serviceTokenId);
+    expect(found?.clientId).toEqual(token.clientId);
+    expect(found?.clientSecret).toBeUndefined();
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );
 

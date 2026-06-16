@@ -1,5 +1,6 @@
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as originCa from "@distilled.cloud/cloudflare/origin-ca-certificates";
 import { expect } from "@effect/vitest";
@@ -94,6 +95,42 @@ test.provider("issue, verify, and revoke a certificate", (stack) =>
     yield* stack.destroy();
     yield* expectRevoked(cert.certificateId);
     yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates issued certificates", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const cert = yield* stack.deploy(
+      Cloudflare.OriginCaCertificate("ListCert", {
+        csr: TEST_CSR,
+        hostnames: [hostname],
+        requestType: "origin-rsa",
+        requestedValidity: 90,
+      }).pipe(adopt(true)),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.OriginCaCertificate,
+    );
+    const all = yield* provider.list();
+
+    // `list()` is account-wide but enumerated per zone with the `zone_id`
+    // query param; a zone the scoped token can't read for Origin CA rejects
+    // with the typed `Forbidden` tag, which is swallowed so that zone simply
+    // contributes []. The standing token can list the test zone, so the
+    // freshly issued certificate must appear in the exhaustively-paginated
+    // result in the `read` Attributes shape.
+    expect(Array.isArray(all)).toBe(true);
+    const match = all.find((c) => c.certificateId === cert.certificateId);
+    expect(match).toBeDefined();
+    expect(match!.certificateId).toEqual(cert.certificateId);
+    expect(match!.hostnames).toEqual([hostname]);
+    expect(match!.requestType).toEqual("origin-rsa");
+
+    yield* stack.destroy();
+    yield* expectRevoked(cert.certificateId);
   }).pipe(logLevel),
 );
 

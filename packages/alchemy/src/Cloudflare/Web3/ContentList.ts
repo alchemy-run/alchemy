@@ -1,10 +1,13 @@
 import * as web3 from "@distilled.cloud/cloudflare/web3";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const Web3HostnameContentListTypeId =
   "Cloudflare.Web3HostnameContentList" as const;
@@ -148,6 +151,49 @@ export const isWeb3HostnameContentList = (
 export const Web3HostnameContentListProvider = () =>
   Provider.succeed(Web3HostnameContentList, {
     stables: ["zoneId", "hostnameId"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // The content list is a per-hostname singleton keyed by
+      // {zoneId, hostnameId}. Enumerate every zone, list its Web3
+      // hostnames, keep only universal-path gateways (other targets
+      // reject content-list ops), and read each one's list.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          web3.listHostnames.items({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).filter(
+                (h): h is typeof h & { id: string } =>
+                  h.id != null && h.target === "ipfs_universal_path",
+              ),
+            ),
+            Effect.flatMap((hostnames) =>
+              Effect.forEach(
+                hostnames,
+                (h) =>
+                  observeContentList(zone.id, h.id).pipe(
+                    Effect.catchTag("Forbidden", () =>
+                      Effect.succeed(undefined),
+                    ),
+                  ),
+                { concurrency: 10 },
+              ),
+            ),
+            // Web3 is entitlement-gated and freshly minted tokens can
+            // briefly 403 — skip zones we can't enumerate.
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows
+        .flat()
+        .filter(
+          (row): row is Web3HostnameContentListAttributes => row !== undefined,
+        );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as Partial<Web3HostnameContentListProps>;

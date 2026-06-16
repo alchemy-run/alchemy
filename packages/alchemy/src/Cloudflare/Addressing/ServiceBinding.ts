@@ -144,6 +144,43 @@ export const AddressingServiceBindingProvider = () =>
       return match ? toAttributes(match, prefixId, acct) : undefined;
     }),
 
+    // Service bindings are children of a BYOIP prefix with no account-wide
+    // enumeration API — fan out across every account prefix and list each
+    // prefix's bindings, hydrating into the exact `read` shape.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const prefixIds = yield* addressing.listPrefixes
+        .items({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk)
+              .map((p) => p.id)
+              .filter((id): id is string => typeof id === "string"),
+          ),
+        );
+      const perPrefix = yield* Effect.forEach(
+        prefixIds,
+        (prefixId) =>
+          addressing.listPrefixServiceBindings
+            .items({ accountId, prefixId })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).map((b) =>
+                  toAttributes(b, prefixId, accountId),
+                ),
+              ),
+              // The parent prefix vanished between enumeration and listing.
+              Effect.catchTag("PrefixNotFound", () =>
+                Effect.succeed<AddressingServiceBindingAttributes[]>([]),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      return perPrefix.flat();
+    }),
+
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

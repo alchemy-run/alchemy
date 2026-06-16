@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
@@ -114,6 +115,24 @@ export const isSilence = (value: unknown): value is Silence =>
 export const SilenceProvider = () =>
   Provider.succeed(Silence, {
     stables: ["silenceId", "accountId", "policyId", "createdAt"],
+
+    // Silences are account-scoped; listSilences enumerates every silence in
+    // the account and the response carries the full attribute shape, so no
+    // per-item hydration is needed.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* alerting.listSilences.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map(narrowSilence)
+              .filter((s): s is ObservedSilence => s !== undefined)
+              .map((s) => toSilenceAttributes(s, accountId)),
+          ),
+        ),
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

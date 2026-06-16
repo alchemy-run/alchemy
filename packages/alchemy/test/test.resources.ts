@@ -30,6 +30,7 @@ export const Bucket = Resource<Bucket>("Test.Bucket");
 
 const bucketProvider = () =>
   Provider.succeed(Bucket, {
+    list: () => Effect.succeed([]),
     diff: Effect.fn(function* ({ id, news, output }) {
       if (!isResolved(news)) return undefined;
     }),
@@ -63,6 +64,7 @@ export const Queue = Resource<Queue>("Test.Queue");
 
 export const queueProvider = () =>
   Provider.succeed(Queue, {
+    list: () => Effect.succeed([]),
     diff: Effect.fn(function* ({ id, news = {}, output }) {
       if (!isResolved(news)) return undefined;
     }),
@@ -95,6 +97,7 @@ export const Function = Resource<Function>("Test.Function");
 
 export const functionProvider = () =>
   Provider.succeed(Function, {
+    list: () => Effect.succeed([]),
     diff: Effect.fn(function* ({ id, news, output }) {
       if (!isResolved(news)) return undefined;
     }),
@@ -135,6 +138,7 @@ export const bindingTargetProvider = () =>
     BindingTarget,
     Effect.gen(function* () {
       return {
+        list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ id, news = {}, olds = {}, newBindings }) {
           if (!isResolved(news)) return undefined;
           const hooks = Option.getOrUndefined(
@@ -232,6 +236,7 @@ export const DeletedBindingRegressionTarget =
 
 export const deletedBindingRegressionProvider = () =>
   Provider.succeed(DeletedBindingRegressionTarget, {
+    list: () => Effect.succeed([]),
     diff: Effect.fn(function* () {}),
     precreate: Effect.fn(function* ({ id, news = {} }) {
       return {
@@ -270,6 +275,7 @@ export const ArtifactProbe = Resource<ArtifactProbe>("Test.ArtifactProbe");
 
 export const artifactProbeProvider = () =>
   Provider.succeed(ArtifactProbe, {
+    list: () => Effect.succeed([]),
     diff: Effect.fn(function* ({ news, olds }) {
       const next = news as ArtifactProbeProps;
       const prev = olds as ArtifactProbeProps | undefined;
@@ -361,6 +367,7 @@ export const testResourceProvider = () =>
     TestResource,
     Effect.gen(function* () {
       return {
+        list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, output }) {
           const hooks = Option.getOrUndefined(
             yield* Effect.serviceOption(TestResourceHooks),
@@ -487,6 +494,7 @@ export const StaticStablesResource = Resource<StaticStablesResource>(
 
 export const staticStablesResourceProvider = () =>
   Provider.succeed(StaticStablesResource, {
+    list: () => Effect.succeed([]),
     // KEY DIFFERENCE: Static stables defined on the provider itself
     // These are always stable regardless of what diff() returns
     stables: ["stableId", "stableArn"],
@@ -577,6 +585,7 @@ export const KindStablesResource = Resource<KindStablesResource>(
 
 export const kindStablesResourceProvider = () =>
   Provider.succeed(KindStablesResource, {
+    list: () => Effect.succeed([]),
     stables: ["kind"],
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return undefined;
@@ -633,6 +642,7 @@ export const phasedTargetProvider = () =>
     PhasedTarget,
     Effect.gen(function* () {
       return {
+        list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return undefined;
           const n = news as PhasedTargetProps;
@@ -717,6 +727,7 @@ export const NoPrecreateBindingTarget = Resource<NoPrecreateBindingTarget>(
 
 export const noPrecreateBindingTargetProvider = () =>
   Provider.succeed(NoPrecreateBindingTarget, {
+    list: () => Effect.succeed([]),
     diff: Effect.fn(function* () {}),
     reconcile: Effect.fn(function* ({ id, news = {}, bindings }) {
       return {
@@ -758,6 +769,7 @@ export const DurationResource = Resource<DurationResource>(
 
 export const durationResourceProvider = () =>
   Provider.succeed(DurationResource, {
+    list: () => Effect.succeed([]),
     diff: Effect.fn(function* ({ news }) {
       if (!isResolved(news)) return undefined;
       return undefined;

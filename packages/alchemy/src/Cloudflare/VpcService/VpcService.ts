@@ -142,6 +142,27 @@ const findServiceByName = Effect.fnUntraced(function* (name: string) {
 export const VpcServiceProvider = () =>
   Provider.succeed(VpcService, {
     stables: ["serviceId", "accountId"],
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* connectivity.listDirectoryServices
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter(
+                  (s): s is typeof s & { serviceId: string } =>
+                    s.serviceId != null,
+                )
+                .map((s) => formatVpcService(s, accountId)),
+            ),
+          ),
+          // VPC/Workers connectivity is plan-gated; an un-entitled
+          // account rejects the list route. Treat as nothing to enumerate.
+          Effect.catchTag("Forbidden", () => Effect.succeed([])),
+        );
+    }),
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;

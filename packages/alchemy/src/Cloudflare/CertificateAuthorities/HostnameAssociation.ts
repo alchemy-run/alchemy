@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const HostnameAssociationTypeId =
   "Cloudflare.CertificateAuthorities.HostnameAssociation" as const;
@@ -122,6 +124,47 @@ export const isHostnameAssociation = (
 export const HostnameAssociationProvider = () =>
   Provider.succeed(HostnameAssociation, {
     stables: ["zoneId", "mtlsCertificateId"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // The association is a per-zone settings singleton with no
+      // account-wide enumeration API. The only enumerable key is the
+      // zone's active Cloudflare Managed CA (no `mtlsCertificateId`):
+      // associations keyed by an uploaded CA can't be enumerated because
+      // there is no API to list the certificate ids in play. Fan out over
+      // every zone and read its Managed-CA association.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          certificateAuthorities
+            .getHostnameAssociation({ zoneId: zone.id })
+            .pipe(
+              Effect.map(
+                (observed): HostnameAssociationAttributes | undefined => {
+                  const hostnames = [...(observed.hostnames ?? [])];
+                  // An empty list is the singleton's "unconfigured"
+                  // state — nothing exists to enumerate (matches `read`).
+                  if (hostnames.length === 0) return undefined;
+                  return {
+                    zoneId: zone.id,
+                    mtlsCertificateId: undefined,
+                    hostnames,
+                  };
+                },
+              ),
+              // Zones without the mTLS entitlement reject the route
+              // (Forbidden) or aren't routable (InvalidRoute); skip them.
+              Effect.catchTag(["Forbidden", "InvalidRoute"], () =>
+                Effect.succeed(undefined),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is HostnameAssociationAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as HostnameAssociationProps;

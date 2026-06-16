@@ -7,7 +7,9 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const CertificatePackTypeId = "Cloudflare.Ssl.CertificatePack" as const;
 type CertificatePackTypeId = typeof CertificatePackTypeId;
@@ -351,6 +353,38 @@ export const CertificatePackProvider = () =>
       return toAttributes(zoneId, observed, validationMethod);
     }),
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Certificate packs are zone-scoped; there is no account-wide
+      // enumeration API. Fan out over every zone in the account and list
+      // its packs, restricting to `advanced` packs (the only kind this
+      // resource manages — universal/total_tls packs are not orderable).
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          ssl.listCertificatePacks
+            .pages({ zoneId: zone.id, status: "all" })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? [])
+                    .filter((pack) => pack.type === "advanced")
+                    .map((pack) => toAttributes(zone.id, pack)),
+                ),
+              ),
+              // A plan-gated zone (no ACM) rejects the route, and a freshly
+              // minted token may briefly answer Forbidden — skip either.
+              Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
+                Effect.succeed([] as CertificatePackAttributes[]),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
+
     delete: Effect.fn(function* ({ output }) {
       // Observe first — deleting an already-gone pack answers 404 (code
       // 1408); treat missing as done so delete stays idempotent.
@@ -372,7 +406,8 @@ export const CertificatePackProvider = () =>
 type ObservedPack =
   | ssl.GetCertificatePackResponse
   | ssl.CreateCertificatePackResponse
-  | ssl.PatchCertificatePackResponse;
+  | ssl.PatchCertificatePackResponse
+  | ssl.ListCertificatePacksResponse["result"][number];
 
 /**
  * Read a pack by id, mapping "gone" (`CertificatePackNotFound`, Cloudflare

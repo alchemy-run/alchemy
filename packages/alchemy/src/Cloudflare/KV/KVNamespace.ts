@@ -164,6 +164,22 @@ export const KVNamespaceProvider = () =>
         })
         .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.void));
     }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* kv.listNamespaces.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((ns) => ({
+              title: ns.title,
+              namespaceId: ns.id,
+              supportsUrlEncoding: ns.supportsUrlEncoding ?? undefined,
+              accountId,
+            })),
+          ),
+        ),
+      );
+    }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (output?.namespaceId) {

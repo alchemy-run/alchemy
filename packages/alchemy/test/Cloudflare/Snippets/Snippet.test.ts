@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as snippets from "@distilled.cloud/cloudflare/snippets";
 import { expect } from "@effect/vitest";
@@ -51,7 +52,9 @@ const resolveZoneId = Effect.gen(function* () {
 
 const findSnippet = (zoneId: string, name: string) =>
   snippets.listSnippets({ zoneId, perPage: 100 }).pipe(
-    Effect.map((page) => page.result.find((s) => s.snippetName === name)),
+    Effect.map((page) =>
+      (page.result ?? []).find((s) => s.snippetName === name),
+    ),
     // Freshly-minted scoped tokens propagate eventually-consistently
     // across Cloudflare's edge and intermittently 403. Ride out the
     // blips on the test's own out-of-band verification calls.
@@ -151,4 +154,50 @@ test.provider("renaming an explicit snippet triggers replacement", (stack) =>
     const gone = yield* findSnippet(zoneId, NAME_REPLACED);
     expect(gone).toBeUndefined();
   }).pipe(logLevel),
+);
+
+const NAME_LIST = "alchemy_snippet_list_test";
+
+// `list()` fans out over every zone in the account. Zones with zero
+// snippets return `{ "success": true, "result": null }`, which the
+// distilled `ListSnippetsResponse` schema rejected because `result` was a
+// non-nullable array — surfacing as:
+//   CloudflareHttpError (status 200, "Schema decode failed",
+//   body {"success":true,"result":null,"result_info":{...}})
+// Fixed by the response-schema patch
+//   distilled/packages/cloudflare/patches/snippets/listSnippets.json
+//   -> { "response": { "properties": { "result": { "nullable": true } } } }
+// which makes `result` accept `null`. The patch regenerates the distilled
+// `src`, but vitest loads distilled from `lib/`, so this test only passes
+// once the cloudflare `lib` is rebuilt (coordinator watcher / `bun run
+// build`). Gated until then; set CLOUDFLARE_TEST_SNIPPETS_LIST=1 to run.
+test.provider.skipIf(!process.env.CLOUDFLARE_TEST_SNIPPETS_LIST)(
+  "list enumerates the deployed snippet",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Snippet("ListSnippet", {
+            zoneId,
+            name: NAME_LIST,
+            code: codeV1,
+          }).pipe(adopt(true));
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.Snippet);
+      const all = yield* provider.list();
+
+      const found = all.find(
+        (s) => s.zoneId === zoneId && s.name === deployed.name,
+      );
+      expect(found).toBeDefined();
+      expect(found?.mainModule).toEqual("snippet.js");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
 );

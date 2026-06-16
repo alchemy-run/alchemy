@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as connectivity from "@distilled.cloud/cloudflare/connectivity";
 import { expect } from "@effect/vitest";
@@ -238,6 +239,41 @@ test.provider("http service with explicit ports and default name", (stack) =>
 
     yield* stack.destroy();
     yield* expectGone(accountId, service.serviceId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed directory service", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const service = yield* stack.deploy(
+      Effect.gen(function* () {
+        const tunnel = yield* Cloudflare.Tunnel("DirSvcListTunnel", {
+          ingress: [{ service: "http://localhost:8080" }],
+          adopt: true,
+        });
+        return yield* Cloudflare.DirectoryService("ListService", {
+          name: "alchemy-connectivity-dirsvc-list",
+          type: "tcp",
+          tcpPort: 5432,
+          host: {
+            ipv4: "10.20.0.21",
+            network: { tunnelId: tunnel.tunnelId },
+          },
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.DirectoryService);
+    const all = yield* provider.list();
+
+    expect(all.some((s) => s.serviceId === service.serviceId)).toBe(true);
+    const found = all.find((s) => s.serviceId === service.serviceId)!;
+    expect(found.name).toEqual("alchemy-connectivity-dirsvc-list");
+    expect(found.type).toEqual("tcp");
+
+    yield* stack.destroy();
+    yield* expectGone(service.accountId, service.serviceId);
   }).pipe(logLevel),
 );
 

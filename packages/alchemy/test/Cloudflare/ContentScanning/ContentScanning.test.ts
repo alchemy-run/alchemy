@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as contentScanning from "@distilled.cloud/cloudflare/content-scanning";
 import { expect } from "@effect/vitest";
@@ -138,6 +139,28 @@ describe.sequential("ContentScanning", () => {
         const restored = yield* getStatus(zoneId);
         expect(restored.value).toEqual("disabled");
       }).pipe(logLevel),
+  );
+
+  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+  // API for this per-zone setting, so `list()` enumerates every zone via
+  // `listAllZones` and reads the singleton in each. Reading the status works
+  // on every plan (only enabling is entitlement-gated), so this stays an
+  // ungated read-only assertion. Assert the result is non-empty and contains
+  // the standing test zone.
+  test.provider("list enumerates the status across all zones", (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      const provider = yield* Provider.findProvider(Cloudflare.ContentScanning);
+      const all = yield* provider.list();
+
+      expect(all.length).toBeGreaterThan(0);
+      expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+
+      // `stack` is unused here (the singleton always exists on every zone),
+      // but keep the destroy bookend so the harness state stays clean.
+      yield* stack.destroy();
+    }).pipe(logLevel),
   );
 
   test.provider.skipIf(!entitledZoneId)(

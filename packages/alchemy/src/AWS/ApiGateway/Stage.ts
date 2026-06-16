@@ -1,5 +1,6 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
@@ -554,6 +555,45 @@ export const StageProvider = () =>
           if (!s?.stageName) return undefined;
           return snapshotStage(s, output.restApiId, s.stageName);
         }),
+        // Stage is a sub-resource keyed by (restApiId, stageName). There is
+        // no account-wide stage enumeration API, so enumerate every parent
+        // RestApi first (paginated `getRestApis`) then list the stages per
+        // api (`getStages` needs a restApiId). Map each stage to the full
+        // Attributes shape `read` produces.
+        list: () =>
+          Effect.gen(function* () {
+            const restApiIds = yield* ag.getRestApis.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.items ?? [])
+                    .map((api) => api.id)
+                    .filter((id): id is string => id != null),
+                ),
+              ),
+            );
+            const perApi = yield* Effect.forEach(
+              restApiIds,
+              (restApiId) =>
+                ag.getStages({ restApiId }).pipe(
+                  Effect.map((res) =>
+                    (res.item ?? [])
+                      .filter(
+                        (s): s is ag.Stage & { stageName: string } =>
+                          s.stageName != null,
+                      )
+                      .map((s) => snapshotStage(s, restApiId, s.stageName)),
+                  ),
+                  // The parent api may vanish between enumeration and the
+                  // per-api list (race); treat as no stages.
+                  Effect.catchTag("NotFoundException", () =>
+                    Effect.succeed([]),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+            return perApi.flat();
+          }),
         reconcile: Effect.fn(function* ({ id, news: newsIn, output, session }) {
           const { region } = yield* AWSEnvironment.current;
           if (!isResolved(newsIn)) {

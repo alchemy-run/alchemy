@@ -4,7 +4,9 @@ import * as Predicate from "effect/Predicate";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const SmartRoutingTypeId = "Cloudflare.Argo.SmartRouting" as const;
 type SmartRoutingTypeId = typeof SmartRoutingTypeId;
@@ -102,6 +104,34 @@ export const isSmartRouting = (value: unknown): value is SmartRouting =>
 export const SmartRoutingProvider = () =>
   Provider.succeed(SmartRouting, {
     stables: ["zoneId", "initialValue"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its setting.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          argo.getSmartRouting({ zoneId }).pipe(
+            Effect.map((observed) =>
+              toAttributes(zoneId, observed, toValue(observed.value)),
+            ),
+            // Argo Smart Routing is a paid add-on — zones without the
+            // subscription reject every read with the typed entitlement
+            // tag (code 1015); skip them. Zones deleted out-of-band
+            // surface InvalidObjectIdentifier.
+            Effect.catchTag("NotAuthorized", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidObjectIdentifier", () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is SmartRoutingAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as SmartRoutingProps;

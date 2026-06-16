@@ -1,6 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -127,6 +128,28 @@ export const DlpEntryProvider = () =>
       if (!output?.entryId) return undefined;
       const observed = yield* observeEntry(acct, output.entryId);
       return observed ? toAttributes(observed, acct) : undefined;
+    }),
+
+    // Account collection: enumerate every custom DLP entry in the account
+    // (GET /accounts/{id}/dlp/entries), exhaustively paginated. The list
+    // response is a union of entry variants; only the `custom` variant is
+    // an alchemy-managed DlpEntry, so we narrow to it and hydrate into the
+    // exact `read` Attributes shape.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listDlpEntryCustoms.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter(
+                (entry): entry is typeof entry & { type: "custom" } =>
+                  "type" in entry && entry.type === "custom",
+              )
+              .map((entry) => toAttributes(entry, accountId)),
+          ),
+        ),
+      );
     }),
 
     reconcile: Effect.fn(function* ({ id, news, output }) {

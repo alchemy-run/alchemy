@@ -160,6 +160,29 @@ export const AccessGroupProvider = () =>
         isDefault: existing.isDefault ?? undefined,
       };
     }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listAccessGroupsForAccount
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter(
+                  (g): g is (typeof page.result)[number] & { id: string } =>
+                    g.id != null,
+                )
+                .map((g) => ({
+                  groupId: g.id,
+                  accountId,
+                  name: g.name ?? "",
+                  isDefault: g.isDefault ?? undefined,
+                })),
+            ),
+          ),
+        );
+    }),
     reconcile: Effect.fn(function* ({
       id,
       news = {} as AccessGroupProps,

@@ -1,6 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -234,6 +235,44 @@ export const DlpProfileProvider = () =>
           profileId: output.profileId,
         })
         .pipe(Effect.catchTag("DlpProfileNotFound", () => Effect.void));
+    }),
+
+    // Account-scoped collection (pattern b): enumerate every custom DLP
+    // profile via the account profiles list, then hydrate each by id into
+    // the exact `read` Attributes shape so list items are delete-ready.
+    // The list endpoint also returns predefined / integration profiles —
+    // only `custom` profiles are modelled by this resource, so the rest
+    // are filtered out.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const profileIds = yield* zeroTrust.listDlpProfiles
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).flatMap((profile) =>
+                profile.type === "custom" ? [profile.id] : [],
+              ),
+            ),
+          ),
+        );
+
+      const rows = yield* Effect.forEach(
+        profileIds,
+        (profileId) =>
+          observeProfile(accountId, profileId).pipe(
+            Effect.map((observed) =>
+              observed ? toAttributes(observed, accountId) : undefined,
+            ),
+          ),
+        { concurrency: 10 },
+      );
+
+      return rows.filter(
+        (row): row is DlpProfileAttributes => row !== undefined,
+      );
     }),
   });
 

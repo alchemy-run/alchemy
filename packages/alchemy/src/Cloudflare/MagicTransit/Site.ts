@@ -1,6 +1,7 @@
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -132,6 +133,24 @@ export const isMagicSite = (value: unknown): value is MagicSite =>
 export const MagicSiteProvider = () =>
   Provider.succeed(MagicSite, {
     stables: ["siteId", "accountId", "haMode"],
+
+    // Account collection — Magic WAN sites are account-scoped and enumerated
+    // via the paginated list API. Accounts without a Magic WAN subscription
+    // reject with the typed `MagicWanUnauthorized` (code 1025) → return [].
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* magicTransit.listSites.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((site) => toAttributes(site, accountId)),
+          ),
+        ),
+        Effect.catchTag("MagicWanUnauthorized", () =>
+          Effect.succeed<MagicSiteAttributes[]>([]),
+        ),
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;

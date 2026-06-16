@@ -298,6 +298,14 @@ export class RulesListBulkOperationError extends Data.TaggedError(
 export const RulesListProvider = () =>
   Provider.succeed(RulesList, {
     stables: ["listId", "accountId", "name", "kind", "createdOn"],
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* rules.listLists.items({ accountId }).pipe(
+        Stream.map((list) => toAttributes(list, accountId)),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+      );
+    }),
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;

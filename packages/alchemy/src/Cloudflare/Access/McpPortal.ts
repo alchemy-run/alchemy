@@ -1,6 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -115,6 +116,28 @@ export const isAccessMcpPortal = (value: unknown): value is AccessMcpPortal =>
 export const AccessMcpPortalProvider = () =>
   Provider.succeed(AccessMcpPortal, {
     stables: ["portalId", "accountId", "createdAt"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection; exhaustively paginate. The list rows
+      // carry the full portal shape, so each maps directly into the same
+      // Attributes `read` returns. Accounts without the AI Controls
+      // entitlement reject the route with the typed `Forbidden` — treat
+      // them as having no portals.
+      return yield* zeroTrust.listAccessAiControlMcpPortals
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((portal) =>
+                toAttributes(portal, accountId),
+              ),
+            ),
+          ),
+          Effect.catchTag("Forbidden", () => Effect.succeed([])),
+        );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

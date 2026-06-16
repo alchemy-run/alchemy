@@ -1,5 +1,6 @@
 import * as eks from "@distilled.cloud/aws/eks";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -99,6 +100,54 @@ export const PodIdentityAssociationProvider = () =>
 
       return {
         stables: ["associationArn", "associationId"],
+        // `list()` enumerates every pod identity association across the
+        // account/region. The list op is cluster-scoped, so first enumerate all
+        // clusters (`listClusters`), then list each cluster's associations
+        // (`listPodIdentityAssociations`), then hydrate each summary via
+        // `describePodIdentityAssociation` to produce the full Attributes shape.
+        list: () =>
+          Effect.gen(function* () {
+            const clusterNames = yield* eks.listClusters.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.clusters ?? []),
+              ),
+            );
+
+            const perCluster = yield* Effect.forEach(
+              clusterNames,
+              (clusterName) =>
+                eks.listPodIdentityAssociations.pages({ clusterName }).pipe(
+                  Stream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk).flatMap(
+                      (page) => page.associations ?? [],
+                    ),
+                  ),
+                  Effect.flatMap((summaries) =>
+                    Effect.forEach(
+                      summaries,
+                      (summary) =>
+                        summary.associationId
+                          ? readAssociationById({
+                              clusterName,
+                              associationId: summary.associationId,
+                            })
+                          : Effect.succeed(undefined),
+                      { concurrency: 5 },
+                    ),
+                  ),
+                ),
+              { concurrency: 5 },
+            );
+
+            return perCluster
+              .flat()
+              .filter(
+                (association): association is NonNullable<typeof association> =>
+                  association !== undefined,
+              );
+          }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
           if (olds.clusterName !== news.clusterName) {

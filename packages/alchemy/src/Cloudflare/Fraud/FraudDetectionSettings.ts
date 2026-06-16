@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const FraudDetectionSettingsTypeId =
   "Cloudflare.FraudDetectionSettings" as const;
@@ -182,6 +184,30 @@ type SettingsKey = (typeof SETTINGS_KEYS)[number];
 export const FraudDetectionSettingsProvider = () =>
   Provider.succeed(FraudDetectionSettings, {
     stables: ["zoneId", "initialSettings"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its settings (every live zone has
+      // exactly one). `getFraud` only reads, so the entitlement gate
+      // (which is on `putFraud`) never trips here.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          observe(zoneId).pipe(
+            Effect.map((observed) =>
+              observed === undefined
+                ? undefined
+                : toAttributes(zoneId, observed, pickSettings(observed)),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is FraudDetectionSettingsAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

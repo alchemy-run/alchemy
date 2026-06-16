@@ -1,6 +1,7 @@
 import * as pages from "@distilled.cloud/cloudflare/pages";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -342,6 +343,30 @@ export const PagesProjectProvider = () =>
           projectName: output.name,
         })
         .pipe(Effect.catchTag("ProjectNotFound", () => Effect.void));
+    }),
+    // Pages projects are account-scoped; enumerate every project in the
+    // account, paginating exhaustively, and hydrate each into the same
+    // Attributes shape `read` returns.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* pages.listProjects.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map(
+              (project): PagesProjectAttributes => ({
+                projectId: project.id,
+                accountId,
+                name: project.name,
+                subdomain: project.subdomain ?? `${project.name}.pages.dev`,
+                domains: [...(project.domains ?? [])],
+                productionBranch: project.productionBranch,
+                createdOn: project.createdOn,
+              }),
+            ),
+          ),
+        ),
+      );
     }),
   });
 

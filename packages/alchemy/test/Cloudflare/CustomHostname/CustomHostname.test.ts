@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as customHostnames from "@distilled.cloud/cloudflare/custom-hostnames";
 import { expect } from "@effect/vitest";
@@ -192,6 +193,62 @@ testSaas(
         }),
       );
       expect(again.customHostnameId).toEqual(initial.customHostnameId);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// `list()` fans out over every zone in the account and skips zones without
+// the SaaS entitlement (typed `SaasQuotaNotAllocated`/`Forbidden`). Without
+// the entitlement on any zone the result is a well-typed empty array — this
+// read-only assertion runs ungated and proves the per-zone skip path.
+test.provider("list returns a well-typed array of custom hostnames", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const provider = yield* Provider.findProvider(Cloudflare.CustomHostname);
+    const all = yield* provider.list();
+
+    expect(Array.isArray(all)).toBe(true);
+    for (const item of all) {
+      expect(typeof item.customHostnameId).toBe("string");
+      expect(typeof item.zoneId).toBe("string");
+      expect(typeof item.hostname).toBe("string");
+    }
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+// Entitlement-gated: deploy a custom hostname and assert `list()` enumerates
+// it. Skipped unless CLOUDFLARE_SAAS_ENABLED=1 because Cloudflare for SaaS is
+// not provisioned on the test account (every create is rejected with
+// `SaasQuotaNotAllocated`, code 1404).
+testSaas(
+  "list enumerates the deployed custom hostname",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+      yield* probeSaasEntitlement(zoneId);
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.CustomHostname("ListResource", {
+            zoneId,
+            hostname: HOST_DEFAULT,
+          }).pipe(adopt(true));
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.CustomHostname);
+      const all = yield* provider.list();
+
+      expect(
+        all.some((h) => h.customHostnameId === deployed.customHostnameId),
+      ).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

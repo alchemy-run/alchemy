@@ -1306,6 +1306,52 @@ export default await Effect.runPromise(handlerEffect)
             ? attrs
             : Unowned(attrs);
         }),
+        // Account/region collection: exhaustively paginate `listFunctions`
+        // (its `Functions` items are `FunctionConfiguration`s, the same shape
+        // `read` pulls from `getFunction().Configuration`), then hydrate each
+        // into the exact `read` Attributes shape with a bounded fan-out. The
+        // code hash is not recoverable from the API (it lives in persisted
+        // state), so it is left empty — `delete`/nuke only needs the
+        // function/role identifiers.
+        list: () =>
+          Effect.gen(function* () {
+            const configs = yield* Lambda.listFunctions.items({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+            );
+            const rows = yield* Effect.forEach(
+              configs,
+              (fn) =>
+                Effect.gen(function* () {
+                  if (!fn.FunctionArn || !fn.FunctionName || !fn.Role) {
+                    return undefined;
+                  }
+                  const functionUrl = yield* Lambda.getFunctionUrlConfig({
+                    FunctionName: fn.FunctionName,
+                  }).pipe(
+                    Effect.map((f) => f.FunctionUrl),
+                    // No URL config (or the function vanished between the
+                    // list and the hydrate) — surface `undefined`, matching
+                    // `read`.
+                    Effect.catchTag("ResourceNotFoundException", () =>
+                      Effect.succeed(undefined),
+                    ),
+                  );
+                  return {
+                    functionArn: fn.FunctionArn,
+                    functionName: fn.FunctionName,
+                    functionUrl,
+                    roleArn: fn.Role,
+                    roleName: fn.Role.split("/").pop()!,
+                    code: { hash: "" },
+                  } satisfies Function["Attributes"];
+                }),
+              { concurrency: 10 },
+            );
+            return rows.filter(
+              (row): row is Function["Attributes"] => row !== undefined,
+            );
+          }),
 
         precreate: Effect.fnUntraced(function* ({ id, news, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;

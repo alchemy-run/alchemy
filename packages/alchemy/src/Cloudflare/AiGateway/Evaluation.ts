@@ -1,6 +1,7 @@
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -256,6 +257,44 @@ export const AiGatewayEvaluationProvider = () =>
         // Cloudflare reports both a missing evaluation and a missing parent
         // gateway with code 7002 — either way it's already gone.
         .pipe(Effect.catchTag("EvaluationNotFound", () => Effect.void));
+    }),
+    // Evaluations are scoped under an AI Gateway, which itself is
+    // account-scoped. Fan out: exhaustively paginate every gateway in the
+    // account, then exhaustively paginate the evaluations under each gateway
+    // (bounded concurrency) and hydrate each into the same Attributes shape
+    // `read` produces (via `toAttributes`). A gateway deleted mid-enumeration
+    // returns an empty evaluation list, so no per-item not-found handling is
+    // required. We pass `[]` for known type ids: the listed evaluation only
+    // echoes type ids back once results exist, and `toAttributes` falls back
+    // to the result-derived ids otherwise.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const gatewayIds = yield* aiGateway.listAiGateways
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((gateway) => gateway.id),
+            ),
+          ),
+        );
+      const rows = yield* Effect.forEach(
+        gatewayIds,
+        (gatewayId) =>
+          aiGateway.listEvaluations.pages({ accountId, gatewayId }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((evaluation) =>
+                  toAttributes(evaluation, accountId, []),
+                ),
+              ),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
     }),
   });
 

@@ -180,6 +180,38 @@ export const AccountMemberProvider = () =>
   Provider.succeed(AccountMember, {
     stables: ["memberId", "accountId", "email", "userId"],
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Exhaustively paginate the account membership list to collect every
+      // member id, then re-read each membership through `getMember` so each
+      // element matches the EXACT shape `read`/`reconcile` produce. A
+      // membership that vanishes between the list and the per-item read
+      // (typed `MemberNotFound`, Cloudflare code 1003) is dropped.
+      const ids = yield* accounts.listMembers.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map((member) => member.id)
+              .filter((id): id is string => id != null),
+          ),
+        ),
+      );
+      const rows = yield* Effect.forEach(
+        ids,
+        (memberId) =>
+          getMember(accountId, memberId).pipe(
+            Effect.map((member) =>
+              member ? toAttributes(member, accountId) : undefined,
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is AccountMemberAttributes => row !== undefined,
+      );
+    }),
+
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as Partial<AccountMemberProps>;
       const n = news as AccountMemberProps;

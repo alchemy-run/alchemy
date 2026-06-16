@@ -1,5 +1,6 @@
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -127,6 +128,26 @@ export const SecretsStoreProvider = () =>
       return yield* Effect.die(
         new Error(
           `Cloudflare reported MaximumStoresExceeded for account ${acct} but no store could be listed.`,
+        ),
+      );
+    }),
+    // Account-scoped collection. Cloudflare exposes a paginated
+    // `secrets_store/stores` list op; enumerate every page and hydrate each
+    // store into the exact `read` Attributes shape. Cloudflare currently
+    // permits only one (default) store per account, so this is usually a
+    // single-element array, but the enumeration is exhaustive regardless.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* secretsStore.listStores.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((store) => ({
+              storeId: store.id,
+              storeName: store.name,
+              accountId: store.accountId ?? accountId,
+            })),
+          ),
         ),
       );
     }),

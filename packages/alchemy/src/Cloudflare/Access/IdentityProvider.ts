@@ -229,6 +229,30 @@ export const AccessIdentityProviderProvider = () =>
       return undefined;
     }),
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection — exhaustively paginate the account's
+      // identity providers and hydrate each into the `read` Attributes
+      // shape. The SCIM secret is masked by the API on list, so it is
+      // carried as undefined (there is no prior state to thread through).
+      return yield* zeroTrust.listIdentityProvidersForAccount
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((idp) =>
+                toAttributes(
+                  idp as unknown as ObservedIdp,
+                  accountId,
+                  undefined,
+                ),
+              ),
+            ),
+          ),
+        );
+    }),
+
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* resolveName(id, news.name);

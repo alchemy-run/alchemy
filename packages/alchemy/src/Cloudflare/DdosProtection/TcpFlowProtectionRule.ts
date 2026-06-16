@@ -162,6 +162,29 @@ export const TcpFlowProtectionRuleProvider = () =>
       return undefined;
     }),
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* ddos.listAdvancedTcpProtectionTcpFlowProtectionRules
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((rule) => toAttributes(rule, accountId)),
+            ),
+          ),
+          // Accounts lacking the Advanced TCP Protection entitlement (or a
+          // token without access) can't enumerate rules — there is nothing
+          // to nuke, so report an empty set rather than failing.
+          Effect.catchTags({
+            AdvancedTcpProtectionNotEntitled: () =>
+              Effect.succeed<TcpFlowProtectionRuleAttributes[]>([]),
+            Forbidden: () =>
+              Effect.succeed<TcpFlowProtectionRuleAttributes[]>([]),
+          }),
+        );
+    }),
+
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

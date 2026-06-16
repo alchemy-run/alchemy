@@ -6,6 +6,20 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
+import { listAllZones } from "../Zone/lookup.ts";
+
+type EmailRoutingAttributes = EmailRouting["Attributes"];
+
+const toAttributes = (
+  zoneId: string,
+  result: emailRouting.GetEmailRoutingResponse,
+): EmailRoutingAttributes => ({
+  routingId: result.id,
+  zoneId,
+  name: result.name,
+  enabled: result.enabled,
+  status: (result.status ?? undefined) as EmailRoutingStatus | undefined,
+});
 
 export type EmailRoutingStatus =
   | "ready"
@@ -69,6 +83,26 @@ const resolve = Effect.fnUntraced(function* (zone: ZoneReference) {
 export const EmailRoutingProvider = () =>
   Provider.succeed(EmailRouting, {
     stables: ["zoneId", "routingId"],
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Email Routing settings are a per-zone singleton — no account-wide
+      // enumeration API. Enumerate every zone in the account and read the
+      // settings in each (every zone has one).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          emailRouting.getEmailRouting({ zoneId }).pipe(
+            Effect.map((result) => toAttributes(zoneId, result)),
+            // Plan-gated or partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is EmailRoutingAttributes => row !== undefined,
+      );
+    }),
     diff: Effect.fn(function* ({ news, output }) {
       if (!output) return undefined;
       if (!isResolved(news)) return undefined;

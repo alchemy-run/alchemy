@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import { expect } from "@effect/vitest";
@@ -95,6 +96,39 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(accountId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (account-level singleton): the account has at most
+// one Stream webhook, so `list()` reads that single slot and returns a
+// one-element array when configured or `[]` when unset — exactly mirroring
+// `read`. This is read-only and runs without the Stream subscription
+// entitlement (mutating the webhook is covered by the gated lifecycle test
+// above, which fails with the typed Cloudflare `StreamSubscriptionRequired`
+// error code 10010 on un-entitled accounts).
+test.provider(
+  "list enumerates the account Stream webhook",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.StreamWebhook);
+      const all = yield* provider.list();
+
+      // Account singleton: zero or one webhook, each well-typed Attributes
+      // for the ambient account.
+      expect(Array.isArray(all)).toBe(true);
+      expect(all.length).toBeLessThanOrEqual(1);
+      for (const webhook of all) {
+        expect(webhook.accountId).toEqual(accountId);
+        expect(typeof webhook.notificationUrl).toEqual("string");
+        expect(Redacted.isRedacted(webhook.secret)).toBe(true);
+      }
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

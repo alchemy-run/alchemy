@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const UniversalSslTypeId = "Cloudflare.Ssl.UniversalSsl" as const;
 type UniversalSslTypeId = typeof UniversalSslTypeId;
@@ -96,6 +98,30 @@ export const isUniversalSsl = (value: unknown): value is UniversalSsl =>
 export const UniversalSslProvider = () =>
   Provider.succeed(UniversalSsl, {
     stables: ["zoneId", "initialEnabled"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its setting (every zone has one).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          ssl.getUniversalSetting({ zoneId }).pipe(
+            Effect.map((observed) => {
+              const enabled = observedEnabled(observed);
+              // Observed value is the pre-management value at adoption.
+              return { zoneId, enabled, initialEnabled: enabled };
+            }),
+            // Plan-gated or partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is UniversalSslAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       // news is Input<Props> during plan — only compare once resolved.

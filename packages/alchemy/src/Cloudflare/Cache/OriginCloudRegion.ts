@@ -1,12 +1,15 @@
 import * as cache from "@distilled.cloud/cloudflare/cache";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const OriginCloudRegionTypeId = "Cloudflare.Cache.OriginCloudRegion" as const;
 type OriginCloudRegionTypeId = typeof OriginCloudRegionTypeId;
@@ -141,6 +144,32 @@ export const OriginCloudRegionProvider = () =>
   Provider.succeed(OriginCloudRegion, {
     stables: ["zoneId", "originIp"],
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Mappings live inside a zone (`/zones/{zone_id}/origin/cloud_regions`)
+      // with no account-wide list — enumerate every zone, then list its
+      // mappings and flatten. A zone may have zero mappings.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          cache.listOriginCloudRegions.pages({ zoneId }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((mapping) =>
+                  toAttributes(zoneId, mapping),
+                ),
+              ),
+            ),
+            // Plan-gated / deleted zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
+
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
       // The IP is the mapping's identity — changing it replaces. Prefer the
@@ -243,7 +272,8 @@ const toAttributes = (
   zoneId: string,
   response:
     | cache.GetOriginCloudRegionResponse
-    | cache.PutOriginCloudRegionResponse,
+    | cache.PutOriginCloudRegionResponse
+    | cache.ListOriginCloudRegionsResponse["result"][number],
 ): OriginCloudRegionAttributes => ({
   zoneId,
   originIp: response.originIp,

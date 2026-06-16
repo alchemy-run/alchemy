@@ -1,5 +1,6 @@
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
 import { expect } from "@effect/vitest";
@@ -103,6 +104,30 @@ test.provider("replaces policy when alertType changes", (stack) =>
     yield* stack.destroy();
 
     yield* waitForPolicyDeleted(accountId, replaced.policyId);
+  }).pipe(logLevel),
+);
+
+// Canonical `list()` test (account-scoped collection): deploy a real policy,
+// then assert it appears in the exhaustively-paginated account-wide result.
+test.provider("list enumerates the deployed notification policy", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Cloudflare.NotificationPolicy("ListPolicy", {
+        alertType: "universal_ssl_event_type",
+        mechanisms: { email: [{ id: EMAIL }] },
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.NotificationPolicy,
+    );
+    const all = yield* provider.list();
+
+    expect(all.some((p) => p.policyId === deployed.policyId)).toBe(true);
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );
 

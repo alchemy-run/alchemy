@@ -9,7 +9,9 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { arrayEqualsUnordered } from "../../Util/equal.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const HealthcheckTypeId = "Cloudflare.Healthcheck" as const;
 type HealthcheckTypeId = typeof HealthcheckTypeId;
@@ -422,6 +424,36 @@ export const HealthcheckProvider = () =>
           // Already gone — deletion is idempotent.
           Effect.catchTag("HealthcheckNotFound", () => Effect.void),
         );
+    }),
+
+    // Health checks are zone-scoped (`/zones/{zone_id}/healthchecks`) with no
+    // account-wide enumeration API, so fan out over every zone and list per
+    // zone. A scoped token may lack permission on a zone (eventual consistency)
+    // or a zone may be partially provisioned — skip those zones (-> []) rather
+    // than failing the whole enumeration.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          healthchecks.listHealthchecks.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).flatMap((h) => {
+                  const attrs = toAttributes(h, zone.id);
+                  return attrs ? [attrs] : [];
+                }),
+              ),
+            ),
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as HealthcheckAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
     }),
   });
 

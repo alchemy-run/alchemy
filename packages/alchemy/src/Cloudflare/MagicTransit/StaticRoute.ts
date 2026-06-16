@@ -235,6 +235,22 @@ export const MagicStaticRouteProvider = () =>
         })
         .pipe(Effect.catchTag("RouteNotFound", () => Effect.void));
     }),
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection — the list API already returns the full
+      // route shape, so each item maps directly to the `read` Attributes.
+      return yield* magicTransit.listRoutes({ accountId }).pipe(
+        Effect.map((response) =>
+          (response.routes ?? []).map((route) =>
+            toAttributes(route, accountId),
+          ),
+        ),
+        // Accounts without a Magic Transit / Magic WAN subscription can't
+        // enumerate routes — treat as empty rather than failing the list.
+        Effect.catchTag("MagicTransitNotOnboarded", () => Effect.succeed([])),
+      );
+    }),
   });
 
 interface ObservedRoute {

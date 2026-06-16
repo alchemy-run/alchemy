@@ -2,6 +2,7 @@ import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { isResolved } from "../../Diff.ts";
@@ -167,6 +168,31 @@ export const HyperdriveProvider = () =>
   Provider.succeed(Hyperdrive, {
     // The `hyperdriveId` is not marked as stable because if you start in dev mode, the ID will change on first deploy.
     stables: ["accountId"],
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* hyperdrive.listConfigs.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((c) => ({
+              hyperdriveId: c.id,
+              name: c.name,
+              accountId,
+              // The connection-string password is write-only and never
+              // returned by the API, so it is absent here (matching `read`,
+              // which sources it from `olds`).
+              origin: { ...c.origin } as HyperdriveOrigin,
+              mtls: {
+                caCertificateId: c.mtls?.caCertificateId ?? undefined,
+                mtlsCertificateId: c.mtls?.mtlsCertificateId ?? undefined,
+                sslmode: c.mtls?.sslmode ?? undefined,
+              } as HyperdriveMtls,
+              dev: undefined,
+            })),
+          ),
+        ),
+      );
+    }),
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const ctx = yield* AlchemyContext;

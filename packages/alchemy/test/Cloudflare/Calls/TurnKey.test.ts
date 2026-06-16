@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as calls from "@distilled.cloud/cloudflare/calls";
 import { expect } from "@effect/vitest";
@@ -152,5 +153,27 @@ test.provider("recreates after out-of-band delete", (stack) =>
     yield* stack.destroy();
 
     yield* expectGone(accountId, healed.keyId);
+  }).pipe(logLevel),
+);
+
+// Canonical `list()` test (account collection): deploy a TURN key, then
+// enumerate every TURN key in the account via the provider's `list()` and
+// assert the deployed key is present in the exhaustively-paginated result.
+test.provider("list enumerates the deployed TURN key", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Cloudflare.CallsTurnKey("ListTurnKey", {
+        name: "alchemy-calls-turn-list",
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.CallsTurnKey);
+    const all = yield* provider.list();
+
+    expect(all.some((x) => x.keyId === deployed.keyId)).toBe(true);
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );

@@ -10,6 +10,7 @@ import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
@@ -1877,6 +1878,56 @@ export const LiveWorkerProvider = () =>
 
       return Worker.Provider.of({
         stables: ["workerId", "workerName"],
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            // Account-scoped enumeration of every Worker script. The
+            // per-script `read` makes several extra calls (subdomain,
+            // settings, domains, schedule) to fully hydrate
+            // url/durableObjectNamespaces/domains/crons. Doing that for
+            // every script on the account is both expensive (4 calls × N)
+            // and fragile — a single script with a binding shape the
+            // settings schema doesn't know about would break the whole
+            // listing (the same reason `read` deliberately avoids
+            // `listScripts`). For `list()` we hydrate the core identifying
+            // and settings fields that come straight from the script
+            // metadata and leave the binding-derived fields at the same
+            // defaults `read` returns when those sub-resources are absent
+            // (`url: undefined`, `durableObjectNamespaces: {}`,
+            // `domains: []`, `crons: []`). `accountId` + `workerName` are
+            // sufficient for `delete`.
+            return yield* workers.listScripts.pages({ accountId }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  // Annotate the element type as the full `Attributes` shape
+                  // (incl. the optional `hash`) so it matches `read` exactly.
+                  // `list()` is an inference source for the provider's resource
+                  // type; a narrower element (e.g. via `satisfies`, which omits
+                  // `hash`) would derail `Res` inference and cascade every
+                  // lifecycle method's requirement channel to `never`.
+                  (page.result ?? []).flatMap(
+                    (script): Worker["Attributes"][] =>
+                      script.id
+                        ? [
+                            {
+                              accountId,
+                              workerId: script.id,
+                              workerName: script.id,
+                              logpush: script.logpush ?? undefined,
+                              url: undefined,
+                              tags: script.tags ?? undefined,
+                              durableObjectNamespaces: {},
+                              domains: [],
+                              crons: [],
+                            },
+                          ]
+                        : [],
+                  ),
+                ),
+              ),
+            );
+          }),
         diff: Effect.fnUntraced(function* ({
           id,
           news,

@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 /**
  * A single rule mapping a traffic expression to a snippet.
@@ -119,6 +121,31 @@ export const SnippetRulesProvider = () =>
   Provider.succeed(SnippetRules, {
     stables: ["zoneId"],
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Snippet rules are a per-zone singleton with no account-wide list
+      // API — enumerate every zone and read its rule list. Zones with no
+      // rules have nothing to manage (matches `read` returning undefined
+      // for an empty list), so skip them.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          listObservedRules(zoneId).pipe(
+            Effect.map((rules): SnippetRulesAttributes | undefined =>
+              rules.length === 0 ? undefined : { zoneId, rules },
+            ),
+            // Plan-gated zones (and eventually-consistent token 403s)
+            // reject the route; skip them.
+            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is SnippetRulesAttributes => row !== undefined,
+      );
+    }),
+
     diff: Effect.fn(function* ({ olds, news, output }) {
       const o = olds as SnippetRulesProps;
       const n = news as SnippetRulesProps;
@@ -190,6 +217,9 @@ interface WireRule {
 
 const listObservedRules = (zoneId: string) =>
   snippets.listRules({ zoneId }).pipe(
+    // A zone that has never had a snippet-rule list 404s — there is simply
+    // no rule list, which is equivalent to an empty one.
+    Effect.catchTag("SnippetRulesNotFound", () => Effect.succeed([])),
     Effect.map((result): SnippetRuleAttribute[] => {
       if (!Array.isArray(result)) return [];
       return (result as WireRule[]).flatMap((rule) =>

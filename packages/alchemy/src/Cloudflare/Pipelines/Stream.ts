@@ -373,6 +373,22 @@ export const PipelineStreamProvider = () =>
           Effect.catchTag("InvalidStreamId", () => Effect.void),
         );
     }),
+
+    // Account-scoped collection: exhaustively paginate every stream in the
+    // account and hydrate each into the same Attributes shape `read`
+    // returns. The list item shape is structurally identical to the
+    // get/create response consumed by `toAttributes`.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* pipelines.listStreams.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((s) => toAttributes(s, accountId)),
+          ),
+        ),
+      );
+    }),
   });
 
 /**

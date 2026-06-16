@@ -7,7 +7,9 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const SpectrumApplicationTypeId = "Cloudflare.Spectrum.Application" as const;
 type SpectrumApplicationTypeId = typeof SpectrumApplicationTypeId;
@@ -366,6 +368,33 @@ export const SpectrumApplicationProvider = () =>
       yield* spectrum
         .deleteApp({ zoneId: output.zoneId, appId: output.appId })
         .pipe(Effect.catchTag("SpectrumAppNotFound", () => Effect.void));
+    }),
+
+    // Zone-scoped collection: Spectrum applications live inside a zone and
+    // are listed per-zone (`/zones/{zone_id}/spectrum/apps`). Enumerate every
+    // zone, exhaustively paginate each zone's apps, and hydrate into the same
+    // `Attributes` shape `read` returns. Zones without Spectrum entitlement
+    // reject the route with the typed `Forbidden` tag — skip them.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          spectrum.listApps.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((app) => toAttributes(app, zone.id)),
+              ),
+            ),
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as SpectrumApplicationAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
     }),
   });
 

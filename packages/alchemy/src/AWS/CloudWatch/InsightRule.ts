@@ -231,6 +231,50 @@ export const InsightRuleProvider = () =>
             tags,
           };
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every Contributor Insights rule in the account/region
+            // by exhaustively paginating `describeInsightRules` (items live
+            // under the `InsightRules` field). ARNs are reconstructed from the
+            // ambient region/account since the API returns names only.
+            const { accountId, region } = yield* AWSEnvironment.current;
+            const rules = yield* cloudwatch.describeInsightRules.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.InsightRules ?? []).filter(
+                    (
+                      candidate,
+                    ): candidate is typeof candidate & {
+                      Name: string;
+                    } => candidate.Name != null,
+                  ),
+                ),
+              ),
+            );
+
+            const attrs: InsightRule["Attributes"][] = yield* Effect.forEach(
+              rules,
+              (insightRule) => {
+                const arn =
+                  `arn:aws:cloudwatch:${region}:${accountId}:insight-rule/${insightRule.Name}` as InsightRuleArn;
+                return readResourceTags(arn).pipe(
+                  Effect.catchTag("ResourceNotFoundException", () =>
+                    Effect.succeed({}),
+                  ),
+                  Effect.map((tags) => ({
+                    ruleName: insightRule.Name,
+                    ruleArn: arn,
+                    state: insightRule.State,
+                    insightRule,
+                    tags,
+                  })),
+                );
+              },
+              { concurrency: 10 },
+            );
+            return attrs;
+          }),
         delete: Effect.fn(function* ({ output }) {
           const existing = yield* readInsightRule(output.ruleName);
           if (!existing) {

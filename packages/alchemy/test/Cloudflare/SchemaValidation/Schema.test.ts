@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as schemaValidation from "@distilled.cloud/cloudflare/schema-validation";
 import { expect } from "@effect/vitest";
@@ -142,6 +143,44 @@ test.provider(
         .getSchema({ zoneId, schemaId: replaced.schemaId })
         .pipe(Effect.flip);
       expect(gone._tag).toEqual("SchemaNotFound");
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (zone-scoped collection): `list()` enumerates every
+// zone in the account via `listAllZones` and exhaustively paginates each
+// zone's schemas. Deploy a real schema and assert it appears in the result.
+test.provider(
+  "list enumerates the deployed schema across all zones",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+      const v1 = yield* readFixture("openapi-v1.json");
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.SchemaValidationSchema("ListSchema", {
+            zoneId,
+            source: v1,
+            validationEnabled: false,
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.SchemaValidationSchema,
+      );
+      const all = yield* provider.list();
+
+      expect(
+        all.some(
+          (s) => s.schemaId === deployed.schemaId && s.zoneId === zoneId,
+        ),
+      ).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

@@ -1,5 +1,6 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
@@ -78,6 +79,45 @@ export const SubscriptionProvider = () =>
       });
     }),
     stables: ["subscriptionArn"],
+    // Account/region-scoped collection: paginate `listSubscriptions`
+    // exhaustively, then hydrate each concrete-ARN subscription via
+    // `getSubscriptionAttributes` (inside `readSubscription`) so each element
+    // matches the exact `read` Attributes shape. Pending-confirmation entries
+    // have no real ARN to hydrate or delete against, so they are skipped.
+    list: Effect.fn(function* () {
+      const subscriptions = yield* sns.listSubscriptions.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.Subscriptions ?? []),
+        ),
+      );
+
+      const concrete = subscriptions.filter(
+        (
+          subscription,
+        ): subscription is sns.Subscription & {
+          SubscriptionArn: string;
+        } =>
+          typeof subscription.SubscriptionArn === "string" &&
+          !isPendingConfirmation(subscription.SubscriptionArn),
+      );
+
+      const rows = yield* Effect.forEach(
+        concrete,
+        (subscription) =>
+          readSubscription({
+            subscriptionArn: subscription.SubscriptionArn,
+            topicArn: subscription.TopicArn,
+            protocol: subscription.Protocol,
+            endpoint: subscription.Endpoint,
+          }),
+        { concurrency: 10 },
+      );
+
+      return rows.filter(
+        (row): row is NonNullable<typeof row> => row !== undefined,
+      );
+    }),
     diff: Effect.fn(function* ({ news, olds }) {
       if (!isResolved(news)) return undefined;
       if (news.protocol !== olds.protocol) {

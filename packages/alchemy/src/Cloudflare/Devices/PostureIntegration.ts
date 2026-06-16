@@ -2,6 +2,7 @@ import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -184,6 +185,25 @@ export const isDevicePostureIntegration = (
 export const DevicePostureIntegrationProvider = () =>
   Provider.succeed(DevicePostureIntegration, {
     stables: ["integrationId", "accountId", "type"],
+
+    // Account collection — enumerate every posture integration in the
+    // ambient account, exhaustively paginating the distilled list op.
+    // Zero Trust is plan-gated; a `Forbidden` rejection means the account
+    // lacks the entitlement, so treat it as "nothing to list".
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listDevicePostureIntegrations
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((i) => toAttributes(i, accountId)),
+            ),
+          ),
+          Effect.catchTag("Forbidden", () => Effect.succeed([])),
+        );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

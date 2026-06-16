@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as waitingRooms from "@distilled.cloud/cloudflare/waiting-rooms";
 import { expect } from "@effect/vitest";
@@ -173,6 +174,52 @@ test.provider.skipIf(!entitledZoneId)(
       expect(gone).toBeUndefined();
 
       // Destroy again — deletion is idempotent.
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (zone-scoped collection): waiting rooms have no
+// account-wide enumeration API, so `list()` fans out across every zone via
+// `listAllZones`, exhaustively paginates `listWaitingRoomsForZone` per zone,
+// and hydrates each room into the `read` Attributes shape. Plan-gated /
+// unentitled zones reject the route (typed `Forbidden`) and are skipped to
+// `[]`. The standing test zone lacks the Waiting Rooms entitlement, so the
+// read-only assertion only requires a well-typed array; the deployed-presence
+// assertion is gated behind an entitled zone id supplied via env.
+test.provider(
+  "list enumerates waiting rooms across zones",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(Cloudflare.WaitingRoom);
+
+      if (entitledZoneId) {
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.WaitingRoom("ListRoom", {
+              zoneId: entitledZoneId,
+              name: "alchemy-waitingroom-list",
+              host: entitledZoneHost,
+              path: "/alchemy-list",
+              totalActiveUsers: 200,
+              newUsersPerMinute: 200,
+            });
+          }),
+        );
+
+        const all = yield* provider.list();
+        expect(
+          all.some((r) => r.waitingRoomId === deployed.waitingRoomId),
+        ).toBe(true);
+      } else {
+        // Unentitled standing zone: no rooms exist, but `list()` must still
+        // return a well-typed array (unentitled zones skip to `[]`).
+        const all = yield* provider.list();
+        expect(Array.isArray(all)).toBe(true);
+      }
+
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },

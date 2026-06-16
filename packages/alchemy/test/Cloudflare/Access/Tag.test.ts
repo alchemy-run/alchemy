@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -103,5 +104,30 @@ test.provider("rename replaces the tag", (stack) =>
         Effect.catchTag("AccessTagNotFound", () => Effect.succeed(undefined)),
       );
     expect(afterDestroy).toBeUndefined();
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed access tag", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const tag = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.AccessTag("ListTag", {
+          name: "alchemy-test-access-tag-list",
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.AccessTag);
+    const all = yield* provider.list();
+
+    const found = all.find((t) => t.name === tag.name);
+    expect(found).toBeDefined();
+    expect(found?.accountId).toEqual(accountId);
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );

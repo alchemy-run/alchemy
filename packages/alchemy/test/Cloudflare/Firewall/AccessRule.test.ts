@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as firewall from "@distilled.cloud/cloudflare/firewall";
 import { expect } from "@effect/vitest";
@@ -28,6 +29,7 @@ const IP_UPDATE = "198.51.100.102";
 const IP_REPLACE_OLD = "198.51.100.103";
 const IP_REPLACE_NEW = "198.51.100.104";
 const IP_ACCOUNT = "198.51.100.105";
+const IP_LIST = "198.51.100.106";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -270,6 +272,41 @@ test.provider("changing the configuration triggers replacement", (stack) =>
     yield* stack.destroy();
 
     yield* expectZoneRuleGone(zoneId, replaced.ruleId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed zone-scoped rule", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
+
+    yield* stack.destroy();
+    yield* purgeRules({ zoneId }, IP_LIST);
+
+    const rule = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.FirewallAccessRule("ListRule", {
+          zoneId,
+          configuration: { target: "ip", value: IP_LIST },
+          mode: "challenge",
+          notes: "alchemy firewall test (list)",
+        }).pipe(adopt(true));
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.FirewallAccessRule,
+    );
+    const all = yield* provider.list();
+
+    const found = all.find((r) => r.ruleId === rule.ruleId);
+    expect(found).toBeDefined();
+    expect(found?.zoneId).toEqual(zoneId);
+    expect(found?.configuration).toEqual({ target: "ip", value: IP_LIST });
+    expect(found?.mode).toEqual("challenge");
+
+    yield* stack.destroy();
+
+    yield* expectZoneRuleGone(zoneId, rule.ruleId);
   }).pipe(logLevel),
 );
 

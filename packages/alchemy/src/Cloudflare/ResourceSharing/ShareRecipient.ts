@@ -1,6 +1,7 @@
 import * as resourceSharing from "@distilled.cloud/cloudflare/resource-sharing";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -220,6 +221,46 @@ export const ShareRecipientProvider = () =>
           recipientId: output.recipientId,
         })
         .pipe(Effect.catchTag("ShareRecipientNotFound", () => Effect.void));
+    }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Parent fan-out: recipients are keyed by their parent Share, which is
+      // account-scoped. Enumerate the account's owned (sent) shares, then list
+      // recipients within each share with bounded concurrency.
+      const shareIds = yield* resourceSharing.listResourceSharings
+        .pages({ accountId, kind: "sent" })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((share) => share.id),
+            ),
+          ),
+          // The account cannot enumerate shares — nothing to list.
+          Effect.catchTag("Forbidden", () => Effect.succeed([] as string[])),
+        );
+
+      const rows = yield* Effect.forEach(
+        shareIds,
+        (shareId) =>
+          resourceSharing.listRecipients.pages({ accountId, shareId }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  // Disassociated recipients are "gone" — match `read`.
+                  .filter((r) => r.associationStatus !== "disassociated")
+                  .map((r) => toAttributes(r, accountId, shareId)),
+              ),
+            ),
+            // The share vanished mid-enumeration or isn't ours — skip it.
+            Effect.catchTag(["ShareNotFound", "Forbidden"], () =>
+              Effect.succeed([] as ShareRecipientAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
     }),
   });
 

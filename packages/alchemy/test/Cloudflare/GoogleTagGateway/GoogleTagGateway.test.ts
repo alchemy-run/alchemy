@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as googleTagGateway from "@distilled.cloud/cloudflare/google-tag-gateway";
 import { expect } from "@effect/vitest";
@@ -180,6 +181,66 @@ describe.sequential("GoogleTagGateway", () => {
           yield* stack.destroy();
           const stillRestored = yield* getConfig(zoneId);
           expect(stillRestored).toEqual(baseline);
+        }).pipe(Effect.ensuring(setBaseline(zoneId).pipe(Effect.ignore)));
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  // Canonical `list()` test (zone-scoped singleton with a `null` baseline):
+  // there is no account-wide API for the per-zone config, so `list()`
+  // enumerates every zone via `listAllZones` and reads each one, skipping
+  // zones that have never configured the feature. Deploy a config on the
+  // standing test zone and assert it shows up in the enumeration.
+  //
+  // SKIP REASON (distilled core schema-decode bug): for a zone that has never
+  // configured Google Tag Gateway the API returns `{"result":null,...}`. The
+  // distilled core client coerces a null `result` to `{}` before decoding
+  // (packages/core/src/client.ts:826 — `responsePath === "result" && nested
+  // === null ? {} : nested`). `GetConfigResponse` is `Union([Struct, Null])`,
+  // so `{}` matches neither branch and the op fails with an untyped, uncatchable
+  //   CloudflareHttpError: {"result":null,"success":true,"errors":[],"messages":[]}
+  //   status: 200, statusText: 'Schema decode failed'
+  // Because this is a *success-response* decode failure (not an error response),
+  // the per-service error-patch system can't convert it to a typed tag — the fix
+  // must be in distilled core: only coerce null `result` to `{}` when the output
+  // schema does NOT accept null (e.g. `if (!Schema.is(outputSchema)(null)) …`).
+  // Until that lands, any account with at least one unconfigured zone breaks
+  // enumeration. Run with CLOUDFLARE_TEST_GTG_LIST=1 once distilled is fixed.
+  test.provider.skipIf(!process.env.CLOUDFLARE_TEST_GTG_LIST)(
+    "list enumerates configured zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
+
+        yield* stack.destroy();
+        yield* setBaseline(zoneId);
+
+        yield* Effect.gen(function* () {
+          const deployed = yield* stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.GoogleTagGateway("GtgList", {
+                zone: { zoneId, name: zoneName },
+                enabled: true,
+                endpoint: "/listcfg",
+                measurementId: "G-LIST123456",
+                hideOriginalIp: true,
+                setUpTag: false,
+              });
+            }),
+          );
+
+          const provider = yield* Provider.findProvider(
+            Cloudflare.GoogleTagGateway,
+          );
+          const all = yield* provider.list();
+
+          // The configured test zone appears with its full Attributes shape.
+          const found = all.find((c) => c.zoneId === deployed.zoneId);
+          expect(found).toBeDefined();
+          expect(found?.endpoint).toEqual("/listcfg");
+          expect(found?.measurementId).toEqual("G-LIST123456");
+
+          yield* stack.destroy();
         }).pipe(Effect.ensuring(setBaseline(zoneId).pipe(Effect.ignore)));
       }).pipe(logLevel),
     { timeout: 120_000 },

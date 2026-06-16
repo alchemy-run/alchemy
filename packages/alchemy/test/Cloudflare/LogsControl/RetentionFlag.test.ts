@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as logs from "@distilled.cloud/cloudflare/logs";
 import { expect } from "@effect/vitest";
@@ -134,6 +135,46 @@ test.provider.skipIf(!entitled)(
       // Destroy restored the value the flag had before we managed it.
       const restored = yield* getFlag(zoneId);
       expect(restored).toEqual(false);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (zone-scoped singleton): there is no account-wide
+// API for this per-zone flag, so `list()` enumerates every zone via
+// `listAllZones` and reads the singleton in each. Logpull is Enterprise-only,
+// so on an unentitled account every per-zone read fails with the typed
+// `LogsControlNotAuthorized` (code 10000) and `list()` skips it — yielding an
+// array (typically empty) rather than throwing. This ungated case asserts that
+// the typed-skip path keeps `list()` total; the entitled case below asserts
+// the standing test zone is actually enumerated.
+test.provider("list enumerates the retention flag across all zones", (stack) =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(Cloudflare.LogsRetentionFlag);
+    const all = yield* provider.list();
+
+    expect(Array.isArray(all)).toBe(true);
+
+    // `stack` is unused here (the singleton always exists on every zone),
+    // but keep the destroy bookend so the harness state stays clean.
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+test.provider.skipIf(!entitled)(
+  "list contains the entitled test zone's retention flag",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.LogsRetentionFlag,
+      );
+      const all = yield* provider.list();
+
+      expect(all.length).toBeGreaterThan(0);
+      expect(all.some((f) => f.zoneId === zoneId)).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

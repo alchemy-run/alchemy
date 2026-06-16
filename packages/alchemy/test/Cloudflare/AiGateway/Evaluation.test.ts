@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import { expect } from "@effect/vitest";
@@ -111,5 +112,55 @@ test.provider("create, noop, replace, delete an evaluation", (stack) =>
     yield* stack.destroy();
 
     yield* expectGone(accountId, GATEWAY_ID, renamed.evaluation.evaluationId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed evaluation", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const types = yield* Cloudflare.listEvaluationTypes(accountId);
+    const typeIds = types
+      .filter((t) => t.mandatory)
+      .map((t) => t.id)
+      .sort();
+    expect(typeIds.length).toBeGreaterThan(0);
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        const gateway = yield* Cloudflare.AiGateway("EvalGateway", {
+          id: GATEWAY_ID,
+        });
+        const dataset = yield* Cloudflare.AiGatewayDataset("EvalDataset", {
+          gatewayId: gateway.gatewayId,
+          name: "alchemy-test-eval-list-dataset",
+          filters: [{ key: "success", operator: "eq", value: [true] }],
+        });
+        const evaluation = yield* Cloudflare.AiGatewayEvaluation("Evaluation", {
+          gatewayId: gateway.gatewayId,
+          name: "alchemy-test-eval-list",
+          datasetIds: [dataset.datasetId],
+          evaluationTypeIds: typeIds,
+        });
+        return { evaluation };
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.AiGatewayEvaluation,
+    );
+    const all = yield* provider.list();
+
+    const found = all.find(
+      (e) => e.evaluationId === deployed.evaluation.evaluationId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.accountId).toEqual(accountId);
+    expect(found?.gatewayId).toEqual(GATEWAY_ID);
+    expect(found?.name).toEqual("alchemy-test-eval-list");
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );

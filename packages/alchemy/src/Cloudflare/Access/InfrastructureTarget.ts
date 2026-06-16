@@ -142,6 +142,20 @@ export const AccessInfrastructureTargetProvider = () =>
   Provider.succeed(AccessInfrastructureTarget, {
     stables: ["targetId", "accountId", "createdAt"],
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listAccessInfrastructureTargets
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((t) => toAttributes(t, accountId)),
+            ),
+          ),
+        );
+    }),
+
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {

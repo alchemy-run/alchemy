@@ -1,6 +1,7 @@
 import * as sqs from "@distilled.cloud/aws/sqs";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -212,6 +213,46 @@ export const QueueProvider = () =>
       };
       return Queue.Provider.of({
         stables: ["queueName", "queueUrl", "queueArn"],
+        // Enumerate every queue in the ambient account/region. `listQueues`
+        // returns queue URLs (paginated), which we hydrate into the exact `read`
+        // shape. A queue can vanish between enumeration and hydration, so we
+        // tolerate the typed `QueueDoesNotExist` per item and drop it.
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+            const urls = yield* sqs.listQueues.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.QueueUrls ?? []),
+              ),
+            );
+            const items = yield* Effect.forEach(
+              urls,
+              (queueUrl) =>
+                sqs
+                  .getQueueAttributes({
+                    QueueUrl: queueUrl,
+                    AttributeNames: ["QueueArn"],
+                  })
+                  .pipe(
+                    Effect.map((r) => {
+                      const queueName =
+                        r.Attributes?.QueueArn?.split(":").pop() ??
+                        queueUrl.split("/").pop()!;
+                      const queueArn =
+                        `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
+                      return { queueName, queueUrl, queueArn };
+                    }),
+                    Effect.catchTag("QueueDoesNotExist", () =>
+                      Effect.succeed(undefined),
+                    ),
+                  ),
+              { concurrency: 10 },
+            );
+            return items.filter(
+              (item): item is Queue["Attributes"] => item !== undefined,
+            );
+          }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const queueName =

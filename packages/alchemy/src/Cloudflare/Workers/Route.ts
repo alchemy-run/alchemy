@@ -6,7 +6,9 @@ import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 export interface WorkerRouteProps {
   /**
@@ -213,6 +215,36 @@ export const WorkerRouteProvider = () =>
           routeId: output.routeId,
         })
         .pipe(Effect.catchTag("RouteNotFound", () => Effect.void));
+    }),
+
+    // Routes are zone-scoped (`/zones/{id}/workers/routes`) with no account-
+    // wide enumeration API. Fan out over every zone via `listAllZones`,
+    // exhaustively paginate `listRoutes` per zone, and hydrate each into the
+    // same Attributes shape `read` returns. Zones the scoped token can't
+    // reach (Forbidden) or that reject the route (InvalidRoute) are skipped
+    // with a typed catch rather than failing the whole enumeration.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          workers.listRoutes.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((route) =>
+                  toAttributes(normalizeRoute(route), zone.id),
+                ),
+              ),
+            ),
+            Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
+              Effect.succeed([] as WorkerRouteAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
     }),
   });
 

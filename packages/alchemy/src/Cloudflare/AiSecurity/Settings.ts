@@ -4,7 +4,9 @@ import * as Predicate from "effect/Predicate";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const AiSecuritySettingsTypeId = "Cloudflare.AiSecurity.Settings" as const;
 type AiSecuritySettingsTypeId = typeof AiSecuritySettingsTypeId;
@@ -97,6 +99,36 @@ export const isAiSecuritySettings = (
 export const AiSecuritySettingsProvider = () =>
   Provider.succeed(AiSecuritySettings, {
     stables: ["zoneId", "initialEnabled"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its setting. The observed value at
+      // read time is its own `initialEnabled` (nothing is being managed).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          aiSecurity.getAiSecurity({ zoneId }).pipe(
+            Effect.map((observed): AiSecuritySettingsAttributes => {
+              const enabled = observed.enabled ?? false;
+              return { zoneId, enabled, initialEnabled: enabled };
+            }),
+            // Entitlement-gated or out-of-band-deleted zones reject the
+            // route; skip them rather than failing the whole enumeration.
+            Effect.catchTag("AiSecurityNotEntitled", () =>
+              Effect.succeed(undefined),
+            ),
+            Effect.catchTag("ZoneNotAuthorized", () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is AiSecuritySettingsAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as AiSecuritySettingsProps;

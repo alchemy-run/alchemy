@@ -458,6 +458,39 @@ export const EventSourceMappingProvider = () =>
             Effect.catchTag("ResourceNotFoundException", () => Effect.void),
           );
         }),
+        // `list()` — AWS account/region collection (§4a). Exhaustively
+        // paginate `listEventSourceMappings` with no `FunctionName` filter to
+        // enumerate every mapping in the current region, hydrating each into
+        // the exact `Attributes` shape `reconcile`/`configToAttrs` returns.
+        // The list response carries full `EventSourceMappingConfiguration`
+        // objects, so there is no per-item `getEventSourceMapping` to issue —
+        // hence no bounded fan-out or per-item `ResourceNotFoundException`
+        // handling is required. We drop any partial entry missing a required
+        // identifier field rather than emitting a malformed `Attributes`.
+        list: () =>
+          lambda.listEventSourceMappings.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.EventSourceMappings ?? [])
+                  .filter(
+                    (
+                      config,
+                    ): config is lambda.EventSourceMappingConfiguration & {
+                      UUID: string;
+                      EventSourceMappingArn: string;
+                      FunctionArn: string;
+                      State: string;
+                    } =>
+                      config.UUID != null &&
+                      config.EventSourceMappingArn != null &&
+                      config.FunctionArn != null &&
+                      config.State != null,
+                  )
+                  .map(configToAttrs),
+              ),
+            ),
+          ),
       };
     }),
   );

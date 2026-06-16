@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as originTls from "@distilled.cloud/cloudflare/origin-tls-client-auth";
 import { expect } from "@effect/vitest";
@@ -158,6 +159,24 @@ const program = (opts: {
   });
 
 describe.sequential("HostnameAssociation", () => {
+  // Hostname associations are keyed entirely by {zoneId, hostname} and
+  // Cloudflare exposes no endpoint that enumerates which hostnames in a zone
+  // have an AOP association, so `list()` is non-listable and returns []. This
+  // read-only assertion always runs (no cert/hostname deploy required).
+  test.provider("list returns [] for the non-listable association", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.OriginTlsClientAuthHostnameAssociation,
+      );
+      const all = yield* provider.list();
+      expect(all).toEqual([]);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  );
+
   test.provider(
     "associates a hostname, updates cert and enablement in place, voids on destroy",
     (stack) =>

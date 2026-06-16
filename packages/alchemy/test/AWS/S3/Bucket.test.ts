@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { Bucket } from "@/AWS/S3";
+import * as Provider from "@/Provider";
 import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as S3 from "@distilled.cloud/aws/s3";
@@ -370,6 +371,34 @@ test.provider(
       yield* stack.destroy();
       yield* assertBucketDeleted(bucketName);
     }),
+);
+
+// Canonical `list()` test (AWS account/region-scoped collection): deploy a
+// real bucket, resolve the provider from context via `findProviderByType`,
+// call `list()`, and assert the deployed bucket appears in the
+// exhaustively-paginated result.
+test.provider("list enumerates the deployed bucket", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const bucket = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Bucket("ListBucket", {
+          bucketName: "alchemy-test-bucket-list",
+          forceDestroy: true,
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Bucket);
+    const all = yield* provider.list();
+
+    expect(all.some((b) => b.bucketName === bucket.bucketName)).toBe(true);
+
+    yield* stack.destroy();
+
+    yield* assertBucketDeleted(bucket.bucketName);
+  }),
 );
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}

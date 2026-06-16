@@ -2,6 +2,7 @@ import { Credentials } from "@distilled.cloud/planetscale/Credentials";
 import * as planetscale from "@distilled.cloud/planetscale/Operations";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -239,6 +240,78 @@ export const PostgresDefaultRoleProvider = () =>
           branch: output.branch,
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
+    }),
+
+    list: Effect.fn(function* () {
+      const { organization } = yield* yield* Credentials;
+
+      const roles = yield* planetscale.listDatabases
+        .pages({ organization })
+        .pipe(
+          Stream.map((page) =>
+            page.data.filter((db) => db.kind === "postgresql"),
+          ),
+          Stream.flattenIterable,
+          Stream.flatMap(
+            (db) =>
+              planetscale.listBranches
+                .pages({ organization, database: db.name })
+                .pipe(
+                  Stream.map((page) =>
+                    page.data.filter((branch) => branch.kind === "postgresql"),
+                  ),
+                  Stream.flattenIterable,
+                  Stream.catchTag("NotFound", () =>
+                    Stream.succeed({ name: db.default_branch ?? "main" }),
+                  ),
+                  Stream.flatMap(
+                    (branch) =>
+                      planetscale.listRoles
+                        .pages({
+                          organization,
+                          database: db.name,
+                          branch: branch.name,
+                        })
+                        .pipe(
+                          Stream.map((page) =>
+                            page.data
+                              .filter((role) => role.default)
+                              .map(
+                                (role) =>
+                                  ({
+                                    id: role.id,
+                                    name: role.name,
+                                    expiresAt: role.expires_at,
+                                    host: role.access_host_url,
+                                    username: role.username,
+                                    password: Redacted.make(""),
+                                    ttl: role.ttl,
+                                    databaseName: role.database_name,
+                                    connectionUrl: Redacted.make(""),
+                                    connectionUrlPooled: Redacted.make(""),
+                                    inheritedRoles:
+                                      role.inherited_roles as InheritedRole[],
+                                    organization,
+                                    database: db.name,
+                                    branch: branch.name,
+                                  }) satisfies PostgresDefaultRoleAttributes as PostgresDefaultRoleAttributes,
+                              ),
+                          ),
+                          Stream.flattenIterable,
+                          Stream.catchTags({
+                            NotFound: () => Stream.empty,
+                            Forbidden: () => Stream.empty,
+                          }),
+                        ),
+                    { concurrency: 10 },
+                  ),
+                ),
+            { concurrency: 10 },
+          ),
+          Stream.runCollect,
+        );
+
+      return Array.from(roles);
     }),
   });
 

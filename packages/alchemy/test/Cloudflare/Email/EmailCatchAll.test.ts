@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import { expect } from "@effect/vitest";
@@ -178,6 +179,37 @@ describe.sequential("EmailCatchAll", () => {
         expect(restored.enabled).toEqual(false);
         expect(restored.name ?? "").toEqual("");
         expect(restored.actions).toEqual([{ type: "drop" }]);
+      }).pipe(logLevel),
+  );
+
+  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+  // API for this per-zone catch-all rule, so `list()` enumerates every zone
+  // via `listAllZones` and reads the singleton in each (skipping zones without
+  // Email Routing enabled). Ensure Email Routing is enabled on the standing
+  // test zone, then assert the result is non-empty, well-typed, and contains
+  // the test zone.
+  test.provider(
+    "list enumerates the catch-all rule across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
+
+        yield* stack.destroy();
+        // Email Routing must be enabled for the test zone's catch-all to be
+        // visible to `list()`; normalize to a known baseline.
+        yield* setBaseline(zoneId);
+
+        const provider = yield* Provider.findProvider(Cloudflare.EmailCatchAll);
+        const all = yield* provider.list();
+
+        expect(all.length).toBeGreaterThan(0);
+        const row = all.find((r) => r.zoneId === zoneId);
+        expect(row).toBeDefined();
+        expect(row!.ruleId).not.toEqual("");
+        expect(typeof row!.enabled).toBe("boolean");
+        expect(Array.isArray(row!.actions)).toBe(true);
+
+        yield* stack.destroy();
       }).pipe(logLevel),
   );
 });

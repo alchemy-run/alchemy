@@ -3,6 +3,7 @@ import { Distribution, OriginAccessControl } from "@/AWS/CloudFront";
 import type { PolicyStatement } from "@/AWS/IAM/Policy";
 import { Bucket } from "@/AWS/S3";
 import * as Output from "@/Output";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as S3 from "@distilled.cloud/aws/s3";
@@ -106,6 +107,74 @@ describe("AWS.CloudFront.Distribution", () => {
 
         yield* stack.destroy();
         yield* assertDistributionDeleted(deployed.distribution.distributionId);
+      }),
+    { timeout: 600_000 },
+  );
+
+  // Fast probe (read-only): CloudFront `list()` exhaustively paginates
+  // `listDistributions` and resolves each summary to the full `read`-shaped
+  // Attributes. This runs without deploying anything (distribution create +
+  // disable-before-delete exceeds CI budget — see the gated full test below),
+  // so it verifies the live list op cheaply.
+  test.provider("list enumerates account distributions", () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.findProvider(Distribution);
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      for (const item of all) {
+        expect(item.distributionId).toBeDefined();
+        expect(item.distributionArn).toBeDefined();
+        expect(item.domainName).toBeDefined();
+      }
+    }),
+  );
+
+  // Full lifecycle: deploy a real distribution, assert it shows up in the
+  // enumerated result, then tear it down. Gated behind the same slow-test env
+  // flag as the create/delete case because distribution provisioning +
+  // disable-before-delete can take many minutes.
+  test.provider.skipIf(!runLive)(
+    "list includes a freshly deployed distribution",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const bucket = yield* Bucket("ListWebsiteBucket", {
+              forceDestroy: true,
+            });
+            const oac = yield* OriginAccessControl("ListWebsiteOac", {
+              originType: "s3",
+            });
+            return yield* Distribution("ListWebsiteDistribution", {
+              origins: [
+                {
+                  id: "site",
+                  domainName: bucket.bucketRegionalDomainName,
+                  s3Origin: true,
+                  originAccessControlId: oac.originAccessControlId,
+                },
+              ],
+              defaultCacheBehavior: {
+                targetOriginId: "site",
+                viewerProtocolPolicy: "redirect-to-https",
+                compress: true,
+              },
+            });
+          }),
+        );
+
+        const provider = yield* Provider.findProvider(Distribution);
+        const all = yield* provider.list();
+
+        expect(
+          all.some((d) => d.distributionId === deployed.distributionId),
+        ).toBe(true);
+
+        yield* stack.destroy();
+        yield* assertDistributionDeleted(deployed.distributionId);
       }),
     { timeout: 600_000 },
   );

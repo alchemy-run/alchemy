@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import { expect } from "@effect/vitest";
@@ -70,6 +71,29 @@ test.provider("lists the services catalog and prefixes (read-only)", (stack) =>
       ),
     );
     expect(Array.isArray(prefixes)).toBe(true);
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+// `list()` enumerates account-scoped BYOIP prefixes via the catalog endpoint,
+// which is available regardless of the BYOIP entitlement (it returns an empty
+// array on accounts with no onboarded prefixes). The result is a well-typed
+// `AddressingPrefixAttributes[]` — the exact shape `read` produces.
+test.provider("list enumerates account prefixes (read-only)", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const provider = yield* Provider.findProvider(Cloudflare.AddressingPrefix);
+    const all = yield* retryForbidden(provider.list());
+
+    expect(Array.isArray(all)).toBe(true);
+    for (const p of all) {
+      expect(typeof p.prefixId).toBe("string");
+      expect(typeof p.accountId).toBe("string");
+      expect(typeof p.cidr).toBe("string");
+      expect(typeof p.asn).toBe("number");
+    }
 
     yield* stack.destroy();
   }).pipe(logLevel),

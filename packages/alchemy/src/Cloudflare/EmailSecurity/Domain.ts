@@ -270,6 +270,28 @@ export const EmailSecurityDomainProvider = () =>
           Effect.catchTag("EmailSecurityDomainNotFound", () => Effect.void),
         );
     }),
+
+    // Account-scoped collection: enumerate every onboarded domain via the
+    // paginated account-level list API and hydrate each into the exact
+    // `read` Attributes shape. Accounts without the Email Security add-on
+    // (`EmailSecurityNotEntitled`) or lacking access (`Forbidden`) have
+    // nothing to enumerate — return [].
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* emailSecurity.listSettingDomains.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((d) =>
+              toAttributes(d as ObservedDomain, accountId),
+            ),
+          ),
+        ),
+        Effect.catchTag(["EmailSecurityNotEntitled", "Forbidden"], () =>
+          Effect.succeed([] as EmailSecurityDomainAttributes[]),
+        ),
+      );
+    }),
   });
 
 type ObservedDomain = emailSecurity.GetSettingDomainResponse;

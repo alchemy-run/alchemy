@@ -1,5 +1,6 @@
 import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -202,6 +203,53 @@ export const ScheduleGroupProvider = () =>
             state: observed?.State,
           };
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every schedule group in the account/region,
+            // paginated.
+            const summaries = yield* scheduler.listScheduleGroups
+              .pages({})
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) =>
+                    (page.ScheduleGroups ?? []).filter(
+                      (
+                        g,
+                      ): g is scheduler.ScheduleGroupSummary & {
+                        Name: string;
+                      } => g.Name != null,
+                    ),
+                  ),
+                ),
+              );
+
+            // Hydrate each summary via GetScheduleGroup into the exact
+            // `read` shape. Skip groups deleted between list and get.
+            const rows = yield* Effect.forEach(
+              summaries,
+              (summary) =>
+                scheduler.getScheduleGroup({ Name: summary.Name }).pipe(
+                  Effect.map((described) =>
+                    described.Arn && described.Name
+                      ? {
+                          scheduleGroupArn: described.Arn,
+                          scheduleGroupName: described.Name,
+                          state: described.State,
+                        }
+                      : undefined,
+                  ),
+                  Effect.catchTag("ResourceNotFoundException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+
+            return rows.filter(
+              (row): row is ScheduleGroup["Attributes"] => row !== undefined,
+            );
+          }),
         delete: Effect.fn(function* ({ output }) {
           yield* scheduler
             .deleteScheduleGroup({

@@ -7,7 +7,9 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { arrayEqualsUnordered } from "../../Util/equal.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 /**
  * Domain control validation (DCV) method used to prove control over the
@@ -287,6 +289,35 @@ export const isCustomHostname = (value: unknown): value is CustomHostname =>
 export const CustomHostnameProvider = () =>
   Provider.succeed(CustomHostname, {
     stables: ["customHostnameId", "zoneId", "hostname"],
+
+    // Custom hostnames are a zone-scoped Cloudflare for SaaS feature. Fan out
+    // over every zone in the account, exhaustively paginate each zone's custom
+    // hostnames, and hydrate each into the same Attributes shape `read`
+    // produces. Zones without the SaaS entitlement reject with the typed
+    // `SaasQuotaNotAllocated`/`Forbidden` errors — skip them.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          customHostnames.listCustomHostnames.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map(
+                  (raw): CustomHostnameAttributes =>
+                    toAttributes(narrowHostname(raw), zone.id),
+                ),
+              ),
+            ),
+            Effect.catchTag("SaasQuotaNotAllocated", () => Effect.succeed([])),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as CustomHostnameProps;

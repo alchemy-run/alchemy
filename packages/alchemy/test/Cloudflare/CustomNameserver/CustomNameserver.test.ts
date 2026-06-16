@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as customNameservers from "@distilled.cloud/cloudflare/custom-nameservers";
 import { expect } from "@effect/vitest";
@@ -74,6 +75,51 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+);
+
+// Canonical `list()` test (account collection). On the unentitled testing
+// account the collection endpoint rejects with `CustomNameserversNotEnabled`,
+// which `list()` maps to an empty collection — so the read-only assertion is
+// "list returns a well-typed array" (here, `[]`). An entitled account also
+// runs the deploy+presence variant below.
+test.provider("list enumerates account custom nameservers", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const provider = yield* Provider.findProvider(Cloudflare.CustomNameserver);
+    const all = yield* provider.list();
+
+    // Always a well-typed array; `[]` on unentitled accounts.
+    expect(Array.isArray(all)).toBe(true);
+    if (!entitled) {
+      expect(all).toEqual([]);
+    }
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+test.provider.skipIf(!entitled)(
+  "list includes a deployed custom nameserver",
+  (stack) =>
+    Effect.gen(function* () {
+      const nsName = `alchemy-ns-list.${zoneName}`;
+
+      yield* stack.destroy();
+
+      const ns = yield* stack.deploy(
+        Cloudflare.CustomNameserver("NsList", { nsName }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.CustomNameserver,
+      );
+      const all = yield* provider.list();
+      expect(all.some((x) => x.nsName === ns.nsName)).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 test.provider.skipIf(!entitled)(

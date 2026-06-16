@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -181,6 +182,56 @@ export const PolicyProvider = () =>
 
       return {
         stables: ["policyArn", "policyName", "policyId"],
+        list: () =>
+          Effect.gen(function* () {
+            // IAM is global; enumerate only customer-managed ("Local")
+            // policies, paginating exhaustively.
+            const policies = yield* iam.listPolicies
+              .pages({ Scope: "Local" })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) => page.Policies ?? []),
+                ),
+              );
+            const rows = yield* Effect.forEach(
+              policies,
+              (policy) =>
+                Effect.gen(function* () {
+                  if (!policy.Arn || !policy.PolicyName) {
+                    return undefined;
+                  }
+                  const tags = yield* iam.listPolicyTags({
+                    PolicyArn: policy.Arn,
+                  });
+                  const policyDocument = yield* readPolicyDocument({
+                    policyArn: policy.Arn,
+                    versionId: policy.DefaultVersionId,
+                  });
+                  if (!policyDocument) {
+                    return undefined;
+                  }
+                  return {
+                    policyArn: policy.Arn as PolicyArn,
+                    policyName: policy.PolicyName,
+                    policyId: policy.PolicyId,
+                    path: policy.Path,
+                    defaultVersionId: policy.DefaultVersionId,
+                    attachmentCount: policy.AttachmentCount,
+                    permissionsBoundaryUsageCount:
+                      policy.PermissionsBoundaryUsageCount,
+                    isAttachable: policy.IsAttachable,
+                    description: policy.Description,
+                    policyDocument,
+                    tags: toTagRecord(tags.Tags),
+                  };
+                }),
+              { concurrency: 10 },
+            );
+            return rows.filter(
+              (row): row is NonNullable<typeof row> => row !== undefined,
+            );
+          }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (

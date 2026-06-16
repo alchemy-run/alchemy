@@ -1,6 +1,7 @@
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -220,6 +221,20 @@ export const FlagshipAppProvider = () =>
       yield* flagship
         .deleteApp({ accountId: output.accountId, appId: output.appId })
         .pipe(Effect.catchTag("FlagshipAppNotFound", () => Effect.void));
+    }),
+    // Account-scoped collection (pattern b): enumerate every app in the
+    // ambient account via the paginated listApps op. The list item shape
+    // matches GetAppResponse, so each maps directly into Attributes.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* flagship.listApps.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((app) => toAttributes(app, accountId)),
+          ),
+        ),
+      );
     }),
   });
 

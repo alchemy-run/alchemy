@@ -1,6 +1,7 @@
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
@@ -246,8 +247,62 @@ export const RecordProvider = () =>
         yield* waitForChange(response.ChangeInfo.Id);
       });
 
+      // `listResourceRecordSets` is not paginated by distilled, so manually
+      // walk the `IsTruncated` / `NextRecord*` cursor to collect every record
+      // set in a hosted zone.
+      const listAllRecordSets = Effect.fn(function* (hostedZoneId: string) {
+        const all: route53.ResourceRecordSet[] = [];
+        let request: route53.ListResourceRecordSetsRequest = {
+          HostedZoneId: normalizeHostedZoneId(hostedZoneId),
+          MaxItems: 300,
+        };
+        while (true) {
+          const response = yield* route53.listResourceRecordSets(request);
+          all.push(...response.ResourceRecordSets);
+          if (!response.IsTruncated || response.NextRecordName === undefined) {
+            break;
+          }
+          request = {
+            HostedZoneId: normalizeHostedZoneId(hostedZoneId),
+            StartRecordName: response.NextRecordName,
+            StartRecordType: response.NextRecordType,
+            StartRecordIdentifier: response.NextRecordIdentifier,
+            MaxItems: 300,
+          };
+        }
+        return all;
+      });
+
       return {
         stables: ["hostedZoneId", "name", "type", "setIdentifier"],
+        list: () =>
+          Effect.gen(function* () {
+            // Records are hosted-zone-scoped: enumerate every hosted zone
+            // (paginated), then fan out one `listResourceRecordSets` walk per
+            // zone with bounded concurrency.
+            const zones = yield* route53.listHostedZones.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.HostedZones ?? []),
+              ),
+            );
+
+            const rows = yield* Effect.forEach(
+              zones,
+              (zone) =>
+                listAllRecordSets(zone.Id).pipe(
+                  Effect.map((recordSets) =>
+                    recordSets.map((recordSet) => toAttrs(recordSet, zone.Id)),
+                  ),
+                  // A zone may be deleted concurrently with enumeration; treat
+                  // a vanished zone as contributing no records.
+                  Effect.catchTag("NoSuchHostedZone", () => Effect.succeed([])),
+                ),
+              { concurrency: 10 },
+            );
+
+            return rows.flat();
+          }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return undefined;
           if (

@@ -2,6 +2,7 @@ import { Credentials } from "@distilled.cloud/planetscale/Credentials";
 import * as planetscale from "@distilled.cloud/planetscale/Operations";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -354,6 +355,80 @@ export const PostgresRoleProvider = () =>
             () => Effect.void,
           ),
         );
+    }),
+
+    list: Effect.fn(function* () {
+      const { organization } = yield* yield* Credentials;
+
+      const databases = yield* planetscale.listDatabases
+        .pages({ organization })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              page.data.filter((db) => db.kind === "postgresql"),
+            ),
+          ),
+        );
+
+      const rows = yield* Effect.forEach(
+        databases,
+        (db) =>
+          planetscale.listBranches
+            .pages({ organization, database: db.name })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((branchPages) =>
+                Array.from(branchPages).flatMap((page) =>
+                  page.data.filter((branch) => branch.kind === "postgresql"),
+                ),
+              ),
+              Effect.catchTag("NotFound", () =>
+                Effect.succeed([{ name: db.default_branch ?? "main" }]),
+              ),
+              Effect.flatMap((branches) =>
+                Effect.forEach(
+                  branches,
+                  (branch) =>
+                    planetscale.listRoles
+                      .pages({
+                        organization,
+                        database: db.name,
+                        branch: branch.name,
+                      })
+                      .pipe(
+                        Stream.runCollect,
+                        Effect.map((rolePages): PostgresRoleAttributes[] =>
+                          Array.from(rolePages).flatMap((page) =>
+                            page.data
+                              .filter((role) => !role.default)
+                              .map((role) =>
+                                buildAttributes(role, Redacted.make(""), {
+                                  inheritedRoles:
+                                    role.inherited_roles as InheritedRole[],
+                                  successor: "postgres",
+                                  organization,
+                                  database: db.name,
+                                  branch: branch.name,
+                                }),
+                              ),
+                          ),
+                        ),
+                        Effect.catchTag("NotFound", () =>
+                          Effect.succeed([] as PostgresRoleAttributes[]),
+                        ),
+                        Effect.catchTag("Forbidden", () =>
+                          Effect.succeed([] as PostgresRoleAttributes[]),
+                        ),
+                      ),
+                  { concurrency: 10 },
+                ).pipe(Effect.map((perBranch) => perBranch.flat())),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+
+      return rows.flat();
     }),
   });
 

@@ -1,5 +1,6 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -195,6 +196,39 @@ export const DBSubnetGroupProvider = () =>
             tags: desiredTags,
           };
         }),
+        list: () =>
+          // AWS account/region collection: `describeDBSubnetGroups` is
+          // paginated (items field `DBSubnetGroups`). Collect every page and
+          // map each group into the exact `read` Attributes shape. `read` does
+          // not hydrate tags from the cloud (it returns the cached
+          // `output.tags`), so we mirror that here with an empty tag map rather
+          // than issuing a per-item `listTagsForResource` call.
+          rds.describeDBSubnetGroups.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.DBSubnetGroups ?? []).flatMap((group) =>
+                  group.DBSubnetGroupName
+                    ? [
+                        {
+                          dbSubnetGroupName: group.DBSubnetGroupName,
+                          dbSubnetGroupArn: group.DBSubnetGroupArn,
+                          vpcId: group.VpcId,
+                          subnetIds: (group.Subnets ?? []).flatMap((subnet) =>
+                            subnet.SubnetIdentifier
+                              ? [subnet.SubnetIdentifier]
+                              : [],
+                          ),
+                          status: group.SubnetGroupStatus,
+                          supportedNetworkTypes: group.SupportedNetworkTypes,
+                          tags: {} as Record<string, string>,
+                        },
+                      ]
+                    : [],
+                ),
+              ),
+            ),
+          ),
         delete: Effect.fn(function* ({ output }) {
           yield* rds
             .deleteDBSubnetGroup({

@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { generateLocalId, isLiveId } from "@/Cloudflare/LocalRuntime";
+import * as Provider from "@/Provider";
 import { State } from "@/State";
 import type { CreatedResourceState } from "@/State/ResourceState";
 import * as Test from "@/Test/Vitest";
@@ -532,6 +533,48 @@ test.provider("promotes a dev consumer to a live consumer on deploy", (stack) =>
     expect("scriptName" in live ? live.scriptName : undefined).toEqual(
       promoted.worker.workerName,
     );
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+/**
+ * Canonical `list()` test (parent fan-out): queue consumers have no
+ * account-wide enumeration API, so `list()` enumerates every queue in the
+ * account and lists each queue's worker consumer. Deploy a queue + worker +
+ * consumer, then assert the consumer is present in the exhaustively-
+ * paginated result, hydrated into the same `Attributes` shape `read` returns.
+ */
+test.provider("list enumerates the deployed consumer", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        const queue = yield* Cloudflare.Queue("Q");
+        const worker = yield* Cloudflare.Worker("Worker", {
+          main,
+          compatibility: { date: "2024-01-01" },
+        });
+        const consumer = yield* Cloudflare.QueueConsumer("Consumer", {
+          queueId: queue.queueId,
+          scriptName: worker.workerName,
+          settings: { batchSize: 7 },
+        });
+        return { queue, worker, consumer };
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.QueueConsumer);
+    const all = yield* provider.list();
+
+    const found = all.find(
+      (c) => c.consumerId === deployed.consumer.consumerId,
+    );
+    expect(found).toBeDefined();
+    expect(found?.queueId).toEqual(deployed.queue.queueId);
+    expect(found?.scriptName).toEqual(deployed.worker.workerName);
+    expect(found?.accountId).toBeTypeOf("string");
 
     yield* stack.destroy();
   }).pipe(logLevel),

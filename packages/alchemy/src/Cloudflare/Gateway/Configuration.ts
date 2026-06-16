@@ -204,6 +204,18 @@ export const GatewayConfigurationProvider = () =>
   Provider.succeed(GatewayConfiguration, {
     stables: ["accountId", "initialSettings", "createdAt"],
 
+    // Account-wide singleton: the Gateway configuration always exists for
+    // the ambient account, so enumeration is a single read returning a
+    // one-element array. There is no prior management context, so the
+    // restore snapshot is empty.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* zeroTrust.getGatewayConfiguration({
+        accountId,
+      });
+      return [toAttributes(accountId, observed, {})];
+    }),
+
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as cni from "@distilled.cloud/cloudflare/network-interconnects";
 import { expect } from "@effect/vitest";
@@ -103,6 +104,47 @@ test.provider(
       // Destroy restored the value the singleton had before we managed it.
       const restored = yield* getSetting(accountId);
       expect(restored.defaultAsn).toEqual(baselineAsn);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (account singleton): there is no enumeration API
+// for the CNI settings object, so `list()` reads the single
+// `/accounts/{account_id}/cni/settings` and returns a one-element array.
+// CNI is enterprise-gated — on accounts without the entitlement the route
+// rejects with the typed `Forbidden` error, which `list()` maps to `[]`
+// ("unset"). The read-only assertions below hold in both cases; the
+// entitled-account content assertion is gated on a non-empty result.
+test.provider(
+  "list enumerates the CNI settings singleton",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.NetworkInterconnectSettings,
+      );
+      const all = yield* provider.list();
+
+      // Always a well-typed array (empty when the account lacks the
+      // entitlement, one element when CNI settings are present).
+      expect(Array.isArray(all)).toBe(true);
+      expect(all.length).toBeLessThanOrEqual(1);
+
+      if (all.length === 0) {
+        yield* Effect.logWarning(
+          "list() returned []: account lacks the Cloudflare Network Interconnect entitlement (Forbidden).",
+        );
+      } else {
+        const [settings] = all;
+        expect(settings.accountId).toEqual(accountId);
+        expect(typeof settings.defaultAsn).toBe("number");
+        expect(settings.initialDefaultAsn).toEqual(settings.defaultAsn);
+      }
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

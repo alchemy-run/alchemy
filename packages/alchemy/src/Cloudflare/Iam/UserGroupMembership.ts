@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/cloudflare/iam";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -89,6 +90,44 @@ export const isIamUserGroupMembership = (
 export const IamUserGroupMembershipProvider = () =>
   Provider.succeed(IamUserGroupMembership, {
     stables: ["userGroupId", "memberId", "accountId"],
+
+    // Parent fan-out: memberships are keyed by (user group, member) and
+    // there is no account-wide membership enumeration API. Enumerate every
+    // user group in the account (account-scoped), then list each group's
+    // members with bounded concurrency, paginating both levels exhaustively.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const groups = yield* iam.listUserGroups.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.result ?? []),
+        ),
+      );
+      const rows = yield* Effect.forEach(
+        groups,
+        (group) =>
+          iam.listUserGroupMembers
+            .pages({ accountId, userGroupId: group.id })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? []).map(
+                    (member): IamUserGroupMembershipAttributes =>
+                      toAttributes(member, group.id, accountId),
+                  ),
+                ),
+              ),
+              // Group removed out-of-band between enumeration and member
+              // listing — skip it.
+              Effect.catchTag("UserGroupNotFound", () =>
+                Effect.succeed([] as IamUserGroupMembershipAttributes[]),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;

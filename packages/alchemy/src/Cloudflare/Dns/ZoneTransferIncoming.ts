@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const ZoneTransferIncomingTypeId =
   "Cloudflare.Dns.ZoneTransferIncoming" as const;
@@ -113,6 +115,30 @@ export const isZoneTransferIncoming = (
 export const ZoneTransferIncomingProvider = () =>
   Provider.succeed(ZoneTransferIncoming, {
     stables: ["zoneId", "id", "createdTime"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this per-zone singleton — enumerate
+      // every zone and read its incoming transfer config. Only
+      // secondary zones with a configured transfer have one, so skip
+      // the rest (`IncomingZoneTransferNotFound`).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          getIncoming(zoneId).pipe(
+            Effect.map((observed) =>
+              observed === undefined
+                ? undefined
+                : toAttributes(observed, zoneId),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ZoneTransferIncomingAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as ZoneTransferIncomingProps;

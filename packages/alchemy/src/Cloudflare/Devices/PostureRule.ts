@@ -1,6 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -170,6 +171,22 @@ export const DevicePostureRuleProvider = () =>
   Provider.succeed(DevicePostureRule, {
     stables: ["postureRuleId", "accountId", "type"],
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection: exhaustively paginate the device
+      // posture rules list and hydrate each into the `read` shape.
+      return yield* zeroTrust.listDevicePostures.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((rule) => toAttributes(rule, accountId)),
+          ),
+        ),
+        // Account lacks the Zero Trust / device posture entitlement.
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
+    }),
+
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
       // `type` is immutable on Cloudflare's side — replace on change.
@@ -269,7 +286,8 @@ export const DevicePostureRuleProvider = () =>
 type ObservedRule =
   | zeroTrust.GetDevicePostureResponse
   | zeroTrust.CreateDevicePostureResponse
-  | zeroTrust.UpdateDevicePostureResponse;
+  | zeroTrust.UpdateDevicePostureResponse
+  | zeroTrust.ListDevicePosturesResponse["result"][number];
 
 /**
  * Read a posture rule by id, mapping "gone" (`PostureRuleNotFound`,

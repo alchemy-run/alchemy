@@ -1,4 +1,5 @@
 import * as Drizzle from "@/Drizzle";
+import * as Provider from "@/Provider";
 import * as Stack from "@/Stack";
 import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
@@ -144,4 +145,16 @@ test.provider(
       expect(snapshots).toHaveLength(2);
       expect(snapshots[1]?.prevIds).toEqual([initialSnapshot?.id]);
     }),
+);
+
+test.provider("list returns [] (non-listable local build artifact)", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const provider = yield* Provider.findProvider(Drizzle.Schema);
+    const all = yield* provider.list();
+    expect(all).toEqual([]);
+
+    yield* stack.destroy();
+  }),
 );

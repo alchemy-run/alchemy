@@ -122,6 +122,31 @@ export const EmailSecurityImpersonationRegistryEntryProvider = () =>
   Provider.succeed(EmailSecurityImpersonationRegistryEntry, {
     stables: ["entryId", "accountId", "createdAt"],
 
+    // Account collection: exhaustively paginate the account-scoped registry
+    // list and hydrate each row into the exact `read` Attributes shape.
+    // Accounts without the Email Security add-on return the typed
+    // `EmailSecurityNotEntitled` error → treat as an empty registry.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* emailSecurity.listSettingImpersonationRegistries
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((entry) =>
+                toAttributes(entry, accountId),
+              ),
+            ),
+          ),
+          Effect.catchTag("EmailSecurityNotEntitled", () =>
+            Effect.succeed(
+              [] as EmailSecurityImpersonationRegistryEntryAttributes[],
+            ),
+          ),
+        );
+    }),
+
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
@@ -239,11 +264,15 @@ const findByIdentity = (accountId: string, name: string, email: string) =>
       ),
     );
 
+type ListedEntry =
+  emailSecurity.ListSettingImpersonationRegistriesResponse["result"][number];
+
 const toAttributes = (
   entry:
     | ObservedEntry
     | emailSecurity.CreateSettingImpersonationRegistryResponse
-    | emailSecurity.PatchSettingImpersonationRegistryResponse,
+    | emailSecurity.PatchSettingImpersonationRegistryResponse
+    | ListedEntry,
   accountId: string,
 ): EmailSecurityImpersonationRegistryEntryAttributes => ({
   entryId: entry.id ?? "",

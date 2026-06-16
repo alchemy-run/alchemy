@@ -220,6 +220,21 @@ export const GatewayProxyEndpointProvider = () =>
         })
         .pipe(Effect.catchTag("ProxyEndpointNotFound", () => Effect.void));
     }),
+
+    // Account-scoped collection: the proxy-endpoints list op returns each
+    // endpoint's full body, so no per-item hydration is needed. Exhaustively
+    // paginate (`.items` flattens `result` across pages) and map straight into
+    // the `read` Attributes shape.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listGatewayProxyEndpoints
+        .items({ accountId })
+        .pipe(
+          Stream.map((e) => toAttributes(e as ObservedEndpoint, accountId)),
+          Stream.runCollect,
+          Effect.map((chunk) => Array.from(chunk)),
+        );
+    }),
   });
 
 type ObservedEndpoint = zeroTrust.GetGatewayProxyEndpointResponse;

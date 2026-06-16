@@ -1242,6 +1242,23 @@ await Effect.runPromise(serverEffect).catch((err) => {
           // `OwnedBySomeoneElse` unless the caller opted in via `--adopt`.
           return Unowned(attrs);
         }),
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            // Account-scoped collection. `listContainerApplications` returns
+            // the full application objects in one (non-paginated) response, so
+            // each item already carries the complete `read` attributes shape —
+            // no per-item hydration is required.
+            return yield* Containers.listContainerApplications({
+              accountId,
+            }).pipe(
+              Effect.map((apps) => apps.map((app) => toAttributes(app))),
+              // Accounts without the containers product reject the route; treat
+              // a non-entitled account as an empty collection rather than an
+              // error.
+              Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+            );
+          }),
         tail: ({ output }) =>
           telemetry.tailStream({
             accountId: output.accountId,
@@ -1276,7 +1293,8 @@ const toAttributes = (
   application:
     | Containers.CreateContainerApplicationResponse
     | Containers.UpdateContainerApplicationResponse
-    | Containers.GetContainerApplicationResponse,
+    | Containers.GetContainerApplicationResponse
+    | Containers.ListContainerApplicationsResponse[number],
 ): ContainerApplication["Attributes"] => ({
   applicationId: application.id,
   applicationName: application.name,

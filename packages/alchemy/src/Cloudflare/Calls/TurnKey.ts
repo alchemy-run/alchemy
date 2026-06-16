@@ -2,6 +2,7 @@ import * as calls from "@distilled.cloud/cloudflare/calls";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -123,6 +124,24 @@ export const CallsTurnKeyProvider = () =>
       return observed
         ? toAttributes(observed, output.accountId, output.key)
         : undefined;
+    }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection: paginate the TURN keys list exhaustively.
+      // The list response carries every readable field (uid/name/created/
+      // modified) — the bearer `key` is returned only at creation and is
+      // never re-readable, so we hydrate it as an empty redacted value to
+      // match exactly what `read` would produce on a cold (stateless) read.
+      return yield* calls.listTurns.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((turnKey) =>
+              toAttributes(turnKey, accountId, Redacted.make("")),
+            ),
+          ),
+        ),
+      );
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

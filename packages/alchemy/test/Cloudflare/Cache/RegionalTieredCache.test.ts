@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as cache from "@distilled.cloud/cloudflare/cache";
 import { expect } from "@effect/vitest";
@@ -128,5 +129,37 @@ describe.sequential("RegionalTieredCache", () => {
         const restored = yield* getRegionalTieredCache(zoneId);
         expect(restored.value).toEqual("off");
       }).pipe(logLevel),
+  );
+
+  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+  // API for this per-zone setting, so `list()` enumerates every zone via
+  // `listAllZones` and reads the singleton in each. Regional Tiered Cache is
+  // Enterprise-only, so non-entitled zones surface `SettingUnavailableForPlan`
+  // and are skipped — on a non-Enterprise account the result is well-formed
+  // (often empty). The "contains the test zone" assertion only holds when an
+  // Enterprise zone id is supplied via env.
+  test.provider("list enumerates the setting across entitled zones", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.RegionalTieredCache,
+      );
+      const all = yield* provider.list();
+
+      // Always well-formed: an array whose entries match the Attributes shape.
+      expect(Array.isArray(all)).toBe(true);
+      for (const row of all) {
+        expect(typeof row.zoneId).toBe("string");
+        expect(typeof row.value).toBe("string");
+      }
+
+      // On an Enterprise account, the entitled zone is enumerated.
+      if (enterpriseZoneId) {
+        expect(all.some((s) => s.zoneId === enterpriseZoneId)).toBe(true);
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
   );
 });

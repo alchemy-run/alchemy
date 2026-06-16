@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const ZoneCustomNameserversTypeId =
   "Cloudflare.Zone.CustomNameservers" as const;
@@ -124,6 +126,41 @@ export const isZoneCustomNameservers = (
 export const ZoneCustomNameserversProvider = () =>
   Provider.succeed(ZoneCustomNameservers, {
     stables: ["zoneId", "initialEnabled", "initialNsSet"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its custom-nameserver config.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          zones.getCustomNameserver({ zoneId }).pipe(
+            Effect.map((observed) => {
+              // Only zones actively using account custom nameservers are
+              // worth enumerating — a disabled (default) toggle has
+              // nothing to restore on destroy.
+              if (!(observed.enabled ?? false)) return undefined;
+              return toAttributes(
+                zoneId,
+                observed,
+                observed.enabled ?? false,
+                observed.nsSet ?? undefined,
+              );
+            }),
+            // ACNS is a Business/Enterprise feature — plan-gated zones
+            // reject with `Forbidden`; zones deleted out-of-band 404 with
+            // `InvalidZoneIdentifier`. Skip both.
+            Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ZoneCustomNameserversAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       // zoneId is the resource's identity; compare only once both sides

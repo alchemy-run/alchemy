@@ -1,11 +1,14 @@
 import * as speed from "@distilled.cloud/cloudflare/speed";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const SpeedTestScheduleTypeId = "Cloudflare.Speed.TestSchedule" as const;
 type SpeedTestScheduleTypeId = typeof SpeedTestScheduleTypeId;
@@ -167,6 +170,66 @@ const normalizeUrl = (url: string): string => {
 export const SpeedTestScheduleProvider = () =>
   Provider.succeed(SpeedTestSchedule, {
     stables: ["zoneId", "url", "region"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Schedules live inside a zone and are keyed per `(url, region)` —
+      // there is no account-wide enumeration API. Fan out over every zone,
+      // enumerate the zone's Observatory pages, and resolve each page's
+      // schedule with the exact `(url, region)` keying `read` uses.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          speed.listPages.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).flatMap((p) =>
+                  p.url
+                    ? [
+                        {
+                          url: p.url,
+                          region:
+                            (p.region?.value as SpeedTestRegion | undefined) ??
+                            DEFAULT_REGION,
+                        },
+                      ]
+                    : [],
+                ),
+              ),
+            ),
+            Effect.flatMap((pages) =>
+              Effect.forEach(
+                pages,
+                ({ url, region }) =>
+                  getSchedule(zone.id, url, region).pipe(
+                    Effect.map((observed) =>
+                      observed
+                        ? toAttributes(observed, zone.id, url, region)
+                        : undefined,
+                    ),
+                    // Plan-gated zone rejects the schedule route; skip it.
+                    Effect.catchTag("Forbidden", () =>
+                      Effect.succeed(undefined),
+                    ),
+                  ),
+                { concurrency: 10 },
+              ),
+            ),
+            Effect.map((items) =>
+              items.filter(
+                (item): item is SpeedTestScheduleAttributes =>
+                  item !== undefined,
+              ),
+            ),
+            // Plan-gated / partial zones reject the pages route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news }) {
       const o = olds as SpeedTestScheduleProps | undefined;

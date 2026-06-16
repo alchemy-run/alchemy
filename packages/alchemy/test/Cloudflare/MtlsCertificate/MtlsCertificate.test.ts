@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";
 import { expect } from "@effect/vitest";
@@ -116,6 +117,32 @@ test.provider("replaces the certificate when the PEM changes", (stack) =>
     yield* stack.destroy();
 
     yield* waitForDelete(accountId, replaced.mtlsCertificateId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed mTLS certificate", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const cert = yield* stack.deploy(
+      Cloudflare.MtlsCertificate("ListCert", {
+        ca: true,
+        certificates: CA_CERT_1,
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.MtlsCertificate);
+    const all = yield* provider.list();
+
+    expect(
+      all.some((c) => c.mtlsCertificateId === cert.mtlsCertificateId),
+    ).toBe(true);
+
+    yield* stack.destroy();
+
+    yield* waitForDelete(accountId, cert.mtlsCertificateId);
   }).pipe(logLevel),
 );
 

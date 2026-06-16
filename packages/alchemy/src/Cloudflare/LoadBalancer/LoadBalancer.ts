@@ -8,7 +8,9 @@ import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const LoadBalancerTypeId = "Cloudflare.LoadBalancer" as const;
 type LoadBalancerTypeId = typeof LoadBalancerTypeId;
@@ -328,12 +330,36 @@ export const LoadBalancerProvider = () =>
         })
         .pipe(Effect.catchTag("LoadBalancerNotFound", () => Effect.void));
     }),
+
+    // Load balancers are zone-scoped; enumerate every zone in the account and
+    // exhaustively paginate each zone's load balancers, hydrating each into the
+    // same Attributes shape `read` returns. Zones without the Load Balancing
+    // subscription reject the route (Forbidden) and are skipped.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          loadBalancers.listLoadBalancers.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((lb) => toAttributes(lb, zone.id)),
+              ),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 type ObservedLoadBalancer =
   | loadBalancers.GetLoadBalancerResponse
   | loadBalancers.CreateLoadBalancerResponse
-  | loadBalancers.UpdateLoadBalancerResponse;
+  | loadBalancers.UpdateLoadBalancerResponse
+  | loadBalancers.ListLoadBalancersResponse["result"][number];
 
 /**
  * Read a load balancer by id, mapping "gone" (`LoadBalancerNotFound`,

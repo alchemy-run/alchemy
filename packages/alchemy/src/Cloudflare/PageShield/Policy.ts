@@ -1,13 +1,16 @@
 import * as pageShield from "@distilled.cloud/cloudflare/page-shield";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const PageShieldPolicyTypeId = "Cloudflare.PageShield.Policy" as const;
 type PageShieldPolicyTypeId = typeof PageShieldPolicyTypeId;
@@ -217,6 +220,34 @@ export const PageShieldPolicyProvider = () =>
         ...desired,
       });
       return toAttributes(zoneId, updated);
+    }),
+
+    list: Effect.fn(function* () {
+      // Page Shield policies are zone-scoped
+      // (`/zones/{zone_id}/page_shield/policies`). Fan out across every
+      // zone in the account, exhaustively paginate each, and hydrate into
+      // the same Attributes shape `read` produces. Zones without Page
+      // Shield entitlement reject with the typed `Forbidden` tag — skip
+      // them rather than failing the whole enumeration.
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          pageShield.listPolicies.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((policy) =>
+                  toAttributes(zone.id, policy),
+                ),
+              ),
+            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
     }),
 
     delete: Effect.fn(function* ({ output }) {

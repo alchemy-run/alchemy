@@ -4,7 +4,9 @@ import * as Predicate from "effect/Predicate";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const BotManagementTypeId = "Cloudflare.BotManagement" as const;
 type BotManagementTypeId = typeof BotManagementTypeId;
@@ -253,6 +255,32 @@ type SettingsKey = (typeof SETTINGS_KEYS)[number];
 export const BotManagementProvider = () =>
   Provider.succeed(BotManagement, {
     stables: ["zoneId", "initialSettings"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its bot-management config (every
+      // live zone always has exactly one).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          // `observe` maps a dead zone (`InvalidRoute`) to undefined; a
+          // plan-gated zone forbids the read — skip both.
+          observe(zoneId).pipe(
+            Effect.map((observed) =>
+              observed === undefined
+                ? undefined
+                : toAttributes(zoneId, observed, pickSettings(observed)),
+            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is BotManagementAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as BotManagementProps;

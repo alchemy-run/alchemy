@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -212,6 +213,54 @@ export const UserProvider = () =>
 
       return {
         stables: ["userArn", "userName", "userId"],
+        list: () =>
+          Effect.gen(function* () {
+            // IAM is global; `listUsers` enumerates every user in the
+            // account. Paginate exhaustively, then hydrate each user's
+            // managed/inline policies and tags (the list summary omits
+            // them) to produce the same Attributes shape `read` returns.
+            const users = yield* iam.listUsers.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.Users ?? []),
+              ),
+            );
+
+            const hydrated = yield* Effect.forEach(
+              users,
+              (user) =>
+                Effect.gen(function* () {
+                  const [managedPolicyArns, inlinePolicies, tags] =
+                    yield* Effect.all([
+                      readManagedPolicies(user.UserName),
+                      readInlinePolicies(user.UserName),
+                      readTags(user.UserName),
+                    ]);
+                  return {
+                    userArn: user.Arn,
+                    userName: user.UserName,
+                    userId: user.UserId,
+                    path: user.Path,
+                    permissionsBoundary:
+                      user.PermissionsBoundary?.PermissionsBoundaryArn,
+                    managedPolicyArns,
+                    inlinePolicies,
+                    tags,
+                  };
+                }).pipe(
+                  // A user may be deleted concurrently mid-hydration.
+                  Effect.catchTag("NoSuchEntityException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+
+            return hydrated.filter(
+              (attrs): attrs is NonNullable<typeof attrs> =>
+                attrs !== undefined,
+            );
+          }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (

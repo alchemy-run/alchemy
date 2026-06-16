@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -195,6 +196,39 @@ export const PagesDeploymentProvider = () =>
         ? toAttributes(observed, output.accountId, output.projectName)
         : undefined;
     }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Deployments are sub-resources keyed by Pages project, with no
+      // account-wide deployment enumeration API. Enumerate every project
+      // (account-scoped) first, then fan out and list each project's
+      // deployments, paginating exhaustively.
+      const projects = yield* pages.listProjects.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.result ?? []),
+        ),
+        // Account without a Pages entitlement can't list projects → nothing.
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      );
+      const rows = yield* Effect.forEach(
+        projects,
+        (project) =>
+          pages.listProjectDeployments
+            .pages({ accountId, projectName: project.name })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? []).map((deployment) =>
+                    toAttributes(deployment, accountId, project.name),
+                  ),
+                ),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
@@ -321,8 +355,24 @@ const awaitDeployment = (
     return observed;
   });
 
+/**
+ * Minimal structural shape `toAttributes` reads — satisfied by both the
+ * get/create deployment responses and a `listProjectDeployments` row.
+ */
+type DeploymentAttributesSource = {
+  readonly id: string;
+  readonly shortId: string;
+  readonly environment: string;
+  readonly url: string;
+  readonly deploymentTrigger: {
+    readonly metadata: { readonly branch: string };
+  };
+  readonly latestStage: { readonly name: string; readonly status: string };
+  readonly createdOn: string;
+};
+
 const toAttributes = (
-  deployment: ObservedDeployment,
+  deployment: DeploymentAttributesSource,
   accountId: string,
   projectName: string,
 ): PagesDeploymentAttributes => ({

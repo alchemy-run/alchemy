@@ -1,6 +1,7 @@
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Topic } from "@/AWS/SNS";
+import * as Provider from "@/Provider";
 import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as SNS from "@distilled.cloud/aws/sns";
@@ -207,6 +208,32 @@ describe("AWS.SNS.Topic", () => {
         yield* stack.destroy();
         yield* assertTopicDeleted(takenOver.topicArn);
       }),
+  );
+
+  // Canonical `list()` test (AWS account/region-scoped collection): deploy a
+  // real topic, resolve the provider from context via the typed
+  // `Provider.findProvider`, call `list()`, and assert the deployed topic
+  // appears in the exhaustively-paginated result.
+  test.provider("list enumerates the deployed topic", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const topic = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Topic("ListTopic", {
+            topicName: "alchemy-test-sns-topic-list",
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Topic);
+      const all = yield* provider.list();
+
+      expect(all.some((t) => t.topicArn === topic.topicArn)).toBe(true);
+
+      yield* stack.destroy();
+      yield* assertTopicDeleted(topic.topicArn);
+    }),
   );
 
   class TopicStillExists extends Data.TaggedError("TopicStillExists") {}

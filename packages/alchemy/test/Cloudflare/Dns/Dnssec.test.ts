@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import { expect } from "@effect/vitest";
@@ -173,6 +174,46 @@ describe.sequential("Dnssec", () => {
         yield* stack.destroy();
         const after = yield* getDnssec(zoneId);
         expect(family(after.status)).toEqual("disabled");
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+
+  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+  // API for per-zone DNSSEC, so `list()` enumerates every zone via
+  // `listAllZones` and reads each one's config, skipping disabled zones
+  // (which `read` treats as "not created"). Enable DNSSEC on the test zone
+  // so it appears in the result, assert it's present, then restore.
+  test.provider(
+    "list enumerates active DNSSEC across zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
+
+        yield* stack.destroy();
+        yield* normalizeDisabled(zoneId);
+
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Dnssec("ZoneDnssec", { zoneId });
+          }),
+        );
+
+        const provider = yield* Provider.findProvider(Cloudflare.Dnssec);
+        const all = yield* provider.list();
+
+        expect(all.length).toBeGreaterThan(0);
+        expect(all.some((d) => d.zoneId === zoneId)).toBe(true);
+
+        yield* stack.destroy();
+        // Restore the disabled baseline (eventually consistent).
+        const restored = yield* getDnssec(zoneId).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (o) => family(o.status) === "disabled",
+            times: 15,
+          }),
+        );
+        expect(family(restored.status)).toEqual("disabled");
       }).pipe(logLevel),
     { timeout: 300_000 },
   );

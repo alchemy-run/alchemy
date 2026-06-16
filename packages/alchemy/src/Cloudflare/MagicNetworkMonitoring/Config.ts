@@ -224,6 +224,16 @@ export const MagicNetworkMonitoringConfigProvider = () =>
         Effect.catchTag("MnmConfigNotFound", () => Effect.void),
       );
     }),
+
+    // Account singleton — there is exactly one MNM config per account and
+    // only a per-account `getConfig`. Mirror `read`: return the one-element
+    // array when the config exists, `[]` when it is unset (HTTP 200 with
+    // `result: null`, which `observe` maps to `undefined`).
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = observe(yield* mnm.getConfig({ accountId }));
+      return observed === undefined ? [] : [toAttributes(observed, accountId)];
+    }),
   });
 
 /**

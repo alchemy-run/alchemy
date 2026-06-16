@@ -284,6 +284,34 @@ export const AccessPolicyProvider = () =>
         updatedAt: ensured.updatedAt ?? undefined,
       };
     }),
+    // Account-scoped collection (pattern (b)): enumerate every reusable
+    // Access policy in the ambient account, exhaustively paginated, and
+    // hydrate each into the exact `read` Attributes shape. Items missing the
+    // mandatory id are skipped (typed per-item drop).
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listAccessPolicies.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).flatMap((raw) => {
+              const observed = toObserved(raw as RawPolicy);
+              if (!observed.id) return [];
+              return [
+                {
+                  policyId: observed.id,
+                  name: observed.name ?? "",
+                  decision: observed.decision ?? "allow",
+                  accountId,
+                  createdAt: observed.createdAt ?? undefined,
+                  updatedAt: observed.updatedAt ?? undefined,
+                },
+              ];
+            }),
+          ),
+        ),
+      );
+    }),
     delete: Effect.fn(function* ({ output }) {
       yield* zeroTrust
         .deleteAccessPolicy({

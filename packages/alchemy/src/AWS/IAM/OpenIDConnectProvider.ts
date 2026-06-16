@@ -94,8 +94,42 @@ export const OpenIDConnectProviderProvider = () =>
         return response;
       });
 
+      const hydrate = Effect.fn(function* (providerArn: string) {
+        const provider = yield* readProvider(providerArn);
+        if (!provider?.Url) {
+          return undefined;
+        }
+        const tags = yield* iam.listOpenIDConnectProviderTags({
+          OpenIDConnectProviderArn: providerArn,
+        });
+        return {
+          openIDConnectProviderArn: providerArn,
+          url: provider.Url,
+          clientIDList: provider.ClientIDList ?? [],
+          thumbprintList: provider.ThumbprintList ?? [],
+          tags: toTagRecord(tags.Tags),
+        };
+      });
+
       return {
         stables: ["openIDConnectProviderArn"],
+        // IAM is global; `listOpenIDConnectProviders` returns ARNs only, so
+        // hydrate each into the full Attributes shape `read` produces.
+        list: () =>
+          Effect.gen(function* () {
+            const { OpenIDConnectProviderList } =
+              yield* iam.listOpenIDConnectProviders({});
+            const arns = (OpenIDConnectProviderList ?? [])
+              .map((entry) => entry.Arn)
+              .filter((arn): arn is string => arn != null);
+            const rows = yield* Effect.forEach(arns, hydrate, {
+              concurrency: 10,
+            });
+            const result: OpenIDConnectProvider["Attributes"][] = rows.filter(
+              (row): row is NonNullable<typeof row> => row !== undefined,
+            );
+            return result;
+          }),
         diff: Effect.fn(function* ({ olds, news }) {
           if (!isResolved(news)) return;
           if (olds.url !== news.url) {

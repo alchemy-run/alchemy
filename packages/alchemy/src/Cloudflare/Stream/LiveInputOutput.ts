@@ -1,6 +1,7 @@
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -224,6 +225,46 @@ export const StreamLiveInputOutputProvider = () =>
         enabled: desiredEnabled,
       });
       return toAttributes(updated, observedAccount, liveInputId);
+    }),
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Parent fan-out: outputs are sub-resources of a live input and
+      // have no account-wide enumeration endpoint. Enumerate every live
+      // input on the account, then list each input's outputs.
+      // Cloudflare returns this list either wrapped (`{ liveInputs: [...] }`)
+      // or as a bare `result` array depending on the account — handle both.
+      const inputs = yield* stream.listLiveInputs({ accountId });
+      const liveInputIds = (
+        Array.isArray(inputs) ? inputs : (inputs.liveInputs ?? [])
+      )
+        .map((input) => input.uid)
+        .filter((uid): uid is string => typeof uid === "string");
+
+      const rows = yield* Effect.forEach(
+        liveInputIds,
+        (liveInputId) =>
+          stream.listLiveInputOutputs
+            .pages({
+              accountId,
+              liveInputIdentifier: liveInputId,
+            })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  page.result.map((observed) =>
+                    toAttributes(observed, accountId, liveInputId),
+                  ),
+                ),
+              ),
+              // A live input deleted between enumeration and listing its
+              // outputs counts as having no outputs.
+              Effect.catchTag("LiveInputNotFound", () => Effect.succeed([])),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
     }),
 
     delete: Effect.fn(function* ({ output }) {

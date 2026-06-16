@@ -110,6 +110,17 @@ export const StreamWebhookProvider = () =>
       return attrs;
     }),
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-level singleton: the account has at most one Stream
+      // webhook, so enumerate by reading that single slot — return a
+      // one-element array when configured, [] when unset. Exactly
+      // mirrors `read`.
+      const observed = yield* getWebhook(accountId);
+      if (observed === undefined) return [];
+      return [toAttributes(observed, accountId)];
+    }),
+
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

@@ -153,6 +153,52 @@ export const Tunnel = Resource<Tunnel>("Cloudflare.Tunnel");
 export const TunnelProvider = () =>
   Provider.succeed(Tunnel, {
     stables: ["tunnelId", "accountTag", "accountId"],
+    // Account collection: enumerate every cfd_tunnel in the account, skip
+    // deleted tunnels (match `read`/`findTunnelByName`), exhaustively
+    // paginate, then hydrate each into the exact `read` Attributes shape.
+    // The token is fetched per-tunnel with bounded concurrency; a tunnel
+    // whose token is gone is dropped (typed per-item not-found).
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const tunnels = yield* zeroTrust.listTunnels
+        .pages({ accountId, isDeleted: false, tunTypes: ["cfd_tunnel"] })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).filter(
+                (t): t is typeof t & { id: string } => !!t.id && !t.deletedAt,
+              ),
+            ),
+          ),
+        );
+      const rows = yield* Effect.forEach(
+        tunnels,
+        (t) =>
+          zeroTrust
+            .getTunnelCloudflaredToken({ accountId, tunnelId: t.id })
+            .pipe(
+              Effect.map((token): Tunnel["Attributes"] => ({
+                tunnelId: t.id,
+                tunnelName: t.name ?? t.id,
+                accountTag: t.accountTag ?? undefined,
+                accountId,
+                createdAt: t.createdAt ?? undefined,
+                deletedAt: t.deletedAt ?? undefined,
+                configSrc: ((t as { configSrc?: "cloudflare" | "local" | null })
+                  .configSrc ?? "cloudflare") as "cloudflare" | "local",
+                token: Redacted.make(token),
+              })),
+              Effect.catchTag("TunnelTokenNotFound", () =>
+                Effect.succeed(undefined),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is Tunnel["Attributes"] => row !== undefined,
+      );
+    }),
     diff: Effect.fn(function* ({ id, olds = {}, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;

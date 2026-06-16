@@ -262,6 +262,26 @@ export const CatalogSyncProvider = () =>
         })
         .pipe(Effect.catchTag("CatalogSyncNotFound", () => Effect.void));
     }),
+
+    // Account-scoped collection: exhaustively paginate the catalog-sync list
+    // API. `deleteDestination` is an alchemy-only prop with no cloud
+    // representation, so it defaults to `true`. Magic Cloud Networking is an
+    // entitlement-gated add-on; an unentitled account rejects the list with
+    // the typed `FeatureNotEnabled` error — treat that as "nothing to list".
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* mcn.listCatalogSyncs.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((sync) =>
+              toAttributes(sync, accountId, true),
+            ),
+          ),
+        ),
+        Effect.catchTag("FeatureNotEnabled", () => Effect.succeed([])),
+      );
+    }),
   });
 
 type ObservedSync = mcn.GetCatalogSyncResponse | mcn.CreateCatalogSyncResponse;

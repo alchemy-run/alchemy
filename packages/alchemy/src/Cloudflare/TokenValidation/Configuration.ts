@@ -8,7 +8,9 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const TokenConfigurationTypeId =
   "Cloudflare.TokenValidation.Configuration" as const;
@@ -202,6 +204,30 @@ export const isTokenConfiguration = (
 export const TokenConfigurationProvider = () =>
   Provider.succeed(TokenConfiguration, {
     stables: ["configId", "zoneId", "tokenType", "createdAt"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Configurations are zone-scoped; the list op is keyed per zone.
+      // Enumerate every zone, fan out the per-zone list, and flatten.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          tokenValidation.listConfigurations.items({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).map((c) => toAttributes(c, zone.id)),
+            ),
+            // JWT validation is entitlement-gated and freshly minted tokens
+            // can briefly 403 — skip zones we can't enumerate.
+            Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () =>
+              Effect.succeed([]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

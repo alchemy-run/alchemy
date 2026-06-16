@@ -6,7 +6,9 @@ import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const LeakedCredentialDetectionTypeId =
   "Cloudflare.LeakedCredentialCheck.Detection" as const;
@@ -112,6 +114,44 @@ export const isLeakedCredentialDetection = (
 export const LeakedCredentialDetectionProvider = () =>
   Provider.succeed(LeakedCredentialDetection, {
     stables: ["detectionId", "zoneId"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Detections live inside a zone (`/zones/{id}/.../detections`) with
+      // no account-wide enumeration API — fan out across every zone and
+      // exhaustively paginate the per-zone list.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          lcc.listDetections.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map(
+                  (d): LeakedCredentialDetectionAttributes =>
+                    toAttributes(zone.id, d),
+                ),
+              ),
+            ),
+            // Zones without the LCC toggle on refuse all detection reads;
+            // a freshly-minted scoped token can also 403 mid edge-
+            // propagation. Either way the zone contributes nothing.
+            Effect.catchTag(
+              "LeakedCredentialChecksDisabled",
+              (): Effect.Effect<LeakedCredentialDetectionAttributes[]> =>
+                Effect.succeed([]),
+            ),
+            Effect.catchTag(
+              "Forbidden",
+              (): Effect.Effect<LeakedCredentialDetectionAttributes[]> =>
+                Effect.succeed([]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as LeakedCredentialDetectionProps;

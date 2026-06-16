@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -61,6 +62,42 @@ export const SigningCertificate = Resource<SigningCertificate>(
 export const SigningCertificateProvider = () =>
   Provider.succeed(SigningCertificate, {
     stables: ["certificateId"],
+    // IAM is a global service. `listSigningCertificates` requires a `UserName`,
+    // so we enumerate every IAM user first (paginated) and then list each
+    // user's signing certificates (also paginated) with bounded concurrency.
+    // The list response carries the full certificate body, so each entry maps
+    // directly to the `Attributes` shape `read` returns without further
+    // hydration.
+    list: Effect.fn(function* () {
+      const users = yield* iam.listUsers.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) => page.Users ?? []),
+        ),
+      );
+      const perUser = yield* Effect.forEach(
+        users,
+        (user) =>
+          iam.listSigningCertificates.pages({ UserName: user.UserName }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk)
+                .flatMap((page) => page.Certificates ?? [])
+                .map((cert) => ({
+                  userName: cert.UserName,
+                  certificateId: cert.CertificateId,
+                  certificateBody: cert.CertificateBody,
+                  status: cert.Status,
+                  uploadDate: cert.UploadDate,
+                })),
+            ),
+            // The user may be deleted between enumeration and per-user list.
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return perUser.flat();
+    }),
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;
       if (

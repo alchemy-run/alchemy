@@ -1,12 +1,13 @@
 import * as eks from "@distilled.cloud/aws/eks";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface AccessPolicyAssociation {
   /**
@@ -110,6 +111,39 @@ export const AccessEntryProvider = () =>
       if ((olds.type ?? "STANDARD") !== (news.type ?? "STANDARD")) {
         return { action: "replace" } as const;
       }
+    }),
+    // Enumerate every access entry across every cluster in the account/region.
+    // `listAccessEntries` requires a cluster name, so enumerate clusters first
+    // (`listClusters`), then list access entry principal ARNs per cluster, then
+    // hydrate each one through `readAccessEntry` (describe + associated policies)
+    // to produce the full `read`-shaped Attributes. All pagination is exhausted.
+    list: Effect.fn(function* () {
+      const clusterNames = yield* eks.listClusters.items({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+      );
+
+      const perCluster = yield* Effect.forEach(
+        clusterNames,
+        (clusterName) =>
+          eks.listAccessEntries.items({ clusterName }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) => Array.from(chunk)),
+            Effect.flatMap((principalArns) =>
+              Effect.forEach(
+                principalArns,
+                (principalArn) =>
+                  readAccessEntry({ clusterName, principalArn }),
+                { concurrency: 5 },
+              ),
+            ),
+          ),
+        { concurrency: 5 },
+      );
+
+      return perCluster
+        .flat()
+        .filter((entry): entry is NonNullable<typeof entry> => entry != null);
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const state = yield* readAccessEntry({

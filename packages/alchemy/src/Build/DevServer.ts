@@ -145,6 +145,9 @@ export const LiveDevServerProvider = () =>
         diff: () => Effect.succeed({ action: "noop" }),
         reconcile: () => Effect.succeed({}),
         delete: () => Effect.void,
+        // Non-listable: a DevServer is a local dev-server child process, not a
+        // cloud resource. There is no remote enumeration API.
+        list: () => Effect.succeed([]),
       }),
     ),
   );
@@ -273,6 +276,11 @@ export const LocalDevServerProvider = () =>
         delete: Effect.fn(function* ({ id }) {
           yield* stop(id);
         }),
+        // Non-listable: a DevServer is a local dev-server child process, not a
+        // cloud resource. There is no remote enumeration API. The in-memory
+        // `instances` map is sidecar-local process state, not a queryable
+        // resource collection, so list() returns [].
+        list: () => Effect.succeed([]),
       });
     }),
   );

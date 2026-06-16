@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as turnstile from "@distilled.cloud/cloudflare/turnstile";
 import { expect } from "@effect/vitest";
@@ -173,5 +174,32 @@ test.provider("recreates after out-of-band delete", (stack) =>
     yield* stack.destroy();
 
     yield* expectGone(accountId, healed.sitekey);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed widget", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const widget = yield* stack.deploy(
+      Cloudflare.TurnstileWidget("ListWidget", {
+        name: "alchemy-turnstile-list",
+        domains: [zoneName],
+        mode: "managed",
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.TurnstileWidget);
+    const all = yield* provider.list();
+
+    const found = all.find((w) => w.sitekey === widget.sitekey);
+    expect(found).toBeDefined();
+    expect(found?.name).toEqual("alchemy-turnstile-list");
+    expect(found?.domains).toEqual([zoneName]);
+    expect(found?.mode).toEqual("managed");
+    // list() hydrates the write-only secret to match the read shape.
+    expect(Redacted.value(found!.secret)).toBeTruthy();
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as emailSecurity from "@distilled.cloud/cloudflare/email-security";
 import { expect } from "@effect/vitest";
@@ -93,6 +94,63 @@ test.provider.skipIf(!entitled)(
         }),
       );
       expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Read-only: `list()` enumerates the account registry. On the standard
+// (non-entitled) testing account the provider catches the typed
+// `EmailSecurityNotEntitled` error and returns a well-typed empty array, so
+// this runs everywhere and proves the wiring (typed `findProvider`, exact
+// Attributes shape).
+test.provider(
+  "list returns the account impersonation registry",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.EmailSecurityImpersonationRegistryEntry,
+      );
+      const all = yield* provider.list();
+
+      expect(Array.isArray(all)).toBe(true);
+      for (const entry of all) {
+        expect(typeof entry.entryId).toBe("string");
+        expect(typeof entry.accountId).toBe("string");
+        expect(typeof entry.name).toBe("string");
+        expect(typeof entry.email).toBe("string");
+        expect(typeof entry.isEmailRegex).toBe("boolean");
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Entitled accounts: deploy a real entry and assert `list()` includes it.
+test.provider.skipIf(!entitled)(
+  "list enumerates the deployed impersonation registry entry",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.EmailSecurityImpersonationRegistryEntry(
+            "ListVip",
+            { name, email, comments: "list" },
+          );
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.EmailSecurityImpersonationRegistryEntry,
+      );
+      const all = yield* provider.list();
+      expect(all.some((e) => e.entryId === created.entryId)).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

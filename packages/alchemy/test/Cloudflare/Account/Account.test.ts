@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import { expect } from "@effect/vitest";
@@ -51,6 +52,31 @@ test.provider("inaccessible account surfaces a typed tag", (stack) =>
       .getAccount({ accountId: missingAccountId })
       .pipe(Effect.flip);
     expect(error._tag).toEqual("Unauthorized");
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+// Account creation is tenant-gated, so list() is verified read-only: a
+// standard token can LIST every account it can access, and the token's own
+// testing account must appear in the exhaustively-paginated result with the
+// exact `Attributes` shape `read` produces.
+test.provider("list enumerates accessible accounts (read-only)", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const provider = yield* Provider.findProvider(Cloudflare.Account);
+    const all = yield* provider.list();
+
+    expect(all.length).toBeGreaterThan(0);
+
+    const self = all.find((a) => a.accountId === accountId);
+    expect(self).toBeDefined();
+    expect(self?.name).toBeTruthy();
+    expect(["standard", "enterprise"]).toContain(self?.type);
+    expect(typeof self?.enforceTwofactor).toEqual("boolean");
 
     yield* stack.destroy();
   }).pipe(logLevel),

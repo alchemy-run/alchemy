@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Neon from "@/Neon";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import { assert, expect } from "@effect/vitest";
@@ -89,6 +90,28 @@ test.provider("create, update, delete hyperdrive", (stack) =>
     yield* stack.destroy();
 
     yield* waitForConfigToBeDeleted(hd.hyperdriveId, accountId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed hyperdrive", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const hd = yield* stack.deploy(
+      Effect.gen(function* () {
+        const project = yield* Neon.Project("ListProject");
+        return yield* Cloudflare.Hyperdrive("ListHyperdrive", {
+          origin: project.origin,
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.Hyperdrive);
+    const all = yield* provider.list();
+
+    expect(all.some((x) => x.hyperdriveId === hd.hyperdriveId)).toBe(true);
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );
 

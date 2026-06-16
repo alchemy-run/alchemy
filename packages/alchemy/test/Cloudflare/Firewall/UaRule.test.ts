@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as firewall from "@distilled.cloud/cloudflare/firewall";
 import { expect } from "@effect/vitest";
@@ -26,6 +27,7 @@ const zoneName =
 // (never Date.now()/random).
 const UA_LIFECYCLE_V1 = "AlchemyTestBot/1.0 (+https://alchemy.run)";
 const UA_LIFECYCLE_V2 = "AlchemyTestBot/2.0 (+https://alchemy.run)";
+const UA_LIST = "AlchemyListBot/1.0 (+https://alchemy.run)";
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -166,4 +168,40 @@ test.provider(
 
       yield* expectUaRuleGone(zoneId, initial.uaRuleId);
     }).pipe(logLevel),
+);
+
+// Canonical `list()` test (zone-scoped collection): UA rules live inside a
+// zone with no account-wide list, so `list()` enumerates every zone via
+// `listAllZones` and exhaustively paginates each. Deploy one rule and assert
+// it appears in the result, hydrated into the full `read` Attributes shape.
+test.provider("list enumerates UA rules across all zones", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
+
+    yield* stack.destroy();
+    yield* purgeUaRules(zoneId, [UA_LIST]);
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.UaRule("ListUaRule", {
+          zoneId,
+          userAgent: UA_LIST,
+          mode: "block",
+          description: "alchemy ua rule list test",
+        }).pipe(adopt(true));
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.UaRule);
+    const all = yield* provider.list();
+
+    const found = all.find((r) => r.uaRuleId === deployed.uaRuleId);
+    expect(found).toBeDefined();
+    expect(found?.zoneId).toEqual(zoneId);
+    expect(found?.userAgent).toEqual(UA_LIST);
+    expect(found?.mode).toEqual("block");
+
+    yield* stack.destroy();
+    yield* purgeUaRules(zoneId, [UA_LIST]);
+  }).pipe(logLevel),
 );

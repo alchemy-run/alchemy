@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as aiSecurity from "@distilled.cloud/cloudflare/ai-security";
 import { expect } from "@effect/vitest";
@@ -81,6 +82,33 @@ test.provider(
 
       yield* stack.destroy();
     }).pipe(logLevel),
+);
+
+// Canonical `list()` test (zone-scoped singleton): there is no account-wide
+// API for this per-zone list, so `list()` enumerates every zone via
+// `listAllZones` and reads the singleton in each, skipping zones that reject
+// with the typed `AiSecurityNotEntitled` / `ZoneNotAuthorized` / `Forbidden`
+// tags. On the unentitled testing account every zone is skipped, so the
+// result is an empty array — the assertion is that `list()` resolves to an
+// array (proving the typed skip path) rather than throwing. Presence of the
+// standing test zone is asserted only on an entitled account (env-gated).
+test.provider("list enumerates the custom topics across all zones", (stack) =>
+  Effect.gen(function* () {
+    const provider = yield* Provider.findProvider(
+      Cloudflare.AiSecurityCustomTopics,
+    );
+    const all = yield* provider.list();
+
+    expect(Array.isArray(all)).toBe(true);
+
+    if (entitledZoneId) {
+      expect(all.some((t) => t.zoneId === entitledZoneId)).toBe(true);
+    }
+
+    // `stack` is unused (the singleton always exists on every entitled zone),
+    // but keep the destroy bookends so the harness state stays clean.
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 test.provider.skipIf(!entitledZoneId)(

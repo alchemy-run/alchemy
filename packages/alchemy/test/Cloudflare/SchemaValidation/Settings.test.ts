@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as schemaValidation from "@distilled.cloud/cloudflare/schema-validation";
 import { expect } from "@effect/vitest";
@@ -112,6 +113,33 @@ test.provider(
       const restored = yield* getSettingOob(zoneId);
       expect(restored.validationDefaultMitigationAction).toEqual("none");
       expect(restored.validationOverrideMitigationAction ?? null).toEqual(null);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (zone-scoped singleton): there is no account-wide
+// API for this per-zone setting, so `list()` enumerates every zone via
+// `listAllZones` and reads the singleton in each. Assert the result is
+// non-empty and contains the standing test zone.
+test.provider(
+  "list enumerates the schema validation settings across all zones",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.SchemaValidationSettings,
+      );
+      const all = yield* provider.list();
+
+      expect(all.length).toBeGreaterThan(0);
+      expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+
+      // The singleton always exists on every zone, so nothing was deployed;
+      // keep the destroy bookends so the harness state stays clean.
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

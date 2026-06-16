@@ -1,5 +1,6 @@
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -107,6 +108,59 @@ export const TargetGroupProvider = () =>
             vpcId: targetGroup.VpcId!,
           };
         }),
+        // Target groups are account/region-scoped. Exhaustively paginate
+        // describeTargetGroups, then fetch tags per group (Attributes carry
+        // them) to produce the same shape `read` returns.
+        list: () =>
+          Effect.gen(function* () {
+            const targetGroups = yield* elbv2.describeTargetGroups
+              .pages({})
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) =>
+                    (page.TargetGroups ?? []).filter(
+                      (
+                        tg,
+                      ): tg is elbv2.TargetGroup & { TargetGroupArn: string } =>
+                        tg.TargetGroupArn != null,
+                    ),
+                  ),
+                ),
+              );
+            return yield* Effect.forEach(
+              targetGroups,
+              (tg) =>
+                Effect.gen(function* () {
+                  const tagDescriptions = yield* elbv2
+                    .describeTags({ ResourceArns: [tg.TargetGroupArn] })
+                    .pipe(
+                      Effect.catchTag("TargetGroupNotFoundException", () =>
+                        Effect.succeed(undefined),
+                      ),
+                    );
+                  const tags = Object.fromEntries(
+                    (tagDescriptions?.TagDescriptions?.[0]?.Tags ?? [])
+                      .filter(
+                        (t): t is { Key: string; Value: string } =>
+                          typeof t.Key === "string" &&
+                          typeof t.Value === "string",
+                      )
+                      .map((t) => [t.Key, t.Value]),
+                  );
+                  return {
+                    targetGroupArn: tg.TargetGroupArn as TargetGroupArn,
+                    targetGroupName: tg.TargetGroupName!,
+                    port: tg.Port!,
+                    protocol: tg.Protocol!,
+                    targetType: tg.TargetType!,
+                    vpcId: tg.VpcId!,
+                    tags,
+                  };
+                }),
+              { concurrency: 10 },
+            );
+          }),
         reconcile: Effect.fn(function* ({ id, news, session }) {
           const name = yield* toName(id, news);
           const desiredTags = {

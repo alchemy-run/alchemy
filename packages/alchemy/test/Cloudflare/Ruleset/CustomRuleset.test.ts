@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import { expect } from "@effect/vitest";
@@ -134,6 +135,83 @@ test.provider(
       yield* stack.destroy();
       const gone = yield* getRuleset(accountId, created.rulesetId);
       expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (account-scoped collection). `list()` enumerates the
+// account's rulesets, filters to `kind: custom`, and hydrates each into the
+// full `read` Attributes shape. Account-level custom WAF phases require an
+// Enterprise plan: unentitled accounts (the standard testing account) fail the
+// create with the typed `PhaseNotEntitled` error, so we still verify `list()`
+// returns an array without throwing; entitled accounts additionally deploy a
+// ruleset and assert it appears in the exhaustively-paginated result.
+test.provider(
+  "list enumerates the deployed custom ruleset",
+  (stack) =>
+    Effect.gen(function* () {
+      const accountId = yield* resolveAccountId;
+
+      yield* stack.destroy();
+
+      const probe = yield* rulesets
+        .createRulesetForAccount({
+          accountId,
+          kind: "custom",
+          name: "alchemy-customruleset-list-probe",
+          phase,
+          rules: [],
+        })
+        .pipe(
+          Effect.retry({
+            while: (e) => e._tag === "Forbidden",
+            schedule: forbiddenRetrySchedule,
+            times: 8,
+          }),
+          Effect.result,
+        );
+
+      if (Result.isFailure(probe)) {
+        // Unentitled — assert the typed entitlement tag, then verify the
+        // provider's `list()` still enumerates without error (returns []).
+        expect(probe.failure._tag).toEqual("PhaseNotEntitled");
+        const provider = yield* Provider.findProvider(Cloudflare.CustomRuleset);
+        const all = yield* provider.list();
+        expect(Array.isArray(all)).toBe(true);
+        yield* stack.destroy();
+        return;
+      }
+
+      // Entitled — clean up the probe and run the full list assertion.
+      yield* rulesets
+        .deleteRulesetForAccount({ accountId, rulesetId: probe.success.id })
+        .pipe(Effect.catchTag("RulesetNotFound", () => Effect.void));
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.CustomRuleset("ListWafRules", {
+            phase,
+            description: "alchemy custom ruleset list",
+            rules: [
+              {
+                description: "Block exploit probes",
+                expression: `lower(http.request.uri.path) contains "/.env"`,
+                action: "block",
+              },
+            ],
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.CustomRuleset);
+      const all = yield* provider.list();
+
+      expect(all.some((r) => r.rulesetId === deployed.rulesetId)).toBe(true);
+      const found = all.find((r) => r.rulesetId === deployed.rulesetId);
+      expect(found?.kind).toEqual("custom");
+      expect(found?.rules).toHaveLength(1);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

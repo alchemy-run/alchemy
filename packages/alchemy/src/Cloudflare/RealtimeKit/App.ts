@@ -172,6 +172,54 @@ export const RealtimeKitAppProvider = () =>
         `Cloudflare RealtimeKit has no delete API — app "${output.name}" (${output.appId}) was removed from state but still exists on account ${output.accountId}.`,
       );
     }),
+    // Account-scoped collection: enumerate every RealtimeKit app on the
+    // account, exhaustively paginated, and hydrate each into the exact `read`
+    // Attributes shape. Unentitled accounts reject the list with the typed
+    // `Forbidden` (403) which propagates — the suite gates the live assertion
+    // behind an entitlement probe.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const apps = yield* listAllApps(accountId);
+      return apps.map((app) => toAttributes({ ...app, accountId }, accountId));
+    }),
+  });
+
+const LIST_PER_PAGE = 100;
+
+/**
+ * Exhaustively enumerate every RealtimeKit app in the account. The list op is
+ * not generated as a paginated method, so fetch the first page, derive the
+ * page count from `paging.totalCount`, then fan out the remaining pages with
+ * bounded concurrency.
+ */
+const listAllApps = (accountId: string) =>
+  Effect.gen(function* () {
+    const first = yield* realtimeKit.getApp({
+      accountId,
+      pageNo: 1,
+      perPage: LIST_PER_PAGE,
+    });
+    const apps = (first.data ?? []).filter(
+      (a): a is NonNullable<typeof a> => a !== null,
+    );
+    const total = first.paging?.totalCount ?? apps.length;
+    const pages = Math.ceil(total / LIST_PER_PAGE);
+    if (pages <= 1) return apps;
+    const rest = yield* Effect.forEach(
+      Array.from({ length: pages - 1 }, (_, i) => i + 2),
+      (pageNo) =>
+        realtimeKit
+          .getApp({ accountId, pageNo, perPage: LIST_PER_PAGE })
+          .pipe(
+            Effect.map((res) =>
+              (res.data ?? []).filter(
+                (a): a is NonNullable<typeof a> => a !== null,
+              ),
+            ),
+          ),
+      { concurrency: 10 },
+    );
+    return [...apps, ...rest.flat()];
   });
 
 /**

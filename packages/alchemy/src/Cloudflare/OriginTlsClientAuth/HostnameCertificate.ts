@@ -3,11 +3,14 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const OriginTlsClientAuthHostnameCertificateTypeId =
   "Cloudflare.OriginTlsClientAuth.HostnameCertificate" as const;
@@ -138,6 +141,33 @@ export const isOriginTlsClientAuthHostnameCertificate = (
 export const OriginTlsClientAuthHostnameCertificateProvider = () =>
   Provider.succeed(OriginTlsClientAuthHostnameCertificate, {
     stables: ["certificateId", "zoneId"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Per-hostname client certificates live inside a zone and are only
+      // enumerable per-zone — fan out over every zone in the account.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          originTls.listHostnameCertificates.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  // Match `read`: tombstoned (deleted / pending_deletion)
+                  // certificates no longer satisfy the desired state.
+                  .filter((c) => isLive(c.status))
+                  .map((c) => toAttributes(c, zone.id)),
+              ),
+            ),
+            // Plan-gated / partial zones reject the route; skip them.
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return undefined;

@@ -1,12 +1,14 @@
 import * as resourceTagging from "@distilled.cloud/cloudflare/resource-tagging";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { recordsEqual } from "../../Util/equal.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 
 const ZoneResourceTagsTypeId = "Cloudflare.Tags.ZoneResourceTags" as const;
@@ -149,6 +151,39 @@ export const ZoneResourceTagsProvider = () =>
   Provider.succeed(ZoneResourceTags, {
     stables: ["zoneId", "resourceType", "resourceId", "accessApplicationId"],
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // The account-wide `GET /accounts/{id}/tags/resources` enumerates
+      // every tagged resource in the account in one paginated call. The
+      // zone-scoped variants (the ones this resource manages) are exactly
+      // those that carry a `zoneId` in the response union; account-level
+      // variants (worker, kv_namespace, …) lack it and are filtered out.
+      return yield* resourceTagging.listResourceTaggings
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter((item): item is ZoneScopedTagging => "zoneId" in item)
+                .map(
+                  (item): ZoneResourceTagsAttributes => ({
+                    zoneId: item.zoneId,
+                    resourceType: item.type,
+                    resourceId: item.id,
+                    accessApplicationId:
+                      "accessApplicationId" in item
+                        ? item.accessApplicationId
+                        : undefined,
+                    tags: narrowTags(item.tags),
+                    etag: item.etag,
+                  }),
+                ),
+            ),
+          ),
+        );
+    }),
+
     diff: Effect.fn(function* ({ olds = {}, news }) {
       const o = olds as Partial<ZoneResourceTagsProps>;
       const n = news as ZoneResourceTagsProps;
@@ -276,6 +311,18 @@ export const ZoneResourceTagsProvider = () =>
       });
     }),
   });
+
+/**
+ * The zone-scoped variants of the `listResourceTaggings` response union —
+ * the items that carry a `zoneId` (dns_record, custom_hostname,
+ * custom_certificate, managed_client_certificate, access_application_policy,
+ * api_gateway_operation, zone). These are exactly the resources this provider
+ * manages tags for.
+ */
+type ZoneScopedTagging = Extract<
+  resourceTagging.ListResourceTaggingsResponse["result"][number],
+  { zoneId: string }
+>;
 
 /** Narrow distilled's `Record<string, unknown>` tag values to strings. */
 const narrowTags = (tags: Record<string, unknown>): Record<string, string> =>

@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { CachePolicy } from "@/AWS/CloudFront";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import { describe, expect } from "@effect/vitest";
@@ -78,6 +79,43 @@ describe("AWS.CloudFront.CachePolicy", () => {
 
         yield* stack.destroy();
         yield* assertCachePolicyDeleted(updated.cachePolicyId);
+      }),
+    { timeout: 300_000 },
+  );
+
+  test.provider.skipIf(!runLive)(
+    "list enumerates the deployed cache policy",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* CachePolicy("ListCachePolicy", {
+              comment: "list",
+              minTTL: 0,
+              defaultTTL: 60,
+              maxTTL: 3600,
+              parametersInCacheKeyAndForwardedToOrigin: {
+                EnableAcceptEncodingGzip: true,
+                EnableAcceptEncodingBrotli: true,
+                HeadersConfig: { HeaderBehavior: "none" },
+                CookiesConfig: { CookieBehavior: "none" },
+                QueryStringsConfig: { QueryStringBehavior: "none" },
+              },
+            });
+          }),
+        );
+
+        const provider = yield* Provider.findProvider(CachePolicy);
+        const all = yield* provider.list();
+
+        expect(
+          all.some((p) => p.cachePolicyId === deployed.cachePolicyId),
+        ).toBe(true);
+
+        yield* stack.destroy();
+        yield* assertCachePolicyDeleted(deployed.cachePolicyId);
       }),
     { timeout: 300_000 },
   );

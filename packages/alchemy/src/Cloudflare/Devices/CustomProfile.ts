@@ -1,6 +1,7 @@
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -489,6 +490,38 @@ export const DeviceCustomProfileProvider = () =>
           policyId: output.policyId,
         })
         .pipe(Effect.catchTag("DevicePolicyNotFound", () => Effect.void));
+    }),
+
+    // Account collection: enumerate every custom device profile in the
+    // ambient account, then hydrate each into the exact `read` Attributes
+    // shape (same `observeProfile` + `buildAttrs` path read uses, so the
+    // per-profile split-tunnel/fallback lists are fetched too). Bounded
+    // concurrency keeps the fan-out polite; a profile that vanishes
+    // mid-enumeration is dropped via the typed `DevicePolicyNotFound` map.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const items = yield* zeroTrust.listDevicePolicyCustoms
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) => page.result ?? []),
+          ),
+        );
+      const rows = yield* Effect.forEach(
+        items.filter((p) => p.policyId != null),
+        (p) =>
+          Effect.gen(function* () {
+            const observed = yield* observeProfile(accountId, p.policyId!);
+            return observed
+              ? yield* buildAttrs(accountId, observed)
+              : undefined;
+          }),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is DeviceCustomProfileAttributes => row !== undefined,
+      );
     }),
   });
 

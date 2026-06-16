@@ -309,6 +309,20 @@ export const QueueSubscriptionProvider = () =>
         })
         .pipe(Effect.catchTag("SubscriptionNotFound", () => Effect.void));
     }),
+    // Account collection — subscriptions are account-scoped. Exhaustively
+    // paginate `listSubscriptions` (response array is `result`) and hydrate
+    // each row into the same Attributes shape `read` returns.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* queues.listSubscriptions.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((sub) => toAttributes(sub, accountId)),
+          ),
+        ),
+      );
+    }),
   });
 
 type ObservedSubscription =

@@ -559,6 +559,50 @@ export const R2BucketProvider = () =>
           return applied.sort((a, b) => a.domain.localeCompare(b.domain));
         });
 
+      // R2's `listBuckets` is not modelled as paginated by distilled and its
+      // response omits a continuation cursor, so paginate exhaustively with the
+      // `startAfter` query param: keep fetching full pages (capped at 1000)
+      // until a short page signals the end.
+      const listBucketsInJurisdiction = (
+        accountId: string,
+        jurisdiction: R2Bucket.Jurisdiction,
+      ) =>
+        Effect.gen(function* () {
+          const all: {
+            name: string;
+            jurisdiction: R2Bucket.Jurisdiction;
+            storageClass: R2Bucket.StorageClass;
+            location: R2Bucket.Location | undefined;
+          }[] = [];
+          let startAfter: string | undefined = undefined;
+          const perPage = 1000;
+          for (;;) {
+            const response: r2.ListBucketsResponse = yield* r2.listBuckets({
+              accountId,
+              jurisdiction,
+              perPage,
+              startAfter,
+            });
+            const page = (response.buckets ?? []).filter(
+              (b): b is typeof b & { name: string } =>
+                typeof b.name === "string" && b.name !== "",
+            );
+            for (const b of page) {
+              all.push({
+                name: b.name,
+                jurisdiction: (b.jurisdiction ??
+                  jurisdiction) as R2Bucket.Jurisdiction,
+                storageClass: (b.storageClass ??
+                  "Standard") as R2Bucket.StorageClass,
+                location: normalizeLocation(b.location),
+              });
+            }
+            if (page.length < perPage) break;
+            startAfter = page[page.length - 1].name;
+          }
+          return all;
+        });
+
       const reconcileLifecycleRules = (
         bucketName: string,
         jurisdiction: R2Bucket.Jurisdiction,
@@ -605,6 +649,72 @@ export const R2BucketProvider = () =>
 
       return {
         stables: ["bucketName", "accountId"],
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            // R2 buckets are account-scoped but partitioned by jurisdiction, so
+            // enumerate each jurisdiction. Accounts not entitled to a given
+            // jurisdiction (e.g. `fedramp`) reject the route — treat as empty.
+            const jurisdictions: R2Bucket.Jurisdiction[] = [
+              "default",
+              "eu",
+              "fedramp",
+            ];
+            const perJurisdiction = yield* Effect.forEach(
+              jurisdictions,
+              (jurisdiction) =>
+                listBucketsInJurisdiction(accountId, jurisdiction).pipe(
+                  // An account not entitled to a jurisdiction rejects the list
+                  // route with `Forbidden` ("Access Denied") or `InvalidRoute`
+                  // — there are simply no buckets there, so treat as empty.
+                  // @ts-expect-error
+                  Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
+                    Effect.succeed([]),
+                  ),
+                ),
+              { concurrency: jurisdictions.length },
+            );
+            const buckets = perJurisdiction.flat();
+
+            // Hydrate each bucket into the exact `read` Attributes shape so the
+            // result is directly usable by `delete` (which needs `domains` to
+            // tear down custom domains).
+            return yield* Effect.forEach(
+              buckets,
+              (bucket) =>
+                Effect.gen(function* () {
+                  const domains =
+                    (yield* listCustomDomains(
+                      bucket.name,
+                      bucket.jurisdiction,
+                    )) ?? [];
+                  const lifecycleRules = yield* r2
+                    .getBucketLifecycle({
+                      accountId,
+                      bucketName: bucket.name,
+                      jurisdiction: bucket.jurisdiction,
+                    })
+                    .pipe(
+                      Effect.map((observed) =>
+                        (observed.rules ?? []).map(toLifecycleRule),
+                      ),
+                      Effect.catchTag("NoSuchBucket", () =>
+                        Effect.succeed([] as R2Bucket.LifecycleRule[]),
+                      ),
+                    );
+                  return {
+                    bucketName: bucket.name,
+                    storageClass: bucket.storageClass,
+                    jurisdiction: bucket.jurisdiction,
+                    location: bucket.location,
+                    accountId,
+                    domains,
+                    lifecycleRules,
+                  };
+                }),
+              { concurrency: 10 },
+            );
+          }),
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           if (!isResolved(news)) return undefined;
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -744,21 +854,25 @@ export const R2BucketProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          for (const domain of output.domains ?? []) {
-            yield* r2
-              .deleteBucketDomainCustom({
-                accountId: output.accountId,
-                bucketName: output.bucketName,
-                domain: domain.domain,
-                jurisdiction: output.jurisdiction,
-              })
-              .pipe(
-                Effect.catchTag(
-                  ["DomainNotFound", "NoSuchBucket"],
-                  () => Effect.void,
+          yield* Effect.all(
+            (output.domains ?? []).map((domain) =>
+              r2
+                .deleteBucketDomainCustom({
+                  accountId: output.accountId,
+                  bucketName: output.bucketName,
+                  domain: domain.domain,
+                  jurisdiction: output.jurisdiction,
+                })
+                .pipe(
+                  Effect.catchTag(
+                    ["DomainNotFound", "NoSuchBucket"],
+                    () => Effect.void,
+                  ),
                 ),
-              );
-          }
+            ),
+            { concurrency: "unbounded" },
+          );
+
           yield* emptyBucket(output.bucketName, output.jurisdiction);
           yield* r2
             .deleteBucket({

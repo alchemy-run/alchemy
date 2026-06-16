@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as managedTransforms from "@distilled.cloud/cloudflare/managed-transforms";
 import { expect } from "@effect/vitest";
@@ -273,5 +274,29 @@ describe.sequential("ManagedTransforms", () => {
         }
       }).pipe(logLevel),
     { timeout: 240_000 },
+  );
+
+  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+  // API for the managed-transforms catalog, so `list()` enumerates every zone
+  // via `listAllZones` and reads the singleton in each. Assert the result is
+  // non-empty and contains the standing test zone.
+  test.provider(
+    "list enumerates managed transforms across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
+
+        const provider = yield* Provider.findProvider(
+          Cloudflare.ManagedTransforms,
+        );
+        const all = yield* provider.list();
+
+        expect(all.length).toBeGreaterThan(0);
+        expect(all.some((t) => t.zoneId === zoneId)).toBe(true);
+
+        // `stack` is unused here (the singleton always exists on every zone),
+        // but keep the destroy bookend so the harness state stays clean.
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

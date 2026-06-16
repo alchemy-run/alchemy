@@ -243,6 +243,25 @@ export const AccountDnsSettingsProvider = () =>
   Provider.succeed(AccountDnsSettings, {
     stables: ["accountId", "initialSettings", "managedKeys"],
 
+    // Account singleton — the DNS settings object always exists for the
+    // ambient account. There is no enumeration API, so read the single
+    // object and return it as a one-element array (mirrors `read` with no
+    // prior output: the observed snapshot is its own `initialSettings`,
+    // nothing is being managed yet).
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed = yield* dns.getSettingAccount({ accountId });
+      const snapshot = toSnapshot(observed);
+      return [
+        {
+          accountId,
+          ...snapshot,
+          initialSettings: snapshot,
+          managedKeys: [],
+        } satisfies AccountDnsSettingsAttributes,
+      ];
+    }),
+
     diff: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // The settings object is an account singleton — a different

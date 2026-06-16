@@ -282,6 +282,26 @@ export const CloudIntegrationProvider = () =>
         })
         .pipe(Effect.catchTag("CloudIntegrationNotFound", () => Effect.void));
     }),
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection: the list response already carries the
+      // full per-integration shape `read` returns, so no per-item hydrate
+      // is needed. Paginate exhaustively and map each row to Attributes.
+      return yield* mcn.listCloudIntegrations.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((integration) =>
+              toAttributes(integration, accountId),
+            ),
+          ),
+        ),
+        // Magic Cloud Networking is an entitlement-gated add-on; accounts
+        // without it can't enumerate integrations — treat as empty.
+        Effect.catchTag("FeatureNotEnabled", () => Effect.succeed([])),
+      );
+    }),
   });
 
 const credentialKeys = [

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -139,6 +140,32 @@ test.provider("update name and config in place (same id)", (stack) =>
 
     yield* stack.destroy();
     yield* expectGone(accountId, initial.identityProviderId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed IdP", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Cloudflare.AccessIdentityProvider("ListOidc", {
+        name: "alchemy-zt-idp-list",
+        type: "oidc",
+        config: oidcConfig,
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(
+      Cloudflare.AccessIdentityProvider,
+    );
+    const all = yield* provider.list();
+
+    expect(
+      all.some((x) => x.identityProviderId === deployed.identityProviderId),
+    ).toBe(true);
+
+    yield* stack.destroy();
+    yield* expectGone(deployed.accountId, deployed.identityProviderId);
   }).pipe(logLevel),
 );
 

@@ -4,7 +4,9 @@ import * as Predicate from "effect/Predicate";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const ApiShieldConfigurationTypeId =
   "Cloudflare.ApiShield.Configuration" as const;
@@ -122,6 +124,42 @@ export const isApiShieldConfiguration = (
 export const ApiShieldConfigurationProvider = () =>
   Provider.succeed(ApiShieldConfiguration, {
     stables: ["zoneId", "initialAuthIdCharacteristics"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its configuration (it always exists,
+      // defaulting to an empty list, on every entitled zone).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          apiGateway.getConfiguration({ zoneId }).pipe(
+            Effect.map((observed) => {
+              const characteristics = toCharacteristics(
+                observed.authIdCharacteristics,
+              );
+              return toAttributes(
+                zoneId,
+                observed.authIdCharacteristics,
+                // A freshly listed item adopts its observed value as the
+                // pre-management baseline, mirroring a cold `read`.
+                characteristics,
+              );
+            }),
+            // API Shield is entitlement-gated and zones may be partial or
+            // deleted out-of-band — skip any zone we can't read.
+            Effect.catchTag(
+              ["NotEntitled", "InvalidObjectIdentifier", "Forbidden"],
+              () => Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ApiShieldConfigurationAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       const o = olds as ApiShieldConfigurationProps | undefined;

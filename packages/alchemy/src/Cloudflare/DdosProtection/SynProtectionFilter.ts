@@ -109,6 +109,30 @@ export const SynProtectionFilterProvider = () =>
   Provider.succeed(SynProtectionFilter, {
     stables: ["filterId", "accountId", "createdOn"],
 
+    // Account-scoped collection: paginate every filter in the ambient
+    // account. Accounts without the Advanced TCP Protection entitlement (or
+    // lacking read permission) yield no filters — treat the typed rejection
+    // as an empty enumeration rather than an error.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* ddos.listAdvancedTcpProtectionSynProtectionFilters
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((filter) =>
+                toAttributes(filter, accountId),
+              ),
+            ),
+          ),
+          Effect.catchTags({
+            AdvancedTcpProtectionNotEntitled: () => Effect.succeed([]),
+            Forbidden: () => Effect.succeed([]),
+          }),
+        );
+    }),
+
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

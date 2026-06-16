@@ -96,6 +96,51 @@ export const PolicyProvider = () =>
             ? state
             : Unowned(state);
         }),
+        // `listPolicies` REQUIRES a `Filter` (one policy type per call), so we
+        // fan out across every policy-type filter and hydrate each summary via
+        // `describePolicy` into the exact `read` shape. Degrades to `[]` when
+        // the account isn't an org management/delegated-admin account
+        // (`AWSOrganizationsNotInUseException`/`AccessDeniedException`) and skips
+        // disabled policy types per-filter.
+        list: () =>
+          Effect.gen(function* () {
+            const summaries = yield* Effect.forEach(
+              POLICY_TYPE_FILTERS,
+              (type) =>
+                retryOrganizations(
+                  collectPages(
+                    (NextToken) =>
+                      organizations.listPolicies({ Filter: type, NextToken }),
+                    (page) => page.Policies,
+                  ),
+                ).pipe(
+                  // Not an org management/delegated account → nothing to list.
+                  Effect.catchTag(
+                    [
+                      "AWSOrganizationsNotInUseException",
+                      "AccessDeniedException",
+                    ],
+                    () => Effect.succeed([] as organizations.PolicySummary[]),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+
+            const ids = summaries
+              .flat()
+              .map((summary) => summary.Id)
+              .filter((policyId): policyId is string => policyId != null);
+
+            const hydrated = yield* Effect.forEach(
+              ids,
+              (policyId) => readPolicyById(policyId),
+              { concurrency: 10 },
+            );
+
+            return hydrated.filter(
+              (policy): policy is Policy["Attributes"] => policy !== undefined,
+            );
+          }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const name = yield* toName(id, news);
           const desiredDescription = news.description ?? "";
@@ -195,6 +240,19 @@ export const PolicyProvider = () =>
       };
     }),
   );
+
+// The documented `ListPolicies` `Filter` values. `listPolicies` requires a
+// single policy type per call, so `list()` fans out across all of them.
+const POLICY_TYPE_FILTERS = [
+  "SERVICE_CONTROL_POLICY",
+  "RESOURCE_CONTROL_POLICY",
+  "DECLARATIVE_POLICY_EC2",
+  "BACKUP_POLICY",
+  "TAG_POLICY",
+  "CHATBOT_POLICY",
+  "AISERVICES_OPT_OUT_POLICY",
+  "SECURITYHUB_POLICY",
+] as const satisfies readonly organizations.PolicyType[];
 
 const toName = (id: string, props: { name?: string } = {}) =>
   createName(id, props.name, 128);

@@ -1,5 +1,6 @@
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { createHash } from "node:crypto";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -205,6 +206,45 @@ export const DeploymentProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["deploymentId", "restApiId"] as const,
+        // Deployments are sub-resources keyed by `restApiId`. Enumerate every
+        // RestApi in the account/region, then page every deployment under each
+        // one and flatten — yielding the same Attributes shape `read` returns.
+        list: () =>
+          Effect.gen(function* () {
+            const restApiIds = yield* ag.getRestApis.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.items ?? [])
+                    .map((api) => api.id)
+                    .filter((id): id is string => id != null),
+                ),
+              ),
+            );
+            const rows = yield* Effect.forEach(
+              restApiIds,
+              (restApiId) =>
+                ag.getDeployments.pages({ restApiId }).pipe(
+                  Stream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk).flatMap((page) =>
+                      (page.items ?? [])
+                        .filter(
+                          (d): d is ag.Deployment & { id: string } =>
+                            d.id != null,
+                        )
+                        .map((d) => ({
+                          deploymentId: d.id,
+                          restApiId,
+                          description: d.description,
+                        })),
+                    ),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+            return rows.flat();
+          }),
         diff: Effect.fn(function* ({ news: newsIn, olds }) {
           if (!isResolved(newsIn)) return;
           const news = newsIn as Input.ResolveProps<DeploymentProps>;

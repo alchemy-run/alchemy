@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "./lookup.ts";
 
 const ZoneHoldTypeId = "Cloudflare.Zone.Hold" as const;
 type ZoneHoldTypeId = typeof ZoneHoldTypeId;
@@ -104,6 +106,27 @@ export const isZoneHold = (value: unknown): value is ZoneHold =>
 export const ZoneHoldProvider = () =>
   Provider.succeed(ZoneHold, {
     stables: ["zoneId"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // A hold is a per-zone singleton — `getHold` always returns a record
+      // for every zone (default `hold: false`), and there is no account-wide
+      // enumeration API. Enumerate every zone and read its hold state.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          zones.getHold({ zoneId }).pipe(
+            Effect.map((observed) => toAttributes(zoneId, observed)),
+            // Zone deleted out-of-band mid-enumeration — drop it.
+            Effect.catchTag("InvalidZoneIdentifier", () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter((row): row is ZoneHoldAttributes => row !== undefined);
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as ZoneHoldProps;

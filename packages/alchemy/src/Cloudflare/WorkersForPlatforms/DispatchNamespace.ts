@@ -1,6 +1,7 @@
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -131,6 +132,19 @@ export const DispatchNamespaceProvider = () =>
         return { action: "replace" } as const;
       }
       return undefined;
+    }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* wfp.listDispatchNamespaces.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((ns) =>
+              toAttributes(ns, accountId, ns.namespaceName ?? ""),
+            ),
+          ),
+        ),
+      );
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

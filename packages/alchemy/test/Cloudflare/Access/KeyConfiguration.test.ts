@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -67,6 +68,27 @@ test.provider(
       // Destroy restored the interval the account had before management.
       const restored = yield* zeroTrust.getAccessKey({ accountId });
       expect(restored.keyRotationIntervalDays).toEqual(90);
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+// Canonical `list()` test (per-account singleton): the key configuration
+// always exists with a Cloudflare default and there is no enumeration API,
+// so `list()` reads the single instance and returns it as a one-element
+// array. Assert exactly one well-typed item scoped to the account.
+test.provider(
+  "list returns the account key configuration singleton",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.AccessKeyConfiguration,
+      );
+      const all = yield* provider.list();
+
+      expect(all.length).toBe(1);
+      expect(all[0]!.accountId).toEqual(accountId);
     }).pipe(logLevel),
   { timeout: 90_000 },
 );

@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as customHostnames from "@distilled.cloud/cloudflare/custom-hostnames";
 import { expect } from "@effect/vitest";
@@ -101,6 +102,71 @@ const isGone = (
   observed.origin === undefined ||
   observed.status === "pending_deletion" ||
   observed.status === "deletion_timed_out";
+
+// Canonical `list()` test (zone-scoped singleton): there is no account-wide
+// API for the fallback origin, so `list()` enumerates every zone via
+// `listAllZones` and reads the singleton in each, skipping zones without
+// Cloudflare for SaaS (`SaasAccessNotGranted` / `Forbidden`). This read-only
+// assertion ALWAYS runs — on an unentitled account every zone is skipped and
+// the result is a well-typed empty `FallbackOriginAttributes[]`.
+test.provider("list enumerates fallback origins across all zones", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const provider = yield* Provider.findProvider(Cloudflare.FallbackOrigin);
+    const all = yield* provider.list();
+
+    // Well-typed `FallbackOriginAttributes[]`: each element matches the
+    // shape `read` produces.
+    expect(Array.isArray(all)).toBe(true);
+    for (const item of all) {
+      expect(typeof item.zoneId).toBe("string");
+      expect(typeof item.origin).toBe("string");
+    }
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
+);
+
+// Entitlement-gated: when Cloudflare for SaaS is provisioned, deploy a
+// fallback origin and assert `list()` surfaces it. Skipped on the standing
+// test account, where every fallback-origin call returns
+// `SaasAccessNotGranted` (code 1456).
+testSaas(
+  "list surfaces a deployed fallback origin",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+      yield* probeSaasEntitlement(zoneId);
+
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const record = yield* Cloudflare.DnsRecord("OriginA", {
+            zoneId,
+            name: ORIGIN_A,
+            type: "A",
+            content: "203.0.113.50",
+            proxied: true,
+          }).pipe(adopt(true));
+          return yield* Cloudflare.FallbackOrigin("Fallback", {
+            zoneId,
+            origin: record.name,
+          }).pipe(adopt(true));
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.FallbackOrigin);
+      const all = yield* provider.list();
+      expect(
+        all.some((o) => o.zoneId === zoneId && o.origin === ORIGIN_A),
+      ).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 300_000 },
+);
 
 testSaas(
   "set, update and delete the zone fallback origin",

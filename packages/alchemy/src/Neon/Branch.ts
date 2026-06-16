@@ -6,6 +6,8 @@ import {
   listProjectBranchDatabases,
   listProjectBranches,
   type ListProjectBranchesOutput,
+  listProjects,
+  type ListProjectsOutput,
   updateProjectBranch,
 } from "@distilled.cloud/neon";
 import * as Effect from "effect/Effect";
@@ -427,7 +429,119 @@ export const BranchProvider = () =>
         branch_id: output.branchId,
       }).pipe(Effect.catchTag("NotFound", () => Effect.void));
     }),
+    // Parent fan-out: branches are scoped to a project, and there is no
+    // account-wide branch enumeration API. Enumerate every project, then
+    // list+hydrate the branches of each (bounded concurrency), producing
+    // the exact `read` Attributes shape for each branch.
+    list: Effect.fn(function* () {
+      const projects = yield* listAllProjects;
+      const perProject = yield* Effect.forEach(
+        projects,
+        (project) =>
+          Effect.gen(function* () {
+            const branches = yield* listAllBranches(project.id);
+            return yield* Effect.forEach(
+              branches,
+              (branch) => hydrateBranch(project.id, branch),
+              { concurrency: 10 },
+            );
+          }).pipe(
+            // The project may be deleted between enumeration and listing.
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return perProject
+        .flat()
+        .filter((row): row is Branch["Attributes"] => row !== undefined);
+    }),
   });
+
+const listAllProjects = Effect.gen(function* () {
+  const projects: ListProjectsOutput["projects"][number][] = [];
+  let cursor: string | undefined;
+  while (true) {
+    const page = yield* listProjects({
+      ...(cursor !== undefined ? { cursor } : {}),
+    });
+    projects.push(...page.projects);
+    const nextCursor = page.pagination?.cursor;
+    // Neon returns a `pagination.cursor` on every response (the `created_at`
+    // of the last row), not a "has next page" flag — stop once a page comes
+    // back empty or the cursor stops advancing to avoid an infinite loop.
+    if (
+      page.projects.length === 0 ||
+      nextCursor === undefined ||
+      nextCursor === cursor
+    ) {
+      break;
+    }
+    cursor = nextCursor;
+  }
+  return projects;
+});
+
+const listAllBranches = (projectId: string) =>
+  Effect.gen(function* () {
+    const branches: ListProjectBranchesOutput["branches"][number][] = [];
+    let cursor: string | undefined;
+    do {
+      const page = yield* listProjectBranches({
+        project_id: projectId,
+        ...(cursor !== undefined ? { cursor } : {}),
+      });
+      branches.push(...page.branches);
+      cursor = page.pagination?.next;
+    } while (cursor);
+    return branches;
+  });
+
+const hydrateBranch = (
+  projectId: string,
+  branch: ListProjectBranchesOutput["branches"][number],
+) =>
+  Effect.gen(function* () {
+    const dbs = yield* listProjectBranchDatabases({
+      project_id: projectId,
+      branch_id: branch.id,
+    });
+    const db = dbs.databases[0];
+    if (!db) return undefined;
+    const conn = yield* fetchConnection(
+      projectId,
+      branch.id,
+      db.name,
+      db.owner_name,
+    );
+    const attributes: Branch["Attributes"] = {
+      branchId: branch.id,
+      branchName: branch.name,
+      projectId,
+      parentBranchId: branch.parent_id,
+      parentLsn: branch.parent_lsn,
+      parentTimestamp: branch.parent_timestamp,
+      initSource: branch.init_source as
+        | "schema-only"
+        | "parent-data"
+        | undefined,
+      protected: branch.protected,
+      default: branch.default,
+      expiresAt: branch.expires_at,
+      databaseName: db.name,
+      roleName: db.owner_name,
+      connectionUri: conn.uri,
+      pooledConnectionUri: conn.pooled,
+      origin: parsePostgresOrigin(conn.uri),
+      migrationsDir: undefined,
+      migrationsTable: undefined,
+      migrationsHashes: {},
+      importHashes: {},
+    };
+    return attributes;
+  }).pipe(
+    // A branch/database/endpoint can disappear mid-enumeration — skip it.
+    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+  );
 
 const rootDir = Effect.sync(() => process.cwd());
 const createBranchName = (id: string, name: string | undefined) =>

@@ -2,6 +2,7 @@ import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -307,6 +308,44 @@ export const AiGatewayProviderConfigProvider = () =>
         // Cloudflare reports both a missing config and a missing parent
         // gateway with code 7002 — either way it's already gone.
         .pipe(Effect.catchTag("ProviderConfigNotFound", () => Effect.void));
+    }),
+    // Provider configs are nested under an AI Gateway, with no account-wide
+    // collection endpoint. Enumerate every gateway in the account, then fan
+    // out (bounded) over them and exhaustively paginate each gateway's
+    // provider configs, hydrating each item into the same Attributes shape
+    // `read` produces (via `toAttributes`). A gateway that disappears between
+    // enumeration and listing returns an empty list, so no per-item not-found
+    // mapping is needed.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const gatewayIds = yield* aiGateway.listAiGateways
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((gateway) => gateway.id),
+            ),
+          ),
+        );
+
+      const rows = yield* Effect.forEach(
+        gatewayIds,
+        (gatewayId) =>
+          aiGateway.listProviderConfigs.pages({ accountId, gatewayId }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((config) =>
+                  toAttributes(config, accountId),
+                ),
+              ),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
     }),
   });
 

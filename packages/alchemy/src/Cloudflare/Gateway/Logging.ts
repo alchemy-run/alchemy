@@ -123,6 +123,17 @@ export const GatewayLoggingProvider = () =>
   Provider.succeed(GatewayLogging, {
     stables: ["accountId", "initialSettings"],
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account singleton — there is no enumeration API; the Gateway
+      // logging settings object always exists for the account. Mirror
+      // `read`: observe the single instance and return it as a
+      // one-element array (its observed snapshot is its own
+      // `initialSettings`, since nothing is being managed).
+      const observed = yield* observeLogging(accountId);
+      return [toAttributes(accountId, observed, observed)];
+    }),
+
     read: Effect.fn(function* ({ output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

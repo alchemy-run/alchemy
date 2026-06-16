@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import { expect } from "@effect/vitest";
@@ -276,6 +277,46 @@ test.provider(
         replaced.bucket.bucketName,
         replaced.queueB.queueId,
       );
+    }).pipe(logLevel),
+  { timeout: 300_000 },
+);
+
+test.provider(
+  "list enumerates deployed bucket event notifications",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        program({
+          rules: [
+            { actions: ["PutObject", "DeleteObject"], prefix: "incoming/" },
+          ],
+        }),
+      );
+
+      // Parent fan-out over every R2 bucket, then each bucket's
+      // event-notification queues — the deployed (bucket, queue) pair must
+      // appear, hydrated into the exact `read` Attributes shape.
+      const provider = yield* Provider.findProvider(
+        Cloudflare.R2BucketEventNotification,
+      );
+      const all = yield* provider.list();
+
+      const found = all.find(
+        (n) =>
+          n.bucketName === deployed.bucket.bucketName &&
+          n.queueId === deployed.queue.queueId,
+      );
+      expect(found).toBeDefined();
+      expect(found?.accountId).toBeDefined();
+      expect(found?.jurisdiction).toEqual("default");
+      expect(found?.rules.length).toBeGreaterThanOrEqual(1);
+      expect(found?.rules.some((rule) => rule.prefix === "incoming/")).toBe(
+        true,
+      );
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 300_000 },
 );

@@ -1,6 +1,7 @@
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -169,6 +170,21 @@ export const AccountProvider = () =>
       return undefined;
     }),
 
+    list: () =>
+      // `listAccounts` (GET /accounts) enumerates every account the API
+      // token can access — no scope input required. The list items carry
+      // the full account shape (settings + managedBy), so each maps
+      // directly to the same `Attributes` `read` produces with no
+      // per-item hydration. Paginate exhaustively.
+      accounts.listAccounts.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((account) => toAttributes(account)),
+          ),
+        ),
+      ),
+
     read: Effect.fn(function* ({ output }) {
       // The physical identity is the Cloudflare-assigned account id —
       // names are not unique, so there is no cold find-by-name fallback.
@@ -247,7 +263,8 @@ export const AccountProvider = () =>
 type ObservedAccount =
   | accounts.GetAccountResponse
   | accounts.CreateAccountResponse
-  | accounts.UpdateAccountResponse;
+  | accounts.UpdateAccountResponse
+  | accounts.ListAccountsResponse["result"][number];
 
 /**
  * Read an account by id, mapping "gone" to `undefined`. A missing (or

@@ -191,6 +191,30 @@ export const EmailSecurityBlockSenderProvider = () =>
         })
         .pipe(Effect.catchTag("BlockSenderNotFound", () => Effect.void));
     }),
+
+    // Account collection: enumerate every blocked sender in the ambient
+    // account, exhaustively paginating. Each list item already carries the
+    // full entry shape, so it hydrates directly into `read`'s Attributes with
+    // no per-item follow-up. Email Security is a paid add-on, so accounts
+    // without the entitlement (or without permission) have nothing to
+    // enumerate and yield an empty array.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* emailSecurity.listSettingBlockSenders
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((entry) =>
+                toAttributes(entry, accountId),
+              ),
+            ),
+          ),
+          Effect.catchTag("EmailSecurityNotEntitled", () => Effect.succeed([])),
+          Effect.catchTag("Forbidden", () => Effect.succeed([])),
+        );
+    }),
   });
 
 type ObservedBlockSender = emailSecurity.GetSettingBlockSenderResponse;
@@ -225,7 +249,8 @@ const toAttributes = (
   entry:
     | ObservedBlockSender
     | emailSecurity.CreateSettingBlockSenderResponse
-    | emailSecurity.PatchSettingBlockSenderResponse,
+    | emailSecurity.PatchSettingBlockSenderResponse
+    | emailSecurity.ListSettingBlockSendersResponse["result"][number],
   accountId: string,
 ): EmailSecurityBlockSenderAttributes => ({
   blockSenderId: entry.id ?? "",

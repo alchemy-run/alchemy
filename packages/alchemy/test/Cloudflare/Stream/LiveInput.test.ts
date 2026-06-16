@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import { expect } from "@effect/vitest";
@@ -140,6 +141,51 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(accountId, healed.liveInputId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (account collection): deploy a live input, then
+// resolve the typed provider and assert the deployed uid appears in the
+// exhaustively-enumerated result.
+//
+// GATED — blocked on a distilled schema mismatch, not an entitlement: the
+// account *can* create/list live inputs (the CRUD cases above pass), but
+// `stream.listLiveInputs` fails to decode the live response. The Cloudflare
+// REST API returns `result` as a bare array of live-input objects, while the
+// upstream cloudflare-typescript SDK (and therefore distilled) types the
+// `result` payload as the object `{ liveInputs, range, total }`. The decode
+// throws, verbatim:
+//
+//   CloudflareHttpError { status: 200, statusText: "Schema decode failed" }
+//   GET /accounts/{account_id}/stream/live_inputs
+//   body: {"result":[{"uid":"…","created":"…",…}],"success":true,…}
+//
+// Needed distilled patch: model `ListLiveInputsResponse` as
+// `Array<LiveInput>` decoded at ResponsePath("result") (not the wrapper
+// object). The current patch DSL can't express this — `op.responsePath`
+// ("result", from the SDK's `_thenUnwrap`) wins over `patch.responsePath`,
+// and `responseType: "array"` wraps the wrapper object rather than the item
+// — so it requires a generator/spec-level fix. Once landed, drop this gate
+// and map `response` (the array) directly in LiveInput.ts's `list()`.
+test.provider.skipIf(!process.env.CLOUDFLARE_TEST_STREAM_LIST)(
+  "list enumerates the deployed live input",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const input = yield* stack.deploy(
+        Cloudflare.StreamLiveInput("ListInput", {
+          meta: { name: "alchemy-stream-list-input" },
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.StreamLiveInput);
+      const all = yield* provider.list();
+
+      expect(all.some((x) => x.liveInputId === input.liveInputId)).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

@@ -254,6 +254,48 @@ export const GatewayRuleProvider = () =>
       return {
         stables: ["ruleId", "action", "accountId"],
 
+        // Account collection (pattern b): Gateway rules are account-scoped
+        // (`/accounts/{id}/gateway/rules`). Exhaustively page the list op,
+        // narrow each rule, and hydrate the exact `read` Attributes shape.
+        // Rules missing a required field (id/action/filters/precedence) are
+        // dropped rather than surfaced as partial rows.
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId } = yield* env;
+            return yield* listRules.pages({ accountId }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? []).flatMap((raw) => {
+                    const r = narrowRule(
+                      raw as Parameters<typeof narrowRule>[0],
+                    );
+                    if (
+                      !r.id ||
+                      !r.action ||
+                      !r.filters ||
+                      r.precedence === undefined
+                    ) {
+                      return [];
+                    }
+                    return [
+                      {
+                        ruleId: r.id,
+                        name: r.name ?? r.id,
+                        action: r.action,
+                        filters: r.filters,
+                        precedence: r.precedence,
+                        accountId,
+                        createdAt: r.createdAt,
+                        updatedAt: r.updatedAt,
+                      } satisfies GatewayRuleAttributes,
+                    ];
+                  }),
+                ),
+              ),
+            );
+          }),
+
         diff: Effect.fn(function* ({ olds = {}, news }) {
           if ((olds as GatewayRuleProps).action !== undefined) {
             if (

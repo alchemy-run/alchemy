@@ -229,6 +229,38 @@ export const TunnelVirtualNetworkProvider = () =>
         })
         .pipe(Effect.catchTag("VirtualNetworkNotFound", () => Effect.void));
     }),
+
+    // Account-scoped collection: virtual networks are listed per account.
+    // Exhaustively paginate and filter out soft-deleted networks to match
+    // `read`/`findByName`, hydrating each into the `read` Attributes shape.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listNetworkVirtualNetworks
+        .pages({ accountId, isDeleted: false })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter((v) => !v.deletedAt)
+                // The account's default virtual network can't be deleted
+                // ("it is the default virtual network"); never enumerate it
+                // for account-wide teardown.
+                .filter((v) => !v.isDefaultNetwork)
+                .map(
+                  (v): TunnelVirtualNetworkAttributes => ({
+                    virtualNetworkId: v.id,
+                    accountId,
+                    name: v.name,
+                    comment: v.comment,
+                    isDefaultNetwork: v.isDefaultNetwork,
+                    createdAt: v.createdAt,
+                  }),
+                ),
+            ),
+          ),
+        );
+    }),
   });
 
 type ObservedVnet = zeroTrust.GetNetworkVirtualNetworkResponse;

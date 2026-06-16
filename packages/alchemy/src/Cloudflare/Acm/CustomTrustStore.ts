@@ -7,7 +7,9 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const CustomTrustStoreTypeId = "Cloudflare.Acm.CustomTrustStore" as const;
 type CustomTrustStoreTypeId = typeof CustomTrustStoreTypeId;
@@ -124,6 +126,35 @@ export const isCustomTrustStore = (value: unknown): value is CustomTrustStore =>
 export const CustomTrustStoreProvider = () =>
   Provider.succeed(CustomTrustStore, {
     stables: ["id", "zoneId", "issuer", "signature", "uploadedOn"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Trust stores live inside a zone (`/zones/{zone_id}/acm/...`) with
+      // no account-wide collection API — enumerate every zone and list
+      // within each, paginating exhaustively.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          acm.listCustomTrustStores.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  .filter((cert) => !isGoneStatus(cert.status))
+                  .map((cert) => toAttributes(zone.id, cert)),
+              ),
+            ),
+            // Zones without the Advanced Certificate Manager add-on reject
+            // the route with the typed entitlement tag — skip them.
+            Effect.catchTag("AdvancedCertificateManagerRequired", () =>
+              Effect.succeed([] as CustomTrustStoreAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;

@@ -1,6 +1,7 @@
 import * as resourceSharing from "@distilled.cloud/cloudflare/resource-sharing";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -192,6 +193,25 @@ export const isShare = (value: unknown): value is Share =>
 export const ShareProvider = () =>
   Provider.succeed(Share, {
     stables: ["shareId", "accountId", "organizationId", "created"],
+    // Account collection — enumerate every share this account sends
+    // (the ones we own and can delete), exhaustively paginated, mapped
+    // into the same Attributes shape `read` returns. Deleted shares are
+    // excluded since they no longer exist.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* resourceSharing.listResourceSharings
+        .pages({ accountId, kind: "sent", perPage: 50 })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter((s) => s.status !== "deleted")
+                .map((s) => toAttributes(s, accountId)),
+            ),
+          ),
+        );
+    }),
     diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;

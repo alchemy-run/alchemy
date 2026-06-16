@@ -7,6 +7,7 @@ import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 import type { EmailAction } from "./EmailRule.ts";
 
 const EmailCatchAllTypeId = "Cloudflare.EmailCatchAll" as const;
@@ -138,6 +139,30 @@ export const EmailCatchAllProvider = () =>
       "initialEnabled",
       "initialActions",
     ],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // The catch-all rule is a per-zone singleton with no account-wide
+      // enumeration API — enumerate every zone and read its rule. The
+      // observed state at read time is the initial* baseline.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          emailRouting.getRuleCatchAll({ zoneId }).pipe(
+            Effect.map((observed) =>
+              toAttributes(zoneId, observed, observedInitial(observed)),
+            ),
+            // Zones without Email Routing enabled (or that the token can no
+            // longer see) reject the route; skip them.
+            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is EmailCatchAllAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ news, output }) {
       if (!output) return undefined;

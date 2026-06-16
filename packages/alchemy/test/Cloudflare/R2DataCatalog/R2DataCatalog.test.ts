@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as rdc from "@distilled.cloud/cloudflare/r2-data-catalog";
 import { expect } from "@effect/vitest";
@@ -160,6 +161,39 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(accountId, initial.bucket.bucketName);
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+test.provider(
+  "list enumerates the deployed catalog",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(program());
+      expect(deployed.catalog.status).toEqual("active");
+
+      const provider = yield* Provider.findProvider(Cloudflare.R2DataCatalog);
+      const all = yield* provider.list();
+
+      // The freshly-enabled catalog is present in the account-wide listing,
+      // hydrated into the exact `read` Attributes shape.
+      const found = all.find((c) => c.catalogId === deployed.catalog.catalogId);
+      expect(found).toBeDefined();
+      expect(found?.bucketName).toEqual(deployed.bucket.bucketName);
+      expect(found?.accountId).toEqual(deployed.catalog.accountId);
+      expect(found?.name).toEqual(deployed.catalog.name);
+      expect(found?.catalogUri).toEqual(deployed.catalog.catalogUri);
+      expect(found?.status).toEqual("active");
+      // Every entry is an active warehouse mapped to full Attributes.
+      expect(all.every((c) => c.status === "active")).toBe(true);
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, deployed.bucket.bucketName);
     }).pipe(logLevel),
   { timeout: 240_000 },
 );

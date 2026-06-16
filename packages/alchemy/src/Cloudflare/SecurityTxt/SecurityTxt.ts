@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const SecurityTxtTypeId = "Cloudflare.SecurityTxt" as const;
 type SecurityTxtTypeId = typeof SecurityTxtTypeId;
@@ -163,6 +165,33 @@ export const isSecurityTxt = (value: unknown): value is SecurityTxt =>
 export const SecurityTxtProvider = () =>
   Provider.succeed(SecurityTxt, {
     stables: ["zoneId"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // There is no account-wide API for this per-zone singleton, and the
+      // file is only present on zones that have explicitly configured it —
+      // enumerate every zone, read its security.txt, and emit one entry per
+      // configured zone (an empty-string sentinel means unconfigured, which
+      // `read` treats as absent, so skip it).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          securityTxt
+            .getSecurityTxt({ zoneId })
+            .pipe(
+              Effect.map((observed) =>
+                typeof observed === "string"
+                  ? undefined
+                  : toAttributes(zoneId, observed),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is SecurityTxtAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as SecurityTxtProps;

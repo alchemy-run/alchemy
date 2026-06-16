@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const LogpushJobTypeId = "Cloudflare.Logpush.Job" as const;
 type LogpushJobTypeId = typeof LogpushJobTypeId;
@@ -326,6 +327,59 @@ export const LogpushJobProvider = () =>
         return olds?.name !== undefined ? Unowned(attrs) : attrs;
       }
       return undefined;
+    }),
+
+    // Logpush jobs are hybrid-scoped: account-scoped jobs live under the
+    // account, zone-scoped jobs under each zone. Enumerate both — the account
+    // collection plus a fan-out over every zone — and hydrate each into the
+    // same Attributes shape `read` returns.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const accountRows = yield* logpush.listJobsForAccount
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter((job): job is NonNullable<typeof job> => job != null)
+                .map((job) =>
+                  toAttributes(job, { accountId, zoneId: undefined }),
+                )
+                .filter(
+                  (attrs): attrs is LogpushJobAttributes => attrs !== undefined,
+                ),
+            ),
+          ),
+        );
+
+      const zones = yield* listAllZones(accountId);
+      const zoneRows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          logpush.listJobsForZone.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  .filter((job): job is NonNullable<typeof job> => job != null)
+                  .map((job) =>
+                    toAttributes(job, { accountId, zoneId: zone.id }),
+                  )
+                  .filter(
+                    (attrs): attrs is LogpushJobAttributes =>
+                      attrs !== undefined,
+                  ),
+              ),
+            ),
+            // Plan-gated / partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+
+      return [...accountRows, ...zoneRows.flat()];
     }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {

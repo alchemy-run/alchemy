@@ -4,7 +4,9 @@ import * as Predicate from "effect/Predicate";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const UrlNormalizationTypeId = "Cloudflare.UrlNormalization" as const;
 type UrlNormalizationTypeId = typeof UrlNormalizationTypeId;
@@ -132,6 +134,27 @@ const DEFAULT_TYPE: UrlNormalizationType = "cloudflare";
 export const UrlNormalizationProvider = () =>
   Provider.succeed(UrlNormalization, {
     stables: ["zoneId"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this zone singleton — enumerate every
+      // zone in the account and read its URL normalization (every zone
+      // has one).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          urlNormalization.getUrlNormalization({ zoneId }).pipe(
+            Effect.map((observed) => toAttributes(zoneId, observed)),
+            // Plan-gated or partial zones reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is UrlNormalizationAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as UrlNormalizationProps;

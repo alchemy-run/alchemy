@@ -2,6 +2,7 @@ import type * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
 import { isResolved } from "../../Diff.ts";
@@ -83,6 +84,46 @@ export const RouteTableAssociationProvider = () =>
     Effect.gen(function* () {
       return {
         stables: ["associationId", "subnetId", "gatewayId"],
+
+        // Associations are embedded in describeRouteTables — each RouteTable
+        // carries an Associations[] of {subnet/gateway, routeTable,
+        // associationId}. Flatten every page's associations across the region.
+        // The implicit "main" association (the VPC default route-table binding)
+        // is skipped: it isn't a standalone resource we create or manage.
+        list: () =>
+          ec2.describeRouteTables.pages({}).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.RouteTables ?? []).flatMap((rt) =>
+                  (rt.Associations ?? [])
+                    .filter(
+                      (
+                        a,
+                      ): a is EC2.RouteTableAssociation & {
+                        RouteTableAssociationId: string;
+                        RouteTableId: string;
+                      } =>
+                        a.Main !== true &&
+                        a.RouteTableAssociationId != null &&
+                        a.RouteTableId != null,
+                    )
+                    .map((a) => ({
+                      associationId:
+                        a.RouteTableAssociationId as RouteTableAssociationId,
+                      routeTableId: a.RouteTableId as RouteTableId,
+                      subnetId: a.SubnetId as SubnetId | undefined,
+                      gatewayId: a.GatewayId,
+                      associationState: {
+                        state: a.AssociationState?.State ?? "associated",
+                        statusMessage: a.AssociationState?.StatusMessage,
+                      },
+                    })),
+                ),
+              ),
+            ),
+          ),
+
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
           // Subnet/Gateway change requires replacement (use ReplaceRouteTableAssociation internally)

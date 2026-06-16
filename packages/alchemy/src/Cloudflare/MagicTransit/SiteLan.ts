@@ -1,6 +1,7 @@
 import * as magicTransit from "@distilled.cloud/cloudflare/magic-transit";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
@@ -324,6 +325,52 @@ export const MagicSiteLanProvider = () =>
           lanId: output.lanId,
         })
         .pipe(Effect.catchTag("SiteLanNotFound", () => Effect.void));
+    }),
+
+    // LANs are sub-resources keyed by their parent Magic WAN site, which is
+    // not enumerable by LAN. Fan out: list every account-scoped site, then
+    // exhaustively paginate the LANs of each site (bounded concurrency) and
+    // hydrate into the same Attributes shape `read` returns. Accounts (or
+    // individual sites) without Magic WAN entitlement reject with the typed
+    // `MagicWanUnauthorized` (Cloudflare code 1025) — nothing to enumerate,
+    // so skip → [].
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      const siteIds = yield* magicTransit.listSites.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map((site) => site.id)
+              .filter((id): id is string => typeof id === "string"),
+          ),
+        ),
+        Effect.catchTag("MagicWanUnauthorized", () =>
+          Effect.succeed([] as string[]),
+        ),
+      );
+
+      const rows = yield* Effect.forEach(
+        siteIds,
+        (siteId) =>
+          magicTransit.listSiteLans.pages({ accountId, siteId }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((lan) =>
+                  toAttributes(lan, siteId, accountId),
+                ),
+              ),
+            ),
+            Effect.catchTag("MagicWanUnauthorized", () =>
+              Effect.succeed([] as MagicSiteLanAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+
+      return rows.flat();
     }),
   });
 

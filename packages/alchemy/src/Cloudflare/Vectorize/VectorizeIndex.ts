@@ -1,6 +1,7 @@
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -222,6 +223,25 @@ export const VectorizeIndexProvider = () =>
           indexName: output.indexName,
         })
         .pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.void));
+    }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* vectorize.listIndexes.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter(
+                (
+                  index,
+                ): index is (typeof page.result)[number] & {
+                  name: string;
+                } => index.name != null,
+              )
+              .map((index) => toAttributes(index, index.name, accountId)),
+          ),
+        ),
+      );
     }),
   });
 

@@ -1,13 +1,16 @@
 import * as schemaValidation from "@distilled.cloud/cloudflare/schema-validation";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const SchemaValidationSchemaTypeId =
   "Cloudflare.SchemaValidation.Schema" as const;
@@ -269,6 +272,38 @@ export const SchemaValidationSchemaProvider = () =>
         .deleteSchema({ zoneId: output.zoneId, schemaId: output.schemaId })
         .pipe(Effect.catchTag("SchemaNotFound", () => Effect.void));
     }),
+
+    // Zone-scoped collection: schemas live under `/zones/{zone_id}/...`, so
+    // enumerate every zone in the account and list its schemas, paginating
+    // each exhaustively. `omitSource: false` hydrates the full `read`
+    // Attributes shape. Zones whose route is invalid (deleted/partial) reject
+    // with the typed `InvalidRoute` — skip them rather than failing the whole
+    // enumeration.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          schemaValidation.listSchemas
+            .pages({ zoneId: zone.id, omitSource: false })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? []).map((schema) =>
+                    toAttributes(zone.id, schema),
+                  ),
+                ),
+              ),
+              Effect.catchTag("InvalidRoute", () =>
+                Effect.succeed<SchemaValidationSchemaAttributes[]>([]),
+              ),
+            ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 /**
@@ -304,7 +339,8 @@ const toAttributes = (
   schema:
     | schemaValidation.GetSchemaResponse
     | schemaValidation.CreateSchemaResponse
-    | schemaValidation.PatchSchemaResponse,
+    | schemaValidation.PatchSchemaResponse
+    | schemaValidation.ListSchemasResponse["result"][number],
 ): SchemaValidationSchemaAttributes => ({
   schemaId: schema.schemaId,
   zoneId,

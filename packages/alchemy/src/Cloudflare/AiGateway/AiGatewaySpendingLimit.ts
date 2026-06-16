@@ -318,6 +318,34 @@ export const AiGatewaySpendingLimitProvider = () =>
         autoRecharge: observedAutoRecharge(billing.topupConfig),
       };
     }),
+    // Per-account singleton: Cloudflare stores a single spending limit per
+    // account (`/accounts/{account_id}/ai-gateway/billing/spending-limit`),
+    // so there is no collection API to paginate. Observe the one instance
+    // for the ambient account and return it as a one-element array — or `[]`
+    // when no limit is currently set (mirrors `read` returning `undefined`).
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const current = yield* aiGateway.getBillingSpendingLimit({
+        accountId,
+      });
+      if (!current.enabled) return [];
+      const billing = yield* aiGateway.creditBalanceBilling({
+        accountId,
+      });
+      const defaults = desired(undefined);
+      return [
+        {
+          accountId,
+          amount: current.config.amount ?? defaults.amount,
+          duration: (current.config.duration ??
+            defaults.duration) as AiGatewaySpendingLimitDuration,
+          strategy: (current.config.strategy ??
+            defaults.strategy) as AiGatewaySpendingLimitStrategy,
+          enabled: current.enabled,
+          autoRecharge: observedAutoRecharge(billing.topupConfig),
+        },
+      ];
+    }),
   });
 
 // Normalize the observed `topup_config` into the attribute shape. An

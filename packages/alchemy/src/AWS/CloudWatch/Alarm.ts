@@ -1,5 +1,6 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
@@ -123,6 +124,53 @@ export const AlarmProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        // Enumerate every MetricAlarm in the account/region by exhaustively
+        // paginating `describeAlarms` filtered to `MetricAlarm` (CompositeAlarm
+        // is owned by a separate resource). Each item is mapped to the same
+        // Attributes shape `read` produces, fetching tags per alarm.
+        list: () =>
+          Effect.gen(function* () {
+            const alarms = yield* cloudwatch.describeAlarms
+              .pages({ AlarmTypes: ["MetricAlarm"] })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) => page.MetricAlarms ?? []),
+                ),
+              );
+
+            const attrs: Alarm["Attributes"][] = yield* Effect.forEach(
+              alarms.filter(
+                (
+                  metricAlarm,
+                ): metricAlarm is typeof metricAlarm & {
+                  AlarmName: string;
+                  AlarmArn: string;
+                } =>
+                  metricAlarm.AlarmName != null && metricAlarm.AlarmArn != null,
+              ),
+              (metricAlarm) =>
+                Effect.gen(function* () {
+                  const tags = yield* readResourceTags(
+                    metricAlarm.AlarmArn,
+                  ).pipe(
+                    Effect.catchTag("ResourceNotFoundException", () =>
+                      Effect.succeed({}),
+                    ),
+                  );
+                  return {
+                    alarmName: metricAlarm.AlarmName,
+                    alarmArn: metricAlarm.AlarmArn as AlarmArn,
+                    stateValue: metricAlarm.StateValue,
+                    stateReason: metricAlarm.StateReason,
+                    metricAlarm,
+                    tags,
+                  };
+                }),
+              { concurrency: 10 },
+            );
+            return attrs;
+          }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =
             output?.alarmName ?? (yield* createAlarmName(id, olds ?? {}));

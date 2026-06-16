@@ -163,6 +163,28 @@ export const SynProtectionRuleProvider = () =>
   Provider.succeed(SynProtectionRule, {
     stables: ["ruleId", "accountId", "scope", "name", "createdOn"],
 
+    // Account-scoped collection: paginate every rule in the ambient
+    // account. Accounts without the Advanced TCP Protection entitlement (or
+    // lacking read permission) yield no rules — treat the typed rejection as
+    // an empty enumeration rather than an error.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* ddos.listAdvancedTcpProtectionSynProtectionRules
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((rule) => toAttributes(rule, accountId)),
+            ),
+          ),
+          Effect.catchTags({
+            AdvancedTcpProtectionNotEntitled: () => Effect.succeed([]),
+            Forbidden: () => Effect.succeed([]),
+          }),
+        );
+    }),
+
     diff: Effect.fn(function* ({ olds, news }) {
       if (olds === undefined) return undefined;
       // `news` runs at plan time and may still carry unresolved

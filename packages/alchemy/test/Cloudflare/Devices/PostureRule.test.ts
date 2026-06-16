@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -136,5 +137,38 @@ test.provider("changing the rule type triggers a replacement", (stack) =>
 
     yield* stack.destroy();
     yield* expectGone(accountId, replaced.postureRuleId);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed posture rule", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Cloudflare.DevicePostureRule("ListRule", {
+        name: "alchemy-test-posture-list",
+        type: "os_version",
+        match: [{ platform: "windows" }],
+        schedule: "5m",
+        input: {
+          operatingSystem: "windows",
+          operator: ">=",
+          version: "10.0.19045",
+        },
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.DevicePostureRule);
+    const all = yield* provider.list();
+
+    // Exhaustive pagination must include the rule we just deployed.
+    expect(
+      all.some((rule) => rule.postureRuleId === deployed.postureRuleId),
+    ).toBe(true);
+
+    yield* stack.destroy();
+    yield* expectGone(accountId, deployed.postureRuleId);
   }).pipe(logLevel),
 );

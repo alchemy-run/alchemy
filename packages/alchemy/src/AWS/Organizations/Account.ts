@@ -205,6 +205,31 @@ export const AccountProvider = () =>
               ),
           );
         }),
+        // Enumerate every account in the organization (paginated), then
+        // hydrate each into the exact `read` Attributes shape (parent + tags)
+        // with bounded concurrency. Per-item not-found is already typed and
+        // swallowed inside `readAccountById`. When the caller's account is not
+        // the management account of an organization there is nothing to
+        // enumerate, so we return an empty array rather than throwing.
+        list: () =>
+          Effect.gen(function* () {
+            const accounts = yield* listAccounts();
+            const rows = yield* Effect.forEach(
+              accounts,
+              (account) =>
+                account.Id
+                  ? readAccountById(account.Id)
+                  : Effect.succeed(undefined),
+              { concurrency: 10 },
+            );
+            return rows.filter(
+              (row): row is Account["Attributes"] => row !== undefined,
+            );
+          }).pipe(
+            Effect.catchTag("AWSOrganizationsNotInUseException", () =>
+              Effect.succeed([] as Account["Attributes"][]),
+            ),
+          ),
       };
     }),
   );

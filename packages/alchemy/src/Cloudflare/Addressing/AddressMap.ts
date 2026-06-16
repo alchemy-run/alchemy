@@ -1,6 +1,7 @@
 import * as addressing from "@distilled.cloud/cloudflare/addressing";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -156,6 +157,34 @@ export const AddressMapProvider = () =>
       "canModifyIps",
       "createdAt",
     ],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // The account-scoped list endpoint omits `ips` and `memberships`,
+      // so enumerate ids exhaustively, then hydrate each into the exact
+      // `read` shape via `getAddressMap` (typed per-item not-found).
+      const ids = yield* addressing.listAddressMaps.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).flatMap((m) => (m.id ? [m.id] : [])),
+          ),
+        ),
+      );
+      const rows = yield* Effect.forEach(
+        ids,
+        (addressMapId) =>
+          getMap(accountId, addressMapId).pipe(
+            Effect.map((observed) =>
+              observed ? toAttributes(observed, accountId) : undefined,
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is AddressMapAttributes => row !== undefined,
+      );
+    }),
 
     read: Effect.fn(function* ({ output }) {
       // Address Maps have no name field to match on, so there is no

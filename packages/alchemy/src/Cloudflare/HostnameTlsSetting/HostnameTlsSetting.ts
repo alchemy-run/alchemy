@@ -1,12 +1,15 @@
 import * as hostnames from "@distilled.cloud/cloudflare/hostnames";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const HostnameTlsSettingTypeId = "Cloudflare.HostnameTlsSetting" as const;
 type HostnameTlsSettingTypeId = typeof HostnameTlsSettingTypeId;
@@ -168,6 +171,61 @@ export const isHostnameTlsSetting = (
 export const HostnameTlsSettingProvider = () =>
   Provider.succeed(HostnameTlsSetting, {
     stables: ["zoneId", "settingId", "hostname", "createdAt"],
+
+    list: Effect.fn(function* () {
+      // No account-wide enumeration: overrides live under
+      // `/zones/{zone_id}/hostnames/settings/{settingId}` and are keyed by
+      // (zone, settingId, hostname). Enumerate every zone, then list each
+      // of the three TLS settings, paginating exhaustively, and flatten one
+      // row per (settingId, hostname) override.
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const settingIds: HostnameTlsSettingId[] = [
+        "ciphers",
+        "min_tls_version",
+        "http2",
+      ];
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          Effect.forEach(
+            settingIds,
+            (settingId) =>
+              hostnames.getSettingTls
+                .pages({ zoneId: zone.id, settingId })
+                .pipe(
+                  Stream.runCollect,
+                  Effect.map((chunk) =>
+                    Array.from(chunk).flatMap((page) =>
+                      page.result.flatMap((entry) =>
+                        entry.hostname == null
+                          ? []
+                          : [
+                              toAttributes(
+                                zone.id,
+                                settingId,
+                                entry.hostname,
+                                entry,
+                              ),
+                            ],
+                      ),
+                    ),
+                  ),
+                  // Zones without Advanced Certificate Manager / Cloudflare
+                  // for SaaS reject the route, and a scoped token may lack
+                  // access to a zone — skip those rather than fail the whole
+                  // enumeration.
+                  Effect.catchTag(
+                    ["AdvancedCertificateManagerRequired", "Forbidden"],
+                    () => Effect.succeed([] as HostnameTlsSettingAttributes[]),
+                  ),
+                ),
+            { concurrency: "unbounded" },
+          ).pipe(Effect.map((perSetting) => perSetting.flat())),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news, output }) {
       // `news` may still carry unresolved plan-time expressions — defer to

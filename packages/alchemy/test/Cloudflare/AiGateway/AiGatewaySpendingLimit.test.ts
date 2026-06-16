@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as aiGateway from "@distilled.cloud/cloudflare/ai-gateway";
 import { expect } from "@effect/vitest";
@@ -110,5 +111,43 @@ describe.sequential("AiGatewaySpendingLimit", () => {
 
       yield* stack.destroy();
     }).pipe(logLevel),
+  );
+
+  // Canonical `list()` test (per-account singleton): there is no collection
+  // API, so `list()` observes the one limit on the ambient account. Deploy a
+  // limit, then assert it appears in the enumerated result. Bracket with
+  // destroy() at start and end so the test is isolated and leaves no residue.
+  test.provider(
+    "list enumerates the deployed account spending limit",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        yield* stack.destroy();
+
+        const cap = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.AiGatewaySpendingLimit("SpendCap", {
+              amount: 234_56, // cents -> $234.56
+              duration: "monthly",
+              topUp: { amount: 10_00 },
+            });
+          }),
+        );
+
+        const provider = yield* Provider.findProvider(
+          Cloudflare.AiGatewaySpendingLimit,
+        );
+        const all = yield* provider.list();
+
+        expect(all.length).toBeGreaterThan(0);
+        const found = all.find((s) => s.accountId === accountId);
+        expect(found).toBeDefined();
+        expect(found?.accountId).toEqual(cap.accountId);
+        expect(found?.amount).toEqual(234_56);
+        expect(found?.enabled).toEqual(true);
+
+        yield* stack.destroy();
+      }).pipe(logLevel),
   );
 });

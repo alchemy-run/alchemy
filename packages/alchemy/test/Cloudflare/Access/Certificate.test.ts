@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -125,6 +126,47 @@ test.provider.skipIf(!entitled)(
           ),
         );
       expect(afterDestroy?.id ?? undefined).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (account-scoped collection). Enumeration via
+// `listAccessCertificatesForAccount` works on any account regardless of the
+// create quota, so the probe (which only reads) always runs. On an entitled
+// account we additionally deploy a certificate and assert it appears in the
+// exhaustively-paginated result.
+test.provider(
+  "list enumerates account access certificates",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.AccessCertificate,
+      );
+
+      if (entitled) {
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.AccessCertificate("ListCert", {
+              certificate: CA_CERT_1,
+            });
+          }),
+        );
+
+        const all = yield* provider.list();
+        expect(
+          all.some((c) => c.certificateId === deployed.certificateId),
+        ).toBe(true);
+
+        yield* stack.destroy();
+      } else {
+        // Unentitled accounts can't create certificates, but enumeration must
+        // still succeed and return a typed array (empty when the account has
+        // none) — proving the pagination path is wired correctly.
+        const all = yield* provider.list();
+        expect(Array.isArray(all)).toBe(true);
+      }
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

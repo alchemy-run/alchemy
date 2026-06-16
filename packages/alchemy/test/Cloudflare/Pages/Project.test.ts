@@ -1,6 +1,7 @@
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as pages from "@distilled.cloud/cloudflare/pages";
 import { expect } from "@effect/vitest";
@@ -21,6 +22,7 @@ const logLevel = Effect.provideService(
 const NAME_UPDATE = "alchemy-e3-pages-update";
 const NAME_REPLACE_A = "alchemy-e3-pages-replace-a";
 const NAME_REPLACE_B = "alchemy-e3-pages-replace-b";
+const NAME_LIST = "alchemy-e3-pages-list";
 
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips (`Forbidden`,
@@ -197,6 +199,36 @@ test.provider("update mutable props in place (same project id)", (stack) =>
     yield* stack.destroy();
 
     yield* expectGone(accountId, NAME_UPDATE);
+  }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed project", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+
+    yield* stack.destroy();
+    yield* purgeProject(accountId, NAME_LIST);
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.PagesProject("ListProject", {
+          name: NAME_LIST,
+        }).pipe(adopt(true));
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.PagesProject);
+    const all = yield* provider.list();
+
+    const match = all.find((p) => p.projectId === deployed.projectId);
+    expect(match).toBeDefined();
+    expect(match?.name).toEqual(NAME_LIST);
+    expect(match?.accountId).toEqual(accountId);
+    expect(match?.subdomain).toEqual(`${NAME_LIST}.pages.dev`);
+
+    yield* stack.destroy();
+
+    yield* expectGone(accountId, NAME_LIST);
   }).pipe(logLevel),
 );
 

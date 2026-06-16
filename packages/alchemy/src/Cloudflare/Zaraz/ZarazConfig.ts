@@ -11,6 +11,7 @@ import {
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 import { defineZarazEvents } from "./ZarazEventTypes.ts";
 
 export type ZarazWorkflow = zaraz.GetWorkflowResponse;
@@ -197,6 +198,25 @@ export const ZarazConfig = Object.assign(
 export const ZarazConfigProvider = () =>
   Provider.succeed(ZarazConfig, {
     stables: ["zoneId"],
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Zaraz config is a zone-level singleton with no account-wide list
+      // API — enumerate every zone and read its config (one per zone).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          observe(zoneId).pipe(
+            // Zones where Zaraz isn't provisioned (e.g. partial setups)
+            // reject the route; skip them.
+            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ZarazConfig["Attributes"] => row !== undefined,
+      );
+    }),
     diff: Effect.fn(function* ({ olds, news, output }) {
       if (!output) return undefined;
       if (!isResolved(news)) return undefined;

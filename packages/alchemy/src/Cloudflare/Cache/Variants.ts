@@ -5,7 +5,9 @@ import * as Predicate from "effect/Predicate";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { arrayEquals } from "../../Util/equal.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const VariantsTypeId = "Cloudflare.Cache.Variants" as const;
 type VariantsTypeId = typeof VariantsTypeId;
@@ -179,6 +181,35 @@ const valuesEqual = (a: VariantsValue, b: VariantsValue): boolean =>
 export const VariantsProvider = () =>
   Provider.succeed(Variants, {
     stables: ["zoneId"],
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // No account-wide API for this per-zone setting — enumerate every
+      // zone in the account and read its variants setting. Unlike most
+      // zone singletons, Variants has true create/delete semantics, so a
+      // zone that never configured it returns `VariantsNotConfigured`;
+      // those zones (and plan-gated / deleted zones) are skipped.
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          cache.getVariant({ zoneId }).pipe(
+            Effect.map((observed) => toAttributes(zoneId, observed)),
+            // Setting never configured on this zone — nothing to enumerate.
+            Effect.catchTag("VariantsNotConfigured", () =>
+              Effect.succeed(undefined),
+            ),
+            // Plan-gated zones reject the setting (`Forbidden`, code 1135
+            // "not available for your plan type") or the route entirely
+            // (`InvalidRoute`); skip them.
+            Effect.catchTag(["Forbidden", "InvalidRoute"], () =>
+              Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter((row): row is VariantsAttributes => row !== undefined);
+    }),
 
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const o = olds as VariantsProps;

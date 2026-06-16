@@ -1,6 +1,7 @@
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -251,6 +252,21 @@ export const StreamWatermarkProvider = () =>
         scale: news.scale,
       });
       return toAttributes(created, accountId);
+    }),
+
+    list: Effect.fn(function* () {
+      // Account-scoped collection — watermark profiles are enumerated
+      // per account. `listWatermarks` is paginated (items: "result");
+      // collect every page and hydrate into the `read` Attributes shape.
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* stream.listWatermarks.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((w) => toAttributes(w, accountId)),
+          ),
+        ),
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {

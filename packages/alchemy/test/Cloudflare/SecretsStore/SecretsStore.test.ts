@@ -1,3 +1,6 @@
+import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
+import * as Test from "@/Test/Vitest";
 import {
   Credentials,
   apiTokenCredentials,
@@ -9,6 +12,8 @@ import * as Layer from "effect/Layer";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+
+const { test } = Test.make({ providers: Cloudflare.providers() });
 
 /**
  * Test harness that captures the outbound `HttpClientRequest` and lets
@@ -136,4 +141,30 @@ it.live(
       expect(err._tag).toBe("MaximumStoresExceeded");
       expect(err.message).toBe("maximum_stores_exceeded");
     }),
+);
+
+// Canonical `list()` test (account-scoped collection). Deploy/adopt the
+// account's Secrets Store, then enumerate via the provider's `list()` and
+// assert the deployed store's id is present in the exhaustively-paginated
+// result. Bracketed with `stack.destroy()` at start and end; note the
+// SecretsStore provider's `delete` is an intentional no-op (account-level
+// infra), so destroy never tears down the shared store.
+test.provider("list enumerates the deployed secrets store", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.SecretsStore("ListStore");
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.SecretsStore);
+    const all = yield* provider.list();
+
+    expect(all.length).toBeGreaterThan(0);
+    expect(all.some((s) => s.storeId === deployed.storeId)).toBe(true);
+
+    yield* stack.destroy();
+  }),
 );

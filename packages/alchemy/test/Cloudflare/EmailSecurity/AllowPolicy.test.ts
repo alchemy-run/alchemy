@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as emailSecurity from "@distilled.cloud/cloudflare/email-security";
 import { expect } from "@effect/vitest";
@@ -63,6 +64,55 @@ test.provider.skipIf(entitled)(
           Effect.flip,
         );
       expect(error._tag).toEqual("EmailSecurityNotEntitled");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Read-only list assertion that runs on every account. On unentitled
+// accounts the provider's list() maps the typed EmailSecurityNotEntitled
+// rejection to a well-typed empty array; entitled accounts return real rows.
+test.provider(
+  "list enumerates allow policies (read-only)",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.EmailSecurityAllowPolicy,
+      );
+      const all = yield* provider.list();
+      expect(Array.isArray(all)).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Requires the Email Security (Area 1) enterprise add-on — unentitled accounts fail
+// with the typed EmailSecurityNotEntitled. Unlock with CLOUDFLARE_EMAIL_SECURITY=1.
+test.provider.skipIf(!entitled)(
+  "list includes the deployed allow policy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.EmailSecurityAllowPolicy("ListPolicy", {
+            pattern,
+            patternType: "EMAIL",
+            isAcceptableSender: true,
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.EmailSecurityAllowPolicy,
+      );
+      const all = yield* provider.list();
+      expect(all.some((p) => p.policyId === deployed.policyId)).toBe(true);
 
       yield* stack.destroy();
     }).pipe(logLevel),

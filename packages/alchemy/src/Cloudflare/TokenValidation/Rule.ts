@@ -8,7 +8,9 @@ import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const TokenValidationRuleTypeId = "Cloudflare.TokenValidation.Rule" as const;
 type TokenValidationRuleTypeId = typeof TokenValidationRuleTypeId;
@@ -304,6 +306,37 @@ export const TokenValidationRuleProvider = () =>
           Effect.catchTag("TokenValidationRuleNotFound", () => Effect.void),
         );
     }),
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Token validation rules live inside a zone with no account-wide
+      // enumeration API — fan out across every zone and list rules per
+      // zone, paginating each zone exhaustively.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          tokenValidation.listRules.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map(
+                  (rule): TokenValidationRuleAttributes =>
+                    toAttributes(rule, zone.id),
+                ),
+              ),
+            ),
+            // JWT validation is an API Shield (Enterprise) feature; zones
+            // without the entitlement, or with partial permissions, reject
+            // the route — skip them rather than failing the whole listing.
+            Effect.catchTag(["TokenValidationNotEntitled", "Forbidden"], () =>
+              Effect.succeed([] as TokenValidationRuleAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 type ObservedRule = tokenValidation.GetRuleResponse;
@@ -379,7 +412,8 @@ const toAttributes = (
   rule:
     | ObservedRule
     | tokenValidation.CreateRuleResponse
-    | tokenValidation.PatchRuleResponse,
+    | tokenValidation.PatchRuleResponse
+    | tokenValidation.ListRulesResponse["result"][number],
   zoneId: string,
 ): TokenValidationRuleAttributes => ({
   ruleId: rule.id ?? "",

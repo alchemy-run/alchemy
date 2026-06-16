@@ -1,6 +1,7 @@
 import * as intel from "@distilled.cloud/cloudflare/intel";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
 import crypto from "node:crypto";
 
 import { isResolved } from "../../Diff.ts";
@@ -161,6 +162,45 @@ export const isIndicatorFeed = (value: unknown): value is IndicatorFeed =>
 export const IndicatorFeedProvider = () =>
   Provider.succeed(IndicatorFeed, {
     stables: ["feedId", "accountId", "createdOn"],
+
+    // Account collection — enumerate every indicator feed owned by the
+    // ambient account. The list endpoint returns a thin row (no
+    // `latestUploadStatus`), so hydrate each id via `getFeed` to produce the
+    // exact `read` Attributes shape. Accounts without the Cloudforce One feed
+    // entitlement are rejected with the typed `Forbidden` tag — treat that as
+    // an empty collection rather than failing the enumeration.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const ids = yield* intel.listIndicatorFeeds.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .map((f) => f.id)
+              .filter((id): id is number => id != null),
+          ),
+        ),
+        Effect.catchTag("Forbidden", () => Effect.succeed([] as number[])),
+      );
+      const rows = yield* Effect.forEach(
+        ids,
+        (feedId) =>
+          getFeed(accountId, feedId).pipe(
+            Effect.map((observed) =>
+              observed
+                ? toAttributes(observed, accountId, undefined)
+                : undefined,
+            ),
+            // A feed may vanish between list and get, or the account may
+            // lack access to an individual feed — skip either case.
+            Effect.catchTag("Forbidden", () => Effect.succeed(undefined)),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is IndicatorFeedAttributes => row !== undefined,
+      );
+    }),
 
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

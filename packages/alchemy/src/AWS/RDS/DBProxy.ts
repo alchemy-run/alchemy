@@ -1,6 +1,7 @@
 import * as rds from "@distilled.cloud/aws/rds";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -146,6 +147,49 @@ export const DBProxyProvider = () =>
 
       return {
         stables: ["dbProxyArn", "dbProxyName"],
+        // Enumerate every DB proxy in the account/region via the paginated
+        // `describeDBProxies`, then hydrate each proxy's tags via
+        // `listTagsForResource` (describe does not return tags inline) so each
+        // element matches `read`'s `Attributes` shape exactly. A proxy deleted
+        // between the describe and the tag fetch surfaces `DBProxyNotFoundFault`
+        // per item and is dropped.
+        list: () =>
+          Effect.gen(function* () {
+            const proxies = yield* rds.describeDBProxies.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.DBProxies ?? []),
+              ),
+            );
+            const rows = yield* Effect.forEach(
+              proxies,
+              (proxy) =>
+                Effect.gen(function* () {
+                  if (!proxy.DBProxyArn) return undefined;
+                  const tagResponse = yield* rds
+                    .listTagsForResource({ ResourceName: proxy.DBProxyArn })
+                    .pipe(
+                      Effect.catchTag("DBProxyNotFoundFault", () =>
+                        Effect.succeed(undefined),
+                      ),
+                    );
+                  if (tagResponse === undefined) return undefined;
+                  const tags = Object.fromEntries(
+                    (tagResponse.TagList ?? [])
+                      .filter(
+                        (tag): tag is rds.Tag & { Key: string } =>
+                          tag.Key != null,
+                      )
+                      .map((tag) => [tag.Key, tag.Value ?? ""] as const),
+                  );
+                  return toAttrs({ proxy, tags });
+                }),
+              { concurrency: 10 },
+            );
+            return rows.filter(
+              (row): row is DBProxy["Attributes"] => row !== undefined,
+            );
+          }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return undefined;
           if (

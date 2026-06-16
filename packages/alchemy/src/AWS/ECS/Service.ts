@@ -1,6 +1,7 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -449,6 +450,77 @@ export const ServiceProvider = () =>
             status: service.status ?? "ACTIVE",
           };
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // ECS services are scoped to a cluster, so enumerate every cluster
+            // first, then list services per cluster, then hydrate via
+            // describeServices (which accepts up to 10 services per call).
+            const clusterArns = yield* ecs.listClusters.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.clusterArns ?? []),
+              ),
+            );
+
+            const perCluster = yield* Effect.forEach(
+              clusterArns,
+              (clusterArn) =>
+                Effect.gen(function* () {
+                  const serviceArns = yield* ecs.listServices
+                    .pages({ cluster: clusterArn })
+                    .pipe(
+                      Stream.runCollect,
+                      Effect.map((chunk) =>
+                        Array.from(chunk).flatMap(
+                          (page) => page.serviceArns ?? [],
+                        ),
+                      ),
+                      Effect.catchTag("ClusterNotFoundException", () =>
+                        Effect.succeed([] as string[]),
+                      ),
+                    );
+                  if (serviceArns.length === 0) {
+                    return [] as Service["Attributes"][];
+                  }
+
+                  const batches: string[][] = [];
+                  for (let i = 0; i < serviceArns.length; i += 10) {
+                    batches.push(serviceArns.slice(i, i + 10));
+                  }
+
+                  const described = yield* Effect.forEach(
+                    batches,
+                    (services) =>
+                      ecs
+                        .describeServices({ cluster: clusterArn, services })
+                        .pipe(
+                          Effect.map((res) => res.services ?? []),
+                          Effect.catchTag("ClusterNotFoundException", () =>
+                            Effect.succeed([] as ecs.Service[]),
+                          ),
+                        ),
+                    { concurrency: 4 },
+                  );
+
+                  return described.flat().flatMap((service) =>
+                    service.serviceArn && service.status !== "INACTIVE"
+                      ? [
+                          {
+                            serviceArn: service.serviceArn as ServiceArn,
+                            serviceName: service.serviceName!,
+                            clusterArn: service.clusterArn as ClusterArn,
+                            taskDefinitionArn: service.taskDefinition!,
+                            status: service.status ?? "ACTIVE",
+                          } satisfies Service["Attributes"],
+                        ]
+                      : [],
+                  );
+                }),
+              { concurrency: 5 },
+            );
+
+            return perCluster.flat();
+          }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const serviceName = yield* toServiceName(id, news);
           const clusterArn = clusterArnOf(news.cluster) as ClusterArn;

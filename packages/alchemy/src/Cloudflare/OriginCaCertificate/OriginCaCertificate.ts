@@ -8,7 +8,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import { findZoneByName } from "../Zone/lookup.ts";
+import { findZoneByName, listAllZones } from "../Zone/lookup.ts";
 
 const OriginCaCertificateTypeId = "Cloudflare.OriginCaCertificate" as const;
 type OriginCaCertificateTypeId = typeof OriginCaCertificateTypeId;
@@ -171,6 +171,40 @@ export const OriginCaCertificateProvider = () =>
       "requestedValidity",
       "expiresOn",
     ],
+
+    // Origin CA certificates are enumerated per zone (the list endpoint
+    // requires a `zone_id` query param). Fan out across every zone on the
+    // account and flatten. The list response omits the csr and requested
+    // validity, so `toAttributes` fills them with the defaults — matching the
+    // cold/unowned `read` shape. Origin CA endpoints may require the special
+    // Origin CA Key auth; a zone we can't enumerate rejects with `Forbidden`,
+    // which we skip rather than fail (the array stays as complete as the
+    // credentials allow).
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          originCa.listOriginCaCertificates.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? [])
+                  .filter((cert) => cert.id != null)
+                  .map(
+                    (cert): OriginCaCertificateAttributes => toAttributes(cert),
+                  ),
+              ),
+            ),
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as OriginCaCertificateAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
 
     diff: Effect.fn(function* ({ olds, news }) {
       const o = olds as OriginCaCertificateProps | undefined;

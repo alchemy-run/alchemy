@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as rum from "@distilled.cloud/cloudflare/rum";
 import { expect } from "@effect/vitest";
@@ -170,6 +171,25 @@ test.provider(
 
       yield* expectGone(accountId, replaced.siteTag);
     }).pipe(logLevel),
+);
+
+test.provider("list enumerates the deployed RUM site", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Cloudflare.RumSite("ListSite", {
+        host: `list.${zoneName}`,
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.RumSite);
+    const all = yield* provider.list();
+
+    expect(all.some((s) => s.siteTag === deployed.siteTag)).toBe(true);
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 test.provider("recreates after out-of-band delete", (stack) =>

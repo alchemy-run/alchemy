@@ -193,6 +193,25 @@ export const OrganizationProvider = () =>
   Provider.succeed(Organization, {
     stables: ["organizationId", "createTime"],
 
+    // Enumerate every organization reachable by the credentials. Cloudflare's
+    // `/organizations` collection is account-wide (no per-account scoping
+    // beyond the token), so there is no env scope to resolve — just paginate
+    // exhaustively and map each row to the same `Attributes` shape `read`
+    // returns. The op is entitlement-gated: on an unentitled account it
+    // rejects with the typed `Forbidden` error (which propagates).
+    list: () =>
+      organizations.listOrganizations.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map(toAttributes),
+          ),
+        ),
+        // Organizations are a Tenant/reseller feature — a regular account
+        // token gets `Forbidden` ("Authentication error"). Nothing to list.
+        Effect.catchTag("Forbidden", () => Effect.succeed([])),
+      ),
+
     diff: Effect.fn(function* ({ olds, news, output }) {
       // `news` may still carry unresolved plan-time expressions — defer
       // to the engine's default update logic until everything is concrete.

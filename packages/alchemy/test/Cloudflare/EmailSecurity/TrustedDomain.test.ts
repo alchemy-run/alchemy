@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as emailSecurity from "@distilled.cloud/cloudflare/email-security";
 import { expect } from "@effect/vitest";
@@ -91,6 +92,47 @@ test.provider.skipIf(!entitled)(
         }),
       );
       expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// `list()` enumerates the account's trusted domains. On the standard testing
+// account (not entitled) the typed `EmailSecurityNotEntitled` error is caught
+// and the result is an empty array — so this assertion is meaningful without
+// the add-on. On an entitled account it also asserts the deployed entry is
+// present.
+test.provider(
+  "list enumerates trusted domains",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.EmailSecurityTrustedDomain,
+      );
+
+      if (!entitled) {
+        // Unentitled account: typed entitlement error -> [].
+        const all = yield* provider.list();
+        expect(all).toEqual([]);
+        return;
+      }
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.EmailSecurityTrustedDomain("ListTrusted", {
+            pattern,
+            isSimilarity: true,
+          });
+        }),
+      );
+
+      const all = yield* provider.list();
+      expect(
+        all.some((x) => x.trustedDomainId === deployed.trustedDomainId),
+      ).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

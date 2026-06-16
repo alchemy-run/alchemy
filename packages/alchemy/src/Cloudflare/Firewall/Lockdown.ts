@@ -6,7 +6,9 @@ import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const LockdownTypeId = "Cloudflare.Firewall.Lockdown" as const;
 type LockdownTypeId = typeof LockdownTypeId;
@@ -277,6 +279,29 @@ export const LockdownProvider = () =>
       }
 
       return toAttributes(observed, zoneId);
+    }),
+
+    // Zone Lockdown rules are zone-scoped: there is no account-wide list, so
+    // enumerate every zone and exhaustively paginate its lockdown rules,
+    // hydrating each into the same Attributes shape `read` returns. Zone
+    // Lockdown is a Pro+ feature, so plan-gated zones reject the route with a
+    // typed `Forbidden` — skip those rather than failing the whole list.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          firewall.listLockdowns.items({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).map((rule) => toAttributes(rule, zone.id)),
+            ),
+            Effect.catchTag("Forbidden", () => Effect.succeed([])),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
     }),
 
     delete: Effect.fn(function* ({ output }) {

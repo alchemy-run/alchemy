@@ -146,6 +146,13 @@ export const Comment = Resource<Comment>("GitHub.Comment");
 export const CommentProvider = () =>
   Provider.succeed(Comment, {
     stables: ["commentId"],
+    // Non-listable: a Comment is identified entirely by its parent
+    // {owner, repository, issueNumber} plus the server-assigned commentId.
+    // GitHub only exposes comment enumeration *within* a specific issue or PR
+    // (`issues.listComments`); there is no account- or repo-wide API to
+    // enumerate every comment without first knowing the issue/PR. With no
+    // ambient scope to enumerate from, this collapses to the empty list.
+    list: () => Effect.succeed([]),
     reconcile: Effect.fn(function* ({ news, output }) {
       const octokit = yield* Octokit;
       const body = dedent(news.body);

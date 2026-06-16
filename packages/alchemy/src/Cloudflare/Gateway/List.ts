@@ -159,6 +159,15 @@ export const GatewayListProvider = () =>
   Provider.succeed(GatewayList, {
     stables: ["listId", "accountId", "type", "createdAt"],
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const lists = yield* zeroTrust.listGatewayLists.items({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+      );
+      return lists.map((list) => toAttributes(list, accountId));
+    }),
+
     diff: Effect.fn(function* ({ olds = {}, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;

@@ -50,6 +50,14 @@ export const AccountPasswordPolicyProvider = () =>
         );
       return response?.PasswordPolicy;
     }),
+    // Account-level singleton: IAM exposes no enumeration API, only
+    // `getAccountPasswordPolicy`. Return the single policy as a one-element
+    // array, or `[]` when none is set (typed `NoSuchEntityException`).
+    list: () =>
+      iam.getAccountPasswordPolicy({}).pipe(
+        Effect.map((response) => [response.PasswordPolicy]),
+        Effect.catchTag("NoSuchEntityException", () => Effect.succeed([])),
+      ),
     reconcile: Effect.fn(function* ({ news, session }) {
       // The account password policy is a singleton driven entirely by
       // `updateAccountPasswordPolicy`, which is itself a full upsert.

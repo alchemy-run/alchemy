@@ -269,6 +269,28 @@ export const LoadBalancerPoolProvider = () =>
       return undefined;
     }),
 
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* loadBalancers.listPools.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map(
+              (pool): LoadBalancerPoolAttributes => ({
+                poolId: pool.id ?? "",
+                accountId,
+                name: pool.name ?? "",
+                enabled: pool.enabled ?? true,
+                monitor: pool.monitor ?? undefined,
+                createdOn: pool.createdOn ?? undefined,
+                modifiedOn: pool.modifiedOn ?? undefined,
+              }),
+            ),
+          ),
+        ),
+      );
+    }),
+
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createPoolName(id, news.name);

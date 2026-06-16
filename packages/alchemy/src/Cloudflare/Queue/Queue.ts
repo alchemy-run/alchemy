@@ -214,6 +214,26 @@ export const QueueProviderLive = () =>
           Effect.catchTag("QueueNotFound", () => Effect.void),
         );
     }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* queues.listQueues.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? [])
+              .filter(
+                (q): q is typeof q & { queueId: string; queueName: string } =>
+                  q.queueId != null && q.queueName != null,
+              )
+              .map((q) => ({
+                queueId: q.queueId,
+                queueName: q.queueName,
+                accountId,
+              })),
+          ),
+        ),
+      );
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (output?.queueId && isLiveId(output.queueId)) {

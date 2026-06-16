@@ -4,7 +4,9 @@ import * as Predicate from "effect/Predicate";
 
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "./lookup.ts";
 
 const ZoneSettingTypeId = "Cloudflare.Zone.Setting" as const;
 type ZoneSettingTypeId = typeof ZoneSettingTypeId;
@@ -79,6 +81,78 @@ export type ZoneSettingId =
   | "webp"
   | "websockets"
   | (string & {});
+
+/**
+ * The concrete, enumerable members of {@link ZoneSettingId}. Cloudflare has no
+ * "list all settings" operation in the distilled `zones` service (only a
+ * per-setting `getSetting`), so `list()` fans out a `getSetting` over this
+ * known set on every zone. Forward-compatible settings (the `(string & {})`
+ * tail) cannot be enumerated and are skipped by definition.
+ */
+const KNOWN_ZONE_SETTING_IDS = [
+  "0rtt",
+  "advanced_ddos",
+  "aegis",
+  "always_online",
+  "always_use_https",
+  "automatic_https_rewrites",
+  "automatic_platform_optimization",
+  "brotli",
+  "browser_cache_ttl",
+  "browser_check",
+  "cache_level",
+  "challenge_ttl",
+  "china_network_enabled",
+  "ciphers",
+  "cname_flattening",
+  "content_converter",
+  "development_mode",
+  "early_hints",
+  "edge_cache_ttl",
+  "email_obfuscation",
+  "h2_prioritization",
+  "hotlink_protection",
+  "http2",
+  "http3",
+  "image_resizing",
+  "ip_geolocation",
+  "ipv6",
+  "max_upload",
+  "min_tls_version",
+  "mirage",
+  "nel",
+  "opportunistic_encryption",
+  "opportunistic_onion",
+  "orange_to_orange",
+  "origin_error_page_pass_thru",
+  "origin_h2_max_streams",
+  "origin_max_http_version",
+  "polish",
+  "prefetch_preload",
+  "privacy_pass",
+  "proxy_read_timeout",
+  "pseudo_ipv4",
+  "redirects_for_ai_training",
+  "replace_insecure_js",
+  "response_buffering",
+  "rocket_loader",
+  "search_for_agents",
+  "security_header",
+  "security_level",
+  "server_side_exclude",
+  "sha1_support",
+  "sort_query_string_for_cache",
+  "ssl",
+  "tls_1_2_only",
+  "tls_1_3",
+  "tls_client_auth",
+  "transformations",
+  "transformations_allowed_origins",
+  "true_client_ip_header",
+  "waf",
+  "webp",
+  "websockets",
+] as const satisfies readonly ZoneSettingId[];
 
 export type ZoneSettingProps = {
   /**
@@ -290,6 +364,59 @@ export const ZoneSettingProvider = () =>
       yield* zones
         .patchSetting({ zoneId, settingId, value: initialValue })
         .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.void));
+    }),
+
+    // Zone settings are keyed by (zoneId, settingId): every setting exists on
+    // every zone with a Cloudflare default. There is no account-wide list, so
+    // enumerate every zone via `listAllZones` and read each known setting with
+    // the same `getSetting` call `read` uses — emitting one Attributes per
+    // (zone, setting), exactly matching `read`'s keying.
+    //
+    // The distilled `zones` service exposes only a per-setting `getSetting`
+    // (no bulk `/zones/{id}/settings` list op), so we fan out across the known
+    // setting ids. Adding a bulk-list operation to distilled would collapse
+    // each zone's N gets into one call — see the agent report's neededPatch.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const allZones = yield* listAllZones(accountId);
+      const pairs = allZones.flatMap((zone) =>
+        KNOWN_ZONE_SETTING_IDS.map((settingId) => ({
+          zoneId: zone.id,
+          settingId,
+        })),
+      );
+      const rows = yield* Effect.forEach(
+        pairs,
+        ({ zoneId, settingId }) =>
+          zones.getSetting({ zoneId, settingId }).pipe(
+            Effect.map((observed) =>
+              // Unmanaged at discovery time, so the observed value is the
+              // setting's pre-management value (mirrors a cold `read`).
+              toAttributes(zoneId, settingId, observed, settingValue(observed)),
+            ),
+            // Zone removed out-of-band or the setting is plan-gated / not
+            // exposed to this token — skip it rather than fail the listing.
+            Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () =>
+              Effect.succeed<ZoneSettingAttributes | undefined>(undefined),
+            ),
+            // A handful of structured settings (e.g.
+            // `automatic_platform_optimization`) can return a scalar value
+            // (`"off"`) that distilled's `GetSettingResponse` union doesn't
+            // model, surfacing as an untyped `CloudflareHttpError` (status
+            // 200, "Schema decode failed"). The Cloudflare patch system only
+            // types errors, not response schemas, so this can't be patched
+            // here — skip the undecodable setting rather than failing the
+            // whole listing. See the agent report's neededPatch (widen the
+            // `GetSettingResponse` member to accept the scalar form).
+            Effect.catch(() =>
+              Effect.succeed<ZoneSettingAttributes | undefined>(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ZoneSettingAttributes => row !== undefined,
+      );
     }),
   });
 

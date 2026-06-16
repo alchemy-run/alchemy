@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -96,6 +97,34 @@ test.provider(
 
       const afterDestroy = yield* getLivePortal(accountId, PORTAL_ID);
       expect(afterDestroy).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+// Canonical `list()` test (account collection): deploy a portal, then resolve
+// the provider via the typed helper and assert the deployed portal appears in
+// the exhaustively-paginated result.
+test.provider(
+  "list enumerates the deployed MCP portal",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.AccessMcpPortal("ListPortal", {
+            portalId: PORTAL_ID,
+            hostname: HOSTNAME,
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.AccessMcpPortal);
+      const all = yield* provider.list();
+
+      expect(all.some((p) => p.portalId === deployed.portalId)).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 90_000 },
 );

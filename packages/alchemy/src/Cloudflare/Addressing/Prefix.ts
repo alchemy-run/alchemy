@@ -168,6 +168,21 @@ export const AddressingPrefixProvider = () =>
       return undefined;
     }),
 
+    // BYOIP prefixes are account-scoped; the catalog list endpoint returns
+    // the full prefix object per item, so each row hydrates directly into the
+    // same `Attributes` shape `read` produces — no per-item fetch needed.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* addressing.listPrefixes.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((p) => toAttributes(p, accountId)),
+          ),
+        ),
+      );
+    }),
+
     read: Effect.fn(function* ({ output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

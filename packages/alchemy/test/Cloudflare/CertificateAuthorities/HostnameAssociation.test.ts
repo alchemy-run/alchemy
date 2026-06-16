@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as certificateAuthorities from "@distilled.cloud/cloudflare/certificate-authorities";
 import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";

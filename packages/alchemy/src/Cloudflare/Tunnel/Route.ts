@@ -270,6 +270,36 @@ export const TunnelRouteProvider = () =>
           Effect.catch(() => Effect.succeed(undefined)),
         );
     }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Account-scoped collection: enumerate every Zero Trust network
+      // route in the account, exhaustively paginating. Drop soft-deleted
+      // routes and anything missing an id, then hydrate into the exact
+      // `read` Attributes shape so each element is delete-ready.
+      return yield* zeroTrust.listNetworkRoutes
+        .pages({ accountId, isDeleted: false })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter(
+                  (r): r is typeof r & { id: string } =>
+                    r.id != null && !r.deletedAt,
+                )
+                .map((r) => ({
+                  routeId: r.id,
+                  network: normalize(r.network) ?? "",
+                  tunnelId: normalize(r.tunnelId) ?? "",
+                  accountId,
+                  comment: normalize(r.comment),
+                  virtualNetworkId: normalize(r.virtualNetworkId),
+                  createdAt: normalize(r.createdAt),
+                })),
+            ),
+          ),
+        );
+    }),
     read: Effect.fn(function* ({ olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
 

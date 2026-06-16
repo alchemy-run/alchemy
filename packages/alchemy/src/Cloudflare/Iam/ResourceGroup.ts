@@ -212,6 +212,23 @@ export const IamResourceGroupProvider = () =>
         })
         .pipe(Effect.catchTag("ResourceGroupNotFound", () => Effect.void));
     }),
+
+    // Account collection — the list op returns the full group record (id,
+    // name, scope) per page, so each item maps straight to the `read`
+    // Attributes shape without a per-item GET. Predefined/system resource
+    // groups are returned alongside ours, so a read-only list is often
+    // non-empty. Cloudflare paginates a single page set; exhaust it.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* iam.listResourceGroups.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((group) => toAttributes(group, accountId)),
+          ),
+        ),
+      );
+    }),
   });
 
 type ObservedResourceGroup = {

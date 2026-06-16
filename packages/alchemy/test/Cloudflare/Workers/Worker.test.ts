@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
+import * as Provider from "@/Provider";
 import * as Output from "@/Output";
 import { Stack } from "@/Stack";
 import { State } from "@/State";
@@ -865,6 +866,36 @@ describe.concurrent("Cloudflare.Worker", () => {
         yield* stack.destroy();
         yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
       }).pipe(logLevel),
+  );
+
+  // Canonical `list()` test (account collection): deploy a real Worker and
+  // assert it shows up in the exhaustively-paginated account-wide listing.
+  test.provider("list enumerates the deployed worker", (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const worker = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Worker("ListWorker", {
+            main,
+            compatibility: { date: "2024-01-01" },
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.Worker);
+      const all = yield* provider.list();
+
+      expect(all.some((w) => w.workerName === worker.workerName)).toBe(true);
+      const found = all.find((w) => w.workerName === worker.workerName);
+      expect(found?.workerId).toEqual(worker.workerId);
+      expect(found?.accountId).toEqual(accountId);
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+    }).pipe(logLevel),
   );
 
   test.provider(

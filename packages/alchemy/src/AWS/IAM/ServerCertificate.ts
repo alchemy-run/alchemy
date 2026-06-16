@@ -1,6 +1,7 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -249,6 +250,51 @@ export const ServerCertificateProvider = () =>
             tags: desiredTags,
           };
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // IAM is global; `listServerCertificates` enumerates every cert in
+            // the account. Metadata lacks the body/chain/tags, so hydrate each
+            // entry to produce the full Attributes shape `read` returns.
+            const metadatas = yield* iam.listServerCertificates.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap(
+                  (page) => page.ServerCertificateMetadataList ?? [],
+                ),
+              ),
+            );
+            const rows = yield* Effect.forEach(
+              metadatas,
+              (meta) =>
+                Effect.gen(function* () {
+                  const cert = yield* readCertificate(
+                    meta.ServerCertificateName,
+                  );
+                  // Raced delete between list and hydrate — skip it.
+                  if (!cert?.ServerCertificateMetadata?.Arn) {
+                    return undefined;
+                  }
+                  const tags = yield* iam.listServerCertificateTags({
+                    ServerCertificateName: meta.ServerCertificateName,
+                  });
+                  return {
+                    serverCertificateArn: cert.ServerCertificateMetadata.Arn,
+                    serverCertificateName:
+                      cert.ServerCertificateMetadata.ServerCertificateName,
+                    serverCertificateId:
+                      cert.ServerCertificateMetadata.ServerCertificateId,
+                    path: cert.ServerCertificateMetadata.Path,
+                    certificateBody: cert.CertificateBody,
+                    certificateChain: cert.CertificateChain,
+                    uploadDate: cert.ServerCertificateMetadata.UploadDate,
+                    expiration: cert.ServerCertificateMetadata.Expiration,
+                    tags: toTagRecord(tags.Tags),
+                  };
+                }),
+              { concurrency: 10 },
+            );
+            return rows.filter((row) => row !== undefined);
+          }),
         delete: Effect.fn(function* ({ output }) {
           yield* iam
             .deleteServerCertificate({

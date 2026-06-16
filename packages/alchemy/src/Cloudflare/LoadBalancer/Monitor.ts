@@ -199,6 +199,23 @@ export const LoadBalancerMonitorProvider = () =>
   Provider.succeed(LoadBalancerMonitor, {
     stables: ["monitorId", "accountId", "createdOn"],
 
+    // Account-scoped collection: monitors are enumerated by the account-wide
+    // listMonitors endpoint, whose result items already carry the full monitor
+    // shape — map each directly into the exact `read` Attributes shape.
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* loadBalancers.listMonitors.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((monitor) =>
+              toAttributes(monitor, accountId),
+            ),
+          ),
+        ),
+      );
+    }),
+
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {

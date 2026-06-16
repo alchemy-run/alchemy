@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as botManagement from "@distilled.cloud/cloudflare/bot-management";
 import { expect } from "@effect/vitest";
@@ -229,6 +230,31 @@ describe.sequential("BotManagement", () => {
           }
         }).pipe(Effect.ensuring(restoreSbfm(zoneId, original)));
 
+        yield* stack.destroy();
+      }).pipe(logLevel),
+    { timeout: 240_000 },
+  );
+
+  // Canonical `list()` test (zone-scoped singleton): there is no account-wide
+  // API for this per-zone config, so `list()` enumerates every zone via
+  // `listAllZones` and reads the bot-management singleton in each. Assert the
+  // result is non-empty and contains the standing test zone. This is a
+  // read-only assertion (no mutation), so it runs regardless of whether the
+  // zone has the paid Bot Management add-on.
+  test.provider(
+    "list enumerates bot management across all zones",
+    (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
+
+        const provider = yield* Provider.findProvider(Cloudflare.BotManagement);
+        const all = yield* provider.list();
+
+        expect(all.length).toBeGreaterThan(0);
+        expect(all.some((s) => s.zoneId === zoneId)).toBe(true);
+
+        // `stack` is unused (the singleton always exists on every zone), but
+        // keep the destroy bookend so the harness state stays clean.
         yield* stack.destroy();
       }).pipe(logLevel),
     { timeout: 240_000 },

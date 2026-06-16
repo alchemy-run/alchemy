@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as aisearch from "@distilled.cloud/cloudflare/aisearch";
 import { expect } from "@effect/vitest";
@@ -151,6 +152,33 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(accountId, healed.token.id);
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+test.provider(
+  "list enumerates the deployed service token",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(program(accountId));
+
+      const provider = yield* Provider.findProvider(Cloudflare.AiSearchToken);
+      const all = yield* provider.list();
+
+      const found = all.find((t) => t.id === deployed.token.id);
+      expect(found).toBeDefined();
+      // list() emits the exact `read` Attributes shape.
+      expect(found?.accountId).toEqual(accountId);
+      expect(found?.cfApiId).toEqual(deployed.apiToken.tokenId);
+      expect(found?.name).toEqual(deployed.token.name);
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, deployed.token.id);
     }).pipe(logLevel),
   { timeout: 240_000 },
 );

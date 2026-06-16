@@ -1,6 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as rum from "@distilled.cloud/cloudflare/rum";
 import { expect } from "@effect/vitest";
@@ -207,6 +208,49 @@ test.provider("create, update in place, and delete a rule", (stack) =>
     yield* stack.destroy();
 
     yield* expectGone(accountId, rulesetId, initial.rule.id);
+  }).pipe(logLevel),
+);
+
+// Canonical `list()` test: rules live under a RumSite's implicit ruleset and
+// there is no account-wide rule list, so `list()` enumerates every site
+// (paginated) and fans out the per-ruleset rule list. Deploy a real rule,
+// then assert it appears in the exhaustively-enumerated result. Gated behind
+// the same account-wide `MaxRulesExceeded` quota the other cases handle.
+test.provider("list enumerates rules across all rulesets", (stack) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const zone = yield* findZoneByName({ accountId, name: zoneName });
+    if (!zone) {
+      return yield* Effect.die(
+        new Error(`zone "${zoneName}" not found in account`),
+      );
+    }
+
+    yield* stack.destroy();
+    yield* cleanupLeftoverSites(accountId, zone.id);
+
+    const deployed = yield* retryingQuota(
+      stack.deploy(
+        program(zone.id, {
+          host: zoneName,
+          paths: ["/list-test/*"],
+          inclusive: false,
+        }),
+      ),
+    );
+    if (deployed === undefined) return yield* quotaExhausted(stack);
+
+    const provider = yield* Provider.findProvider(Cloudflare.RumRule);
+    const all = yield* provider.list();
+
+    expect(
+      all.some(
+        (r) =>
+          r.id === deployed.rule.id && r.rulesetId === deployed.rule.rulesetId,
+      ),
+    ).toBe(true);
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );
 

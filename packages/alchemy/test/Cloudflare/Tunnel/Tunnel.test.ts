@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { describe, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -85,5 +86,30 @@ describe("Tunnel runtime bindings", () => {
       expect(body.deleted).toBe(true);
     }).pipe(logLevel),
     { timeout: 180_000 },
+  );
+});
+
+// Canonical `list()` test (account collection): deploy a tunnel, resolve the
+// provider with the typed `Provider.findProvider`, enumerate every cfd_tunnel
+// in the account, and assert the deployed tunnel is present. Bracket with
+// `stack.destroy()` so the test is isolated and leaves no cloud residue.
+describe("Tunnel.list", () => {
+  test.provider("list enumerates the deployed tunnel", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Tunnel("ListTunnel");
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.Tunnel);
+      const all = yield* provider.list();
+
+      expect(all.some((t) => t.tunnelId === deployed.tunnelId)).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
   );
 });

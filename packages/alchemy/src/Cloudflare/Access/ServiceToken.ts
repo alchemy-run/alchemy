@@ -128,6 +128,39 @@ export const isAccessServiceToken = (
 export const AccessServiceTokenProvider = () =>
   Provider.succeed(AccessServiceToken, {
     stables: ["serviceTokenId", "accountId", "clientId"],
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* zeroTrust.listAccessServiceTokensForAccount
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? [])
+                .filter(
+                  (
+                    t,
+                  ): t is (typeof page.result)[number] & {
+                    id: string;
+                    clientId: string;
+                  } => t.id != null && t.clientId != null,
+                )
+                .map((t) => ({
+                  serviceTokenId: t.id,
+                  accountId,
+                  clientId: t.clientId,
+                  // The secret is only revealed on create/rotate, never on
+                  // enumeration — match read and leave it undefined.
+                  clientSecret: undefined,
+                  name: t.name ?? "",
+                  duration: t.duration ?? undefined,
+                  expiresAt: t.expiresAt ?? undefined,
+                  clientSecretVersion: 1,
+                })),
+            ),
+          ),
+        );
+    }),
     diff: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;

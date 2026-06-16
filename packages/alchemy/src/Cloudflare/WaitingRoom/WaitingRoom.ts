@@ -7,7 +7,9 @@ import { Unowned } from "../../AdoptPolicy.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 const WaitingRoomTypeId = "Cloudflare.WaitingRoom" as const;
 type WaitingRoomTypeId = typeof WaitingRoomTypeId;
@@ -395,6 +397,36 @@ export const WaitingRoomProvider = () =>
           Effect.catchTag("InvalidRoute", () => Effect.void),
         );
     }),
+
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Waiting rooms live inside a zone with no account-wide enumeration
+      // API — fan out across every zone and list rooms per zone, then
+      // exhaustively paginate each.
+      const zones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        zones,
+        (zone) =>
+          waitingRooms.listWaitingRoomsForZone.pages({ zoneId: zone.id }).pipe(
+            Stream.runCollect,
+            Effect.map((chunk) =>
+              Array.from(chunk).flatMap((page) =>
+                (page.result ?? []).map((room) => toAttributes(room, zone.id)),
+              ),
+            ),
+            // Plan-gated / partial-permission zones reject the route, and a
+            // zone deleted out-of-band has no rooms; skip both.
+            Effect.catchTag("Forbidden", () =>
+              Effect.succeed([] as WaitingRoomAttributes[]),
+            ),
+            Effect.catchTag("InvalidRoute", () =>
+              Effect.succeed([] as WaitingRoomAttributes[]),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.flat();
+    }),
   });
 
 type ObservedRoom = waitingRooms.GetWaitingRoomResponse;
@@ -578,7 +610,8 @@ const toAttributes = (
   room:
     | waitingRooms.GetWaitingRoomResponse
     | waitingRooms.CreateWaitingRoomResponse
-    | waitingRooms.UpdateWaitingRoomResponse,
+    | waitingRooms.UpdateWaitingRoomResponse
+    | waitingRooms.ListWaitingRoomsResponse["result"][number],
   zoneId: string,
 ): WaitingRoomAttributes => ({
   // Cloudflare always echoes an id for a persisted room; distilled types it

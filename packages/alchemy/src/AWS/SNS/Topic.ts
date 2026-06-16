@@ -1,13 +1,14 @@
 import * as sns from "@distilled.cloud/aws/sns";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import type { Providers } from "../Providers.ts";
 import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type TopicName = string;
@@ -134,6 +135,39 @@ export const Topic = Resource<Topic>("AWS.SNS.Topic");
 
 export const TopicProvider = () =>
   Provider.succeed(Topic, {
+    // AWS account/region collection: `listTopics` enumerates every topic ARN
+    // in the ambient account+region (paginated, ARN-only), then each ARN is
+    // hydrated via `readTopic` into the exact `read` Attributes shape
+    // (attributes + tags + data protection policy). Per-item not-found is
+    // handled inside `readTopic` (returns undefined) for topics deleted
+    // between enumeration and hydration.
+    list: Effect.fn(function* () {
+      const topicArns = yield* sns.listTopics.pages({}).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.Topics ?? [])
+              .map((topic) => topic.TopicArn)
+              .filter((arn): arn is string => typeof arn === "string"),
+          ),
+        ),
+      );
+
+      const rows = yield* Effect.forEach(
+        topicArns,
+        (topicArn) =>
+          readTopic({
+            id: "",
+            topicArn,
+            topicName: topicArn.split(":").at(-1) ?? topicArn,
+          }),
+        { concurrency: 10 },
+      );
+
+      return rows.filter(
+        (row): row is NonNullable<typeof row> => row !== undefined,
+      );
+    }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const topicName =
         output?.topicName ?? (yield* toTopicName(id, olds ?? {}));
