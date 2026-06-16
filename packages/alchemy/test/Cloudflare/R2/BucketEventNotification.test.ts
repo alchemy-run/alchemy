@@ -301,6 +301,19 @@ test.provider(
       const provider = yield* Provider.findProvider(
         Cloudflare.R2BucketEventNotification,
       );
+      const { accountId: acct } = yield* yield* CloudflareEnvironment;
+      const rawBuckets = yield* r2.listBuckets({ accountId: acct });
+      yield* Effect.log(
+        `RAW BUCKETS count=${(rawBuckets.buckets ?? []).length} names=${JSON.stringify((rawBuckets.buckets ?? []).map((b) => b.name))}`,
+      );
+      const rawNotif = yield* r2
+        .listBucketEventNotifications({
+          accountId: acct,
+          bucketName: deployed.bucket.bucketName,
+        })
+        .pipe(Effect.either);
+      yield* Effect.log(`RAW NOTIF=${JSON.stringify(rawNotif)}`);
+
       const all = yield* provider.list();
 
       yield* Effect.log(

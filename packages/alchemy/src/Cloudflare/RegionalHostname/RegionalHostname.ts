@@ -134,6 +134,16 @@ export const RegionalHostnameProvider = () =>
               ),
               // Plan-gated zones (no Data Localization Suite entitlement)
               // reject the route; skip them rather than failing the whole list.
+              //
+              // NOTE: zones the ambient token cannot access return a 403
+              // `Forbidden` here. `listRegionalHostnames` currently types its
+              // error union as `DefaultErrors` only (no `Forbidden`), so it
+              // cannot be `catchTag`ed yet. Once distilled types `Forbidden`
+              // on this op (patch:
+              // distilled/packages/cloudflare/patches/addressing/listRegionalHostnames.json
+              // -> { "errors": { "Forbidden": [{ "status": 403 }] } }, then
+              // regenerate addressing), add "Forbidden" to this catch so
+              // inaccessible zones are skipped instead of failing the list.
               Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
             ),
           { concurrency: 10 },

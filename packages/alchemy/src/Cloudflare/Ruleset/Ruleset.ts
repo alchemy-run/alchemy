@@ -1,11 +1,14 @@
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import type { Zone, ZoneAttributes } from "../Zone/index.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 
 export type RulesetPhase = rulesets.CreateRulesetForZoneRequest["phase"];
 export type RulesetRule = NonNullable<

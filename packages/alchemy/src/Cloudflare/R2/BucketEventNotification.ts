@@ -398,9 +398,9 @@ export const R2BucketEventNotificationProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        const { buckets } = yield* r2.listBuckets({ accountId });
+        const buckets = yield* listAllBuckets(accountId);
         const perBucket = yield* Effect.forEach(
-          buckets ?? [],
+          buckets,
           (bucket) => {
             const bucketName = bucket.name;
             if (bucketName == null) {
@@ -464,6 +464,31 @@ export const R2BucketEventNotificationProvider = () =>
 const r2EventNotificationConsistencySchedule = Schedule.exponential(250).pipe(
   Schedule.both(Schedule.recurs(6)),
 );
+
+type ObservedBucket = NonNullable<r2.ListBucketsResponse["buckets"]>[number];
+
+// `listBuckets` is a non-paginated distilled op that returns at most one
+// page (default ordering by name). Page through it exhaustively with the
+// `startAfter` cursor so `list()` enumerates *every* bucket in the account.
+const listAllBuckets = (accountId: string) =>
+  Effect.gen(function* () {
+    const pageSize = 1000;
+    const all: ObservedBucket[] = [];
+    let startAfter: string | undefined;
+    while (true) {
+      const { buckets } = yield* r2.listBuckets({
+        accountId,
+        perPage: pageSize,
+        startAfter,
+      });
+      const page = buckets ?? [];
+      all.push(...page);
+      const last = page.at(-1)?.name;
+      if (page.length < pageSize || last == null) break;
+      startAfter = last;
+    }
+    return all;
+  });
 
 const getConfiguration = (
   accountId: string,
