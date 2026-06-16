@@ -130,7 +130,7 @@ export const execStack = Effect.fn(function* ({
               output: {},
             }
           : stack,
-        { force },
+        { force, dryRun },
       );
       if (dryRun) {
         yield* cli.displayPlan(updatePlan);

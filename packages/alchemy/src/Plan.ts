@@ -229,6 +229,23 @@ export type Plan<Output = any> = {
 
 export interface MakePlanOptions {
   force?: boolean;
+  /**
+   * When `true`, skip the cold-start adoption probe (`provider.read` on
+   * resources with no prior state). The probe exists to detect pre-existing
+   * cloud resources so a real apply can adopt them or fail loudly on a
+   * foreign conflict — it issues one network round-trip per greenfield
+   * resource and persists adopted state via `state.set`.
+   *
+   * Neither of those is appropriate for a read-only `plan`: a dry run should
+   * never mutate the state store, and the per-resource network latency makes
+   * `plan` feel like it hangs on first deploy. With the probe skipped, a
+   * greenfield resource simply previews as `create` (which is what an apply
+   * would attempt anyway). The adoption decision still happens on the real
+   * apply, where the probe runs.
+   *
+   * @default false
+   */
+  dryRun?: boolean;
 }
 
 export const make = <A>(
@@ -710,7 +727,16 @@ export const make = <A>(
             // not-yet-created upstreams cannot themselves be pre-existing
             // — there's nothing to adopt.
             let forceUpdateAfterAdoption = false;
-            if (oldState === undefined && provider.read && isResolved(news)) {
+            if (
+              oldState === undefined &&
+              provider.read &&
+              isResolved(news) &&
+              // Skip the adoption probe on a read-only plan: it issues a
+              // network round-trip per greenfield resource and persists
+              // adopted state via `state.set`, neither of which belongs in a
+              // dry run. The real apply still probes and adopts.
+              !options.dryRun
+            ) {
               const adoptInstanceId = yield* generateInstanceId();
               const readResult = yield* provider
                 .read({
