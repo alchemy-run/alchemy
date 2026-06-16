@@ -1,6 +1,7 @@
 import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import { expect } from "@effect/vitest";
@@ -78,6 +79,39 @@ test.provider(
         connector.tunnelId,
       );
       expect(afterDestroy).toBeUndefined();
+    }).pipe(logLevel),
+  { timeout: 90_000 },
+);
+
+// Canonical `list()` test (account collection): deploy a WARP Connector
+// tunnel, resolve the provider via the typed `Provider.findProvider`, and
+// assert the deployed tunnel appears in the exhaustively-paginated result.
+test.provider(
+  "list enumerates the deployed WARP Connector tunnel",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const connector = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.TunnelWarpConnector("ListSite", {
+            name: "alchemy-test-warp-connector-list",
+          }).pipe(adopt(true));
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.TunnelWarpConnector,
+      );
+      const all = yield* provider.list();
+
+      const found = all.find((t) => t.tunnelId === connector.tunnelId);
+      expect(found).toBeDefined();
+      expect(found?.name).toEqual("alchemy-test-warp-connector-list");
+      expect(found?.accountId).toEqual(connector.accountId);
+      expect(Redacted.value(found!.token).length).toBeGreaterThan(0);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 90_000 },
 );

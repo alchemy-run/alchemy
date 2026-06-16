@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import { expect } from "@effect/vitest";
@@ -216,6 +217,60 @@ test.provider(
         healed.input.liveInputId,
         healed.output.outputId,
       );
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates outputs across all live inputs",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const input = yield* Cloudflare.StreamLiveInput("ListOutputInput", {
+            meta: { name: "alchemy-stream-output-list-input" },
+          });
+          const output = yield* Cloudflare.StreamLiveInputOutput("ListOutput", {
+            liveInputId: input.liveInputId,
+            url: "rtmps://a.rtmps.youtube.com/live2",
+            streamKey: "alchemy-list-stream-key",
+          });
+          return { input, output };
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.StreamLiveInputOutput,
+      );
+
+      // Edge propagation: the freshly-created output (and its parent live
+      // input enumeration) is eventually consistent — retry until present.
+      const all = yield* provider.list().pipe(
+        Effect.flatMap((rows) =>
+          rows.some((o) => o.outputId === deployed.output.outputId)
+            ? Effect.succeed(rows)
+            : Effect.fail({ _tag: "OutputNotListed" } as const),
+        ),
+        Effect.retry({
+          while: (e) => e._tag === "OutputNotListed",
+          schedule: Schedule.exponential("500 millis").pipe(
+            Schedule.both(Schedule.recurs(10)),
+          ),
+        }),
+      );
+
+      const found = all.find((o) => o.outputId === deployed.output.outputId);
+      expect(found).toBeDefined();
+      expect(found?.liveInputId).toEqual(deployed.input.liveInputId);
+      expect(found?.accountId).toEqual(accountId);
+      expect(found?.url).toEqual("rtmps://a.rtmps.youtube.com/live2");
+      expect(found?.enabled).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );
