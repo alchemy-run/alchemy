@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import * as Cloudflare from "@/Cloudflare/index.ts";
 import * as R2 from "@/Cloudflare/R2";
+import * as Provider from "@/Provider";
 import { Stack } from "@/Stack";
 import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
