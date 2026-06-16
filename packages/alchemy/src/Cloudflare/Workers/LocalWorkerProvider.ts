@@ -63,7 +63,6 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { LOCAL_ENTRY_URL, LocalRuntimeState } from "../LocalRuntime.ts";
 import type { WorkerAssetsConfig, WorkerProps } from "../Workers/Worker.ts";
 import { getCompatibility } from "./Compatibility.ts";
-import * as Vite from "./Vite.ts";
 import { Worker } from "./Worker.ts";
 import { getCronBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding } from "./WorkerBinding.ts";
@@ -385,6 +384,9 @@ export const LocalWorkerProvider = () =>
       ) {
         const proxy = yield* maybeStartProxy(worker.id, worker.dev);
         yield* proxy.unset().pipe(Effect.forkChild);
+        // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
+        // (~0.5s); only needed when running a vite dev server.
+        const Vite = yield* Effect.promise(() => import("./Vite.ts"));
         const devServer = yield* Vite.viteDev(
           rootDir,
           worker.env ?? {},

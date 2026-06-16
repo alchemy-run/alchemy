@@ -110,7 +110,7 @@ const serverUrlOf = (server: SsrSiteServerOrigin): Input<string> => {
       return Output.map((url: string | undefined) => {
         if (!url) {
           throw new Error(
-            "SsrSite lambda origins require a function created with `url: true`.",
+            "SsrSite lambda origins require a function created with `url` enabled.",
           );
         }
         return url;

@@ -304,6 +304,7 @@
     "@effect/vitest": "catalog:",
     "@libsql/client": "catalog:",
     "@octokit/rest": "^22.0.1",
+    "@octokit/webhooks": "^14.2.0",
     "@smithy/node-config-provider": "catalog:",
     "@smithy/shared-ini-file-loader": "catalog:",
     "@smithy/types": "catalog:",
