@@ -189,6 +189,22 @@ export const StreamLiveInputProvider = () =>
       return observed ? toAttributes(observed, accountId) : undefined;
     }),
 
+    // Account collection: enumerate every live input in the account. The
+    // Cloudflare list endpoint returns all inputs in a single response
+    // (no cursor), so there is no extra pagination to drive. Hydrate each
+    // item into the same Attributes shape `read` produces.
+    list: () =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const response = yield* stream.listLiveInputs({ accountId });
+        return (response.liveInputs ?? [])
+          .filter(
+            (li): li is typeof li & { uid: string } =>
+              li.uid !== null && li.uid !== undefined,
+          )
+          .map((li) => toAttributes(li, accountId));
+      }),
+
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const meta = news.meta ?? {

@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import { expect } from "@effect/vitest";
@@ -140,6 +141,31 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(accountId, healed.liveInputId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+// Canonical `list()` test (account collection): deploy a live input, then
+// resolve the typed provider and assert the deployed uid appears in the
+// exhaustively-enumerated result.
+test.provider(
+  "list enumerates the deployed live input",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const input = yield* stack.deploy(
+        Cloudflare.StreamLiveInput("ListInput", {
+          meta: { name: "alchemy-stream-list-input" },
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(Cloudflare.StreamLiveInput);
+      const all = yield* provider.list();
+
+      expect(all.some((x) => x.liveInputId === input.liveInputId)).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

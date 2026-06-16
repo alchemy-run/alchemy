@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as stream from "@distilled.cloud/cloudflare/stream";
 import { expect } from "@effect/vitest";
@@ -76,6 +77,28 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(accountId, key.keyId);
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "list enumerates the deployed signing key",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const key = yield* stack.deploy(
+        Cloudflare.StreamSigningKey("ListKey", {}),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.StreamSigningKey,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((k) => k.keyId === key.keyId)).toBe(true);
+
+      yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 120_000 },
 );

@@ -2,6 +2,7 @@ import { adopt } from "@/AdoptPolicy";
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@/Cloudflare/Zone/lookup";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as snippets from "@distilled.cloud/cloudflare/snippets";
 import { expect } from "@effect/vitest";
@@ -150,5 +151,36 @@ test.provider("renaming an explicit snippet triggers replacement", (stack) =>
 
     const gone = yield* findSnippet(zoneId, NAME_REPLACED);
     expect(gone).toBeUndefined();
+  }).pipe(logLevel),
+);
+
+const NAME_LIST = "alchemy_snippet_list_test";
+
+test.provider("list enumerates the deployed snippet", (stack) =>
+  Effect.gen(function* () {
+    const zoneId = yield* resolveZoneId;
+
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Cloudflare.Snippet("ListSnippet", {
+          zoneId,
+          name: NAME_LIST,
+          code: codeV1,
+        }).pipe(adopt(true));
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Cloudflare.Snippet);
+    const all = yield* provider.list();
+
+    const found = all.find(
+      (s) => s.zoneId === zoneId && s.name === deployed.name,
+    );
+    expect(found).toBeDefined();
+    expect(found?.mainModule).toEqual("snippet.js");
+
+    yield* stack.destroy();
   }).pipe(logLevel),
 );
