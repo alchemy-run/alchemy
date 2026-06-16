@@ -140,6 +140,7 @@ export const isDeviceSettings = (value: unknown): value is DeviceSettings =>
 
 export const DeviceSettingsProvider = () =>
   Provider.succeed(DeviceSettings, {
+    nuke: { singleton: true },
     stables: ["accountId", "initialSettings"],
 
     // Account singleton: there is exactly one device-settings object per

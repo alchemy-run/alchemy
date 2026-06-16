@@ -224,7 +224,13 @@ export const IamResourceGroupProvider = () =>
         Stream.runCollect,
         Effect.map((chunk) =>
           Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((group) => toAttributes(group, accountId)),
+            (page.result ?? [])
+              // Cloudflare seeds every account with predefined, non-editable
+              // system resource groups named `com.cloudflare.api.account.*`.
+              // They can't be deleted (`UnprocessableEntity: non-editable`),
+              // so exclude them from enumeration.
+              .filter((group) => !isSystemGroupName(group.name))
+              .map((group) => toAttributes(group, accountId)),
           ),
         ),
       );
@@ -236,6 +242,14 @@ type ObservedResourceGroup = {
   name?: string | null;
   scope: unknown;
 };
+
+/**
+ * Cloudflare's predefined, non-editable account resource groups use the
+ * reserved `com.cloudflare.api.account.*` name. They are seeded on every
+ * account and cannot be deleted, so they must be excluded from enumeration.
+ */
+const isSystemGroupName = (name: string | null | undefined): boolean =>
+  (name ?? "").startsWith("com.cloudflare.api.");
 
 /**
  * Read a resource group by id, mapping "gone" (`ResourceGroupNotFound`,

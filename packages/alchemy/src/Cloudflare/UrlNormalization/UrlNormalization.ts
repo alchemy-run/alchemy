@@ -133,6 +133,7 @@ const DEFAULT_TYPE: UrlNormalizationType = "cloudflare";
 
 export const UrlNormalizationProvider = () =>
   Provider.succeed(UrlNormalization, {
+    nuke: { singleton: true },
     stables: ["zoneId"],
 
     list: Effect.fn(function* () {

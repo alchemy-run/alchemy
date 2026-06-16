@@ -165,6 +165,10 @@ export const RealtimeKitAppProvider = () =>
       }
       return toAttributes(observed, observed.accountId);
     }),
+    // No delete API exists, so `delete` cannot actually remove the app — it
+    // would re-appear on every `nuke` scan. Skip it in account-wide teardown
+    // instead of falsely reporting it deleted.
+    nuke: { skip: true },
     delete: Effect.fn(function* ({ output }) {
       // RealtimeKit ships no delete API. Forget the app from state and warn —
       // the app remains on the account until Cloudflare adds deletion.

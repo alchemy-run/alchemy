@@ -106,6 +106,7 @@ const desiredEnabled = (props: LeakedCredentialCheckProps): boolean =>
 
 export const LeakedCredentialCheckProvider = () =>
   Provider.succeed(LeakedCredentialCheck, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialEnabled"],
 
     list: Effect.fn(function* () {

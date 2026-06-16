@@ -128,6 +128,7 @@ export const isOriginPostQuantumEncryption = (
 
 export const OriginPostQuantumEncryptionProvider = () =>
   Provider.succeed(OriginPostQuantumEncryption, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialValue"],
 
     list: Effect.fn(function* () {

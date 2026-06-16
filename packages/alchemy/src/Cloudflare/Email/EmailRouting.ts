@@ -82,6 +82,7 @@ const resolve = Effect.fnUntraced(function* (zone: ZoneReference) {
 
 export const EmailRoutingProvider = () =>
   Provider.succeed(EmailRouting, {
+    nuke: { singleton: true },
     stables: ["zoneId", "routingId"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

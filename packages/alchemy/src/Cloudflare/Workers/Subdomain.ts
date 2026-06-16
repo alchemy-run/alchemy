@@ -88,6 +88,7 @@ export const isWorkersSubdomain = (value: unknown): value is WorkersSubdomain =>
 
 export const WorkersSubdomainProvider = () =>
   Provider.succeed(WorkersSubdomain, {
+    nuke: { singleton: true },
     stables: ["accountId", "initialSubdomain"],
 
     diff: Effect.fn(function* ({ output }) {

@@ -197,6 +197,7 @@ export const ZarazConfig = Object.assign(
 
 export const ZarazConfigProvider = () =>
   Provider.succeed(ZarazConfig, {
+    nuke: { singleton: true },
     stables: ["zoneId"],
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

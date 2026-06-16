@@ -139,6 +139,7 @@ export const isGoogleTagGateway = (value: unknown): value is GoogleTagGateway =>
 
 export const GoogleTagGatewayProvider = () =>
   Provider.succeed(GoogleTagGateway, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialConfig"],
 
     list: Effect.fn(function* () {

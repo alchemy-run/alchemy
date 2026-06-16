@@ -104,6 +104,7 @@ export const isTieredCaching = (value: unknown): value is TieredCaching =>
 
 export const TieredCachingProvider = () =>
   Provider.succeed(TieredCaching, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialValue"],
 
     list: Effect.fn(function* () {

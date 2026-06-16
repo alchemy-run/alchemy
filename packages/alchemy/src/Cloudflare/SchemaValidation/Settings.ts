@@ -118,6 +118,7 @@ export const isSchemaValidationSettings = (
 
 export const SchemaValidationSettingsProvider = () =>
   Provider.succeed(SchemaValidationSettings, {
+    nuke: { singleton: true },
     stables: [
       "zoneId",
       "initialDefaultMitigationAction",

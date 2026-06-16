@@ -121,6 +121,7 @@ export const isGatewayLogging = (value: unknown): value is GatewayLogging =>
 
 export const GatewayLoggingProvider = () =>
   Provider.succeed(GatewayLogging, {
+    nuke: { singleton: true },
     stables: ["accountId", "initialSettings"],
 
     list: Effect.fn(function* () {

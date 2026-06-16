@@ -106,6 +106,7 @@ export const isWorkersAccountSetting = (
 
 export const WorkersAccountSettingProvider = () =>
   Provider.succeed(WorkersAccountSetting, {
+    nuke: { singleton: true },
     stables: ["accountId", "initialDefaultUsageModel", "initialGreenCompute"],
 
     diff: Effect.fn(function* ({ output }) {

@@ -97,6 +97,7 @@ export const isWaitingRoomSettings = (
 
 export const WaitingRoomSettingsProvider = () =>
   Provider.succeed(WaitingRoomSettings, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialSearchEngineCrawlerBypass"],
 
     list: Effect.fn(function* () {

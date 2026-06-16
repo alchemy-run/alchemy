@@ -90,6 +90,7 @@ export const isAccessKeyConfiguration = (
 
 export const AccessKeyConfigurationProvider = () =>
   Provider.succeed(AccessKeyConfiguration, {
+    nuke: { singleton: true },
     stables: ["accountId", "initialKeyRotationIntervalDays"],
 
     list: Effect.fn(function* () {

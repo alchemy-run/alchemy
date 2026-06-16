@@ -104,6 +104,7 @@ const desiredValue = (props: SmartTieredCacheProps): "on" | "off" =>
 
 export const SmartTieredCacheProvider = () =>
   Provider.succeed(SmartTieredCache, {
+    nuke: { singleton: true },
     stables: ["zoneId", "initialValue"],
 
     list: Effect.fn(function* () {
