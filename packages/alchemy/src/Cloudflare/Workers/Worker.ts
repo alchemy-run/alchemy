@@ -40,7 +40,6 @@ import {
 } from "./DurableObjectNamespace.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { Request } from "./Request.ts";
-import * as Vite from "./Vite.ts";
 import {
   bindWorkerAsyncBindings,
   getCronBindings,
@@ -1232,6 +1231,10 @@ export const LiveWorkerProvider = () =>
 
       const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
         const compatibility = getCompatibility(props);
+        // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
+        // (~0.5s), which is only needed for vite-based workers at build time —
+        // not for every Worker definition at module-load time.
+        const Vite = yield* Effect.promise(() => import("./Vite.ts"));
         const { assetsDirectory, serverBundle } = yield* Vite.viteBuild(
           props.vite?.rootDir,
           Object.fromEntries(
