@@ -1,5 +1,6 @@
 import * as Cloudflare from "@/Cloudflare";
 import { CloudflareEnvironment } from "@/Cloudflare/CloudflareEnvironment";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { expect } from "@effect/vitest";
@@ -128,6 +129,36 @@ describe.sequential("AccountSetting", () => {
         const after = yield* getLiveSetting;
         expect(after.defaultUsageModel).toEqual(baseline.defaultUsageModel);
         expect(after.greenCompute).toEqual(baseline.greenCompute);
+      }).pipe(logLevel),
+    { timeout: 120_000 },
+  );
+
+  // Canonical `list()` test (account-scoped singleton): there is no
+  // collection API for the Workers account settings, so `list()` reads the
+  // single account-wide object and returns it as a one-element array. The
+  // singleton always exists, so no deploy is needed to observe it.
+  test.provider(
+    "list returns the account settings singleton",
+    (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        const provider = yield* Provider.findProvider(
+          Cloudflare.WorkersAccountSetting,
+        );
+        const all = yield* provider.list();
+
+        expect(all.length).toEqual(1);
+        expect(all[0].accountId).toEqual(accountId);
+        // The element is a full Attributes shape (same as `read` produces).
+        expect(all[0].initialGreenCompute).toEqual(all[0].greenCompute);
+        expect(all[0].initialDefaultUsageModel).toEqual(
+          all[0].defaultUsageModel,
+        );
+
+        // `stack` is unused (the singleton always exists), but keep the destroy
+        // bookend so the harness state stays clean.
+        yield* stack.destroy();
       }).pipe(logLevel),
     { timeout: 120_000 },
   );
