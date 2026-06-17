@@ -712,6 +712,28 @@ export const DBInstanceProvider = () =>
             .pipe(
               Effect.catchTag("DBInstanceNotFoundFault", () => Effect.void),
             );
+          // Block until the instance is fully gone. RDS deletion is async; if we
+          // return while it is still `deleting`, a dependent (e.g. a
+          // DBSubnetGroup or VPC) is torn down next and AWS rejects it with
+          // `InvalidDBSubnetGroupStateFault: ... still using it`.
+          yield* Effect.repeat(
+            rds
+              .describeDBInstances({
+                DBInstanceIdentifier: output.dbInstanceIdentifier,
+              })
+              .pipe(
+                Effect.as(true),
+                Effect.catchTag("DBInstanceNotFoundFault", () =>
+                  Effect.succeed(false),
+                ),
+              ),
+            {
+              schedule: Schedule.fixed("15 seconds").pipe(
+                Schedule.both(Schedule.recurs(40)),
+              ),
+              until: (exists) => exists === false,
+            },
+          ).pipe(Effect.catch(() => Effect.void));
         }),
       };
     }),

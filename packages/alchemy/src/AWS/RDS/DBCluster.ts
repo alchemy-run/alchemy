@@ -746,6 +746,28 @@ export const DBClusterProvider = () =>
               SkipFinalSnapshot: true,
             })
             .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.void));
+          // Block until the cluster is fully gone. RDS deletion is async; if we
+          // return while it is still `deleting`, a dependent (e.g. a
+          // DBSubnetGroup or VPC) is torn down next and AWS rejects it with
+          // `InvalidDBSubnetGroupStateFault: ... still using it`.
+          yield* Effect.repeat(
+            rds
+              .describeDBClusters({
+                DBClusterIdentifier: output.dbClusterIdentifier,
+              })
+              .pipe(
+                Effect.as(true),
+                Effect.catchTag("DBClusterNotFoundFault", () =>
+                  Effect.succeed(false),
+                ),
+              ),
+            {
+              schedule: Schedule.fixed("15 seconds").pipe(
+                Schedule.both(Schedule.recurs(40)),
+              ),
+              until: (exists) => exists === false,
+            },
+          ).pipe(Effect.catch(() => Effect.void));
         }),
       };
     }),

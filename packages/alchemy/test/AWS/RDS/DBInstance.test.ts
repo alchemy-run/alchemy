@@ -158,8 +158,10 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       // group for the instance to live in.
       const network = Effect.gen(function* () {
         const net = yield* Network("RdsNet", { cidrBlock: "10.41.0.0/16" });
+        // No fixed name — let the engine generate a unique physical name so a
+        // leftover group from an interrupted run can't force a cross-VPC
+        // ModifyDBSubnetGroup ("new Subnets are not in the same Vpc").
         const subnetGroup = yield* DBSubnetGroup("RdsSubnetGroup", {
-          dbSubnetGroupName: "alchemy-rds-standalone-sng",
           description: "alchemy standalone instance lifecycle",
           subnetIds: net.privateSubnetIds,
         });

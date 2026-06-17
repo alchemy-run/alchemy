@@ -147,8 +147,10 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       // group for the cluster.
       const network = Effect.gen(function* () {
         const net = yield* Network("ClusterNet", { cidrBlock: "10.42.0.0/16" });
+        // No fixed name — let the engine generate a unique physical name so a
+        // leftover group from an interrupted run can't force a cross-VPC
+        // ModifyDBSubnetGroup ("new Subnets are not in the same Vpc").
         const subnetGroup = yield* DBSubnetGroup("ClusterSubnetGroup", {
-          dbSubnetGroupName: "alchemy-rds-lifecycle-sng",
           description: "alchemy cluster lifecycle",
           subnetIds: net.privateSubnetIds,
         });
