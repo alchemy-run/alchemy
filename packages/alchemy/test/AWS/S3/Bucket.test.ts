@@ -619,6 +619,8 @@ test.provider("lifecycle add rule then remove", (stack) =>
       }),
     );
 
+    // Lifecycle config is eventually consistent — the rule can linger on reads
+    // for a few seconds after deleteBucketLifecycle. Retry until it clears.
     const removed = yield* S3.getBucketLifecycleConfiguration({
       Bucket: bucket.bucketName,
     }).pipe(
@@ -626,6 +628,11 @@ test.provider("lifecycle add rule then remove", (stack) =>
       Effect.catchTag("NoSuchLifecycleConfiguration", () =>
         Effect.succeed("no-lifecycle" as const),
       ),
+      Effect.repeat({
+        schedule: Schedule.spaced("3 seconds"),
+        until: (r) => r === "no-lifecycle",
+        times: 10,
+      }),
     );
     expect(removed).toEqual("no-lifecycle");
 
