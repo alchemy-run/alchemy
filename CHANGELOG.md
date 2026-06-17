@@ -1,3 +1,52 @@
+## v2.0.0-beta.56
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **aws**:
+  - S3-backed state store (AWS.state()) &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/585 [<samp>(1d664)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1d6642b1)
+  - **lambda**: Support function URL config &nbsp;-&nbsp; by **José Netto** in https://github.com/alchemy-run/alchemy-effect/issues/614 [<samp>(33da7)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/33da7a32)
+- **cloudflare**:
+  - DnsRecord and Zero Trust resources (TunnelRoute, Access apps/policies/org, Device profile) &nbsp;-&nbsp; by **Andy Jefferson** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/570 [<samp>(e9af0)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/e9af082d)
+  - Forward dev.env to the StaticSite dev server &nbsp;-&nbsp; by **Alex** in https://github.com/alchemy-run/alchemy-effect/issues/587 [<samp>(f5110)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f5110e55)
+  - Generate all missing Cloudflare resources &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/601 [<samp>(89bbb)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/89bbb2d6)
+  - Flagship feature flags — resources + worker binding &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/602 [<samp>(f7e1c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f7e1c4d3)
+  - **worker**: Bundle: false — deploy prebuilt workers without re-bundling &nbsp;-&nbsp; by **Alex** in https://github.com/alchemy-run/alchemy-effect/issues/592 [<samp>(76fc7)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/76fc7ad2)
+- **core**:
+  - Provider.list &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/620 [<samp>(b9360)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b9360147)
+  - Alchemy unsafe nuke &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/624 [<samp>(9b052)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/9b052778)
+- **github**:
+  - Add GitHub Repository resource &nbsp;-&nbsp; by **Justin Bennett** in https://github.com/alchemy-run/alchemy-effect/issues/607 [<samp>(1a48e)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1a48ef4e)
+  - Repository event source for Cloudflare Workers &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/619 [<samp>(5ba26)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/5ba26aed)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- **cli**:
+  - Keep alchemy dev alive when an apply fails &nbsp;-&nbsp; by **Matthew Aylward** in https://github.com/alchemy-run/alchemy-effect/issues/582 [<samp>(c2f63)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/c2f635a6)
+  - Run state clear in parallel &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(81b9d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/81b9d8f7)
+  - Support different entrypoint file in alchemy state clear command &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(7d7f3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/7d7f33d4)
+  - Hide nuke command &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(2d57d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/2d57df42)
+- **cloudflare**:
+  - Migrate resources to regenerated SDK after spec update &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(a8e4e)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a8e4e8f2)
+  - Local assets binding throws 500 error &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/613 [<samp>(dfea3)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/dfea32a1)
+  - Broad improvements to new resources and tests &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(17dd2)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/17dd2cc7)
+  - **worker**:
+    - Keep url stable across updates &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/616 [<samp>(03e71)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/03e71f03)
+    - Keep durableObjectNamespaces stable across updates &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/617 [<samp>(f7fcb)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f7fcb9e0)
+- **drizzle**:
+  - Cache detectDrift so interactive prompt only runs once &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/597 [<samp>(957a6)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/957a63c3)
+- **github**:
+  - Implement Webhook Provider.list &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(2915a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/2915a1d5)
+- **pr-package**:
+  - Unwrap Redacted on both sides of bearer-token auth &nbsp;-&nbsp; by **Michael K** in https://github.com/alchemy-run/alchemy-effect/issues/598 [<samp>(f9314)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f9314d0a)
+
+### &nbsp;&nbsp;&nbsp;🏎 Performance
+
+- **cli**: Make `alchemy plan` start near-instant (8.2s -> 1.8s) &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/618 [<samp>(89ccc)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/89ccc11f)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.55...HEAD)
+
+---
+
 ## v2.0.0-beta.55
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
