@@ -6,6 +6,8 @@ import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import { isAiGateway } from "../AiGateway/AiGateway.ts";
+import { isAiSearchInstance } from "../AiSearch/Instance.ts";
+import { isAiSearchNamespace } from "../AiSearch/Namespace.ts";
 import { isAnalyticsEngineDataset } from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
 import { isArtifacts } from "../Artifacts/Artifacts.ts";
 import { isBrowser } from "../Browser/Browser.ts";
@@ -186,6 +188,24 @@ const toBinding = (
     return {
       type: "ai",
       name: bindingName,
+    };
+  } else if (isAiSearchInstance(binding)) {
+    // Single-instance binding: `env.NAME` is the instance itself. The
+    // `namespace` qualifies which namespace the instance lives in (the
+    // account-provided `default` when unspecified).
+    return {
+      type: "ai_search",
+      name: bindingName,
+      instanceName: binding.id,
+      namespace: binding.namespace,
+    };
+  } else if (isAiSearchNamespace(binding)) {
+    // Namespace binding: `env.NAME.get(instanceName)` selects an instance
+    // within the namespace at runtime.
+    return {
+      type: "ai_search_namespace",
+      name: bindingName,
+      namespace: binding.name,
     };
   } else if (isHyperdrive(binding)) {
     return {

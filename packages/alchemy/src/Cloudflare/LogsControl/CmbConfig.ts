@@ -70,7 +70,9 @@ export type LogsCmbConfig = Resource<
  * and processed, and deleting the config lifts the boundary. Handle with
  * care in production accounts.
  * :::
- *
+ * @resource
+ * @product Logs
+ * @category Observability & Analytics
  * @section Restricting logs to a region
  * @example Keep all account logs in the EU
  * ```typescript

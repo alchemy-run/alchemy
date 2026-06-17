@@ -90,7 +90,9 @@ export type EmailCatchAll = Resource<
  * Email Routing must be enabled on the zone first (see
  * `Cloudflare.EmailRouting`), and `forward` actions require the destination
  * address to be verified (see `Cloudflare.EmailAddress`).
- *
+ * @resource
+ * @product Email
+ * @category Email
  * @section Catching unmatched mail
  * @example Forward everything else to a verified destination
  * ```typescript

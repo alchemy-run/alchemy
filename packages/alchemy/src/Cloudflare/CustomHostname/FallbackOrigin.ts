@@ -57,7 +57,9 @@ export type FallbackOrigin = Resource<
  * Safety: when there is no prior state, `read` reports an existing
  * fallback origin as `Unowned`, so the engine refuses to overwrite an
  * out-of-band configuration unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Custom Hostnames
+ * @category Domains & DNS
  * @section Setting the Fallback Origin
  * @example Point custom hostname traffic at your origin
  * ```typescript

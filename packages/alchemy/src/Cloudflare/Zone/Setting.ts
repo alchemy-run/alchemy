@@ -225,7 +225,9 @@ export type ZoneSetting = Resource<
  * `image_resizing`, `polish` need Pro+; `advanced_ddos` is Enterprise).
  * Patching a non-editable setting fails with Cloudflare's "setting not
  * editable" error.
- *
+ * @resource
+ * @product Zones
+ * @category Domains & DNS
  * @section Toggle settings
  * @example Force HTTPS on the whole zone
  * ```typescript

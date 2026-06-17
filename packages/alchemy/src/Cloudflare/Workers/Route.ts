@@ -71,7 +71,9 @@ export type WorkerRoute = Resource<
  * scans the zone for an existing route with the same pattern and
  * reports it as `Unowned`, so the engine refuses to take it over unless
  * `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Workers
+ * @category Workers & Compute
  * @section Routing a hostname to a Worker
  * @example Route all requests on a subdomain to a Worker
  * ```typescript

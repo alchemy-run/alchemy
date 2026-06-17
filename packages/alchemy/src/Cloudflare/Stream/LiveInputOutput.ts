@@ -94,7 +94,9 @@ export type StreamLiveInputOutput = Resource<
  * the output. Toggling `enabled` updates the output in place.
  *
  * Requires the Stream subscription to be enabled on the account.
- *
+ * @resource
+ * @product Stream
+ * @category Media
  * @section Creating an output
  * @example Restream a live input to YouTube
  * ```typescript

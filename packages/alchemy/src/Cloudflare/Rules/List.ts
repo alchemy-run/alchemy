@@ -224,7 +224,9 @@ export type RulesList = Resource<
  * replacement. The list's items are managed as part of the resource: on any
  * change the full contents are replaced via the asynchronous bulk items
  * operation, which the provider polls to completion.
- *
+ * @resource
+ * @product Rules
+ * @category Rules & Configuration
  * @section Creating a List
  * @example IP list with items
  * ```typescript

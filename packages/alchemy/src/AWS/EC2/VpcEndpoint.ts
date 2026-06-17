@@ -213,6 +213,91 @@ export interface VpcEndpoint extends Resource<
   never,
   Providers
 > {}
+/**
+ * A VPC endpoint that connects your VPC privately to an AWS service (or a
+ * service behind a Gateway Load Balancer) without traversing the public
+ * internet, a NAT gateway, or an internet gateway.
+ *
+ * The `vpcEndpointType` selects how the connection is realized:
+ * - `"Gateway"` — for S3 and DynamoDB; traffic is directed by adding routes to
+ *   the route tables in `routeTableIds` (no hourly cost).
+ * - `"Interface"` — for most other AWS services; provisions elastic network
+ *   interfaces in `subnetIds`, guarded by `securityGroupIds`, and optionally
+ *   resolves the service's public DNS name privately via `privateDnsEnabled`.
+ * - `"GatewayLoadBalancer"` — routes traffic through a third-party appliance
+ *   fleet fronted by a Gateway Load Balancer.
+ *
+ * Changing `vpcId`, `serviceName`, or `vpcEndpointType` replaces the endpoint;
+ * route tables, subnets, security groups, DNS, and the policy update in place.
+ *
+ * @resource
+ * @section Gateway Endpoints
+ * Gateway endpoints target S3 and DynamoDB and work by injecting a prefix-list
+ * route into each route table you list, so requests to the service stay on the
+ * AWS network.
+ * @example S3 Gateway Endpoint
+ * ```typescript
+ * const s3Endpoint = yield* AWS.EC2.VpcEndpoint("S3Endpoint", {
+ *   vpcId: vpc.vpcId,
+ *   serviceName: "com.amazonaws.us-east-1.s3",
+ *   vpcEndpointType: "Gateway",
+ *   routeTableIds: [privateRouteTable.routeTableId],
+ *   tags: { Name: "s3-endpoint" },
+ * });
+ * ```
+ * Listing the private subnets' route tables in `routeTableIds` lets those
+ * subnets reach S3 directly, removing NAT data-processing charges for S3 traffic
+ * and keeping it off the public internet.
+ *
+ * @section Interface Endpoints
+ * Interface endpoints place an ENI in each chosen subnet and are reached over
+ * private IPs; enabling private DNS lets existing SDK calls resolve to the
+ * endpoint transparently.
+ * @example Secrets Manager Interface Endpoint
+ * ```typescript
+ * const secretsEndpoint = yield* AWS.EC2.VpcEndpoint("SecretsEndpoint", {
+ *   vpcId: vpc.vpcId,
+ *   serviceName: "com.amazonaws.us-east-1.secretsmanager",
+ *   vpcEndpointType: "Interface",
+ *   subnetIds: [privateSubnet.subnetId],
+ *   securityGroupIds: [endpointSecurityGroup.groupId],
+ *   privateDnsEnabled: true,
+ *   ipAddressType: "ipv4",
+ *   dnsOptions: {
+ *     dnsRecordIpType: "ipv4",
+ *   },
+ * });
+ * ```
+ * The endpoint gets an interface in each `subnetIds` entry, `securityGroupIds`
+ * controls who may reach those interfaces, and `privateDnsEnabled: true` makes
+ * the service's default DNS name resolve to the endpoint; `ipAddressType` and
+ * `dnsOptions` tune the IP family used for the interfaces and their DNS records.
+ *
+ * @section Restricting Access with a Policy
+ * @example Endpoint Policy Limiting Access to One Bucket
+ * ```typescript
+ * const s3Endpoint = yield* AWS.EC2.VpcEndpoint("RestrictedS3Endpoint", {
+ *   vpcId: vpc.vpcId,
+ *   serviceName: "com.amazonaws.us-east-1.s3",
+ *   vpcEndpointType: "Gateway",
+ *   routeTableIds: [privateRouteTable.routeTableId],
+ *   policyDocument: JSON.stringify({
+ *     Version: "2012-10-17",
+ *     Statement: [
+ *       {
+ *         Effect: "Allow",
+ *         Principal: "*",
+ *         Action: ["s3:GetObject"],
+ *         Resource: ["arn:aws:s3:::my-bucket/*"],
+ *       },
+ *     ],
+ *   }),
+ * });
+ * ```
+ * `policyDocument` attaches an endpoint policy (JSON) that constrains which
+ * service actions and resources can be reached through the endpoint; omit it to
+ * allow full access to the service.
+ */
 export const VpcEndpoint = Resource<VpcEndpoint>("AWS.EC2.VpcEndpoint");
 
 export const VpcEndpointProvider = () =>

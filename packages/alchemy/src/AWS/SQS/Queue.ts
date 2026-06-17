@@ -159,7 +159,7 @@ export interface Queue extends Resource<
  * `Queue` owns the lifecycle of a standard or FIFO SQS queue. A queue name
  * is auto-generated from the app, stage, and logical ID unless you provide
  * one explicitly. FIFO queues automatically append the `.fifo` suffix.
- *
+ * @resource
  * @section Creating Queues
  * @example Standard Queue
  * ```typescript

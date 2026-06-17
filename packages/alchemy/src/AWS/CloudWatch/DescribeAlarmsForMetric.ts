@@ -9,6 +9,7 @@ export interface DescribeAlarmsForMetricRequest
 
 /**
  * Runtime binding for `cloudwatch:DescribeAlarmsForMetric`.
+ * @binding
  */
 export class DescribeAlarmsForMetric extends Binding.Service<
   DescribeAlarmsForMetric,

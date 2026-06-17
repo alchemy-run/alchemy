@@ -69,7 +69,9 @@ export type AddressingServiceBinding = Resource<
  * replacement. Provisioning to the edge is asynchronous: the binding is
  * returned immediately with `provisioning.state: "provisioning"` and flips
  * to `"active"` on Cloudflare's side; the resource does not wait for it.
- *
+ * @resource
+ * @product Addressing
+ * @category Network
  * @section Binding a Prefix to a Service
  * @example Bind a /24 to the CDN
  * ```typescript

@@ -82,7 +82,9 @@ export const isRateLimit = (value: unknown): value is RateLimit =>
  * standalone provisioning API. The Worker provider sees this object in
  * `env: { ... }` and emits the corresponding `{ type: "ratelimit" }` metadata
  * binding to the script.
- *
+ * @binding
+ * @product Rate Limiting
+ * @category Application Security
  * @section Declaring on a Worker's env
  * @example Async (non-Effect) Worker
  * ```typescript

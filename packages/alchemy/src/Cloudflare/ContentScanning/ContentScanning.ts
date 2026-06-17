@@ -71,7 +71,9 @@ export type ContentScanning = Resource<
  * Content Scanning is an Enterprise paid add-on. Reading the status works
  * on every plan, but enabling it on a zone without the add-on fails with
  * the typed `ContentScanningNotEntitled` error.
- *
+ * @resource
+ * @product Content Scanning
+ * @category Application Security
  * @section Enabling Content Scanning
  * @example Turn on malicious-upload scanning for a zone
  * ```typescript

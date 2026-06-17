@@ -211,7 +211,7 @@ export interface Repository extends Resource<
  * Authentication is resolved via the `GitHubCredentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope (and `delete_repo` when deletion is opted in via `destroy()`).
- *
+ * @resource
  * @section Creating a Repository
  * @example Basic Repository
  * ```typescript

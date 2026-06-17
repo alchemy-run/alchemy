@@ -48,7 +48,9 @@ export type UserApiToken = Resource<
  *
  * Policy `resources` are passed through verbatim — no `accountId` rewriting
  * is performed because user tokens aren't bound to a single account.
- *
+ * @resource
+ * @product API Tokens
+ * @category Account & Identity
  * @section Creating a Token
  * @example A token bound to the authenticated user
  * ```typescript

@@ -111,7 +111,9 @@ export type DeviceSettings = Resource<
  * fields in place. The pre-management snapshot is captured on first touch
  * and restored on destroy (capture-and-restore), returning the account to
  * the state Alchemy found it in.
- *
+ * @resource
+ * @product Devices
+ * @category Cloudflare One (Zero Trust)
  * @section Managing device settings
  * @example Enable the Gateway proxy
  * ```typescript

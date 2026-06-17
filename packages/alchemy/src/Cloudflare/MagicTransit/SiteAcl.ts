@@ -111,7 +111,9 @@ export type MagicSiteAcl = Resource<
  *
  * `siteId` is create-only — changing it triggers a replacement. Everything
  * else is updated in place.
- *
+ * @resource
+ * @product Magic Transit
+ * @category Network
  * @section Creating an ACL
  * @example Allow TCP between two LANs
  * ```typescript

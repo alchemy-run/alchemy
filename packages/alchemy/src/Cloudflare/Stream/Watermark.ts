@@ -136,7 +136,9 @@ export type StreamWatermark = Resource<
  * by Cloudflare from the given URL at creation time.
  *
  * Requires the Stream subscription to be enabled on the account.
- *
+ * @resource
+ * @product Stream
+ * @category Media
  * @section Creating a watermark
  * @example Default watermark from an image URL
  * ```typescript

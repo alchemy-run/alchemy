@@ -212,7 +212,7 @@ export interface Record extends Resource<
  * `Record` manages a single Route 53 record set using `UPSERT` for create and
  * update operations, and waits for Route 53 change propagation before
  * returning.
- *
+ * @resource
  * @section Creating Records
  * @example A Record Alias To CloudFront
  * ```typescript

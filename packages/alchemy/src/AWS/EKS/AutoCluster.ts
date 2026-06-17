@@ -134,7 +134,7 @@ export type AutoCluster = Effect.Success<ReturnType<typeof AutoCluster>>;
  * `AutoCluster` is the higher-level entry point that composes `IAM.Role` and
  * the canonical `EKS.Cluster` resource so callers can stand up a usable EKS
  * Auto Mode cluster with just `EC2.Network` plus this helper.
- *
+ * @resource
  * @section Creating Auto Mode Clusters
  * @example Auto Mode Cluster on Top of `EC2.Network`
  * ```typescript

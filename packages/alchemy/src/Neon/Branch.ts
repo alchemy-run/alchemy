@@ -152,7 +152,7 @@ export type Branch = Resource<
  *
  * Branches are first-class, copy-on-write copies of a parent branch — they
  * share storage with the parent until the new branch starts diverging.
- *
+ * @resource
  * @section Branching from a project's default branch
  * @example Basic branch
  * ```typescript

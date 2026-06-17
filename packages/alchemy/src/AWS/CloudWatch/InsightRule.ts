@@ -78,7 +78,7 @@ export interface InsightRule extends Resource<
 
 /**
  * A CloudWatch Contributor Insights rule.
- *
+ * @resource
  * @section Creating Insight Rules
  * @example Rule Definition
  * ```typescript

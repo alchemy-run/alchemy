@@ -84,7 +84,7 @@ export interface Listener extends Resource<
  * connection requests using its configured protocol and port, then routes them
  * to target groups via its default actions (and any attached
  * {@link ListenerRule}s).
- *
+ * @resource
  * @section Creating a Listener
  * @example Basic HTTP forward listener
  * ```typescript

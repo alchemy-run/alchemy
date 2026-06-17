@@ -135,6 +135,8 @@ export const isDynamicWorkerLoader = (
  * templates.
  *
  * @resource
+ * @product Workers
+ * @category Workers & Compute
  *
  * @section Creating a Loader
  * Yield `Cloudflare.DynamicWorkerLoader(name)` in your Worker's init

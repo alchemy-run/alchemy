@@ -9,6 +9,7 @@ export interface ListAlarmMuteRulesRequest
 
 /**
  * Runtime binding for `cloudwatch:ListAlarmMuteRules`.
+ * @binding
  */
 export class ListAlarmMuteRules extends Binding.Service<
   ListAlarmMuteRules,

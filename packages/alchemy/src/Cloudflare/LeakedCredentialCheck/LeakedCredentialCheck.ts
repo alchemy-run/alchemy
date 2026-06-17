@@ -67,7 +67,9 @@ export type LeakedCredentialCheck = Resource<
  *
  * Only one `LeakedCredentialCheck` resource per zone makes sense — two
  * instances managing the same zone would fight over the singleton.
- *
+ * @resource
+ * @product Leaked Credential Checks
+ * @category Application Security
  * @section Managing the check
  * @example Enable Leaked Credential Checks on a zone
  * ```typescript

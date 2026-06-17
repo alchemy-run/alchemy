@@ -50,7 +50,7 @@ export interface LogGroup extends Resource<
 
 /**
  * A CloudWatch Logs log group.
- *
+ * @resource
  * @section Creating Log Groups
  * @example ECS Task Log Group
  * ```typescript

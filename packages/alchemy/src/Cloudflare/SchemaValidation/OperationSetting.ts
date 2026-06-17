@@ -76,7 +76,9 @@ export type SchemaValidationOperationSetting = Resource<
  * The override is keyed by the operation's UUID; deleting the resource
  * clears the override so the operation falls back to the zone default.
  * Deleting the underlying API Shield operation cascades the override away.
- *
+ * @resource
+ * @product Schema Validation
+ * @category Application Security
  * @section Overriding an operation
  * @example Block non-conforming requests on one operation
  * ```typescript

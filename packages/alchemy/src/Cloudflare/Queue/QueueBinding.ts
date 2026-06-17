@@ -30,7 +30,9 @@ export class QueueSendError extends Data.TaggedError("QueueSendError")<{
 /**
  * Binding service that turns a {@link Queue} resource into a typed
  * {@link QueueSender} you can call from a Worker's runtime Effect.
- *
+ * @binding
+ * @product Queues
+ * @category Storage & Databases
  * @section Sending Messages
  * Bind the queue in the Worker's init phase, then use `send` for
  * single messages or `sendBatch` for many messages in one call.

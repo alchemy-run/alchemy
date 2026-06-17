@@ -7,6 +7,8 @@ import * as Binding from "../../Binding.ts";
 import type { Rpc } from "../../Rpc.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import type { AiGateway } from "../AiGateway/AiGateway.ts";
+import type { AiSearchInstance } from "../AiSearch/Instance.ts";
+import type { AiSearchNamespace } from "../AiSearch/Namespace.ts";
 import { AnalyticsEngineDataset } from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
 import { Artifacts } from "../Artifacts/Artifacts.ts";
 import { Browser } from "../Browser/Browser.ts";
@@ -50,6 +52,8 @@ export type WorkerBindingResource =
   | KVNamespace
   | Queue
   | AiGateway
+  | AiSearchInstance
+  | AiSearchNamespace
   | AnalyticsEngineDataset
   | SendEmail
   | Artifacts
@@ -99,6 +103,11 @@ export const bindWorker = Effect.fnUntraced(function* <Shape, Req = never>(
   return makeRpcStub<Shape>(stubEff);
 });
 
+/**
+ * @binding
+ * @product Workers
+ * @category Workers & Compute
+ */
 export class BindWorkerPolicy extends Binding.Policy<
   BindWorkerPolicy,
   (worker: Worker) => Effect.Effect<void>

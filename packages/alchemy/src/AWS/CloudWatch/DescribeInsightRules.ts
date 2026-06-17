@@ -9,6 +9,7 @@ export interface DescribeInsightRulesRequest
 
 /**
  * Runtime binding for `cloudwatch:DescribeInsightRules`.
+ * @binding
  */
 export class DescribeInsightRules extends Binding.Service<
   DescribeInsightRules,

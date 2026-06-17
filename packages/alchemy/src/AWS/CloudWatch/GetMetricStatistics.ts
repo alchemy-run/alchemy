@@ -9,6 +9,7 @@ export interface GetMetricStatisticsRequest
 
 /**
  * Runtime binding for `cloudwatch:GetMetricStatistics`.
+ * @binding
  */
 export class GetMetricStatistics extends Binding.Service<
   GetMetricStatistics,

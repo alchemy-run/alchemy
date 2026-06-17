@@ -72,7 +72,9 @@ export type WorkersAccountSetting = Resource<
  * desired ones; destroy restores the values the account had before Alchemy
  * first managed it (captured as `initialDefaultUsageModel` /
  * `initialGreenCompute`).
- *
+ * @resource
+ * @product Workers
+ * @category Workers & Compute
  * @section Managing account settings
  * @example Enable Green Compute for scheduled Workers
  * ```typescript

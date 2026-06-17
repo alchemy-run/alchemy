@@ -65,7 +65,9 @@ export type ZoneHold = Resource<
  * Destroying the resource removes the hold. The delete is idempotent —
  * removing a hold that is already gone (or whose zone was deleted
  * out-of-band) succeeds.
- *
+ * @resource
+ * @product Zones
+ * @category Domains & DNS
  * @section Holding a zone
  * @example Place a hold on a zone
  * ```typescript

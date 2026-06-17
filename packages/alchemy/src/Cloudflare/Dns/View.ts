@@ -62,7 +62,9 @@ export type DnsView = Resource<
  * Requires the Enterprise Internal DNS entitlement on the account
  * (creation fails with `InternalDnsNotAvailable` otherwise). Both
  * `name` and `zones` are mutable in place.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Creating a View
  * @example View over internal zones
  * ```typescript

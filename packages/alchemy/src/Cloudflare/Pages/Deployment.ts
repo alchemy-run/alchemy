@@ -118,7 +118,9 @@ export type PagesDeployment = Resource<
  * it is the project's active production deployment — Cloudflare refuses to
  * delete the live deployment, so delete tolerates that case and the
  * deployment is cleaned up when the project itself is deleted.
- *
+ * @resource
+ * @product Pages
+ * @category Workers & Compute
  * @section Creating a Deployment
  * @example Production deployment on a direct-upload project
  * ```typescript

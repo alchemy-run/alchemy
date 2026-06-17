@@ -119,7 +119,9 @@ export type FraudDetectionSettings = Resource<
  * Fields that were never set by this resource are not touched.
  * `authenticationSettings` that did not exist before the first write
  * cannot be cleared and are left as-is.
- *
+ * @resource
+ * @product Fraud Detection
+ * @category Application Security
  * @section Fraud User Profiles
  * @example Enable user profiles with a username expression
  * ```typescript

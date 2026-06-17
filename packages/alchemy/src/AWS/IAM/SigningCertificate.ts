@@ -41,7 +41,7 @@ export interface SigningCertificate extends Resource<
  *
  * `SigningCertificate` uploads an X.509 signing certificate for legacy
  * IAM-integrated workflows that still depend on user-scoped certificates.
- *
+ * @resource
  * @section Managing User Certificates
  * @example Upload a Signing Certificate
  * ```typescript

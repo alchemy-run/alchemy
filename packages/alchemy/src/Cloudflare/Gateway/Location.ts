@@ -129,7 +129,9 @@ export type GatewayLocation = Resource<
  * `https://<dohSubdomain>.cloudflare-gateway.com/dns-query` and Gateway
  * DNS policies apply to its traffic. All declared properties converge in
  * place — nothing on a location forces a replacement.
- *
+ * @resource
+ * @product Gateway
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Location
  * @example DoH-only location
  * ```typescript

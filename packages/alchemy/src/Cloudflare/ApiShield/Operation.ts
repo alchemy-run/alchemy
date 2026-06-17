@@ -99,7 +99,9 @@ export type ApiShieldOperation = Resource<
  * Endpoint paths may contain `{placeholder}` templates; Cloudflare
  * normalizes the variable names left-to-right to `{var1}`, `{var2}`, … and
  * the normalized form is what is stored and diffed.
- *
+ * @resource
+ * @product API Shield
+ * @category Application Security
  * @section Registering an Operation
  * @example Register a GET endpoint
  * ```typescript

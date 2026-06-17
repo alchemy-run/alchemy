@@ -19,6 +19,7 @@ export interface ExecuteStatementRequest extends Omit<
 
 /**
  * Runtime binding for `rds-data:ExecuteStatement`.
+ * @binding
  */
 export class ExecuteStatement extends Binding.Service<
   ExecuteStatement,

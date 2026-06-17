@@ -196,7 +196,9 @@ export type LoadBalancer = Resource<
  * Requires the Load Balancing subscription to be enabled for the zone;
  * without it, creation fails with the typed `LoadBalancingNotEnabledForZone`
  * error.
- *
+ * @resource
+ * @product Load Balancers
+ * @category Performance & Reliability
  * @section Creating a Load Balancer
  * @example DNS-only (unproxied) load balancer
  * ```typescript

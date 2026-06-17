@@ -9,6 +9,7 @@ type AlarmResources = [AlarmResource, ...AlarmResource[]];
 
 /**
  * Runtime binding for `cloudwatch:DisableAlarmActions`.
+ * @binding
  */
 export class DisableAlarmActions extends Binding.Service<
   DisableAlarmActions,

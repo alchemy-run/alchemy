@@ -126,6 +126,11 @@ export interface D1ConnectionClient {
   ) => Effect.Effect<runtime.D1Result<T>[], never, RuntimeContext>;
 }
 
+/**
+ * @binding
+ * @product D1
+ * @category Storage & Databases
+ */
 export class D1Connection extends Binding.Service<
   D1Connection,
   (database: D1Database) => Effect.Effect<D1ConnectionClient>

@@ -51,6 +51,7 @@ export const ToQueuePolicyLive = ToQueuePolicy.layer.succeed(
   }),
 );
 
+/** @binding */
 export const toQueue = (
   descriptor: EventDescriptor,
   queue: Queue,

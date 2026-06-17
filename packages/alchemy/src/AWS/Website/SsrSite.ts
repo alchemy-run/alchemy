@@ -139,7 +139,7 @@ const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
  *
  * `SsrSite` serves a dynamic origin behind CloudFront and can optionally split
  * immutable static assets into a private S3 bucket origin.
- *
+ * @resource
  * @section Creating SSR Sites
  * @example Lambda URL Origin
  * ```typescript

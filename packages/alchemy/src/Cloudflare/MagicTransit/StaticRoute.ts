@@ -95,7 +95,9 @@ export type MagicStaticRoute = Resource<
  * identity is the `(prefix, nexthop, priority)` triple — when state is
  * lost, `read` scans for a matching route and reports it as `Unowned` so
  * takeover is gated behind `--adopt`.
- *
+ * @resource
+ * @product Magic Transit
+ * @category Network
  * @section Creating a static route
  * @example Route a prefix over a GRE tunnel
  * ```typescript

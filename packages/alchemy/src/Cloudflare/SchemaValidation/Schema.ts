@@ -95,7 +95,9 @@ export type SchemaValidationSchema = Resource<
  * delete those operations). The schema body is immutable: changing `source`
  * uploads a new schema and deletes the old one (replacement). Only the
  * `validationEnabled` flag is mutable in place.
- *
+ * @resource
+ * @product Schema Validation
+ * @category Application Security
  * @section Uploading a Schema
  * @example Upload an OpenAPI v3 schema
  * ```typescript

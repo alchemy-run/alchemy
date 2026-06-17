@@ -138,7 +138,7 @@ export interface Dashboard extends Resource<
 
 /**
  * An Amazon CloudWatch dashboard.
- *
+ * @resource
  * @section Creating Dashboards
  * @example Basic Dashboard
  * ```typescript

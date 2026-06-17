@@ -15,6 +15,7 @@ export interface ListTagsForResourceRequest extends Omit<
 
 /**
  * Runtime binding for `cloudwatch:ListTagsForResource`.
+ * @binding
  */
 export class ListTagsForResource extends Binding.Service<
   ListTagsForResource,

@@ -150,7 +150,9 @@ export type Share = Resource<
  * are seeded inline. Post-create changes to those arrays are reconciled
  * through the recipient/resource sub-APIs; only `name` is mutable on the
  * share itself. Deletion is asynchronous (`active → deleting → deleted`).
- *
+ * @resource
+ * @product Resource Sharing
+ * @category Account & Identity
  * @section Creating a Share
  * @example Share a gateway policy with another account
  * ```typescript

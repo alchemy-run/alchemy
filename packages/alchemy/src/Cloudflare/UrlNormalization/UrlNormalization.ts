@@ -87,7 +87,9 @@ export type UrlNormalization = Resource<
  * singleton and PUTs the desired `{ scope, type }` only when the observed
  * configuration differs. Destroy issues the API's true reset operation
  * (DELETE), returning the zone to Cloudflare defaults.
- *
+ * @resource
+ * @product URL Normalization
+ * @category Rules & Configuration
  * @section Managing URL normalization
  * @example Normalize URLs sent to the origin too
  * ```typescript

@@ -115,7 +115,9 @@ export type OriginCaCertificate = Resource<
  * Certificates are fully immutable: there is no update API, so changing any
  * property triggers a replacement (a new certificate is issued, then the
  * old one is revoked). Destroying the resource revokes the certificate.
- *
+ * @resource
+ * @product Origin CA Certificates
+ * @category SSL/TLS & Certificates
  * @section Issuing a certificate
  * @example RSA certificate for a single hostname
  * ```typescript

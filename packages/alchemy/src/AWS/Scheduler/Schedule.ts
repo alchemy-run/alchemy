@@ -71,7 +71,7 @@ export interface ScheduleProps {
  * `Schedule` is the canonical time-based delivery primitive. High-level helpers
  * like `every`, `cron`, and `at` can synthesize the target role and scheduler
  * target configuration on top of this resource.
- *
+ * @resource
  * @section Creating Schedules
  * @example Hourly Schedule
  * ```typescript

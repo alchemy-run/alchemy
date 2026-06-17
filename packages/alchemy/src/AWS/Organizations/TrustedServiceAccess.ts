@@ -26,6 +26,7 @@ export interface TrustedServiceAccess extends Resource<
 
 /**
  * Enables trusted access for an AWS service principal.
+ * @resource
  */
 export const TrustedServiceAccess = Resource<TrustedServiceAccess>(
   "AWS.Organizations.TrustedServiceAccess",

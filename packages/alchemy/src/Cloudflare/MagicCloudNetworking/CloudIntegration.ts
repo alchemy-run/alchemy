@@ -137,7 +137,9 @@ export type CloudIntegration = Resource<
  * Magic Cloud Networking is an entitlement-gated add-on (Magic WAN family).
  * On accounts without the entitlement every API call fails with the typed
  * `FeatureNotEnabled` error (Cloudflare code 1012, "feature not enabled").
- *
+ * @resource
+ * @product Magic Cloud Networking
+ * @category Network
  * @section Creating an integration
  * @example Register an AWS account
  * ```typescript

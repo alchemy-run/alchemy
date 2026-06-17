@@ -12,6 +12,7 @@ export interface ListRulesRequest extends Omit<
   "EventBusName"
 > {}
 
+/** @binding */
 export class ListRules extends Binding.Service<
   ListRules,
   (

@@ -52,6 +52,8 @@ export const isBrowser = (value: unknown): value is Browser =>
  * sessions from Workers via `@cloudflare/puppeteer`.
  *
  * @binding
+ * @product Browser Rendering
+ * @category Developer Platform
  *
  * @section Effect-style Worker (recommended)
  * @example Bind the runtime client and convert a page to Markdown

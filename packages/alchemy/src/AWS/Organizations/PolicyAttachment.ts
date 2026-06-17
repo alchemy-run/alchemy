@@ -33,6 +33,7 @@ export interface PolicyAttachment extends Resource<
 
 /**
  * Attaches an Organizations policy to a root, OU, or account.
+ * @resource
  */
 export const PolicyAttachment = Resource<PolicyAttachment>(
   "AWS.Organizations.PolicyAttachment",

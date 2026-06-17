@@ -19,6 +19,7 @@ export interface ExecuteSqlRequest extends Omit<
 
 /**
  * Runtime binding for the deprecated `rds-data:ExecuteSql` API.
+ * @binding
  */
 export class ExecuteSql extends Binding.Service<
   ExecuteSql,

@@ -65,7 +65,7 @@ export interface TransactWriteItemsRequest extends Omit<
  *
  * Bind this operation to one or more tables and identify each item's target
  * table by the bound table's `LogicalId`.
- *
+ * @binding
  * @section Writing Data
  * @example Write Items Transactionally
  * ```typescript

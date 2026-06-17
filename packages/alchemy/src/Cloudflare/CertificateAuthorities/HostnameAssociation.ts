@@ -81,7 +81,9 @@ export type HostnameAssociation = Resource<
  * still reference it. Pass the certificate id through
  * `cert.mtlsCertificateId` so the engine destroys the association before the
  * certificate.
- *
+ * @resource
+ * @product Certificate Authorities
+ * @category SSL/TLS & Certificates
  * @section Cloudflare Managed CA
  * @example Enforce mTLS on a hostname with the Managed CA
  * ```typescript

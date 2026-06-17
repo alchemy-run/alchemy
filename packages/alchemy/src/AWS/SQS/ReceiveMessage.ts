@@ -12,6 +12,7 @@ export interface ReceiveMessageRequest extends Omit<
   "QueueUrl"
 > {}
 
+/** @binding */
 export class ReceiveMessage extends Binding.Service<
   ReceiveMessage,
   (

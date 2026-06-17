@@ -125,6 +125,9 @@ export interface FlagshipClient {
  * Binding service that turns a {@link FlagshipApp} resource into a typed
  * {@link FlagshipClient} for Worker runtime code. Prefer the
  * `Cloudflare.FlagshipApp.bind(app)` alias.
+ * @binding
+ * @product Flagship
+ * @category Developer Platform
  */
 export class FlagshipBinding extends Binding.Service<
   FlagshipBinding,

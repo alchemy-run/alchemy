@@ -11,6 +11,7 @@ export interface SendMessageBatchRequest extends Omit<
   "QueueUrl"
 > {}
 
+/** @binding */
 export class SendMessageBatch extends Binding.Service<
   SendMessageBatch,
   (

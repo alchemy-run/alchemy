@@ -90,7 +90,9 @@ export type GatewayCertificate = Resource<
  * To make Gateway actually intercept with this certificate, reference its
  * `certificateId` from the Gateway configuration's `certificate` setting
  * (see `Cloudflare.GatewayConfiguration`).
- *
+ * @resource
+ * @product Gateway
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Certificate
  * @example Activated certificate (default)
  * ```typescript

@@ -64,7 +64,9 @@ export type MagicApp = Resource<
  * `MagicWanUnauthorized` error (Cloudflare code 1025).
  *
  * All properties are mutable in place via PATCH.
- *
+ * @resource
+ * @product Magic Transit
+ * @category Network
  * @section Creating an app
  * @example App matching hostnames
  * ```typescript

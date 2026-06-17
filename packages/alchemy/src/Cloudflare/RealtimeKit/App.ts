@@ -65,7 +65,9 @@ export type RealtimeKitApp = Resource<
  * (with a warning) — the app itself remains on the account until Cloudflare
  * ships a delete API. Because of this, an existing app with the same name is
  * adopted rather than duplicated.
- *
+ * @resource
+ * @product Realtime Kit
+ * @category Media
  * @section Creating an App
  * @example Basic app
  * ```typescript

@@ -54,7 +54,7 @@ export interface ListenerRule extends Resource<
  * and route requests to target groups (or other actions) based on conditions
  * such as host header, path pattern, HTTP header, query string, request method,
  * and source IP.
- *
+ * @resource
  * @section Creating a Rule
  * @example Path-based routing
  * ```typescript

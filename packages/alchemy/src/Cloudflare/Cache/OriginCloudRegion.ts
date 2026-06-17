@@ -85,7 +85,9 @@ export type OriginCloudRegion = Resource<
  * prior state, `read` reports an existing mapping for the same IP as
  * `Unowned`, so the engine refuses to take it over unless `--adopt`
  * (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Cache
+ * @category Performance & Reliability
  * @section Mapping origins to cloud regions
  * @example Map an origin IP to an AWS region
  * ```typescript

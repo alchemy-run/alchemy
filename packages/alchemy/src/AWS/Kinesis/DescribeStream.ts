@@ -10,6 +10,7 @@ export interface DescribeStreamRequest extends Omit<
   "StreamName" | "StreamARN"
 > {}
 
+/** @binding */
 export class DescribeStream extends Binding.Service<
   DescribeStream,
   (

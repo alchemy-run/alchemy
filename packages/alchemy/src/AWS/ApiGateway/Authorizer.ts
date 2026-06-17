@@ -55,6 +55,7 @@ export interface AuthorizerProps {
   authorizerResultTtlInSeconds?: number;
 }
 
+/** @resource */
 export interface Authorizer extends Resource<
   "AWS.ApiGateway.Authorizer",
   AuthorizerProps,

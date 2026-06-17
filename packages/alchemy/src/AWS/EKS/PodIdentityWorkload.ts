@@ -112,7 +112,7 @@ export interface PodIdentityWorkloadResources {
  * can declare a service-account-backed deployment without manually wiring the
  * IAM role, EKS pod identity association, Kubernetes service account, and
  * deployment together.
- *
+ * @resource
  * @example Pod identity workload with generated role
  * ```typescript
  * const app = yield* PodIdentityWorkload("api", {

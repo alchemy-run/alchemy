@@ -10,6 +10,7 @@ export interface PublishBatchRequest extends Omit<
   "TopicArn"
 > {}
 
+/** @binding */
 export class PublishBatch extends Binding.Service<
   PublishBatch,
   (

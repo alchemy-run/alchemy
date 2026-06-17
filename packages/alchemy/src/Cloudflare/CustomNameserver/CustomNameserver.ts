@@ -108,7 +108,9 @@ export type CustomNameserver = Resource<
  * prior state, `read` scans the account for an existing nameserver with
  * the same `nsName` and reports it as `Unowned`, so the engine refuses to
  * take it over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Custom Nameservers
+ * @category Domains & DNS
  * @section Creating a custom nameserver
  * @example Vanity nameserver on the default set
  * ```typescript

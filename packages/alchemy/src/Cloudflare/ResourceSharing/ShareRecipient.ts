@@ -89,7 +89,9 @@ export type ShareRecipient = Resource<
  * change triggers a replacement. Association is eventually consistent
  * (`associating → associated`). Do not manage the same recipient both inline
  * on `Share.recipients` and through this resource.
- *
+ * @resource
+ * @product Resource Sharing
+ * @category Account & Identity
  * @section Adding a Recipient
  * @example Share with another account
  * ```typescript

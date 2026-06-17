@@ -279,7 +279,7 @@ export interface DBCluster extends Resource<
  * `dbSubnetGroupName`, `storageEncrypted`, `kmsKeyId`, `engineMode`,
  * `globalClusterIdentifier`, `availabilityZones`, `engineLifecycleSupport`)
  * force a replacement.
- *
+ * @resource
  * @section Serverless v2 Cluster
  * @example Aurora Postgres serverless-v2
  * ```typescript

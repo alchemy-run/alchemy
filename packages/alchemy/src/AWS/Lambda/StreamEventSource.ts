@@ -20,6 +20,7 @@ export const isKinesisStreamEvent = (
   event.Records.length > 0 &&
   event.Records[0].eventSource === "aws:kinesis";
 
+/** @binding */
 export const StreamEventSource = Layer.effect(
   KinesisStreamEventSource,
   Effect.gen(function* () {

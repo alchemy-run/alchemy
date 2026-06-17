@@ -72,7 +72,9 @@ export type Pipeline = Resource<
  * The SQL is fixed at creation: changing it (or the name) triggers a
  * replacement. Nothing references a pipeline downstream, so replacements
  * are cheap.
- *
+ * @resource
+ * @product Pipelines
+ * @category Storage & Databases
  * @section Creating a Pipeline
  * @example Stream → Sink passthrough
  * ```typescript

@@ -124,7 +124,9 @@ export type Lockdown = Resource<
  * state, `read` scans the zone for an existing rule with the same URL set
  * and reports it as `Unowned`, so the engine refuses to take it over unless
  * `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Firewall
+ * @category Application Security
  * @section Locking down a URL
  * @example Allow a single office IP to reach an admin panel
  * ```typescript

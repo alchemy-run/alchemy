@@ -235,7 +235,9 @@ export type DirectoryService = Resource<
  * Names are unique within the account. All properties — including the host
  * and even the protocol type — are mutable in place via a full PUT; nothing
  * forces a replacement except moving accounts.
- *
+ * @resource
+ * @product Connectivity
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Directory Service
  * @example TCP database service through a tunnel
  * ```typescript

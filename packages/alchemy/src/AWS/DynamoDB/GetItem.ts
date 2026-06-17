@@ -15,7 +15,7 @@ export interface GetItemRequest extends Omit<
  *
  * Bind this operation to a `Table` inside a function runtime to get a callable
  * that automatically injects the table name.
- *
+ * @binding
  * @section Reading Data
  * @example Read a Single Item
  * ```typescript

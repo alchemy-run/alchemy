@@ -87,7 +87,9 @@ export type QueueConsumer = Resource<
  * consumers can coexist). The reconciler enforces this: if the queue
  * already has a Worker consumer pointing at a different script, the
  * deploy fails with a clear error rather than silently adopting it.
- *
+ * @resource
+ * @product Queues
+ * @category Storage & Databases
  * @section Registering a Consumer
  * @example Basic consumer
  * ```typescript

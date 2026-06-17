@@ -79,7 +79,9 @@ export type DdosAllowlistEntry = Resource<
  * prior state, `read` scans for an existing entry with the same prefix and
  * reports it as `Unowned`, so the engine refuses to take it over unless
  * `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product DDoS Protection
+ * @category Network
  * @section Creating an allowlist entry
  * @example Allowlist a trusted prefix
  * ```typescript

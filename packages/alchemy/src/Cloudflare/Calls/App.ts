@@ -69,7 +69,9 @@ export type CallsApp = Resource<
  * backend authenticates management calls with the create-only `secret`
  * (a bearer token). The only configurable property is the human-readable
  * `name`, which is mutable in place.
- *
+ * @resource
+ * @product Calls
+ * @category Media
  * @section Creating an App
  * @example App with a generated name
  * ```typescript

@@ -10,6 +10,7 @@ export interface ListTagsOfResourceRequest extends Omit<
   "ResourceArn"
 > {}
 
+/** @binding */
 export class ListTagsOfResource extends Binding.Service<
   ListTagsOfResource,
   <T extends Table>(

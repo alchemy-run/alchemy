@@ -296,7 +296,7 @@ export interface Service extends Resource<
  * `cluster`, launchType↔capacityProviderStrategy switch, `deploymentController`
  * type, `schedulingStrategy`, `enableECSManagedTags`, `role` — replace the
  * service.
- *
+ * @resource
  * @section Creating Services
  * @example Internal Service
  * ```typescript

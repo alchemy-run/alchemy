@@ -186,7 +186,9 @@ export type PipelineStream = Resource<
  * The stream's `schema` and `format` are fixed at creation (changing them
  * triggers a replacement); the HTTP endpoint and Worker-binding toggles
  * are mutable in place.
- *
+ * @resource
+ * @product Pipelines
+ * @category Storage & Databases
  * @section Creating a Stream
  * @example Unstructured stream with default settings
  * ```typescript

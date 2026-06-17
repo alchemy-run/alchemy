@@ -132,7 +132,9 @@ export type AccessPolicy = Resource<
  * A reusable, account-scoped Cloudflare Access policy. Distinct from the
  * inline policies attached directly to an `AccessApplication` — a reusable
  * policy can be referenced by multiple applications by id.
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Policy
  * @example Allow a single email domain
  * ```typescript

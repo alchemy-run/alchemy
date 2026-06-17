@@ -85,7 +85,9 @@ export type AccessMcpPortal = Resource<
  * entitlement; accounts without it receive the typed `Forbidden` error
  * on all writes. Attaching servers to the portal is managed out of band
  * (a future `Cloudflare.Access.McpServer` resource).
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @section Creating an MCP portal
  * @example Minimal portal
  * ```typescript

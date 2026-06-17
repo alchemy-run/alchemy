@@ -250,7 +250,7 @@ export interface TaskRuntimeContext extends ProcessContext {
  * Beyond the single bundled container you can declare task-level configuration
  * (volumes, runtime platform, ephemeral storage, IPC/PID mode, placement
  * constraints) and append additional `sidecars` for multi-container tasks.
- *
+ * @resource
  * @section Creating a Task
  * @example Basic Task
  * ```typescript

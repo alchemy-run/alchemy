@@ -106,7 +106,9 @@ export type RealtimeKitWebhook = Resource<
  *
  * Name, URL, events, and enablement are all mutable in place; only moving
  * the webhook to a different app forces a replacement.
- *
+ * @resource
+ * @product Realtime Kit
+ * @category Media
  * @section Creating a Webhook
  * @example Meeting lifecycle events
  * ```typescript

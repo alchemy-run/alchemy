@@ -72,7 +72,9 @@ export type LeakedCredentialDetection = Resource<
  * state, `read` scans the zone for an existing detection with the same
  * expressions and reports it as `Unowned`, so the engine refuses to take
  * it over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Leaked Credential Checks
+ * @category Application Security
  * @section Custom detection locations
  * @example Detect credentials in a JSON login body
  * ```typescript

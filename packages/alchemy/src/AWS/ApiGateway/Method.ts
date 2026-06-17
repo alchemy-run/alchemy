@@ -107,7 +107,7 @@ export interface MethodType extends Resource<
  * REST API resource path. Most methods also carry an `integration` — the
  * downstream target that actually handles the request (a Lambda function,
  * an HTTP endpoint, a mock response, etc.).
- *
+ * @resource
  * @section Binding to a RestApi
  * Pass the `RestApi` value on `restApi`. This threads the API id through
  * and registers the method as a `RestApiBinding` on the API, so that any

@@ -42,7 +42,9 @@ export type KVNamespace = Resource<
  * KV provides eventually-consistent, low-latency reads with global
  * replication. Create a namespace as a resource, then bind it to a Worker
  * to get/put values at runtime.
- *
+ * @resource
+ * @product KV
+ * @category Storage & Databases
  * @section Creating a Namespace
  * @example Basic KV namespace
  * ```typescript

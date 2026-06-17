@@ -156,7 +156,9 @@ export type AccessOrganization = Resource<
  * domain, login branding, session lifetimes, WARP authentication toggle, etc.
  *
  * Wraps `PUT /accounts/{account_id}/access/organizations`.
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @remarks
  * **This resource is a singleton.** Every Cloudflare account owns exactly one
  * Access Organization; you cannot create a second one and you cannot delete

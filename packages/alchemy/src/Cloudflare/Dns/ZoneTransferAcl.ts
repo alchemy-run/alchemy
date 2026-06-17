@@ -63,7 +63,9 @@ export type ZoneTransferAcl = Resource<
  *
  * Requires the Secondary DNS (zone transfer) entitlement on the
  * account. Both `name` and `ipRange` are mutable in place.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Creating an ACL
  * @example Allow a primary nameserver range
  * ```typescript

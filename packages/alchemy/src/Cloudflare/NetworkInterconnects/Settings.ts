@@ -57,7 +57,9 @@ export type NetworkInterconnectSettings = Resource<
  * CNI is an enterprise feature — on accounts without the Network
  * Interconnect entitlement the endpoint fails with the typed `Forbidden`
  * error.
- *
+ * @resource
+ * @product Network Interconnects
+ * @category Network
  * @section Managing the default ASN
  * @example Pin the account's default ASN
  * ```typescript

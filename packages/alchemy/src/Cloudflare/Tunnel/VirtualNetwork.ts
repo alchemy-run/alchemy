@@ -77,7 +77,9 @@ export type TunnelVirtualNetwork = Resource<
  * requires that no routes reference it — express that relationship by
  * passing `vnet.virtualNetworkId` into your `TunnelRoute`s so destroy
  * ordering is correct.
- *
+ * @resource
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Virtual Network
  * @example Basic virtual network
  * ```typescript

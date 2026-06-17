@@ -91,7 +91,9 @@ export type MagicNetworkMonitoringConfig = Resource<
  * falling through to an update. When the engine has no prior state but a
  * configuration already exists on the account, `read` reports it as
  * `Unowned` and takeover is gated behind `--adopt`.
- *
+ * @resource
+ * @product Magic Network Monitoring
+ * @category Network
  * @section Creating the configuration
  * @example Minimal configuration
  * ```typescript

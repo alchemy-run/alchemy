@@ -10,6 +10,7 @@ export interface PublishRequest extends Omit<
   "TopicArn" | "TargetArn" | "PhoneNumber"
 > {}
 
+/** @binding */
 export class Publish extends Binding.Service<
   Publish,
   (

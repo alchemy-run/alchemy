@@ -166,7 +166,9 @@ export type GreTunnel = Resource<
  * The tunnel `name` is its routing identity (unique, ≤15 chars) — changing
  * it triggers a replacement, as does changing `bgp` (the update API cannot
  * modify BGP settings). Everything else is updated in place via PUT.
- *
+ * @resource
+ * @product Magic Transit
+ * @category Network
  * @section Creating a GRE tunnel
  * @example Basic tunnel
  * ```typescript

@@ -71,7 +71,9 @@ export type EmailSecurityBlockSender = Resource<
  * All fields are mutable in place. Requires the Email Security enterprise
  * add-on; accounts without the entitlement receive the typed
  * `EmailSecurityNotEntitled` error.
- *
+ * @resource
+ * @product Email Security
+ * @category Email
  * @section Blocking Senders
  * @example Block a single email address
  * ```typescript

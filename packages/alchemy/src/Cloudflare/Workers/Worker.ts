@@ -409,7 +409,9 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * - **Async** — plain `async fetch` handler, no Effect runtime in the bundle.
  * - **Effect** — Effect implementation passed directly, single file.
  * - **Layer** — class and `.make()` in a single file; Rolldown tree-shakes `.make()` from consumers.
- *
+ * @resource
+ * @product Workers
+ * @category Workers & Compute
  * @section Async Workers
  * You don't have to use Effect for your runtime code. If you create
  * a Worker resource with `main` pointing at a file but provide no

@@ -394,7 +394,7 @@ export interface Distribution extends Resource<
  * `Distribution` manages the CDN layer for static sites and HTTP origins such
  * as Lambda Function URLs and ALBs. It exposes the distribution domain and
  * hosted zone ID needed for Route 53 alias records.
- *
+ * @resource
  * @section Creating Distributions
  * @example Private S3 Origin
  * ```typescript

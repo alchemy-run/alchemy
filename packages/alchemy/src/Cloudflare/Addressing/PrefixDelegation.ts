@@ -61,7 +61,9 @@ export type AddressingPrefixDelegation = Resource<
  *
  * Delegations are create/delete only — every prop change forces a
  * replacement.
- *
+ * @resource
+ * @product Addressing
+ * @category Network
  * @section Delegating a Prefix
  * @example Delegate a /26 to another account
  * ```typescript

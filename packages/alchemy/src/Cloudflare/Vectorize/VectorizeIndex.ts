@@ -87,7 +87,9 @@ export type VectorizeIndex = Resource<
  * A Vectorize index is identified by its name and is immutable: its
  * dimensions, metric, preset, and description are all fixed at creation.
  * Changing any of them triggers a replacement.
- *
+ * @resource
+ * @product Vectorize
+ * @category AI
  * @section Creating an Index
  * @example Index with explicit dimensions and metric
  * ```typescript

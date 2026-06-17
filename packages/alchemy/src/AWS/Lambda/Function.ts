@@ -220,7 +220,7 @@ const normalizeFunctionUrl = (
  * for plain handler patterns, or the
  * {@link https://alchemy.run/guides/lambda | Effect Lambda Guide}
  * for the full Effect-based approach with bindings, event sources, and sinks.
- *
+ * @resource
  * @section Async Functions
  * Point `main` at a file that exports a standard Lambda handler. No
  * Effect runtime is included in the bundle. Useful when migrating

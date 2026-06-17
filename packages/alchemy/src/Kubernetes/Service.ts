@@ -47,7 +47,7 @@ export interface ServiceProps {
 
 /**
  * A Kubernetes service bound to an EKS cluster.
- *
+ * @resource
  * @example Expose a deployment on a ClusterIP service
  * ```typescript
  * const service = yield* Service("api", {

@@ -233,7 +233,9 @@ export type CustomHostname = Resource<
  * existing hostname match. Custom hostnames carry no ownership markers,
  * so an existing match is reported as `Unowned` and the engine refuses
  * to take it over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Custom Hostnames
+ * @category Domains & DNS
  * @section Creating a Custom Hostname
  * @example Basic custom hostname with TXT validation
  * ```typescript

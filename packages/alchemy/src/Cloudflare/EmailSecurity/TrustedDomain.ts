@@ -81,7 +81,9 @@ export type EmailSecurityTrustedDomain = Resource<
  * All fields are mutable in place. Requires the Email Security enterprise
  * add-on; accounts without the entitlement receive the typed
  * `EmailSecurityNotEntitled` error.
- *
+ * @resource
+ * @product Email Security
+ * @category Email
  * @section Trusting Domains
  * @example Trust a partner domain with similar spelling
  * ```typescript

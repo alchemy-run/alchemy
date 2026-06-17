@@ -65,7 +65,7 @@ export interface Command extends Resource<
 /**
  * A Build resource that runs a shell command and produces an output asset.
  * Input files are hashed using globs to avoid redundant rebuilds.
- *
+ * @resource
  * @section Building a Vite App
  * @example Basic Vite Build
  * ```typescript

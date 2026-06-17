@@ -270,7 +270,7 @@ export type InstanceRuntimeContext = Ec2HostRuntimeContext;
 /**
  * An EC2 instance that can either act as a low-level compute primitive or run
  * a bundled long-lived Effect program directly on the machine.
- *
+ * @resource
  * @section Launching Instances
  * @example Basic Instance
  * ```typescript

@@ -7,6 +7,7 @@ import type { Secret } from "./Secret.ts";
 
 /**
  * Runtime binding for `secretsmanager:DescribeSecret`.
+ * @binding
  */
 export class DescribeSecret extends Binding.Service<
   DescribeSecret,

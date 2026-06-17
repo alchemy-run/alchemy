@@ -10,6 +10,7 @@ export interface DescribeRuleRequest extends Omit<
   "Name" | "EventBusName"
 > {}
 
+/** @binding */
 export class DescribeRule extends Binding.Service<
   DescribeRule,
   (

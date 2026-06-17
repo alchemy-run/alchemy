@@ -76,7 +76,9 @@ export type DeviceManagedNetwork = Resource<
  *
  * Name and config are mutable in place (PUT). `tls` is the only network
  * type Cloudflare supports.
- *
+ * @resource
+ * @product Devices
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a managed network
  * @example Detect the office network by TLS fingerprint
  * ```typescript

@@ -154,7 +154,9 @@ export type R2Bucket = Resource<
  *
  * R2 provides zero-egress-fee object storage. Create a bucket as a resource,
  * then bind it to a Worker to read and write objects at runtime.
- *
+ * @resource
+ * @product R2
+ * @category Storage & Databases
  * @section Creating a Bucket
  * @example Basic R2 bucket
  * ```typescript

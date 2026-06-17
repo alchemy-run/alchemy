@@ -126,7 +126,9 @@ export type FirewallAccessRule = Resource<
  * prior state, `read` scans the scope for an existing rule with the same
  * configuration and reports it as `Unowned`, so the engine refuses to take
  * it over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Firewall
+ * @category Application Security
  * @section Blocking an IP
  * @example Block a single IPv4 address on a zone
  * ```typescript

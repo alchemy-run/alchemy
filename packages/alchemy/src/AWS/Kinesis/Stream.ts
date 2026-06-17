@@ -175,7 +175,7 @@ export interface Stream extends Resource<
  * including retention, encryption, monitoring, warm throughput, record size, tags,
  * and stream resource policy. A stream name is auto-generated from the app,
  * stage, and logical ID unless you provide one explicitly.
- *
+ * @resource
  * @section Creating Streams
  * @example On-Demand Stream
  * ```typescript

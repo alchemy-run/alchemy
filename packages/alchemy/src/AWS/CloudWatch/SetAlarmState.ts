@@ -12,6 +12,7 @@ export interface SetAlarmStateRequest extends Omit<
 
 /**
  * Runtime binding for `cloudwatch:SetAlarmState`.
+ * @binding
  */
 export class SetAlarmState extends Binding.Service<
   SetAlarmState,

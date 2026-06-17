@@ -92,7 +92,9 @@ export type RulesetAccountEntrypoint = Resource<
  *
  * Account-level phases require an Enterprise plan; on lower plans deploys
  * fail with the typed `PhaseNotEntitled` error.
- *
+ * @resource
+ * @product Rulesets
+ * @category Rules & Configuration
  * @section Account WAF Deployment
  * @example Deploy a custom ruleset across all zones
  * ```typescript

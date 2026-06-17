@@ -97,7 +97,7 @@ export interface RepositoryEventSourceProps<
  * host-specific runtime layer — see
  * `Cloudflare.GitHubRepositoryEventSourceLive` for the Cloudflare Worker
  * implementation.
- *
+ * @binding
  * @example
  * ```typescript
  * // `event.name` is narrowed to "push" | "pull_request"

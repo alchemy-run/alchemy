@@ -83,7 +83,7 @@ export interface Addon extends Resource<
  * `Addon` is intended for optional managed add-ons. On Auto Mode clusters, many
  * core components are already provided by AWS and do not need to be modeled as
  * explicit add-on resources.
- *
+ * @resource
  * @section Managing Add-ons
  * @example Install Metrics Server
  * ```typescript

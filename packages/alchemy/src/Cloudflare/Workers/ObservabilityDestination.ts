@@ -134,7 +134,9 @@ export type ObservabilityDestination = Resource<
  * account for a destination with the same name and reports it as
  * `Unowned`, so the engine refuses to take it over unless `--adopt` (or
  * `adopt(true)`) is set.
- *
+ * @resource
+ * @product Workers
+ * @category Workers & Compute
  * @section Exporting Workers traces
  * @example Push traces to an OTLP collector
  * ```typescript

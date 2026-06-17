@@ -113,7 +113,7 @@ export interface Table extends Resource<
  * `Table` owns the lifecycle of the physical table while the binding contract
  * allows runtime-specific integrations such as Lambda table event sources to
  * request stream configuration without forcing a circular input prop.
- *
+ * @resource
  * @section Creating Tables
  * @example Basic Table
  * ```typescript

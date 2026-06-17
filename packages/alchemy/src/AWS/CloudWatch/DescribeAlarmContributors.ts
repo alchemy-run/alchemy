@@ -12,6 +12,7 @@ export interface DescribeAlarmContributorsRequest extends Omit<
 
 /**
  * Runtime binding for `cloudwatch:DescribeAlarmContributors`.
+ * @binding
  */
 export class DescribeAlarmContributors extends Binding.Service<
   DescribeAlarmContributors,

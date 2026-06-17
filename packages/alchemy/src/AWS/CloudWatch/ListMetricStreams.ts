@@ -9,6 +9,7 @@ export interface ListMetricStreamsRequest
 
 /**
  * Runtime binding for `cloudwatch:ListMetricStreams`.
+ * @binding
  */
 export class ListMetricStreams extends Binding.Service<
   ListMetricStreams,

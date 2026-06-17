@@ -128,7 +128,9 @@ export type ManagedTransforms = Resource<
  * Some transforms are plan-gated (e.g. `add_bot_protection_headers`
  * requires Bot Management) — enabling those fails server-side on
  * unentitled zones.
- *
+ * @resource
+ * @product Managed Transforms
+ * @category Rules & Configuration
  * @section Request transforms
  * @example Add visitor location headers
  * ```typescript

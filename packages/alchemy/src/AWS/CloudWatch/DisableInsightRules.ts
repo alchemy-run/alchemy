@@ -12,6 +12,7 @@ type InsightRules = [InsightRuleResource, ...InsightRuleResource[]];
 
 /**
  * Runtime binding for `cloudwatch:DisableInsightRules`.
+ * @binding
  */
 export class DisableInsightRules extends Binding.Service<
   DisableInsightRules,

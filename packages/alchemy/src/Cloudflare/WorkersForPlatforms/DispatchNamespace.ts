@@ -76,7 +76,9 @@ export type DispatchNamespace = Resource<
  *
  * Note: Workers for Platforms is a paid add-on. On accounts without the
  * subscription, namespace creation fails with an entitlement error.
- *
+ * @resource
+ * @product Workers for Platforms
+ * @category Workers & Compute
  * @section Creating a Dispatch Namespace
  * @example Namespace with a generated name
  * ```typescript

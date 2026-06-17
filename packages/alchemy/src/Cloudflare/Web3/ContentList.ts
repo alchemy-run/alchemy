@@ -96,7 +96,9 @@ export type Web3HostnameContentList = Resource<
  * `ipfs_universal_path` hostname (empty by default), so this resource never
  * creates or deletes a physical object. Reconciliation replaces the whole
  * list declaratively via the bulk PUT, and destroy resets the list to empty.
- *
+ * @resource
+ * @product Web3
+ * @category Domains & DNS
  * @section Blocking content
  * @example Block a CID and a content path
  * ```typescript

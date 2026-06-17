@@ -92,7 +92,9 @@ export type OriginTlsClientAuthHostnameAssociation = Resource<
  * separate instances for different hostnames are safe to deploy
  * concurrently. On destroy the association is voided (`enabled: null`),
  * which restores the hostname to zone-level AOP behavior.
- *
+ * @resource
+ * @product Origin TLS Client Auth
+ * @category SSL/TLS & Certificates
  * @section Enabling AOP for a hostname
  * @example Associate a hostname with a client certificate
  * ```typescript

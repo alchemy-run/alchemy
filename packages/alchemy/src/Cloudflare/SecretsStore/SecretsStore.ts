@@ -31,7 +31,9 @@ export type SecretsStore = Resource<
  * start and `create` is only ever invoked when no store exists yet.
  * Once it exists it is treated as account-level infrastructure that
  * outlives any single stack.
- *
+ * @resource
+ * @product Secrets Store
+ * @category Storage & Databases
  * @section Creating a Store
  * @example Basic Secrets Store (adopts existing or creates one)
  * ```typescript

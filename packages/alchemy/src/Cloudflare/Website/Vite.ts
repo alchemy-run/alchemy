@@ -46,6 +46,8 @@ export interface ViteProps<
  * unchanged projects skip the build and deploy entirely.
  *
  * @resource
+ * @product Website
+ * @category Workers & Compute
  *
  * @section Deploying a Static Site
  * For a pure static site (no SSR), a single call is all you need.

@@ -29,6 +29,7 @@ export interface DomainNameProps {
   tags?: Record<string, string>;
 }
 
+/** @resource */
 export interface DomainName extends Resource<
   "AWS.ApiGateway.DomainName",
   DomainNameProps,

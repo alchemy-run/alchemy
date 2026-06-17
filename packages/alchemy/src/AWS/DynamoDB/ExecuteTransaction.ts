@@ -10,6 +10,7 @@ export interface ExecuteTransactionRequest
 
 type ExecuteTransactionTables = [Table, ...Table[]];
 
+/** @binding */
 export class ExecuteTransaction extends Binding.Service<
   ExecuteTransaction,
   (

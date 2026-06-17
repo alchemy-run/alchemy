@@ -37,7 +37,7 @@ import type { RouterProps } from "./shared.ts";
  * the Router's KV store. The Router's CF function matches incoming requests to
  * routes by host pattern and path prefix, then delegates to `routeSite()` for
  * static site routing or directly sets URL/S3 origins.
- *
+ * @resource
  * @section Creating Routers
  * @example Basic Router
  * ```typescript

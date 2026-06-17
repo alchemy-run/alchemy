@@ -254,7 +254,7 @@ export interface Bucket extends Resource<
  * A bucket name is auto-generated from the app, stage, and logical ID unless
  * you provide one explicitly via `bucketName`. Enable `forceDestroy` to allow
  * Alchemy to empty the bucket before deleting it.
- *
+ * @resource
  * @section Creating a Bucket
  * @example Basic Bucket
  * ```typescript

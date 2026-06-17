@@ -64,7 +64,9 @@ export type WorkersSubdomain = Resource<
  * URL of every deployed Worker on the account that relies on
  * `workers.dev`. Only manage this resource on accounts where that is
  * acceptable.
- *
+ * @resource
+ * @product Workers
+ * @category Workers & Compute
  * @section Managing the subdomain
  * @example Pin the account's workers.dev subdomain
  * ```typescript

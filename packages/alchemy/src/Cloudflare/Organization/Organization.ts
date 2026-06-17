@@ -143,7 +143,9 @@ export type Organization = Resource<
  * state, `read` scans for an existing organization with the same name
  * (and parent) and reports it as `Unowned`, so the engine refuses to take
  * it over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Organizations
+ * @category Account & Identity
  * @section Creating an Organization
  * @example Basic organization
  * ```typescript

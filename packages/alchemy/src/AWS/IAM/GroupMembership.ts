@@ -34,7 +34,7 @@ export interface GroupMembership extends Resource<
  *
  * `GroupMembership` models the exact set of users in a group, making membership
  * reconciliation explicit instead of spreading it across user or group resources.
- *
+ * @resource
  * @section Managing Group Membership
  * @example Sync a Group's Members
  * ```typescript

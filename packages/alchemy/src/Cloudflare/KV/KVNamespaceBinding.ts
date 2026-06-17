@@ -218,6 +218,11 @@ export interface KVNamespaceClient<Key extends string = string> {
   delete(key: Key): Effect.Effect<void, KVNamespaceError, RuntimeContext>;
 }
 
+/**
+ * @binding
+ * @product KV
+ * @category Storage & Databases
+ */
 export class KVNamespaceBinding extends Binding.Service<
   KVNamespaceBinding,
   (bucket: KVNamespace) => Effect.Effect<KVNamespaceClient>
