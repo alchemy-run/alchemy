@@ -31,6 +31,7 @@ import {
   Function,
   KindStablesResource,
   NoPrecreateBindingTarget,
+  OverrideStablesResource,
   Queue,
   TestLayers,
   TestResource,
@@ -2232,6 +2233,100 @@ describe("stable properties should not cause downstream changes", () => {
         ),
       ),
     }),
+  );
+});
+
+describe("diff.stables overrides provider.stables", () => {
+  // `A` is an OverrideStablesResource: provider `stables` is
+  // ["providerStable", "sharedStable"], but its `diff` returns
+  // ["diffStable", "sharedStable"] on a `string` change. The two lists
+  // disagree, so this exercises the override (not merge) semantics.
+  const seedUpstreamAndDownstream = (downstreamOldString: string) =>
+    seed({
+      A: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "A",
+        fqn: "A",
+        namespace: undefined,
+        resourceType: "Test.OverrideStablesResource",
+        status: "created",
+        props: { string: "old" },
+        attr: {
+          string: "old",
+          providerStable: "provider-A",
+          diffStable: "diff-A",
+          sharedStable: "shared-A",
+        },
+        downstream: [],
+        bindings: [],
+      },
+      B: {
+        instanceId,
+        providerVersion: 0,
+        logicalId: "B",
+        fqn: "B",
+        namespace: undefined,
+        resourceType: "Test.TestResource",
+        status: "created",
+        props: { string: downstreamOldString },
+        attr: {
+          string: downstreamOldString,
+          stableString: "B",
+          stableArray: ["B"],
+        },
+        downstream: [],
+        bindings: [],
+      },
+    });
+
+  const subtest = (
+    description: string,
+    accessor: (A: OverrideStablesResource) => any,
+    downstreamOldString: string,
+    expectedBAction: "update" | "noop",
+  ) =>
+    test(
+      description,
+      Effect.gen(function* () {
+        yield* seedUpstreamAndDownstream(downstreamOldString);
+        const plan = yield* Effect.gen(function* () {
+          const A = yield* OverrideStablesResource("A", { string: "new" });
+          yield* TestResource("B", { string: accessor(A) });
+        }).pipe(makePlan);
+
+        // A always updates: its `string` prop changed.
+        expect(plan.resources.A!.action).toBe("update");
+        expect(plan.resources.B!.action).toBe(expectedBAction);
+      }),
+    );
+
+  // `providerStable` is in `provider.stables` but OMITTED from the
+  // `diff.stables` returned for this update. Because `diff.stables` now
+  // overrides `provider.stables`, it is treated as changed and the
+  // downstream re-plans (update). Under the old merge it would wrongly
+  // stay stable and the downstream would no-op.
+  subtest(
+    "provider-only stable omitted by diff is treated as changed downstream",
+    (A) => A.providerStable,
+    "provider-A",
+    "update",
+  );
+
+  // `diffStable` is only in `diff.stables` -> stays stable -> downstream no-op.
+  subtest(
+    "diff-only stable keeps downstream stable",
+    (A) => A.diffStable,
+    "diff-A",
+    "noop",
+  );
+
+  // `sharedStable` is in both lists -> stays stable -> downstream no-op.
+  subtest(
+    "shared stable keeps downstream stable",
+    (A) => A.sharedStable,
+    "shared-A",
+    "noop",
   );
 });
 
