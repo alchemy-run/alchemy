@@ -12,9 +12,12 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
-// The full lifecycle requires a real, internal Application Load Balancer in a
-// VPC, which is slow to provision. Gate it behind an env var; the probe below
-// runs unconditionally and proves the typed error surface cheaply.
+// The full lifecycle provisions a real internal ALB and a CloudFront VPC
+// origin. CloudFront VPC-origin deploy + delete is very slow (global
+// propagation, ~20-25 min for create alone), so the whole create -> Deployed
+// -> delete -> gone cycle runs ~35-40 min end to end. It is gated behind an
+// env var and given a generous timeout; the probe + list below run cheaply and
+// cover the wiring + typed-error surface in CI.
 const runLifecycle = process.env.CLOUDFRONT_TEST_VPC_ORIGIN === "1";
 
 describe("AWS.CloudFront.VpcOrigin", () => {
@@ -107,8 +110,9 @@ describe("AWS.CloudFront.VpcOrigin", () => {
         yield* assertVpcOriginDeleted(deployed.vpcOrigin.vpcOriginId);
       }),
     // CloudFront VPC origin deploy + delete each take many minutes (global
-    // propagation), on top of the ALB/VPC provisioning and teardown.
-    { timeout: 1_800_000 },
+    // propagation), on top of the ALB/VPC provisioning and teardown — budget
+    // 45 min for the full create -> Deployed -> delete -> gone cycle.
+    { timeout: 2_700_000 },
   );
 
   test.provider.skipIf(!runLifecycle)(
