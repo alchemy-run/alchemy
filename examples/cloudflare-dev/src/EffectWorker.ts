@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import Agent from "./Agent.ts";
 import { KV } from "./KV.ts";
 import NotifyWorkflow from "./NotifyWorkflow.ts";
 
@@ -29,6 +30,7 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
     },
   },
   Effect.gen(function* () {
+    const agents = yield* Agent;
     const kv = yield* Cloudflare.KVNamespace.bind(KV);
     const queue = yield* Cloudflare.Queue("EffectWorkerQueue");
     const queueBinding = yield* Cloudflare.Queue.bind(queue);
@@ -49,6 +51,15 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const url = new URL(request.url, "http://internal");
+        if (url.pathname === "/sandbox") {
+          const agent = agents.getByName("sandbox-test");
+          const body = yield* agent.hello().pipe(Effect.orDie);
+          return HttpServerResponse.text(body);
+        } else if (url.pathname === "/sandbox/increment") {
+          const agent = agents.getByName("sandbox-test");
+          const body = yield* agent.increment().pipe(Effect.orDie);
+          return HttpServerResponse.text(body);
+        }
         if (url.pathname === "/wasm") {
           const instance = yield* Effect.promise(async () => {
             // This is dynamically imported so that the WASM import doesn't occur at deploy-time, which works in Bun but fails in Node.

@@ -509,14 +509,52 @@ export const LocalWorkerProvider = () =>
             stables: output?.workerName === name ? ["workerName"] : undefined,
           };
         }),
-        reconcile: Effect.fn(function* ({ id, news, bindings }) {
+        precreate: Effect.fn(function* ({ id, news, bindings }) {
+          const name = yield* createWorkerName(id, news.name);
+          const durableObjectNamespaces: Record<string, string> = {};
+          for (const { data } of bindings) {
+            for (const binding of data?.bindings ?? []) {
+              if (binding.type === "durable_object_namespace") {
+                durableObjectNamespaces[binding.className] =
+                  binding.namespaceId ??
+                  encodeURIComponent(
+                    `${binding.scriptName!}-${binding.className}`,
+                  );
+              }
+            }
+          }
           const { accountId } = yield* yield* CloudflareEnvironment;
+          const url =
+            news.dev === false
+              ? undefined
+              : typeof news.dev === "string"
+                ? news.dev
+                : yield* maybeStartProxy(id, {
+                    ...news.dev,
+                    port: news.dev?.port ?? 1337,
+                  }).pipe(Effect.map((proxy) => proxy.url.toString()));
+          return {
+            workerId: name,
+            workerName: name,
+            logpush: undefined,
+            url,
+            tags: [],
+            durableObjectNamespaces,
+            domains: url ? [url] : [],
+            crons: Array.from(
+              new Set([...getCronBindings(bindings), ...(news.crons ?? [])]),
+            ),
+            accountId,
+          };
+        }),
+        reconcile: Effect.fn(function* ({ id, news, bindings }) {
           // `dev: false` opts out of running a local Worker entirely —
           // typically because an external dev process (DevCommand) is
           // serving requests. Tear down any prior instance and return a
           // stub Attributes; the resource exists in state but has no
           // running workerd / proxy behind it.
           if (news.dev === false || typeof news.dev === "string") {
+            const { accountId } = yield* yield* CloudflareEnvironment;
             const existing = instances.get(id);
             if (existing) {
               yield* Fiber.interrupt(existing.fiber);

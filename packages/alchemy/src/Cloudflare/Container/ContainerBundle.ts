@@ -56,6 +56,7 @@ export const buildFinalDockerfile = (
     // non-trivial bundles always emit at least one chunk, minimal
     // bundles emit none and the COPY no-ops.
     "COPY *.js /app/",
+    "EXPOSE 3000",
     `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
     "",
   ].join("\n");
@@ -76,6 +77,7 @@ export const bundleContainerProgram = Effect.fnUntraced(function* ({
   handler = "default",
   isExternal = false,
   external = [],
+  outdir,
 }: {
   id: string;
   main: string;
@@ -83,6 +85,7 @@ export const bundleContainerProgram = Effect.fnUntraced(function* ({
   handler?: string | undefined;
   isExternal?: boolean;
   external?: string[];
+  outdir?: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const stack = yield* Stack;
@@ -118,8 +121,9 @@ export const bundleContainerProgram = Effect.fnUntraced(function* ({
       {
         format: "esm",
         sourcemap: false,
-        minify: true,
-        entryFileNames: "index.js",
+        minify: false,
+        dir: outdir,
+        entryFileNames: "index.mjs",
       },
     );
   });

@@ -1,26 +1,24 @@
-import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
 import * as Effect from "effect/Effect";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import {
-  materializeDockerfile,
-  writeContextFiles,
-} from "../../Bundle/Docker.ts";
+import * as Artifacts from "../../Artifacts.ts";
+import { materializeDockerfile } from "../../Bundle/Docker.ts";
 import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { isResolved } from "../../Diff.ts";
 import * as RpcProvider from "../../Local/RpcProvider.ts";
+import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { generateLocalId, LOCAL_ENTRY_URL } from "../LocalRuntime.ts";
-import {
-  buildFinalDockerfile,
-  bundleContainerProgram,
-  createContainerApplicationName,
-} from "./ContainerBundle.ts";
 import { Container } from "./Container.ts";
 import type {
   ContainerApplication,
   ContainerApplicationProps,
 } from "./ContainerApplication.ts";
+import {
+  buildFinalDockerfile,
+  bundleContainerProgram,
+  createContainerApplicationName,
+} from "./ContainerBundle.ts";
 
 /**
  * Local (dev) provider for Cloudflare Container applications.
@@ -47,13 +45,10 @@ export const LocalContainerProvider = () =>
       // Dockerfile) into a stable build context directory. `Docker.build` in
       // cloudflare-runtime reads `dockerfile` as a file path and uses
       // `context` as the build context, so we point `dev` at both.
-      const buildImage = Effect.fnUntraced(function* ({
-        id,
-        news,
-      }: {
-        id: string;
-        news: ContainerApplicationProps;
-      }) {
+      const prepareImage = Effect.fnUntraced(function* (
+        id: string,
+        news: ContainerApplicationProps,
+      ) {
         const main = news.main;
         if (!main) {
           return yield* Effect.die(
@@ -61,44 +56,41 @@ export const LocalContainerProvider = () =>
           );
         }
         const runtime = news.runtime ?? "bun";
-        const { files } = yield* bundleContainerProgram({
-          id,
-          main,
-          runtime,
-          handler: news.handler,
-          isExternal: news.isExternal,
-          external: news.external,
-        });
-        const dockerfile = buildFinalDockerfile(
+        const context = yield* getStableContextDir(
+          process.cwd(),
+          dotAlchemy,
+          `${id}-container`,
+        );
+        const dockerfileContent = buildFinalDockerfile(
           news.dockerfile,
           runtime,
           news.external,
           news.autoInstallExternals,
         );
-        const contextDir = yield* getStableContextDir(
-          process.cwd(),
-          dotAlchemy,
-          `${id}-container`,
-        );
-        const dockerfilePath = yield* materializeDockerfile(
-          dockerfile,
-          contextDir,
-        );
-        yield* writeContextFiles(
-          contextDir,
-          files.map((f, i) => ({
-            // Keep the entry rename to `index.mjs` so the Dockerfile
-            // ENTRYPOINT stays valid; preserve rolldown-assigned fileNames
-            // for every other chunk so intra-bundle relative imports resolve.
-            path: i === 0 ? "index.mjs" : f.path,
-            content: f.content,
-          })),
+        const [bundle, dockerfile] = yield* Effect.all(
+          [
+            bundleContainerProgram({
+              id,
+              main,
+              runtime,
+              handler: news.handler,
+              isExternal: news.isExternal,
+              external: news.external,
+              outdir: context,
+            }),
+            materializeDockerfile(dockerfileContent, context),
+          ],
+          { concurrency: "unbounded" },
         );
         return {
-          dockerfile: dockerfilePath,
-          context: contextDir,
-        } satisfies ContainerImage.Build;
-      });
+          context,
+          dockerfile,
+          hash: yield* sha256Object({
+            bundle: bundle.hash,
+            dockerfileContent,
+          }),
+        };
+      }, Artifacts.cached("container-image"));
 
       const placeholderConfiguration = (props: ContainerApplicationProps) =>
         normalizeNulls({
@@ -130,12 +122,10 @@ export const LocalContainerProvider = () =>
         output: ContainerApplication["Attributes"] | undefined;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        const dev = yield* buildImage({ id, news });
-        const name = yield* createContainerApplicationName(id, news.name);
-        const createdAt = yield* Effect.sync(() => new Date().toISOString());
+        const { context, hash, dockerfile } = yield* prepareImage(id, news);
         return {
           applicationId: output?.applicationId ?? generateLocalId(),
-          applicationName: name,
+          applicationName: yield* createContainerApplicationName(id, news.name),
           accountId: output?.accountId ?? accountId,
           schedulingPolicy: news.schedulingPolicy ?? "default",
           instances: news.instances ?? 1,
@@ -144,10 +134,10 @@ export const LocalContainerProvider = () =>
           affinities: news.affinities,
           configuration: placeholderConfiguration(news),
           durableObjects: undefined,
-          createdAt,
+          createdAt: new Date().toISOString(),
           version: 1,
-          hash: undefined,
-          dev,
+          dev: { context, dockerfile },
+          hash: { image: hash },
         } satisfies ContainerApplication["Attributes"];
       });
 
@@ -155,10 +145,14 @@ export const LocalContainerProvider = () =>
         // No HMR for containers (yet): bundle once on first reconcile, then
         // treat the resource as a no-op so subsequent reconciles don't
         // re-bundle on every change.
-        diff: Effect.fn(function* ({ news, output }) {
+        stables: ["accountId", "applicationId"],
+        diff: Effect.fn(function* ({ id, news, output }) {
           if (!output) return { action: "update" };
           if (!isResolved(news)) return undefined;
-          return { action: "noop" };
+          const input = yield* prepareImage(id, news);
+          return input.hash !== output.hash?.image
+            ? { action: "update" }
+            : undefined;
         }),
         read: Effect.fn(function* ({ output }) {
           return output;
