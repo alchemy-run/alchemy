@@ -1,65 +1,129 @@
 import * as Construct from "../../Construct.ts";
 import type { Input, InputProps } from "../../Input.ts";
+import { isResource } from "../../Resource.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { R2Bucket } from "../R2/R2Bucket.ts";
 import {
   AiSearchInstance,
   type AiSearchInstanceProps,
+  type AiSearchSourceParams,
 } from "./AiSearchInstance.ts";
 import {
   AiSearchToken,
   type AiSearchToken as AiSearchTokenType,
 } from "./AiSearchToken.ts";
 
+type WebCrawlerParams = NonNullable<AiSearchSourceParams["webCrawler"]>;
+
+/**
+ * How a web crawler discovers and parses pages — Cloudflare's `parseType`
+ * folded together with its parse options. Defaults to `type: "sitemap"`.
+ */
+export type AiSearchParse = {
+  /**
+   * How pages are discovered:
+   * - `"sitemap"` (default) — read `<seed>/sitemap.xml` (found via
+   *   `robots.txt`) and index the URLs it lists.
+   * - `"crawl"` — start at `source` and follow links.
+   * - `"feed-rss"` — treat the seed as an RSS / Atom feed.
+   * @default "sitemap"
+   */
+  type?: NonNullable<WebCrawlerParams["parseType"]>;
+} & NonNullable<WebCrawlerParams["parseOptions"]>;
+
+/**
+ * Link-discovery options for a web crawler (mainly for `parse.type: "crawl"`):
+ * `depth`, `includeSubdomains`, `includeExternalLinks`, `maxAge`, and `source`
+ * (`"all"` | `"sitemaps"` | `"links"`).
+ */
+export type AiSearchCrawl = NonNullable<WebCrawlerParams["crawlOptions"]>;
+
+/**
+ * Where crawled content is stored. Cloudflare provisions managed storage by
+ * default; set this to store output in an R2 bucket you control.
+ */
+export type AiSearchStore = {
+  /** R2 bucket to store crawl output in. */
+  bucket: R2Bucket;
+  /** R2 data-residency jurisdiction for the store bucket. */
+  jurisdiction?: string;
+};
+
 /**
  * Props common to every AI Search pipeline, regardless of data source. The
- * `type` and `source` of the underlying instance are derived from the
- * source-specific variant ({@link AiSearchR2Props} / {@link
- * AiSearchWebCrawlerProps}), so they're omitted here.
+ * underlying instance's `type`, `source`, and `sourceParams` are derived from
+ * the source-specific variant, so they're omitted here.
  */
 export type AiSearchSharedProps = Omit<
   InputProps<AiSearchInstanceProps, "type">,
-  "type" | "source"
+  "type" | "source" | "sourceParams"
 >;
 
 /**
- * An R2-backed AI Search pipeline. The presence of `bucket` selects R2 as
- * the data source.
+ * An R2-backed AI Search pipeline. Passing an {@link R2Bucket} as `source`
+ * selects R2 as the data source.
  */
 export type AiSearchR2Props = AiSearchSharedProps & {
   /**
-   * The R2 bucket to index. AI Search needs a service token to read it;
-   * the construct provisions one unless you pass your own `tokenId`.
+   * The R2 bucket to index. AI Search needs a service token to read it; the
+   * construct provisions one unless you pass your own `tokenId`.
    */
-  bucket: R2Bucket;
-  url?: never;
+  source: R2Bucket;
+  /** Only index object keys under this prefix. */
+  prefix?: string;
+  /** Glob patterns of object keys to index. */
+  include?: string[];
+  /** Glob patterns of object keys to skip. */
+  exclude?: string[];
+  /** R2 data-residency jurisdiction of the source bucket. */
+  jurisdiction?: string;
+  parse?: never;
+  crawl?: never;
+  store?: never;
 };
 
 /**
- * A web-crawler-backed AI Search pipeline. The presence of `url` selects
+ * A web-crawler-backed AI Search pipeline. Passing a URL as `source` selects
  * the web crawler as the data source (no service token needed).
  */
 export type AiSearchWebCrawlerProps = AiSearchSharedProps & {
-  /**
-   * Seed URL to crawl and index. Tune crawl/parse behaviour via
-   * `sourceParams.webCrawler`.
-   */
-  url: Input<string>;
-  bucket?: never;
+  /** Seed URL to crawl and index. */
+  source: Input<string>;
+  /** How pages are discovered and parsed. */
+  parse?: AiSearchParse;
+  /** How links are followed from the seed. */
+  crawl?: AiSearchCrawl;
+  /** Where crawl output is stored (defaults to managed storage). */
+  store?: AiSearchStore;
+  prefix?: never;
+  include?: never;
+  exclude?: never;
+  jurisdiction?: never;
 };
 
 /**
- * Props for the {@link AiSearch} construct — a union discriminated by the
- * data source: pass `bucket` for an R2 source or `url` for a web crawl.
+ * Props for the {@link AiSearch} construct — a union discriminated by what you
+ * pass as `source`: an {@link R2Bucket} for an R2 source, or a URL string for
+ * a web crawl.
  */
 export type AiSearchProps = AiSearchR2Props | AiSearchWebCrawlerProps;
+
+/** Drop `undefined` entries; return `undefined` when nothing is left. */
+const clean = <T extends Record<string, unknown>>(
+  obj: T,
+): { [K in keyof T]: T[K] } | undefined => {
+  const entries = Object.entries(obj).filter(([, v]) => v !== undefined);
+  return entries.length
+    ? (Object.fromEntries(entries) as { [K in keyof T]: T[K] })
+    : undefined;
+};
 
 /**
  * A convenience construct over {@link AiSearchInstance} that auto-creates the
  * sub-resources an AI Search instance typically needs, so a single call wires
- * up a working pipeline. The data source is chosen by which field you pass —
- * `bucket` (an {@link R2Bucket}) for R2, or `url` for a web crawl:
+ * up a working pipeline. The data source is chosen by what you pass as
+ * `source` — an {@link R2Bucket} for R2, or a URL for a web crawl:
  *
  * - For an R2 source, it mints a least-privilege {@link AccountApiToken}
  *   (`AI Search Index Engine`) and an {@link AiSearchToken} wrapping it
@@ -79,27 +143,51 @@ export type AiSearchProps = AiSearchR2Props | AiSearchWebCrawlerProps;
  * @category AI
  * @section Creating an AI Search pipeline
  * @example R2-backed instance (token provisioned for you)
- * Pass an {@link R2Bucket} as `bucket` — its presence selects R2 as the
- * data source.
+ * Pass an {@link R2Bucket} as `source` — its presence selects R2.
  * ```typescript
  * const bucket = yield* Cloudflare.R2Bucket("docs", {});
- * const { instance } = yield* Cloudflare.AiSearch("docs-search", { bucket });
+ * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
+ *   source: bucket,
+ * });
+ * ```
+ *
+ * @example Index only part of a bucket
+ * ```typescript
+ * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
+ *   source: bucket,
+ *   prefix: "docs/",
+ *   include: ["published/"],
+ *   exclude: ["drafts/"],
+ * });
  * ```
  *
  * @example Reuse an existing service token
  * ```typescript
  * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
- *   bucket,
+ *   source: bucket,
  *   tokenId: existingToken.id,
  * });
  * ```
  *
  * @example Web-crawler source
- * Pass a seed `url` instead of a `bucket` to crawl and index a website (no
- * service token needed).
+ * Pass a URL as `source` to crawl and index a website (no service token
+ * needed). `parse.type` defaults to `"sitemap"`; use `"crawl"` to follow
+ * links from the seed instead.
  * ```typescript
  * const { instance } = yield* Cloudflare.AiSearch("site-search", {
- *   url: "https://example.com",
+ *   source: "https://example.com",
+ *   parse: { type: "crawl", contentSelector: [{ path: "/docs", selector: "main" }] },
+ *   crawl: { depth: 3, includeSubdomains: true },
+ * });
+ * ```
+ *
+ * @example Store crawl output in your own bucket
+ * ```typescript
+ * const store = yield* Cloudflare.R2Bucket("crawl-store", {});
+ * const { instance } = yield* Cloudflare.AiSearch("site-search", {
+ *   source: "https://example.com",
+ *   parse: { type: "crawl" },
+ *   store: { bucket: store },
  * });
  * ```
  *
@@ -123,7 +211,9 @@ export type AiSearchProps = AiSearchR2Props | AiSearchWebCrawlerProps;
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const bucket = yield* Cloudflare.R2Bucket("docs", {});
- *     const { instance } = yield* Cloudflare.AiSearch("docs-search", { bucket });
+ *     const { instance } = yield* Cloudflare.AiSearch("docs-search", {
+ *       source: bucket,
+ *     });
  *     const search = yield* Cloudflare.AiSearchInstance.bind(instance);
  *
  *     return {
@@ -150,7 +240,9 @@ export type AiSearchProps = AiSearchR2Props | AiSearchWebCrawlerProps;
  * ```typescript
  * // stack.ts
  * const bucket = yield* Cloudflare.R2Bucket("docs", {});
- * const { instance } = yield* Cloudflare.AiSearch("docs-search", { bucket });
+ * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
+ *   source: bucket,
+ * });
  *
  * export const Api = Cloudflare.Worker("api", {
  *   main: "./worker.ts",
@@ -175,21 +267,37 @@ export const AiSearch = Construct.fn(function* (
   id: string,
   props: AiSearchProps,
 ) {
-  let tokenId = props.tokenId;
+  const {
+    source,
+    prefix,
+    include,
+    exclude,
+    jurisdiction,
+    parse,
+    crawl,
+    store,
+    ...shared
+  } = props;
+
+  let tokenId = shared.tokenId;
   let serviceToken: AiSearchTokenType | undefined;
-
-  // Discriminate the data source on which field the caller passed. R2
-  // sources index a bucket and need a service token to read it; web-crawler
-  // sources crawl a seed URL and don't.
   let type: "r2" | "web-crawler";
-  let source: Input<string>;
-  let shared: AiSearchSharedProps;
+  let instanceSource: Input<string>;
+  let sourceParams: Input<AiSearchSourceParams> | undefined;
 
-  if ("bucket" in props && props.bucket !== undefined) {
-    const { bucket, url: _url, ...rest } = props;
+  // Discriminate the data source on what `source` is: an R2Bucket (a resource)
+  // indexes a bucket and needs a service token to read it; a URL crawls a seed
+  // and doesn't.
+  if (isResource(source)) {
+    const bucket = source as R2Bucket;
     type = "r2";
-    source = bucket.bucketName;
-    shared = rest;
+    instanceSource = bucket.bucketName;
+    sourceParams = clean({
+      prefix,
+      includeItems: include,
+      excludeItems: exclude,
+      r2Jurisdiction: jurisdiction,
+    }) as Input<AiSearchSourceParams> | undefined;
 
     // Cloudflare requires a service token to read an R2 source and only
     // auto-creates one via the dashboard/Wrangler — not on a programmatic
@@ -214,17 +322,33 @@ export const AiSearch = Construct.fn(function* (
       tokenId = serviceToken.id;
     }
   } else {
-    const { url, bucket: _bucket, ...rest } = props;
     type = "web-crawler";
-    source = url;
-    shared = rest;
+    instanceSource = source as Input<string>;
+
+    const { type: parseType, ...parseOptions } = parse ?? {};
+    const webCrawler = clean({
+      parseType,
+      parseOptions: clean(parseOptions),
+      crawlOptions: crawl ? clean(crawl) : undefined,
+      storeOptions: store
+        ? clean({
+            storageId: store.bucket.bucketName,
+            storageType: "r2" as const,
+            r2Jurisdiction: store.jurisdiction,
+          })
+        : undefined,
+    });
+    sourceParams = webCrawler
+      ? ({ webCrawler } as Input<AiSearchSourceParams>)
+      : undefined;
   }
 
   const instance = yield* AiSearchInstance("Instance", {
     ...shared,
     type,
-    source,
+    source: instanceSource,
     tokenId,
+    sourceParams,
   });
 
   return { instance, token: serviceToken };

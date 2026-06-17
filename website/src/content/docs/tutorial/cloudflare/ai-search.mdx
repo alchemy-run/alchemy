@@ -41,7 +41,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 import { Docs } from "./Docs.ts";
 
 export const Search = Cloudflare.AiSearch("Search", {
-  bucket: Docs,
+  source: Docs,
 });
 ```
 
@@ -85,7 +85,7 @@ const instance = yield* Cloudflare.AiSearchInstance("Instance", {
 });
 ```
 
-`AiSearch` translates `bucket` into the instance's `type: "r2"` +
+`AiSearch` translates the `source` bucket into the instance's `type: "r2"` +
 `source: bucket.bucketName` for you. It returns `{ instance, token }` so
 you can reach the underlying `AiSearchInstance` when you need to bind it.
 
@@ -97,7 +97,7 @@ its `tokenId` and `AiSearch` skips minting the `AccountApiToken` +
 
 ```typescript
 export const Search = Cloudflare.AiSearch("Search", {
-  bucket: Docs,
+  source: Docs,
   tokenId: existingToken.id,
 });
 ```

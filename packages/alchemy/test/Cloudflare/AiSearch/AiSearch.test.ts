@@ -46,7 +46,7 @@ const program = () =>
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket("AiSearchSource", {});
     const search = yield* Cloudflare.AiSearch("Search", {
-      bucket,
+      source: bucket,
     });
     return { bucket, search };
   });
@@ -88,9 +88,13 @@ test.provider(
 const crawlerProgram = () =>
   Effect.gen(function* () {
     const target = yield* AiSearchCrawlTargetWorker;
+    // Exercise the flattened source groups end-to-end: `parse` (parseType +
+    // parse options) and `crawl` (link-discovery options) must translate into
+    // the distilled `sourceParams.webCrawler.{parseType,parseOptions,crawlOptions}`.
     const search = yield* Cloudflare.AiSearch("Search", {
-      url: target.url.as<string>(),
-      sourceParams: { webCrawler: { parseType: "crawl" } },
+      source: target.url.as<string>(),
+      parse: { type: "crawl", useBrowserRendering: false },
+      crawl: { depth: 2, includeSubdomains: false },
     });
     return { target, search };
   });

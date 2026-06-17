@@ -368,10 +368,112 @@ export type AiSearchInstance = Resource<
  * const search = yield* Cloudflare.AiSearchInstance("site-search", {
  *   type: "web-crawler",
  *   source: "https://example.com",
+ *   sourceParams: { webCrawler: { parseType: "crawl" } },
+ * });
+ * ```
+ *
+ * @section R2 source options
+ * For an `r2` source, `sourceParams` filters which objects are indexed (all
+ * fields optional):
+ * - `prefix` — only index keys under this prefix.
+ * - `includeItems` / `excludeItems` — glob patterns to include / exclude.
+ * - `r2Jurisdiction` — R2 data-residency jurisdiction of the source bucket.
+ * @example Index only part of a bucket
+ * ```typescript
+ * const search = yield* Cloudflare.AiSearchInstance("docs-search", {
+ *   source: bucket.bucketName,
+ *   tokenId: serviceToken.id,
+ *   sourceParams: {
+ *     prefix: "docs/",
+ *     includeItems: ["published/"],
+ *     excludeItems: ["drafts/"],
+ *   },
+ * });
+ * ```
+ *
+ * @section Web-crawler source options
+ * `sourceParams.webCrawler` tunes how a `web-crawler` source is fetched,
+ * parsed, and stored. All fields are optional.
+ *
+ * `parseType` selects how pages are discovered:
+ * - `"sitemap"` (Cloudflare default) — read `<seed>/sitemap.xml` (discovered
+ *   via `robots.txt`) and index the URLs it lists.
+ * - `"crawl"` — start at `source` and follow links.
+ * - `"feed-rss"` — treat the seed as an RSS / Atom feed.
+ *
+ * `crawlOptions` controls link discovery (mainly for `parseType: "crawl"`):
+ * - `depth` — how many links deep to follow from the seed.
+ * - `includeSubdomains` — also crawl subdomains of the seed host.
+ * - `includeExternalLinks` — follow links off the seed host.
+ * - `maxAge` — skip re-fetching pages younger than this (seconds).
+ * - `source` — where links come from: `"all"`, `"sitemaps"`, or `"links"`.
+ *
+ * `parseOptions` controls how each page is parsed:
+ * - `useBrowserRendering` — render JS in a headless browser before parsing.
+ * - `includeImages` — index image content.
+ * - `specificSitemaps` — explicit sitemap URLs to read (for `"sitemap"`).
+ * - `contentSelector` — `{ path, selector }[]` CSS selectors scoping which
+ *   part of a page is indexed per URL path.
+ * - `includeHeaders` — extra request headers sent while crawling.
+ *
+ * `storeOptions` overrides where crawled content is stored — Cloudflare
+ * provisions managed storage by default:
+ * - `storageId` — R2 bucket name to store crawl output in.
+ * - `storageType` — `"r2"`.
+ * - `r2Jurisdiction` — R2 data-residency jurisdiction for the store bucket.
+ * @example Fully-configured crawl
+ * ```typescript
+ * const search = yield* Cloudflare.AiSearchInstance("site-search", {
+ *   type: "web-crawler",
+ *   source: "https://example.com",
  *   sourceParams: {
  *     webCrawler: {
  *       parseType: "crawl",
- *       crawlOptions: { depth: 2, includeSubdomains: true },
+ *       crawlOptions: {
+ *         depth: 3,
+ *         includeSubdomains: true,
+ *         includeExternalLinks: false,
+ *         maxAge: 86_400,
+ *         source: "all",
+ *       },
+ *       parseOptions: {
+ *         useBrowserRendering: true,
+ *         includeImages: false,
+ *         contentSelector: [{ path: "/docs", selector: "main" }],
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
+ * @example Sitemap and RSS sources
+ * ```typescript
+ * // Index the URLs listed in one or more sitemaps (the default parse mode).
+ * const fromSitemap = yield* Cloudflare.AiSearchInstance("sitemap-search", {
+ *   type: "web-crawler",
+ *   source: "https://example.com",
+ *   sourceParams: {
+ *     webCrawler: {
+ *       parseType: "sitemap",
+ *       parseOptions: { specificSitemaps: ["https://example.com/sitemap.xml"] },
+ *     },
+ *   },
+ * });
+ *
+ * // Treat the seed as an RSS / Atom feed.
+ * const fromFeed = yield* Cloudflare.AiSearchInstance("feed-search", {
+ *   type: "web-crawler",
+ *   source: "https://example.com/feed.xml",
+ *   sourceParams: { webCrawler: { parseType: "feed-rss" } },
+ * });
+ * ```
+ * @example Store crawl output in a specific R2 bucket
+ * ```typescript
+ * const search = yield* Cloudflare.AiSearchInstance("site-search", {
+ *   type: "web-crawler",
+ *   source: "https://example.com",
+ *   sourceParams: {
+ *     webCrawler: {
+ *       parseType: "crawl",
  *       storeOptions: { storageId: "my-crawl-bucket", storageType: "r2" },
  *     },
  *   },
