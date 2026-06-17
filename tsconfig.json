@@ -2,6 +2,27 @@
   "files": [],
   "exclude": ["node_modules", "dist"],
   "references": [
+    // distilled (dependencies first so `tsgo -b` emits their `lib/` before the
+    // packages that consume them — otherwise a clean build races the not-yet-emitted
+    // declarations and fails to resolve `@distilled.cloud/*`).
+    {
+      "path": "./distilled/packages/core/tsconfig.json"
+    },
+    {
+      "path": "./distilled/packages/aws/tsconfig.json"
+    },
+    {
+      "path": "./distilled/packages/cloudflare/tsconfig.json"
+    },
+    {
+      "path": "./distilled/packages/planetscale/tsconfig.json"
+    },
+    {
+      "path": "./distilled/packages/neon/tsconfig.json"
+    },
+    {
+      "path": "./distilled/packages/axiom/tsconfig.json"
+    },
     {
       "path": "./tsconfig.scripts.json"
     },
@@ -89,25 +110,6 @@
     },
     {
       "path": "./examples/monorepo-multi-stack/tsconfig.json"
-    },
-    // distilled
-    {
-      "path": "./distilled/packages/aws/tsconfig.json"
-    },
-    {
-      "path": "./distilled/packages/cloudflare/tsconfig.json"
-    },
-    {
-      "path": "./distilled/packages/planetscale/tsconfig.json"
-    },
-    {
-      "path": "./distilled/packages/core/tsconfig.json"
-    },
-    {
-      "path": "./distilled/packages/neon/tsconfig.json"
-    },
-    {
-      "path": "./distilled/packages/axiom/tsconfig.json"
     }
   ],
   "compilerOptions": {
