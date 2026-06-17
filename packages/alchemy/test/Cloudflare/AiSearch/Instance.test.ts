@@ -18,9 +18,10 @@ const logLevel = Effect.provideService(
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
 // (`Forbidden`, declared in the distilled error union) on the test's
-// own out-of-band verification calls.
-const getInstance = (accountId: string, id: string) =>
-  aisearch.readInstance({ accountId, id }).pipe(
+// own out-of-band verification calls. Instances are namespace-scoped, so
+// verify through the namespace-scoped read (defaulting to `default`).
+const getInstance = (accountId: string, id: string, namespace = "default") =>
+  aisearch.readNamespaceInstance({ accountId, name: namespace, id }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       schedule: Schedule.exponential("500 millis"),
@@ -28,12 +29,16 @@ const getInstance = (accountId: string, id: string) =>
     }),
   );
 
-const expectGone = (accountId: string, id: string) =>
-  getInstance(accountId, id).pipe(
+const expectGone = (accountId: string, id: string, namespace = "default") =>
+  getInstance(accountId, id, namespace).pipe(
     Effect.flatMap(() => Effect.fail({ _tag: "InstanceNotDeleted" } as const)),
-    // A missing instance surfaces as `NotFound` (Cloudflare error code
-    // 7002) — that's the success condition here.
-    Effect.catchTag("NotFound", () => Effect.void),
+    // A missing instance (`AiSearchInstanceNotFound`, code 7002) or a
+    // missing enclosing namespace (`NamespaceNotFound`, code 7063) is the
+    // success condition here.
+    Effect.catchTag(
+      ["AiSearchInstanceNotFound", "NamespaceNotFound"],
+      () => Effect.void,
+    ),
     Effect.retry({
       while: (e) => e._tag === "InstanceNotDeleted",
       schedule: Schedule.exponential("500 millis").pipe(
@@ -191,7 +196,11 @@ test.provider(
       // must observe the instance as missing and recreate it instead of
       // failing on a 404.
       yield* aisearch
-        .deleteInstance({ accountId, id: initial.instance.id })
+        .deleteNamespaceInstance({
+          accountId,
+          name: "default",
+          id: initial.instance.id,
+        })
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "Forbidden",
@@ -214,10 +223,10 @@ test.provider(
   { timeout: 240_000 },
 );
 
-// Canonical `list()` test (account collection): `list()` enumerates every
-// AI Search instance in the account via `listInstances`, paginating
-// exhaustively, and hydrates each into the `read` Attributes shape. Deploy
-// an instance and assert its id appears in the result.
+// Canonical `list()` test: instances are namespace-scoped, so `list()`
+// enumerates every namespace (including the account-provided `default`) and
+// fans out a paginated instance list per namespace, hydrating each into the
+// `read` Attributes shape. Deploy an instance and assert its id appears.
 test.provider(
   "list enumerates the deployed instance",
   (stack) =>
@@ -236,6 +245,50 @@ test.provider(
       yield* stack.destroy();
 
       yield* expectGone(deployed.instance.accountId, deployed.instance.id);
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+// A program that places the instance in a custom namespace. The instance's
+// `namespace` references the namespace's `name` output, so the engine orders
+// instance-after-namespace on deploy (and namespace-after-instance on
+// destroy, so the namespace's instances are torn down before it).
+const nsProgram = (props?: Partial<Cloudflare.AiSearchInstanceProps>) =>
+  Effect.gen(function* () {
+    const namespace = yield* Cloudflare.AiSearchNamespace("AiSearchNs", {});
+    const bucket = yield* Cloudflare.R2Bucket("AiSearchSource", {});
+    const instance = yield* Cloudflare.AiSearchInstance("Search", {
+      source: bucket.bucketName,
+      namespace: namespace.name,
+      ...props,
+    });
+    return { namespace, bucket, instance };
+  });
+
+test.provider(
+  "creates an instance in a custom namespace and moving namespaces replaces",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const initial = yield* stack.deploy(nsProgram());
+      expect(initial.instance.namespace).toEqual(initial.namespace.name);
+      expect(initial.namespace.name).not.toEqual("default");
+
+      // The instance is readable in its namespace, but NOT in `default`.
+      const live = yield* getInstance(
+        accountId,
+        initial.instance.id,
+        initial.namespace.name,
+      );
+      expect(live.id).toEqual(initial.instance.id);
+      yield* expectGone(accountId, initial.instance.id, "default");
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, initial.instance.id, initial.namespace.name);
     }).pipe(logLevel),
   { timeout: 240_000 },
 );

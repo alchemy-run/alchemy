@@ -66,7 +66,9 @@ export type AiSearchNamespace = Resource<
  * searched or queried as a unit. The namespace `name` is its identity —
  * changing it triggers a replacement; only the `description` is mutable
  * in place.
- *
+ * @resource
+ * @product AI Search
+ * @category AI
  * @section Creating a Namespace
  * @example Generated name
  * ```typescript
@@ -173,6 +175,14 @@ export const AiSearchNamespaceProvider = () =>
         observed = ensured.ns;
       }
 
+      // The account-provided `default` namespace is reserved: it always
+      // exists and its metadata cannot be modified
+      // (`cannot_modify_default_namespace`). Adopt it as-is so it can be
+      // referenced/bound, but never attempt to mutate it.
+      if (name === "default") {
+        return toAttributes(observed, acct);
+      }
+
       // Sync — the description is the only mutable aspect. Diff observed
       // cloud state against desired; skip the PUT entirely on a no-op.
       const observedDescription = normalize(observed.description);
@@ -202,6 +212,10 @@ export const AiSearchNamespaceProvider = () =>
       return toAttributes(updated, acct);
     }),
     delete: Effect.fn(function* ({ output }) {
+      // The account-provided `default` namespace cannot be deleted
+      // (`cannot_modify_default_namespace`); binding/adopting it must never
+      // tear it down, so its delete is a no-op.
+      if (output.name === "default") return;
       // A missing namespace (already deleted) is success. Instances inside
       // the namespace must be deleted first — the engine orders that via
       // the `namespace` reference on dependent resources.

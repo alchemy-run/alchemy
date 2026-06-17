@@ -107,7 +107,9 @@ export type AiSearchToken = Resource<
  * `Cloudflare.AccountApiToken` to mint the underlying API token in the
  * same stack, then reference the service token's `id` from an AI Search
  * instance's `tokenId` prop.
- *
+ * @resource
+ * @product AI Search
+ * @category AI
  * @section Creating a Token
  * @example Minting the underlying API token in the same stack
  * ```typescript

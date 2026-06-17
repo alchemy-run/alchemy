@@ -1,0 +1,104 @@
+import * as Cloudflare from "@/Cloudflare";
+import * as Test from "@/Test/Vitest";
+import { expect } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import Stack from "./fixtures/bindings-stack.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Cloudflare.providers(),
+});
+
+const logLevel = Effect.provideService(
+  MinimumLogLevel,
+  process.env.DEBUG ? "Debug" : "Info",
+);
+
+const stack = beforeAll(deploy(Stack));
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
+
+// Deploying the Worker succeeding at all proves Cloudflare accepted both the
+// `ai_search` and `ai_search_namespace` bindings. The `/bindings` route then
+// confirms they are injected and shaped correctly at runtime.
+test(
+  "worker deploys with ai_search + ai_search_namespace bindings injected",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    expect(url).toBeTypeOf("string");
+
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.get(`${url}/bindings`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 15 }),
+    );
+
+    const body = (yield* res.json) as {
+      search: string;
+      searchAiSearch: string;
+      ns: string;
+      nsGet: string;
+    };
+
+    // Single-instance `ai_search` binding resolves to an `AutoRAG` object
+    // exposing `aiSearch()`.
+    expect(body.search).toBe("object");
+    expect(body.searchAiSearch).toBe("function");
+    // `ai_search_namespace` binding resolves to an object with `.get()`.
+    expect(body.ns).toBe("object");
+    expect(body.nsGet).toBe("function");
+  }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+// The Effect worker attaches the same two binding flavors via
+// `AiSearchInstanceBinding.bind(...)` / `AiSearchNamespaceBinding.bind(...)`
+// and reads them through the Effect-native client. Resolving each client's
+// `raw` `AutoRAG` handle proves the Effect-first path wires through to the
+// live runtime bindings.
+test(
+  "effect worker resolves ai_search + ai_search_namespace via Effect clients",
+  Effect.gen(function* () {
+    const { effectUrl } = yield* stack;
+    expect(effectUrl).toBeTypeOf("string");
+
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.get(`${effectUrl}/bindings`).pipe(
+      Effect.flatMap((res) =>
+        res.status === 200
+          ? Effect.succeed(res)
+          : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
+      ),
+      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 15 }),
+    );
+
+    const body = (yield* res.json) as {
+      mode: string;
+      searchRaw: string;
+      searchAiSearch: string;
+      searchSearch: string;
+      nsRaw: string;
+      nsAiSearch: string;
+    };
+
+    expect(body.mode).toBe("effect");
+    // `AiSearchInstanceBinding.bind(...).raw` resolves to the runtime
+    // `AutoRAG` exposing `aiSearch()` / `search()`.
+    expect(body.searchRaw).toBe("object");
+    expect(body.searchAiSearch).toBe("function");
+    expect(body.searchSearch).toBe("function");
+    // `AiSearchNamespaceBinding.bind(...).get(name).raw` resolves to an
+    // `AutoRAG` scoped to the named instance within the namespace. The
+    // namespace-scoped handle is a callable runtime proxy (`typeof`
+    // `"function"`), unlike the single-instance handle (`"object"`) — either
+    // way `aiSearch()` is callable on it.
+    expect(["object", "function"]).toContain(body.nsRaw);
+    expect(body.nsAiSearch).toBe("function");
+  }).pipe(logLevel),
+  { timeout: 240_000 },
+);
