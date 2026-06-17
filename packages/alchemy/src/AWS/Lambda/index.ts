@@ -1,5 +1,6 @@
 export * from "./BucketEventSource.ts";
 export * from "./EventBridgeEventSource.ts";
+export * from "./EventInvokeConfig.ts";
 export * from "./EventSourceMapping.ts";
 export * from "./Function.ts";
 export * from "./HttpServer.ts";
