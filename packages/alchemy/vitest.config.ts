@@ -1,5 +1,5 @@
 import path from "pathe";
-import { loadEnv } from "vite";
+import { defaultServerConditions, loadEnv } from "vite";
 import { defineConfig } from "vitest/config";
 
 const AWS_API_GATEWAY_INCLUDE = "test/AWS/ApiGateway/**/*.test.ts";
@@ -10,13 +10,29 @@ export default defineConfig({
     alias: {
       "@": path.resolve(import.meta.dirname, "src"),
     },
-    // Vite's default external condiitons are ["node", "module-sync"].
-    // Extend this to include Bun so `@distilled.cloud/*` packages are
-    // resolved from `src/*.ts` instead of `lib/*.js`.
-    externalConditions: ["bun", "node", "module-sync"],
+  },
+  // Resolve `@distilled.cloud/*` to its `.ts` sources (the `bun` export
+  // condition → `./src/*.ts`) so a `bun scripts/generate.ts` regen is live in
+  // tests with no `lib` rebuild. Vitest uses Vite's `ssr` environment, which
+  // has its own resolve config, so the conditions go here.
+  ssr: {
+    resolve: {
+      conditions: ["bun", ...defaultServerConditions],
+    },
   },
   test: {
     env: loadEnv("test", path.resolve(import.meta.dirname, "..", ".."), ""),
+    // Conditions only apply to inlined deps; externalized imports resolve the
+    // `default` export (`./lib`). Inline distilled (by specifier and by its
+    // symlinked real path) so Vite transforms the `src` we resolved above.
+    server: {
+      deps: {
+        inline: [
+          /@distilled\.cloud\//,
+          /distilled\/packages\/[^/]+\/(src|lib)\//,
+        ],
+      },
+    },
     pool: "forks",
     maxWorkers: 32,
     sequence: { concurrent: true },
