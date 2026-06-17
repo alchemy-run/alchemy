@@ -46,7 +46,13 @@ export interface Command extends Resource<
   CommandProps,
   {
     /**
-     * Absolute path to the build output.
+     * Path to the build output, relative to `process.cwd()`.
+     *
+     * Stored relative (rather than absolute) so the value is portable across
+     * machines — state written by a CI runner
+     * (`/home/runner/work/.../dist`) resolves correctly on a local laptop and
+     * vice versa. Consumers should `path.resolve()` it against their own cwd
+     * to obtain an absolute path.
      */
     outdir: string;
     /**
@@ -122,13 +128,31 @@ export const CommandProvider = () =>
           });
         });
 
+      // Absolute build-output path, used for all filesystem operations.
       const getOutputPath = (props: CommandProps) => {
         const cwd = props.cwd ? pathModule.resolve(props.cwd) : process.cwd();
         return pathModule.resolve(cwd, props.outdir);
       };
 
+      // The value persisted in `outdir`: relative to `process.cwd()` so it is
+      // portable across machines and resolves correctly anywhere it is read
+      // back (e.g. `Cloudflare.Worker` assets via `readAssets`).
+      const getRelativeOutputPath = (props: CommandProps) =>
+        pathModule.relative(process.cwd(), getOutputPath(props));
+
+      // Resolve a persisted `outdir` (relative going forward, but possibly an
+      // absolute path written by an older version of this provider) to an
+      // absolute path for filesystem access.
+      const resolveOutdir = (outdir: string) => pathModule.resolve(outdir);
+
       return Command.Provider.of({
-        stables: ["outdir"],
+        // `outdir` is intentionally NOT declared stable: it is derived from
+        // mutable inputs (`cwd` + `outdir`) and is machine-relative. Marking
+        // it stable made the engine carry the *old* state's path into
+        // downstream resources at plan time (e.g. a Worker's
+        // `assets.directory`), so a rebuild that produced a different path —
+        // or state written on another machine — fed a stale, non-existent
+        // directory to the consumer and crashed its asset read.
         // Non-listable: a Build.Command is a local build/exec step whose
         // artifact is a directory on the local filesystem keyed by the hash of
         // its inputs. There is no remote enumeration API to discover existing
@@ -150,17 +174,17 @@ export const CommandProvider = () =>
           }
           // Recompute the output path against the *current* cwd. State
           // may have been written by a different machine (e.g. CI) and
-          // the absolute path baked into `output.outdir` won't exist
-          // locally. As long as the path resolved against this
-          // machine's cwd is present, return the refreshed output so
-          // downstream consumers (e.g. `Cloudflare.Worker` assets)
-          // don't try to read a stale, foreign-machine path.
+          // the path baked into `output.outdir` won't exist locally. As
+          // long as the path resolved against this machine's cwd is
+          // present, return the refreshed (relative) output so downstream
+          // consumers (e.g. `Cloudflare.Worker` assets) don't try to read
+          // a stale, foreign-machine path.
           const outputPath = getOutputPath(olds);
           const exists = yield* fs.exists(outputPath);
           if (!exists) {
             return undefined;
           }
-          return { ...output, outdir: outputPath };
+          return { ...output, outdir: getRelativeOutputPath(olds) };
         }),
         reconcile: Effect.fnUntraced(function* ({ news, output, session }) {
           // Observe — the build artifact is a local directory keyed by the
@@ -169,11 +193,12 @@ export const CommandProvider = () =>
           const desiredHash = yield* hashDirectory(news);
           const outputPath = getOutputPath(news);
           const cachedExists =
-            output !== undefined && (yield* fs.exists(output.outdir));
+            output !== undefined &&
+            (yield* fs.exists(resolveOutdir(output.outdir)));
           const reusable =
             cachedExists &&
             output!.hash === desiredHash &&
-            output!.outdir === outputPath;
+            resolveOutdir(output!.outdir) === outputPath;
 
           // Ensure — when the cached artifact is missing, stale, or the
           // output path moved, run the build. The build command itself is
@@ -198,16 +223,18 @@ export const CommandProvider = () =>
             );
           }
 
-          // Return — the artifact location and the hash that produced it.
+          // Return — the artifact location (relative, for portability) and
+          // the hash that produced it.
           return {
-            outdir: outputPath,
+            outdir: getRelativeOutputPath(news),
             hash: desiredHash,
           };
         }),
         delete: Effect.fnUntraced(function* ({ output, session }) {
-          const exists = yield* fs.exists(output.outdir);
+          const outputPath = resolveOutdir(output.outdir);
+          const exists = yield* fs.exists(outputPath);
           if (exists) {
-            yield* fs.remove(output.outdir, { recursive: true });
+            yield* fs.remove(outputPath, { recursive: true });
             yield* session.note(`Removed build output: ${output.outdir}`);
           }
         }),

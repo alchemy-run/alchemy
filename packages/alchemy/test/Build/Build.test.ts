@@ -34,7 +34,9 @@ test.provider(
         }),
       );
 
-      expect(build1.outdir).toBe(distDir);
+      // `outdir` is persisted relative to `process.cwd()` for portability;
+      // resolve it back to an absolute path before comparing.
+      expect(pathe.resolve(build1.outdir)).toBe(distDir);
       expect(build1.hash).toBeDefined();
       expect(typeof build1.hash).toBe("string");
       expect(build1.hash.length).toBeGreaterThan(0);
