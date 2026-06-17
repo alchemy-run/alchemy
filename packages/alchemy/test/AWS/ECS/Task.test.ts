@@ -60,6 +60,13 @@ test.provider(
       });
       const arn = registered.taskDefinition?.taskDefinitionArn;
       expect(arn).toBeDefined();
+      // Safety net: deregister the out-of-band task definition on scope close
+      // even if the assertions below fail.
+      yield* Effect.addFinalizer(() =>
+        ecs
+          .deregisterTaskDefinition({ taskDefinition: arn! })
+          .pipe(Effect.ignore),
+      );
 
       const provider = yield* Provider.findProvider(Task);
       const all = yield* provider.list();
@@ -134,6 +141,11 @@ test.provider(
       const td = registered.taskDefinition;
       const arn = td?.taskDefinitionArn;
       expect(arn).toBeDefined();
+      yield* Effect.addFinalizer(() =>
+        ecs
+          .deregisterTaskDefinition({ taskDefinition: arn! })
+          .pipe(Effect.ignore),
+      );
 
       const described = yield* ecs.describeTaskDefinition({
         taskDefinition: arn!,
@@ -168,15 +180,13 @@ test.provider(
         ],
       });
       expect(updated.taskDefinition?.revision).toBeGreaterThan(td!.revision!);
-
-      yield* ecs
-        .deregisterTaskDefinition({ taskDefinition: arn! })
-        .pipe(Effect.catchTag("ClientException", () => Effect.void));
-      yield* ecs
-        .deregisterTaskDefinition({
-          taskDefinition: updated.taskDefinition!.taskDefinitionArn!,
-        })
-        .pipe(Effect.catchTag("ClientException", () => Effect.void));
+      yield* Effect.addFinalizer(() =>
+        ecs
+          .deregisterTaskDefinition({
+            taskDefinition: updated.taskDefinition!.taskDefinitionArn!,
+          })
+          .pipe(Effect.ignore),
+      );
     }),
   { timeout: 120_000 },
 );

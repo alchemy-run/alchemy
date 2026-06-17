@@ -51,6 +51,13 @@ test.provider("list enumerates the deployed service", (stack) =>
         new Error("registerTaskDefinition returned no task definition ARN"),
       );
     }
+    // Safety net: deregister the out-of-band task definition on scope close even
+    // if the body fails — leaves it INACTIVE rather than orphaned as ACTIVE.
+    yield* Effect.addFinalizer(() =>
+      ecs
+        .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
+        .pipe(Effect.ignore),
+    );
 
     const service = yield* stack.deploy(
       Effect.gen(function* () {
@@ -123,6 +130,12 @@ test.provider(
         ],
       });
       const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
+      // Safety net: deregister the out-of-band task definition on scope close.
+      yield* Effect.addFinalizer(() =>
+        ecs
+          .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
+          .pipe(Effect.ignore),
+      );
 
       const deployService = (props: {
         desiredCount: number;
@@ -240,6 +253,12 @@ test.provider(
         ],
       });
       const taskDefinitionArn = registered.taskDefinition?.taskDefinitionArn!;
+      // Safety net: deregister the out-of-band task definition on scope close.
+      yield* Effect.addFinalizer(() =>
+        ecs
+          .deregisterTaskDefinition({ taskDefinition: taskDefinitionArn })
+          .pipe(Effect.ignore),
+      );
 
       // Deploy networking first so we can resolve concrete ids for the
       // out-of-band ELBv2 resources.
@@ -317,6 +336,13 @@ test.provider(
         Subnets: [net.subnetAId, net.subnetBId],
       });
       const loadBalancerArn = loadBalancer.LoadBalancers?.[0]?.LoadBalancerArn!;
+      // Safety-net finalizers (run LIFO on scope close): listener -> TG -> ALB,
+      // so the out-of-band ELBv2 resources are reclaimed even if the body fails.
+      yield* Effect.addFinalizer(() =>
+        elbv2
+          .deleteLoadBalancer({ LoadBalancerArn: loadBalancerArn })
+          .pipe(Effect.ignore),
+      );
 
       const targetGroup = yield* elbv2.createTargetGroup({
         Name: "alchemy-test-ecs-manuallb",
@@ -326,6 +352,11 @@ test.provider(
         Port: 80,
       });
       const targetGroupArn = targetGroup.TargetGroups?.[0]?.TargetGroupArn!;
+      yield* Effect.addFinalizer(() =>
+        elbv2
+          .deleteTargetGroup({ TargetGroupArn: targetGroupArn })
+          .pipe(Effect.ignore),
+      );
 
       const listener = yield* elbv2.createListener({
         LoadBalancerArn: loadBalancerArn,
@@ -334,6 +365,9 @@ test.provider(
         DefaultActions: [{ Type: "forward", TargetGroupArn: targetGroupArn }],
       });
       const listenerArn = listener.Listeners?.[0]?.ListenerArn!;
+      yield* Effect.addFinalizer(() =>
+        elbv2.deleteListener({ ListenerArn: listenerArn }).pipe(Effect.ignore),
+      );
 
       // Re-declare the same networking (idempotent — same logical ids) plus the
       // Service wired to the user-supplied target group.
