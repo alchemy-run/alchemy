@@ -107,13 +107,16 @@ for finer control.
 export const Search = Cloudflare.AiSearch("Search", {
   source: Docs,
 +  prefix: "docs/",
-+  include: ["published/"],
-+  exclude: ["drafts/"],
++  include: ["/docs/**"],
++  exclude: ["/docs/drafts/**"],
 });
 ```
 
-`prefix` limits indexing to keys under `docs/`; `include` / `exclude` then
-filter within that scope.
+`prefix` limits indexing to keys under `docs/`. `include` / `exclude` are
+[micromatch](https://github.com/micromatch/micromatch) glob patterns (`*`
+matches within a path segment, `**` across segments; up to 10 each) — only
+objects matching an `include` pattern are indexed, and `exclude` wins over
+`include`.
 
 ## Reuse an existing token
 

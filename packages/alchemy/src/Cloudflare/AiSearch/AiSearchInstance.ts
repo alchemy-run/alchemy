@@ -367,7 +367,9 @@ export type AiSearchInstance = Resource<
  * For an `r2` source, `sourceParams` filters which objects are indexed (all
  * fields optional):
  * - `prefix` — only index keys under this prefix.
- * - `includeItems` / `excludeItems` — glob patterns to include / exclude.
+ * - `includeItems` / `excludeItems` — micromatch glob patterns (`*` within a
+ *   path segment, `**` across segments; max 10 each). Only objects matching an
+ *   `includeItems` pattern are indexed; `excludeItems` takes precedence.
  * - `r2Jurisdiction` — R2 data-residency jurisdiction of the source bucket.
  * @example Index only part of a bucket
  * ```typescript
@@ -376,8 +378,8 @@ export type AiSearchInstance = Resource<
  *   tokenId: serviceToken.id,
  *   sourceParams: {
  *     prefix: "docs/",
- *     includeItems: ["published/"],
- *     excludeItems: ["drafts/"],
+ *     includeItems: ["/docs/**"],
+ *     excludeItems: ["/docs/drafts/**"],
  *   },
  * });
  * ```

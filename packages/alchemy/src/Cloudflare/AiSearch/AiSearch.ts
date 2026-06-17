@@ -72,9 +72,15 @@ export type AiSearchR2Props = AiSearchSharedProps & {
   source: R2Bucket;
   /** Only index object keys under this prefix. */
   prefix?: string;
-  /** Glob patterns of object keys to index. */
+  /**
+   * Micromatch glob patterns; only objects matching at least one are
+   * indexed (`*` within a path segment, `**` across segments). Max 10.
+   */
   include?: string[];
-  /** Glob patterns of object keys to skip. */
+  /**
+   * Micromatch glob patterns; objects matching any are skipped. Exclude
+   * takes precedence over `include`. Max 10.
+   */
   exclude?: string[];
   /** R2 data-residency jurisdiction of the source bucket. */
   jurisdiction?: string;
@@ -156,8 +162,8 @@ const clean = <T extends Record<string, unknown>>(
  * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
  *   source: bucket,
  *   prefix: "docs/",
- *   include: ["published/"],
- *   exclude: ["drafts/"],
+ *   include: ["/docs/**"],
+ *   exclude: ["/docs/drafts/**"],
  * });
  * ```
  *
