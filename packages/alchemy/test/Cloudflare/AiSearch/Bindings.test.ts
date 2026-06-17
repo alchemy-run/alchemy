@@ -35,7 +35,15 @@ test(
           ? Effect.succeed(res)
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
-      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 15 }),
+      // Cap the backoff at 3s so a fresh worker that takes a while to start
+      // serving 200s keeps getting polled steadily, rather than the
+      // unbounded exponential delay overshooting the test timeout.
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis").pipe(
+          Schedule.either(Schedule.spaced("3 seconds")),
+        ),
+        times: 40,
+      }),
     );
 
     const body = (yield* res.json) as {
@@ -77,7 +85,15 @@ test(
           ? Effect.succeed(res)
           : Effect.fail(new Error(`Worker not ready: ${res.status}`)),
       ),
-      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 15 }),
+      // Cap the backoff at 3s so a fresh worker that takes a while to start
+      // serving 200s keeps getting polled steadily, rather than the
+      // unbounded exponential delay overshooting the test timeout.
+      Effect.retry({
+        schedule: Schedule.exponential("500 millis").pipe(
+          Schedule.either(Schedule.spaced("3 seconds")),
+        ),
+        times: 40,
+      }),
     );
 
     const body = (yield* res.json) as {

@@ -145,8 +145,9 @@ export type AiSearch = AiSearchInstance & {
  * `source` — an {@link R2Bucket} for R2, or a URL for a web crawl:
  *
  * - For an R2 source, it mints a least-privilege {@link AccountApiToken}
- *   (`AI Search Index Engine`) and an {@link AiSearchToken} wrapping it
- *   (stable children `Token`), then passes that token to the instance.
+ *   (`AI Search Index Engine`, stable child `ApiToken`) and an
+ *   {@link AiSearchToken} wrapping it (stable child `Token`), then passes
+ *   that token to the instance.
  *   Cloudflare requires a service token to read an R2 bucket and only
  *   provisions one through the dashboard / Wrangler — never on a
  *   programmatic API create — so the construct provisions it for you. Pass
@@ -334,7 +335,7 @@ export const AiSearch = Construct.fn(function* (
     // API create. Mint one ourselves unless the caller passed a `tokenId`.
     if (tokenId === undefined) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const apiToken = yield* AccountApiToken("Token", {
+      const apiToken = yield* AccountApiToken("ApiToken", {
         policies: [
           {
             effect: "allow",
