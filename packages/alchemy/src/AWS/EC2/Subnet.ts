@@ -417,7 +417,10 @@ export const SubnetProvider = () =>
             .pipe(
               Effect.tapError(Effect.logDebug),
               Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.void),
-              // Retry on dependency violations (resources still being deleted)
+              // Retry on dependency violations (resources still being deleted).
+              // ENIs from a just-deleted ALB or CloudFront VPC origin can take
+              // several minutes to detach after the owning resource is gone, so
+              // budget ~12 min (fast exponential start, capped at 30s steps).
               Effect.retry({
                 while: (e) => {
                   // DependencyViolation means there are still dependent resources
@@ -425,7 +428,8 @@ export const SubnetProvider = () =>
                   return e._tag === "DependencyViolation";
                 },
                 schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.both(Schedule.recurs(10)), // Try up to 10 times
+                  Schedule.either(Schedule.spaced("30 seconds")),
+                  Schedule.both(Schedule.recurs(30)),
                   Schedule.tapOutput(([, attempt]) =>
                     session.note(
                       `Waiting for dependencies to clear... (attempt ${attempt + 1})`,
