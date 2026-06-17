@@ -198,8 +198,11 @@ export const VpcOriginProvider = () =>
           ),
           Effect.retry({
             while: (error) => error._tag === "VpcOriginPendingDeployment",
+            // CloudFront VPC-origin deployment is slow (global propagation) and
+            // routinely exceeds 10 min; budget ~20 min (120 * 10s) so a real
+            // deploy doesn't fail spuriously.
             schedule: Schedule.fixed("10 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
+              Schedule.both(Schedule.recurs(120)),
             ),
           }),
         );
