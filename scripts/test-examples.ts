@@ -1,6 +1,6 @@
 const examples = [
   "./examples/cloudflare-worker",
-  "./examples/cloudflare-worker-auth",
+  "./examples/cloudflare-pr-package",
   "./examples/cloudflare-worker-async",
   "./examples/cloudflare-tanstack",
   "./examples/cloudflare-tanstack-start-solid",

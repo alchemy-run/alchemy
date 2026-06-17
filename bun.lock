@@ -587,6 +587,18 @@
         "drizzle-kit": "1.0.0-rc.1",
       },
     },
+    "examples/cloudflare-pr-package": {
+      "name": "cloudflare-pr-package",
+      "version": "0.0.0",
+      "dependencies": {
+        "@alchemy.run/pr-package": "workspace:*",
+        "@cloudflare/workers-types": "catalog:",
+        "@effect/platform-bun": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "examples/cloudflare-secrets-store": {
       "name": "cloudflare-secrets-store",
       "version": "0.0.0",
@@ -724,17 +736,6 @@
         "@effect/platform-node": "catalog:",
         "alchemy": "workspace:*",
         "better-auth": "catalog:",
-        "effect": "catalog:",
-      },
-    },
-    "examples/cloudflare-worker-auth": {
-      "name": "cloudflare-worker-auth",
-      "version": "0.0.0",
-      "dependencies": {
-        "@cloudflare/workers-types": "catalog:",
-        "@effect/platform-bun": "catalog:",
-        "@effect/platform-node": "catalog:",
-        "alchemy": "workspace:*",
         "effect": "catalog:",
       },
     },
@@ -2604,6 +2605,8 @@
 
     "cloudflare-planetscale-postgres-drizzle": ["cloudflare-planetscale-postgres-drizzle@workspace:examples/cloudflare-planetscale-postgres-drizzle"],
 
+    "cloudflare-pr-package": ["cloudflare-pr-package@workspace:examples/cloudflare-pr-package"],
+
     "cloudflare-secrets-store": ["cloudflare-secrets-store@workspace:examples/cloudflare-secrets-store"],
 
     "cloudflare-solid-ssr": ["cloudflare-solid-ssr@workspace:examples/cloudflare-solidjs-ssr"],
@@ -2619,8 +2622,6 @@
     "cloudflare-worker": ["cloudflare-worker@workspace:examples/cloudflare-worker"],
 
     "cloudflare-worker-async": ["cloudflare-worker-async@workspace:examples/cloudflare-worker-async"],
-
-    "cloudflare-worker-auth": ["cloudflare-worker-auth@workspace:examples/cloudflare-worker-auth"],
 
     "clsx": ["clsx@2.1.1", "", {}, "sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA=="],
 
