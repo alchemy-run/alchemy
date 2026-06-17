@@ -39,6 +39,7 @@ import {
   WorkerLoader,
   Workflows,
 } from "@distilled.cloud/cloudflare-runtime/bindings";
+import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
 import * as WorkerProxy from "@distilled.cloud/cloudflare-runtime/proxy/WorkerProxy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -212,9 +213,7 @@ export const LocalWorkerProvider = () =>
             compatibilityFlags: worker.compatibility.flags,
             bindings: worker.workerBindings as never,
             hyperdrives: worker.hyperdrives,
-            durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
-              worker.durableObjectNamespaces,
-            ),
+            durableObjectNamespaces: worker.durableObjectNamespaces,
             queueConsumers: yield* getQueueConsumers(worker.name),
             modules: yield* toRuntimeModules(bundle),
             assets: toRuntimeAssets(worker.assets),
@@ -254,8 +253,12 @@ export const LocalWorkerProvider = () =>
           }),
           ...(props.assets || props.vite ? [Assets.local("ASSETS")] : []),
         ];
-        const durableObjectNamespaces: Record<string, string> = {};
+        const durableObjectNamespaces: Record<
+          string,
+          RuntimeDurableObjectNamespace & { uniqueKey: string }
+        > = {};
         const hyperdrives: Record<string, Required<HyperdriveOrigin>> = {};
+        const containers: Record<string, ContainerImage> = {};
         for (const { data } of bindings) {
           for (const binding of data.bindings ?? []) {
             if (
@@ -269,7 +272,11 @@ export const LocalWorkerProvider = () =>
               const namespaceId =
                 binding.namespaceId ??
                 encodeURIComponent(`${name}-${binding.className}`);
-              durableObjectNamespaces[binding.className] = namespaceId;
+              durableObjectNamespaces[binding.className] = {
+                className: binding.className,
+                uniqueKey: namespaceId,
+                sql: true,
+              };
               workerBindings.push(
                 yield* toRuntimeBinding({
                   ...binding,
@@ -295,13 +302,31 @@ export const LocalWorkerProvider = () =>
               };
             }
           }
+          if (data.containers) {
+            for (const container of data.containers) {
+              if (!container.dev) {
+                return yield* Effect.die(
+                  `Container ${container.className} has no dev image`,
+                );
+              }
+              containers[container.className] = container.dev;
+            }
+          }
+        }
+        for (const [className, dev] of Object.entries(containers)) {
+          if (!durableObjectNamespaces[className]) {
+            return yield* Effect.die(
+              `Durable Object namespace ${className} not found`,
+            );
+          }
+          durableObjectNamespaces[className].container = dev;
         }
         return {
           id,
           name,
           compatibility,
           workerBindings,
-          durableObjectNamespaces,
+          durableObjectNamespaces: Object.values(durableObjectNamespaces),
           hyperdrives,
           env: props.env,
           bundleOptions: {
@@ -396,9 +421,7 @@ export const LocalWorkerProvider = () =>
             worker: {
               name: worker.name,
               bindings: worker.workerBindings,
-              durableObjectNamespaces: toRuntimeDurableObjectNamespaces(
-                worker.durableObjectNamespaces,
-              ),
+              durableObjectNamespaces: worker.durableObjectNamespaces,
               hyperdrives: worker.hyperdrives,
               queueConsumers: yield* getQueueConsumers(worker.name),
               assets: toRuntimeAssets(worker.assets),
@@ -444,7 +467,12 @@ export const LocalWorkerProvider = () =>
           logpush: undefined,
           url,
           tags: [],
-          durableObjectNamespaces: config.durableObjectNamespaces,
+          durableObjectNamespaces: Object.fromEntries(
+            config.durableObjectNamespaces.map((namespace) => [
+              namespace.className,
+              namespace.uniqueKey,
+            ]),
+          ),
           domains: [url],
           crons: Array.from(
             new Set([...getCronBindings(bindings), ...(props.crons ?? [])]),
@@ -685,16 +713,6 @@ const toRuntimeAssets = (
     runWorkerFirst: assets.runWorkerFirst,
     serveDirectly: assets.serveDirectly,
   };
-};
-
-const toRuntimeDurableObjectNamespaces = (
-  namespaces: Record<string, string>,
-): RuntimeDurableObjectNamespace[] => {
-  return Object.entries(namespaces).map(([className, namespaceId]) => ({
-    className,
-    uniqueKey: namespaceId,
-    sql: true,
-  }));
 };
 
 const moduleTypeFromExtension = (ext: string): Module["type"] | "SourceMap" => {

@@ -34,7 +34,7 @@ export const bindContainer = Effect.fnUntraced(function* <Shape, Req = never>(
   const className = namespace.name;
 
   yield* worker.bind`${container.LogicalId}`({
-    containers: [{ className }],
+    containers: [{ className, dev: container.dev }],
   });
 
   // TODO(sam): register this in the Container Execution Context
