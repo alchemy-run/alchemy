@@ -32,17 +32,16 @@ AI Search picks them up on its next sync.
 
 ## Declare the AI Search pipeline
 
-Add an `AiSearch` construct pointed at the bucket. Pass the bucket's
-`bucketName` as the `source`.
+Add an `AiSearch` construct and pass the `Docs` bucket as `bucket`. That
+field selects R2 as the data source.
 
 ```typescript
 // src/Search.ts
 import * as Cloudflare from "alchemy/Cloudflare";
-import * as Effect from "effect/Effect";
 import { Docs } from "./Docs.ts";
 
 export const Search = Cloudflare.AiSearch("Search", {
-  source: Docs.bucketName,
+  bucket: Docs,
 });
 ```
 
@@ -51,9 +50,10 @@ into several resources so you don't have to wire them up by hand.
 
 ## What the helper creates
 
-For an R2 source, the indexer needs permission to read your bucket.
-Rather than make you provision that by hand, `AiSearch` mints it as
-stable children of the construct:
+For an R2 source, the indexer needs a service token to read your bucket.
+Cloudflare only creates that token for you through the dashboard or
+Wrangler — never on a programmatic API create — so `AiSearch` provisions
+it as stable children of the construct:
 
 - a least-privilege `Cloudflare.AccountApiToken` scoped to the
   **AI Search Index Engine** permission group,
@@ -80,32 +80,31 @@ const serviceToken = yield* Cloudflare.AiSearchToken("Token", {
   cfApiKey: apiToken.value,
 });
 const instance = yield* Cloudflare.AiSearchInstance("Instance", {
-  source: bucketName,
+  source: Docs.bucketName,
   tokenId: serviceToken.id,
 });
 ```
 
-The construct returns `{ instance, token }` so you can reach the
-underlying `AiSearchInstance` when you need to bind it.
+`AiSearch` translates `bucket` into the instance's `type: "r2"` +
+`source: bucket.bucketName` for you. It returns `{ instance, token }` so
+you can reach the underlying `AiSearchInstance` when you need to bind it.
 
-## Opt out of the managed token
+## Reuse an existing token
 
-By default (`token: "managed"`) Alchemy provisions the read token for
-you, as shown above. Pass `token: "auto"` to opt out of that: the
-construct skips the `AccountApiToken` + `AiSearchToken` children and
-creates the instance with no `tokenId`, leaving the source credential
-to the platform default instead of an explicit token you own.
+If your account already has a registered AI Search service token, pass
+its `tokenId` and `AiSearch` skips minting the `AccountApiToken` +
+`AiSearchToken` children, wiring your token into the instance instead.
 
 ```typescript
 export const Search = Cloudflare.AiSearch("Search", {
-  source: Docs.bucketName,
-  token: "auto",
+  bucket: Docs,
+  tokenId: existingToken.id,
 });
 ```
 
-The managed default (`token: "managed"`) is recommended — the token is
-least-privilege, lives in your stack's state, and is torn down with
-everything else on `destroy`.
+Otherwise the default — letting the construct provision a least-privilege
+token that lives in your stack's state and is torn down on `destroy` — is
+the simplest path.
 
 ## Add both to the stack
 

@@ -1,7 +1,8 @@
 import * as Construct from "../../Construct.ts";
-import type { InputProps } from "../../Input.ts";
+import type { Input, InputProps } from "../../Input.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { R2Bucket } from "../R2/R2Bucket.ts";
 import {
   AiSearchInstance,
   type AiSearchInstanceProps,
@@ -11,37 +12,62 @@ import {
   type AiSearchToken as AiSearchTokenType,
 } from "./AiSearchToken.ts";
 
-// Constructs don't auto-wrap props in `Input` (only the underlying `Resource`
-// does), so wrap the instance props here to accept `Output` values from
-// callers (e.g. `source: bucket.bucketName`). `type` stays a plain literal so
-// the runtime discriminant check below works.
-export type AiSearchProps = InputProps<AiSearchInstanceProps, "type"> & {
+/**
+ * Props common to every AI Search pipeline, regardless of data source. The
+ * `type` and `source` of the underlying instance are derived from the
+ * source-specific variant ({@link AiSearchR2Props} / {@link
+ * AiSearchWebCrawlerProps}), so they're omitted here.
+ */
+export type AiSearchSharedProps = Omit<
+  InputProps<AiSearchInstanceProps, "type">,
+  "type" | "source"
+>;
+
+/**
+ * An R2-backed AI Search pipeline. The presence of `bucket` selects R2 as
+ * the data source.
+ */
+export type AiSearchR2Props = AiSearchSharedProps & {
   /**
-   * How the AI Search service token used to read an R2 data source is
-   * provisioned:
-   * - `"managed"` (default): mint a least-privilege Cloudflare API token
-   *   (the `AI Search Index Engine` permission group) plus the AI Search
-   *   service token wrapping it, as stable children of this construct, and
-   *   wire its id into the instance.
-   * - `"auto"`: skip the managed token and let Cloudflare auto-provision
-   *   one for the instance.
-   *
-   * Ignored when an explicit `tokenId` is supplied, or for non-R2 sources
-   * (web crawler / built-in storage), which don't use a service token.
-   * @default "managed"
+   * The R2 bucket to index. AI Search needs a service token to read it;
+   * the construct provisions one unless you pass your own `tokenId`.
    */
-  token?: "managed" | "auto";
+  bucket: R2Bucket;
+  url?: never;
 };
+
+/**
+ * A web-crawler-backed AI Search pipeline. The presence of `url` selects
+ * the web crawler as the data source (no service token needed).
+ */
+export type AiSearchWebCrawlerProps = AiSearchSharedProps & {
+  /**
+   * Seed URL to crawl and index. Tune crawl/parse behaviour via
+   * `sourceParams.webCrawler`.
+   */
+  url: Input<string>;
+  bucket?: never;
+};
+
+/**
+ * Props for the {@link AiSearch} construct — a union discriminated by the
+ * data source: pass `bucket` for an R2 source or `url` for a web crawl.
+ */
+export type AiSearchProps = AiSearchR2Props | AiSearchWebCrawlerProps;
 
 /**
  * A convenience construct over {@link AiSearchInstance} that auto-creates the
  * sub-resources an AI Search instance typically needs, so a single call wires
- * up a working pipeline:
+ * up a working pipeline. The data source is chosen by which field you pass —
+ * `bucket` (an {@link R2Bucket}) for R2, or `url` for a web crawl:
  *
- * - For an R2 source with no explicit `tokenId`, it mints a least-privilege
- *   {@link AccountApiToken} (`AI Search Index Engine`) and an
- *   {@link AiSearchToken} wrapping it (stable children `Token`), then passes
- *   that token to the instance.
+ * - For an R2 source, it mints a least-privilege {@link AccountApiToken}
+ *   (`AI Search Index Engine`) and an {@link AiSearchToken} wrapping it
+ *   (stable children `Token`), then passes that token to the instance.
+ *   Cloudflare requires a service token to read an R2 bucket and only
+ *   provisions one through the dashboard / Wrangler — never on a
+ *   programmatic API create — so the construct provisions it for you. Pass
+ *   your own `tokenId` to skip minting and reuse an existing token.
  * - It creates the {@link AiSearchInstance} (child `Instance`) with the
  *   remaining props.
  *
@@ -52,19 +78,28 @@ export type AiSearchProps = InputProps<AiSearchInstanceProps, "type"> & {
  * @product AI Search
  * @category AI
  * @section Creating an AI Search pipeline
- * @example R2-backed instance with an auto-provisioned token
+ * @example R2-backed instance (token provisioned for you)
+ * Pass an {@link R2Bucket} as `bucket` — its presence selects R2 as the
+ * data source.
  * ```typescript
  * const bucket = yield* Cloudflare.R2Bucket("docs", {});
+ * const { instance } = yield* Cloudflare.AiSearch("docs-search", { bucket });
+ * ```
+ *
+ * @example Reuse an existing service token
+ * ```typescript
  * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
- *   source: bucket.bucketName,
+ *   bucket,
+ *   tokenId: existingToken.id,
  * });
  * ```
  *
- * @example Let Cloudflare auto-provision the token
+ * @example Web-crawler source
+ * Pass a seed `url` instead of a `bucket` to crawl and index a website (no
+ * service token needed).
  * ```typescript
- * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
- *   source: bucket.bucketName,
- *   token: "auto",
+ * const { instance } = yield* Cloudflare.AiSearch("site-search", {
+ *   url: "https://example.com",
  * });
  * ```
  *
@@ -88,9 +123,7 @@ export type AiSearchProps = InputProps<AiSearchInstanceProps, "type"> & {
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const bucket = yield* Cloudflare.R2Bucket("docs", {});
- *     const { instance } = yield* Cloudflare.AiSearch("docs-search", {
- *       source: bucket.bucketName,
- *     });
+ *     const { instance } = yield* Cloudflare.AiSearch("docs-search", { bucket });
  *     const search = yield* Cloudflare.AiSearchInstance.bind(instance);
  *
  *     return {
@@ -117,9 +150,7 @@ export type AiSearchProps = InputProps<AiSearchInstanceProps, "type"> & {
  * ```typescript
  * // stack.ts
  * const bucket = yield* Cloudflare.R2Bucket("docs", {});
- * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
- *   source: bucket.bucketName,
- * });
+ * const { instance } = yield* Cloudflare.AiSearch("docs-search", { bucket });
  *
  * export const Api = Cloudflare.Worker("api", {
  *   main: "./worker.ts",
@@ -144,39 +175,55 @@ export const AiSearch = Construct.fn(function* (
   id: string,
   props: AiSearchProps,
 ) {
-  const { token, ...instanceProps } = props;
-
-  let tokenId = instanceProps.tokenId;
+  let tokenId = props.tokenId;
   let serviceToken: AiSearchTokenType | undefined;
 
-  // Mint a managed service token for R2 sources unless the caller pinned a
-  // `tokenId` or opted into Cloudflare's auto-provisioned token.
-  if (
-    tokenId === undefined &&
-    (token ?? "managed") === "managed" &&
-    (instanceProps.type ?? "r2") === "r2"
-  ) {
-    const { accountId } = yield* yield* CloudflareEnvironment;
-    const apiToken = yield* AccountApiToken("Token", {
-      policies: [
-        {
-          effect: "allow",
-          permissionGroups: ["AI Search Index Engine"],
-          resources: {
-            [`com.cloudflare.api.account.${accountId}`]: "*",
+  // Discriminate the data source on which field the caller passed. R2
+  // sources index a bucket and need a service token to read it; web-crawler
+  // sources crawl a seed URL and don't.
+  let type: "r2" | "web-crawler";
+  let source: Input<string>;
+  let shared: AiSearchSharedProps;
+
+  if ("bucket" in props && props.bucket !== undefined) {
+    const { bucket, url: _url, ...rest } = props;
+    type = "r2";
+    source = bucket.bucketName;
+    shared = rest;
+
+    // Cloudflare requires a service token to read an R2 source and only
+    // auto-creates one via the dashboard/Wrangler — not on a programmatic
+    // API create. Mint one ourselves unless the caller passed a `tokenId`.
+    if (tokenId === undefined) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const apiToken = yield* AccountApiToken("Token", {
+        policies: [
+          {
+            effect: "allow",
+            permissionGroups: ["AI Search Index Engine"],
+            resources: {
+              [`com.cloudflare.api.account.${accountId}`]: "*",
+            },
           },
-        },
-      ],
-    });
-    serviceToken = yield* AiSearchToken("Token", {
-      cfApiId: apiToken.tokenId,
-      cfApiKey: apiToken.value,
-    });
-    tokenId = serviceToken.id;
+        ],
+      });
+      serviceToken = yield* AiSearchToken("Token", {
+        cfApiId: apiToken.tokenId,
+        cfApiKey: apiToken.value,
+      });
+      tokenId = serviceToken.id;
+    }
+  } else {
+    const { url, bucket: _bucket, ...rest } = props;
+    type = "web-crawler";
+    source = url;
+    shared = rest;
   }
 
   const instance = yield* AiSearchInstance("Instance", {
-    ...instanceProps,
+    ...shared,
+    type,
+    source,
     tokenId,
   });
 

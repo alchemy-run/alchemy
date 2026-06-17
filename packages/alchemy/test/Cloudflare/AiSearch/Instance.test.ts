@@ -7,6 +7,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -254,6 +255,44 @@ test.provider(
       );
     }).pipe(logLevel),
   { timeout: 240_000 },
+);
+
+// A web-crawler source crawls a seed URL and needs no service token (unlike
+// an R2 source). Cloudflare only crawls a domain the account owns, so the
+// crawl is seeded at a Worker we deploy (its `workers.dev` URL is owned by the
+// account); `parseType: "crawl"` walks pages instead of requiring a sitemap.
+test.provider(
+  "creates a web-crawler instance (no service token)",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          const target = yield* AiSearchCrawlTargetWorker;
+          const instance = yield* Cloudflare.AiSearchInstance("Search", {
+            type: "web-crawler",
+            source: target.url.as<string>(),
+            sourceParams: { webCrawler: { parseType: "crawl" } },
+          });
+          return { target, instance };
+        }),
+      );
+
+      // Creating without any tokenId proves a web-crawler needs no token.
+      expect(initial.instance.type).toEqual("web-crawler");
+      expect(initial.instance.source).toEqual(initial.target.url);
+
+      const live = yield* getInstance(accountId, initial.instance.instanceId);
+      expect(live.type).toEqual("web-crawler");
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, initial.instance.instanceId);
+    }).pipe(logLevel),
+  { timeout: 300_000 },
 );
 
 // A program that places the instance in a custom namespace. The instance's

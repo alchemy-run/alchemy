@@ -6,6 +6,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -45,7 +46,7 @@ const program = () =>
   Effect.gen(function* () {
     const bucket = yield* Cloudflare.R2Bucket("AiSearchSource", {});
     const search = yield* Cloudflare.AiSearch("Search", {
-      source: bucket.bucketName,
+      bucket,
     });
     return { bucket, search };
   });
@@ -71,6 +72,46 @@ test.provider(
       // than re-asserting the token id off the read path.
       const live = yield* getInstance(accountId, instance.instanceId);
       expect(live.id).toEqual(instance.instanceId);
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, instance.instanceId);
+    }).pipe(logLevel),
+  { timeout: 300_000 },
+);
+
+// A web-crawler source crawls a seed URL and needs no service token, so the
+// construct must NOT mint an AccountApiToken / AiSearchToken — `token` comes
+// back undefined. Cloudflare only crawls a domain the account owns, so the
+// crawl is seeded at a Worker we deploy (its `workers.dev` URL is owned by the
+// account); `parseType: "crawl"` walks pages instead of requiring a sitemap.
+const crawlerProgram = () =>
+  Effect.gen(function* () {
+    const target = yield* AiSearchCrawlTargetWorker;
+    const search = yield* Cloudflare.AiSearch("Search", {
+      url: target.url.as<string>(),
+      sourceParams: { webCrawler: { parseType: "crawl" } },
+    });
+    return { target, search };
+  });
+
+test.provider(
+  "web-crawler source skips token minting",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const deployed = yield* stack.deploy(crawlerProgram());
+
+      const { instance, token } = deployed.search;
+      // No service token is minted for a web crawler.
+      expect(token).toBeUndefined();
+      expect(instance.type).toEqual("web-crawler");
+
+      const live = yield* getInstance(accountId, instance.instanceId);
+      expect(live.type).toEqual("web-crawler");
 
       yield* stack.destroy();
 
