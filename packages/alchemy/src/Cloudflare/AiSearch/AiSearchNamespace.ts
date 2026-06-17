@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { AiSearchNamespaceBinding } from "./AiSearchBinding.ts";
 
 const AiSearchNamespaceTypeId = "Cloudflare.AiSearch.Namespace" as const;
 type AiSearchNamespaceTypeId = typeof AiSearchNamespaceTypeId;
@@ -66,6 +67,11 @@ export type AiSearchNamespace = Resource<
  * searched or queried as a unit. The namespace `name` is its identity —
  * changing it triggers a replacement; only the `description` is mutable
  * in place.
+ *
+ * The account-provided `default` namespace is reserved: it always exists
+ * and Cloudflare disallows modifying or deleting it. Alchemy adopts it so
+ * it can be referenced and bound, but never updates or tears it down.
+ *
  * @resource
  * @product AI Search
  * @category AI
@@ -85,6 +91,7 @@ export type AiSearchNamespace = Resource<
  *
  * @section Updating a Namespace
  * @example Change the description in place
+ * Only the `description` is mutable; changing `name` replaces the namespace.
  * ```typescript
  * const ns = yield* Cloudflare.AiSearchNamespace("docs", {
  *   name: "docs-search",
@@ -92,11 +99,83 @@ export type AiSearchNamespace = Resource<
  * });
  * ```
  *
+ * @section Grouping instances
+ * Place instances in the namespace by passing its `name` to each
+ * {@link AiSearchInstance}'s `namespace` prop. The engine orders each
+ * instance after the namespace on deploy and tears them down before it on
+ * destroy.
+ * @example Two instances in one namespace
+ * ```typescript
+ * const ns = yield* Cloudflare.AiSearchNamespace("docs", {});
+ * const guides = yield* Cloudflare.AiSearchInstance("guides", {
+ *   source: guidesBucket.bucketName,
+ *   namespace: ns.name,
+ * });
+ * const api = yield* Cloudflare.AiSearchInstance("api", {
+ *   source: apiBucket.bucketName,
+ *   namespace: ns.name,
+ * });
+ * ```
+ *
+ * @section Binding to an Effect Worker
+ * Bind the namespace with `Cloudflare.AiSearchNamespace.bind(namespace)`,
+ * which attaches the `ai_search_namespace` binding and returns a client
+ * whose `.get(name)` selects an instance within the namespace at runtime.
+ * Provide {@link AiSearchNamespaceBindingLive} in the Worker's runtime
+ * layer.
+ * @example Select an instance per request
+ * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export default class Api extends Cloudflare.Worker<Api>()(
+ *   "api",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const ns = yield* Cloudflare.AiSearchNamespace.bind(Docs);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const url = new URL((yield* HttpServerRequest).url);
+ *         const instance = url.searchParams.get("instance") ?? "guides";
+ *         const query = url.searchParams.get("q") ?? "";
+ *         const answer = yield* ns.get(instance).aiSearch({ query });
+ *         return yield* HttpServerResponse.json(answer);
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.AiSearchNamespaceBindingLive)),
+ * ) {}
+ * ```
+ *
+ * @section Binding to an Async Worker
+ * For a vanilla `async fetch` Worker, pass the namespace under `Worker.env`.
+ * `InferEnv` types `env.SEARCH` as `{ get(name): AutoRAG }`.
+ * @example Async Worker via `env`
+ * ```typescript
+ * export const Api = Cloudflare.Worker("api", {
+ *   main: "./worker.ts",
+ *   env: { SEARCH: namespace },
+ * });
+ * export type ApiEnv = Cloudflare.InferEnv<typeof Api>;
+ *
+ * // worker.ts
+ * export default {
+ *   async fetch(request: Request, env: ApiEnv): Promise<Response> {
+ *     const query = new URL(request.url).searchParams.get("q") ?? "";
+ *     return Response.json(await env.SEARCH.get("guides").aiSearch({ query }));
+ *   },
+ * };
+ * ```
+ *
  * @see https://developers.cloudflare.com/ai-search/
  */
 export const AiSearchNamespace = Resource<AiSearchNamespace>(
   AiSearchNamespaceTypeId,
-);
+)({
+  bind: AiSearchNamespaceBinding.bind,
+});
 
 /**
  * Returns true if the given value is an AiSearchNamespace resource.

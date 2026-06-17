@@ -1,12 +1,15 @@
 import * as Construct from "../../Construct.ts";
 import type { InputProps } from "../../Input.ts";
-import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
-import { AiSearchInstance, type AiSearchInstanceProps } from "./Instance.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import {
+  AiSearchInstance,
+  type AiSearchInstanceProps,
+} from "./AiSearchInstance.ts";
 import {
   AiSearchToken,
   type AiSearchToken as AiSearchTokenType,
-} from "./Token.ts";
+} from "./AiSearchToken.ts";
 
 // Constructs don't auto-wrap props in `Input` (only the underlying `Resource`
 // does), so wrap the instance props here to accept `Output` values from

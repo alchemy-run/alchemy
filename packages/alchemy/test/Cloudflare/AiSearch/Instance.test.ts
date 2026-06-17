@@ -72,13 +72,13 @@ test.provider(
       // Create — engine-generated instance id, default settings.
       const initial = yield* stack.deploy(program());
 
-      expect(initial.instance.id).toBeTruthy();
+      expect(initial.instance.instanceId).toBeTruthy();
       expect(initial.instance.accountId).toEqual(accountId);
       expect(initial.instance.type).toEqual("r2");
       expect(initial.instance.source).toEqual(initial.bucket.bucketName);
 
-      const live = yield* getInstance(accountId, initial.instance.id);
-      expect(live.id).toEqual(initial.instance.id);
+      const live = yield* getInstance(accountId, initial.instance.instanceId);
+      expect(live.id).toEqual(initial.instance.instanceId);
       expect(live.source).toEqual(initial.bucket.bucketName);
       expect(live.type).toEqual("r2");
 
@@ -92,7 +92,7 @@ test.provider(
         }),
       );
 
-      expect(updated.instance.id).toEqual(initial.instance.id);
+      expect(updated.instance.instanceId).toEqual(initial.instance.instanceId);
       expect(updated.instance.aiSearchModel).toEqual(
         "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       );
@@ -103,7 +103,7 @@ test.provider(
       // readback until the mutated props land before asserting, bounded.
       const liveUpdated = yield* getInstance(
         accountId,
-        updated.instance.id,
+        updated.instance.instanceId,
       ).pipe(
         Effect.flatMap((live) =>
           live.aiSearchModel === "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
@@ -132,11 +132,11 @@ test.provider(
           chunkOverlap: 15,
         }),
       );
-      expect(noop.instance.id).toEqual(initial.instance.id);
+      expect(noop.instance.instanceId).toEqual(initial.instance.instanceId);
 
       yield* stack.destroy();
 
-      yield* expectGone(accountId, initial.instance.id);
+      yield* expectGone(accountId, initial.instance.instanceId);
 
       // Destroy again — delete must be idempotent (already gone).
       yield* stack.destroy();
@@ -163,20 +163,22 @@ test.provider(
 
       // The embedding model defines the vector space and is fixed at
       // creation — a new physical instance exists.
-      expect(replaced.instance.id).not.toEqual(initial.instance.id);
+      expect(replaced.instance.instanceId).not.toEqual(
+        initial.instance.instanceId,
+      );
       expect(replaced.instance.embeddingModel).toEqual(
         "@cf/baai/bge-large-en-v1.5",
       );
 
-      const live = yield* getInstance(accountId, replaced.instance.id);
+      const live = yield* getInstance(accountId, replaced.instance.instanceId);
       expect(live.embeddingModel).toEqual("@cf/baai/bge-large-en-v1.5");
 
       // The old instance was deleted as part of the replacement.
-      yield* expectGone(accountId, initial.instance.id);
+      yield* expectGone(accountId, initial.instance.instanceId);
 
       yield* stack.destroy();
 
-      yield* expectGone(accountId, replaced.instance.id);
+      yield* expectGone(accountId, replaced.instance.instanceId);
     }).pipe(logLevel),
   { timeout: 240_000 },
 );
@@ -199,7 +201,7 @@ test.provider(
         .deleteNamespaceInstance({
           accountId,
           name: "default",
-          id: initial.instance.id,
+          id: initial.instance.instanceId,
         })
         .pipe(
           Effect.retry({
@@ -208,17 +210,17 @@ test.provider(
             times: 8,
           }),
         );
-      yield* expectGone(accountId, initial.instance.id);
+      yield* expectGone(accountId, initial.instance.instanceId);
 
       const healed = yield* stack.deploy(program({ maxNumResults: 10 }));
 
-      expect(healed.instance.id).toEqual(initial.instance.id);
-      const live = yield* getInstance(accountId, healed.instance.id);
-      expect(live.id).toEqual(initial.instance.id);
+      expect(healed.instance.instanceId).toEqual(initial.instance.instanceId);
+      const live = yield* getInstance(accountId, healed.instance.instanceId);
+      expect(live.id).toEqual(initial.instance.instanceId);
 
       yield* stack.destroy();
 
-      yield* expectGone(accountId, healed.instance.id);
+      yield* expectGone(accountId, healed.instance.instanceId);
     }).pipe(logLevel),
   { timeout: 240_000 },
 );
@@ -240,11 +242,16 @@ test.provider(
       );
       const all = yield* provider.list();
 
-      expect(all.some((x) => x.id === deployed.instance.id)).toBe(true);
+      expect(
+        all.some((x) => x.instanceId === deployed.instance.instanceId),
+      ).toBe(true);
 
       yield* stack.destroy();
 
-      yield* expectGone(deployed.instance.accountId, deployed.instance.id);
+      yield* expectGone(
+        deployed.instance.accountId,
+        deployed.instance.instanceId,
+      );
     }).pipe(logLevel),
   { timeout: 240_000 },
 );
@@ -280,15 +287,19 @@ test.provider(
       // The instance is readable in its namespace, but NOT in `default`.
       const live = yield* getInstance(
         accountId,
-        initial.instance.id,
+        initial.instance.instanceId,
         initial.namespace.name,
       );
-      expect(live.id).toEqual(initial.instance.id);
-      yield* expectGone(accountId, initial.instance.id, "default");
+      expect(live.id).toEqual(initial.instance.instanceId);
+      yield* expectGone(accountId, initial.instance.instanceId, "default");
 
       yield* stack.destroy();
 
-      yield* expectGone(accountId, initial.instance.id, initial.namespace.name);
+      yield* expectGone(
+        accountId,
+        initial.instance.instanceId,
+        initial.namespace.name,
+      );
     }).pipe(logLevel),
   { timeout: 240_000 },
 );

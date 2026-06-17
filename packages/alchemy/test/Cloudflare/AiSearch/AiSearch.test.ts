@@ -61,7 +61,7 @@ test.provider(
       const deployed = yield* stack.deploy(program());
 
       const { instance, token } = deployed.search;
-      expect(instance.id).toBeTruthy();
+      expect(instance.instanceId).toBeTruthy();
       // The managed service token was minted as a child and wired in.
       expect(token).toBeDefined();
       expect(instance.tokenId).toEqual(token!.id);
@@ -69,12 +69,12 @@ test.provider(
       // Cloudflare's read projection hides the token association
       // (`tokenId` comes back `null`), so verify the instance exists rather
       // than re-asserting the token id off the read path.
-      const live = yield* getInstance(accountId, instance.id);
-      expect(live.id).toEqual(instance.id);
+      const live = yield* getInstance(accountId, instance.instanceId);
+      expect(live.id).toEqual(instance.instanceId);
 
       yield* stack.destroy();
 
-      yield* expectGone(accountId, instance.id);
+      yield* expectGone(accountId, instance.instanceId);
     }).pipe(logLevel),
   { timeout: 300_000 },
 );

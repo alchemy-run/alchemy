@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import type * as runtime from "@cloudflare/workers-types";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -9,8 +7,8 @@ import * as Binding from "../../Binding.ts";
 import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
-import type { AiSearchInstance } from "./Instance.ts";
-import type { AiSearchNamespace } from "./Namespace.ts";
+import type { AiSearchInstance } from "./AiSearchInstance.ts";
+import type { AiSearchNamespace } from "./AiSearchNamespace.ts";
 
 /**
  * Error raised by AI Search runtime binding operations.
@@ -178,7 +176,7 @@ export const AiSearchInstanceBindingPolicyLive =
             {
               type: "ai_search",
               name: instance.LogicalId,
-              instanceName: instance.id,
+              instanceName: instance.instanceId,
               namespace: instance.namespace,
             },
           ],

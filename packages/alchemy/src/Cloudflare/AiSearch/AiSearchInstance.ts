@@ -251,7 +251,7 @@ export type AiSearchInstanceAttributes = {
   /**
    * AI Search instance id. Lowercase alphanumeric, hyphens, underscores.
    */
-  id: string;
+  instanceId: string;
   /**
    * The Cloudflare account the instance belongs to.
    */
@@ -323,20 +323,30 @@ export type AiSearchInstance = Resource<
  * chat queries against it. Creation returns immediately; the initial
  * indexing run happens asynchronously.
  *
- * The instance `id`, `namespace`, `type`, `source`, and `embeddingModel`
- * are fixed at creation — changing any of them triggers a replacement.
- * Everything else
- * (models, chunking, caching, reranking, public endpoint, sync interval)
- * is mutable in place.
+ * The instance `instanceId`, `namespace`, `type`, `source`, and
+ * `embeddingModel` are fixed at creation — changing any of them triggers a
+ * replacement. Everything else (models, chunking, caching, reranking,
+ * public endpoint, sync interval) is mutable in place.
+ *
+ * For the common R2 case, prefer the {@link AiSearch} construct, which also
+ * mints the service token the indexer needs to read your bucket. Use this
+ * low-level resource directly when you manage the token yourself, share one
+ * token across instances, or group instances under an {@link
+ * AiSearchNamespace}.
+ *
  * @resource
  * @product AI Search
  * @category AI
  * @section Creating an Instance
  * @example R2-backed instance
+ * An R2 source needs a service token to read the bucket. Either pass a
+ * `tokenId` (see {@link AiSearchToken}) or let the {@link AiSearch}
+ * construct provision one for you.
  * ```typescript
  * const bucket = yield* Cloudflare.R2Bucket("docs", {});
  * const search = yield* Cloudflare.AiSearchInstance("docs-search", {
  *   source: bucket.bucketName,
+ *   tokenId: serviceToken.id,
  * });
  * ```
  *
@@ -368,6 +378,72 @@ export type AiSearchInstance = Resource<
  * });
  * ```
  *
+ * @section Grouping under a namespace
+ * Instances live in a namespace (the account-provided `default` when
+ * unspecified). Pass an {@link AiSearchNamespace}'s `name` to group related
+ * instances — the engine then orders this instance after the namespace on
+ * deploy. The namespace is immutable; changing it replaces the instance.
+ * @example Place the instance in a custom namespace
+ * ```typescript
+ * const ns = yield* Cloudflare.AiSearchNamespace("docs-ns", {});
+ * const search = yield* Cloudflare.AiSearchInstance("docs-search", {
+ *   source: bucket.bucketName,
+ *   namespace: ns.name,
+ * });
+ * ```
+ *
+ * @section Binding to an Effect Worker
+ * Bind the instance during the Worker's init phase with
+ * `Cloudflare.AiSearchInstance.bind(instance)`, which attaches the
+ * single-instance `ai_search` binding and returns an Effect-native client
+ * whose `search` / `aiSearch` methods return `Effect`s. Provide
+ * {@link AiSearchInstanceBindingLive} in the Worker's runtime layer.
+ * @example Effect Worker that answers from AI Search
+ * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export default class Api extends Cloudflare.Worker<Api>()(
+ *   "api",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const search = yield* Cloudflare.AiSearchInstance.bind(Search);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const query = new URL(request.url).searchParams.get("q") ?? "";
+ *         const answer = yield* search.aiSearch({ query });
+ *         return yield* HttpServerResponse.json(answer);
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.AiSearchInstanceBindingLive)),
+ * ) {}
+ * ```
+ *
+ * @section Binding to an Async Worker
+ * For a vanilla `async fetch` Worker, pass the instance under `Worker.env`.
+ * The engine attaches the same `ai_search` binding and `InferEnv` types
+ * `env.SEARCH` as the runtime `AutoRAG` handle.
+ * @example Async Worker via `env`
+ * ```typescript
+ * export const Api = Cloudflare.Worker("api", {
+ *   main: "./worker.ts",
+ *   env: { SEARCH: search },
+ * });
+ * export type ApiEnv = Cloudflare.InferEnv<typeof Api>;
+ *
+ * // worker.ts
+ * export default {
+ *   async fetch(request: Request, env: ApiEnv): Promise<Response> {
+ *     const query = new URL(request.url).searchParams.get("q") ?? "";
+ *     return Response.json(await env.SEARCH.aiSearch({ query }));
+ *   },
+ * };
+ * ```
+ *
  * @see https://developers.cloudflare.com/ai-search/
  */
 export const AiSearchInstance = Resource<AiSearchInstance>(
@@ -385,7 +461,7 @@ export const isAiSearchInstance = (value: unknown): value is AiSearchInstance =>
 export const AiSearchInstanceProvider = () =>
   Provider.succeed(AiSearchInstance, {
     stables: [
-      "id",
+      "instanceId",
       "accountId",
       "namespace",
       "type",
@@ -412,7 +488,7 @@ export const AiSearchInstanceProvider = () =>
       // The instance id is its identity — renaming is a replacement.
       const newId = yield* createInstanceId(id, news.instanceId);
       const oldId =
-        output?.id ?? (yield* createInstanceId(id, olds.instanceId));
+        output?.instanceId ?? (yield* createInstanceId(id, olds.instanceId));
       if (newId !== oldId) {
         return { action: "replace" } as const;
       }
@@ -453,7 +529,7 @@ export const AiSearchInstanceProvider = () =>
       // logical id + instance id), so a cold read (lost state) resolves
       // the same identifier as the original create did.
       const instanceId =
-        output?.id ?? (yield* createInstanceId(id, olds?.instanceId));
+        output?.instanceId ?? (yield* createInstanceId(id, olds?.instanceId));
       const observed = yield* getInstance(acct, namespace, instanceId);
       return observed ? toAttributes(observed, acct, namespace) : undefined;
     }),
@@ -499,9 +575,9 @@ export const AiSearchInstanceProvider = () =>
       const acct = output?.accountId ?? accountId;
       const namespace = resolveNamespace(news.namespace);
       const instanceId =
-        output?.id ?? (yield* createInstanceId(id, news.instanceId));
+        output?.instanceId ?? (yield* createInstanceId(id, news.instanceId));
 
-      // Observe — `output.id` is a cache, not a guarantee: a NotFound
+      // Observe — `output.instanceId` is a cache, not a guarantee: a NotFound
       // falls through to "missing" and we recreate.
       let observed = yield* getInstance(acct, namespace, instanceId);
 
@@ -605,7 +681,7 @@ export const AiSearchInstanceProvider = () =>
         .deleteNamespaceInstance({
           accountId: output.accountId,
           name: output.namespace,
-          id: output.id,
+          id: output.instanceId,
         })
         .pipe(
           Effect.catchTag(
@@ -771,7 +847,7 @@ const toAttributes = (
   accountId: string,
   namespace: string,
 ): AiSearchInstanceAttributes => ({
-  id: instance.id,
+  instanceId: instance.id,
   accountId,
   namespace,
   // Distilled widens generated string enums to open unions.

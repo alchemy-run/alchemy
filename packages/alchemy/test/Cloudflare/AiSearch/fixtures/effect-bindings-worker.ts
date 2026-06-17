@@ -33,8 +33,8 @@ export default class AiSearchEffectBindingsWorker extends Cloudflare.Worker<AiSe
       "AiSearchEffectBindingInstance",
       { source: bucket.bucketName },
     );
-    const search = yield* Cloudflare.AiSearchInstanceBinding.bind(instance);
-    const ns = yield* Cloudflare.AiSearchNamespaceBinding.bind(namespace);
+    const search = yield* Cloudflare.AiSearchInstance.bind(instance);
+    const ns = yield* Cloudflare.AiSearchNamespace.bind(namespace);
 
     return {
       fetch: Effect.gen(function* () {
