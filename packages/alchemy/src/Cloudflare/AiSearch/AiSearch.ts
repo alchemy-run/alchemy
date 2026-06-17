@@ -65,32 +65,59 @@ export type AiSearchProps = InputProps<AiSearchInstanceProps, "type"> & {
  * });
  * ```
  *
- * @section Binding to a Worker
+ * @section Binding to an Effect Worker
  *
- * The returned `instance` is an {@link AiSearchInstance}, so it binds to a
- * Worker the same way any AI Search instance does: pass it under
- * `Worker.env`. The engine attaches a single-instance `ai_search` binding
- * (see `toBinding` in `WorkerAsyncBindings.ts`) and orders the deploy
- * bucket → instance → worker.
+ * The returned `instance` is an {@link AiSearchInstance}. Bind it during the
+ * Worker's init phase with `Cloudflare.AiSearchInstance.bind(instance)`, which
+ * attaches the single-instance `ai_search` binding and hands back an
+ * Effect-native client whose `search` / `aiSearch` methods return `Effect`s.
+ * Provide `AiSearchInstanceBindingLive` in the Worker's runtime layer.
  *
- * @example Bind the instance into an async Worker's `env`
+ * @example Effect Worker that answers from AI Search
  * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export default class Api extends Cloudflare.Worker<Api>()(
+ *   "api",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const bucket = yield* Cloudflare.R2Bucket("docs", {});
+ *     const { instance } = yield* Cloudflare.AiSearch("docs-search", {
+ *       source: bucket.bucketName,
+ *     });
+ *     const search = yield* Cloudflare.AiSearchInstance.bind(instance);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const query = new URL(request.url).searchParams.get("q") ?? "";
+ *         const answer = yield* search.aiSearch({ query });
+ *         return yield* HttpServerResponse.json(answer);
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.AiSearchInstanceBindingLive)),
+ * ) {}
+ * ```
+ *
+ * @section Binding to an Async Worker
+ *
+ * For a vanilla `async fetch` Worker, pass the `instance` under `Worker.env`.
+ * The engine attaches the same single-instance `ai_search` binding (see
+ * `toBinding` in `WorkerAsyncBindings.ts`), orders the deploy
+ * bucket → instance → worker, and `InferEnv` types `env.SEARCH` as the
+ * runtime `AutoRAG` handle — no hand-written types.
+ *
+ * @example Async Worker that answers from AI Search
+ * ```typescript
+ * // stack.ts
+ * const bucket = yield* Cloudflare.R2Bucket("docs", {});
  * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
  *   source: bucket.bucketName,
  * });
  *
- * const worker = yield* Cloudflare.Worker("api", {
- *   main: "./worker.ts",
- *   env: { SEARCH: instance },
- * });
- * ```
- *
- * @example Type the async Worker's `env` with `InferEnv`
- * `InferEnv` maps an `AiSearchInstance` binding to the runtime `AutoRAG`
- * handle (an `AiSearchNamespace` maps to `{ get(name): AutoRAG }`), so the
- * worker gets a fully-typed `env.SEARCH` with no hand-written types.
- * ```typescript
- * // stack.ts
  * export const Api = Cloudflare.Worker("api", {
  *   main: "./worker.ts",
  *   env: { SEARCH: instance },
@@ -101,15 +128,12 @@ export type AiSearchProps = InputProps<AiSearchInstanceProps, "type"> & {
  * import type { ApiEnv } from "./stack.ts";
  * export default {
  *   async fetch(request: Request, env: ApiEnv): Promise<Response> {
- *     const answer = await env.SEARCH.aiSearch({ query: "How do I deploy?" });
+ *     const query = new URL(request.url).searchParams.get("q") ?? "";
+ *     const answer = await env.SEARCH.aiSearch({ query });
  *     return Response.json(answer);
  *   },
  * };
  * ```
- *
- * For an Effect-native Worker, prefer
- * `Cloudflare.AiSearchInstanceBinding.bind(instance)`, which returns an
- * Effect-native client instead of the raw `AutoRAG`.
  *
  * @see https://developers.cloudflare.com/ai-search/
  */

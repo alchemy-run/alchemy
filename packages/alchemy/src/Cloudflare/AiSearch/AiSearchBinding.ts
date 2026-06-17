@@ -31,7 +31,7 @@ export class AiSearchError extends Data.TaggedError("AiSearchError")<{
  *
  * Wraps the runtime `AutoRAG` binding so each operation returns an Effect
  * tagged with {@link AiSearchError}. Obtain one from
- * `Cloudflare.AiSearchInstanceBinding.bind(instance)` (or
+ * `Cloudflare.AiSearchInstance.bind(instance)` (or
  * `namespace.get(instanceName)`) during the Worker's init phase.
  */
 export interface AiSearchClient {
@@ -127,7 +127,7 @@ const resolveBinding = <T>(logicalId: string) =>
  * Bind the instance during the Worker's init phase, then use `search` /
  * `aiSearch` from request handlers.
  * ```typescript
- * const search = yield* Cloudflare.AiSearchInstanceBinding.bind(instance);
+ * const search = yield* Cloudflare.AiSearchInstance.bind(instance);
  *
  * return {
  *   fetch: Effect.gen(function* () {

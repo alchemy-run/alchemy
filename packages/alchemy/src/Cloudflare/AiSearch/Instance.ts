@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { AiSearchInstanceBinding } from "./AiSearchBinding.ts";
 
 const AiSearchInstanceTypeId = "Cloudflare.AiSearch.Instance" as const;
 type AiSearchInstanceTypeId = typeof AiSearchInstanceTypeId;
@@ -371,7 +372,9 @@ export type AiSearchInstance = Resource<
  */
 export const AiSearchInstance = Resource<AiSearchInstance>(
   AiSearchInstanceTypeId,
-);
+)({
+  bind: AiSearchInstanceBinding.bind,
+});
 
 /**
  * Returns true if the given value is an AiSearchInstance resource.
