@@ -127,60 +127,16 @@ type CreateTokenPolicy = {
 };
 
 /**
- * Curated set of permission groups granted by `create-token` when
- * `--all-permissions` is NOT passed. Covers the services Alchemy commonly
- * deploys (Workers + storage + zone/DNS) without handing out a god token.
- * Names are matched against the account's live permission groups; any name
- * not available for the account is silently skipped.
+ * Cloudflare scopes that `buildTokenPolicies` knows how to turn into a policy,
+ * mapped to a short human label shown as a hint in the selection prompt.
+ * Groups with any other scope cannot be expressed as a policy and are omitted
+ * from the prompt.
  */
-const ALCHEMY_DEFAULT_PERMISSION_GROUP_NAMES: ReadonlySet<string> = new Set([
-  "Account Settings Read",
-  "Workers Scripts Read",
-  "Workers Scripts Write",
-  "Workers KV Storage Read",
-  "Workers KV Storage Write",
-  "Workers R2 Storage Read",
-  "Workers R2 Storage Write",
-  "Workers Routes Read",
-  "Workers Routes Write",
-  "Workers Tail Read",
-  "Workers Observability Read",
-  "Workers Observability Write",
-  "Workers AI Read",
-  "Workers AI Write",
-  "D1 Read",
-  "D1 Write",
-  "Queues Read",
-  "Queues Write",
-  "Hyperdrive Read",
-  "Hyperdrive Write",
-  "Pages Read",
-  "Pages Write",
-  "Vectorize Read",
-  "Vectorize Write",
-  "Pipelines Read",
-  "Pipelines Write",
-  "AI Gateway Read",
-  "AI Gateway Run",
-  "AI Gateway Write",
-  "Flagship Read",
-  "Flagship Write",
-  "Browser Rendering Read",
-  "Browser Rendering Write",
-  "Images Read",
-  "Images Write",
-  "Stream Read",
-  "Stream Write",
-  "Secrets Store Read",
-  "Secrets Store Write",
-  "DNS Read",
-  "DNS Write",
-  "Zone Read",
-  "Zone Settings Read",
-  "Zone Settings Write",
-  "SSL and Certificates Read",
-  "SSL and Certificates Write",
-]);
+const SELECTABLE_SCOPE_LABELS: Record<string, string> = {
+  "com.cloudflare.api.account": "account",
+  "com.cloudflare.api.account.zone": "zone",
+  "com.cloudflare.edge.r2.bucket": "r2",
+};
 
 /**
  * Group permission groups by their Cloudflare scope and produce one policy
@@ -296,8 +252,8 @@ const tokenAccountIdFlag = Flag.string("account-id").pipe(
  * stored.
  *
  * With `--all-permissions` it builds a "superuser" token spanning every
- * permission group (after a confirmation prompt). Otherwise it grants a
- * curated set covering the services Alchemy commonly deploys.
+ * permission group (after a confirmation prompt). Otherwise it prompts the
+ * user to pick which permission groups to grant from the account's live set.
  */
 const createTokenCommand = Command.make(
   "create-token",
@@ -399,11 +355,32 @@ const createTokenCommand = Command.make(
             : [],
         );
 
-        const selected = allPermissions
-          ? liveGroups
-          : liveGroups.filter((g) =>
-              ALCHEMY_DEFAULT_PERMISSION_GROUP_NAMES.has(g.name),
-            );
+        let selected: typeof liveGroups;
+        if (allPermissions) {
+          selected = liveGroups;
+        } else {
+          // Only groups whose scope maps to one of the three policy buckets
+          // can actually become a policy (see `buildTokenPolicies`); offering
+          // the rest would let the user "select" permissions that are then
+          // silently dropped. Restrict the prompt to selectable groups.
+          const selectable = liveGroups
+            .filter((g) => SELECTABLE_SCOPE_LABELS[g.scopes[0]!] !== undefined)
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+          const chosenIds = yield* Clank.multiselect<string>({
+            message:
+              "Select the permission groups to grant (space to toggle, enter to confirm)",
+            options: selectable.map((g) => ({
+              value: g.id,
+              label: g.name,
+              hint: SELECTABLE_SCOPE_LABELS[g.scopes[0]!],
+            })),
+            required: true,
+          });
+
+          const chosen = new Set(chosenIds);
+          selected = selectable.filter((g) => chosen.has(g.id));
+        }
         const policies = buildTokenPolicies(resolvedAccountId, selected);
 
         if (policies.length === 0) {
