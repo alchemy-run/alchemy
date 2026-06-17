@@ -6,14 +6,17 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 /**
  * Effect-native Worker fixture exercising the Effect-first AI Search bindings:
- * - `AiSearchInstanceBinding.bind(instance)` attaches the single-instance
- *   `ai_search` binding and returns an Effect-native `AiSearchClient`.
+ * - `AiSearchInstanceBinding.bind(search)` attaches the single-instance
+ *   `ai_search` binding and returns an Effect-native `AiSearchClient`. The
+ *   `search` is the `AiSearch` construct's result — proving it's usable
+ *   anywhere an `AiSearchInstance` is, here passed straight to `bind(...)`.
  * - `AiSearchNamespaceBinding.bind(namespace)` attaches the
  *   `ai_search_namespace` binding; `.get(name)` scopes to an instance.
  *
- * The `/bindings` route resolves each client's `raw` `AutoRAG` handle and
- * reports its runtime shape — proving the Effect clients wire through to the
- * live runtime bindings (it does not query, which needs indexed data).
+ * The `/bindings` route resolves each client's `raw` runtime handle (an
+ * `AiSearchInstance` / `AiSearchNamespace`) and reports its runtime shape —
+ * proving the Effect clients wire through to the live runtime bindings (it
+ * does not query, which needs indexed data).
  */
 export default class AiSearchEffectBindingsWorker extends Cloudflare.Worker<AiSearchEffectBindingsWorker>()(
   "AiSearchEffectBindingsWorker",
@@ -21,19 +24,15 @@ export default class AiSearchEffectBindingsWorker extends Cloudflare.Worker<AiSe
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2Bucket(
-      "AiSearchEffectBindingBucket",
-      {},
-    );
+    const bucket = yield* Cloudflare.R2Bucket("AiSearchEffectBindingBucket");
     const namespace = yield* Cloudflare.AiSearchNamespace(
       "AiSearchEffectBindingNs",
-      {},
     );
-    const instance = yield* Cloudflare.AiSearchInstance(
+    const aiSearch = yield* Cloudflare.AiSearch(
       "AiSearchEffectBindingInstance",
-      { source: bucket.bucketName },
+      { source: bucket },
     );
-    const search = yield* Cloudflare.AiSearchInstance.bind(instance);
+    const search = yield* Cloudflare.AiSearchInstance.bind(aiSearch);
     const ns = yield* Cloudflare.AiSearchNamespace.bind(namespace);
 
     return {
@@ -41,14 +40,14 @@ export default class AiSearchEffectBindingsWorker extends Cloudflare.Worker<AiSe
         const request = yield* HttpServerRequest;
         if (request.url.includes("/bindings")) {
           const raw = yield* search.raw;
-          const nsRaw = yield* ns.get("docs-search").raw;
+          const nsRaw = yield* ns.raw;
           return yield* HttpServerResponse.json({
             mode: "effect",
             searchRaw: typeof raw,
-            searchAiSearch: typeof raw.aiSearch,
+            searchChatCompletions: typeof raw.chatCompletions,
             searchSearch: typeof raw.search,
             nsRaw: typeof nsRaw,
-            nsAiSearch: typeof nsRaw.aiSearch,
+            nsChatCompletions: typeof nsRaw.get("docs-search").chatCompletions,
           });
         }
         return HttpServerResponse.text("ok");

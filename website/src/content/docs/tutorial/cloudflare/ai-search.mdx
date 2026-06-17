@@ -94,8 +94,10 @@ const instance = yield* Cloudflare.AiSearchInstance("Instance", {
 ```
 
 `AiSearch` translates the `source` bucket into the instance's `type: "r2"` +
-`source: bucket.bucketName` for you. It returns `{ instance, token }` so
-you can reach the underlying `AiSearchInstance` when you need to bind it.
+`source: bucket.bucketName` for you. The value it returns **is** the
+`AiSearchInstance` (with the managed `serviceToken` attached), so you can pass
+it straight to anything that expects an `AiSearchInstance` — no destructuring
+needed.
 
 ## Index only part of the bucket
 
@@ -135,6 +137,25 @@ Otherwise the default — letting the construct provision a least-privilege
 token that lives in your stack's state and is torn down on `destroy` — is
 the simplest path.
 
+## Group pipelines under a namespace
+
+Pass an `AiSearchNamespace` resource as `namespace` to group related
+pipelines under it instead of the account-provided `default` namespace.
+
+```typescript
+const Knowledge = Cloudflare.AiSearchNamespace("Knowledge", {});
+
+export const Search = Cloudflare.AiSearch("Search", {
+  source: Docs,
+  namespace: Knowledge,
+});
+```
+
+Passing the namespace resource (not its name) lets the engine order the
+pipeline after the namespace on deploy and tear it down before the
+namespace on destroy. The namespace is immutable — changing it replaces
+the pipeline.
+
 ## Add both to the stack
 
 ```diff lang="typescript"
@@ -149,12 +170,12 @@ the simplest path.
    Effect.gen(function* () {
      const api = yield* Api;
 +    const docs = yield* Docs;
-+    const { instance } = yield* Search;
++    const search = yield* Search;
 
      return {
        url: api.url.as<string>(),
 +      bucket: docs.bucketName,
-+      search: instance.instanceId,
++      search: search.instanceId,
      };
    }),
  );
@@ -162,11 +183,12 @@ the simplest path.
 
 `yield* Search` registers the construct — the bucket, both tokens, and
 the instance all get created on the next deploy, in dependency order.
-We destructure `instance` because that's what the Worker binds.
+The value is the `AiSearchInstance` itself, so `search.instanceId` reads
+straight off it.
 
 ## Bind the instance into the Worker
 
-`Cloudflare.AiSearchInstance.bind(instance)` attaches the
+`Cloudflare.AiSearchInstance.bind(search)` attaches the
 single-instance `ai_search` binding and returns a typed Effect client.
 Bind it during the Worker's init phase.
 
@@ -180,8 +202,8 @@ Bind it during the Worker's init phase.
    "Api",
    { main: import.meta.filename },
    Effect.gen(function* () {
-+    const { instance } = yield* Search;
-+    const search = yield* Cloudflare.AiSearchInstance.bind(instance);
++    const aiSearch = yield* Search;
++    const search = yield* Cloudflare.AiSearchInstance.bind(aiSearch);
 
      return {
        fetch: Effect.gen(function* () {
@@ -195,13 +217,13 @@ Bind it during the Worker's init phase.
 
 `Cloudflare.AiSearchInstanceBindingLive` is the runtime side of the
 binding. Provide it once at the bottom of the Init layer chain and the
-`bind(...)` above resolves to a live `AutoRAG` handle at runtime.
+`bind(...)` above resolves to a live `AiSearchInstance` handle at runtime.
 
 ## Answer questions on `/ask`
 
-`search.aiSearch({ query })` runs the full RAG pipeline — retrieve the
-relevant chunks, then answer with the configured generation model. It
-returns an Effect, so call it like any other.
+`search.chatCompletions({ messages })` runs the full RAG pipeline —
+retrieve the relevant chunks, then answer with the configured generation
+model. It returns an Effect, so call it like any other.
 
 ```diff lang="typescript"
 +import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
@@ -214,10 +236,12 @@ returns an Effect, so call it like any other.
 
 +      if (url.pathname === "/ask") {
 +        const query = url.searchParams.get("q") ?? "What is this about?";
-+        const answer = yield* search.aiSearch({ query }).pipe(Effect.orDie);
++        const answer = yield* search
++          .chatCompletions({ messages: [{ role: "user", content: query }] })
++          .pipe(Effect.orDie);
 +        return yield* HttpServerResponse.json({
-+          response: answer.response,
-+          sources: answer.data.map((d) => d.filename),
++          response: answer.choices[0]?.message.content,
++          sources: answer.chunks.map((c) => c.item.key),
 +        });
 +      }
 
@@ -226,9 +250,9 @@ returns an Effect, so call it like any other.
    };
 ```
 
-`answer.response` is the generated text; `answer.data` is the source
-chunks it drew from, so we surface their filenames as citations.
-`Effect.orDie` turns an `AiSearchError` into a 500 — swap in
+`answer.choices[0].message.content` is the generated text; `answer.chunks`
+are the source chunks it drew from, so we surface their item keys as
+citations. `Effect.orDie` turns an `AiSearchError` into a 500 — swap in
 `Effect.catchTag("AiSearchError", …)` if you want typed handling.
 
 ## Retrieve chunks without generation on `/search`
@@ -241,12 +265,12 @@ no generation step, so it's cheaper and faster.
 +      if (url.pathname === "/search") {
 +        const query = url.searchParams.get("q") ?? "";
 +        const hits = yield* search.search({ query }).pipe(Effect.orDie);
-+        return yield* HttpServerResponse.json(hits.data);
++        return yield* HttpServerResponse.json(hits.chunks);
 +      }
 ```
 
-`hits.data` is the ranked list of chunks with their scores and source
-metadata — no `response` field, because nothing was generated.
+`hits.chunks` is the ranked list of chunks with their scores and source
+metadata — no generated answer, because nothing was generated.
 
 ## Try it
 
@@ -279,10 +303,6 @@ for the underlying resources directly when you need to:
 - **share one token across many instances** — create the
   `AiSearchToken` once and pass its `id` as `tokenId` to each
   `AiSearchInstance`,
-- **group instances under a namespace** — create an
-  `AiSearchNamespace` and pass its `name` to each instance's
-  `namespace` prop (the namespace is immutable; changing it replaces
-  the instance),
 - **adopt an existing instance or token** rather than create one.
 
 Everything the helper does is just these resources composed — there's

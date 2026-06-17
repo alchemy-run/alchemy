@@ -19,57 +19,69 @@ export class AiSearchError extends Data.TaggedError("AiSearchError")<{
    */
   message: string;
   /**
-   * Original error thrown by the Cloudflare `AutoRAG` runtime binding.
+   * Original error thrown by the Cloudflare AI Search runtime binding.
    */
   cause: unknown;
 }> {}
 
 /**
- * Effect-native client for a Cloudflare AI Search (`AutoRAG`) Worker binding.
+ * Effect-native client for a Cloudflare AI Search Worker binding.
  *
- * Wraps the runtime `AutoRAG` binding so each operation returns an Effect
- * tagged with {@link AiSearchError}. Obtain one from
- * `Cloudflare.AiSearchInstance.bind(instance)` (or
- * `namespace.get(instanceName)`) during the Worker's init phase.
+ * Wraps the standalone `AiSearchInstance` runtime binding (the binding the
+ * `ai_search` type resolves to — the deprecated `AutoRAG` shape is gone) so
+ * each operation returns an Effect tagged with {@link AiSearchError}. Obtain
+ * one from `Cloudflare.AiSearchInstance.bind(instance)` (or a namespace
+ * client's `.get(instanceName)`) during the Worker's init phase.
  */
 export interface AiSearchClient {
   /**
-   * Effect resolving to the raw underlying Cloudflare `AutoRAG` binding. Use
-   * this for direct access (e.g. streaming `aiSearch`) not covered below.
+   * Effect resolving to the raw underlying Cloudflare `AiSearchInstance`
+   * binding. Use this for operations not surfaced below (`items`, `jobs`,
+   * `update`, or streaming `chatCompletions`).
    */
-  raw: Effect.Effect<runtime.AutoRAG, never, RuntimeContext>;
-  /**
-   * List the instances reachable through this binding.
-   */
-  list(): Effect.Effect<
-    runtime.AutoRagListResponse,
-    AiSearchError,
-    RuntimeContext
-  >;
+  raw: Effect.Effect<runtime.AiSearchInstance, never, RuntimeContext>;
   /**
    * Retrieve the chunks most relevant to a query without generation.
    */
   search(
-    params: runtime.AutoRagSearchRequest,
+    params: runtime.AiSearchSearchRequest,
   ): Effect.Effect<
-    runtime.AutoRagSearchResponse,
+    runtime.AiSearchSearchResponse,
     AiSearchError,
     RuntimeContext
   >;
   /**
    * Run retrieval-augmented generation: retrieve relevant chunks and answer
-   * the query with the configured model.
+   * with the configured model (non-streaming).
    */
-  aiSearch(
-    params: runtime.AutoRagAiSearchRequest,
+  chatCompletions(
+    params: runtime.AiSearchChatCompletionsRequest,
   ): Effect.Effect<
-    runtime.AutoRagAiSearchResponse,
+    runtime.AiSearchChatCompletionsResponse,
+    AiSearchError,
+    RuntimeContext
+  >;
+  /**
+   * Metadata about this instance (id, models, source, status, …).
+   */
+  info(): Effect.Effect<
+    runtime.AiSearchInstanceInfo,
+    AiSearchError,
+    RuntimeContext
+  >;
+  /**
+   * Indexing statistics (item counts per status, last activity, engine).
+   */
+  stats(): Effect.Effect<
+    runtime.AiSearchStatsResponse,
     AiSearchError,
     RuntimeContext
   >;
 }
 
-const tryAutoRag = <A>(fn: () => Promise<A>): Effect.Effect<A, AiSearchError> =>
+const tryAiSearch = <A>(
+  fn: () => Promise<A>,
+): Effect.Effect<A, AiSearchError> =>
   Effect.tryPromise({
     try: fn,
     catch: (cause) =>
@@ -84,17 +96,21 @@ const tryAutoRag = <A>(fn: () => Promise<A>): Effect.Effect<A, AiSearchError> =>
 
 /**
  * Build an {@link AiSearchClient} from an Effect that lazily resolves the raw
- * `AutoRAG` runtime binding. The resolution is deferred so `.bind(...)` works
- * at both plan time (where `WorkerEnvironment` is absent) and runtime.
+ * `AiSearchInstance` runtime binding. The resolution is deferred so
+ * `.bind(...)` works at both plan time (where `WorkerEnvironment` is absent)
+ * and runtime.
  */
-const makeClient = (rawEff: Effect.Effect<runtime.AutoRAG>): AiSearchClient => {
-  const use = <A>(fn: (raw: runtime.AutoRAG) => Promise<A>) =>
-    Effect.flatMap(rawEff, (raw) => tryAutoRag(() => fn(raw)));
+const makeClient = (
+  rawEff: Effect.Effect<runtime.AiSearchInstance>,
+): AiSearchClient => {
+  const use = <A>(fn: (raw: runtime.AiSearchInstance) => Promise<A>) =>
+    Effect.flatMap(rawEff, (raw) => tryAiSearch(() => fn(raw)));
   return {
     raw: rawEff,
-    list: () => use((raw) => raw.list()),
     search: (params) => use((raw) => raw.search(params)),
-    aiSearch: (params) => use((raw) => raw.aiSearch(params)),
+    chatCompletions: (params) => use((raw) => raw.chatCompletions(params)),
+    info: () => use((raw) => raw.info()),
+    stats: () => use((raw) => raw.stats()),
   } satisfies AiSearchClient;
 };
 
@@ -113,7 +129,7 @@ const resolveBinding = <T>(logicalId: string) =>
 /**
  * Binding service turning an {@link AiSearchInstance} into an Effect-native
  * {@link AiSearchClient} for Worker runtime code. The single-instance
- * `ai_search` binding resolves directly to an `AutoRAG`.
+ * `ai_search` binding resolves directly to a runtime `AiSearchInstance`.
  *
  * Provide {@link AiSearchInstanceBindingLive} in the Worker's runtime layer.
  *
@@ -121,15 +137,18 @@ const resolveBinding = <T>(logicalId: string) =>
  * @category AI
  *
  * @section Querying AI Search
- * @example Search and answer from a Worker
- * Bind the instance during the Worker's init phase, then use `search` /
- * `aiSearch` from request handlers.
+ * @example Retrieve and generate from a Worker
+ * Bind the instance during the Worker's init phase, then use `search`
+ * (retrieval only) or `chatCompletions` (retrieval + generation) from request
+ * handlers.
  * ```typescript
  * const search = yield* Cloudflare.AiSearchInstance.bind(instance);
  *
  * return {
  *   fetch: Effect.gen(function* () {
- *     const answer = yield* search.aiSearch({ query: "How do I deploy?" });
+ *     const answer = yield* search.chatCompletions({
+ *       messages: [{ role: "user", content: "How do I deploy?" }],
+ *     });
  *     return yield* HttpServerResponse.json(answer);
  *   }),
  * };
@@ -149,7 +168,9 @@ export const AiSearchInstanceBindingLive = Layer.effect(
     const Policy = yield* AiSearchInstanceBindingPolicy;
     return Effect.fn(function* (instance: AiSearchInstance) {
       yield* Policy(instance);
-      const rawEff = yield* resolveBinding<runtime.AutoRAG>(instance.LogicalId);
+      const rawEff = yield* resolveBinding<runtime.AiSearchInstance>(
+        instance.LogicalId,
+      );
       return makeClient(rawEff);
     });
   }),
@@ -192,22 +213,46 @@ export const AiSearchInstanceBindingPolicyLive =
   );
 
 /**
- * Effect-native client for an `ai_search_namespace` binding. `.get(name)`
- * selects an instance within the bound namespace and returns its
- * {@link AiSearchClient}.
+ * Effect-native client for an `ai_search_namespace` binding, wrapping the
+ * runtime `AiSearchNamespace`. `.get(name)` selects an instance within the
+ * bound namespace and returns its {@link AiSearchClient}; `list` / `search`
+ * operate across the namespace.
  */
 export interface AiSearchNamespaceClient {
+  /**
+   * Effect resolving to the raw underlying Cloudflare `AiSearchNamespace`
+   * binding. Use this for operations not surfaced below (`create`, `delete`,
+   * multi-instance `chatCompletions`).
+   */
+  raw: Effect.Effect<runtime.AiSearchNamespace, never, RuntimeContext>;
   /**
    * Select an instance within the bound namespace by name.
    */
   get(instanceName: string): AiSearchClient;
+  /**
+   * List the instances within the bound namespace.
+   */
+  list(
+    params?: runtime.AiSearchListInstancesParams,
+  ): Effect.Effect<runtime.AiSearchListResponse, AiSearchError, RuntimeContext>;
+  /**
+   * Search across multiple instances in the bound namespace (requires
+   * `ai_search_options.instance_ids`).
+   */
+  search(
+    params: runtime.AiSearchMultiSearchRequest,
+  ): Effect.Effect<
+    runtime.AiSearchMultiSearchResponse,
+    AiSearchError,
+    RuntimeContext
+  >;
 }
 
 /**
  * Binding service turning an {@link AiSearchNamespace} into an
  * {@link AiSearchNamespaceClient} for Worker runtime code. The
- * `ai_search_namespace` binding resolves to an object whose `.get(name)`
- * selects an instance within the namespace at runtime.
+ * `ai_search_namespace` binding resolves to a runtime `AiSearchNamespace`
+ * whose `.get(name)` selects an instance within the namespace at runtime.
  *
  * Provide {@link AiSearchNamespaceBindingLive} in the Worker's runtime layer.
  *
@@ -221,7 +266,9 @@ export interface AiSearchNamespaceClient {
  *
  * return {
  *   fetch: Effect.gen(function* () {
- *     const answer = yield* ns.get("docs-search").aiSearch({ query });
+ *     const answer = yield* ns.get("docs-search").chatCompletions({
+ *       messages: [{ role: "user", content: query }],
+ *     });
  *     return yield* HttpServerResponse.json(answer);
  *   }),
  * };
@@ -241,12 +288,17 @@ export const AiSearchNamespaceBindingLive = Layer.effect(
     const Policy = yield* AiSearchNamespaceBindingPolicy;
     return Effect.fn(function* (namespace: AiSearchNamespace) {
       yield* Policy(namespace);
-      const nsEff = yield* resolveBinding<{
-        get(name: string): runtime.AutoRAG;
-      }>(namespace.LogicalId);
+      const nsEff = yield* resolveBinding<runtime.AiSearchNamespace>(
+        namespace.LogicalId,
+      );
       return {
+        raw: nsEff,
         get: (instanceName) =>
           makeClient(nsEff.pipe(Effect.map((ns) => ns.get(instanceName)))),
+        list: (params) =>
+          Effect.flatMap(nsEff, (ns) => tryAiSearch(() => ns.list(params))),
+        search: (params) =>
+          Effect.flatMap(nsEff, (ns) => tryAiSearch(() => ns.search(params))),
       } satisfies AiSearchNamespaceClient;
     });
   }),

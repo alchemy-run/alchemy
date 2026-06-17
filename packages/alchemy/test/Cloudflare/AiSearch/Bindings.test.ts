@@ -40,16 +40,19 @@ test(
 
     const body = (yield* res.json) as {
       search: string;
-      searchAiSearch: string;
+      searchChatCompletions: string;
+      searchSearch: string;
       ns: string;
       nsGet: string;
     };
 
-    // Single-instance `ai_search` binding resolves to an `AutoRAG` object
-    // exposing `aiSearch()`.
+    // Single-instance `ai_search` binding resolves to an `AiSearchInstance`
+    // object exposing `search()` / `chatCompletions()`.
     expect(body.search).toBe("object");
-    expect(body.searchAiSearch).toBe("function");
-    // `ai_search_namespace` binding resolves to an object with `.get()`.
+    expect(body.searchChatCompletions).toBe("function");
+    expect(body.searchSearch).toBe("function");
+    // `ai_search_namespace` binding resolves to an `AiSearchNamespace` with
+    // `.get()`.
     expect(body.ns).toBe("object");
     expect(body.nsGet).toBe("function");
   }).pipe(logLevel),
@@ -59,7 +62,7 @@ test(
 // The Effect worker attaches the same two binding flavors via
 // `AiSearchInstanceBinding.bind(...)` / `AiSearchNamespaceBinding.bind(...)`
 // and reads them through the Effect-native client. Resolving each client's
-// `raw` `AutoRAG` handle proves the Effect-first path wires through to the
+// `raw` runtime handle proves the Effect-first path wires through to the
 // live runtime bindings.
 test(
   "effect worker resolves ai_search + ai_search_namespace via Effect clients",
@@ -80,25 +83,24 @@ test(
     const body = (yield* res.json) as {
       mode: string;
       searchRaw: string;
-      searchAiSearch: string;
+      searchChatCompletions: string;
       searchSearch: string;
       nsRaw: string;
-      nsAiSearch: string;
+      nsChatCompletions: string;
     };
 
     expect(body.mode).toBe("effect");
     // `AiSearchInstanceBinding.bind(...).raw` resolves to the runtime
-    // `AutoRAG` exposing `aiSearch()` / `search()`.
+    // `AiSearchInstance` exposing `search()` / `chatCompletions()`.
     expect(body.searchRaw).toBe("object");
-    expect(body.searchAiSearch).toBe("function");
+    expect(body.searchChatCompletions).toBe("function");
     expect(body.searchSearch).toBe("function");
-    // `AiSearchNamespaceBinding.bind(...).get(name).raw` resolves to an
-    // `AutoRAG` scoped to the named instance within the namespace. The
-    // namespace-scoped handle is a callable runtime proxy (`typeof`
-    // `"function"`), unlike the single-instance handle (`"object"`) — either
-    // way `aiSearch()` is callable on it.
+    // `AiSearchNamespaceBinding.bind(...).raw` resolves to the runtime
+    // `AiSearchNamespace`; `.get(name)` scopes to an instance exposing
+    // `chatCompletions()`. The namespace handle may be a callable runtime
+    // proxy (`typeof` `"function"`) or an object.
     expect(["object", "function"]).toContain(body.nsRaw);
-    expect(body.nsAiSearch).toBe("function");
+    expect(body.nsChatCompletions).toBe("function");
   }).pipe(logLevel),
   { timeout: 240_000 },
 );

@@ -3,7 +3,7 @@
 /**
  * Plain (non-Effect) Worker handler exercising the two AI Search binding
  * shapes wired via `env`:
- * - `SEARCH` is a single-instance `ai_search` binding (an `AutoRAG`).
+ * - `SEARCH` is a single-instance `ai_search` binding (an `AiSearchInstance`).
  * - `NS` is an `ai_search_namespace` binding (`.get(name)` selects an
  *   instance within the namespace).
  *
@@ -13,8 +13,8 @@
  * Worker deploy accepted them.
  */
 interface Env {
-  SEARCH: AutoRAG;
-  NS: { get(instanceName: string): AutoRAG };
+  SEARCH: AiSearchInstance;
+  NS: AiSearchNamespace;
 }
 
 export default {
@@ -23,7 +23,8 @@ export default {
     if (url.pathname === "/bindings") {
       return Response.json({
         search: typeof env.SEARCH,
-        searchAiSearch: typeof env.SEARCH?.aiSearch,
+        searchChatCompletions: typeof env.SEARCH?.chatCompletions,
+        searchSearch: typeof env.SEARCH?.search,
         ns: typeof env.NS,
         nsGet: typeof env.NS?.get,
       });

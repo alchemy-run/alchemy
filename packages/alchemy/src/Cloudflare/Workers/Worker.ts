@@ -141,7 +141,8 @@ export type WorkerServices =
   | Worker
   | Request
   | WorkerExecutionContext
-  | WorkerEnvironment;
+  | WorkerEnvironment
+  | CloudflareEnvironment;
 
 export type WorkerShape = Main<WorkerServices>;
 

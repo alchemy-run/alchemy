@@ -9,10 +9,8 @@ import {
   type AiSearchInstanceProps,
   type AiSearchSourceParams,
 } from "./AiSearchInstance.ts";
-import {
-  AiSearchToken,
-  type AiSearchToken as AiSearchTokenType,
-} from "./AiSearchToken.ts";
+import type { AiSearchNamespace } from "./AiSearchNamespace.ts";
+import { AiSearchToken } from "./AiSearchToken.ts";
 
 type WebCrawlerParams = NonNullable<AiSearchSourceParams["webCrawler"]>;
 
@@ -57,8 +55,18 @@ export type AiSearchStore = {
  */
 export type AiSearchSharedProps = Omit<
   InputProps<AiSearchInstanceProps, "type">,
-  "type" | "source" | "sourceParams"
->;
+  "type" | "source" | "sourceParams" | "namespace"
+> & {
+  /**
+   * Namespace to group this pipeline under. Pass an {@link AiSearchNamespace}
+   * resource — the engine orders this pipeline after the namespace on deploy
+   * and tears it down before the namespace on destroy. Omit to place the
+   * pipeline in the account-provided `default` namespace. The namespace is
+   * immutable — changing it triggers a replacement.
+   * @default the account-provided `default` namespace
+   */
+  namespace?: AiSearchNamespace;
+};
 
 /**
  * An R2-backed AI Search pipeline. Passing an {@link R2Bucket} as `source`
@@ -115,14 +123,19 @@ export type AiSearchWebCrawlerProps = AiSearchSharedProps & {
  */
 export type AiSearchProps = AiSearchR2Props | AiSearchWebCrawlerProps;
 
-/** Drop `undefined` entries; return `undefined` when nothing is left. */
-const clean = <T extends Record<string, unknown>>(
-  obj: T,
-): { [K in keyof T]: T[K] } | undefined => {
-  const entries = Object.entries(obj).filter(([, v]) => v !== undefined);
-  return entries.length
-    ? (Object.fromEntries(entries) as { [K in keyof T]: T[K] })
-    : undefined;
+/**
+ * The result of the {@link AiSearch} construct. It *is* the underlying
+ * {@link AiSearchInstance}, augmented with the managed `serviceToken`, so it
+ * can be passed anywhere an `AiSearchInstance` is expected —
+ * `AiSearchInstance.bind(search)`, a Worker's `env`, etc.
+ */
+export type AiSearch = AiSearchInstance & {
+  /**
+   * The managed AI Search service token minted for an R2 source, or
+   * `undefined` when the source is a web crawler (no token needed) or you
+   * supplied your own `tokenId`.
+   */
+  serviceToken: AiSearchToken | undefined;
 };
 
 /**
@@ -144,6 +157,11 @@ const clean = <T extends Record<string, unknown>>(
  * Drop down to the low-level resources directly when you need to share a
  * token across instances, adopt an existing one, or bind a namespace.
  *
+ * The returned value *is* an {@link AiSearchInstance} (augmented with the
+ * managed `serviceToken`, `undefined` for a web crawler), so an `AiSearch`
+ * is usable anywhere an `AiSearchInstance` is expected — pass it straight to
+ * `AiSearchInstance.bind(search)` or a Worker's `env`.
+ *
  * @resource
  * @product AI Search
  * @category AI
@@ -152,14 +170,14 @@ const clean = <T extends Record<string, unknown>>(
  * Pass an {@link R2Bucket} as `source` — its presence selects R2.
  * ```typescript
  * const bucket = yield* Cloudflare.R2Bucket("docs");
- * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
+ * const search = yield* Cloudflare.AiSearch("docs-search", {
  *   source: bucket,
  * });
  * ```
  *
  * @example Index only part of a bucket
  * ```typescript
- * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
+ * const search = yield* Cloudflare.AiSearch("docs-search", {
  *   source: bucket,
  *   prefix: "docs/",
  *   include: ["/docs/**"],
@@ -169,7 +187,7 @@ const clean = <T extends Record<string, unknown>>(
  *
  * @example Reuse an existing service token
  * ```typescript
- * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
+ * const search = yield* Cloudflare.AiSearch("docs-search", {
  *   source: bucket,
  *   tokenId: existingToken.id,
  * });
@@ -180,7 +198,7 @@ const clean = <T extends Record<string, unknown>>(
  * needed). `parse.type` defaults to `"sitemap"`; use `"crawl"` to follow
  * links from the seed instead.
  * ```typescript
- * const { instance } = yield* Cloudflare.AiSearch("site-search", {
+ * const search = yield* Cloudflare.AiSearch("site-search", {
  *   source: "https://example.com",
  *   parse: { type: "crawl", contentSelector: [{ path: "/docs", selector: "main" }] },
  *   crawl: { depth: 3, includeSubdomains: true },
@@ -190,7 +208,7 @@ const clean = <T extends Record<string, unknown>>(
  * @example Store crawl output in your own bucket
  * ```typescript
  * const store = yield* Cloudflare.R2Bucket("crawl-store");
- * const { instance } = yield* Cloudflare.AiSearch("site-search", {
+ * const search = yield* Cloudflare.AiSearch("site-search", {
  *   source: "https://example.com",
  *   parse: { type: "crawl" },
  *   store: { bucket: store },
@@ -199,11 +217,12 @@ const clean = <T extends Record<string, unknown>>(
  *
  * @section Binding to an Effect Worker
  *
- * The returned `instance` is an {@link AiSearchInstance}. Bind it during the
- * Worker's init phase with `Cloudflare.AiSearchInstance.bind(instance)`, which
+ * The returned `search` is an {@link AiSearchInstance}. Bind it during the
+ * Worker's init phase with `Cloudflare.AiSearchInstance.bind(search)`, which
  * attaches the single-instance `ai_search` binding and hands back an
- * Effect-native client whose `search` / `aiSearch` methods return `Effect`s.
- * Provide `AiSearchInstanceBindingLive` in the Worker's runtime layer.
+ * Effect-native client whose `search` / `chatCompletions` methods return
+ * `Effect`s. Provide `AiSearchInstanceBindingLive` in the Worker's runtime
+ * layer.
  *
  * @example Effect Worker that answers from AI Search
  * ```typescript
@@ -217,16 +236,18 @@ const clean = <T extends Record<string, unknown>>(
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     const bucket = yield* Cloudflare.R2Bucket("docs");
- *     const { instance } = yield* Cloudflare.AiSearch("docs-search", {
+ *     const aiSearch = yield* Cloudflare.AiSearch("docs-search", {
  *       source: bucket,
  *     });
- *     const search = yield* Cloudflare.AiSearchInstance.bind(instance);
+ *     const search = yield* Cloudflare.AiSearchInstance.bind(aiSearch);
  *
  *     return {
  *       fetch: Effect.gen(function* () {
  *         const request = yield* HttpServerRequest;
  *         const query = new URL(request.url).searchParams.get("q") ?? "";
- *         const answer = yield* search.aiSearch({ query });
+ *         const answer = yield* search.chatCompletions({
+ *           messages: [{ role: "user", content: query }],
+ *         });
  *         return yield* HttpServerResponse.json(answer);
  *       }),
  *     };
@@ -236,23 +257,23 @@ const clean = <T extends Record<string, unknown>>(
  *
  * @section Binding to an Async Worker
  *
- * For a vanilla `async fetch` Worker, pass the `instance` under `Worker.env`.
+ * For a vanilla `async fetch` Worker, pass the `search` under `Worker.env`.
  * The engine attaches the same single-instance `ai_search` binding (see
  * `toBinding` in `WorkerAsyncBindings.ts`), orders the deploy
  * bucket → instance → worker, and `InferEnv` types `env.SEARCH` as the
- * runtime `AutoRAG` handle — no hand-written types.
+ * runtime `AiSearchInstance` handle — no hand-written types.
  *
  * @example Async Worker that answers from AI Search
  * ```typescript
  * // stack.ts
  * const bucket = yield* Cloudflare.R2Bucket("docs");
- * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
+ * const search = yield* Cloudflare.AiSearch("docs-search", {
  *   source: bucket,
  * });
  *
  * export const Api = Cloudflare.Worker("api", {
  *   main: "./worker.ts",
- *   env: { SEARCH: instance },
+ *   env: { SEARCH: search },
  * });
  * export type ApiEnv = Cloudflare.InferEnv<typeof Api>;
  *
@@ -261,7 +282,9 @@ const clean = <T extends Record<string, unknown>>(
  * export default {
  *   async fetch(request: Request, env: ApiEnv): Promise<Response> {
  *     const query = new URL(request.url).searchParams.get("q") ?? "";
- *     const answer = await env.SEARCH.aiSearch({ query });
+ *     const answer = await env.SEARCH.chatCompletions({
+ *       messages: [{ role: "user", content: query }],
+ *     });
  *     return Response.json(answer);
  *   },
  * };
@@ -282,11 +305,12 @@ export const AiSearch = Construct.fn(function* (
     parse,
     crawl,
     store,
+    namespace,
     ...shared
   } = props;
 
   let tokenId = shared.tokenId;
-  let serviceToken: AiSearchTokenType | undefined;
+  let serviceToken: AiSearchToken | undefined;
   let type: "r2" | "web-crawler";
   let instanceSource: Input<string>;
   let sourceParams: Input<AiSearchSourceParams> | undefined;
@@ -351,11 +375,27 @@ export const AiSearch = Construct.fn(function* (
 
   const instance = yield* AiSearchInstance("Instance", {
     ...shared,
+    // The instance is keyed by namespace name; pass the namespace's `name`
+    // output so the engine orders instance-after-namespace.
+    namespace: namespace?.name,
     type,
     source: instanceSource,
     tokenId,
     sourceParams,
   });
 
-  return { instance, token: serviceToken };
+  // Return the instance itself (augmented with the managed `serviceToken`)
+  // so an `AiSearch` is usable anywhere an `AiSearchInstance` is expected —
+  // `AiSearchInstance.bind(search)`, `env: { SEARCH: search }`, etc.
+  return Object.assign(instance, { serviceToken }) as AiSearch;
 });
+
+/** Drop `undefined` entries; return `undefined` when nothing is left. */
+const clean = <T extends Record<string, unknown>>(
+  obj: T,
+): { [K in keyof T]: T[K] } | undefined => {
+  const entries = Object.entries(obj).filter(([, v]) => v !== undefined);
+  return entries.length
+    ? (Object.fromEntries(entries) as { [K in keyof T]: T[K] })
+    : undefined;
+};

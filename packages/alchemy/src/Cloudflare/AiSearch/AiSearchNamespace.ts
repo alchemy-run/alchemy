@@ -99,21 +99,21 @@ export type AiSearchNamespace = Resource<
  * });
  * ```
  *
- * @section Grouping instances
- * Place instances in the namespace by passing its `name` to each
- * {@link AiSearchInstance}'s `namespace` prop. The engine orders each
- * instance after the namespace on deploy and tears them down before it on
- * destroy.
- * @example Two instances in one namespace
+ * @section Grouping pipelines
+ * Group {@link AiSearch} pipelines under the namespace by passing the
+ * namespace resource itself to each pipeline's `namespace` prop. The engine
+ * orders each pipeline after the namespace on deploy and tears them down
+ * before it on destroy.
+ * @example Two pipelines in one namespace
  * ```typescript
  * const ns = yield* Cloudflare.AiSearchNamespace("docs", {});
- * const guides = yield* Cloudflare.AiSearchInstance("guides", {
- *   source: guidesBucket.bucketName,
- *   namespace: ns.name,
+ * const guides = yield* Cloudflare.AiSearch("guides", {
+ *   source: guidesBucket,
+ *   namespace: ns,
  * });
- * const api = yield* Cloudflare.AiSearchInstance("api", {
- *   source: apiBucket.bucketName,
- *   namespace: ns.name,
+ * const api = yield* Cloudflare.AiSearch("api", {
+ *   source: apiBucket,
+ *   namespace: ns,
  * });
  * ```
  *
@@ -141,7 +141,9 @@ export type AiSearchNamespace = Resource<
  *         const url = new URL((yield* HttpServerRequest).url);
  *         const instance = url.searchParams.get("instance") ?? "guides";
  *         const query = url.searchParams.get("q") ?? "";
- *         const answer = yield* ns.get(instance).aiSearch({ query });
+ *         const answer = yield* ns.get(instance).chatCompletions({
+ *           messages: [{ role: "user", content: query }],
+ *         });
  *         return yield* HttpServerResponse.json(answer);
  *       }),
  *     };
@@ -151,7 +153,7 @@ export type AiSearchNamespace = Resource<
  *
  * @section Binding to an Async Worker
  * For a vanilla `async fetch` Worker, pass the namespace under `Worker.env`.
- * `InferEnv` types `env.SEARCH` as `{ get(name): AutoRAG }`.
+ * `InferEnv` types `env.SEARCH` as the runtime `AiSearchNamespace` handle.
  * @example Async Worker via `env`
  * ```typescript
  * export const Api = Cloudflare.Worker("api", {
@@ -164,7 +166,11 @@ export type AiSearchNamespace = Resource<
  * export default {
  *   async fetch(request: Request, env: ApiEnv): Promise<Response> {
  *     const query = new URL(request.url).searchParams.get("q") ?? "";
- *     return Response.json(await env.SEARCH.get("guides").aiSearch({ query }));
+ *     return Response.json(
+ *       await env.SEARCH.get("guides").chatCompletions({
+ *         messages: [{ role: "user", content: query }],
+ *       }),
+ *     );
  *   },
  * };
  * ```
@@ -196,10 +202,11 @@ export const AiSearchNamespaceProvider = () =>
         return { action: "replace" } as const;
       }
       // The name is the namespace's identity (it is the API path
-      // parameter) — renaming is a replacement.
-      const newName = yield* createNamespaceName(id, news.name);
+      // parameter) — renaming is a replacement. Props are all optional, so a
+      // no-props resource resolves `news`/`olds` to `undefined` at runtime.
+      const newName = yield* createNamespaceName(id, news?.name);
       const oldName =
-        output?.name ?? (yield* createNamespaceName(id, olds.name));
+        output?.name ?? (yield* createNamespaceName(id, olds?.name));
       if (newName !== oldName) {
         // A user-pinned name collides with the still-existing old
         // namespace only when both resolve to the same string — they
@@ -221,7 +228,10 @@ export const AiSearchNamespaceProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const name = output?.name ?? (yield* createNamespaceName(id, news.name));
+      // Props are all optional, so a no-props resource resolves `news` to
+      // `undefined` at runtime — fall back to the empty desired shape.
+      const props = news ?? {};
+      const name = output?.name ?? (yield* createNamespaceName(id, props.name));
 
       // Observe — `output.name` is a cache, not a guarantee: a missing
       // namespace falls through to create.
@@ -236,7 +246,7 @@ export const AiSearchNamespaceProvider = () =>
           .createNamespace({
             accountId: acct,
             name,
-            description: news.description,
+            description: props.description,
           })
           .pipe(
             Effect.map((created) => ({ created: true as const, ns: created })),
@@ -265,7 +275,7 @@ export const AiSearchNamespaceProvider = () =>
       // Sync — the description is the only mutable aspect. Diff observed
       // cloud state against desired; skip the PUT entirely on a no-op.
       const observedDescription = normalize(observed.description);
-      if (observedDescription === news.description) {
+      if (observedDescription === props.description) {
         return toAttributes(observed, acct);
       }
       const updated = yield* aisearch
@@ -273,7 +283,7 @@ export const AiSearchNamespaceProvider = () =>
           accountId: acct,
           name,
           // `null` clears a previously-set description.
-          description: news.description ?? null,
+          description: props.description ?? null,
         })
         .pipe(
           // The observe read can be eventually consistent: a namespace
@@ -284,7 +294,7 @@ export const AiSearchNamespaceProvider = () =>
             aisearch.createNamespace({
               accountId: acct,
               name,
-              description: news.description,
+              description: props.description,
             }),
           ),
         );

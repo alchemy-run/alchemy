@@ -63,9 +63,9 @@ const expectDescription = (
 ) =>
   getNamespace(accountId, name).pipe(
     Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
+      schedule: Schedule.spaced("2 seconds"),
       until: (ns) => (ns.description ?? undefined) === expected,
-      times: 15,
+      times: 30,
     }),
     Effect.map((ns) => expect(ns.description ?? undefined).toEqual(expected)),
   );

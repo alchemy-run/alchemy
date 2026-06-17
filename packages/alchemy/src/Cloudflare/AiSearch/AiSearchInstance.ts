@@ -499,7 +499,7 @@ export type AiSearchInstance = Resource<
  * Bind the instance during the Worker's init phase with
  * `Cloudflare.AiSearchInstance.bind(instance)`, which attaches the
  * single-instance `ai_search` binding and returns an Effect-native client
- * whose `search` / `aiSearch` methods return `Effect`s. Provide
+ * whose `search` / `chatCompletions` methods return `Effect`s. Provide
  * {@link AiSearchInstanceBindingLive} in the Worker's runtime layer.
  * @example Effect Worker that answers from AI Search
  * ```typescript
@@ -518,7 +518,9 @@ export type AiSearchInstance = Resource<
  *       fetch: Effect.gen(function* () {
  *         const request = yield* HttpServerRequest;
  *         const query = new URL(request.url).searchParams.get("q") ?? "";
- *         const answer = yield* search.aiSearch({ query });
+ *         const answer = yield* search.chatCompletions({
+ *           messages: [{ role: "user", content: query }],
+ *         });
  *         return yield* HttpServerResponse.json(answer);
  *       }),
  *     };
@@ -529,7 +531,7 @@ export type AiSearchInstance = Resource<
  * @section Binding to an Async Worker
  * For a vanilla `async fetch` Worker, pass the instance under `Worker.env`.
  * The engine attaches the same `ai_search` binding and `InferEnv` types
- * `env.SEARCH` as the runtime `AutoRAG` handle.
+ * `env.SEARCH` as the runtime `AiSearchInstance` handle.
  * @example Async Worker via `env`
  * ```typescript
  * export const Api = Cloudflare.Worker("api", {
@@ -542,7 +544,11 @@ export type AiSearchInstance = Resource<
  * export default {
  *   async fetch(request: Request, env: ApiEnv): Promise<Response> {
  *     const query = new URL(request.url).searchParams.get("q") ?? "";
- *     return Response.json(await env.SEARCH.aiSearch({ query }));
+ *     return Response.json(
+ *       await env.SEARCH.chatCompletions({
+ *         messages: [{ role: "user", content: query }],
+ *       }),
+ *     );
  *   },
  * };
  * ```
@@ -810,8 +816,13 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "InvalidTokenCredentials",
-      schedule: Schedule.exponential("1 second"),
-      times: 6,
+      // A full-body update PUT re-sends `source`, which makes Cloudflare
+      // re-validate the (write-only, auto-provisioned) R2 service token —
+      // opening a fresh propagation window each time. Gentle exponential
+      // growth keeps the per-attempt delay bounded (~17s max) while giving
+      // the token longer overall to settle (~70s across 10 attempts).
+      schedule: Schedule.exponential("1 second", 1.5),
+      times: 10,
     }),
   );
 

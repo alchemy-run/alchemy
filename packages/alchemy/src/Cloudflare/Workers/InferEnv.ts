@@ -37,9 +37,9 @@ export type GetBindingType<T> =
                   : T extends Cloudflare.AiGateway
                     ? Ai
                     : T extends Cloudflare.AiSearchInstance
-                      ? AutoRAG
+                      ? AiSearchInstance
                       : T extends Cloudflare.AiSearchNamespace
-                        ? { get(instanceName: string): AutoRAG }
+                        ? AiSearchNamespace
                         : T extends Cloudflare.SendEmail
                           ? SendEmail
                           : T extends Cloudflare.AnalyticsEngineDataset

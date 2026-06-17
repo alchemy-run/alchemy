@@ -15,6 +15,33 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
+// Type-level coverage: the `AiSearch` construct result *is* an
+// `AiSearchInstance`, so it can be passed anywhere one is expected. These
+// assertions fail to compile the moment the construct stops being
+// substitutable for an instance. The two binding styles are also exercised at
+// runtime by the `bindings-stack` fixtures (Effect Worker `bind(...)` +
+// async Worker `env`).
+declare const _search: Cloudflare.AiSearch;
+// 1. Assignable to an `AiSearchInstance` (and thus to `AiSearchInstance.bind`,
+//    which is how an Effect Worker attaches the `ai_search` binding). These
+//    assertions live inside a never-invoked closure so the type checks compile
+//    without executing the `declare`d binding (which has no runtime value).
+void (() => {
+  const _asInstance: Cloudflare.AiSearchInstance = _search;
+  void _asInstance;
+  void Cloudflare.AiSearchInstance.bind(_search);
+});
+// 2. As a Worker `env` binding, `InferEnv` resolves it to the same runtime
+//    handle (`AiSearchInstance`) it would for a plain `AiSearchInstance`.
+type _EnvSearch = Cloudflare.InferEnv<{
+  SEARCH: Cloudflare.AiSearch;
+}>["SEARCH"];
+type _EnvInstance = Cloudflare.InferEnv<{
+  SEARCH: Cloudflare.AiSearchInstance;
+}>["SEARCH"];
+const _envSame: _EnvSearch extends _EnvInstance ? true : never = true;
+void _envSame;
+
 const getInstance = (accountId: string, id: string, namespace = "default") =>
   aisearch.readNamespaceInstance({ accountId, name: namespace, id }).pipe(
     Effect.retry({
@@ -48,7 +75,7 @@ const program = () =>
     const search = yield* Cloudflare.AiSearch("Search", {
       source: bucket,
     });
-    return { bucket, search };
+    return { bucket, search, serviceToken: search.serviceToken };
   });
 
 test.provider(
@@ -61,21 +88,21 @@ test.provider(
 
       const deployed = yield* stack.deploy(program());
 
-      const { instance, token } = deployed.search;
-      expect(instance.instanceId).toBeTruthy();
+      const { search, serviceToken } = deployed;
+      expect(search.instanceId).toBeTruthy();
       // The managed service token was minted as a child and wired in.
-      expect(token).toBeDefined();
-      expect(instance.tokenId).toEqual(token!.id);
+      expect(serviceToken).toBeDefined();
+      expect(search.tokenId).toEqual(serviceToken!.id);
 
       // Cloudflare's read projection hides the token association
       // (`tokenId` comes back `null`), so verify the instance exists rather
       // than re-asserting the token id off the read path.
-      const live = yield* getInstance(accountId, instance.instanceId);
-      expect(live.id).toEqual(instance.instanceId);
+      const live = yield* getInstance(accountId, search.instanceId);
+      expect(live.id).toEqual(search.instanceId);
 
       yield* stack.destroy();
 
-      yield* expectGone(accountId, instance.instanceId);
+      yield* expectGone(accountId, search.instanceId);
     }).pipe(logLevel),
   { timeout: 300_000 },
 );
@@ -96,7 +123,7 @@ const crawlerProgram = () =>
       parse: { type: "crawl", useBrowserRendering: false },
       crawl: { depth: 2, includeSubdomains: false },
     });
-    return { target, search };
+    return { target, search, serviceToken: search.serviceToken };
   });
 
 test.provider(
@@ -109,17 +136,17 @@ test.provider(
 
       const deployed = yield* stack.deploy(crawlerProgram());
 
-      const { instance, token } = deployed.search;
+      const { search, serviceToken } = deployed;
       // No service token is minted for a web crawler.
-      expect(token).toBeUndefined();
-      expect(instance.type).toEqual("web-crawler");
+      expect(serviceToken).toBeUndefined();
+      expect(search.type).toEqual("web-crawler");
 
-      const live = yield* getInstance(accountId, instance.instanceId);
+      const live = yield* getInstance(accountId, search.instanceId);
       expect(live.type).toEqual("web-crawler");
 
       yield* stack.destroy();
 
-      yield* expectGone(accountId, instance.instanceId);
+      yield* expectGone(accountId, search.instanceId);
     }).pipe(logLevel),
   { timeout: 300_000 },
 );
