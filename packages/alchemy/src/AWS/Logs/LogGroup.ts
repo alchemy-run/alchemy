@@ -76,7 +76,9 @@ export interface LogGroup extends Resource<
 export const LogGroup = Resource<LogGroup>("AWS.Logs.LogGroup");
 
 const retryLogGroupMutation = Effect.retry({
-  while: (error: any) =>
+  while: (
+    error: logs.OperationAbortedException | logs.ServiceUnavailableException,
+  ) =>
     error._tag === "OperationAbortedException" ||
     error._tag === "ServiceUnavailableException",
   schedule: Schedule.exponential(100),
