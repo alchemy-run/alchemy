@@ -109,6 +109,57 @@ test.provider(
   { timeout: 360_000 },
 );
 
+test.provider(
+  "applies, updates, and removes reserved concurrency",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const initial = yield* stack.deploy(
+        AWS.Lambda.Function<{}>()("ConcurrencyFn", {
+          main: timeoutHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          url: false,
+        }),
+      );
+
+      expect(initial.reservedConcurrentExecutions).toBeUndefined();
+      yield* waitForReservedConcurrency(initial.functionName, undefined);
+
+      const updated = yield* stack.deploy(
+        AWS.Lambda.Function<{}>()("ConcurrencyFn", {
+          main: timeoutHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          url: false,
+          reservedConcurrentExecutions: 0,
+        }),
+      );
+
+      expect(updated.functionName).toBe(initial.functionName);
+      expect(updated.reservedConcurrentExecutions).toBe(0);
+      yield* waitForReservedConcurrency(updated.functionName, 0);
+
+      const removed = yield* stack.deploy(
+        AWS.Lambda.Function<{}>()("ConcurrencyFn", {
+          main: timeoutHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          url: false,
+        }),
+      );
+
+      expect(removed.functionName).toBe(initial.functionName);
+      expect(removed.reservedConcurrentExecutions).toBeUndefined();
+      yield* waitForReservedConcurrency(removed.functionName, undefined);
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { timeout: 360_000 },
+);
+
 // Canonical `list()` test (AWS account/region-scoped collection): deploy a
 // real function, resolve the provider from context via the typed
 // `Provider.findProvider`, call `list()`, and assert the deployed function
@@ -305,6 +356,29 @@ const getFunctionUrlConfigWithAuth = Effect.fn(function* (
     Effect.filterOrFail(
       (config) => config.AuthType === authType,
       () => new Error("Function URL auth has not propagated yet"),
+    ),
+    Effect.retry({
+      schedule: Schedule.exponential(500).pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
+    }),
+  );
+});
+
+const waitForReservedConcurrency = Effect.fn(function* (
+  functionName: string,
+  expected: number | undefined,
+) {
+  return yield* Lambda.getFunctionConcurrency({
+    FunctionName: functionName,
+  }).pipe(
+    Effect.map((config) => config.ReservedConcurrentExecutions),
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed(undefined),
+    ),
+    Effect.filterOrFail(
+      (actual) => actual === expected,
+      () => new Error("Reserved concurrency update has not propagated yet"),
     ),
     Effect.retry({
       schedule: Schedule.exponential(500).pipe(
