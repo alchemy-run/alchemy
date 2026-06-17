@@ -1,8 +1,7 @@
 import * as AWS from "@/AWS";
 import { VpcOrigin } from "@/AWS/CloudFront";
+import { Network } from "@/AWS/EC2/Network";
 import { SecurityGroup } from "@/AWS/EC2/SecurityGroup";
-import { Subnet } from "@/AWS/EC2/Subnet";
-import { Vpc } from "@/AWS/EC2/Vpc";
 import { LoadBalancer } from "@/AWS/ELBv2/LoadBalancer";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
@@ -48,43 +47,45 @@ describe("AWS.CloudFront.VpcOrigin", () => {
       Effect.gen(function* () {
         yield* stack.destroy();
 
+        // CloudFront VPC origins require the target's VPC to have an internet
+        // gateway attached. `Network` provisions a production-shaped VPC (VPC +
+        // attached IGW + public/private subnets across 2 AZs + route tables), so
+        // the networking + ALB is deployed in a first phase, then the VPC origin
+        // in a second — the IGW must be attached before `createVpcOrigin` runs.
+        const network = Effect.gen(function* () {
+          const net = yield* Network("VpcOriginNet", {
+            cidrBlock: "10.40.0.0/16",
+          });
+          const sg = yield* SecurityGroup("VpcOriginSg", {
+            vpcId: net.vpcId,
+            description: "alchemy vpc origin alb",
+            ingress: [
+              {
+                ipProtocol: "tcp",
+                fromPort: 80,
+                toPort: 80,
+                cidrIpv4: "0.0.0.0/0",
+              },
+            ],
+          });
+          const alb = yield* LoadBalancer("VpcOriginAlb", {
+            scheme: "internal",
+            type: "application",
+            subnets: net.publicSubnetIds,
+            securityGroups: [sg.groupId],
+          });
+          return { albArn: alb.loadBalancerArn };
+        });
+
+        // Phase 1: networking (incl. attached IGW) + ALB.
+        yield* stack.deploy(network);
+
+        // Phase 2: the VPC origin, now that the IGW is attached.
         const deployed = yield* stack.deploy(
           Effect.gen(function* () {
-            const vpc = yield* Vpc("VpcOriginVpc", {
-              cidrBlock: "10.40.0.0/16",
-            });
-            // An internal ALB needs no public routing, so we only need the VPC,
-            // two subnets in different AZs, and a security group.
-            const subnetA = yield* Subnet("VpcOriginSubnetA", {
-              vpcId: vpc.vpcId,
-              cidrBlock: "10.40.1.0/24",
-              availabilityZone: "us-east-1a",
-            });
-            const subnetB = yield* Subnet("VpcOriginSubnetB", {
-              vpcId: vpc.vpcId,
-              cidrBlock: "10.40.2.0/24",
-              availabilityZone: "us-east-1b",
-            });
-            const sg = yield* SecurityGroup("VpcOriginSg", {
-              vpcId: vpc.vpcId,
-              description: "alchemy vpc origin alb",
-              ingress: [
-                {
-                  ipProtocol: "tcp",
-                  fromPort: 80,
-                  toPort: 80,
-                  cidrIpv4: "0.0.0.0/0",
-                },
-              ],
-            });
-            const alb = yield* LoadBalancer("VpcOriginAlb", {
-              scheme: "internal",
-              type: "application",
-              subnets: [subnetA.subnetId, subnetB.subnetId],
-              securityGroups: [sg.groupId],
-            });
+            const { albArn } = yield* network;
             const vpcOrigin = yield* VpcOrigin("AppVpcOrigin", {
-              arn: alb.loadBalancerArn,
+              arn: albArn,
               httpPort: 80,
               originProtocolPolicy: "http-only",
             });
@@ -105,7 +106,9 @@ describe("AWS.CloudFront.VpcOrigin", () => {
         yield* stack.destroy();
         yield* assertVpcOriginDeleted(deployed.vpcOrigin.vpcOriginId);
       }),
-    { timeout: 600_000 },
+    // CloudFront VPC origin deploy + delete each take many minutes (global
+    // propagation), on top of the ALB/VPC provisioning and teardown.
+    { timeout: 1_800_000 },
   );
 
   test.provider.skipIf(!runLifecycle)(

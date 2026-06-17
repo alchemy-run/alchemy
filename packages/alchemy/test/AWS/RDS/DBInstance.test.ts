@@ -1,6 +1,8 @@
 import * as AWS from "@/AWS";
+import { Network } from "@/AWS/EC2/Network";
 import { DBCluster, DBInstance } from "@/AWS/RDS";
 import type { DBInstanceProps } from "@/AWS/RDS/DBInstance.ts";
+import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
@@ -151,8 +153,22 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      // The testing account has no default VPC/subnets, so provision a
+      // production-shaped network (VPC + subnets across 2 AZs) and a DB subnet
+      // group for the instance to live in.
+      const network = Effect.gen(function* () {
+        const net = yield* Network("RdsNet", { cidrBlock: "10.41.0.0/16" });
+        const subnetGroup = yield* DBSubnetGroup("RdsSubnetGroup", {
+          dbSubnetGroupName: "alchemy-rds-standalone-sng",
+          description: "alchemy standalone instance lifecycle",
+          subnetIds: net.privateSubnetIds,
+        });
+        return { dbSubnetGroupName: subnetGroup.dbSubnetGroupName };
+      });
+
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const { dbSubnetGroupName } = yield* network;
           return yield* DBInstance("StandaloneInstance", {
             dbInstanceIdentifier: "alchemy-rds-standalone",
             engine: "postgres",
@@ -163,6 +179,8 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             manageMasterUserPassword: true,
             backupRetentionPeriod: 1,
             deletionProtection: false,
+            dbSubnetGroupName,
+            publiclyAccessible: false,
           });
         }),
       );
@@ -173,6 +191,7 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const { dbSubnetGroupName } = yield* network;
           return yield* DBInstance("StandaloneInstance", {
             dbInstanceIdentifier: "alchemy-rds-standalone",
             engine: "postgres",
@@ -184,6 +203,8 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
             backupRetentionPeriod: 3,
             enablePerformanceInsights: true,
             deletionProtection: false,
+            dbSubnetGroupName,
+            publiclyAccessible: false,
           });
         }),
       );

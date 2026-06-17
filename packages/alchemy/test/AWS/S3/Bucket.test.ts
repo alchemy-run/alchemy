@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import { Role } from "@/AWS/IAM";
 import { Bucket } from "@/AWS/S3";
 import * as Provider from "@/Provider";
 import { State } from "@/State";
@@ -838,15 +839,14 @@ test.provider("explicit bucket policy prop", (stack) =>
   }),
 );
 
-// Replication needs an IAM role S3 can assume + a destination bucket, so the
-// full lifecycle is gated. A standing role ARN is supplied via env.
-test.provider.skipIf(!process.env.S3_TEST_REPLICATION)(
+// Replication needs an IAM role S3 can assume + a versioned destination bucket.
+// The test provisions all of it (role + dest bucket) so it is self-contained.
+test.provider(
   "replication configuration",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const role = process.env.S3_REPLICATION_ROLE_ARN!;
       const dest = "alchemy-test-bucket-replication-dest";
       const src = "alchemy-test-bucket-replication-src";
 
@@ -857,11 +857,54 @@ test.provider.skipIf(!process.env.S3_TEST_REPLICATION)(
             versioning: "Enabled",
             forceDestroy: true,
           });
+          const replRole = yield* Role("ReplRole", {
+            roleName: "alchemy-test-s3-replication-role",
+            assumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { Service: "s3.amazonaws.com" },
+                  Action: ["sts:AssumeRole"],
+                },
+              ],
+            },
+            inlinePolicies: {
+              Replication: {
+                Version: "2012-10-17",
+                Statement: [
+                  {
+                    Effect: "Allow",
+                    Action: ["s3:GetReplicationConfiguration", "s3:ListBucket"],
+                    Resource: [`arn:aws:s3:::${src}`],
+                  },
+                  {
+                    Effect: "Allow",
+                    Action: [
+                      "s3:GetObjectVersionForReplication",
+                      "s3:GetObjectVersionAcl",
+                      "s3:GetObjectVersionTagging",
+                    ],
+                    Resource: [`arn:aws:s3:::${src}/*`],
+                  },
+                  {
+                    Effect: "Allow",
+                    Action: [
+                      "s3:ReplicateObject",
+                      "s3:ReplicateDelete",
+                      "s3:ReplicateTags",
+                    ],
+                    Resource: [`arn:aws:s3:::${dest}/*`],
+                  },
+                ],
+              },
+            },
+          });
           const srcBucket = yield* Bucket("ReplSrcBucket", {
             bucketName: src,
             versioning: "Enabled",
             replication: {
-              role,
+              role: replRole.roleArn,
               rules: [
                 {
                   ID: "replicate-all",
@@ -875,14 +918,14 @@ test.provider.skipIf(!process.env.S3_TEST_REPLICATION)(
             },
             forceDestroy: true,
           });
-          return { srcBucket, destBucket };
+          return { srcBucket, destBucket, roleArn: replRole.roleArn };
         }),
       );
 
       const repl = yield* S3.getBucketReplication({
         Bucket: buckets.srcBucket.bucketName,
       });
-      expect(repl.ReplicationConfiguration?.Role).toEqual(role);
+      expect(repl.ReplicationConfiguration?.Role).toEqual(buckets.roleArn);
       expect(repl.ReplicationConfiguration?.Rules).toHaveLength(1);
 
       yield* stack.destroy();

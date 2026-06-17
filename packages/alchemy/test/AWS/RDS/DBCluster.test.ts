@@ -1,6 +1,8 @@
 import * as AWS from "@/AWS";
+import { Network } from "@/AWS/EC2/Network";
 import { DBCluster } from "@/AWS/RDS/DBCluster.ts";
 import type { DBClusterProps } from "@/AWS/RDS/DBCluster.ts";
+import { DBSubnetGroup } from "@/AWS/RDS/DBSubnetGroup.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
@@ -140,12 +142,27 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
+      // No default VPC/subnets in the testing account — provision a
+      // production-shaped network (VPC + subnets across 2 AZs) + a DB subnet
+      // group for the cluster.
+      const network = Effect.gen(function* () {
+        const net = yield* Network("ClusterNet", { cidrBlock: "10.42.0.0/16" });
+        const subnetGroup = yield* DBSubnetGroup("ClusterSubnetGroup", {
+          dbSubnetGroupName: "alchemy-rds-lifecycle-sng",
+          description: "alchemy cluster lifecycle",
+          subnetIds: net.privateSubnetIds,
+        });
+        return { dbSubnetGroupName: subnetGroup.dbSubnetGroupName };
+      });
+
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const { dbSubnetGroupName } = yield* network;
           return yield* DBCluster("LifecycleCluster", {
             dbClusterIdentifier: "alchemy-rds-lifecycle",
             engine: "aurora-postgresql",
             engineMode: "provisioned",
+            dbSubnetGroupName,
             serverlessV2ScalingConfiguration: {
               MinCapacity: 0.5,
               MaxCapacity: 1,
@@ -165,10 +182,12 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const { dbSubnetGroupName } = yield* network;
           return yield* DBCluster("LifecycleCluster", {
             dbClusterIdentifier: "alchemy-rds-lifecycle",
             engine: "aurora-postgresql",
             engineMode: "provisioned",
+            dbSubnetGroupName,
             serverlessV2ScalingConfiguration: {
               MinCapacity: 1,
               MaxCapacity: 2,
@@ -189,10 +208,12 @@ test.provider.skipIf(!process.env.RDS_TEST_LIFECYCLE)(
       // Re-disable protection so the trailing destroy can delete the cluster.
       yield* stack.deploy(
         Effect.gen(function* () {
+          const { dbSubnetGroupName } = yield* network;
           return yield* DBCluster("LifecycleCluster", {
             dbClusterIdentifier: "alchemy-rds-lifecycle",
             engine: "aurora-postgresql",
             engineMode: "provisioned",
+            dbSubnetGroupName,
             serverlessV2ScalingConfiguration: {
               MinCapacity: 1,
               MaxCapacity: 2,
