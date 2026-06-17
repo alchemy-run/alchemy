@@ -275,7 +275,11 @@ test.provider(
           const instance = yield* Cloudflare.AiSearchInstance("Search", {
             type: "web-crawler",
             source: target.url.as<string>(),
-            sourceParams: { webCrawler: { parseType: "crawl" } },
+            sourceParams: {
+              webCrawler: {
+                parseType: "crawl",
+              },
+            },
           });
           return { target, instance };
         }),
