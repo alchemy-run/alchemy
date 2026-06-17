@@ -48,6 +48,14 @@ export const Search = Cloudflare.AiSearch("Search", {
 `AiSearch` is a **construct**, not a single resource. Calling it expands
 into several resources so you don't have to wire them up by hand.
 
+:::note[Crawling a website instead]
+Passing a URL as `source` (instead of a bucket) indexes a website by
+crawling it, with optional `parse` / `crawl` / `store` options and no
+service token. This tutorial focuses on the R2 source — see the
+[`AiSearch` reference](/providers/cloudflare/aisearch/aisearch) for the
+web-crawler options.
+:::
+
 ## What the helper creates
 
 For an R2 source, the indexer needs a service token to read your bucket.
@@ -88,6 +96,24 @@ const instance = yield* Cloudflare.AiSearchInstance("Instance", {
 `AiSearch` translates the `source` bucket into the instance's `type: "r2"` +
 `source: bucket.bucketName` for you. It returns `{ instance, token }` so
 you can reach the underlying `AiSearchInstance` when you need to bind it.
+
+## Index only part of the bucket
+
+By default AI Search indexes every object in the bucket. Pass `prefix` to
+scope indexing to one key prefix, and `include` / `exclude` glob patterns
+for finer control.
+
+```diff lang="typescript"
+export const Search = Cloudflare.AiSearch("Search", {
+  source: Docs,
++  prefix: "docs/",
++  include: ["published/"],
++  exclude: ["drafts/"],
+});
+```
+
+`prefix` limits indexing to keys under `docs/`; `include` / `exclude` then
+filter within that scope.
 
 ## Reuse an existing token
 

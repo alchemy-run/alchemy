@@ -363,15 +363,6 @@ export type AiSearchInstance = Resource<
  * });
  * ```
  *
- * @example Web-crawler instance
- * ```typescript
- * const search = yield* Cloudflare.AiSearchInstance("site-search", {
- *   type: "web-crawler",
- *   source: "https://example.com",
- *   sourceParams: { webCrawler: { parseType: "crawl" } },
- * });
- * ```
- *
  * @section R2 source options
  * For an `r2` source, `sourceParams` filters which objects are indexed (all
  * fields optional):
@@ -421,6 +412,14 @@ export type AiSearchInstance = Resource<
  * - `storageId` — R2 bucket name to store crawl output in.
  * - `storageType` — `"r2"`.
  * - `r2Jurisdiction` — R2 data-residency jurisdiction for the store bucket.
+ * @example Basic web-crawler instance
+ * ```typescript
+ * const search = yield* Cloudflare.AiSearchInstance("site-search", {
+ *   type: "web-crawler",
+ *   source: "https://example.com",
+ *   sourceParams: { webCrawler: { parseType: "crawl" } },
+ * });
+ * ```
  * @example Fully-configured crawl
  * ```typescript
  * const search = yield* Cloudflare.AiSearchInstance("site-search", {

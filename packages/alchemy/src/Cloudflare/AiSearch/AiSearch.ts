@@ -145,7 +145,7 @@ const clean = <T extends Record<string, unknown>>(
  * @example R2-backed instance (token provisioned for you)
  * Pass an {@link R2Bucket} as `source` — its presence selects R2.
  * ```typescript
- * const bucket = yield* Cloudflare.R2Bucket("docs", {});
+ * const bucket = yield* Cloudflare.R2Bucket("docs");
  * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
  *   source: bucket,
  * });
@@ -183,7 +183,7 @@ const clean = <T extends Record<string, unknown>>(
  *
  * @example Store crawl output in your own bucket
  * ```typescript
- * const store = yield* Cloudflare.R2Bucket("crawl-store", {});
+ * const store = yield* Cloudflare.R2Bucket("crawl-store");
  * const { instance } = yield* Cloudflare.AiSearch("site-search", {
  *   source: "https://example.com",
  *   parse: { type: "crawl" },
@@ -210,7 +210,7 @@ const clean = <T extends Record<string, unknown>>(
  *   "api",
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
- *     const bucket = yield* Cloudflare.R2Bucket("docs", {});
+ *     const bucket = yield* Cloudflare.R2Bucket("docs");
  *     const { instance } = yield* Cloudflare.AiSearch("docs-search", {
  *       source: bucket,
  *     });
@@ -239,7 +239,7 @@ const clean = <T extends Record<string, unknown>>(
  * @example Async Worker that answers from AI Search
  * ```typescript
  * // stack.ts
- * const bucket = yield* Cloudflare.R2Bucket("docs", {});
+ * const bucket = yield* Cloudflare.R2Bucket("docs");
  * const { instance } = yield* Cloudflare.AiSearch("docs-search", {
  *   source: bucket,
  * });
