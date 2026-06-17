@@ -380,10 +380,26 @@ export const VpcOriginProvider = () =>
           if (!output.vpcOriginId) {
             return;
           }
+          // Observe current state. `deleteVpcOrigin` requires a terminal
+          // `Deployed` status and the *current* ETag — `output.etag` may be
+          // stale. If the origin is still `Deploying` (e.g. an interrupted
+          // create), CloudFront refuses the delete and leaves the origin — and
+          // its managed ENIs, which then block the VPC/ALB teardown —
+          // orphaned. Wait for it to settle so it becomes deletable.
+          const observed = yield* getById(output.vpcOriginId);
+          if (!observed) {
+            return; // already gone — idempotent
+          }
+          const current =
+            observed.vpcOrigin.Status === "Deployed"
+              ? observed
+              : yield* waitForDeployment(output.vpcOriginId).pipe(
+                  Effect.catch(() => Effect.succeed(observed)),
+                );
           yield* cloudfront
             .deleteVpcOrigin({
               Id: output.vpcOriginId,
-              IfMatch: output.etag ?? "",
+              IfMatch: current.etag ?? observed.etag ?? "",
             })
             .pipe(
               Effect.catchTag("EntityNotFound", () => Effect.void),
@@ -403,6 +419,19 @@ export const VpcOriginProvider = () =>
                 ),
               }),
             );
+          // Block until the origin record is fully gone so dependents (the
+          // fronted ALB/VPC, held by CloudFront's ENIs) can be torn down.
+          yield* Effect.repeat(
+            getById(output.vpcOriginId).pipe(
+              Effect.map((o) => o !== undefined),
+            ),
+            {
+              schedule: Schedule.fixed("10 seconds").pipe(
+                Schedule.both(Schedule.recurs(30)),
+              ),
+              until: (exists) => exists === false,
+            },
+          ).pipe(Effect.catch(() => Effect.void));
         }),
       };
     }),
