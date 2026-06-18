@@ -2027,7 +2027,10 @@ export const LiveWorkerProvider = () =>
             cronsChanged ||
             (yield* hasChanged(id, news, output))
           ) {
-            const stables: string[] = [];
+            // `workerId` is always stable across an update; seed it so it
+            // survives now that `diff.stables` overrides `provider.stables`
+            // rather than being merged with it.
+            const stables: string[] = ["workerId"];
             if (oldWorkerName === workerName) {
               stables.push("workerName");
             }

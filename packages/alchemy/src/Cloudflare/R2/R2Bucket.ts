@@ -739,7 +739,11 @@ export const R2BucketProvider = () =>
           if (oldStorageClass !== (news.storageClass ?? "Standard")) {
             return {
               action: "update",
-              stables: oldName === name ? ["bucketName"] : undefined,
+              // `accountId` is always stable across an update (a name/account
+              // change is a `replace`); keep it now that `diff.stables`
+              // overrides `provider.stables` rather than merging with it.
+              stables:
+                oldName === name ? ["bucketName", "accountId"] : ["accountId"],
             } as const;
           }
           if (!deepEqual(olds.domains, news.domains)) {
