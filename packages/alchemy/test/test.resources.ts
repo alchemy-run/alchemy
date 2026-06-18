@@ -4,8 +4,8 @@ import * as Provider from "@/Provider.ts";
 import { Resource, type ResourceBinding } from "@/Resource";
 import * as State from "@/State/index";
 import { isUnknown } from "@/Util/unknown";
-import * as Context from "effect/Context";
 import { Data } from "effect";
+import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -639,6 +639,7 @@ export const OverrideStablesResource = Resource<OverrideStablesResource>(
 
 export const overrideStablesResourceProvider = () =>
   Provider.succeed(OverrideStablesResource, {
+    list: () => Effect.succeed([]),
     stables: ["providerStable", "sharedStable"],
     diff: Effect.fn(function* ({ news = {}, olds = {} }) {
       if (!isResolved(news)) return undefined;
