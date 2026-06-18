@@ -40,6 +40,7 @@ import { Default as DefaultEnvironment } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
 import * as IAM from "./IAM/index.ts";
 import * as IdentityCenter from "./IdentityCenter/index.ts";
+import * as KMS from "./KMS/index.ts";
 import * as Kinesis from "./Kinesis/index.ts";
 import * as Lambda from "./Lambda/index.ts";
 import * as Logs from "./Logs/index.ts";
@@ -215,6 +216,8 @@ export const providers = () =>
       IdentityCenter.Group,
       IdentityCenter.Instance,
       IdentityCenter.PermissionSet,
+      KMS.Alias,
+      KMS.Key,
       Kinesis.DescribeAccountSettingsPolicy,
       Kinesis.DescribeLimitsPolicy,
       Kinesis.DescribeStreamConsumerPolicy,
@@ -474,6 +477,8 @@ export const providers = () =>
         IdentityCenter.GroupProvider(),
         IdentityCenter.InstanceProvider(),
         IdentityCenter.PermissionSetProvider(),
+        KMS.AliasProvider(),
+        KMS.KeyProvider(),
         Kinesis.DescribeAccountSettingsPolicyLive,
         Kinesis.DescribeLimitsPolicyLive,
         Kinesis.DescribeStreamConsumerPolicyLive,
