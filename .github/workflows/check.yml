@@ -1,4 +1,4 @@
-name: docs-check
+name: check
 
 # Runs the website docs validator (`bun run docs:check`) on every PR
 # so broken links / missing API references fail fast before merge.
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: docs-check-${{ github.ref }}
+  group: check-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -42,5 +42,5 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
 
       - run: bun install
-
+      - run: bun tsgo -b
       - run: bun run docs:check
