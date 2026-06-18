@@ -6,14 +6,9 @@ name: check
 on:
   pull_request:
     types: [opened, reopened, synchronize]
-  workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: check-${{ github.ref }}
-  cancel-in-progress: true
 
 env:
   NODE_VERSION: "24"

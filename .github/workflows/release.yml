@@ -1,4 +1,4 @@
-name: Release NPM Package
+name: release
 
 on:
   workflow_dispatch:
@@ -12,6 +12,10 @@ on:
         required: false
         type: string
         default: ""
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 # Reusable workflows can't widen permissions — the caller must grant
 # `contents: write` (commit + tag) and `id-token: write` (npm OIDC).
