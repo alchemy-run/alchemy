@@ -2,11 +2,10 @@ import * as kms from "@distilled.cloud/aws/kms";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
-import { createInternalTags, diffTags, hasAlchemyTags } from "../../Tags.ts";
+import { createInternalTags, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
@@ -162,23 +161,19 @@ export const KeyProvider = () =>
             key !== undefined && key.keyState !== "PendingDeletion",
         );
       }),
-    read: Effect.fn(function* ({ id, olds = {}, output }) {
-      const state = output?.keyId
-        ? yield* readKey({
-            keyId: output.keyId,
-            deletionWindowInDays:
-              output.deletionWindowInDays ??
-              olds.deletionWindowInDays ??
-              defaultDeletionWindowInDays,
-          })
-        : yield* findKeyByAlchemyTags({
-            id,
-            deletionWindowInDays:
-              olds.deletionWindowInDays ?? defaultDeletionWindowInDays,
-          });
-
-      if (!state) return undefined;
-      return (yield* hasAlchemyTags(id, state.tags)) ? state : Unowned(state);
+    read: Effect.fn(function* ({ olds = {}, output }) {
+      // KMS keys have no stable user-assignable identity — only a
+      // cloud-generated keyId — so there is nothing to adopt. We only refresh
+      // a key we already own (via output.keyId); with no prior output the
+      // engine treats this as a greenfield create and mints a fresh key.
+      if (!output?.keyId) return undefined;
+      return yield* readKey({
+        keyId: output.keyId,
+        deletionWindowInDays:
+          output.deletionWindowInDays ??
+          olds.deletionWindowInDays ??
+          defaultDeletionWindowInDays,
+      });
     }),
     diff: Effect.fn(function* ({ news = {}, olds = {} }) {
       if (!isResolved(news)) return;
@@ -202,9 +197,14 @@ export const KeyProvider = () =>
       const deletionWindowInDays =
         news.deletionWindowInDays ?? defaultDeletionWindowInDays;
 
+      // Observe via the cached identifier only — no tag-based discovery. On a
+      // create or replacement the engine calls reconcile with
+      // `output === undefined`, so we fall through to `createKey` and mint a
+      // fresh key rather than adopting an unrelated one (which would collapse a
+      // replacement into a no-op).
       let state = output?.keyId
         ? yield* readKey({ keyId: output.keyId, deletionWindowInDays })
-        : yield* findKeyByAlchemyTags({ id, deletionWindowInDays });
+        : undefined;
 
       if (state?.keyState === "PendingDeletion") {
         yield* kms
@@ -474,39 +474,6 @@ const readConvergedKey = Effect.fn(function* ({
   );
 });
 
-const findKeyByAlchemyTags = Effect.fn(function* ({
-  id,
-  deletionWindowInDays,
-}: {
-  id: string;
-  deletionWindowInDays: number;
-}) {
-  const keys = yield* kms.listKeys.pages({}).pipe(
-    Stream.runCollect,
-    Effect.map((chunk) =>
-      Array.from(chunk).flatMap((page) =>
-        (page.Keys ?? [])
-          .map((key) => key.KeyId)
-          .filter((keyId): keyId is string => keyId !== undefined),
-      ),
-    ),
-  );
-
-  const candidates = yield* Effect.forEach(
-    keys,
-    (keyId) => readKey({ keyId, deletionWindowInDays }),
-    { concurrency: 5 },
-  );
-
-  for (const candidate of candidates) {
-    if (candidate && (yield* hasAlchemyTags(id, candidate.tags))) {
-      return candidate;
-    }
-  }
-
-  return undefined;
-});
-
 const listKeyTags = Effect.fn(function* (keyId: string) {
   const pages = yield* kms.listResourceTags.pages({ KeyId: keyId }).pipe(
     Stream.runCollect,
@@ -535,9 +502,6 @@ const readKeyRotation = Effect.fn(function* (keyId: string) {
 const readKeyPolicy = Effect.fn(function* (keyId: string) {
   return yield* kms.getKeyPolicy({ KeyId: keyId, PolicyName: "default" }).pipe(
     Effect.map((response) => response.Policy),
-    Effect.catchTag("UnsupportedOperationException", () =>
-      Effect.succeed(undefined),
-    ),
     Effect.catchTag("KMSInvalidStateException", () =>
       Effect.succeed(undefined),
     ),

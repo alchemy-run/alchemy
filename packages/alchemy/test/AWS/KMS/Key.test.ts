@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import { AWSEnvironment } from "@/AWS/Environment.ts";
 import { Alias, Key } from "@/AWS/KMS";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
@@ -13,10 +14,12 @@ const { test } = Test.make({ providers: AWS.providers() });
 
 describe("AWS.KMS.Key", () => {
   test.provider(
-    "creates, updates, aliases, and schedules deletion",
+    "reconciles mutable key settings across updates without replacement",
     (stack) =>
       Effect.gen(function* () {
         yield* stack.destroy();
+
+        const { accountId } = yield* AWSEnvironment.current;
 
         const initial = yield* stack.deploy(
           Effect.gen(function* () {
@@ -26,6 +29,7 @@ describe("AWS.KMS.Key", () => {
               enableKeyRotation: true,
               tags: {
                 Environment: "test",
+                Owner: "alice",
               },
             });
             const alias = yield* Alias("ManagedAlias", {
@@ -38,17 +42,18 @@ describe("AWS.KMS.Key", () => {
         const described = yield* KMS.describeKey({
           KeyId: initial.key.keyId,
         });
-        expect(described.KeyMetadata.KeyUsage).toEqual("ENCRYPT_DECRYPT");
-        expect(described.KeyMetadata.KeySpec).toEqual("SYMMETRIC_DEFAULT");
-        expect(described.KeyMetadata.Enabled).toEqual(true);
+        expect(described.KeyMetadata!.KeyUsage).toEqual("ENCRYPT_DECRYPT");
+        expect(described.KeyMetadata!.KeySpec).toEqual("SYMMETRIC_DEFAULT");
+        expect(described.KeyMetadata!.Enabled).toEqual(true);
 
         const rotation = yield* KMS.getKeyRotationStatus({
           KeyId: initial.key.keyId,
         });
         expect(rotation.KeyRotationEnabled).toEqual(true);
 
-        const tags = yield* listTags(initial.key.keyId);
-        expect(tags.Environment).toEqual("test");
+        const initialTags = yield* listTags(initial.key.keyId);
+        expect(initialTags.Environment).toEqual("test");
+        expect(initialTags.Owner).toEqual("alice");
 
         const aliasState = yield* getAlias(initial.alias.aliasName);
         expect(aliasState?.TargetKeyId).toEqual(initial.key.keyId);
@@ -62,6 +67,20 @@ describe("AWS.KMS.Key", () => {
           keyProvider,
         });
 
+        const policy = JSON.stringify({
+          Version: "2012-10-17",
+          Id: "alchemy-test-policy",
+          Statement: [
+            {
+              Sid: "EnableRootPermissions",
+              Effect: "Allow",
+              Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+              Action: "kms:*",
+              Resource: "*",
+            },
+          ],
+        });
+
         const updated = yield* stack.deploy(
           Effect.gen(function* () {
             const key = yield* Key("ManagedKey", {
@@ -69,21 +88,22 @@ describe("AWS.KMS.Key", () => {
               description: "alchemy kms smoke v2",
               enableKeyRotation: false,
               enabled: false,
+              bypassPolicyLockoutSafetyCheck: true,
+              policy,
               tags: {
                 Environment: "prod",
                 Team: "platform",
               },
             });
-            const replacementKey = yield* Key("ReplacementKey", {
-              deletionWindowInDays: 7,
-              description: "alchemy kms replacement",
-            });
             const alias = yield* Alias("ManagedAlias", {
-              targetKeyId: replacementKey.keyArn,
+              targetKeyId: key.keyId,
             });
-            return { alias, key, replacementKey };
+            return { alias, key };
           }),
         );
+
+        // No replacement: a settings-only update keeps the same physical key.
+        expect(updated.key.keyId).toEqual(initial.key.keyId);
 
         yield* assertKeyMetadata({
           description: "alchemy kms smoke v2",
@@ -97,16 +117,172 @@ describe("AWS.KMS.Key", () => {
             Team: "platform",
           },
         });
-        yield* assertAliasTarget({
-          aliasName: updated.alias.aliasName,
-          targetKeyId: updated.replacementKey.keyId,
+
+        // The removed `Owner` tag must no longer be present (untag path).
+        const updatedTags = yield* listTags(updated.key.keyId);
+        expect(updatedTags.Owner).toBeUndefined();
+
+        // Rotation must be disabled after the update.
+        const updatedRotation = yield* KMS.getKeyRotationStatus({
+          KeyId: updated.key.keyId,
         });
+        expect(updatedRotation.KeyRotationEnabled).toEqual(false);
+
+        // The inline policy must have been applied.
+        const appliedPolicy = yield* KMS.getKeyPolicy({
+          KeyId: updated.key.keyId,
+          PolicyName: "default",
+        });
+        expect(appliedPolicy.Policy).toContain("alchemy-test-policy");
 
         yield* stack.destroy();
 
         yield* assertAliasDeleted(updated.alias.aliasName);
         yield* assertKeyPendingDeletion(updated.key.keyId);
-        yield* assertKeyPendingDeletion(updated.replacementKey.keyId);
+      }),
+    { timeout: 180_000 },
+  );
+
+  test.provider(
+    "replaces the key when keySpec changes",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        // Set keySpec explicitly so the diff against the next deploy is
+        // well-defined. The physical key may be adopted from a prior run's
+        // pending-deletion key (KMS keys can't be hard-deleted), so we don't
+        // assert its keySpec here — only the replacement behavior below.
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            const key = yield* Key("ReplaceKey", {
+              description: "alchemy kms replace v1",
+              deletionWindowInDays: 7,
+              keySpec: "SYMMETRIC_DEFAULT",
+              keyUsage: "ENCRYPT_DECRYPT",
+            });
+            return { key };
+          }),
+        );
+
+        const replaced = yield* stack.deploy(
+          Effect.gen(function* () {
+            const key = yield* Key("ReplaceKey", {
+              description: "alchemy kms replace v2",
+              deletionWindowInDays: 7,
+              keySpec: "RSA_2048",
+              keyUsage: "ENCRYPT_DECRYPT",
+            });
+            return { key };
+          }),
+        );
+
+        // A keySpec change forces a replacement: a brand-new physical key.
+        expect(replaced.key.keyId).not.toEqual(initial.key.keyId);
+
+        const replacedDescribe = yield* KMS.describeKey({
+          KeyId: replaced.key.keyId,
+        });
+        expect(replacedDescribe.KeyMetadata!.KeySpec).toEqual("RSA_2048");
+
+        // The old key must have been scheduled for deletion by the replacement.
+        yield* assertKeyPendingDeletion(initial.key.keyId);
+
+        yield* stack.destroy();
+
+        yield* assertKeyPendingDeletion(replaced.key.keyId);
+      }),
+    { timeout: 180_000 },
+  );
+
+  const aliasNameA = "alias/alchemy-test-kms-rename-a" as const;
+  const aliasNameB = "alias/alchemy-test-kms-rename-b" as const;
+
+  test.provider(
+    "retargets an alias in place, then replaces it on rename",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const initial = yield* stack.deploy(
+          Effect.gen(function* () {
+            const keyA = yield* Key("AliasKeyA", {
+              description: "alchemy kms alias target A",
+              deletionWindowInDays: 7,
+            });
+            const keyB = yield* Key("AliasKeyB", {
+              description: "alchemy kms alias target B",
+              deletionWindowInDays: 7,
+            });
+            const alias = yield* Alias("RenamableAlias", {
+              aliasName: aliasNameA,
+              targetKeyId: keyA.keyId,
+            });
+            return { alias, keyA, keyB };
+          }),
+        );
+
+        expect(initial.alias.aliasName).toEqual(aliasNameA);
+        yield* assertAliasTarget({
+          aliasName: aliasNameA,
+          targetKeyId: initial.keyA.keyId,
+        });
+
+        // Retarget the alias to key B. Same alias name => updateAlias, no replace.
+        const retargeted = yield* stack.deploy(
+          Effect.gen(function* () {
+            const keyA = yield* Key("AliasKeyA", {
+              description: "alchemy kms alias target A",
+              deletionWindowInDays: 7,
+            });
+            const keyB = yield* Key("AliasKeyB", {
+              description: "alchemy kms alias target B",
+              deletionWindowInDays: 7,
+            });
+            const alias = yield* Alias("RenamableAlias", {
+              aliasName: aliasNameA,
+              targetKeyId: keyB.keyId,
+            });
+            return { alias, keyA, keyB };
+          }),
+        );
+
+        expect(retargeted.alias.aliasName).toEqual(aliasNameA);
+        yield* assertAliasTarget({
+          aliasName: aliasNameA,
+          targetKeyId: retargeted.keyB.keyId,
+        });
+
+        // Rename the alias. A name change forces a replacement: a new alias is
+        // created and the old one is deleted.
+        const renamed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const keyA = yield* Key("AliasKeyA", {
+              description: "alchemy kms alias target A",
+              deletionWindowInDays: 7,
+            });
+            const keyB = yield* Key("AliasKeyB", {
+              description: "alchemy kms alias target B",
+              deletionWindowInDays: 7,
+            });
+            const alias = yield* Alias("RenamableAlias", {
+              aliasName: aliasNameB,
+              targetKeyId: keyB.keyId,
+            });
+            return { alias, keyA, keyB };
+          }),
+        );
+
+        expect(renamed.alias.aliasName).toEqual(aliasNameB);
+        yield* assertAliasTarget({
+          aliasName: aliasNameB,
+          targetKeyId: renamed.keyB.keyId,
+        });
+        yield* assertAliasDeleted(aliasNameA);
+
+        yield* stack.destroy();
+
+        yield* assertAliasDeleted(aliasNameB);
       }),
     { timeout: 180_000 },
   );
@@ -138,8 +314,8 @@ describe("AWS.KMS.Key", () => {
     yield* Effect.gen(function* () {
       const key = yield* KMS.describeKey({ KeyId: keyId });
       if (
-        key.KeyMetadata.Description !== description ||
-        key.KeyMetadata.Enabled !== enabled
+        key.KeyMetadata!.Description !== description ||
+        key.KeyMetadata!.Enabled !== enabled
       ) {
         return yield* Effect.fail(new KeyMetadataNotConverged());
       }
@@ -250,7 +426,7 @@ describe("AWS.KMS.Key", () => {
   const assertKeyPendingDeletion = Effect.fn(function* (keyId: string) {
     yield* KMS.describeKey({ KeyId: keyId }).pipe(
       Effect.flatMap((response) =>
-        response.KeyMetadata.KeyState === "PendingDeletion"
+        response.KeyMetadata!.KeyState === "PendingDeletion"
           ? Effect.void
           : Effect.fail(new KeyNotPendingDeletion()),
       ),

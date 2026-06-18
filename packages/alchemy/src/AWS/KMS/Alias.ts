@@ -197,7 +197,7 @@ const aliasArn = Effect.fn(function* (aliasName: AliasName) {
 
 const resolveTargetKeyId = Effect.fn(function* (targetKeyId: string) {
   const described = yield* kms.describeKey({ KeyId: targetKeyId });
-  return described.KeyMetadata.KeyId;
+  return described.KeyMetadata?.KeyId!;
 });
 
 const isCustomerAlias = (
