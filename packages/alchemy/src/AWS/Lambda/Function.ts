@@ -121,6 +121,11 @@ export interface FunctionProps extends PlatformProps {
    * @default 3 seconds (AWS Lambda default)
    */
   timeout?: Duration.Duration;
+  /**
+   * Maximum number of concurrent executions reserved for this function.
+   * Omit to remove the function-level reserved concurrency limit.
+   */
+  reservedConcurrentExecutions?: number;
 }
 
 /**
@@ -165,6 +170,7 @@ export interface Function extends Resource<
     code: {
       hash: string;
     };
+    reservedConcurrentExecutions?: number;
   },
   {
     env?: Record<string, any>;
@@ -890,6 +896,61 @@ export default await Effect.runPromise(handlerEffect)
         };
       };
 
+      const retryFunctionMutation = Effect.retry({
+        while: (e: any) =>
+          e._tag === "ResourceConflictException" ||
+          e._tag === "TooManyRequestsException",
+        schedule: Schedule.exponential(100).pipe(
+          Schedule.both(Schedule.recurs(30)),
+        ),
+      }) as <A, R, Err>(
+        self: Effect.Effect<A, Err, R>,
+      ) => Effect.Effect<A, Err, R>;
+
+      const getReservedConcurrentExecutions = Effect.fnUntraced(function* (
+        functionName: string,
+      ) {
+        return yield* Lambda.getFunctionConcurrency({
+          FunctionName: functionName,
+        }).pipe(
+          Effect.map((config) => config.ReservedConcurrentExecutions),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      });
+
+      const syncReservedConcurrentExecutions = Effect.fnUntraced(function* ({
+        functionName,
+        reservedConcurrentExecutions,
+      }: {
+        functionName: string;
+        reservedConcurrentExecutions: number | undefined;
+      }) {
+        const current = yield* getReservedConcurrentExecutions(functionName);
+        if (current === reservedConcurrentExecutions) {
+          return current;
+        }
+
+        if (reservedConcurrentExecutions === undefined) {
+          yield* Lambda.deleteFunctionConcurrency({
+            FunctionName: functionName,
+          }).pipe(
+            retryFunctionMutation,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+          return undefined;
+        }
+
+        const updated = yield* Lambda.putFunctionConcurrency({
+          FunctionName: functionName,
+          ReservedConcurrentExecutions: reservedConcurrentExecutions,
+        }).pipe(retryFunctionMutation);
+        return (
+          updated.ReservedConcurrentExecutions ?? reservedConcurrentExecutions
+        );
+      });
+
       const createOrUpdateFunction = Effect.fnUntraced(function* ({
         id,
         news,
@@ -1118,6 +1179,7 @@ export default await Effect.runPromise(handlerEffect)
               yield* Lambda.addPermission(permission);
             }),
           ),
+          retryFunctionMutation,
         );
 
       const upsertPublicFunctionUrlPermissions = Effect.fnUntraced(function* (
@@ -1179,6 +1241,7 @@ export default await Effect.runPromise(handlerEffect)
             Effect.catchTag("ResourceConflictException", () =>
               Lambda.updateFunctionUrlConfig(config),
             ),
+            retryFunctionMutation,
           );
 
           if (desired.authType === "NONE") {
@@ -1197,6 +1260,7 @@ export default await Effect.runPromise(handlerEffect)
             Lambda.deleteFunctionUrlConfig({
               FunctionName: functionName,
             }).pipe(
+              retryFunctionMutation,
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             ),
             removePublicFunctionUrlPermissions(functionName),
@@ -1255,6 +1319,12 @@ export default await Effect.runPromise(handlerEffect)
           ) {
             return { action: "update" };
           }
+          if (
+            olds.reservedConcurrentExecutions !==
+            news.reservedConcurrentExecutions
+          ) {
+            return { action: "update" };
+          }
         }),
         read: Effect.fnUntraced(function* ({ id, olds, output }) {
           const functionName =
@@ -1292,6 +1362,8 @@ export default await Effect.runPromise(handlerEffect)
               Effect.succeed(undefined),
             ),
           );
+          const reservedConcurrentExecutions =
+            yield* getReservedConcurrentExecutions(fn.FunctionName);
           // Reuse the persisted output where we have it (e.g. code hash) so
           // diff doesn't see drift it can't reconstruct from the API.
           const attrs = {
@@ -1301,6 +1373,7 @@ export default await Effect.runPromise(handlerEffect)
             functionUrl,
             roleArn: fn.Role,
             roleName: output?.roleName ?? fn.Role.split("/").pop()!,
+            reservedConcurrentExecutions,
           } as any;
           return (yield* hasAlchemyTags(id, tagsResult))
             ? attrs
@@ -1337,6 +1410,8 @@ export default await Effect.runPromise(handlerEffect)
                       Effect.succeed(undefined),
                     ),
                   );
+                  const reservedConcurrentExecutions =
+                    yield* getReservedConcurrentExecutions(fn.FunctionName);
                   return {
                     functionArn: fn.FunctionArn,
                     functionName: fn.FunctionName,
@@ -1344,6 +1419,9 @@ export default await Effect.runPromise(handlerEffect)
                     roleArn: fn.Role,
                     roleName: fn.Role.split("/").pop()!,
                     code: { hash: "" },
+                    ...(reservedConcurrentExecutions === undefined
+                      ? {}
+                      : { reservedConcurrentExecutions }),
                   } satisfies Function["Attributes"];
                 }),
               { concurrency: 10 },
@@ -1440,6 +1518,12 @@ export default await Effect.runPromise(handlerEffect)
             session,
           });
 
+          const reservedConcurrentExecutions =
+            yield* syncReservedConcurrentExecutions({
+              functionName,
+              reservedConcurrentExecutions: news.reservedConcurrentExecutions,
+            });
+
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,
             url: news.url,
@@ -1459,6 +1543,7 @@ export default await Effect.runPromise(handlerEffect)
             code: {
               hash,
             },
+            reservedConcurrentExecutions,
           };
         }),
         delete: Effect.fnUntraced(function* ({ output }) {
