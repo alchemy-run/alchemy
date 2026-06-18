@@ -1,5 +1,4 @@
 import * as Layer from "effect/Layer";
-import { CurrentLogLevel } from "effect/References";
 import * as RpcServer from "../Local/RpcServer.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
@@ -26,6 +25,5 @@ Layer.mergeAll(
 ).pipe(
   Layer.provide(localRuntimeServices()),
   Layer.provide(cloudflareServices),
-  Layer.provide(Layer.succeed(CurrentLogLevel, "Debug")),
   RpcServer.launch,
 );
