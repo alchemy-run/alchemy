@@ -217,13 +217,6 @@ export const LogGroupProvider = () =>
                 deletionProtectionEnabled: news.deletionProtectionEnabled,
               })
               .pipe(
-                Effect.retry({
-                  while: (error) =>
-                    error._tag === "OperationAbortedException" ||
-                    error._tag === "ServiceUnavailableException",
-                  schedule: Schedule.exponential(100),
-                  times: 8,
-                }),
                 Effect.catchTag(
                   "ResourceAlreadyExistsException",
                   () => Effect.void,
@@ -244,35 +237,20 @@ export const LogGroupProvider = () =>
           if (news.kmsKeyId !== observedKmsKeyId) {
             if (news.kmsKeyId === undefined) {
               if (observedKmsKeyId !== undefined) {
-                yield* logs.disassociateKmsKey({ logGroupName }).pipe(
-                  Effect.retry({
-                    while: (error) =>
-                      error._tag === "OperationAbortedException" ||
-                      error._tag === "ServiceUnavailableException",
-                    schedule: Schedule.exponential(100),
-                    times: 8,
-                  }),
-                  Effect.catchTag(
-                    "ResourceNotFoundException",
-                    () => Effect.void,
-                  ),
-                );
+                yield* logs
+                  .disassociateKmsKey({ logGroupName })
+                  .pipe(
+                    Effect.catchTag(
+                      "ResourceNotFoundException",
+                      () => Effect.void,
+                    ),
+                  );
               }
             } else {
-              yield* logs
-                .associateKmsKey({
-                  logGroupName,
-                  kmsKeyId: news.kmsKeyId,
-                })
-                .pipe(
-                  Effect.retry({
-                    while: (error) =>
-                      error._tag === "OperationAbortedException" ||
-                      error._tag === "ServiceUnavailableException",
-                    schedule: Schedule.exponential(100),
-                    times: 8,
-                  }),
-                );
+              yield* logs.associateKmsKey({
+                logGroupName,
+                kmsKeyId: news.kmsKeyId,
+              });
             }
           }
 
@@ -283,20 +261,10 @@ export const LogGroupProvider = () =>
           const observedDeletionProtection =
             observed?.deletionProtectionEnabled ?? false;
           if (desiredDeletionProtection !== observedDeletionProtection) {
-            yield* logs
-              .putLogGroupDeletionProtection({
-                logGroupIdentifier: logGroupName,
-                deletionProtectionEnabled: desiredDeletionProtection,
-              })
-              .pipe(
-                Effect.retry({
-                  while: (error) =>
-                    error._tag === "OperationAbortedException" ||
-                    error._tag === "ServiceUnavailableException",
-                  schedule: Schedule.exponential(100),
-                  times: 8,
-                }),
-              );
+            yield* logs.putLogGroupDeletionProtection({
+              logGroupIdentifier: logGroupName,
+              deletionProtectionEnabled: desiredDeletionProtection,
+            });
           }
 
           // Sync retention - observed to desired.
@@ -308,33 +276,16 @@ export const LogGroupProvider = () =>
                   logGroupName,
                 })
                 .pipe(
-                  Effect.retry({
-                    while: (error) =>
-                      error._tag === "OperationAbortedException" ||
-                      error._tag === "ServiceUnavailableException",
-                    schedule: Schedule.exponential(100),
-                    times: 8,
-                  }),
                   Effect.catchTag(
                     "ResourceNotFoundException",
                     () => Effect.void,
                   ),
                 );
             } else {
-              yield* logs
-                .putRetentionPolicy({
-                  logGroupName,
-                  retentionInDays: news.retentionInDays,
-                })
-                .pipe(
-                  Effect.retry({
-                    while: (error) =>
-                      error._tag === "OperationAbortedException" ||
-                      error._tag === "ServiceUnavailableException",
-                    schedule: Schedule.exponential(100),
-                    times: 8,
-                  }),
-                );
+              yield* logs.putRetentionPolicy({
+                logGroupName,
+                retentionInDays: news.retentionInDays,
+              });
             }
           }
 
@@ -356,36 +307,18 @@ export const LogGroupProvider = () =>
             );
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0) {
-            yield* logs
-              .tagResource({
-                resourceArn: arn,
-                tags: Object.fromEntries(
-                  upsert.map((tag) => [tag.Key, tag.Value]),
-                ),
-              })
-              .pipe(
-                Effect.retry({
-                  while: (error) =>
-                    error._tag === "ServiceUnavailableException",
-                  schedule: Schedule.exponential(100),
-                  times: 8,
-                }),
-              );
+            yield* logs.tagResource({
+              resourceArn: arn,
+              tags: Object.fromEntries(
+                upsert.map((tag) => [tag.Key, tag.Value]),
+              ),
+            });
           }
           if (removed.length > 0) {
-            yield* logs
-              .untagResource({
-                resourceArn: arn,
-                tagKeys: removed,
-              })
-              .pipe(
-                Effect.retry({
-                  while: (error) =>
-                    error._tag === "ServiceUnavailableException",
-                  schedule: Schedule.exponential(100),
-                  times: 8,
-                }),
-              );
+            yield* logs.untagResource({
+              resourceArn: arn,
+              tagKeys: removed,
+            });
           }
 
           yield* session.note(arn);
