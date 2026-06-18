@@ -27,12 +27,12 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { isLiveId } from "../LocalRuntime.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
+import { Container, ContainerTypeId } from "./Container.ts";
 import {
   buildFinalDockerfile,
   bundleContainerProgram,
   createContainerApplicationName,
 } from "./ContainerBundle.ts";
-import { Container, ContainerTypeId } from "./Container.ts";
 import { LocalContainerProvider } from "./LocalContainerProvider.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
@@ -785,9 +785,7 @@ export const LiveContainerProvider = () =>
       };
 
       return Container.Provider.of({
-        // `applicationId` is not stable: starting in dev mode produces a
-        // `dev:` id that is promoted to a real one on the first live deploy.
-        stables: ["accountId"],
+        stables: ["accountId", "applicationId"],
         diff: Effect.fnUntraced(function* ({
           id,
           olds = {},
@@ -829,7 +827,8 @@ export const LiveContainerProvider = () =>
           // the real application has never been created. Promote it by forcing
           // an update so reconcile creates the live application.
           if (!isLiveId(output.applicationId)) {
-            return { action: "update" } as const;
+            // Override stables to only include the accountId because the applicationId is going to change.
+            return { action: "update", stables: ["accountId"] } as const;
           }
 
           const { imageHash } = yield* computeImageHash(id, news);

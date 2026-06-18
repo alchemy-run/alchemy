@@ -15,14 +15,12 @@ export const createContainerApplicationName = (
   id: string,
   name: string | undefined,
 ) =>
-  Effect.gen(function* () {
-    return (
-      name ??
-      (yield* createPhysicalName({
-        id,
-        lowercase: true,
-      }))
-    );
+  Effect.suspend(() => {
+    if (name) return Effect.succeed(name);
+    return createPhysicalName({
+      id,
+      lowercase: true,
+    });
   });
 
 /**
