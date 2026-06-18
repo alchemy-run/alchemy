@@ -14,7 +14,7 @@ const { test } = Test.make({ providers: AWS.providers() });
 // `CallerReference`, so re-running reuses the same zone rather than piling up
 // duplicates. (`example.com` is reserved by AWS, hence the bespoke name.)
 const zoneName = "alchemy-route53-list-test.com.";
-const callerReference = "alchemy-route53-record-list-test";
+const callerReference = "alchemy-route53-record-list-test-v2";
 const recordName = `list-record.${zoneName}`;
 const recordValue = '"alchemy-list-test"';
 
@@ -28,6 +28,17 @@ const findZoneIdByName = route53.listHostedZones.pages({}).pipe(
   Effect.map((zones) => zones.find((zone) => zone.Name === zoneName)?.Id),
 );
 
+// The hosted zone is a *standing* fixture — created once and reused across
+// runs (Route53 keys public-zone creation on `CallerReference`, so re-running
+// returns `HostedZoneAlreadyExists` and we look the existing zone up by name).
+// We deliberately do NOT delete the zone on teardown: deleting it would keep
+// the `CallerReference` claimed for a long propagation window, during which
+// `createHostedZone` returns `HostedZoneAlreadyExists` while `listHostedZones`
+// shows nothing — poisoning every subsequent run. A short retry absorbs the
+// brief list eventual-consistency right after a first-time create.
+const zoneNotYetListable =
+  "hosted zone not found after HostedZoneAlreadyExists";
+
 const ensureZone = route53
   .createHostedZone({ Name: zoneName, CallerReference: callerReference })
   .pipe(
@@ -37,14 +48,15 @@ const ensureZone = route53
         Effect.flatMap((id) =>
           id !== undefined
             ? Effect.succeed(normalizeId(id))
-            : Effect.die(
-                new Error(
-                  "hosted zone not found after HostedZoneAlreadyExists",
-                ),
-              ),
+            : Effect.fail(new Error(zoneNotYetListable)),
         ),
       ),
     ),
+    Effect.retry({
+      while: (e) => e instanceof Error && e.message === zoneNotYetListable,
+      schedule: Schedule.spaced("3 seconds"),
+      times: 10,
+    }),
   );
 
 // Create/delete the record set out of band. The Alchemy engine's own deploy
@@ -75,14 +87,6 @@ const changeRecord = (hostedZoneId: string, action: "UPSERT" | "DELETE") =>
       Effect.catchTag("NoSuchHostedZone", () => Effect.void),
     );
 
-const deleteZone = (hostedZoneId: string) =>
-  route53.deleteHostedZone({ Id: hostedZoneId }).pipe(
-    Effect.asVoid,
-    // Best-effort teardown: tolerate a vanished or still-non-empty zone.
-    Effect.catchTag("NoSuchHostedZone", () => Effect.void),
-    Effect.catchTag("HostedZoneNotEmpty", () => Effect.void),
-  );
-
 test.provider(
   "list enumerates the deployed record across hosted zones",
   (stack) =>
@@ -90,9 +94,7 @@ test.provider(
       yield* stack.destroy();
 
       const hostedZoneId = yield* ensureZone;
-      yield* changeRecord(hostedZoneId, "UPSERT").pipe(
-        Effect.tapError(() => deleteZone(hostedZoneId)),
-      );
+      yield* changeRecord(hostedZoneId, "UPSERT");
 
       const provider = yield* Provider.findProvider(Record);
 
@@ -121,7 +123,8 @@ test.provider(
       );
 
       yield* changeRecord(hostedZoneId, "DELETE");
-      yield* deleteZone(hostedZoneId);
+      // Leave the hosted zone standing — see `ensureZone` above. Deleting it
+      // would poison the stable `CallerReference` for the next run.
       yield* stack.destroy();
 
       expect(found).toBe(true);
