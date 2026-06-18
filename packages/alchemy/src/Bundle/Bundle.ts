@@ -161,6 +161,16 @@ export const watch = (
               },
             },
           ],
+          watch: {
+            // Watching the full module graph of an Effect worker (all of
+            // `effect`, `alchemy`, `@distilled.cloud/*`) registers thousands
+            // of OS watch handles *per worker*; with several Effect workers
+            // this exhausts the process fd table and the next `posix_spawn`
+            // (workerd / docker) fails with `spawn EBADF`. Workspace packages
+            // resolve to their real source paths (outside `node_modules`), so
+            // they stay watched and local HMR is unaffected.
+            exclude: ["**/node_modules/**"],
+          },
           output: outputOptions,
         });
         watcher.on("event", (event) => {
