@@ -71,7 +71,9 @@ export type EmailRule = Resource<
  *
  * Rules forward inbound mail matching `matchers` to the listed actions
  * (forward to a verified destination, drop, or hand off to a Worker).
- *
+ * @resource
+ * @product Email
+ * @category Email
  * @section Forwarding Mail
  * @example Forward `info@` to a verified destination
  * ```typescript

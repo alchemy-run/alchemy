@@ -82,7 +82,9 @@ export type EmailSendingSubdomain = Resource<
  * prior state, `read` scans the zone for an existing subdomain with the
  * same name and reports it as `Unowned`, so the engine refuses to take it
  * over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Email
+ * @category Email
  * @section Registering a sending subdomain
  * @example Send mail from `mail.example.com`
  * ```typescript

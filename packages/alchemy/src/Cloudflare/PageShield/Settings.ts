@@ -105,7 +105,9 @@ export type PageShieldSettings = Resource<
  *
  * Only one `PageShieldSettings` resource per zone makes sense — two
  * instances managing the same zone would fight over the singleton.
- *
+ * @resource
+ * @product Page Shield
+ * @category Application Security
  * @section Managing Page Shield
  * @example Enable Page Shield on a zone
  * ```typescript

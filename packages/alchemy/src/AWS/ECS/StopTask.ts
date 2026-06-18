@@ -8,6 +8,7 @@ import type { Cluster } from "./Cluster.ts";
 
 export interface StopTaskRequest extends Omit<ECS.StopTaskRequest, "cluster"> {}
 
+/** @binding */
 export class StopTask extends Binding.Service<
   StopTask,
   (

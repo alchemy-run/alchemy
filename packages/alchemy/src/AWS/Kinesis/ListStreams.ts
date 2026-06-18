@@ -6,6 +6,7 @@ import { isFunction } from "../Lambda/Function.ts";
 
 export interface ListStreamsRequest extends Kinesis.ListStreamsInput {}
 
+/** @binding */
 export class ListStreams extends Binding.Service<
   ListStreams,
   () => Effect.Effect<

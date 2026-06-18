@@ -22,6 +22,9 @@ import { isWorker, isWorkerEvent, Worker } from "./Worker.ts";
  * at this Worker (at a deterministic per-repo path). The webhook secret is
  * bound onto the Worker separately by the runtime layer, via an `Output`
  * accessor, so the runtime can verify delivery signatures.
+ * @binding
+ * @product Workers
+ * @category Workers & Compute
  */
 export class GitHubRepositoryEventSourcePolicy extends Binding.Policy<
   GitHubRepositoryEventSourcePolicy,

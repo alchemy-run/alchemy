@@ -47,7 +47,9 @@ export type AccountApiToken = Resource<
  *
  * Creating account-owned tokens requires the caller to have the
  * `API Tokens > Write` account permission.
- *
+ * @resource
+ * @product API Tokens
+ * @category Account & Identity
  * @section Creating a Token
  * @example A token for managing Workers and KV from CI
  * ```typescript

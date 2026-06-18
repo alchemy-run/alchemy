@@ -146,7 +146,9 @@ export type QueueSubscription = Resource<
  * creation (changing it replaces the subscription). `name`, `events`,
  * `enabled`, and the destination `queueId` are all mutable in place.
  * Cloudflare allows at most one subscription per source per account.
- *
+ * @resource
+ * @product Queues
+ * @category Storage & Databases
  * @section Creating a Subscription
  * @example R2 bucket events into a Queue
  * ```typescript

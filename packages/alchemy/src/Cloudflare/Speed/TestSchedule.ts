@@ -118,7 +118,9 @@ export type SpeedTestSchedule = Resource<
  * state, `read` reports an existing schedule for the same `(url, region)` as
  * `Unowned`, so the engine refuses to take it over unless `--adopt` (or
  * `adopt(true)`) is set.
- *
+ * @resource
+ * @product Speed
+ * @category Performance & Reliability
  * @section Scheduling a test
  * @example Weekly test of the home page
  * ```typescript

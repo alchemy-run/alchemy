@@ -85,7 +85,9 @@ export type IamResourceGroup = Resource<
  *
  * Account-scoped IAM (resource groups, user groups) is an Enterprise
  * feature.
- *
+ * @resource
+ * @product IAM
+ * @category Account & Identity
  * @section Creating a Resource Group
  * @example Scope a group to the whole account
  * ```typescript

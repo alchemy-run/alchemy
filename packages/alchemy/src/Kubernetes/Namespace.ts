@@ -28,7 +28,7 @@ export interface Namespace extends ObjectRef {
 
 /**
  * A Kubernetes namespace bound to an EKS cluster.
- *
+ * @resource
  * @example Create a namespace
  * ```typescript
  * const ns = yield* Namespace("demo", {

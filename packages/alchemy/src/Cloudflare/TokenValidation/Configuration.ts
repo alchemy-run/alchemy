@@ -144,7 +144,9 @@ export type TokenConfiguration = Resource<
  * Title, description, and token sources are patched in place; the key set
  * is rotated in place via the credentials endpoint. Only `zoneId` and
  * `tokenType` force a replacement.
- *
+ * @resource
+ * @product Token Validation
+ * @category Application Security
  * @section Creating a Configuration
  * @example JWT configuration with an RSA key
  * ```typescript

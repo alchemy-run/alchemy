@@ -18,6 +18,7 @@ export const isSQSEvent = (event: any): event is lambda.SQSEvent =>
   event.Records.length > 0 &&
   event.Records[0].eventSource === "aws:sqs";
 
+/** @binding */
 export const QueueEventSource = Layer.effect(
   SQSQueueEventSource,
   // @ts-expect-error

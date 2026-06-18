@@ -129,7 +129,9 @@ export type IpsecTunnel = Resource<
  * The tunnel `name` is unique per account and immutable in practice —
  * changing it triggers a replacement. The `psk` is write-only: Cloudflare
  * never returns it, so the configured value is carried in state.
- *
+ * @resource
+ * @product Magic Transit
+ * @category Network
  * @section Creating an IPsec tunnel
  * @example Basic tunnel with a provided PSK
  * ```typescript

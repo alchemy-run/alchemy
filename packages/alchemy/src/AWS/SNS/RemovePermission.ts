@@ -10,6 +10,7 @@ export interface RemovePermissionRequest extends Omit<
   "TopicArn"
 > {}
 
+/** @binding */
 export class RemovePermission extends Binding.Service<
   RemovePermission,
   (

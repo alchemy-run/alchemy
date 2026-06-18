@@ -178,7 +178,9 @@ export type BotManagement = Resource<
  * Fields that were never set by this resource are not touched. Settings
  * changed out-of-band after the snapshot was taken, or fields the zone's
  * plan no longer accepts, cannot be restored.
- *
+ * @resource
+ * @product Bot Management
+ * @category Application Security
  * @section Super Bot Fight Mode
  * @example Challenge definitely automated traffic (Pro and above)
  * ```typescript

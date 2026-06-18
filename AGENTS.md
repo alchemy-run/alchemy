@@ -111,22 +111,12 @@ Alchemy resource coverage is produced as a **software factory**: fleets of agent
 
 `tsgo -b` over the workspace is expensive; dozens of agents running it concurrently thrashes the machine (and concurrent `tsbuildinfo` writes race). Instead:
 
-- The coordinator runs exactly **one** watcher for the lifetime of the factory:
-  ```sh
-  nohup bun tsgo -b -w > /tmp/tsgo-watch.log 2>&1 &
-  ```
-- **Agents are banned** from running `tsgo`, `tsc`, or `bun run build` (root or distilled) in any form. They read type state from the watch log instead — free and instant:
-  ```sh
-  grep -a "Found" /tmp/tsgo-watch.log | tail -1      # settled error count
-  grep -a "error TS" /tmp/tsgo-watch.log | tail -20  # current errors
-  ```
-- **vitest resolves distilled from `src/*.ts` directly, NOT the built `lib/`.** So a regenerated service is **immediately test-visible** the moment `bun scripts/generate.ts --service {service}` (+ oxlint/oxfmt) finishes — there is nothing to rebuild and **nothing to wait for**. Do NOT sleep, do NOT poll the watch log for a `lib/` rebuild, and do NOT gate a test re-run on the watcher after regenerating. This applies to response-schema patches as well as error-tag-only patches.
-- The watcher therefore exists purely for **type-state monitoring**; it is never on the critical path for making a distilled change test-visible. If it dies, tests are unaffected.
-- Watch-mode occasionally reports a spurious `TS6059` rootDir error with a lowercase-mangled path — a one-shot `bun tsgo -b` is the authoritative check, run by the coordinator at wave boundaries.
+- **Agents are banned** from running `tsgo`, `tsc`, or `bun run build` (root or distilled) in any form. The coordinator owns type-checking and runs a one-shot `bun tsgo -b` at wave boundaries.
+- **vitest resolves distilled from `src/*.ts` directly, NOT the built `lib/`** (the `bun` export condition; see `packages/alchemy/vitest.config.ts`). So a regenerated service is **immediately test-visible** the moment `bun scripts/generate.ts --service {service}` (+ oxlint/oxfmt) finishes — there is nothing to rebuild and **nothing to wait for**. Do NOT sleep and do NOT gate a test re-run on a build after regenerating. This applies to response-schema patches as well as error-tag-only patches.
 
 ## Speed doctrine: never wait on a hang
 
-- Wrap **every** test invocation in a hard kill: `timeout 240 ALCHEMY_PROFILE=testing bun vitest run <suite>` (from the repo root). Hitting the wall **is** the failure — read the partial output, find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping.
+- Run tests from `packages/alchemy` (suite paths are relative to it, e.g. `test/Cloudflare/...`). Wrap **every** test invocation in a hard kill: `cd packages/alchemy && timeout 240 ALCHEMY_PROFILE=testing bun vitest run <suite>`. Hitting the wall **is** the failure — read the partial output, find the hang (unbounded retry, infinite pagination, the engine deadlock below), fix the root cause. Never just re-run hoping.
 - Per-test vitest timeout ≤ 90–120s. A suite needing more than ~3–5 minutes total is a bug.
 - Every `Effect.retry`/`Effect.repeat` is bounded: `times ≤ 8–10`, total backoff under ~45–60s. Never poll for asynchronous provisioning slower than ~90s — skipIf-gate instead.
 - **Known engine bug**: a deploy that *replaces* a resource while simultaneously *removing* its old dependency deadlocks. Keep both dependencies deployed across replacement steps in tests (see `test/Cloudflare/R2/BucketEventNotification.test.ts`).
@@ -150,7 +140,7 @@ A wave task prompt is a contract. Include, every time:
 1. The **distilled service the agent owns** and the resources to build (with namespace + directory).
 2. **Assess-first** instruction (finish partial work, don't rewrite).
 3. The reading list: this file's Reconciler doctrine + Typed Error Doctrine, the catalog spec, the distilled service module + existing patches, current exemplar resources/tests (account-level CRUD, zone singleton capture-and-restore, observe-before-delete), and the registration files.
-4. The **type-check/build ban** + watch-log usage (above).
+4. The **type-check/build ban** (above) — agents never run `tsgo`/`tsc`/`bun run build`; the coordinator owns type-checking.
 5. The **speed doctrine** (above) verbatim — agents rediscover unbounded waits otherwise.
 6. The **Typed Error Doctrine** hard rule with the patch-regenerate command for *their* service only.
 7. Registration discipline for the shared files, including the nested-mergeAll note.
@@ -839,17 +829,19 @@ bun tsgo -b
 
 This runs the TypeScript compiler in build mode, which checks all projects in the workspace (including the distilled packages, which are project references). This is critical because CI will fail if there are type errors.
 
-## Multi-agent sessions: one watcher, no per-agent checks
+## Running tests
 
-When many agents work concurrently (see **The Resource Factory Process**), do NOT let each agent run `bun tsgo -b` — concurrent runs thrash the machine and race on `tsbuildinfo`. Instead the coordinator runs a single watcher for the session:
+Run tests from `packages/alchemy` — suite paths are relative to it:
 
 ```bash
-nohup bun tsgo -b -w > /tmp/tsgo-watch.log 2>&1 &
+cd packages/alchemy && ALCHEMY_PROFILE=testing bun vitest run test/Cloudflare/{Service}/{Resource}.test.ts
 ```
 
-- Agents read type state from the log (`grep -a "Found" /tmp/tsgo-watch.log | tail -1`) instead of invoking the compiler.
-- The watcher is **only** for type-state monitoring. vitest resolves distilled from `src/*.ts` directly, so a regenerated service is test-visible immediately — no `lib/` rebuild and no watcher wait is ever required before re-running tests (see the "Resource budget" section above). If the watcher dies, tests are unaffected; just restart it (or run a one-shot `bun tsgo -b`) when you next want a type check.
-- Watch mode occasionally emits a spurious `TS6059` rootDir error with a lowercase-mangled path; a one-shot `bun tsgo -b` at wave boundaries is the authoritative check.
+vitest resolves distilled from `src/*.ts` directly (the `bun` export condition; see `packages/alchemy/vitest.config.ts`), so a regenerated service is test-visible immediately — no `lib/` rebuild is ever required before re-running tests.
+
+## Multi-agent sessions: the coordinator owns type-checking
+
+When many agents work concurrently (see **The Resource Factory Process**), do NOT let each agent run `bun tsgo -b` — concurrent runs thrash the machine and race on `tsbuildinfo`. Agents never invoke the compiler; the coordinator runs a one-shot `bun tsgo -b` at wave boundaries as the authoritative type check.
 
 ## Build Commands
 

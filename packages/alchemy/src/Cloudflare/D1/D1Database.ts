@@ -133,7 +133,9 @@ export type D1Database = Resource<
  *
  * D1 is a serverless relational database that runs at the edge. Create a
  * database as a resource, then bind it to a Worker to run SQL queries.
- *
+ * @resource
+ * @product D1
+ * @category Storage & Databases
  * @section Creating a Database
  * @example Basic database
  * ```typescript

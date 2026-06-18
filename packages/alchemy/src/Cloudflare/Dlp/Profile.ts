@@ -98,7 +98,9 @@ export type DlpProfile = Resource<
  *
  * Requires the Cloudflare DLP entitlement (a paid Zero Trust add-on);
  * accounts without it receive the typed `Forbidden` error on all writes.
- *
+ * @resource
+ * @product DLP
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a DLP profile
  * @example Profile with a custom regex entry
  * ```typescript

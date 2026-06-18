@@ -70,7 +70,9 @@ export type CallsTurnKey = Resource<
  * short-lived TURN credentials that WebRTC clients use to relay traffic
  * through Cloudflare's network. The only configurable property is the
  * human-readable `name`, which is mutable in place.
- *
+ * @resource
+ * @product Calls
+ * @category Media
  * @section Creating a TURN key
  * @example TURN key with a generated name
  * ```typescript

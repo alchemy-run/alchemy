@@ -81,7 +81,9 @@ export type EmailSecurityImpersonationRegistryEntry = Resource<
  * Office365/Google integrations and are not exposed as inputs. Requires
  * the Email Security enterprise add-on; accounts without the entitlement
  * receive the typed `EmailSecurityNotEntitled` error.
- *
+ * @resource
+ * @product Email Security
+ * @category Email
  * @section Registering Protected Identities
  * @example Protect an executive's display name
  * ```typescript

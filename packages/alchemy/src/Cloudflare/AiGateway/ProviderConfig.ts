@@ -132,7 +132,9 @@ export type AiGatewayProviderConfig = Resource<
  * Cloudflare imposes a strict naming contract: the gateway must reference a
  * Secrets Store via its `storeId`, and the secret must be scoped to
  * `ai_gateway` and named exactly `{gatewayId}_{providerSlug}_{alias}`.
- *
+ * @resource
+ * @product AI Gateway
+ * @category AI
  * @section Creating a Provider Config
  * @example Bring your own OpenAI key
  * ```typescript

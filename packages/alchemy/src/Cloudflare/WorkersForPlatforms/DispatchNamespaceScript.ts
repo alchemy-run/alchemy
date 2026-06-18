@@ -96,7 +96,9 @@ export type DispatchNamespaceScript = Resource<
  * This resource supports small inline ES modules. For full bundling,
  * assets, and rich binding support, see the follow-up notes in the
  * Workers for Platforms catalog.
- *
+ * @resource
+ * @product Workers for Platforms
+ * @category Workers & Compute
  * @section Uploading a script
  * @example Inline user Worker
  * ```typescript

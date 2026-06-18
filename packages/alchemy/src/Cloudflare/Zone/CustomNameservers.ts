@@ -80,7 +80,9 @@ export type ZoneCustomNameservers = Resource<
  * Enabling requires an account custom nameserver set to be configured first
  * (Business/Enterprise feature). Without one, Cloudflare rejects the update
  * with the typed `CustomNameserverSetNotFound` error.
- *
+ * @resource
+ * @product Zones
+ * @category Domains & DNS
  * @section Enabling account custom nameservers
  * @example Use the account's default nameserver set
  * ```typescript

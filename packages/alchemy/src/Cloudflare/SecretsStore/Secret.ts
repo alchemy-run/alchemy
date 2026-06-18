@@ -71,7 +71,9 @@ const asSecretStatus = (status: string): SecretStatus => status as SecretStatus;
  * The secret value is treated as redacted and is only ever sent to
  * Cloudflare at create time. Updating `scopes` or `comment` issues a
  * PATCH; changing `value` or `name` replaces the secret.
- *
+ * @resource
+ * @product Secrets Store
+ * @category Storage & Databases
  * @section Creating a Secret
  * @example Basic Secret
  * ```typescript

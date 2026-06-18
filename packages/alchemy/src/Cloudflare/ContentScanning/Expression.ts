@@ -65,7 +65,9 @@ export type ContentScanningExpression = Resource<
  * state, `read` scans the zone for an expression with the same payload text
  * and reports it as `Unowned`, so the engine refuses to take it over unless
  * `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Content Scanning
+ * @category Application Security
  * @section Creating expressions
  * @example Scan a JSON-embedded file field
  * ```typescript

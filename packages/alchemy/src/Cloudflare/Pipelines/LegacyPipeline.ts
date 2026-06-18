@@ -166,7 +166,9 @@ export type LegacyPipeline = Resource<
  * A legacy pipeline accepts JSON events over HTTP (and/or a Worker
  * `pipelines` binding) and batches them into an R2 bucket using
  * S3-compatible credentials.
- *
+ * @resource
+ * @product Pipelines
+ * @category Storage & Databases
  * @section Creating a Legacy Pipeline
  * @example HTTP ingest into R2
  * The S3-compatible credentials are derived from a Cloudflare API token:

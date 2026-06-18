@@ -22,6 +22,94 @@ import type { RegionID } from "../Region.ts";
 export type BucketName = string;
 export type BucketArn = `arn:aws:s3:::${BucketName}`;
 
+/**
+ * Server-side encryption configuration for a bucket.
+ */
+export interface BucketEncryption {
+  /**
+   * Server-side encryption algorithm to use for the default encryption.
+   */
+  sseAlgorithm: "AES256" | "aws:kms" | "aws:kms:dsse";
+  /**
+   * KMS key id (or ARN) to use when `sseAlgorithm` is `aws:kms` or
+   * `aws:kms:dsse`. Ignored for `AES256`.
+   */
+  kmsMasterKeyId?: string;
+  /**
+   * Whether to use an S3 Bucket Key for SSE-KMS to reduce KMS request costs.
+   * @default false
+   */
+  bucketKeyEnabled?: boolean;
+}
+
+/**
+ * Public access block settings for a bucket. Each flag defaults to `false`
+ * (i.e. the corresponding public access is allowed) when omitted.
+ */
+export interface BucketPublicAccessBlock {
+  /** Block new public ACLs and uploading public objects. */
+  blockPublicAcls?: boolean;
+  /** Ignore all public ACLs on the bucket and its objects. */
+  ignorePublicAcls?: boolean;
+  /** Block new bucket policies that grant public access. */
+  blockPublicPolicy?: boolean;
+  /** Restrict access granted by public bucket policies to AWS principals. */
+  restrictPublicBuckets?: boolean;
+}
+
+/**
+ * Access-logging configuration for a bucket.
+ */
+export interface BucketLogging {
+  /** Bucket that receives the access logs. */
+  targetBucket: string;
+  /** Key prefix applied to log object names. */
+  targetPrefix: string;
+  /** Optional grants giving accounts access to the log objects. */
+  targetGrants?: s3.TargetGrant[];
+  /** Optional log object key format (simple or partitioned prefix). */
+  targetObjectKeyFormat?: s3.TargetObjectKeyFormat;
+}
+
+/**
+ * Static-website hosting configuration for a bucket.
+ */
+export interface BucketWebsite {
+  /** Index document served for directory-style requests. */
+  indexDocument?: { suffix: string };
+  /** Document served for 4XX errors. */
+  errorDocument?: { key: string };
+  /** Redirect every request to another host instead of serving objects. */
+  redirectAllRequestsTo?: { hostName: string; protocol?: "http" | "https" };
+  /** Routing rules for conditional redirects. */
+  routingRules?: s3.RoutingRule[];
+}
+
+/**
+ * Cross-region (or same-region) replication configuration for a bucket.
+ * Requires `versioning: "Enabled"` on the source bucket and an IAM role
+ * that S3 can assume to perform the replication.
+ */
+export interface BucketReplication {
+  /** ARN of the IAM role S3 assumes to replicate objects. */
+  role: string;
+  /** Replication rules describing what to replicate and where. */
+  rules: s3.ReplicationRule[];
+}
+
+/**
+ * Default object-lock retention applied to objects placed in a bucket that
+ * was created with `objectLockEnabled: true`.
+ */
+export interface BucketObjectLockConfiguration {
+  /** Retention mode. */
+  mode: "GOVERNANCE" | "COMPLIANCE";
+  /** Retention period in days (mutually exclusive with `years`). */
+  days?: number;
+  /** Retention period in years (mutually exclusive with `days`). */
+  years?: number;
+}
+
 export interface BucketProps {
   /**
    * Name of the bucket. If omitted, a unique name will be generated.
@@ -42,6 +130,80 @@ export interface BucketProps {
    * Tags to apply to the bucket.
    */
   tags?: Record<string, string>;
+  /**
+   * Object versioning status. `"Enabled"` keeps every version of an object;
+   * `"Suspended"` stops accruing new versions (existing versions are kept).
+   */
+  versioning?: "Enabled" | "Suspended";
+  /**
+   * MFA-delete status. Rarely used — enabling it requires an MFA serial and
+   * the root account, so it cannot be toggled through normal credentials.
+   */
+  mfaDelete?: "Enabled" | "Disabled";
+  /**
+   * Default server-side encryption for objects written to the bucket.
+   */
+  encryption?: BucketEncryption;
+  /**
+   * Block-public-access settings. Applied before any ACL or policy that
+   * grants public access.
+   */
+  publicAccessBlock?: BucketPublicAccessBlock;
+  /**
+   * Cross-origin resource sharing (CORS) rules.
+   */
+  cors?: s3.CORSRule[];
+  /**
+   * Object lifecycle rules (expiration, transition, abort-incomplete-MPU…).
+   */
+  lifecycleRules?: s3.LifecycleRule[];
+  /**
+   * Object ownership control. `"BucketOwnerEnforced"` disables ACLs entirely.
+   */
+  objectOwnership?:
+    | "BucketOwnerPreferred"
+    | "ObjectWriter"
+    | "BucketOwnerEnforced";
+  /**
+   * Canned ACL to apply. Only valid when object ownership is not
+   * `BucketOwnerEnforced`.
+   */
+  acl?: s3.BucketCannedACL;
+  /**
+   * Access-logging configuration.
+   */
+  logging?: BucketLogging;
+  /**
+   * S3 Transfer Acceleration status.
+   */
+  transferAcceleration?: "Enabled" | "Suspended";
+  /**
+   * Who pays for requests and data transfer. `"Requester"` enables
+   * requester-pays.
+   */
+  requestPayer?: "BucketOwner" | "Requester";
+  /**
+   * Static-website hosting configuration.
+   */
+  website?: BucketWebsite;
+  /**
+   * Replication configuration. Requires `versioning: "Enabled"` and an
+   * IAM role.
+   */
+  replication?: BucketReplication;
+  /**
+   * S3 Intelligent-Tiering configurations (id-keyed).
+   */
+  intelligentTiering?: s3.IntelligentTieringConfiguration[];
+  /**
+   * Default object-lock retention. Requires `objectLockEnabled: true`.
+   */
+  objectLockConfiguration?: BucketObjectLockConfiguration;
+  /**
+   * Explicit bucket policy as policy statements. Merged with any
+   * policy statements contributed via bindings.
+   */
+  policy?: PolicyStatement[];
 }
 
 export interface Bucket extends Resource<
@@ -92,7 +254,7 @@ export interface Bucket extends Resource<
  * A bucket name is auto-generated from the app, stage, and logical ID unless
  * you provide one explicitly via `bucketName`. Enable `forceDestroy` to allow
  * Alchemy to empty the bucket before deleting it.
- *
+ * @resource
  * @section Creating a Bucket
  * @example Basic Bucket
  * ```typescript
@@ -112,6 +274,60 @@ export interface Bucket extends Resource<
  * ```typescript
  * const bucket = yield* S3.Bucket("my-bucket", {
  *   forceDestroy: true,
+ * });
+ * ```
+ *
+ * @section Configuring a Bucket
+ * @example Versioning and encryption
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   versioning: "Enabled",
+ *   encryption: { sseAlgorithm: "AES256" },
+ * });
+ * ```
+ *
+ * @example Block all public access
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   publicAccessBlock: {
+ *     blockPublicAcls: true,
+ *     ignorePublicAcls: true,
+ *     blockPublicPolicy: true,
+ *     restrictPublicBuckets: true,
+ *   },
+ * });
+ * ```
+ *
+ * @example CORS and lifecycle rules
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   cors: [
+ *     {
+ *       AllowedMethods: ["GET"],
+ *       AllowedOrigins: ["*"],
+ *       AllowedHeaders: ["*"],
+ *       MaxAgeSeconds: 3000,
+ *     },
+ *   ],
+ *   lifecycleRules: [
+ *     {
+ *       ID: "expire-old",
+ *       Status: "Enabled",
+ *       Filter: { Prefix: "logs/" },
+ *       Expiration: { Days: 30 },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @example Static website hosting
+ * ```typescript
+ * const bucket = yield* S3.Bucket("my-bucket", {
+ *   objectOwnership: "BucketOwnerPreferred",
+ *   website: {
+ *     indexDocument: { suffix: "index.html" },
+ *     errorDocument: { key: "error.html" },
+ *   },
  * });
  * ```
  *
@@ -421,17 +637,20 @@ export const BucketProvider = () =>
       const syncBucketPolicy = Effect.fnUntraced(function* ({
         bucketName,
         bindings,
+        explicitStatements,
         session,
         operation,
       }: {
         bucketName: string;
         session: ScopedPlanStatusSession;
         bindings: ResourceBinding<Bucket["Binding"]>[];
+        explicitStatements?: PolicyStatement[];
         operation: "create" | "update";
       }) {
-        const policyStatements = bindings.flatMap(
-          (binding) => binding.data.policyStatements ?? [],
-        );
+        const policyStatements = [
+          ...(explicitStatements ?? []),
+          ...bindings.flatMap((binding) => binding.data.policyStatements ?? []),
+        ];
         const desiredPolicy =
           policyStatements.length > 0
             ? JSON.stringify({
@@ -548,6 +767,542 @@ export const BucketProvider = () =>
         yield* session.note(`Updated bucket notifications: ${bucketName}`);
       });
 
+      // ---- Bucket configuration sync helpers ------------------------------
+      // Each helper observes the bucket's live cloud state, computes the
+      // desired state from `news`, early-returns on a no-op, and applies only
+      // the delta. The "not configured" read error for each aspect is already
+      // a typed tag in distilled (see processes/AWS/catalog/S3.md), so we
+      // `Effect.catchTag` it rather than inspecting status codes.
+
+      const syncBucketVersioning = Effect.fnUntraced(function* ({
+        bucketName,
+        versioning,
+        mfaDelete,
+        session,
+      }: {
+        bucketName: string;
+        versioning?: "Enabled" | "Suspended";
+        mfaDelete?: "Enabled" | "Disabled";
+        session: ScopedPlanStatusSession;
+      }) {
+        if (versioning === undefined && mfaDelete === undefined) return;
+        const current = yield* s3.getBucketVersioning({ Bucket: bucketName });
+        const desiredStatus = versioning;
+        const desiredMfa = mfaDelete;
+        if (
+          (desiredStatus === undefined || current.Status === desiredStatus) &&
+          (desiredMfa === undefined || current.MFADelete === desiredMfa)
+        ) {
+          return;
+        }
+        yield* s3.putBucketVersioning({
+          Bucket: bucketName,
+          VersioningConfiguration: {
+            Status: desiredStatus,
+            MFADelete: desiredMfa,
+          },
+        });
+        yield* session.note(`Updated bucket versioning: ${bucketName}`);
+      });
+
+      const syncBucketEncryption = Effect.fnUntraced(function* ({
+        bucketName,
+        encryption,
+        session,
+      }: {
+        bucketName: string;
+        encryption?: BucketEncryption;
+        session: ScopedPlanStatusSession;
+      }) {
+        if (encryption === undefined) return;
+        const desiredRule: s3.ServerSideEncryptionRule = {
+          ApplyServerSideEncryptionByDefault: {
+            SSEAlgorithm: encryption.sseAlgorithm,
+            KMSMasterKeyID: encryption.kmsMasterKeyId,
+          },
+          BucketKeyEnabled: encryption.bucketKeyEnabled ?? false,
+        };
+        const current = yield* s3
+          .getBucketEncryption({ Bucket: bucketName })
+          .pipe(
+            Effect.map((r) => r.ServerSideEncryptionConfiguration?.Rules?.[0]),
+            // Some partitions return 404 with no default config; treat any
+            // not-configured read as "no rule" so we converge by writing.
+            Effect.catch(() =>
+              Effect.succeed<s3.ServerSideEncryptionRule | undefined>(
+                undefined,
+              ),
+            ),
+          );
+        const canon = (r: s3.ServerSideEncryptionRule | undefined) =>
+          JSON.stringify({
+            alg: r?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm ?? null,
+            key: r?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID ?? null,
+            bucketKey: r?.BucketKeyEnabled ?? false,
+          });
+        if (canon(current) === canon(desiredRule)) return;
+        yield* s3.putBucketEncryption({
+          Bucket: bucketName,
+          ServerSideEncryptionConfiguration: { Rules: [desiredRule] },
+        });
+        yield* session.note(`Updated bucket encryption: ${bucketName}`);
+      });
+
+      const syncPublicAccessBlock = Effect.fnUntraced(function* ({
+        bucketName,
+        publicAccessBlock,
+        session,
+      }: {
+        bucketName: string;
+        publicAccessBlock?: BucketPublicAccessBlock;
+        session: ScopedPlanStatusSession;
+      }) {
+        if (publicAccessBlock === undefined) return;
+        const desired: s3.PublicAccessBlockConfiguration = {
+          BlockPublicAcls: publicAccessBlock.blockPublicAcls ?? false,
+          IgnorePublicAcls: publicAccessBlock.ignorePublicAcls ?? false,
+          BlockPublicPolicy: publicAccessBlock.blockPublicPolicy ?? false,
+          RestrictPublicBuckets:
+            publicAccessBlock.restrictPublicBuckets ?? false,
+        };
+        const current = yield* s3
+          .getPublicAccessBlock({ Bucket: bucketName })
+          .pipe(
+            Effect.map((r) => r.PublicAccessBlockConfiguration),
+            Effect.catchTag("NoSuchPublicAccessBlockConfiguration", () =>
+              Effect.succeed<s3.PublicAccessBlockConfiguration | undefined>(
+                undefined,
+              ),
+            ),
+          );
+        const canon = (c: s3.PublicAccessBlockConfiguration | undefined) =>
+          JSON.stringify({
+            a: c?.BlockPublicAcls ?? false,
+            i: c?.IgnorePublicAcls ?? false,
+            p: c?.BlockPublicPolicy ?? false,
+            r: c?.RestrictPublicBuckets ?? false,
+          });
+        if (canon(current) === canon(desired)) return;
+        yield* s3.putPublicAccessBlock({
+          Bucket: bucketName,
+          PublicAccessBlockConfiguration: desired,
+        });
+        yield* session.note(`Updated public access block: ${bucketName}`);
+      });
+
+      const canonCors = (rules: readonly s3.CORSRule[]) =>
+        JSON.stringify(
+          Arr.map(rules, (r) => ({
+            // Drop S3-assigned `ID`s and sort member arrays so re-ordering
+            // doesn't read as drift.
+            headers: Arr.sort(r.AllowedHeaders ?? [], Order.String),
+            methods: Arr.sort(r.AllowedMethods ?? [], Order.String),
+            origins: Arr.sort(r.AllowedOrigins ?? [], Order.String),
+            expose: Arr.sort(r.ExposeHeaders ?? [], Order.String),
+            maxAge: r.MaxAgeSeconds ?? null,
+          })),
+        );
+
+      const syncBucketCors = Effect.fnUntraced(function* ({
+        bucketName,
+        cors,
+        session,
+      }: {
+        bucketName: string;
+        cors?: s3.CORSRule[];
+        session: ScopedPlanStatusSession;
+      }) {
+        if (cors === undefined) return;
+        const current = yield* s3.getBucketCors({ Bucket: bucketName }).pipe(
+          Effect.map((r) => r.CORSRules ?? []),
+          Effect.catchTag("NoSuchCORSConfiguration", () =>
+            Effect.succeed<s3.CORSRule[]>([]),
+          ),
+        );
+        if (cors.length === 0) {
+          if (current.length === 0) return;
+          yield* s3.deleteBucketCors({ Bucket: bucketName });
+          yield* session.note(`Removed bucket CORS: ${bucketName}`);
+          return;
+        }
+        if (canonCors(current) === canonCors(cors)) return;
+        yield* s3.putBucketCors({
+          Bucket: bucketName,
+          CORSConfiguration: { CORSRules: cors },
+        });
+        yield* session.note(`Updated bucket CORS: ${bucketName}`);
+      });
+
+      const canonLifecycle = (rules: readonly s3.LifecycleRule[]) =>
+        JSON.stringify(
+          Arr.sort(
+            Arr.map(rules, (r) => ({ ...r })),
+            Order.mapInput(Order.String, (r: s3.LifecycleRule) => r.ID ?? ""),
+          ),
+        );
+
+      const syncBucketLifecycle = Effect.fnUntraced(function* ({
+        bucketName,
+        lifecycleRules,
+        session,
+      }: {
+        bucketName: string;
+        lifecycleRules?: s3.LifecycleRule[];
+        session: ScopedPlanStatusSession;
+      }) {
+        if (lifecycleRules === undefined) return;
+        const current = yield* s3
+          .getBucketLifecycleConfiguration({ Bucket: bucketName })
+          .pipe(
+            Effect.map((r) => r.Rules ?? []),
+            Effect.catchTag("NoSuchLifecycleConfiguration", () =>
+              Effect.succeed<s3.LifecycleRule[]>([]),
+            ),
+          );
+        if (lifecycleRules.length === 0) {
+          if (current.length === 0) return;
+          yield* s3.deleteBucketLifecycle({ Bucket: bucketName });
+          yield* session.note(`Removed bucket lifecycle: ${bucketName}`);
+          return;
+        }
+        if (canonLifecycle(current) === canonLifecycle(lifecycleRules)) return;
+        yield* s3.putBucketLifecycleConfiguration({
+          Bucket: bucketName,
+          LifecycleConfiguration: { Rules: lifecycleRules },
+        });
+        yield* session.note(`Updated bucket lifecycle: ${bucketName}`);
+      });
+
+      const syncBucketOwnershipControls = Effect.fnUntraced(function* ({
+        bucketName,
+        objectOwnership,
+        session,
+      }: {
+        bucketName: string;
+        objectOwnership?:
+          | "BucketOwnerPreferred"
+          | "ObjectWriter"
+          | "BucketOwnerEnforced";
+        session: ScopedPlanStatusSession;
+      }) {
+        if (objectOwnership === undefined) return;
+        const current = yield* s3
+          .getBucketOwnershipControls({ Bucket: bucketName })
+          .pipe(
+            Effect.map((r) => r.OwnershipControls?.Rules?.[0]?.ObjectOwnership),
+            Effect.catchTag("OwnershipControlsNotFoundError", () =>
+              Effect.succeed<string | undefined>(undefined),
+            ),
+          );
+        if (current === objectOwnership) return;
+        yield* s3.putBucketOwnershipControls({
+          Bucket: bucketName,
+          OwnershipControls: {
+            Rules: [{ ObjectOwnership: objectOwnership }],
+          },
+        });
+        yield* session.note(`Updated object ownership: ${bucketName}`);
+      });
+
+      const syncBucketAcl = Effect.fnUntraced(function* ({
+        bucketName,
+        acl,
+        session,
+      }: {
+        bucketName: string;
+        acl?: s3.BucketCannedACL;
+        session: ScopedPlanStatusSession;
+      }) {
+        // S3 has no canned-ACL read, so we cannot diff; only apply when set.
+        // putBucketAcl is idempotent for canned ACLs.
+        if (acl === undefined) return;
+        yield* s3.putBucketAcl({ Bucket: bucketName, ACL: acl });
+        yield* session.note(`Updated bucket ACL: ${bucketName}`);
+      });
+
+      const syncBucketLogging = Effect.fnUntraced(function* ({
+        bucketName,
+        logging,
+        session,
+      }: {
+        bucketName: string;
+        logging?: BucketLogging;
+        session: ScopedPlanStatusSession;
+      }) {
+        if (logging === undefined) return;
+        const current = yield* s3
+          .getBucketLogging({ Bucket: bucketName })
+          .pipe(Effect.map((r) => r.LoggingEnabled));
+        const desired: s3.LoggingEnabled = {
+          TargetBucket: logging.targetBucket,
+          TargetPrefix: logging.targetPrefix,
+          TargetGrants: logging.targetGrants,
+          TargetObjectKeyFormat: logging.targetObjectKeyFormat,
+        };
+        if (
+          current?.TargetBucket === desired.TargetBucket &&
+          current?.TargetPrefix === desired.TargetPrefix &&
+          JSON.stringify(current?.TargetGrants ?? null) ===
+            JSON.stringify(desired.TargetGrants ?? null)
+        ) {
+          return;
+        }
+        yield* s3.putBucketLogging({
+          Bucket: bucketName,
+          BucketLoggingStatus: { LoggingEnabled: desired },
+        });
+        yield* session.note(`Updated bucket logging: ${bucketName}`);
+      });
+
+      const syncTransferAcceleration = Effect.fnUntraced(function* ({
+        bucketName,
+        transferAcceleration,
+        session,
+      }: {
+        bucketName: string;
+        transferAcceleration?: "Enabled" | "Suspended";
+        session: ScopedPlanStatusSession;
+      }) {
+        if (transferAcceleration === undefined) return;
+        const current = yield* s3
+          .getBucketAccelerateConfiguration({ Bucket: bucketName })
+          .pipe(Effect.map((r) => r.Status));
+        if (current === transferAcceleration) return;
+        yield* s3.putBucketAccelerateConfiguration({
+          Bucket: bucketName,
+          AccelerateConfiguration: { Status: transferAcceleration },
+        });
+        yield* session.note(`Updated transfer acceleration: ${bucketName}`);
+      });
+
+      const syncRequestPayment = Effect.fnUntraced(function* ({
+        bucketName,
+        requestPayer,
+        session,
+      }: {
+        bucketName: string;
+        requestPayer?: "BucketOwner" | "Requester";
+        session: ScopedPlanStatusSession;
+      }) {
+        if (requestPayer === undefined) return;
+        const current = yield* s3
+          .getBucketRequestPayment({ Bucket: bucketName })
+          .pipe(Effect.map((r) => r.Payer));
+        if (current === requestPayer) return;
+        yield* s3.putBucketRequestPayment({
+          Bucket: bucketName,
+          RequestPaymentConfiguration: { Payer: requestPayer },
+        });
+        yield* session.note(`Updated request payment: ${bucketName}`);
+      });
+
+      const syncBucketWebsite = Effect.fnUntraced(function* ({
+        bucketName,
+        website,
+        session,
+      }: {
+        bucketName: string;
+        website?: BucketWebsite;
+        session: ScopedPlanStatusSession;
+      }) {
+        if (website === undefined) return;
+        const current = yield* s3.getBucketWebsite({ Bucket: bucketName }).pipe(
+          Effect.map((r) => r as s3.GetBucketWebsiteOutput | undefined),
+          Effect.catchTag("NoSuchWebsiteConfiguration", () =>
+            Effect.succeed<s3.GetBucketWebsiteOutput | undefined>(undefined),
+          ),
+        );
+        const desired: s3.WebsiteConfiguration = {
+          IndexDocument: website.indexDocument
+            ? { Suffix: website.indexDocument.suffix }
+            : undefined,
+          ErrorDocument: website.errorDocument
+            ? { Key: website.errorDocument.key }
+            : undefined,
+          RedirectAllRequestsTo: website.redirectAllRequestsTo
+            ? {
+                HostName: website.redirectAllRequestsTo.hostName,
+                Protocol: website.redirectAllRequestsTo.protocol,
+              }
+            : undefined,
+          RoutingRules: website.routingRules,
+        };
+        const canon = (
+          w: s3.GetBucketWebsiteOutput | s3.WebsiteConfiguration | undefined,
+        ) =>
+          JSON.stringify({
+            index: w?.IndexDocument ?? null,
+            error: w?.ErrorDocument ?? null,
+            redirect: w?.RedirectAllRequestsTo ?? null,
+            routing: w?.RoutingRules ?? null,
+          });
+        if (canon(current) === canon(desired)) return;
+        yield* s3.putBucketWebsite({
+          Bucket: bucketName,
+          WebsiteConfiguration: desired,
+        });
+        yield* session.note(`Updated bucket website: ${bucketName}`);
+      });
+
+      const canonReplication = (
+        cfg:
+          | { Role?: string; Rules?: readonly s3.ReplicationRule[] }
+          | undefined,
+      ) =>
+        JSON.stringify({
+          role: cfg?.Role ?? null,
+          rules: Arr.sort(
+            Arr.map(cfg?.Rules ?? [], (r) => ({ ...r })),
+            Order.mapInput(Order.String, (r: s3.ReplicationRule) => r.ID ?? ""),
+          ),
+        });
+
+      const syncBucketReplication = Effect.fnUntraced(function* ({
+        bucketName,
+        replication,
+        session,
+      }: {
+        bucketName: string;
+        replication?: BucketReplication;
+        session: ScopedPlanStatusSession;
+      }) {
+        if (replication === undefined) return;
+        const current = yield* s3
+          .getBucketReplication({ Bucket: bucketName })
+          .pipe(
+            Effect.map((r) => r.ReplicationConfiguration),
+            Effect.catchTag("ReplicationConfigurationNotFoundError", () =>
+              Effect.succeed<s3.ReplicationConfiguration | undefined>(
+                undefined,
+              ),
+            ),
+          );
+        const desired: s3.ReplicationConfiguration = {
+          Role: replication.role,
+          Rules: replication.rules,
+        };
+        if (canonReplication(current) === canonReplication(desired)) return;
+        yield* s3.putBucketReplication({
+          Bucket: bucketName,
+          ReplicationConfiguration: desired,
+        });
+        yield* session.note(`Updated bucket replication: ${bucketName}`);
+      });
+
+      const syncIntelligentTiering = Effect.fnUntraced(function* ({
+        bucketName,
+        intelligentTiering,
+        oldIntelligentTiering,
+        session,
+      }: {
+        bucketName: string;
+        intelligentTiering?: s3.IntelligentTieringConfiguration[];
+        oldIntelligentTiering?: s3.IntelligentTieringConfiguration[];
+        session: ScopedPlanStatusSession;
+      }) {
+        if (intelligentTiering === undefined) return;
+        const desiredById = new Map(
+          Arr.map(intelligentTiering, (c) => [c.Id, c] as const),
+        );
+        // Reconcile each desired id: put when missing or changed (observed
+        // against the per-id read, which is read-after-write consistent).
+        for (const [id, desired] of desiredById) {
+          const current = yield* s3
+            .getBucketIntelligentTieringConfiguration({
+              Bucket: bucketName,
+              Id: id,
+            })
+            .pipe(
+              Effect.map((r) => r.IntelligentTieringConfiguration),
+              Effect.catchTag("NoSuchConfiguration", () =>
+                Effect.succeed<s3.IntelligentTieringConfiguration | undefined>(
+                  undefined,
+                ),
+              ),
+            );
+          if (JSON.stringify(current) === JSON.stringify(desired)) continue;
+          yield* s3.putBucketIntelligentTieringConfiguration({
+            Bucket: bucketName,
+            Id: id,
+            IntelligentTieringConfiguration: desired,
+          });
+          yield* session.note(
+            `Updated intelligent-tiering ${id}: ${bucketName}`,
+          );
+        }
+        // Remove ids that were previously declared but are no longer desired.
+        // `list` is eventually-consistent, so diff against the prior props
+        // (when available) and fall back to listing for adoption. Each delete
+        // tolerates a config that is already gone.
+        const removedIds = new Set<string>();
+        for (const old of oldIntelligentTiering ?? []) {
+          if (old.Id && !desiredById.has(old.Id)) removedIds.add(old.Id);
+        }
+        if (oldIntelligentTiering === undefined) {
+          const observed = yield* s3
+            .listBucketIntelligentTieringConfigurations({ Bucket: bucketName })
+            .pipe(
+              Effect.map((r) => r.IntelligentTieringConfigurationList ?? []),
+            );
+          for (const cfg of observed) {
+            if (cfg.Id && !desiredById.has(cfg.Id)) removedIds.add(cfg.Id);
+          }
+        }
+        for (const id of removedIds) {
+          // delete is idempotent server-side (no NoSuchConfiguration in the
+          // typed error union), so a missing id is simply a no-op.
+          yield* s3.deleteBucketIntelligentTieringConfiguration({
+            Bucket: bucketName,
+            Id: id,
+          });
+          yield* session.note(
+            `Removed intelligent-tiering ${id}: ${bucketName}`,
+          );
+        }
+      });
+
+      const syncObjectLockRetention = Effect.fnUntraced(function* ({
+        bucketName,
+        objectLockConfiguration,
+        session,
+      }: {
+        bucketName: string;
+        objectLockConfiguration?: BucketObjectLockConfiguration;
+        session: ScopedPlanStatusSession;
+      }) {
+        if (objectLockConfiguration === undefined) return;
+        const current = yield* s3
+          .getObjectLockConfiguration({ Bucket: bucketName })
+          .pipe(
+            Effect.map(
+              (r) => r.ObjectLockConfiguration?.Rule?.DefaultRetention,
+            ),
+            Effect.catchTag("ObjectLockConfigurationNotFoundError", () =>
+              Effect.succeed<s3.DefaultRetention | undefined>(undefined),
+            ),
+          );
+        const desired: s3.DefaultRetention = {
+          Mode: objectLockConfiguration.mode,
+          Days: objectLockConfiguration.days,
+          Years: objectLockConfiguration.years,
+        };
+        const canon = (r: s3.DefaultRetention | undefined) =>
+          JSON.stringify({
+            mode: r?.Mode ?? null,
+            days: r?.Days ?? null,
+            years: r?.Years ?? null,
+          });
+        if (canon(current) === canon(desired)) return;
+        yield* s3.putObjectLockConfiguration({
+          Bucket: bucketName,
+          ObjectLockConfiguration: {
+            ObjectLockEnabled: "Enabled",
+            Rule: { DefaultRetention: desired },
+          },
+        });
+        yield* session.note(`Updated object-lock retention: ${bucketName}`);
+      });
+
       return {
         stables: ["bucketName", "bucketArn", "region", "accountId"],
         // S3 bucket names are globally unique. `headBucket` succeeds only when
@@ -626,6 +1381,7 @@ export const BucketProvider = () =>
         reconcile: Effect.fn(function* ({
           id,
           news = {},
+          olds,
           output,
           session,
           bindings,
@@ -643,9 +1399,100 @@ export const BucketProvider = () =>
             operation,
           });
 
+          // Ownership + public-access-block must precede any ACL/policy that
+          // grants public access, else those puts can fail with AccessDenied.
+          yield* syncBucketOwnershipControls({
+            bucketName: resolved.bucketName,
+            objectOwnership: news.objectOwnership,
+            session,
+          });
+
+          yield* syncPublicAccessBlock({
+            bucketName: resolved.bucketName,
+            publicAccessBlock: news.publicAccessBlock,
+            session,
+          });
+
+          // Versioning before replication (replication requires it enabled).
+          yield* syncBucketVersioning({
+            bucketName: resolved.bucketName,
+            versioning: news.versioning,
+            mfaDelete: news.mfaDelete,
+            session,
+          });
+
+          yield* syncBucketEncryption({
+            bucketName: resolved.bucketName,
+            encryption: news.encryption,
+            session,
+          });
+
+          yield* syncBucketCors({
+            bucketName: resolved.bucketName,
+            cors: news.cors,
+            session,
+          });
+
+          yield* syncBucketLifecycle({
+            bucketName: resolved.bucketName,
+            lifecycleRules: news.lifecycleRules,
+            session,
+          });
+
+          yield* syncBucketLogging({
+            bucketName: resolved.bucketName,
+            logging: news.logging,
+            session,
+          });
+
+          yield* syncTransferAcceleration({
+            bucketName: resolved.bucketName,
+            transferAcceleration: news.transferAcceleration,
+            session,
+          });
+
+          yield* syncRequestPayment({
+            bucketName: resolved.bucketName,
+            requestPayer: news.requestPayer,
+            session,
+          });
+
+          yield* syncBucketWebsite({
+            bucketName: resolved.bucketName,
+            website: news.website,
+            session,
+          });
+
+          yield* syncBucketReplication({
+            bucketName: resolved.bucketName,
+            replication: news.replication,
+            session,
+          });
+
+          yield* syncIntelligentTiering({
+            bucketName: resolved.bucketName,
+            intelligentTiering: news.intelligentTiering,
+            oldIntelligentTiering: olds?.intelligentTiering,
+            session,
+          });
+
+          yield* syncObjectLockRetention({
+            bucketName: resolved.bucketName,
+            objectLockConfiguration: news.objectLockConfiguration,
+            session,
+          });
+
+          // ACL after ownership/public-access-block.
+          yield* syncBucketAcl({
+            bucketName: resolved.bucketName,
+            acl: news.acl,
+            session,
+          });
+
           yield* syncBucketPolicy({
             bucketName: resolved.bucketName,
             bindings,
+            explicitStatements: news.policy,
             session,
             operation,
           });

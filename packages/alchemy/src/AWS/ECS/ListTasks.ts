@@ -11,6 +11,7 @@ export interface ListTasksRequest extends Omit<
   "cluster"
 > {}
 
+/** @binding */
 export class ListTasks extends Binding.Service<
   ListTasks,
   (

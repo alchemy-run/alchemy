@@ -161,7 +161,9 @@ export type Dnssec = Resource<
  * Safety: when there is no prior state and DNSSEC is already enabled
  * on the zone, `read` reports it as `Unowned` and the engine refuses
  * to take it over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Enabling DNSSEC
  * @example Sign the zone
  * ```typescript

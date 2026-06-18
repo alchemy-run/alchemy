@@ -49,7 +49,7 @@ export interface CompositeAlarm extends Resource<
 
 /**
  * A CloudWatch composite alarm.
- *
+ * @resource
  * @section Creating Composite Alarms
  * @example Composite Rule
  * ```typescript

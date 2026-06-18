@@ -61,7 +61,9 @@ export type LogsRetentionFlag = Resource<
  *
  * Logpull is an Enterprise feature — on unentitled zones every operation
  * fails with the typed `LogsControlNotAuthorized` error.
- *
+ * @resource
+ * @product Logs
+ * @category Observability & Analytics
  * @section Managing log retention
  * @example Enable Logpull retention on a zone
  * ```typescript

@@ -10,6 +10,7 @@ export interface UpdateTimeToLiveRequest extends Omit<
   "TableName"
 > {}
 
+/** @binding */
 export class UpdateTimeToLive extends Binding.Service<
   UpdateTimeToLive,
   <T extends Table>(

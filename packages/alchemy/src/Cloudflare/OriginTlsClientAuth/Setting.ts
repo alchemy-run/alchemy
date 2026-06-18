@@ -65,7 +65,9 @@ export type OriginTlsClientAuthSetting = Resource<
  * ({@link OriginTlsClientAuthCertificate}) and your origin is configured to
  * verify it — enabling the flag alone does not break traffic unless the
  * origin enforces mTLS.
- *
+ * @resource
+ * @product Origin TLS Client Auth
+ * @category SSL/TLS & Certificates
  * @section Enabling Authenticated Origin Pulls
  * @example Enable zone-level AOP
  * ```typescript

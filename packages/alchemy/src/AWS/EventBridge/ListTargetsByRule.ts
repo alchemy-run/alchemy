@@ -10,6 +10,7 @@ export interface ListTargetsByRuleRequest extends Omit<
   "Rule" | "EventBusName"
 > {}
 
+/** @binding */
 export class ListTargetsByRule extends Binding.Service<
   ListTargetsByRule,
   (

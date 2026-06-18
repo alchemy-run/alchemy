@@ -10,6 +10,7 @@ export interface UntagResourceRequest extends Omit<
   "ResourceArn"
 > {}
 
+/** @binding */
 export class UntagResource extends Binding.Service<
   UntagResource,
   (

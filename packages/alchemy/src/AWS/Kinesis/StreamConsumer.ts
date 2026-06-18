@@ -60,7 +60,7 @@ export interface StreamConsumer extends Resource<
  *
  * `StreamConsumer` is the canonical lifecycle resource for
  * `RegisterStreamConsumer` / `DeregisterStreamConsumer`.
- *
+ * @resource
  * @section Creating Consumers
  * @example Register a Consumer
  * ```typescript

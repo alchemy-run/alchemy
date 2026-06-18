@@ -159,7 +159,9 @@ export type Zone = Resource<
  * delete the zone in Cloudflare. Opt in to actual deletion by wrapping the
  * resource (or the whole stack) in {@link destroy}() from
  * `alchemy/RemovalPolicy`.
- *
+ * @resource
+ * @product Zones
+ * @category Domains & DNS
  * @section Creating a Zone
  * @example Create a new zone
  * ```typescript

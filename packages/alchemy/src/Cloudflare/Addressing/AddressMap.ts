@@ -109,7 +109,9 @@ export type AddressMap = Resource<
  * Requires the BYOIP add-on or Cloudflare-assigned static IPs on the
  * account; without the entitlement every mutating call fails with the typed
  * `FeatureNotEnabled` error (`address_maps_not_enabled_on_account`).
- *
+ * @resource
+ * @product Addressing
+ * @category Network
  * @section Creating an Address Map
  * @example Disabled map with a description
  * ```typescript

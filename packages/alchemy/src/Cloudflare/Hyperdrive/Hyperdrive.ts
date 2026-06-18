@@ -133,7 +133,9 @@ export type Hyperdrive = Resource<
  * Hyperdrive accelerates and pools connections to existing PostgreSQL or
  * MySQL databases, exposing them to Workers via a binding. Create a config
  * as a resource, then bind it to a Worker to obtain a connection string.
- *
+ * @resource
+ * @product Hyperdrive
+ * @category Storage & Databases
  * @section Creating a Hyperdrive
  * @example Public Postgres origin
  * ```typescript

@@ -89,6 +89,7 @@ export type Schema = Resource<
  * The resource is delete-safe: removing it from the stack does **not** wipe
  * the migrations directory, since migration files are typically checked in
  * and shared with other environments.
+ * @resource
  */
 export const Schema = Resource<Schema>("Drizzle.Schema");
 

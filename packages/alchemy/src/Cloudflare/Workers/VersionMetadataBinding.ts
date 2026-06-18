@@ -29,6 +29,11 @@ export type VersionMetadataAccessor = Effect.Effect<
   WorkerEnvironment
 >;
 
+/**
+ * @binding
+ * @product Workers
+ * @category Workers & Compute
+ */
 export class VersionMetadataBinding extends Binding.Service<
   VersionMetadataBinding,
   (

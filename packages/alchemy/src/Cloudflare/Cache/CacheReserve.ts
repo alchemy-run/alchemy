@@ -88,7 +88,9 @@ export type CacheReserve = Resource<
  *
  * Only one `CacheReserve` resource per zone makes sense — two instances
  * managing the same zone would fight over the singleton.
- *
+ * @resource
+ * @product Cache
+ * @category Performance & Reliability
  * @section Managing Cache Reserve
  * @example Enable Cache Reserve on a zone
  * ```typescript

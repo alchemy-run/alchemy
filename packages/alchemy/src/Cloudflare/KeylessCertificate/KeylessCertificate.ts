@@ -157,7 +157,9 @@ export type KeylessCertificate = Resource<
  *
  * `host`, `port`, `name`, `enabled`, and `tunnel` are mutable in place;
  * `certificate` and `bundleMethod` are create-only and trigger a replacement.
- *
+ * @resource
+ * @product Keyless Certificates
+ * @category SSL/TLS & Certificates
  * @section Creating a Keyless SSL configuration
  * @example Basic key server over the public internet
  * ```typescript

@@ -90,7 +90,9 @@ export type TunnelRoute = Resource<
  * A Cloudflare Tunnel Route attaches a private CIDR to a `cfd_tunnel` so that
  * WARP clients (and other Zero Trust egress paths) can reach private IPs
  * through the tunnel.
- *
+ * @resource
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Route
  * @example Basic route
  * ```typescript

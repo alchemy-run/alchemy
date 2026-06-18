@@ -146,7 +146,9 @@ export type MagicNetworkMonitoringRule = Resource<
  * Config resource's `accountId` output as this rule's `accountId` to
  * sequence the deployment. Rule names are unique per account; the rule
  * `type` is immutable and changing it triggers a replacement.
- *
+ * @resource
+ * @product Magic Network Monitoring
+ * @category Network
  * @section Threshold rules
  * @example Alert when bandwidth exceeds 1 Mbps for 5 minutes
  * ```typescript

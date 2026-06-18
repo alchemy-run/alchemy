@@ -68,7 +68,9 @@ export type UniversalSsl = Resource<
  * **Warning:** disabling Universal SSL removes any active Universal SSL
  * certificates for the zone from the edge. Visitors will see TLS errors
  * unless advanced/custom certificates cover the zone's hostnames.
- *
+ * @resource
+ * @product SSL/TLS
+ * @category SSL/TLS & Certificates
  * @section Managing Universal SSL
  * @example Disable Universal SSL for a zone
  * ```typescript

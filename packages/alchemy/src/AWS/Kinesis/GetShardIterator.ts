@@ -10,6 +10,7 @@ export interface GetShardIteratorRequest extends Omit<
   "StreamName" | "StreamARN"
 > {}
 
+/** @binding */
 export class GetShardIterator extends Binding.Service<
   GetShardIterator,
   (

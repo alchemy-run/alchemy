@@ -64,7 +64,9 @@ export type AccessBookmark = Resource<
 /**
  * A Cloudflare Zero Trust Access bookmark application — an unprotected link
  * shown in the App Launcher.
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @deprecated **Legacy resource.** Cloudflare has deprecated the dedicated
  * bookmarks API in favor of Access applications with `type: "bookmark"` —
  * prefer {@link AccessApplication} for new configurations. This resource is

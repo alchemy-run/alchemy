@@ -6,6 +6,7 @@ import { isFunction } from "../Lambda/Function.ts";
 
 /**
  * Runtime binding for `secretsmanager:GetRandomPassword`.
+ * @binding
  */
 export class GetRandomPassword extends Binding.Service<
   GetRandomPassword,

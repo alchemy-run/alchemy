@@ -202,7 +202,9 @@ export type AccountDnsSettings = Resource<
  * values require the custom nameserver TTL / custom SOA entitlements,
  * `foundationDns` is a paid add-on, and `internalDns` is Enterprise
  * Internal DNS only.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Account-wide overrides
  * @example Force every proxied record to DNS-only
  * ```typescript

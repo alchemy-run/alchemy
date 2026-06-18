@@ -49,7 +49,7 @@ export interface Invalidation extends Resource<
  *
  * `Invalidation` is a helper resource for website deployments that need to
  * clear selected CloudFront cache paths after asset updates.
- *
+ * @resource
  * @section Creating Invalidations
  * @example Invalidate The Entire Distribution
  * ```typescript

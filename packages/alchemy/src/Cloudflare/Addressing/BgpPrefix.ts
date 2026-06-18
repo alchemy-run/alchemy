@@ -92,7 +92,9 @@ export type AddressingBgpPrefix = Resource<
  * reconcile adopts an existing BGP prefix matching the CIDR before creating
  * a new one. There is **no delete API** — destroying this resource only
  * withdraws the advertisement (`advertised: false`) and drops the state.
- *
+ * @resource
+ * @product Addressing
+ * @category Network
  * @section Advertising a Prefix
  * @example Advertise the whole BYOIP prefix
  * ```typescript

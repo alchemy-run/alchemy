@@ -135,7 +135,9 @@ export type DnsRecord = Resource<
  * set. This protects hand-edited records (especially the apex `A`/`AAAA`
  * and email DKIM/SPF records that the dashboard often manages) from
  * being clobbered.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Proxied CNAME pointing at a tunnel
  * @example Route a subdomain through a Cloudflare Tunnel
  * ```typescript

@@ -107,7 +107,9 @@ export type ShareResource = Resource<
  * resource — the last entry cannot be deleted (delete the `Share` instead).
  * Do not manage the same entry both inline on `Share.resources` and through
  * this resource.
- *
+ * @resource
+ * @product Resource Sharing
+ * @category Account & Identity
  * @section Adding a Resource to a Share
  * @example Share an additional gateway policy
  * ```typescript

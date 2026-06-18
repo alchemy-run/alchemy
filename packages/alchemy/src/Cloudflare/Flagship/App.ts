@@ -65,7 +65,9 @@ export type FlagshipApp = Resource<
  * apps that map to your projects or services; the app's `appId` is what a
  * Worker's `Flagship` binding points at and what every evaluation call is
  * scoped to. The name is mutable in place; the app id never changes.
- *
+ * @resource
+ * @product Flagship
+ * @category Developer Platform
  * @section Creating an App
  * @example App with a generated name
  * ```typescript

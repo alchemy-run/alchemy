@@ -206,7 +206,9 @@ export type DeviceDefaultProfile = Resource<
  * Manages the **singleton** Cloudflare WARP **default device profile** for
  * an account. The default profile applies to every WARP device not
  * matched by a custom profile.
- *
+ * @resource
+ * @product Devices
+ * @category Cloudflare One (Zero Trust)
  * @remarks
  * There is exactly one default profile per account; it cannot be created
  * or deleted. Reconciling this resource patches the existing profile in

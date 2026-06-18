@@ -63,7 +63,9 @@ export type AiSecuritySettings = Resource<
  * AI Security for Apps is entitlement-gated: on accounts without the
  * feature every call fails with the typed `AiSecurityNotEntitled` error
  * (Cloudflare error code 13101).
- *
+ * @resource
+ * @product AI Security
+ * @category Application Security
  * @section Enabling AI Security
  * @example Enable AI Security for Apps on a zone
  * ```typescript

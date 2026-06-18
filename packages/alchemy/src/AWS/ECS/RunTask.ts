@@ -11,6 +11,7 @@ export interface RunTaskRequest extends Omit<
   "cluster" | "taskDefinition"
 > {}
 
+/** @binding */
 export class RunTask extends Binding.Service<
   RunTask,
   (

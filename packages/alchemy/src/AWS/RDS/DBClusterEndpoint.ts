@@ -56,6 +56,7 @@ export interface DBClusterEndpoint extends Resource<
 
 /**
  * A custom Aurora cluster endpoint.
+ * @resource
  */
 export const DBClusterEndpoint = Resource<DBClusterEndpoint>(
   "AWS.RDS.DBClusterEndpoint",

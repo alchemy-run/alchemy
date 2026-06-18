@@ -149,7 +149,9 @@ export type R2BucketSippy = Resource<
  * One Sippy configuration exists per bucket (it is a singleton
  * sub-resource of the bucket). Destroying the resource disables Sippy;
  * objects already migrated stay in the R2 bucket.
- *
+ * @resource
+ * @product R2
+ * @category Storage & Databases
  * @section Migrating from AWS S3
  * @example Enable Sippy on a bucket with an S3 source
  * ```typescript

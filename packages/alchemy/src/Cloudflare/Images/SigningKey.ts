@@ -59,7 +59,9 @@ export type ImagesSigningKey = Resource<
  *
  * Requires the Cloudflare Images subscription; accounts without it receive
  * the typed `ImagesAccessNotEnabled` error.
- *
+ * @resource
+ * @product Images
+ * @category Media
  * @section Creating a Signing Key
  * @example Key with a generated name
  * ```typescript

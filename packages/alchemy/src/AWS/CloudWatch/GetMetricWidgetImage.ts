@@ -9,6 +9,7 @@ export interface GetMetricWidgetImageRequest
 
 /**
  * Runtime binding for `cloudwatch:GetMetricWidgetImage`.
+ * @binding
  */
 export class GetMetricWidgetImage extends Binding.Service<
   GetMetricWidgetImage,

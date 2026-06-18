@@ -43,6 +43,7 @@ export interface DBParameterGroup extends Resource<
 
 /**
  * An RDS DB parameter group, useful for Aurora cluster instances.
+ * @resource
  */
 export const DBParameterGroup = Resource<DBParameterGroup>(
   "AWS.RDS.DBParameterGroup",

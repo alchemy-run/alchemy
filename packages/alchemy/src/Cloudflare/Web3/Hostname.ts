@@ -106,7 +106,9 @@ export type Web3Hostname = Resource<
  * state, `read` scans the zone for an existing hostname with the same name
  * and reports it as `Unowned`, so the engine refuses to take it over unless
  * `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Web3
+ * @category Domains & DNS
  * @section IPFS gateway
  * @example IPFS hostname pinned to a DNSLink
  * ```typescript

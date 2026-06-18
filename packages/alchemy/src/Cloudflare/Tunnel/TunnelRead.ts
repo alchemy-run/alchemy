@@ -110,6 +110,8 @@ export const readClient = (token: TunnelToken): TunnelReadClient => {
  * `secret_text` binding) so runtime code can authenticate.
  *
  * @binding
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  *
  * @section Reading tunnels at runtime
  * @example Bind the read client

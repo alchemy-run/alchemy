@@ -7,6 +7,7 @@ import { isFunction } from "../Lambda/Function.ts";
 import type { Queue } from "./Queue.ts";
 import { SendMessageBatch } from "./SendMessageBatch.ts";
 
+/** @binding */
 export class QueueSink extends Binding.Service<
   QueueSink,
   (

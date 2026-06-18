@@ -59,7 +59,7 @@ export interface Repository extends Resource<
 
 /**
  * An Amazon ECR repository for container images.
- *
+ * @resource
  * @section Creating Repositories
  * @example Task Image Repository
  * ```typescript

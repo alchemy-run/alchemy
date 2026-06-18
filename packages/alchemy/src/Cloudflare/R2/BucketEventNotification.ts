@@ -128,7 +128,9 @@ export type R2BucketEventNotification = Resource<
  * either triggers a replacement, while rule changes are applied in place
  * (the provider converges the pair's configuration to exactly the
  * declared rule set).
- *
+ * @resource
+ * @product R2
+ * @category Storage & Databases
  * @section Notifying a Queue
  * @example Notify on every upload and delete
  * ```typescript

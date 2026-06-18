@@ -49,7 +49,7 @@ export interface PermissionSet extends Resource<
 
 /**
  * An IAM Identity Center permission set.
- *
+ * @resource
  * @section Creating Permission Sets
  * @example Administrator Access
  * ```typescript

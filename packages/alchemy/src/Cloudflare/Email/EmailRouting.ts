@@ -60,7 +60,9 @@ export type EmailRouting = Resource<
  * Enables Cloudflare Email Routing on a zone. This is the prerequisite for
  * receiving mail at any address on the domain and for sending email from a
  * Worker via `send_email` bindings.
- *
+ * @resource
+ * @product Email
+ * @category Email
  * @section Enabling Email Routing
  * @example Enable on a zone you own
  * ```typescript

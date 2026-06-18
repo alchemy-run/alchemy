@@ -49,7 +49,7 @@ export interface Group extends Resource<
  *
  * `Group` manages a shared authorization container for IAM users, including
  * attached managed policies and embedded inline policies.
- *
+ * @resource
  * @section Creating IAM Groups
  * @example Group with an Inline Policy
  * ```typescript

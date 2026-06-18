@@ -107,7 +107,9 @@ export type EmailSecurityAllowPolicy = Resource<
  * All fields are mutable in place. Requires the Email Security enterprise
  * add-on; accounts without the entitlement receive the typed
  * `EmailSecurityNotEntitled` error.
- *
+ * @resource
+ * @product Email Security
+ * @category Email
  * @section Creating an Allow Policy
  * @example Acceptable sender by email address
  * ```typescript

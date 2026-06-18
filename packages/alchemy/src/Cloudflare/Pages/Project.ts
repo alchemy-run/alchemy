@@ -193,7 +193,9 @@ export type PagesProject = Resource<
  * The project `name` is its identity (it forms the `<name>.pages.dev`
  * subdomain), so renaming triggers a replacement. `productionBranch`,
  * `buildConfig`, and `deploymentConfigs` are all mutable in place.
- *
+ * @resource
+ * @product Pages
+ * @category Workers & Compute
  * @section Creating a Project
  * @example Minimal project (generated name)
  * ```typescript

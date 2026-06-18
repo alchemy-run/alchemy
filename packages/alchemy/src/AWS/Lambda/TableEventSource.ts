@@ -22,6 +22,7 @@ export const isDynamoDBStreamEvent = (
   event.Records.length > 0 &&
   event.Records[0].eventSource === "aws:dynamodb";
 
+/** @binding */
 export const TableEventSource = Layer.effect(
   DynamoDBTableEventSource,
   Effect.gen(function* () {

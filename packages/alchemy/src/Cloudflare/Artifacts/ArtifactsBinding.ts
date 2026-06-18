@@ -85,6 +85,11 @@ export interface ArtifactsClient {
   ): Effect.Effect<ArtifactsCreateRepoResult, ArtifactsError, RuntimeContext>;
 }
 
+/**
+ * @binding
+ * @product Artifacts
+ * @category Developer Platform
+ */
 export class ArtifactsBinding extends Binding.Service<
   ArtifactsBinding,
   (artifacts: ArtifactsLike) => Effect.Effect<ArtifactsClient>

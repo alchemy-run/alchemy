@@ -152,7 +152,9 @@ export type LoadBalancerMonitor = Resource<
  *
  * Requires the Load Balancing subscription on the account. The allowed
  * `interval` range is plan-dependent.
- *
+ * @resource
+ * @product Load Balancers
+ * @category Performance & Reliability
  * @section Creating a Monitor
  * @example HTTPS health check
  * ```typescript

@@ -68,7 +68,9 @@ export type SmartTieredCache = Resource<
  *
  * Only one `SmartTieredCache` resource per zone makes sense — two instances
  * managing the same zone would fight over the singleton.
- *
+ * @resource
+ * @product Cache
+ * @category Performance & Reliability
  * @section Managing Smart Tiered Cache
  * @example Enable Smart Tiered Cache on a zone
  * ```typescript

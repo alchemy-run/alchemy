@@ -10,6 +10,7 @@ export interface DeleteItemRequest extends Omit<
   "TableName"
 > {}
 
+/** @binding */
 export class DeleteItem extends Binding.Service<
   DeleteItem,
   <T extends Table>(

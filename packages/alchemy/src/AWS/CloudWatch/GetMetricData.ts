@@ -8,6 +8,7 @@ export interface GetMetricDataRequest extends cloudwatch.GetMetricDataInput {}
 
 /**
  * Runtime binding for `cloudwatch:GetMetricData`.
+ * @binding
  */
 export class GetMetricData extends Binding.Service<
   GetMetricData,

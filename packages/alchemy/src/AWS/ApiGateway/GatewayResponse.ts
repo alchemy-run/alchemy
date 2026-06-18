@@ -16,6 +16,7 @@ export interface GatewayResponseProps {
   responseTemplates?: { [key: string]: string | undefined };
 }
 
+/** @resource */
 export interface GatewayResponse extends Resource<
   "AWS.ApiGateway.GatewayResponse",
   GatewayResponseProps,

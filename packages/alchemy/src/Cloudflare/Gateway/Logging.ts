@@ -85,7 +85,9 @@ export type GatewayLogging = Resource<
  * declare (merging them over the observed state before the PUT, since the
  * API is PUT-only). The pre-management snapshot is captured on first touch
  * and restored on destroy (capture-and-restore).
- *
+ * @resource
+ * @product Gateway
+ * @category Cloudflare One (Zero Trust)
  * @section Managing logging settings
  * @example Log everything, keep PII
  * ```typescript

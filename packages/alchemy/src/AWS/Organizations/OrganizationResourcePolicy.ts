@@ -27,6 +27,7 @@ export interface OrganizationResourcePolicy extends Resource<
 
 /**
  * The singleton AWS Organizations resource policy.
+ * @resource
  */
 export const OrganizationResourcePolicy = Resource<OrganizationResourcePolicy>(
   "AWS.Organizations.OrganizationResourcePolicy",

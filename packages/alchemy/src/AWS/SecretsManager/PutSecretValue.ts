@@ -12,6 +12,7 @@ export interface PutSecretValueRequest extends Omit<
 
 /**
  * Runtime binding for `secretsmanager:PutSecretValue`.
+ * @binding
  */
 export class PutSecretValue extends Binding.Service<
   PutSecretValue,

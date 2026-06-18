@@ -54,7 +54,9 @@ export type IndicatorFeedPermission = Resource<
  * Cloudflare exposes no API to list the grantees of a feed from the
  * provider side (the permissions "view" endpoint lists feeds the *calling*
  * account can consume), so `read` reports the last known state.
- *
+ * @resource
+ * @product Intel
+ * @category Observability & Analytics
  * @section Granting Access
  * @example Grant a consumer account access to a feed
  * ```typescript

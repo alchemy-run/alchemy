@@ -9,6 +9,7 @@ export interface ListManagedInsightRulesRequest
 
 /**
  * Runtime binding for `cloudwatch:ListManagedInsightRules`.
+ * @binding
  */
 export class ListManagedInsightRules extends Binding.Service<
   ListManagedInsightRules,

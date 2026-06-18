@@ -72,7 +72,9 @@ export type SynProtectionFilter = Resource<
  * state, `read` scans for an existing filter with the same expression and
  * reports it as `Unowned`, so the engine refuses to take it over unless
  * `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product DDoS Protection
+ * @category Network
  * @section Creating a filter
  * @example Scope SYN mitigation to HTTPS traffic
  * ```typescript

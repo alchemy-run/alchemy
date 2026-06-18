@@ -14,6 +14,7 @@ export interface TopicEventSourceProps {
   attributes?: Record<string, string>;
 }
 
+/** @binding */
 export class TopicEventSource extends Binding.Service<
   TopicEventSource,
   TopicEventSourceService

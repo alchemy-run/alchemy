@@ -196,7 +196,9 @@ export type DnsFirewall = Resource<
  *
  * All settings are mutable in place; only `name` (the cold-state recovery
  * identity) triggers a replacement.
- *
+ * @resource
+ * @product DNS Firewall
+ * @category Domains & DNS
  * @section Creating a Cluster
  * @example Basic cluster
  * ```typescript

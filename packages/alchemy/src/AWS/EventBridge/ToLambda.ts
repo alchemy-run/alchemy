@@ -42,6 +42,7 @@ export const ToLambdaPolicyLive = ToLambdaPolicy.layer.succeed(
   }) as any,
 );
 
+/** @binding */
 export const toLambda = (
   descriptor: EventDescriptor,
   fn: LambdaFunction,

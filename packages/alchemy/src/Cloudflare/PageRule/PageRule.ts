@@ -117,7 +117,9 @@ export type PageRule = Resource<
  * state `read` scans the zone for a rule with the same target and reports
  * it as `Unowned` — the engine refuses to take it over unless `--adopt`
  * (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Page Rules
+ * @category Rules & Configuration
  * @section Caching
  * @example Cache everything under a path
  * ```typescript

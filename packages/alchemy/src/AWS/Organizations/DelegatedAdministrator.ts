@@ -34,6 +34,7 @@ export interface DelegatedAdministrator extends Resource<
 
 /**
  * Registers a delegated administrator account for a trusted AWS service.
+ * @resource
  */
 export const DelegatedAdministrator = Resource<DelegatedAdministrator>(
   "AWS.Organizations.DelegatedAdministrator",

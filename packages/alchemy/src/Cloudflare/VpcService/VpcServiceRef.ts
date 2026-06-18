@@ -27,7 +27,9 @@ export type VpcServiceRef = VpcServiceAttributes;
 
 /**
  * Reference an existing Cloudflare VPC service without managing its lifecycle.
- *
+ * @resource
+ * @product Workers VPC
+ * @category Network
  * @example Reference by ID
  * ```typescript
  * const service = yield* Cloudflare.VpcServiceRef({

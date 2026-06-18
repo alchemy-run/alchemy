@@ -107,7 +107,9 @@ export type TcpFlowProtectionRule = Resource<
  * `read` scans for an existing rule with the same scope + name and reports
  * it as `Unowned`, so the engine refuses to take it over unless `--adopt`
  * (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product DDoS Protection
+ * @category Network
  * @section Creating a rule
  * @example Global TCP flow protection in monitoring mode
  * ```typescript

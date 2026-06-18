@@ -10,6 +10,7 @@ export interface UpdateItemRequest extends Omit<
   "TableName"
 > {}
 
+/** @binding */
 export class UpdateItem extends Binding.Service<
   UpdateItem,
   <T extends Table>(

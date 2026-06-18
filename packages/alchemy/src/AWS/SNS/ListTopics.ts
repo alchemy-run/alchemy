@@ -6,6 +6,7 @@ import { isFunction } from "../Lambda/Function.ts";
 
 export interface ListTopicsRequest extends sns.ListTopicsInput {}
 
+/** @binding */
 export class ListTopics extends Binding.Service<
   ListTopics,
   () => Effect.Effect<

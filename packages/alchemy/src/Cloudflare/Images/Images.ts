@@ -59,7 +59,9 @@ export const isImages = (value: unknown): value is Images =>
  * inputs and return `Effect`s — `info`, `input(...).transform(...)
  * .draw(...).output(...)`. The runtime conversion to Cloudflare's
  * `ReadableStream` is handled internally.
- *
+ * @binding
+ * @product Images
+ * @category Media
  * @section Effect-style Worker (recommended)
  * @example Read image format and dimensions from the request body
  * ```typescript

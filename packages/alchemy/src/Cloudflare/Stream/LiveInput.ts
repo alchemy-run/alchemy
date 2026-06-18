@@ -129,7 +129,9 @@ export type StreamLiveInput = Resource<
  * recorded from it.
  *
  * Requires the Stream subscription to be enabled on the account.
- *
+ * @resource
+ * @product Stream
+ * @category Media
  * @section Creating a live input
  * @example Basic live input
  * ```typescript

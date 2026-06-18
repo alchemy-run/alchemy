@@ -199,7 +199,9 @@ export type AccessApplication = Resource<
  *
  * Access policies are authored as standalone {@link AccessPolicy} resources
  * and referenced here by id — there is no inline-policy support.
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @section Creating an Application
  * @example Self-hosted application gated by a reusable Access policy
  * ```typescript

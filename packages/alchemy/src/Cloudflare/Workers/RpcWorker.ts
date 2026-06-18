@@ -277,6 +277,8 @@ const bind = <Self, Rpcs extends Rpc.Any>(
  * workers binding to this one see the rpc shape pinned to `Self`.
  *
  * @resource
+ * @product Workers
+ * @category Workers & Compute
  *
  * @section Defining the rpc group
  * @example Pure schema description

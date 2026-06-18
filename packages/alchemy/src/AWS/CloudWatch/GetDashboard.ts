@@ -12,6 +12,7 @@ export interface GetDashboardRequest extends Omit<
 
 /**
  * Runtime binding for `cloudwatch:GetDashboard`.
+ * @binding
  */
 export class GetDashboard extends Binding.Service<
   GetDashboard,

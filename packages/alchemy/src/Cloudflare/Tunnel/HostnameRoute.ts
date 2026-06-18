@@ -60,7 +60,9 @@ export type TunnelHostnameRoute = Resource<
  * internal apps by name without publishing a public DNS record.
  *
  * All fields (hostname, tunnel, comment) are mutable in place via PATCH.
- *
+ * @resource
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a hostname route
  * @example Route an internal hostname through a tunnel
  * ```typescript

@@ -41,7 +41,9 @@ export type AccessTag = Resource<
  *
  * The tag's name is its identity — there is nothing to update in place, so
  * renaming replaces the tag.
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Tag
  * @example Tag with a generated name
  * ```typescript

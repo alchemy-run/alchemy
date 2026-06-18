@@ -81,7 +81,9 @@ export type ZoneTransferIncoming = Resource<
  * must be created with `type: "secondary"`. The configuration is a
  * per-zone singleton: `zoneId` is the identity (replacement on change),
  * everything else is mutable in place.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Configuring incoming transfers
  * @example Transfer a secondary zone in from a primary
  * ```typescript

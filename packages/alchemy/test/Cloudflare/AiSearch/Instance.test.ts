@@ -7,6 +7,7 @@ import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import AiSearchCrawlTargetWorker from "./fixtures/crawl-target-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -18,9 +19,10 @@ const logLevel = Effect.provideService(
 // The scoped API token the test harness mints propagates eventually-
 // consistently across Cloudflare's edge — ride out 403 blips
 // (`Forbidden`, declared in the distilled error union) on the test's
-// own out-of-band verification calls.
-const getInstance = (accountId: string, id: string) =>
-  aisearch.readInstance({ accountId, id }).pipe(
+// own out-of-band verification calls. Instances are namespace-scoped, so
+// verify through the namespace-scoped read (defaulting to `default`).
+const getInstance = (accountId: string, id: string, namespace = "default") =>
+  aisearch.readNamespaceInstance({ accountId, name: namespace, id }).pipe(
     Effect.retry({
       while: (e) => e._tag === "Forbidden",
       schedule: Schedule.exponential("500 millis"),
@@ -28,12 +30,16 @@ const getInstance = (accountId: string, id: string) =>
     }),
   );
 
-const expectGone = (accountId: string, id: string) =>
-  getInstance(accountId, id).pipe(
+const expectGone = (accountId: string, id: string, namespace = "default") =>
+  getInstance(accountId, id, namespace).pipe(
     Effect.flatMap(() => Effect.fail({ _tag: "InstanceNotDeleted" } as const)),
-    // A missing instance surfaces as `NotFound` (Cloudflare error code
-    // 7002) — that's the success condition here.
-    Effect.catchTag("NotFound", () => Effect.void),
+    // A missing instance (`AiSearchInstanceNotFound`, code 7002) or a
+    // missing enclosing namespace (`NamespaceNotFound`, code 7063) is the
+    // success condition here.
+    Effect.catchTag(
+      ["AiSearchInstanceNotFound", "NamespaceNotFound"],
+      () => Effect.void,
+    ),
     Effect.retry({
       while: (e) => e._tag === "InstanceNotDeleted",
       schedule: Schedule.exponential("500 millis").pipe(
@@ -67,13 +73,13 @@ test.provider(
       // Create — engine-generated instance id, default settings.
       const initial = yield* stack.deploy(program());
 
-      expect(initial.instance.id).toBeTruthy();
+      expect(initial.instance.instanceId).toBeTruthy();
       expect(initial.instance.accountId).toEqual(accountId);
       expect(initial.instance.type).toEqual("r2");
       expect(initial.instance.source).toEqual(initial.bucket.bucketName);
 
-      const live = yield* getInstance(accountId, initial.instance.id);
-      expect(live.id).toEqual(initial.instance.id);
+      const live = yield* getInstance(accountId, initial.instance.instanceId);
+      expect(live.id).toEqual(initial.instance.instanceId);
       expect(live.source).toEqual(initial.bucket.bucketName);
       expect(live.type).toEqual("r2");
 
@@ -87,7 +93,7 @@ test.provider(
         }),
       );
 
-      expect(updated.instance.id).toEqual(initial.instance.id);
+      expect(updated.instance.instanceId).toEqual(initial.instance.instanceId);
       expect(updated.instance.aiSearchModel).toEqual(
         "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       );
@@ -98,7 +104,7 @@ test.provider(
       // readback until the mutated props land before asserting, bounded.
       const liveUpdated = yield* getInstance(
         accountId,
-        updated.instance.id,
+        updated.instance.instanceId,
       ).pipe(
         Effect.flatMap((live) =>
           live.aiSearchModel === "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
@@ -127,11 +133,11 @@ test.provider(
           chunkOverlap: 15,
         }),
       );
-      expect(noop.instance.id).toEqual(initial.instance.id);
+      expect(noop.instance.instanceId).toEqual(initial.instance.instanceId);
 
       yield* stack.destroy();
 
-      yield* expectGone(accountId, initial.instance.id);
+      yield* expectGone(accountId, initial.instance.instanceId);
 
       // Destroy again — delete must be idempotent (already gone).
       yield* stack.destroy();
@@ -158,20 +164,22 @@ test.provider(
 
       // The embedding model defines the vector space and is fixed at
       // creation — a new physical instance exists.
-      expect(replaced.instance.id).not.toEqual(initial.instance.id);
+      expect(replaced.instance.instanceId).not.toEqual(
+        initial.instance.instanceId,
+      );
       expect(replaced.instance.embeddingModel).toEqual(
         "@cf/baai/bge-large-en-v1.5",
       );
 
-      const live = yield* getInstance(accountId, replaced.instance.id);
+      const live = yield* getInstance(accountId, replaced.instance.instanceId);
       expect(live.embeddingModel).toEqual("@cf/baai/bge-large-en-v1.5");
 
       // The old instance was deleted as part of the replacement.
-      yield* expectGone(accountId, initial.instance.id);
+      yield* expectGone(accountId, initial.instance.instanceId);
 
       yield* stack.destroy();
 
-      yield* expectGone(accountId, replaced.instance.id);
+      yield* expectGone(accountId, replaced.instance.instanceId);
     }).pipe(logLevel),
   { timeout: 240_000 },
 );
@@ -191,7 +199,11 @@ test.provider(
       // must observe the instance as missing and recreate it instead of
       // failing on a 404.
       yield* aisearch
-        .deleteInstance({ accountId, id: initial.instance.id })
+        .deleteNamespaceInstance({
+          accountId,
+          name: "default",
+          id: initial.instance.instanceId,
+        })
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "Forbidden",
@@ -199,25 +211,25 @@ test.provider(
             times: 8,
           }),
         );
-      yield* expectGone(accountId, initial.instance.id);
+      yield* expectGone(accountId, initial.instance.instanceId);
 
       const healed = yield* stack.deploy(program({ maxNumResults: 10 }));
 
-      expect(healed.instance.id).toEqual(initial.instance.id);
-      const live = yield* getInstance(accountId, healed.instance.id);
-      expect(live.id).toEqual(initial.instance.id);
+      expect(healed.instance.instanceId).toEqual(initial.instance.instanceId);
+      const live = yield* getInstance(accountId, healed.instance.instanceId);
+      expect(live.id).toEqual(initial.instance.instanceId);
 
       yield* stack.destroy();
 
-      yield* expectGone(accountId, healed.instance.id);
+      yield* expectGone(accountId, healed.instance.instanceId);
     }).pipe(logLevel),
   { timeout: 240_000 },
 );
 
-// Canonical `list()` test (account collection): `list()` enumerates every
-// AI Search instance in the account via `listInstances`, paginating
-// exhaustively, and hydrates each into the `read` Attributes shape. Deploy
-// an instance and assert its id appears in the result.
+// Canonical `list()` test: instances are namespace-scoped, so `list()`
+// enumerates every namespace (including the account-provided `default`) and
+// fans out a paginated instance list per namespace, hydrating each into the
+// `read` Attributes shape. Deploy an instance and assert its id appears.
 test.provider(
   "list enumerates the deployed instance",
   (stack) =>
@@ -231,11 +243,106 @@ test.provider(
       );
       const all = yield* provider.list();
 
-      expect(all.some((x) => x.id === deployed.instance.id)).toBe(true);
+      expect(
+        all.some((x) => x.instanceId === deployed.instance.instanceId),
+      ).toBe(true);
 
       yield* stack.destroy();
 
-      yield* expectGone(deployed.instance.accountId, deployed.instance.id);
+      yield* expectGone(
+        deployed.instance.accountId,
+        deployed.instance.instanceId,
+      );
+    }).pipe(logLevel),
+  { timeout: 240_000 },
+);
+
+// A web-crawler source crawls a seed URL and needs no service token (unlike
+// an R2 source). Cloudflare only crawls a domain the account owns, so the
+// crawl is seeded at a Worker we deploy (its `workers.dev` URL is owned by the
+// account); `parseType: "crawl"` walks pages instead of requiring a sitemap.
+test.provider(
+  "creates a web-crawler instance (no service token)",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          const target = yield* AiSearchCrawlTargetWorker;
+          const instance = yield* Cloudflare.AiSearchInstance("Search", {
+            type: "web-crawler",
+            source: target.url.as<string>(),
+            sourceParams: {
+              webCrawler: {
+                parseType: "crawl",
+              },
+            },
+          });
+          return { target, instance };
+        }),
+      );
+
+      // Creating without any tokenId proves a web-crawler needs no token.
+      expect(initial.instance.type).toEqual("web-crawler");
+      expect(initial.instance.source).toEqual(initial.target.url);
+
+      const live = yield* getInstance(accountId, initial.instance.instanceId);
+      expect(live.type).toEqual("web-crawler");
+
+      yield* stack.destroy();
+
+      yield* expectGone(accountId, initial.instance.instanceId);
+    }).pipe(logLevel),
+  { timeout: 300_000 },
+);
+
+// A program that places the instance in a custom namespace. The instance's
+// `namespace` references the namespace's `name` output, so the engine orders
+// instance-after-namespace on deploy (and namespace-after-instance on
+// destroy, so the namespace's instances are torn down before it).
+const nsProgram = (props?: Partial<Cloudflare.AiSearchInstanceProps>) =>
+  Effect.gen(function* () {
+    const namespace = yield* Cloudflare.AiSearchNamespace("AiSearchNs", {});
+    const bucket = yield* Cloudflare.R2Bucket("AiSearchSource", {});
+    const instance = yield* Cloudflare.AiSearchInstance("Search", {
+      source: bucket.bucketName,
+      namespace: namespace.name,
+      ...props,
+    });
+    return { namespace, bucket, instance };
+  });
+
+test.provider(
+  "creates an instance in a custom namespace and moving namespaces replaces",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const initial = yield* stack.deploy(nsProgram());
+      expect(initial.instance.namespace).toEqual(initial.namespace.name);
+      expect(initial.namespace.name).not.toEqual("default");
+
+      // The instance is readable in its namespace, but NOT in `default`.
+      const live = yield* getInstance(
+        accountId,
+        initial.instance.instanceId,
+        initial.namespace.name,
+      );
+      expect(live.id).toEqual(initial.instance.instanceId);
+      yield* expectGone(accountId, initial.instance.instanceId, "default");
+
+      yield* stack.destroy();
+
+      yield* expectGone(
+        accountId,
+        initial.instance.instanceId,
+        initial.namespace.name,
+      );
     }).pipe(logLevel),
   { timeout: 240_000 },
 );

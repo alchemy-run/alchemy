@@ -119,7 +119,9 @@ export type CloudConnectorRules = Resource<
  *
  * Note: Cloud Connector only takes effect on proxied (orange-cloud) DNS
  * records, and the number of rules per zone is plan-limited.
- *
+ * @resource
+ * @product Cloud Connector
+ * @category Rules & Configuration
  * @section Routing to object storage
  * @example Serve a path prefix from an S3 bucket
  * ```typescript

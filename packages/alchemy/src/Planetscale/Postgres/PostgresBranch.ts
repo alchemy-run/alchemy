@@ -81,6 +81,7 @@ export type PostgresBranch = Resource<
   Providers
 >;
 
+/** @resource */
 export const PostgresBranch = Resource<PostgresBranch>(
   "Planetscale.PostgresBranch",
 );

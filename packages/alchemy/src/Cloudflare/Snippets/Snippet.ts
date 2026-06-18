@@ -80,7 +80,9 @@ export type Snippet = Resource<
  * state, `read` looks the snippet up by name and reports an existing match
  * as `Unowned`, so the engine refuses to take it over unless `--adopt`
  * (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Snippets
+ * @category Rules & Configuration
  * @section Creating a Snippet
  * @example Add a response header
  * ```typescript

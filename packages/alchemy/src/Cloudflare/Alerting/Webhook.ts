@@ -85,7 +85,9 @@ export type NotificationWebhook = Resource<
  * {@link NotificationPolicy | notification policies}. Cloudflare sends a
  * test POST to the URL when the webhook is created or updated, so the
  * endpoint must be live and respond with a 2xx.
- *
+ * @resource
+ * @product Alerting
+ * @category Observability & Analytics
  * @section Creating a Webhook destination
  * @example Generic webhook with a generated name
  * ```typescript

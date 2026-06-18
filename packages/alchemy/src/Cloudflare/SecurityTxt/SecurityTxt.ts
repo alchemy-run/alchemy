@@ -115,7 +115,9 @@ export type SecurityTxt = Resource<
  *
  * Cloudflare requires the RFC 9116 mandatory fields — `contact` and
  * `expires` — on every write.
- *
+ * @resource
+ * @product Security.txt
+ * @category Application Security
  * @section Publishing a security.txt
  * @example Minimal security.txt
  * ```typescript

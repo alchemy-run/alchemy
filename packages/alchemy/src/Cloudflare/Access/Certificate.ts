@@ -68,7 +68,9 @@ export type AccessCertificate = Resource<
  *
  * The certificate body is immutable — changing the PEM replaces the
  * resource. The name and associated hostnames converge in place.
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Certificate
  * @example Upload a CA certificate
  * ```typescript

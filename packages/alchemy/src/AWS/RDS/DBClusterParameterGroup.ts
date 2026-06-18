@@ -43,6 +43,7 @@ export interface DBClusterParameterGroup extends Resource<
 
 /**
  * An Aurora cluster parameter group.
+ * @resource
  */
 export const DBClusterParameterGroup = Resource<DBClusterParameterGroup>(
   "AWS.RDS.DBClusterParameterGroup",

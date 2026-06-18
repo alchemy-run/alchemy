@@ -76,7 +76,9 @@ export type RiskScoringIntegration = Resource<
  * Requires the Zero Trust risk-scoring entitlement (an Enterprise
  * feature); accounts without it receive the typed `Forbidden` error on
  * all writes.
- *
+ * @resource
+ * @product Risk Scoring
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a risk scoring integration
  * @example Push risk scores to an Okta tenant
  * ```typescript

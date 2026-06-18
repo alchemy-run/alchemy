@@ -67,7 +67,7 @@ export interface ServerCertificate extends Resource<
  * `ServerCertificate` uploads and tracks a TLS certificate bundle for legacy
  * IAM-integrated services. The private key is write-only and should be provided
  * as a redacted value when possible.
- *
+ * @resource
  * @section Uploading Server Certificates
  * @example Upload a TLS Certificate
  * ```typescript

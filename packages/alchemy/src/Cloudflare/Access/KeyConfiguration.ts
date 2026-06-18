@@ -56,7 +56,9 @@ export type AccessKeyConfiguration = Resource<
  * rotation interval when the observed value differs from the desired one;
  * destroy restores the interval the account had before Alchemy first managed
  * it (captured as `initialKeyRotationIntervalDays`).
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @section Managing the rotation interval
  * @example Rotate Access service keys every 30 days
  * ```typescript

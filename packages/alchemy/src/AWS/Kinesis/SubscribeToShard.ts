@@ -10,6 +10,7 @@ export interface SubscribeToShardRequest extends Omit<
   "ConsumerARN"
 > {}
 
+/** @binding */
 export class SubscribeToShard extends Binding.Service<
   SubscribeToShard,
   (

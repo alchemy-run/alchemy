@@ -187,7 +187,9 @@ export type CertificatePack = Resource<
  * The pack's `certificateAuthority`, `hosts`, and `validityDays` are
  * immutable — changing any of them replaces the pack (a new order).
  * `validationMethod` and `cloudflareBranding` are updated in place.
- *
+ * @resource
+ * @product SSL/TLS
+ * @category SSL/TLS & Certificates
  * @section Ordering a certificate pack
  * @example Order an advanced certificate for the apex and a wildcard
  * ```typescript

@@ -29,7 +29,12 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import type { ProcessContext, ServerHost } from "../../Server/Process.ts";
 import { Stack } from "../../Stack.ts";
-import { createInternalTags, createTagsList, hasTags } from "../../Tags.ts";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasTags,
+} from "../../Tags.ts";
 import type { Credentials } from "../Credentials.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -104,11 +109,74 @@ export interface TaskProps extends PlatformProps {
     dockerfile?: string;
   };
   /**
-   * Container definition overrides applied after Alchemy's defaults.
+   * Container definition overrides applied after Alchemy's defaults for the
+   * primary (bundled) container.
    */
   container?: Partial<ecs.ContainerDefinition>;
   /**
-   * Additional task definition overrides.
+   * Additional sidecar containers appended to the task definition after the
+   * primary bundled container. Each entry is a full, typed
+   * {@link ecs.ContainerDefinition} (image URIs supplied by the user, e.g.
+   * from an `ECR.Image` or an external registry).
+   *
+   * Use this to declare multi-container tasks: log routers (firelens),
+   * proxies (Envoy/App Mesh), metric agents (otel/cloudwatch), or any
+   * companion process that shares the task's network namespace.
+   */
+  sidecars?: ecs.ContainerDefinition[];
+  /**
+   * Task definition network mode.
+   * @default "awsvpc"
+   */
+  networkMode?: ecs.NetworkMode;
+  /**
+   * Launch-type compatibilities the task definition must support.
+   * @default ["FARGATE"]
+   */
+  requiresCompatibilities?: ecs.Compatibility[];
+  /**
+   * Task-level data volumes (host / docker / EFS / FSx Windows / S3 /
+   * configured-at-launch). Containers reference these via `mountPoints`.
+   */
+  volumes?: ecs.Volume[];
+  /**
+   * Task definition placement constraints (`memberOf` expressions). Only
+   * applies to EC2/EXTERNAL launch types.
+   */
+  placementConstraints?: ecs.TaskDefinitionPlacementConstraint[];
+  /**
+   * CPU architecture and operating-system family the task runs on, e.g.
+   * `{ cpuArchitecture: "ARM64", operatingSystemFamily: "LINUX" }`.
+   */
+  runtimePlatform?: ecs.RuntimePlatform;
+  /**
+   * Amount of ephemeral storage (in GiB) to allocate for the task on Fargate.
+   */
+  ephemeralStorage?: ecs.EphemeralStorage;
+  /**
+   * IPC resource namespace to use for the containers in the task.
+   */
+  ipcMode?: ecs.IpcMode;
+  /**
+   * Process namespace to use for the containers in the task.
+   */
+  pidMode?: ecs.PidMode;
+  /**
+   * App Mesh proxy configuration.
+   */
+  proxyConfiguration?: ecs.ProxyConfiguration;
+  /**
+   * Elastic Inference accelerators to attach to the task.
+   */
+  inferenceAccelerators?: ecs.InferenceAccelerator[];
+  /**
+   * Whether to enable AWS Fault Injection (FIS) actions on the task.
+   * @default false
+   */
+  enableFaultInjection?: boolean;
+  /**
+   * Additional task definition overrides applied last (escape hatch for
+   * fields not yet surfaced as first-class props).
    */
   taskDefinition?: Partial<
     Omit<
@@ -119,8 +187,6 @@ export interface TaskProps extends PlatformProps {
       | "taskRoleArn"
       | "cpu"
       | "memory"
-      | "networkMode"
-      | "requiresCompatibilities"
     >
   >;
   /**
@@ -173,6 +239,65 @@ export interface TaskRuntimeContext extends ProcessContext {
   readonly Type: "AWS.ECS.Task";
 }
 
+/**
+ * A bundled ECS task definition.
+ *
+ * `Task` bundles an inline Effect program, builds and pushes a Docker image to
+ * a generated ECR repository, provisions task + execution IAM roles and a
+ * CloudWatch log group, and registers a Fargate task definition. Each reconcile
+ * registers a new immutable revision.
+ *
+ * Beyond the single bundled container you can declare task-level configuration
+ * (volumes, runtime platform, ephemeral storage, IPC/PID mode, placement
+ * constraints) and append additional `sidecars` for multi-container tasks.
+ * @resource
+ * @section Creating a Task
+ * @example Basic Task
+ * ```typescript
+ * const task = yield* Task("ApiTask", {
+ *   main: import.meta.filename,
+ *   cpu: 256,
+ *   memory: 512,
+ *   port: 3000,
+ * });
+ * ```
+ *
+ * @section Multi-Container Tasks
+ * @example Task with a Sidecar
+ * ```typescript
+ * const task = yield* Task("ApiTask", {
+ *   main: import.meta.filename,
+ *   port: 3000,
+ *   sidecars: [
+ *     {
+ *       name: "otel-collector",
+ *       image: "public.ecr.aws/aws-observability/aws-otel-collector:latest",
+ *       essential: false,
+ *       portMappings: [{ containerPort: 4317, protocol: "tcp" }],
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @section Task-Level Configuration
+ * @example ARM64 with EFS Volume and Ephemeral Storage
+ * ```typescript
+ * const task = yield* Task("WorkerTask", {
+ *   main: import.meta.filename,
+ *   runtimePlatform: { cpuArchitecture: "ARM64", operatingSystemFamily: "LINUX" },
+ *   ephemeralStorage: { sizeInGiB: 40 },
+ *   volumes: [
+ *     {
+ *       name: "data",
+ *       efsVolumeConfiguration: { fileSystemId: fileSystem.fileSystemId },
+ *     },
+ *   ],
+ *   container: {
+ *     mountPoints: [{ sourceVolume: "data", containerPath: "/data" }],
+ *   },
+ * });
+ * ```
+ */
 export const Task: Platform<Task, TaskServices, TaskShape, TaskRuntimeContext> =
   Platform("AWS.ECS.Task", {
     createRuntimeContext: (id): TaskRuntimeContext => {
@@ -623,6 +748,7 @@ await Effect.runPromise(program);
         taskRoleArn,
         executionRoleArn,
         logGroupName,
+        tags,
       }: {
         props: TaskProps;
         family: string;
@@ -630,51 +756,58 @@ await Effect.runPromise(program);
         taskRoleArn: string;
         executionRoleArn: string;
         logGroupName: string;
+        tags: Record<string, string>;
       }) {
         const { region } = yield* AWSEnvironment.current;
         const containerName = props.container?.name ?? family;
+        const primaryContainer: ecs.ContainerDefinition = {
+          essential: true,
+          name: containerName,
+          image: imageUri,
+          portMappings:
+            props.port !== undefined
+              ? [
+                  {
+                    containerPort: props.port,
+                    hostPort: props.port,
+                    protocol: "tcp",
+                  },
+                ]
+              : undefined,
+          environment: Object.entries(props.env ?? {}).map(([name, value]) => ({
+            name,
+            value: typeof value === "string" ? value : JSON.stringify(value),
+          })),
+          logConfiguration: {
+            logDriver: "awslogs",
+            options: {
+              "awslogs-group": logGroupName,
+              "awslogs-region": region,
+              "awslogs-stream-prefix": family,
+            },
+          },
+          ...props.container,
+        };
         const response = yield* ecs.registerTaskDefinition({
           family,
           taskRoleArn,
           executionRoleArn,
-          networkMode: "awsvpc",
-          requiresCompatibilities: ["FARGATE"],
+          networkMode: props.networkMode ?? "awsvpc",
+          requiresCompatibilities: props.requiresCompatibilities ?? ["FARGATE"],
           cpu: String(props.cpu ?? 256),
           memory: String(props.memory ?? 512),
+          volumes: props.volumes,
+          placementConstraints: props.placementConstraints,
+          runtimePlatform: props.runtimePlatform,
+          ephemeralStorage: props.ephemeralStorage,
+          ipcMode: props.ipcMode,
+          pidMode: props.pidMode,
+          proxyConfiguration: props.proxyConfiguration,
+          inferenceAccelerators: props.inferenceAccelerators,
+          enableFaultInjection: props.enableFaultInjection,
           ...props.taskDefinition,
-          containerDefinitions: [
-            {
-              essential: true,
-              name: containerName,
-              image: imageUri,
-              portMappings:
-                props.port !== undefined
-                  ? [
-                      {
-                        containerPort: props.port,
-                        hostPort: props.port,
-                        protocol: "tcp",
-                      },
-                    ]
-                  : undefined,
-              environment: Object.entries(props.env ?? {}).map(
-                ([name, value]) => ({
-                  name,
-                  value:
-                    typeof value === "string" ? value : JSON.stringify(value),
-                }),
-              ),
-              logConfiguration: {
-                logDriver: "awslogs",
-                options: {
-                  "awslogs-group": logGroupName,
-                  "awslogs-region": region,
-                  "awslogs-stream-prefix": family,
-                },
-              },
-              ...props.container,
-            },
-          ],
+          containerDefinitions: [primaryContainer, ...(props.sidecars ?? [])],
+          tags: Object.entries(tags).map(([key, value]) => ({ key, value })),
         });
         const taskDefinition = response.taskDefinition;
         if (!taskDefinition?.taskDefinitionArn) {
@@ -895,7 +1028,45 @@ await Effect.runPromise(program);
             taskRoleArn,
             executionRoleArn,
             logGroupName,
+            tags,
           });
+
+          // Sync tags — task definition revisions carry tags at register
+          // time, but tags are mutable on the revision ARN. Diff the observed
+          // revision tags against desired so tag-only updates converge.
+          const revisionArn = taskDefinition.taskDefinitionArn!;
+          const observedTags = Object.fromEntries(
+            (
+              (yield* ecs
+                .listTagsForResource({ resourceArn: revisionArn })
+                .pipe(
+                  Effect.catchTag("ClientException", () =>
+                    Effect.succeed({ tags: undefined } as { tags?: ecs.Tag[] }),
+                  ),
+                )).tags ?? []
+            )
+              .filter(
+                (t): t is { key: string; value: string } =>
+                  typeof t.key === "string" && typeof t.value === "string",
+              )
+              .map((t) => [t.key, t.value]),
+          );
+          const { removed: removedTags, upsert: upsertTags } = diffTags(
+            observedTags,
+            tags,
+          );
+          if (upsertTags.length > 0) {
+            yield* ecs.tagResource({
+              resourceArn: revisionArn,
+              tags: upsertTags.map((t) => ({ key: t.Key, value: t.Value })),
+            });
+          }
+          if (removedTags.length > 0) {
+            yield* ecs.untagResource({
+              resourceArn: revisionArn,
+              tagKeys: removedTags,
+            });
+          }
 
           yield* session.note(taskDefinition.taskDefinitionArn!);
           return {

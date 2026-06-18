@@ -153,7 +153,9 @@ export type ZarazConfigAttributes = {
  * Destroy keeps the current Zaraz config by default to avoid wiping unrelated
  * zone-level analytics setup. Set `delete: true` to restore Cloudflare's
  * default Zaraz config on destroy.
- *
+ * @resource
+ * @product Zaraz
+ * @category Performance & Reliability
  * @section Managing Zaraz
  * @example Enable data layer compatibility
  * ```typescript

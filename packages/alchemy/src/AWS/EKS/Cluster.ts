@@ -109,7 +109,7 @@ export interface Cluster extends Resource<
 
 /**
  * An Amazon EKS cluster with support for EKS Auto Mode settings.
- *
+ * @resource
  * @section Creating Clusters
  * @example Auto Mode Cluster from Existing Roles and Subnets
  * ```typescript

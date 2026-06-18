@@ -187,7 +187,9 @@ export type LoadBalancerPool = Resource<
  *
  * Requires the Load Balancing subscription on the account; without it, pool
  * creation fails with the typed `PoolAccessFailed` error.
- *
+ * @resource
+ * @product Load Balancers
+ * @category Performance & Reliability
  * @section Creating a Pool
  * @example Pool with one origin
  * ```typescript

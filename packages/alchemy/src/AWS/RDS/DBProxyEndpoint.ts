@@ -61,6 +61,7 @@ export interface DBProxyEndpoint extends Resource<
 
 /**
  * An additional RDS Proxy endpoint.
+ * @resource
  */
 export const DBProxyEndpoint = Resource<DBProxyEndpoint>(
   "AWS.RDS.DBProxyEndpoint",

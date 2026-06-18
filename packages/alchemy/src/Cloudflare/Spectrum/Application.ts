@@ -220,7 +220,9 @@ export type SpectrumApplication = Resource<
  * no prior state, `read` scans the zone for an application with the same
  * `dns.name` + `protocol` and reports it as `Unowned`, so the engine
  * refuses to take it over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Spectrum
+ * @category Network
  * @section Proxying SSH
  * @example SSH on a fixed origin address
  * ```typescript

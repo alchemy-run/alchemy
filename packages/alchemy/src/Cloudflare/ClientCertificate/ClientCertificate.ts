@@ -122,7 +122,9 @@ export type ClientCertificate = Resource<
  * prior state, `read` scans the zone for a non-revoked certificate issued
  * from the same CSR and reports it as `Unowned`, so the engine refuses to
  * take it over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Client Certificates
+ * @category SSL/TLS & Certificates
  * @section Issuing a client certificate
  * @example Sign a CSR with the Cloudflare Managed CA
  * ```typescript

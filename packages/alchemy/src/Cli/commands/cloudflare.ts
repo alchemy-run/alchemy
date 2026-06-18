@@ -127,81 +127,41 @@ type CreateTokenPolicy = {
 };
 
 /**
- * Curated set of permission groups granted by `create-token` when
- * `--all-permissions` is NOT passed. Covers the services Alchemy commonly
- * deploys (Workers + storage + zone/DNS) without handing out a god token.
- * Names are matched against the account's live permission groups; any name
- * not available for the account is silently skipped.
+ * Cloudflare scopes that `buildTokenPolicies` knows how to turn into a policy,
+ * mapped to a short human label shown as a hint in the selection prompt.
+ * Groups with any other scope cannot be expressed as a policy and are omitted
+ * from the prompt.
  */
-const ALCHEMY_DEFAULT_PERMISSION_GROUP_NAMES: ReadonlySet<string> = new Set([
-  "Account Settings Read",
-  "Workers Scripts Read",
-  "Workers Scripts Write",
-  "Workers KV Storage Read",
-  "Workers KV Storage Write",
-  "Workers R2 Storage Read",
-  "Workers R2 Storage Write",
-  "Workers Routes Read",
-  "Workers Routes Write",
-  "Workers Tail Read",
-  "Workers Observability Read",
-  "Workers Observability Write",
-  "Workers AI Read",
-  "Workers AI Write",
-  "D1 Read",
-  "D1 Write",
-  "Queues Read",
-  "Queues Write",
-  "Hyperdrive Read",
-  "Hyperdrive Write",
-  "Pages Read",
-  "Pages Write",
-  "Vectorize Read",
-  "Vectorize Write",
-  "Pipelines Read",
-  "Pipelines Write",
-  "AI Gateway Read",
-  "AI Gateway Run",
-  "AI Gateway Write",
-  "Flagship Read",
-  "Flagship Write",
-  "Browser Rendering Read",
-  "Browser Rendering Write",
-  "Images Read",
-  "Images Write",
-  "Stream Read",
-  "Stream Write",
-  "Secrets Store Read",
-  "Secrets Store Write",
-  "DNS Read",
-  "DNS Write",
-  "Zone Read",
-  "Zone Settings Read",
-  "Zone Settings Write",
-  "SSL and Certificates Read",
-  "SSL and Certificates Write",
-]);
+const SELECTABLE_SCOPE_LABELS: Record<string, string> = {
+  "com.cloudflare.api.account": "account",
+  "com.cloudflare.api.account.zone": "zone",
+  "com.cloudflare.edge.r2.bucket": "r2",
+};
 
 /**
  * Group permission groups by their Cloudflare scope and produce one policy
  * per scope, wiring up the right resource selector for each:
  *
- * - `com.cloudflare.api.account` → scoped to the account ID
+ * - `com.cloudflare.api.account` → scoped to each selected account ID
  * - `com.cloudflare.api.account.zone` → all zones (`*`)
  * - `com.cloudflare.edge.r2.bucket` → all buckets (`*`)
  *
  * Mirrors the upstream `alchemy` "god token" policy shape. Groups with an
- * unrecognized scope are skipped, and empty policies are dropped.
+ * unrecognized scope are skipped, and empty policies are dropped. When more
+ * than one account is selected, the account-scoped policy lists every chosen
+ * account in its `resources` map so the token spans all of them.
  */
 const buildTokenPolicies = (
-  accountId: string,
+  accountIds: readonly string[],
   groups: readonly { id: string; scopes: readonly string[] }[],
 ): CreateTokenPolicy[] => {
   const buckets: Record<string, CreateTokenPolicy> = {
     "com.cloudflare.api.account": {
       effect: "allow",
       permissionGroups: [],
-      resources: { [`com.cloudflare.api.account.${accountId}`]: "*" },
+      resources: Object.fromEntries(
+        accountIds.map((id) => [`com.cloudflare.api.account.${id}`, "*"]),
+      ),
     },
     "com.cloudflare.api.account.zone": {
       effect: "allow",
@@ -225,20 +185,20 @@ const buildTokenPolicies = (
 };
 
 /**
- * Let the user pick which Cloudflare account the token is scoped to. Lists
- * the accounts visible to the configured credentials and prompts a selection
- * (defaulting the cursor to the profile's account). If there's exactly one
- * account, it's used without prompting; if the API returns none, falls back
- * to the profile's account.
+ * Let the user pick which Cloudflare account(s) the token is scoped to. Lists
+ * the accounts visible to the configured credentials and prompts a
+ * multi-selection (defaulting the cursor to the profile's account). If there's
+ * exactly one account, it's used without prompting; if the API returns none,
+ * falls back to the profile's account.
  */
-const selectAccountId = (defaultAccountId: string | undefined) =>
+const selectAccountIds = (defaultAccountId: string | undefined) =>
   Effect.gen(function* () {
     const list = yield* cfAccounts.listAccounts;
     const response = yield* list({});
     const accounts = response.result;
 
     if (accounts.length === 0) {
-      if (defaultAccountId) return defaultAccountId;
+      if (defaultAccountId) return [defaultAccountId];
       return yield* Effect.die(
         "No Cloudflare accounts found for these credentials.",
       );
@@ -246,16 +206,19 @@ const selectAccountId = (defaultAccountId: string | undefined) =>
     if (accounts.length === 1) {
       const account = accounts[0]!;
       yield* Clank.info(`Using account: ${account.name} (${account.id})`);
-      return account.id;
+      return [account.id];
     }
-    return yield* Clank.select({
-      message: "Select a Cloudflare account",
-      initialValue: defaultAccountId,
+    return yield* Clank.multiselect<string>({
+      message:
+        "Select the Cloudflare account(s) to scope the token to " +
+        "(space to toggle, enter to confirm)",
+      initialValues: defaultAccountId ? [defaultAccountId] : undefined,
       options: accounts.map((a) => ({
         value: a.id,
         label: a.name,
         hint: a.id === defaultAccountId ? `${a.id} (current profile)` : a.id,
       })),
+      required: true,
     });
   });
 
@@ -277,10 +240,20 @@ const tokenNameFlag = Flag.string("name").pipe(
 
 const tokenAccountIdFlag = Flag.string("account-id").pipe(
   Flag.withDescription(
-    "Cloudflare account ID to scope the token to. Defaults to the profile's account.",
+    "Cloudflare account ID(s) to scope the token to (comma-separated for " +
+      "multiple). If omitted, you'll be prompted to select from your accounts.",
   ),
   Flag.optional,
-  Flag.map(Option.getOrUndefined),
+  Flag.map(
+    Option.match({
+      onNone: () => undefined,
+      onSome: (v) =>
+        v
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0),
+    }),
+  ),
 );
 
 /**
@@ -296,8 +269,12 @@ const tokenAccountIdFlag = Flag.string("account-id").pipe(
  * stored.
  *
  * With `--all-permissions` it builds a "superuser" token spanning every
- * permission group (after a confirmation prompt). Otherwise it grants a
- * curated set covering the services Alchemy commonly deploys.
+ * permission group (after a confirmation prompt). Otherwise it prompts the
+ * user to pick which permission groups to grant from the account's live set.
+ *
+ * The token can be scoped to more than one account: pass a comma-separated
+ * list to `--account-id`, or (when neither is supplied) pick multiple accounts
+ * from the interactive selection prompt.
  */
 const createTokenCommand = Command.make(
   "create-token",
@@ -356,8 +333,8 @@ const createTokenCommand = Command.make(
             ),
           );
 
-        const resolvedAccountId =
-          accountId ?? (yield* withCreds(selectAccountId(undefined)));
+        const resolvedAccountIds =
+          accountId ?? (yield* withCreds(selectAccountIds(undefined)));
 
         const tokenName =
           name ??
@@ -399,12 +376,33 @@ const createTokenCommand = Command.make(
             : [],
         );
 
-        const selected = allPermissions
-          ? liveGroups
-          : liveGroups.filter((g) =>
-              ALCHEMY_DEFAULT_PERMISSION_GROUP_NAMES.has(g.name),
-            );
-        const policies = buildTokenPolicies(resolvedAccountId, selected);
+        let selected: typeof liveGroups;
+        if (allPermissions) {
+          selected = liveGroups;
+        } else {
+          // Only groups whose scope maps to one of the three policy buckets
+          // can actually become a policy (see `buildTokenPolicies`); offering
+          // the rest would let the user "select" permissions that are then
+          // silently dropped. Restrict the prompt to selectable groups.
+          const selectable = liveGroups
+            .filter((g) => SELECTABLE_SCOPE_LABELS[g.scopes[0]!] !== undefined)
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+          const chosenIds = yield* Clank.multiselect<string>({
+            message:
+              "Select the permission groups to grant (space to toggle, enter to confirm)",
+            options: selectable.map((g) => ({
+              value: g.id,
+              label: g.name,
+              hint: SELECTABLE_SCOPE_LABELS[g.scopes[0]!],
+            })),
+            required: true,
+          });
+
+          const chosen = new Set(chosenIds);
+          selected = selectable.filter((g) => chosen.has(g.id));
+        }
+        const policies = buildTokenPolicies(resolvedAccountIds, selected);
 
         if (policies.length === 0) {
           return yield* Effect.die(

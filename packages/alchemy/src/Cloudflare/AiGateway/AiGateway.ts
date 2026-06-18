@@ -242,7 +242,9 @@ export const isAiGateway = (value: unknown): value is AiGateway =>
  * `LanguageModel` Layer so you use the standard `generateText` / `streamText`
  * APIs — provider-agnostic, with caching, rate limiting, retries, and a
  * unified request log handled by the gateway.
- *
+ * @resource
+ * @product AI Gateway
+ * @category AI
  * @section Creating a Gateway
  * @example Basic gateway
  * ```typescript

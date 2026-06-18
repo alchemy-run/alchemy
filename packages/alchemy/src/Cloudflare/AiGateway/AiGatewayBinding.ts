@@ -90,6 +90,8 @@ export interface AiGatewayClient {
  * `Layer`.
  *
  * @binding
+ * @product AI Gateway
+ * @category AI
  *
  * @section Calling AI Gateway
  * @example Run through a gateway

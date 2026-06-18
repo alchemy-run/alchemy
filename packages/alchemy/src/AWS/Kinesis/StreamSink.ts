@@ -9,6 +9,7 @@ import type { Stream } from "./Stream.ts";
 
 export type StreamSinkRecord = Kinesis.PutRecordsRequestEntry;
 
+/** @binding */
 export class StreamSink extends Binding.Service<
   StreamSink,
   (

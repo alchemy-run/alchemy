@@ -10,6 +10,7 @@ export interface DescribeEventBusRequest extends Omit<
   "Name"
 > {}
 
+/** @binding */
 export class DescribeEventBus extends Binding.Service<
   DescribeEventBus,
   (

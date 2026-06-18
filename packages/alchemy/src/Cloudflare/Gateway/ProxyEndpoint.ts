@@ -90,7 +90,9 @@ export type GatewayProxyEndpoint = Resource<
  * Zero Trust plans. The kind is immutable; name and `ips` converge in
  * place. Accounts are limited to a small number of proxy endpoints, so
  * prefer reusing one per account.
- *
+ * @resource
+ * @product Gateway
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Proxy Endpoint
  * @example Identity-based endpoint (all plans)
  * ```typescript

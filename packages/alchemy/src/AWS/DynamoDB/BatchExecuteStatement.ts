@@ -25,7 +25,7 @@ export interface BatchExecuteStatementRequest
  *
  * The request is passed through unchanged, but IAM is scoped to the explicitly
  * bound tables and their indexes.
- *
+ * @binding
  * @section PartiQL
  * @example Execute a Batch of Statements
  * ```typescript

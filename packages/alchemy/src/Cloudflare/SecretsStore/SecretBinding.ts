@@ -35,6 +35,11 @@ export interface SecretClient extends Effect.Effect<
   get(): Effect.Effect<Redacted.Redacted<string>, SecretError, RuntimeContext>;
 }
 
+/**
+ * @binding
+ * @product Secrets Store
+ * @category Storage & Databases
+ */
 export class SecretBinding extends Binding.Service<
   SecretBinding,
   (secret: Secret) => Effect.Effect<SecretClient>

@@ -117,7 +117,9 @@ export type DevicePostureRule = Resource<
  *
  * Everything except `type` is mutable in place (full PUT). Changing
  * `type` replaces the rule.
- *
+ * @resource
+ * @product Devices
+ * @category Cloudflare One (Zero Trust)
  * @section Infrastructure-free checks
  * @example Require a minimum Windows version
  * ```typescript

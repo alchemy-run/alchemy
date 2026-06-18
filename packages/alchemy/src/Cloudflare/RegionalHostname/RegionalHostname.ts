@@ -71,7 +71,9 @@ export type RegionalHostname = Resource<
  *
  * Requires the Data Localization Suite (or Enterprise) entitlement on the
  * zone.
- *
+ * @resource
+ * @product Regional Hostnames
+ * @category Domains & DNS
  * @section Regionalizing a Hostname
  * @example Pin a hostname to the EU
  * ```typescript

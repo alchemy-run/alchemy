@@ -23,7 +23,7 @@ import { Permission as LambdaPermission } from "./Permission.ts";
  * This layer listens for bucket notifications routed through the Lambda runtime
  * and exposes them as an `Effect.Stream`, while the companion policy configures
  * the invoke permission and bucket notification binding during deployment.
- *
+ * @binding
  * @section Wiring Events
  * @example Listen for Object Created Events
  * ```typescript

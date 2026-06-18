@@ -127,7 +127,9 @@ export type AiGatewayDataset = Resource<
  * provider, model, success, cost, tokens, etc.) and serve as the input to AI
  * Gateway evaluations. Name, enablement, and filters are all mutable in
  * place; only moving the dataset to a different gateway forces a replacement.
- *
+ * @resource
+ * @product AI Gateway
+ * @category AI
  * @section Creating a Dataset
  * @example Capture successful requests
  * ```typescript

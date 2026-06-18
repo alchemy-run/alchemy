@@ -59,7 +59,9 @@ export type StreamSigningKey = Resource<
  * attributes.
  *
  * Requires the Stream subscription to be enabled on the account.
- *
+ * @resource
+ * @product Stream
+ * @category Media
  * @section Creating a signing key
  * @example Signing key for signed playback URLs
  * ```typescript

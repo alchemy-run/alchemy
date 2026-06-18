@@ -52,7 +52,7 @@ export interface Variable extends Resource<
  * by `GitHub.providers()` (which uses the Alchemy AuthProvider — env,
  * stored PAT, `gh` CLI, or OAuth). The token needs `repo` scope for
  * private repositories or `public_repo` for public ones.
- *
+ * @resource
  * @section Repository Variables
  * Store variables accessible to all GitHub Actions workflows in the
  * repository.

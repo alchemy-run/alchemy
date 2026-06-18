@@ -64,7 +64,9 @@ export type TunnelWarpConnector = Resource<
  * host joins it at runtime using the `token` attribute. Pair with
  * {@link TunnelRoute} to route private CIDRs through the connector and
  * {@link TunnelVirtualNetwork} to isolate overlapping address space.
- *
+ * @resource
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a WARP Connector
  * @example Basic WARP Connector tunnel
  * ```typescript

@@ -124,7 +124,9 @@ export type TunnelConfiguration = Resource<
  * automatically — Cloudflare rejects PUTs whose last rule has a hostname,
  * and forgetting it is a common foot-gun. Override the auto-appended
  * service via {@link TunnelConfigurationProps.catchAllService}.
- *
+ * @resource
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  * @section Routing a private hostname through a tunnel
  * @example Map an internal admin UI through a Cloudflare Tunnel to a K8s Service
  * ```typescript

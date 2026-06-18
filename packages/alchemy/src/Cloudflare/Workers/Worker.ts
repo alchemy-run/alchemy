@@ -141,7 +141,8 @@ export type WorkerServices =
   | Worker
   | Request
   | WorkerExecutionContext
-  | WorkerEnvironment;
+  | WorkerEnvironment
+  | CloudflareEnvironment;
 
 export type WorkerShape = Main<WorkerServices>;
 
@@ -409,7 +410,9 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * - **Async** — plain `async fetch` handler, no Effect runtime in the bundle.
  * - **Effect** — Effect implementation passed directly, single file.
  * - **Layer** — class and `.make()` in a single file; Rolldown tree-shakes `.make()` from consumers.
- *
+ * @resource
+ * @product Workers
+ * @category Workers & Compute
  * @section Async Workers
  * You don't have to use Effect for your runtime code. If you create
  * a Worker resource with `main` pointing at a file but provide no
@@ -842,7 +845,7 @@ export const LiveWorkerProvider = () =>
       // When enabling we also set `previewsEnabled: true` so the
       // script is reachable both at its stable workers.dev URL and at
       // version-preview URLs; on disable we send just `enabled: false`.
-      const setWorkerSubdomain = Effect.fnUntraced(function* (
+      const setWorkerSubdomain = Effect.fn(function* (
         name: string,
         enabled: boolean,
       ) {
@@ -880,7 +883,7 @@ export const LiveWorkerProvider = () =>
       const normalizeCrons = (crons: string[] | undefined): string[] =>
         Array.from(new Set(crons ?? []));
 
-      const getWorkerCrons = Effect.fnUntraced(function* (scriptName: string) {
+      const getWorkerCrons = Effect.fn(function* (scriptName: string) {
         const { accountId } = yield* yield* CloudflareEnvironment;
         return yield* workers
           .getScriptSchedule({
@@ -1030,7 +1033,7 @@ export const LiveWorkerProvider = () =>
           // no-op for Cloudflare and avoids the "already in use" 409.
           // If it's attached to a *different* Worker, refuse with a
           // clear message rather than silently re-routing traffic.
-          const attachDomain = Effect.fnUntraced(function* (hostname: string) {
+          const attachDomain = Effect.fn(function* (hostname: string) {
             const live = liveByHostname.get(hostname);
             if (live) {
               return {
@@ -1145,7 +1148,7 @@ export const LiveWorkerProvider = () =>
           ),
         );
 
-      const getWorkerSettingsWithDurableObjects = Effect.fnUntraced(function* (
+      const getWorkerSettingsWithDurableObjects = Effect.fn(function* (
         scriptName: string,
         expectedClassNames: readonly string[],
       ) {
@@ -1184,7 +1187,7 @@ export const LiveWorkerProvider = () =>
           );
       });
 
-      const prepareAssets = Effect.fnUntraced(function* (
+      const prepareAssets = Effect.fn(function* (
         assets: WorkerProps["assets"],
       ) {
         if (!assets) {
@@ -1230,7 +1233,7 @@ export const LiveWorkerProvider = () =>
           crypto.createHash("sha256").update(script).digest("hex"),
         );
 
-      const viteBuild = Effect.fnUntraced(function* (props: WorkerProps) {
+      const viteBuild = Effect.fn(function* (props: WorkerProps) {
         const compatibility = getCompatibility(props);
         // Loaded lazily: `./Vite.ts` pulls in `@distilled.cloud/cloudflare-vite-plugin`
         // (~0.5s), which is only needed for vite-based workers at build time —
@@ -1241,7 +1244,7 @@ export const LiveWorkerProvider = () =>
           Object.fromEntries(
             (yield* Effect.all(
               Object.entries(props.env ?? {}).map(
-                Effect.fnUntraced(function* ([key, value]) {
+                Effect.fn(function* ([key, value]) {
                   return [
                     key,
                     typeof value === "string"
@@ -1370,7 +1373,7 @@ export const LiveWorkerProvider = () =>
         return { config, hash, skip: hash === output?.hash?.assets };
       };
 
-      const putWorker = Effect.fnUntraced(function* (
+      const putWorker = Effect.fn(function* (
         id: string,
         news: WorkerProps,
         bindings: ResourceBinding<Worker["Binding"]>[],
@@ -1475,6 +1478,11 @@ export const LiveWorkerProvider = () =>
             type: "plain_text",
             name: "ALCHEMY_STAGE",
             text: stack.stage,
+          },
+          {
+            type: "plain_text",
+            name: "ALCHEMY_CLOUDFLARE_ACCOUNT_ID",
+            text: accountId,
           },
         );
         // Add environment variables as metadata bindings
@@ -1814,7 +1822,7 @@ export const LiveWorkerProvider = () =>
         } satisfies Worker["Attributes"];
       });
 
-      const hasChanged = Effect.fnUntraced(function* (
+      const hasChanged = Effect.fn(function* (
         id: string,
         props: WorkerProps,
         output: Worker["Attributes"],
@@ -1928,13 +1936,7 @@ export const LiveWorkerProvider = () =>
               ),
             );
           }),
-        diff: Effect.fnUntraced(function* ({
-          id,
-          news,
-          olds,
-          output,
-          newBindings,
-        }) {
+        diff: Effect.fn(function* ({ id, news, olds, output, newBindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           if (!isResolved(news)) return undefined;
           if ((output?.accountId ?? accountId) !== accountId) {
@@ -2041,7 +2043,7 @@ export const LiveWorkerProvider = () =>
             };
           }
         }),
-        precreate: Effect.fnUntraced(function* ({ id, news, session }) {
+        precreate: Effect.fn(function* ({ id, news, session }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           const name = yield* createWorkerName(id, news.name);
           const exportMap = news.exports ?? {};
@@ -2185,7 +2187,7 @@ export const LiveWorkerProvider = () =>
             crons: [],
           } satisfies Worker["Attributes"];
         }),
-        read: Effect.fnUntraced(
+        read: Effect.fn(
           function* ({ id, output, olds }) {
             const { accountId } = yield* yield* CloudflareEnvironment;
             const workerName =
@@ -2276,7 +2278,7 @@ export const LiveWorkerProvider = () =>
               ),
             ),
         ),
-        reconcile: Effect.fnUntraced(function* ({
+        reconcile: Effect.fn(function* ({
           id,
           news,
           olds,
@@ -2341,7 +2343,7 @@ export const LiveWorkerProvider = () =>
             existingSettings,
           );
         }),
-        delete: Effect.fnUntraced(function* ({ output }) {
+        delete: Effect.fn(function* ({ output }) {
           yield* Effect.logInfo(
             `Cloudflare Worker delete: deleting ${output.workerName}`,
           );

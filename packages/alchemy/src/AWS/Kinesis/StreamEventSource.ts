@@ -72,6 +72,7 @@ export interface StreamEventSourceProps {
   metricsConfig?: Lambda.EventSourceMappingMetricsConfig;
 }
 
+/** @binding */
 export class StreamEventSource extends Binding.Service<
   StreamEventSource,
   StreamEventSourceService

@@ -92,7 +92,9 @@ export type ZoneTransferPeer = Resource<
  * account. Cloudflare's create API only accepts a name; the provider
  * follows up with an update when `ip`, `port`, `tsigId`, or
  * `ixfrEnable` are declared, all of which remain mutable in place.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Creating a Peer
  * @example Primary nameserver to transfer from
  * ```typescript

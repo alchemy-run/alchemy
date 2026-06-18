@@ -102,7 +102,9 @@ export type CustomRuleset = Resource<
  *
  * For zone-level rules, use `Cloudflare.Ruleset` (the zone phase
  * entrypoint) instead.
- *
+ * @resource
+ * @product Rulesets
+ * @category Rules & Configuration
  * @section Custom Rulesets
  * @example Define an account custom WAF ruleset
  * ```typescript

@@ -129,7 +129,9 @@ export type DevicePostureIntegration = Resource<
  * Cloudflare validates the configured credentials against the live
  * provider API at create/update time, so a reachable third-party tenant
  * is required.
- *
+ * @resource
+ * @product Devices
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a posture integration
  * @example CrowdStrike Falcon
  * ```typescript

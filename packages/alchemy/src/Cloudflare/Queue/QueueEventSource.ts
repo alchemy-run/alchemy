@@ -84,7 +84,9 @@ export type QueueMessage<Body = unknown> = cf.Message<Body>;
  * settings before dead-lettering. Per-message control is still
  * available by calling `msg.ack()` / `msg.retry()` inside the
  * handler.
- *
+ * @binding
+ * @product Queues
+ * @category Storage & Databases
  * @example
  * ```typescript
  * import * as Cloudflare from "alchemy/Cloudflare";

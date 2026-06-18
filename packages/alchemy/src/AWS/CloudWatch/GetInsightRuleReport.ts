@@ -12,6 +12,7 @@ export interface GetInsightRuleReportRequest extends Omit<
 
 /**
  * Runtime binding for `cloudwatch:GetInsightRuleReport`.
+ * @binding
  */
 export class GetInsightRuleReport extends Binding.Service<
   GetInsightRuleReport,
