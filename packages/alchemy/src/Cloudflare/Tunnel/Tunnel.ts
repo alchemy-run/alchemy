@@ -103,7 +103,9 @@ export type Tunnel = Resource<
 /**
  * A Cloudflare Tunnel that establishes a secure connection from your origin to
  * Cloudflare's edge.
- *
+ * @resource
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Tunnel
  * @example Basic tunnel
  * ```typescript

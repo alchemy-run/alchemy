@@ -170,6 +170,7 @@ export type PostgresRole = Resource<
   Providers
 >;
 
+/** @resource */
 export const PostgresRole = Resource<PostgresRole>("Planetscale.PostgresRole");
 
 export const PostgresRoleProvider = () =>

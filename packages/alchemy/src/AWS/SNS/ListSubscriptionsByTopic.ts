@@ -10,6 +10,7 @@ export interface ListSubscriptionsByTopicRequest extends Omit<
   "TopicArn"
 > {}
 
+/** @binding */
 export class ListSubscriptionsByTopic extends Binding.Service<
   ListSubscriptionsByTopic,
   (

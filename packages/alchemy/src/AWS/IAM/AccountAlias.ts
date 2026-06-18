@@ -27,7 +27,7 @@ export interface AccountAlias extends Resource<
  *
  * `AccountAlias` manages the one account-level alias that customizes the AWS
  * sign-in URL for the current account.
- *
+ * @resource
  * @section Managing Account Identity
  * @example Set the Account Alias
  * ```typescript

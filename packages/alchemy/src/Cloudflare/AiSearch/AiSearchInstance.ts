@@ -10,6 +10,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { AiSearchInstanceBinding } from "./AiSearchBinding.ts";
 
 const AiSearchInstanceTypeId = "Cloudflare.AiSearch.Instance" as const;
 type AiSearchInstanceTypeId = typeof AiSearchInstanceTypeId;
@@ -102,6 +103,17 @@ export type AiSearchInstanceProps = {
    * @default ${app}-${id}-${stage}-${suffix}
    */
   instanceId?: string;
+  /**
+   * Namespace this instance belongs to. AI Search instances are
+   * namespace-scoped; omitting this places the instance in the
+   * account-provided `default` namespace. Pass an `AiSearchNamespace`'s
+   * `name` output to group instances under a custom namespace (which also
+   * orders this instance after that namespace on deploy and before it on
+   * destroy). The namespace is immutable — changing it triggers a
+   * replacement.
+   * @default "default"
+   */
+  namespace?: string;
   /**
    * Data source kind: `r2` indexes objects in an R2 bucket, `web-crawler`
    * crawls a seed URL. Changing it triggers a replacement.
@@ -224,17 +236,30 @@ export type AiSearchInstanceProps = {
    * 1800, 3600, 7200, 14400, 21600, 43200, 86400.
    */
   syncInterval?: number;
+  /**
+   * Kick off an initial indexing job right after the instance is first
+   * created, instead of waiting for the first scheduled sync. The job is
+   * triggered best-effort and not awaited — the deploy does not block on
+   * indexing, which can take much longer than a provisioning step should.
+   * Has no effect on updates or when no `source` is configured.
+   * @default false
+   */
+  indexOnCreate?: boolean;
 };
 
 export type AiSearchInstanceAttributes = {
   /**
    * AI Search instance id. Lowercase alphanumeric, hyphens, underscores.
    */
-  id: string;
+  instanceId: string;
   /**
    * The Cloudflare account the instance belongs to.
    */
   accountId: string;
+  /**
+   * Namespace the instance belongs to (`default` when unspecified).
+   */
+  namespace: string;
   /**
    * Data source kind (`r2` or `web-crawler`).
    */
@@ -298,17 +323,30 @@ export type AiSearchInstance = Resource<
  * chat queries against it. Creation returns immediately; the initial
  * indexing run happens asynchronously.
  *
- * The instance `id`, `type`, `source`, and `embeddingModel` are fixed at
- * creation — changing any of them triggers a replacement. Everything else
- * (models, chunking, caching, reranking, public endpoint, sync interval)
- * is mutable in place.
+ * The instance `instanceId`, `namespace`, `type`, `source`, and
+ * `embeddingModel` are fixed at creation — changing any of them triggers a
+ * replacement. Everything else (models, chunking, caching, reranking,
+ * public endpoint, sync interval) is mutable in place.
  *
+ * For the common R2 case, prefer the {@link AiSearch} construct, which also
+ * mints the service token the indexer needs to read your bucket. Use this
+ * low-level resource directly when you manage the token yourself, share one
+ * token across instances, or group instances under an {@link
+ * AiSearchNamespace}.
+ *
+ * @resource
+ * @product AI Search
+ * @category AI
  * @section Creating an Instance
  * @example R2-backed instance
+ * An R2 source needs a service token to read the bucket. Either pass a
+ * `tokenId` (see {@link AiSearchToken}) or let the {@link AiSearch}
+ * construct provision one for you.
  * ```typescript
  * const bucket = yield* Cloudflare.R2Bucket("docs", {});
  * const search = yield* Cloudflare.AiSearchInstance("docs-search", {
  *   source: bucket.bucketName,
+ *   tokenId: serviceToken.id,
  * });
  * ```
  *
@@ -325,7 +363,66 @@ export type AiSearchInstance = Resource<
  * });
  * ```
  *
- * @example Web-crawler instance
+ * @section R2 source options
+ * For an `r2` source, `sourceParams` filters which objects are indexed (all
+ * fields optional):
+ * - `prefix` — only index keys under this prefix.
+ * - `includeItems` / `excludeItems` — micromatch glob patterns (`*` within a
+ *   path segment, `**` across segments; max 10 each). Only objects matching an
+ *   `includeItems` pattern are indexed; `excludeItems` takes precedence.
+ * - `r2Jurisdiction` — R2 data-residency jurisdiction of the source bucket.
+ * @example Index only part of a bucket
+ * ```typescript
+ * const search = yield* Cloudflare.AiSearchInstance("docs-search", {
+ *   source: bucket.bucketName,
+ *   tokenId: serviceToken.id,
+ *   sourceParams: {
+ *     prefix: "docs/",
+ *     includeItems: ["/docs/**"],
+ *     excludeItems: ["/docs/drafts/**"],
+ *   },
+ * });
+ * ```
+ *
+ * @section Web-crawler source options
+ * `sourceParams.webCrawler` tunes how a `web-crawler` source is fetched,
+ * parsed, and stored. All fields are optional.
+ *
+ * `parseType` selects how pages are discovered:
+ * - `"sitemap"` (Cloudflare default) — read `<seed>/sitemap.xml` (discovered
+ *   via `robots.txt`) and index the URLs it lists.
+ * - `"crawl"` — start at `source` and follow links.
+ * - `"feed-rss"` — treat the seed as an RSS / Atom feed.
+ *
+ * `crawlOptions` controls link discovery (mainly for `parseType: "crawl"`):
+ * - `depth` — how many links deep to follow from the seed.
+ * - `includeSubdomains` — also crawl subdomains of the seed host.
+ * - `includeExternalLinks` — follow links off the seed host.
+ * - `maxAge` — skip re-fetching pages younger than this (seconds).
+ * - `source` — where links come from: `"all"`, `"sitemaps"`, or `"links"`.
+ *
+ * `parseOptions` controls how each page is parsed:
+ * - `useBrowserRendering` — render JS in a headless browser before parsing.
+ * - `includeImages` — index image content.
+ * - `specificSitemaps` — explicit sitemap URLs to read (for `"sitemap"`).
+ * - `contentSelector` — `{ path, selector }[]` CSS selectors scoping which
+ *   part of a page is indexed per URL path.
+ * - `includeHeaders` — extra request headers sent while crawling.
+ *
+ * `storeOptions` overrides where crawled content is stored — Cloudflare
+ * provisions managed storage by default:
+ * - `storageId` — R2 bucket name to store crawl output in.
+ * - `storageType` — `"r2"`.
+ * - `r2Jurisdiction` — R2 data-residency jurisdiction for the store bucket.
+ * @example Basic web-crawler instance
+ * ```typescript
+ * const search = yield* Cloudflare.AiSearchInstance("site-search", {
+ *   type: "web-crawler",
+ *   source: "https://example.com",
+ *   sourceParams: { webCrawler: { parseType: "crawl" } },
+ * });
+ * ```
+ * @example Fully-configured crawl
  * ```typescript
  * const search = yield* Cloudflare.AiSearchInstance("site-search", {
  *   type: "web-crawler",
@@ -333,18 +430,136 @@ export type AiSearchInstance = Resource<
  *   sourceParams: {
  *     webCrawler: {
  *       parseType: "crawl",
- *       crawlOptions: { depth: 2, includeSubdomains: true },
+ *       crawlOptions: {
+ *         depth: 3,
+ *         includeSubdomains: true,
+ *         includeExternalLinks: false,
+ *         maxAge: 86_400,
+ *         source: "all",
+ *       },
+ *       parseOptions: {
+ *         useBrowserRendering: true,
+ *         includeImages: false,
+ *         contentSelector: [{ path: "/docs", selector: "main" }],
+ *       },
+ *     },
+ *   },
+ * });
+ * ```
+ * @example Sitemap and RSS sources
+ * ```typescript
+ * // Index the URLs listed in one or more sitemaps (the default parse mode).
+ * const fromSitemap = yield* Cloudflare.AiSearchInstance("sitemap-search", {
+ *   type: "web-crawler",
+ *   source: "https://example.com",
+ *   sourceParams: {
+ *     webCrawler: {
+ *       parseType: "sitemap",
+ *       parseOptions: { specificSitemaps: ["https://example.com/sitemap.xml"] },
+ *     },
+ *   },
+ * });
+ *
+ * // Treat the seed as an RSS / Atom feed.
+ * const fromFeed = yield* Cloudflare.AiSearchInstance("feed-search", {
+ *   type: "web-crawler",
+ *   source: "https://example.com/feed.xml",
+ *   sourceParams: { webCrawler: { parseType: "feed-rss" } },
+ * });
+ * ```
+ * @example Store crawl output in a specific R2 bucket
+ * ```typescript
+ * const search = yield* Cloudflare.AiSearchInstance("site-search", {
+ *   type: "web-crawler",
+ *   source: "https://example.com",
+ *   sourceParams: {
+ *     webCrawler: {
+ *       parseType: "crawl",
  *       storeOptions: { storageId: "my-crawl-bucket", storageType: "r2" },
  *     },
  *   },
  * });
  * ```
  *
+ * @section Grouping under a namespace
+ * Instances live in a namespace (the account-provided `default` when
+ * unspecified). Pass an {@link AiSearchNamespace}'s `name` to group related
+ * instances — the engine then orders this instance after the namespace on
+ * deploy. The namespace is immutable; changing it replaces the instance.
+ * @example Place the instance in a custom namespace
+ * ```typescript
+ * const ns = yield* Cloudflare.AiSearchNamespace("docs-ns", {});
+ * const search = yield* Cloudflare.AiSearchInstance("docs-search", {
+ *   source: bucket.bucketName,
+ *   namespace: ns.name,
+ * });
+ * ```
+ *
+ * @section Binding to an Effect Worker
+ * Bind the instance during the Worker's init phase with
+ * `Cloudflare.AiSearchInstance.bind(instance)`, which attaches the
+ * single-instance `ai_search` binding and returns an Effect-native client
+ * whose `search` / `chatCompletions` methods return `Effect`s. Provide
+ * {@link AiSearchInstanceBindingLive} in the Worker's runtime layer.
+ * @example Effect Worker that answers from AI Search
+ * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export default class Api extends Cloudflare.Worker<Api>()(
+ *   "api",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const search = yield* Cloudflare.AiSearchInstance.bind(Search);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         const query = new URL(request.url).searchParams.get("q") ?? "";
+ *         const answer = yield* search.chatCompletions({
+ *           messages: [{ role: "user", content: query }],
+ *         });
+ *         return yield* HttpServerResponse.json(answer);
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.AiSearchInstanceBindingLive)),
+ * ) {}
+ * ```
+ *
+ * @section Binding to an Async Worker
+ * For a vanilla `async fetch` Worker, pass the instance under `Worker.env`.
+ * The engine attaches the same `ai_search` binding and `InferEnv` types
+ * `env.SEARCH` as the runtime `AiSearchInstance` handle.
+ * @example Async Worker via `env`
+ * ```typescript
+ * export const Api = Cloudflare.Worker("api", {
+ *   main: "./worker.ts",
+ *   env: { SEARCH: search },
+ * });
+ * export type ApiEnv = Cloudflare.InferEnv<typeof Api>;
+ *
+ * // worker.ts
+ * export default {
+ *   async fetch(request: Request, env: ApiEnv): Promise<Response> {
+ *     const query = new URL(request.url).searchParams.get("q") ?? "";
+ *     return Response.json(
+ *       await env.SEARCH.chatCompletions({
+ *         messages: [{ role: "user", content: query }],
+ *       }),
+ *     );
+ *   },
+ * };
+ * ```
+ *
  * @see https://developers.cloudflare.com/ai-search/
  */
 export const AiSearchInstance = Resource<AiSearchInstance>(
   AiSearchInstanceTypeId,
-);
+)({
+  bind: AiSearchInstanceBinding.bind,
+});
 
 /**
  * Returns true if the given value is an AiSearchInstance resource.
@@ -354,17 +569,35 @@ export const isAiSearchInstance = (value: unknown): value is AiSearchInstance =>
 
 export const AiSearchInstanceProvider = () =>
   Provider.succeed(AiSearchInstance, {
-    stables: ["id", "accountId", "type", "embeddingModel", "createdAt"],
+    stables: [
+      "instanceId",
+      "accountId",
+      "namespace",
+      "type",
+      "embeddingModel",
+      "createdAt",
+    ],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       if (!isResolved(news)) return undefined;
       if ((output?.accountId ?? accountId) !== accountId) {
         return { action: "replace" } as const;
       }
+      // The namespace is immutable on the Cloudflare side (it is the API
+      // path) — moving an instance between namespaces is a replacement. The
+      // new instance lives at a different path, so create-before-delete is
+      // always safe here regardless of whether the id is pinned.
+      const newNamespace = resolveNamespace(news.namespace);
+      const oldNamespace = resolveNamespace(
+        output?.namespace ?? olds.namespace,
+      );
+      if (newNamespace !== oldNamespace) {
+        return { action: "replace" } as const;
+      }
       // The instance id is its identity — renaming is a replacement.
       const newId = yield* createInstanceId(id, news.instanceId);
       const oldId =
-        output?.id ?? (yield* createInstanceId(id, olds.instanceId));
+        output?.instanceId ?? (yield* createInstanceId(id, olds.instanceId));
       if (newId !== oldId) {
         return { action: "replace" } as const;
       }
@@ -400,53 +633,62 @@ export const AiSearchInstanceProvider = () =>
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
+      const namespace = resolveNamespace(output?.namespace ?? olds?.namespace);
       // The id is deterministic (explicit prop or generated from the
       // logical id + instance id), so a cold read (lost state) resolves
       // the same identifier as the original create did.
       const instanceId =
-        output?.id ?? (yield* createInstanceId(id, olds?.instanceId));
-      const observed = yield* getInstance(acct, instanceId);
-      return observed ? toAttributes(observed, acct) : undefined;
+        output?.instanceId ?? (yield* createInstanceId(id, olds?.instanceId));
+      const observed = yield* getInstance(acct, namespace, instanceId);
+      return observed ? toAttributes(observed, acct, namespace) : undefined;
     }),
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      // Enumerate every instance id in the account, paginating
-      // exhaustively (the list payload omits some fields `read`
-      // returns).
-      const ids = yield* aisearch.listInstances.pages({ accountId }).pipe(
-        Stream.runCollect,
-        Effect.map((chunk) =>
-          Array.from(chunk).flatMap((page) =>
-            (page.result ?? []).map((instance) => instance.id),
-          ),
-        ),
-      );
-      // Hydrate each into the exact `read` Attributes shape; an item
-      // that vanished between list and read (typed NotFound) is
-      // dropped.
-      const rows = yield* Effect.forEach(
-        ids,
-        (instanceId) =>
-          getInstance(accountId, instanceId).pipe(
-            Effect.map((observed) =>
-              observed ? toAttributes(observed, accountId) : undefined,
+      // Instances are namespace-scoped, so enumerate every namespace
+      // (always including the account-provided `default`) and fan out a
+      // paginated instance list per namespace.
+      const namespaces = yield* aisearch.listNamespaces
+        .pages({ accountId })
+        .pipe(
+          Stream.runCollect,
+          Effect.map((chunk) =>
+            Array.from(chunk).flatMap((page) =>
+              (page.result ?? []).map((ns) => ns.name),
             ),
           ),
-        { concurrency: 10 },
+        );
+      const allNamespaces = Array.from(new Set(["default", ...namespaces]));
+      const rows = yield* Effect.forEach(
+        allNamespaces,
+        (namespace) =>
+          aisearch.listNamespaceInstances
+            .pages({ accountId, name: namespace })
+            .pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? []).map((instance) =>
+                    toAttributes(instance, accountId, namespace),
+                  ),
+                ),
+              ),
+              // A namespace deleted between list and fan-out is simply empty.
+              Effect.catchTag("NamespaceNotFound", () => Effect.succeed([])),
+            ),
+        { concurrency: 5 },
       );
-      return rows.filter(
-        (row): row is AiSearchInstanceAttributes => row !== undefined,
-      );
+      return rows.flat();
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
+      const namespace = resolveNamespace(news.namespace);
       const instanceId =
-        output?.id ?? (yield* createInstanceId(id, news.instanceId));
+        output?.instanceId ?? (yield* createInstanceId(id, news.instanceId));
 
-      // Observe — `output.id` is a cache, not a guarantee: a NotFound
+      // Observe — `output.instanceId` is a cache, not a guarantee: a NotFound
       // falls through to "missing" and we recreate.
-      let observed = yield* getInstance(acct, instanceId);
+      let observed = yield* getInstance(acct, namespace, instanceId);
 
       if (!observed) {
         // Ensure — greenfield (or out-of-band delete): create with the
@@ -454,8 +696,9 @@ export const AiSearchInstanceProvider = () =>
         // the instance already exists (a race), fall through to the
         // sync path against the observed instance.
         const ensured = yield* aisearch
-          .createInstance({
+          .createNamespaceInstance({
             accountId: acct,
+            name: namespace,
             id: instanceId,
             type: news.type ?? "r2",
             ...toMutableBody(news),
@@ -468,16 +711,40 @@ export const AiSearchInstanceProvider = () =>
             })),
             Effect.catchTag("InstanceAlreadyExists", (originalError) =>
               Effect.gen(function* () {
-                const existing = yield* getInstance(acct, instanceId);
+                const existing = yield* getInstance(
+                  acct,
+                  namespace,
+                  instanceId,
+                );
                 if (!existing) return yield* Effect.fail(originalError);
                 return { created: false as const, instance: existing };
               }),
             ),
           );
         if (ensured.created) {
-          // Indexing starts asynchronously; we deliberately do NOT wait
-          // for the first sync to finish.
-          return toAttributes(ensured.instance, acct);
+          // Optionally kick off the initial index instead of waiting for
+          // the first scheduled sync. Best-effort and NOT awaited for
+          // completion — the deploy must not block on indexing (the
+          // scheduled sync is the backstop if this transiently fails).
+          if ((news.indexOnCreate ?? false) && news.source !== undefined) {
+            yield* aisearch
+              .createNamespaceInstanceJob({
+                accountId: acct,
+                name: namespace,
+                id: instanceId,
+              })
+              .pipe(
+                Effect.catch((error) =>
+                  Effect.logWarning(
+                    "AI Search initial index job failed to start; the scheduled sync will index instead.",
+                    error,
+                  ),
+                ),
+              );
+          }
+          // Indexing itself starts asynchronously; we deliberately do NOT
+          // wait for the first sync to finish.
+          return toAttributes(ensured.instance, acct, namespace);
         }
         observed = ensured.instance;
       }
@@ -490,31 +757,47 @@ export const AiSearchInstanceProvider = () =>
       const observedRecord = observed as unknown as Record<string, unknown>;
       const dirty = Object.entries(desired).some(
         ([key, value]) =>
+          // Cloudflare's read projection always returns `tokenId: null`
+          // (the association is write-only), so it can never be diffed
+          // against desired — excluding it avoids perpetual false drift.
+          // It still rides along in the create body and in any update PUT
+          // triggered by other fields.
+          key !== "tokenId" &&
           value !== undefined &&
           !deepEqual(normalize(observedRecord[key]), normalize(value), {
             stripNullish: true,
           }),
       );
       if (!dirty) {
-        return toAttributes(observed, acct);
+        return toAttributes(observed, acct, namespace);
       }
 
       const updated = yield* aisearch
-        .updateInstance({
+        .updateNamespaceInstance({
           accountId: acct,
+          name: namespace,
           id: instanceId,
           ...preserveObserved(observed),
           ...defined(desired),
         })
         .pipe(retryTokenPropagation);
-      return toAttributes(updated, acct);
+      return toAttributes(updated, acct, namespace);
     }),
     delete: Effect.fn(function* ({ output }) {
-      // The managed Vectorize index is torn down asynchronously; a
-      // missing instance (already deleted) is success.
+      // The managed Vectorize index is torn down asynchronously; a missing
+      // instance or namespace (already deleted) is success.
       yield* aisearch
-        .deleteInstance({ accountId: output.accountId, id: output.id })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+        .deleteNamespaceInstance({
+          accountId: output.accountId,
+          name: output.namespace,
+          id: output.instanceId,
+        })
+        .pipe(
+          Effect.catchTag(
+            ["AiSearchInstanceNotFound", "NamespaceNotFound"],
+            () => Effect.void,
+          ),
+        );
     }),
   });
 
@@ -533,21 +816,38 @@ const retryTokenPropagation = <A, E extends { _tag: string }, R>(
   effect.pipe(
     Effect.retry({
       while: (e) => e._tag === "InvalidTokenCredentials",
-      schedule: Schedule.exponential("1 second"),
-      times: 6,
+      // A full-body update PUT re-sends `source`, which makes Cloudflare
+      // re-validate the (write-only, auto-provisioned) R2 service token —
+      // opening a fresh propagation window each time. Gentle exponential
+      // growth keeps the per-attempt delay bounded (~17s max) while giving
+      // the token longer overall to settle (~70s across 10 attempts).
+      schedule: Schedule.exponential("1 second", 1.5),
+      times: 10,
     }),
   );
 
-type ObservedInstance = aisearch.ReadInstanceResponse;
+type ObservedInstance = aisearch.ReadNamespaceInstanceResponse;
 
 /**
- * Read an instance by id, mapping "gone" (`NotFound`, Cloudflare error
- * code 7002) to `undefined`.
+ * Resolve the namespace name an instance lives in, defaulting to the
+ * account-provided `default` namespace.
  */
-const getInstance = (accountId: string, id: string) =>
+const resolveNamespace = (namespace: string | undefined): string =>
+  namespace ?? "default";
+
+/**
+ * Read an instance by id within its namespace, mapping "gone" to
+ * `undefined` — either the instance is missing (`AiSearchInstanceNotFound`,
+ * code 7002) or its whole namespace is (`NamespaceNotFound`, code 7063).
+ */
+const getInstance = (accountId: string, namespace: string, id: string) =>
   aisearch
-    .readInstance({ accountId, id })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .readNamespaceInstance({ accountId, name: namespace, id })
+    .pipe(
+      Effect.catchTag(["AiSearchInstanceNotFound", "NamespaceNotFound"], () =>
+        Effect.succeed(undefined),
+      ),
+    );
 
 const createInstanceId = (id: string, instanceId: string | undefined) =>
   Effect.gen(function* () {
@@ -635,15 +935,35 @@ const defined = <T extends Record<string, unknown>>(value: T): Partial<T> =>
     Object.entries(value).filter(([, v]) => v !== undefined),
   ) as Partial<T>;
 
+/**
+ * The instance fields `read` projects, common to the create / read /
+ * update / list-item response shapes (all optional but `id`). Decoupling
+ * from the exact distilled response unions lets the namespace-scoped list
+ * items — which carry a reduced field set — flow through unchanged.
+ */
+type InstanceLike = {
+  id: string;
+  type?: string | null;
+  source?: string | null;
+  tokenId?: string | null;
+  aiGatewayId?: string | null;
+  embeddingModel?: string | null;
+  aiSearchModel?: string | null;
+  status?: string | null;
+  paused?: boolean | null;
+  publicEndpointId?: string | null;
+  createdAt?: string | null;
+  modifiedAt?: string | null;
+};
+
 const toAttributes = (
-  instance:
-    | aisearch.ReadInstanceResponse
-    | aisearch.CreateInstanceResponse
-    | aisearch.UpdateInstanceResponse,
+  instance: InstanceLike,
   accountId: string,
+  namespace: string,
 ): AiSearchInstanceAttributes => ({
-  id: instance.id,
+  instanceId: instance.id,
   accountId,
+  namespace,
   // Distilled widens generated string enums to open unions.
   type: (normalize(instance.type) ?? "r2") as AiSearchInstanceSourceType,
   source: normalize(instance.source),

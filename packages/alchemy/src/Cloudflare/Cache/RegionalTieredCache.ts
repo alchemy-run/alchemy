@@ -75,7 +75,9 @@ export type RegionalTieredCache = Resource<
  *
  * Only one `RegionalTieredCache` resource per zone makes sense — two
  * instances managing the same zone would fight over the singleton.
- *
+ * @resource
+ * @product Cache
+ * @category Performance & Reliability
  * @section Managing Regional Tiered Cache
  * @example Enable Regional Tiered Cache on an Enterprise zone
  * ```typescript

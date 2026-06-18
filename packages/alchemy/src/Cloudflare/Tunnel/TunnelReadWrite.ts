@@ -32,6 +32,8 @@ export const readWriteClient = (token: TunnelToken): TunnelReadWriteClient => ({
  * authenticate.
  *
  * @binding
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  *
  * @section Managing tunnels at runtime
  * @example Create, configure, and delete a tunnel from a request handler

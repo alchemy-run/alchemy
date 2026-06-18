@@ -133,6 +133,11 @@ export interface R2BucketClient {
   ): Effect.Effect<R2MultipartUpload, R2Error, RuntimeContext>;
 }
 
+/**
+ * @binding
+ * @product R2
+ * @category Storage & Databases
+ */
 export class R2BucketBinding extends Binding.Service<
   R2BucketBinding,
   (bucket: R2Bucket) => Effect.Effect<R2BucketClient>

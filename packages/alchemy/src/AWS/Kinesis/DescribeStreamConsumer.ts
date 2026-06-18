@@ -10,6 +10,7 @@ export interface DescribeStreamConsumerRequest extends Omit<
   "ConsumerARN" | "StreamARN" | "ConsumerName"
 > {}
 
+/** @binding */
 export class DescribeStreamConsumer extends Binding.Service<
   DescribeStreamConsumer,
   (

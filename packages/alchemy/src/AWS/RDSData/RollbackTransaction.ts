@@ -17,6 +17,7 @@ export interface RollbackTransactionRequest extends Omit<
 
 /**
  * Runtime binding for `rds-data:RollbackTransaction`.
+ * @binding
  */
 export class RollbackTransaction extends Binding.Service<
   RollbackTransaction,

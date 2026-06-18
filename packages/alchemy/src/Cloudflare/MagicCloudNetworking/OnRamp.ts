@@ -192,7 +192,9 @@ export type OnRamp = Resource<
  * Magic Cloud Networking is an entitlement-gated add-on (Magic WAN family).
  * On accounts without the entitlement every API call fails with the typed
  * `FeatureNotEnabled` error (Cloudflare code 1012, "feature not enabled").
- *
+ * @resource
+ * @product Magic Cloud Networking
+ * @category Network
  * @section Connecting a single VPC
  * @example AWS VPC on-ramp
  * ```typescript

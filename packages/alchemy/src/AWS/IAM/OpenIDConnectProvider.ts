@@ -54,7 +54,7 @@ export interface OpenIDConnectProvider extends Resource<
  *
  * `OpenIDConnectProvider` registers an external OIDC issuer so IAM roles can be
  * assumed through web identity federation flows such as GitHub Actions.
- *
+ * @resource
  * @section Federating with OIDC
  * @example Create a GitHub Actions OIDC Provider
  * ```typescript

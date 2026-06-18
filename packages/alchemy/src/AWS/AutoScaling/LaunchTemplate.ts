@@ -139,7 +139,7 @@ export type LaunchTemplateRuntimeContext = Ec2HostRuntimeContext;
  * A launch template that preserves the `Host` authoring model used by
  * `AWS.EC2.Instance`, but packages that host configuration for use with an
  * Auto Scaling Group.
- *
+ * @resource
  * @section Hosting Processes
  * @example Hosted HTTP Launch Template
  * ```typescript

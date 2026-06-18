@@ -17,6 +17,7 @@ import { ExecutionContext } from "../../ExecutionContext.ts";
 import { makeEntrypointLayer } from "../../Runtime.ts";
 import { Self } from "../../Self.ts";
 import { Stack } from "../../Stack.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import cloudflare_workers from "./cloudflare_workers.ts";
 import { isScopeEjected } from "./HttpServer.ts";
 import {
@@ -241,6 +242,16 @@ export const getWorkerExport = <Export = any>({
             ),
           ),
           Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),
+          Layer.provideMerge(
+            Layer.succeed(
+              CloudflareEnvironment,
+              // TODO(sam): fix this with maybe a CloudflareAccountId Effect service
+              // @ts-expect-error - this is hacky, but we only need and have this property
+              Effect.succeed({
+                account: (env as any).ALCHEMY_CLOUDFLARE_ACCOUNT_ID,
+              }),
+            ),
+          ),
           Layer.provideMerge(
             Layer.succeed(
               MinimumLogLevel,

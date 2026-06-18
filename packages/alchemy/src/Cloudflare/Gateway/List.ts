@@ -113,7 +113,9 @@ export type GatewayList = Resource<
  * description, and items all converge in place. Items are managed as a
  * full set — the provider PUTs the complete desired item set and removes
  * anything not declared.
- *
+ * @resource
+ * @product Gateway
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a List
  * @example Domain list
  * ```typescript

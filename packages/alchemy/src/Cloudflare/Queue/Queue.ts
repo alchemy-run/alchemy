@@ -49,7 +49,9 @@ export type Queue = Resource<
  * Queues enable you to send and receive messages with guaranteed delivery.
  * Create a queue as a resource, then bind it to a Worker to send messages
  * at runtime. Register a consumer to process messages.
- *
+ * @resource
+ * @product Queues
+ * @category Storage & Databases
  * @section Creating a Queue
  * @example Basic queue
  * ```typescript

@@ -11,6 +11,7 @@ export interface DescribeTasksRequest extends Omit<
   "cluster"
 > {}
 
+/** @binding */
 export class DescribeTasks extends Binding.Service<
   DescribeTasks,
   (

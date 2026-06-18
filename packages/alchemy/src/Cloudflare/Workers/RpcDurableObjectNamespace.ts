@@ -188,6 +188,8 @@ export interface RpcDurableObjectNamespaceClass extends Effect.Effect<
  * instances correctly.
  *
  * @resource
+ * @product Workers
+ * @category Workers & Compute
  *
  * @section Defining the rpc group
  * @example DO-scoped rpc schemas

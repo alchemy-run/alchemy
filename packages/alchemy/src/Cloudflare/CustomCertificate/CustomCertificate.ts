@@ -191,7 +191,9 @@ export type CustomCertificate = Resource<
  * the PEM contents back, so a SHA-256 content hash of the pair is persisted
  * in the attributes and used as the rotation diff baseline. Only `zoneId`
  * and `type` force a replacement.
- *
+ * @resource
+ * @product Custom Certificates
+ * @category SSL/TLS & Certificates
  * @section Uploading a certificate
  * @example Basic SNI certificate
  * ```typescript

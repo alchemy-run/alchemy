@@ -85,7 +85,9 @@ export type Ruleset = Resource<
  *
  * This resource owns the entire ruleset for a phase entrypoint. Rules managed
  * elsewhere in the same phase can be overwritten on deploy.
- *
+ * @resource
+ * @product Rulesets
+ * @category Rules & Configuration
  * @section WAF Rules
  * @example Block probes in the custom firewall phase
  * ```typescript

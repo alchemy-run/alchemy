@@ -89,7 +89,9 @@ export type AccessInfrastructureTarget = Resource<
  * Targets are referenced by infrastructure Access applications, which
  * attach SSH access policies to them. Hostname and IP are both mutable
  * in place; the target's identity is its Cloudflare-assigned UUID.
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Target
  * @example Basic IPv4 target
  * ```typescript

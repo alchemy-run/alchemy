@@ -11,6 +11,7 @@ export interface AbortMultipartUploadRequest extends Omit<
   "Bucket"
 > {}
 
+/** @binding */
 export class AbortMultipartUpload extends Binding.Service<
   AbortMultipartUpload,
   (

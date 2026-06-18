@@ -13,6 +13,7 @@ export interface ListTagsForResourceRequest extends Omit<
   "ResourceARN"
 > {}
 
+/** @binding */
 export class ListTagsForResource extends Binding.Service<
   ListTagsForResource,
   (

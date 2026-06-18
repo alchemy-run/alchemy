@@ -85,7 +85,9 @@ export type LoadBalancerMonitorGroup = Resource<
  *
  * Monitor groups are an Enterprise-only feature; on non-entitled accounts
  * creation fails with the typed `MonitorGroupsNotEnabled` error.
- *
+ * @resource
+ * @product Load Balancers
+ * @category Performance & Reliability
  * @section Creating a Monitor Group
  * @example Group of two monitors
  * ```typescript

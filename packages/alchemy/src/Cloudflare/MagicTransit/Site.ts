@@ -94,7 +94,9 @@ export type MagicSite = Resource<
  *
  * `haMode` is create-only — changing it triggers a replacement. Everything
  * else is updated in place.
- *
+ * @resource
+ * @product Magic Transit
+ * @category Network
  * @section Creating a site
  * @example Basic site
  * ```typescript

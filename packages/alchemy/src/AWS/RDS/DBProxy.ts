@@ -84,6 +84,7 @@ export interface DBProxy extends Resource<
 
 /**
  * An RDS Proxy for pooled Lambda-to-Aurora connectivity.
+ * @resource
  */
 export const DBProxy = Resource<DBProxy>("AWS.RDS.DBProxy");
 

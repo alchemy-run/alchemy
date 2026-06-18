@@ -65,7 +65,7 @@ export interface Topic extends Resource<
  * available through the `attributes` prop so the full core pub/sub surface can
  * be configured without waiting on additional typed wrappers. A topic name is
  * auto-generated unless you provide one explicitly.
- *
+ * @resource
  * @section Creating Topics
  * @example Standard Topic
  * ```typescript

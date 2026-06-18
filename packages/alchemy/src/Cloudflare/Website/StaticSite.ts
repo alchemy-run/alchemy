@@ -90,6 +90,8 @@ type StaticSiteWorker<Bindings extends WorkerBindingProps> = Worker<{
  * building automatically.
  *
  * @resource
+ * @product Website
+ * @category Workers & Compute
  *
  * @section Basic Usage
  * Point `command` at your build script, `outdir` at where it writes

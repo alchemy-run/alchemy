@@ -131,6 +131,7 @@ export type MySQLPassword = Resource<
   Providers
 >;
 
+/** @resource */
 export const MySQLPassword = Resource<MySQLPassword>(
   "Planetscale.MySQLPassword",
 );

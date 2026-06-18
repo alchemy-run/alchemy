@@ -75,7 +75,9 @@ export type Silence = Resource<
  * Note: the create API returns no id, so the provider resolves the created
  * silence by listing and matching on `(policyId, startTime, endTime)`. Two
  * silences sharing the exact same policy and window are indistinguishable.
- *
+ * @resource
+ * @product Alerting
+ * @category Observability & Analytics
  * @section Creating a silence
  * @example Silence a policy during a maintenance window
  * ```typescript

@@ -25,6 +25,7 @@ const getAlarmTypes = (alarms: AlarmResources) =>
 
 /**
  * Runtime binding for `cloudwatch:DescribeAlarms`.
+ * @binding
  */
 export class DescribeAlarms extends Binding.Service<
   DescribeAlarms,

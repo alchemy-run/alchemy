@@ -8,6 +8,7 @@ export interface ListDashboardsRequest extends cloudwatch.ListDashboardsInput {}
 
 /**
  * Runtime binding for `cloudwatch:ListDashboards`.
+ * @binding
  */
 export class ListDashboards extends Binding.Service<
   ListDashboards,

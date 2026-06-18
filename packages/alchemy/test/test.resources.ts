@@ -607,6 +607,62 @@ export const kindStablesResourceProvider = () =>
     delete: Effect.fn(function* () {}),
   });
 
+// OverrideStablesResource — declares BOTH a provider-level `stables` list AND
+// a `diff` that returns its own `stables` list that DISAGREES with it. Used to
+// assert that a present `diff.stables` OVERRIDES `provider.stables` during plan
+// (rather than being merged with it):
+//   - `providerStable` is only in `provider.stables` (omitted by `diff.stables`)
+//   - `diffStable`     is only in `diff.stables`     (omitted by `provider.stables`)
+//   - `sharedStable`   is in both
+// Under override semantics, on a `string` change `providerStable` must be
+// treated as CHANGED (downstream re-plans) while `diffStable`/`sharedStable`
+// stay stable. Under the old merge, `providerStable` would wrongly stay stable.
+
+export type OverrideStablesResourceProps = {
+  string?: string;
+};
+
+export interface OverrideStablesResource extends Resource<
+  "Test.OverrideStablesResource",
+  OverrideStablesResourceProps,
+  {
+    string: string;
+    providerStable: string;
+    diffStable: string;
+    sharedStable: string;
+  }
+> {}
+
+export const OverrideStablesResource = Resource<OverrideStablesResource>(
+  "Test.OverrideStablesResource",
+);
+
+export const overrideStablesResourceProvider = () =>
+  Provider.succeed(OverrideStablesResource, {
+    stables: ["providerStable", "sharedStable"],
+    diff: Effect.fn(function* ({ news = {}, olds = {} }) {
+      if (!isResolved(news)) return undefined;
+      const n = news as OverrideStablesResourceProps;
+      const o = olds as OverrideStablesResourceProps;
+      if (n.string !== o.string) {
+        return {
+          action: "update",
+          stables: ["diffStable", "sharedStable"],
+        } as const;
+      }
+      return undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news = {} }) {
+      return {
+        string: news.string ?? id,
+        providerStable: `provider-${id}`,
+        diffStable: `diff-${id}`,
+        sharedStable: `shared-${id}`,
+      };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 export type PhasedTargetProps = {
   desired: string;
   replaceKey?: string;
@@ -800,6 +856,7 @@ export const TestLayers = () =>
     testResourceProvider(),
     staticStablesResourceProvider(),
     kindStablesResourceProvider(),
+    overrideStablesResourceProvider(),
     phasedTargetProvider(),
     noPrecreateBindingTargetProvider(),
     durationResourceProvider(),

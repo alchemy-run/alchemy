@@ -244,7 +244,9 @@ export type AiGatewayDynamicRouting = Resource<
  * new version and deploys it; the reconciler also re-deploys when the live
  * deployed version drifts from the desired graph. Renames are applied in
  * place; only moving the route to a different gateway forces a replacement.
- *
+ * @resource
+ * @product AI Gateway
+ * @category AI
  * @section Creating a Route
  * @example Route all traffic to one model
  * ```typescript

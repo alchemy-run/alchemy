@@ -98,7 +98,9 @@ export type TotalTls = Resource<
  *
  * Only one `TotalTls` resource per zone makes sense — two instances
  * managing the same zone would fight over the singleton.
- *
+ * @resource
+ * @product ACM
+ * @category SSL/TLS & Certificates
  * @section Managing Total TLS
  * @example Enable Total TLS on a zone
  * ```typescript

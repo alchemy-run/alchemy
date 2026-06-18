@@ -8,6 +8,7 @@ import type { Table } from "./Table.ts";
 
 export interface ScanRequest extends Omit<DynamoDB.ScanInput, "TableName"> {}
 
+/** @binding */
 export class Scan extends Binding.Service<
   Scan,
   <T extends Table>(

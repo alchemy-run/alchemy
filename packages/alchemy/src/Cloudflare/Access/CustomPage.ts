@@ -55,7 +55,9 @@ export type AccessCustomPage = Resource<
  * A Cloudflare Zero Trust Access custom page. Replaces the default Access
  * block pages (`identity_denied` / `forbidden`) with custom HTML, which can
  * then be selected on an Access application.
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Custom Page
  * @example Custom forbidden page
  * ```typescript

@@ -9,6 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+import { AiSearchNamespaceBinding } from "./AiSearchBinding.ts";
 
 const AiSearchNamespaceTypeId = "Cloudflare.AiSearch.Namespace" as const;
 type AiSearchNamespaceTypeId = typeof AiSearchNamespaceTypeId;
@@ -67,6 +68,13 @@ export type AiSearchNamespace = Resource<
  * changing it triggers a replacement; only the `description` is mutable
  * in place.
  *
+ * The account-provided `default` namespace is reserved: it always exists
+ * and Cloudflare disallows modifying or deleting it. Alchemy adopts it so
+ * it can be referenced and bound, but never updates or tears it down.
+ *
+ * @resource
+ * @product AI Search
+ * @category AI
  * @section Creating a Namespace
  * @example Generated name
  * ```typescript
@@ -83,6 +91,7 @@ export type AiSearchNamespace = Resource<
  *
  * @section Updating a Namespace
  * @example Change the description in place
+ * Only the `description` is mutable; changing `name` replaces the namespace.
  * ```typescript
  * const ns = yield* Cloudflare.AiSearchNamespace("docs", {
  *   name: "docs-search",
@@ -90,11 +99,89 @@ export type AiSearchNamespace = Resource<
  * });
  * ```
  *
+ * @section Grouping pipelines
+ * Group {@link AiSearch} pipelines under the namespace by passing the
+ * namespace resource itself to each pipeline's `namespace` prop. The engine
+ * orders each pipeline after the namespace on deploy and tears them down
+ * before it on destroy.
+ * @example Two pipelines in one namespace
+ * ```typescript
+ * const ns = yield* Cloudflare.AiSearchNamespace("docs", {});
+ * const guides = yield* Cloudflare.AiSearch("guides", {
+ *   source: guidesBucket,
+ *   namespace: ns,
+ * });
+ * const api = yield* Cloudflare.AiSearch("api", {
+ *   source: apiBucket,
+ *   namespace: ns,
+ * });
+ * ```
+ *
+ * @section Binding to an Effect Worker
+ * Bind the namespace with `Cloudflare.AiSearchNamespace.bind(namespace)`,
+ * which attaches the `ai_search_namespace` binding and returns a client
+ * whose `.get(name)` selects an instance within the namespace at runtime.
+ * Provide {@link AiSearchNamespaceBindingLive} in the Worker's runtime
+ * layer.
+ * @example Select an instance per request
+ * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
+ * import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+ *
+ * export default class Api extends Cloudflare.Worker<Api>()(
+ *   "api",
+ *   { main: import.meta.filename },
+ *   Effect.gen(function* () {
+ *     const ns = yield* Cloudflare.AiSearchNamespace.bind(Docs);
+ *
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const url = new URL((yield* HttpServerRequest).url);
+ *         const instance = url.searchParams.get("instance") ?? "guides";
+ *         const query = url.searchParams.get("q") ?? "";
+ *         const answer = yield* ns.get(instance).chatCompletions({
+ *           messages: [{ role: "user", content: query }],
+ *         });
+ *         return yield* HttpServerResponse.json(answer);
+ *       }),
+ *     };
+ *   }).pipe(Effect.provide(Cloudflare.AiSearchNamespaceBindingLive)),
+ * ) {}
+ * ```
+ *
+ * @section Binding to an Async Worker
+ * For a vanilla `async fetch` Worker, pass the namespace under `Worker.env`.
+ * `InferEnv` types `env.SEARCH` as the runtime `AiSearchNamespace` handle.
+ * @example Async Worker via `env`
+ * ```typescript
+ * export const Api = Cloudflare.Worker("api", {
+ *   main: "./worker.ts",
+ *   env: { SEARCH: namespace },
+ * });
+ * export type ApiEnv = Cloudflare.InferEnv<typeof Api>;
+ *
+ * // worker.ts
+ * export default {
+ *   async fetch(request: Request, env: ApiEnv): Promise<Response> {
+ *     const query = new URL(request.url).searchParams.get("q") ?? "";
+ *     return Response.json(
+ *       await env.SEARCH.get("guides").chatCompletions({
+ *         messages: [{ role: "user", content: query }],
+ *       }),
+ *     );
+ *   },
+ * };
+ * ```
+ *
  * @see https://developers.cloudflare.com/ai-search/
  */
 export const AiSearchNamespace = Resource<AiSearchNamespace>(
   AiSearchNamespaceTypeId,
-);
+)({
+  bind: AiSearchNamespaceBinding.bind,
+});
 
 /**
  * Returns true if the given value is an AiSearchNamespace resource.
@@ -115,10 +202,11 @@ export const AiSearchNamespaceProvider = () =>
         return { action: "replace" } as const;
       }
       // The name is the namespace's identity (it is the API path
-      // parameter) — renaming is a replacement.
-      const newName = yield* createNamespaceName(id, news.name);
+      // parameter) — renaming is a replacement. Props are all optional, so a
+      // no-props resource resolves `news`/`olds` to `undefined` at runtime.
+      const newName = yield* createNamespaceName(id, news?.name);
       const oldName =
-        output?.name ?? (yield* createNamespaceName(id, olds.name));
+        output?.name ?? (yield* createNamespaceName(id, olds?.name));
       if (newName !== oldName) {
         // A user-pinned name collides with the still-existing old
         // namespace only when both resolve to the same string — they
@@ -140,7 +228,10 @@ export const AiSearchNamespaceProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const name = output?.name ?? (yield* createNamespaceName(id, news.name));
+      // Props are all optional, so a no-props resource resolves `news` to
+      // `undefined` at runtime — fall back to the empty desired shape.
+      const props = news ?? {};
+      const name = output?.name ?? (yield* createNamespaceName(id, props.name));
 
       // Observe — `output.name` is a cache, not a guarantee: a missing
       // namespace falls through to create.
@@ -155,7 +246,7 @@ export const AiSearchNamespaceProvider = () =>
           .createNamespace({
             accountId: acct,
             name,
-            description: news.description,
+            description: props.description,
           })
           .pipe(
             Effect.map((created) => ({ created: true as const, ns: created })),
@@ -173,10 +264,18 @@ export const AiSearchNamespaceProvider = () =>
         observed = ensured.ns;
       }
 
+      // The account-provided `default` namespace is reserved: it always
+      // exists and its metadata cannot be modified
+      // (`cannot_modify_default_namespace`). Adopt it as-is so it can be
+      // referenced/bound, but never attempt to mutate it.
+      if (name === "default") {
+        return toAttributes(observed, acct);
+      }
+
       // Sync — the description is the only mutable aspect. Diff observed
       // cloud state against desired; skip the PUT entirely on a no-op.
       const observedDescription = normalize(observed.description);
-      if (observedDescription === news.description) {
+      if (observedDescription === props.description) {
         return toAttributes(observed, acct);
       }
       const updated = yield* aisearch
@@ -184,7 +283,7 @@ export const AiSearchNamespaceProvider = () =>
           accountId: acct,
           name,
           // `null` clears a previously-set description.
-          description: news.description ?? null,
+          description: props.description ?? null,
         })
         .pipe(
           // The observe read can be eventually consistent: a namespace
@@ -195,13 +294,17 @@ export const AiSearchNamespaceProvider = () =>
             aisearch.createNamespace({
               accountId: acct,
               name,
-              description: news.description,
+              description: props.description,
             }),
           ),
         );
       return toAttributes(updated, acct);
     }),
     delete: Effect.fn(function* ({ output }) {
+      // The account-provided `default` namespace cannot be deleted
+      // (`cannot_modify_default_namespace`); binding/adopting it must never
+      // tear it down, so its delete is a no-op.
+      if (output.name === "default") return;
       // A missing namespace (already deleted) is success. Instances inside
       // the namespace must be deleted first — the engine orders that via
       // the `namespace` reference on dependent resources.

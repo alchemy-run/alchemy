@@ -213,7 +213,9 @@ export type FlagshipFlag = Resource<
  * endpoint); changing variations, rules, enablement, or the default
  * variation takes effect without redeploying code. Everything except the
  * flag key and the parent app is mutable in place.
- *
+ * @resource
+ * @product Flagship
+ * @category Developer Platform
  * @section Creating a Flag
  * @example Boolean flag
  * ```typescript

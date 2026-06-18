@@ -44,7 +44,7 @@ export interface KvRoutesUpdate extends Resource<
  *
  * The routes array is stored at key `{namespace}:{key}` and supports automatic
  * chunking when the serialized array exceeds 1000 characters.
- *
+ * @resource
  * @section Managing Routes
  * @example Add A Route Entry
  * ```typescript

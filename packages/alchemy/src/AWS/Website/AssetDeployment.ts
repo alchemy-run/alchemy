@@ -79,7 +79,7 @@ export interface AssetDeployment extends Resource<
  * `AssetDeployment` is a helper resource for website hosting. It uploads all
  * files in a directory, infers content types, applies cache-control defaults,
  * and can optionally purge stale files under a prefix.
- *
+ * @resource
  * @section Deploying Files
  * @example Upload A Build Directory
  * ```typescript

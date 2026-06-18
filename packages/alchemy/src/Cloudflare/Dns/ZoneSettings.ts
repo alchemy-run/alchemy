@@ -214,7 +214,9 @@ export type ZoneDnsSettings = Resource<
  * Some fields are plan-gated: `foundationDns` is a paid add-on,
  * `nameservers.type: "custom.*"` requires account custom nameservers,
  * `internalDns` and `secondaryOverrides` are Enterprise features.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Basic settings
  * @example Lower the NS record TTL
  * ```typescript

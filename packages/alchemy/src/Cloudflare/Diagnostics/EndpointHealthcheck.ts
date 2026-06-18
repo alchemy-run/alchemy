@@ -72,7 +72,9 @@ export type EndpointHealthcheck = Resource<
  * IPs with the typed `InvalidHealthcheckEndpoint` error. The `endpoint` is
  * mutable in place via PUT (the UUID is stable across updates), but `name`
  * is create-only — changing it triggers a replacement.
- *
+ * @resource
+ * @product Diagnostics
+ * @category Observability & Analytics
  * @section Creating an endpoint healthcheck
  * @example Probe an on-net host
  * ```typescript

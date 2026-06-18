@@ -60,7 +60,9 @@ export type StreamWebhook = Resource<
  * Destroying the resource deletes the webhook configuration.
  *
  * Requires the Stream subscription to be enabled on the account.
- *
+ * @resource
+ * @product Stream
+ * @category Media
  * @section Configuring the webhook
  * @example Receive Stream notifications
  * ```typescript

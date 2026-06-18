@@ -82,7 +82,7 @@ export interface Permission extends Resource<
 /**
  * A Lambda permission that grants an AWS service or another account permission to
  * invoke a function.
- *
+ * @resource
  * @section Granting Permissions
  * @example S3 Notification Permission
  * ```typescript

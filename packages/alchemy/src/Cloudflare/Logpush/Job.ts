@@ -221,7 +221,9 @@ export type LogpushJob = Resource<
  * Jobs can be account-scoped (default) or zone-scoped (pass `zoneId`).
  * The dataset, kind, and scope are fixed at creation — changing any of
  * them triggers a replacement; everything else updates in place.
- *
+ * @resource
+ * @product Logpush
+ * @category Observability & Analytics
  * @section Pushing Workers trace events to R2
  * @example Account-scoped job writing to an R2 bucket
  * The R2 destination authenticates with S3-compatible credentials embedded

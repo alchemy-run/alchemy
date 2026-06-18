@@ -154,7 +154,9 @@ export type R2DataCatalog = Resource<
  * Iceberg tables stored in R2. The catalog is a singleton per bucket: this
  * resource enables it, keeps its maintenance configuration in sync, and
  * disables it on destroy (table data in the bucket is never deleted).
- *
+ * @resource
+ * @product R2 Data Catalog
+ * @category Storage & Databases
  * @section Enabling a catalog
  * @example Enable the catalog on an R2 bucket
  * ```typescript

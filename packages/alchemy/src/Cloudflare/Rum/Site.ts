@@ -111,7 +111,9 @@ export type RumSite = Resource<
  * `zoneTag` identity models (or changing `zoneTag`) triggers a replacement.
  *
  * Web Analytics is available on free accounts.
- *
+ * @resource
+ * @product RUM
+ * @category Observability & Analytics
  * @section Measuring a hostname
  * @example Gray-clouded site (manual snippet embed)
  * ```typescript

@@ -50,6 +50,7 @@ export interface Root extends Resource<
  *
  * `Root` is an import-style resource. It discovers the existing root returned by
  * AWS Organizations and can reconcile root tags.
+ * @resource
  */
 export const Root = Resource<Root>("AWS.Organizations.Root");
 

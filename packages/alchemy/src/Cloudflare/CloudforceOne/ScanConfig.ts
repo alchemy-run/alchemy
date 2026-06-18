@@ -74,7 +74,9 @@ export type CloudforceOneScanConfig = Resource<
  * Requires the `cfone.port_scan` entitlement (Cloudforce One subscription) —
  * accounts without it receive an `Unauthorized` error for every scan-config
  * operation.
- *
+ * @resource
+ * @product Cloudforce One
+ * @category Observability & Analytics
  * @section Creating a Scan Config
  * @example One-off scan of a single address
  * ```typescript

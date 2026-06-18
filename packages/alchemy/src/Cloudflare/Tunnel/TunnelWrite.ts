@@ -132,6 +132,8 @@ export const writeClient = (token: TunnelToken): TunnelWriteClient => {
  * `secret_text` binding) so runtime code can authenticate.
  *
  * @binding
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  *
  * @section Mutating tunnels at runtime
  * @example Bind the write client

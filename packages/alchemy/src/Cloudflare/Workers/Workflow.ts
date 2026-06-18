@@ -236,6 +236,8 @@ export class WorkflowScope extends Context.Service<
  * ```
  *
  * @resource
+ * @product Workers
+ * @category Workers & Compute
  *
  * @section Defining a Workflow
  * @example Minimal workflow

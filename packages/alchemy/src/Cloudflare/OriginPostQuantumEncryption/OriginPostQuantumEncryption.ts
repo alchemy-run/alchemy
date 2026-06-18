@@ -84,7 +84,9 @@ export type OriginPostQuantumEncryption = Resource<
  * observed value differs from the desired one; destroy restores the value
  * the setting had before Alchemy first managed it (captured as
  * `initialValue`).
- *
+ * @resource
+ * @product Origin Post-Quantum Encryption
+ * @category SSL/TLS & Certificates
  * @section Managing the setting
  * @example Prefer post-quantum key agreement to the origin
  * ```typescript

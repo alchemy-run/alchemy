@@ -56,7 +56,9 @@ export type VectorizeMetadataIndex = Resource<
  * A metadata index is identified by its parent index and `propertyName` and
  * is immutable — changing the property name, type, or parent index triggers
  * a replacement.
- *
+ * @resource
+ * @product Vectorize
+ * @category AI
  * @section Creating a Metadata Index
  * @example Index a string metadata property
  * ```typescript

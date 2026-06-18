@@ -150,7 +150,9 @@ export type EmailSecurityDomain = Resource<
  *
  * Requires the Email Security enterprise add-on; accounts without the
  * entitlement receive the typed `EmailSecurityNotEntitled` error.
- *
+ * @resource
+ * @product Email Security
+ * @category Email
  * @section Configuring a Domain
  * @example Drop malicious mail before delivery
  * ```typescript

@@ -32,6 +32,7 @@ export interface RootPolicyType extends Resource<
 
 /**
  * Enables a policy type on an organization root.
+ * @resource
  */
 export const RootPolicyType = Resource<RootPolicyType>(
   "AWS.Organizations.RootPolicyType",

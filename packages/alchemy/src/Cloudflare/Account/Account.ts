@@ -116,7 +116,9 @@ export type Account = Resource<
  * The account's physical identity is the Cloudflare-assigned `accountId`.
  * Account names are not unique, so there is no find-by-name fallback: if
  * state is lost, the account is treated as missing rather than guessed at.
- *
+ * @resource
+ * @product Accounts
+ * @category Account & Identity
  * @section Creating an account
  * @example Standard subaccount with a generated name
  * ```typescript

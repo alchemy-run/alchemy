@@ -72,7 +72,9 @@ export type ApiShieldLabel = Resource<
  * characters), so renaming triggers a replacement; only the `description`
  * is mutable in place. Deleting a label detaches it from any operations
  * server-side.
- *
+ * @resource
+ * @product API Shield
+ * @category Application Security
  * @section Creating a Label
  * @example Label with a generated name
  * ```typescript

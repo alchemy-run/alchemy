@@ -8,6 +8,7 @@ export interface ListMetricsRequest extends cloudwatch.ListMetricsInput {}
 
 /**
  * Runtime binding for `cloudwatch:ListMetrics`.
+ * @binding
  */
 export class ListMetrics extends Binding.Service<
   ListMetrics,

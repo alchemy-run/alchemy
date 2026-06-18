@@ -12,6 +12,7 @@ export interface GetSecretValueRequest extends Omit<
 
 /**
  * Runtime binding for `secretsmanager:GetSecretValue`.
+ * @binding
  */
 export class GetSecretValue extends Binding.Service<
   GetSecretValue,

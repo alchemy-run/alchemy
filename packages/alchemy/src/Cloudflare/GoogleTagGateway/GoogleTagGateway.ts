@@ -100,7 +100,9 @@ export type GoogleTagGateway = Resource<
  * idempotent upsert. Destroy restores the configuration the zone had before
  * Alchemy first managed it (or disables the gateway when the zone had never
  * configured it).
- *
+ * @resource
+ * @product Google Tag Gateway
+ * @category Performance & Reliability
  * @section Managing the gateway
  * @example Enable Google Tag Gateway on a zone
  * ```typescript

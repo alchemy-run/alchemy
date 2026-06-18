@@ -251,7 +251,9 @@ export type Healthcheck = Resource<
  * prior state `read` matches by deterministic name and reports an
  * existing check as `Unowned` — the engine refuses to take it over
  * unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Health Checks
+ * @category Performance & Reliability
  * @section Creating a Health Check
  * @example Basic HTTP health check
  * ```typescript

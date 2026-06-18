@@ -211,6 +211,138 @@ export interface Subnet extends Resource<
   never,
   Providers
 > {}
+/**
+ * A subnet within a VPC — a range of IP addresses bound to a single
+ * Availability Zone where you place instances and other resources. Create
+ * public subnets (with `mapPublicIpOnLaunch`) for internet-facing resources
+ * and private subnets for internal ones.
+ *
+ * Changing the `vpcId`, `cidrBlock`, availability zone, or an IPAM/IPv6 pool
+ * replaces the subnet.
+ *
+ * @resource
+ * @section Creating a Subnet
+ * A subnet carves a smaller CIDR range out of its parent VPC's block. The
+ * `cidrBlock` must be a subset of the VPC CIDR and must not overlap any sibling
+ * subnet. You can also let AWS IPAM allocate the range via `ipv4IpamPoolId` +
+ * `ipv4NetmaskLength`.
+ *
+ * @example Basic Subnet
+ * ```typescript
+ * const subnet = yield* AWS.EC2.Subnet("TestSubnet", {
+ *   vpcId: vpc.vpcId,
+ *   cidrBlock: "10.0.1.0/24",
+ * });
+ * ```
+ *
+ * The minimal subnet: a `/24` (256 addresses) inside the VPC. Without an
+ * explicit `availabilityZone`, AWS picks one for you.
+ *
+ * @section Availability Zone Placement
+ * Each subnet lives in exactly one AZ. Pin it with `availabilityZone` (the zone
+ * name, e.g. `us-east-1a`) or `availabilityZoneId` (the stable zone ID, e.g.
+ * `use1-az1`) to spread tiers across zones for high availability.
+ *
+ * @example Subnet pinned to an Availability Zone
+ * ```typescript
+ * const subnet = yield* AWS.EC2.Subnet("Az1Subnet", {
+ *   vpcId: vpc.vpcId,
+ *   cidrBlock: "10.0.1.0/24",
+ *   availabilityZone: "us-east-1a",
+ * });
+ * ```
+ *
+ * Pinning the AZ lets you place a matching subnet in `us-east-1b` and run
+ * resources redundantly across zones. Use `availabilityZoneId` instead when you
+ * need the physical zone to line up across different AWS accounts.
+ *
+ * @section Public IP Assignment
+ * @example Public subnet
+ * ```typescript
+ * const publicSubnet = yield* AWS.EC2.Subnet("PublicSubnet", {
+ *   vpcId: vpc.vpcId,
+ *   cidrBlock: "10.0.1.0/24",
+ *   availabilityZone: "us-east-1a",
+ *   mapPublicIpOnLaunch: true,
+ *   tags: { Name: "public-1a", Tier: "public" },
+ * });
+ * ```
+ *
+ * `mapPublicIpOnLaunch: true` makes this a "public" subnet — instances launched
+ * here automatically get a public IPv4 address. Combine it with an internet
+ * gateway route so those instances can reach the internet.
+ *
+ * @section IPv6 Subnets
+ * For dual-stack VPCs, give the subnet an IPv6 `cidrBlock`, auto-assign IPv6
+ * addresses on launch with `assignIpv6AddressOnCreation`, and optionally enable
+ * `enableDns64` so the Amazon DNS resolver synthesizes IPv6 addresses for
+ * IPv4-only destinations (NAT64).
+ *
+ * @example IPv6-enabled subnet
+ * ```typescript
+ * const subnet = yield* AWS.EC2.Subnet("Ipv6Subnet", {
+ *   vpcId: vpc.vpcId,
+ *   cidrBlock: "10.0.1.0/24",
+ *   ipv6CidrBlock: "2600:1f18:abcd:1234::/64",
+ *   assignIpv6AddressOnCreation: true,
+ *   enableDns64: true,
+ * });
+ * ```
+ *
+ * Instances launched here receive an IPv6 address automatically, and `enableDns64`
+ * lets them reach IPv4-only services through a NAT gateway. The IPv6 `/64` must
+ * come from the parent VPC's IPv6 block.
+ *
+ * @section DNS Hostname Options
+ * Control what hostnames instances receive on launch. `hostnameType` chooses
+ * between IP-based names (`ip-name`) and resource-based names (`resource-name`),
+ * and the `enableResourceNameDnsARecordOnLaunch` /
+ * `enableResourceNameDnsAAAARecordOnLaunch` flags register A / AAAA records for
+ * resource-name hosts.
+ *
+ * @example Resource-name DNS hostnames
+ * ```typescript
+ * const subnet = yield* AWS.EC2.Subnet("ResourceNameSubnet", {
+ *   vpcId: vpc.vpcId,
+ *   cidrBlock: "10.0.1.0/24",
+ *   hostnameType: "resource-name",
+ *   enableResourceNameDnsARecordOnLaunch: true,
+ *   enableResourceNameDnsAAAARecordOnLaunch: true,
+ * });
+ * ```
+ *
+ * Resource-name hostnames are derived from the instance ID rather than its IP,
+ * so they stay stable across stop/start. Enabling the A/AAAA records makes those
+ * names resolvable over IPv4 and IPv6.
+ *
+ * @section Public & Private Tiers
+ * @example A public and a private subnet in one VPC
+ * ```typescript
+ * const vpc = yield* AWS.EC2.Vpc("MyVpc", {
+ *   cidrBlock: "10.0.0.0/16",
+ *   enableDnsSupport: true,
+ *   enableDnsHostnames: true,
+ * });
+ *
+ * const publicSubnet = yield* AWS.EC2.Subnet("PublicSubnet", {
+ *   vpcId: vpc.vpcId,
+ *   cidrBlock: "10.0.1.0/24",
+ *   availabilityZone: "us-east-1a",
+ *   mapPublicIpOnLaunch: true,
+ * });
+ *
+ * const privateSubnet = yield* AWS.EC2.Subnet("PrivateSubnet", {
+ *   vpcId: vpc.vpcId,
+ *   cidrBlock: "10.0.10.0/24",
+ *   availabilityZone: "us-east-1a",
+ * });
+ * ```
+ *
+ * The canonical two-tier pattern: a public subnet (auto public IPs, routed to an
+ * internet gateway) for load balancers and a private subnet (no public IPs) for
+ * application and database instances. Both share the same AZ here, but in
+ * production you'd replicate the pair across AZs.
+ */
 export const Subnet = Resource<Subnet>("AWS.EC2.Subnet");
 
 export const SubnetProvider = () =>
@@ -417,7 +549,10 @@ export const SubnetProvider = () =>
             .pipe(
               Effect.tapError(Effect.logDebug),
               Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.void),
-              // Retry on dependency violations (resources still being deleted)
+              // Retry on dependency violations (resources still being deleted).
+              // ENIs from a just-deleted ALB or CloudFront VPC origin can take
+              // several minutes to detach after the owning resource is gone, so
+              // budget ~12 min (fast exponential start, capped at 30s steps).
               Effect.retry({
                 while: (e) => {
                   // DependencyViolation means there are still dependent resources
@@ -425,7 +560,8 @@ export const SubnetProvider = () =>
                   return e._tag === "DependencyViolation";
                 },
                 schedule: Schedule.exponential(1000, 1.5).pipe(
-                  Schedule.both(Schedule.recurs(10)), // Try up to 10 times
+                  Schedule.either(Schedule.spaced("30 seconds")),
+                  Schedule.both(Schedule.recurs(30)),
                   Schedule.tapOutput(([, attempt]) =>
                     session.note(
                       `Waiting for dependencies to clear... (attempt ${attempt + 1})`,

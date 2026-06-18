@@ -84,7 +84,9 @@ export type ZoneTransferOutgoing = Resource<
  * Requires the Secondary DNS (zone transfer) entitlement on the zone.
  * The configuration is a per-zone singleton: `zoneId` is the identity
  * (replacement on change), everything else is mutable in place.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Configuring outgoing transfers
  * @example Serve a primary zone to an external secondary
  * ```typescript

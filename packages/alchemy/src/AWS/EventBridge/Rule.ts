@@ -161,7 +161,7 @@ export interface RuleProps {
 
 /**
  * An Amazon EventBridge rule that matches events and routes them to targets.
- *
+ * @resource
  * @section Creating Rules
  * @example Event Pattern Rule
  * ```typescript

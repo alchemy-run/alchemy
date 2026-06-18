@@ -80,7 +80,9 @@ export type AccessServiceToken = Resource<
  *
  * The client secret is only revealed by Cloudflare on create and rotate; the
  * provider stores it redacted in state and carries it forward across reads.
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Service Token
  * @example Basic token with a generated name
  * ```typescript

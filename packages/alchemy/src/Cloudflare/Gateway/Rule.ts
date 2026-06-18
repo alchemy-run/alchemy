@@ -171,7 +171,9 @@ export type GatewayRule = Resource<
  * `dns` rule with `action: "override"` that points an internal hostname at
  * a Cloudflare Tunnel — without it, WARP intercepts the lookup but has
  * nowhere to send the answer.
- *
+ * @resource
+ * @product Gateway
+ * @category Cloudflare One (Zero Trust)
  * @section DNS override for a private app
  * @example Resolve an internal hostname through a Cloudflare Tunnel
  * ```typescript

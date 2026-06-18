@@ -9,6 +9,7 @@ export interface DescribeAlarmHistoryRequest
 
 /**
  * Runtime binding for `cloudwatch:DescribeAlarmHistory`.
+ * @binding
  */
 export class DescribeAlarmHistory extends Binding.Service<
   DescribeAlarmHistory,

@@ -166,7 +166,7 @@ type ProjectAttributes = Project["Attributes"];
  * Creating a project also provisions the project's default branch (named
  * "main" by default), an initial role, an initial database, and a
  * read-write compute endpoint, exposed as `connectionUri`.
- *
+ * @resource
  * @section Creating a Project
  * @example Basic project
  * ```typescript

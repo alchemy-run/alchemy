@@ -325,6 +325,218 @@ test.provider(
   { timeout: 120_000 },
 );
 
+test.provider(
+  "DLQ redrive policy round-trips and can be removed",
+  (stack) =>
+    Effect.gen(function* () {
+      // Create the DLQ and source together, keeping both deployed across
+      // steps to avoid the engine replace+remove-dependency deadlock.
+      const deployBoth = (withRedrive: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const dlq = yield* Queue("RedriveDLQ");
+            const source = yield* Queue("RedriveSource", {
+              ...(withRedrive
+                ? {
+                    redrivePolicy: {
+                      deadLetterTargetArn: dlq.queueArn,
+                      maxReceiveCount: 3,
+                    },
+                  }
+                : {}),
+            });
+            return { dlq, source };
+          }),
+        );
+
+      const { source } = yield* deployBoth(true);
+
+      yield* waitForQueueAttributePredicate(source.queueUrl, (attrs) => {
+        if (!attrs.RedrivePolicy) return false;
+        const parsed = JSON.parse(attrs.RedrivePolicy);
+        return parsed.maxReceiveCount === 3;
+      });
+
+      // Remove the redrive policy on update; it must be cleared.
+      const { source: updated } = yield* deployBoth(false);
+      yield* waitForQueueAttributePredicate(
+        updated.queueUrl,
+        (attrs) => !attrs.RedrivePolicy,
+      );
+
+      yield* stack.destroy();
+      yield* assertQueueDeleted(source.queueUrl);
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "redriveAllowPolicy is set on the dead-letter queue",
+  (stack) =>
+    Effect.gen(function* () {
+      const { dlq } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const source = yield* Queue("AllowSource");
+          const dlq = yield* Queue("AllowDLQ", {
+            redriveAllowPolicy: {
+              redrivePermission: "byQueue",
+              sourceQueueArns: [source.queueArn],
+            },
+          });
+          return { source, dlq };
+        }),
+      );
+
+      yield* waitForQueueAttributePredicate(dlq.queueUrl, (attrs) => {
+        if (!attrs.RedriveAllowPolicy) return false;
+        const parsed = JSON.parse(attrs.RedriveAllowPolicy);
+        return parsed.redrivePermission === "byQueue";
+      });
+
+      yield* stack.destroy();
+      yield* assertQueueDeleted(dlq.queueUrl);
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider("SSE-SQS encryption enables sqs-managed key", (stack) =>
+  Effect.gen(function* () {
+    const queue = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Queue("SseSqsQueue", { sqsManagedSseEnabled: true });
+      }),
+    );
+
+    yield* waitForQueueAttributeMatch(queue.queueUrl, {
+      SqsManagedSseEnabled: "true",
+    });
+
+    yield* stack.destroy();
+    yield* assertQueueDeleted(queue.queueUrl);
+  }),
+);
+
+test.provider("SSE-KMS encryption with AWS-managed key", (stack) =>
+  Effect.gen(function* () {
+    const queue = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Queue("KmsQueue", {
+          kmsMasterKeyId: "alias/aws/sqs",
+          kmsDataKeyReusePeriodSeconds: 300,
+        });
+      }),
+    );
+
+    yield* waitForQueueAttributeMatch(queue.queueUrl, {
+      KmsMasterKeyId: "alias/aws/sqs",
+      KmsDataKeyReusePeriodSeconds: "300",
+    });
+
+    yield* stack.destroy();
+    yield* assertQueueDeleted(queue.queueUrl);
+  }),
+);
+
+test.provider(
+  "kmsMasterKeyId and sqsManagedSseEnabled together fail fast",
+  (stack) =>
+    Effect.gen(function* () {
+      const result = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* Queue("ConflictQueue", {
+              kmsMasterKeyId: "alias/aws/sqs",
+              sqsManagedSseEnabled: true,
+            });
+          }),
+        )
+        .pipe(Effect.flip);
+
+      // The typed validation error surfaces (possibly wrapped by the engine).
+      expect(JSON.stringify(result)).toContain("SqsEncryptionConflict");
+
+      yield* stack.destroy();
+    }),
+);
+
+test.provider(
+  "user tags coexist with internal tags and can be removed",
+  (stack) =>
+    Effect.gen(function* () {
+      const withTags = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("TaggedQueue", {
+            tags: { team: "payments", env: "test" },
+          });
+        }),
+      );
+
+      const tags1 = yield* SQS.listQueueTags({ QueueUrl: withTags.queueUrl });
+      expect(tags1.Tags?.team).toEqual("payments");
+      expect(tags1.Tags?.env).toEqual("test");
+      expect(tags1.Tags?.["alchemy::id"]).toBeDefined();
+
+      // Remove one tag, change another.
+      const updated = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Queue("TaggedQueue", {
+            tags: { team: "platform" },
+          });
+        }),
+      );
+
+      yield* Effect.gen(function* () {
+        const tags = yield* SQS.listQueueTags({ QueueUrl: updated.queueUrl });
+        const t = tags.Tags ?? {};
+        if (t.team !== "platform" || t.env !== undefined) {
+          return yield* Effect.fail(new QueueAttributesNotReady());
+        }
+        // internal tags survive untag.
+        expect(t["alchemy::id"]).toBeDefined();
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "QueueAttributesNotReady",
+          schedule: Schedule.fixed("1 second").pipe(
+            Schedule.both(Schedule.recurs(20)),
+          ),
+        }),
+      );
+
+      yield* stack.destroy();
+      yield* assertQueueDeleted(withTags.queueUrl);
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider(
+  "FIFO source with FIFO dead-letter queue (no type mismatch)",
+  (stack) =>
+    Effect.gen(function* () {
+      const { source } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const dlq = yield* Queue("FifoDLQ", { fifo: true });
+          const source = yield* Queue("FifoSource", {
+            fifo: true,
+            redrivePolicy: {
+              deadLetterTargetArn: dlq.queueArn,
+              maxReceiveCount: 5,
+            },
+          });
+          return { dlq, source };
+        }),
+      );
+
+      yield* waitForQueueAttributePredicate(source.queueUrl, (attrs) => {
+        if (!attrs.RedrivePolicy) return false;
+        return JSON.parse(attrs.RedrivePolicy).maxReceiveCount === 5;
+      });
+
+      yield* stack.destroy();
+      yield* assertQueueDeleted(source.queueUrl);
+    }),
+  { timeout: 120_000 },
+);
+
 class QueueNotListed extends Data.TaggedError("QueueNotListed") {}
 
 class QueueStillExists extends Data.TaggedError("QueueStillExists") {}
@@ -380,6 +592,29 @@ const waitForQueueAttributeMatch = Effect.fn(function* (
     Effect.retry({
       while: (e) => e._tag === "QueueAttributesNotReady",
       schedule: Schedule.fixed("500 millis").pipe(
+        Schedule.both(Schedule.recurs(40)),
+      ),
+    }),
+  );
+});
+
+/** Poll until a predicate over the queue's attributes holds. */
+const waitForQueueAttributePredicate = Effect.fn(function* (
+  queueUrl: string,
+  predicate: (attrs: Record<string, string | undefined>) => boolean,
+) {
+  yield* Effect.gen(function* () {
+    const result = yield* SQS.getQueueAttributes({
+      QueueUrl: queueUrl,
+      AttributeNames: ["All"],
+    });
+    if (!predicate(result.Attributes ?? {})) {
+      return yield* Effect.fail(new QueueAttributesNotReady());
+    }
+  }).pipe(
+    Effect.retry({
+      while: (e) => e._tag === "QueueAttributesNotReady",
+      schedule: Schedule.fixed("1 second").pipe(
         Schedule.both(Schedule.recurs(40)),
       ),
     }),

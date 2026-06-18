@@ -64,6 +64,8 @@ export const isVersionMetadata = (value: unknown): value is VersionMetadata =>
  * `timestamp`).
  *
  * @binding
+ * @product Workers
+ * @category Workers & Compute
  *
  * @section Effect-style Worker (recommended)
  * @example Read the deployed version from inside a handler

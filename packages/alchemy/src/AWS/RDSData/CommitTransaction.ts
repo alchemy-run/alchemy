@@ -17,6 +17,7 @@ export interface CommitTransactionRequest extends Omit<
 
 /**
  * Runtime binding for `rds-data:CommitTransaction`.
+ * @binding
  */
 export class CommitTransaction extends Binding.Service<
   CommitTransaction,

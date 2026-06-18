@@ -118,7 +118,9 @@ export type MtlsCertificate = Resource<
  *
  * Certificates are immutable: there is no update API, so changing any
  * property triggers a replacement.
- *
+ * @resource
+ * @product mTLS Certificates
+ * @category SSL/TLS & Certificates
  * @section Uploading Certificates
  * @example CA certificate
  * ```typescript

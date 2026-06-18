@@ -141,7 +141,9 @@ export type AccessIdentityProvider = Resource<
  * place. Cloudflare masks secret config fields (`clientSecret`, API
  * tokens) on read, so those fields diff against your previously declared
  * props instead of observed cloud state.
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @section Creating an Identity Provider
  * @example One-time PIN (no external dependencies)
  * ```typescript

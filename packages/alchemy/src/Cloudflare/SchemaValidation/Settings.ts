@@ -80,7 +80,9 @@ export type SchemaValidationSettings = Resource<
  *
  * The `log` action is plan-gated (API Shield entitlement) on some zones —
  * setting it there fails with the typed `UnentitledMitigationAction` error.
- *
+ * @resource
+ * @product Schema Validation
+ * @category Application Security
  * @section Managing the zone default
  * @example Block non-conforming requests
  * ```typescript

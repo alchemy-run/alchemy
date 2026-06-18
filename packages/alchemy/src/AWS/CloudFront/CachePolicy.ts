@@ -92,7 +92,7 @@ export interface CachePolicy extends Resource<
  * For AWS-managed policies (CachingOptimized, CachingDisabled,
  * AllViewerExceptHostHeader) reference them by ID via the constants in
  * {@link ManagedPolicies} instead of creating a custom policy.
- *
+ * @resource
  * @section Creating Cache Policies
  * @example Cache by query string and Authorization header
  * ```typescript

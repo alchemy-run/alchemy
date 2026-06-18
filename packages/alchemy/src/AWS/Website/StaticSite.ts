@@ -117,7 +117,7 @@ export interface StaticSiteProps {
  * KeyValueStore with a file manifest for edge routing, and optionally builds
  * the site first. Supports standalone distribution or composition with
  * `AWS.Website.Router`.
- *
+ * @resource
  * @section Basic Sites
  * @example Simple Static Site
  * ```typescript

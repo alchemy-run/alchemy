@@ -25,6 +25,11 @@ export interface RateLimitClient {
   >;
 }
 
+/**
+ * @binding
+ * @product Rate Limiting
+ * @category Application Security
+ */
 export class RateLimitBinding extends Binding.Service<
   RateLimitBinding,
   (rateLimit: RateLimitLike) => Effect.Effect<RateLimitClient>

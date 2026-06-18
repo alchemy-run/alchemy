@@ -132,7 +132,9 @@ export const isAiGatewaySpendingLimit = (
  * account (`/accounts/{account_id}/ai-gateway/billing/spending-limit`), so
  * declaring more than one `AiGatewaySpendingLimit` against the same account
  * will make them fight over the same remote object. Declare exactly one.
- *
+ * @resource
+ * @product AI Gateway
+ * @category AI
  * @section Setting a spend cap
  * @example Monthly cap
  * ```ts

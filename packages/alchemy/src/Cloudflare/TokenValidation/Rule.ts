@@ -145,7 +145,9 @@ export type TokenValidationRule = Resource<
  * error (Cloudflare code 10403) on every call.
  *
  * All fields are patched in place; only `zoneId` forces a replacement.
- *
+ * @resource
+ * @product Token Validation
+ * @category Application Security
  * @section Creating a Rule
  * @example Log requests with invalid JWTs
  * ```typescript

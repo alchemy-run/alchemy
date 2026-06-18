@@ -78,7 +78,9 @@ export type AccessGroup = Resource<
  * Access rule criteria. Groups are referenced from Access policies via a
  * `{ group: { id } }` rule, letting many policies share one membership
  * definition.
- *
+ * @resource
+ * @product Access
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a Group
  * @example Allow a single email domain
  * ```typescript

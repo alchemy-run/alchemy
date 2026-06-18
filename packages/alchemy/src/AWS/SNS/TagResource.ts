@@ -10,6 +10,7 @@ export interface TagResourceRequest extends Omit<
   "ResourceArn"
 > {}
 
+/** @binding */
 export class TagResource extends Binding.Service<
   TagResource,
   (

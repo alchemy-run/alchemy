@@ -332,10 +332,11 @@ export const make = <A>(
                     .pipe(providePlanScope(resource.FQN, oldState.instanceId))
                 : Effect.succeed(undefined);
 
-              const stables: string[] = [
-                ...(provider.stables ?? []),
-                ...(diff?.stables ?? []),
-              ];
+              // A present `diff.stables` is authoritative for this update and
+              // overrides `provider.stables`. We only fall back to the
+              // provider-level "always stable" list when the diff does not
+              // return one (e.g. no diff fn, or a diff that omits `stables`).
+              const stables: string[] = diff?.stables ?? provider.stables ?? [];
 
               const withStables = (output: any) =>
                 stables.length > 0

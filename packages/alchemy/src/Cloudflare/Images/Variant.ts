@@ -108,7 +108,9 @@ export type ImagesVariant = Resource<
  * Note: every Images-enabled account has a built-in `public` variant. Do not
  * manage `public` with this resource — Cloudflare silently ignores deletes
  * of the built-in variant, so destroy would not actually remove it.
- *
+ * @resource
+ * @product Images
+ * @category Media
  * @section Creating a Variant
  * @example Thumbnail variant
  * ```typescript

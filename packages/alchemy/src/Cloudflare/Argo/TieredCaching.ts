@@ -73,7 +73,9 @@ export type TieredCaching = Resource<
  * switch). Smart Tiered Cache (the smart-topology variant managed under
  * `/cache/tiered_cache_smart_topology_enable`) requires Tiered Caching to
  * be enabled — deploy this resource first when combining the two.
- *
+ * @resource
+ * @product Argo
+ * @category Performance & Reliability
  * @section Enabling Tiered Caching
  * @example Enable Tiered Caching on a zone
  * ```typescript

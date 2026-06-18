@@ -19,6 +19,7 @@ export interface BatchExecuteStatementRequest extends Omit<
 
 /**
  * Runtime binding for `rds-data:BatchExecuteStatement`.
+ * @binding
  */
 export class BatchExecuteStatement extends Binding.Service<
   BatchExecuteStatement,

@@ -102,7 +102,9 @@ export type RumRule = Resource<
  * place; changing `rulesetId` triggers a replacement.
  *
  * Web Analytics is available on free accounts.
- *
+ * @resource
+ * @product RUM
+ * @category Observability & Analytics
  * @section Excluding traffic
  * @example Exclude a path from measurement
  * ```typescript

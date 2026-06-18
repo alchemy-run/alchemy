@@ -153,6 +153,11 @@ export interface BrowserClient {
   ): BrowserEffect<BrowserMarkdownResult>;
 }
 
+/**
+ * @binding
+ * @product Browser Rendering
+ * @category Developer Platform
+ */
 export class BrowserBinding extends Binding.Service<
   BrowserBinding,
   (browser: BrowserLike) => Effect.Effect<BrowserClient>

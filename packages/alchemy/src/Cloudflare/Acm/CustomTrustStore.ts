@@ -91,7 +91,9 @@ export type CustomTrustStore = Resource<
  * no ownership markers, so a cold `read` scans the zone for a certificate
  * with the same PEM body and reports it as `Unowned` — the engine refuses
  * to take it over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product ACM
+ * @category SSL/TLS & Certificates
  * @section Uploading a root CA
  * @example Trust a private root CA for origin pulls
  * ```typescript

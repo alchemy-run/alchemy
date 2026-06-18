@@ -107,7 +107,9 @@ export type DeviceDexTest = Resource<
  *
  * Requires the DEX entitlement on the account (the API rejects writes
  * with `Forbidden` / `dex.api.entitlements.missing` otherwise).
- *
+ * @resource
+ * @product Devices
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a DEX test
  * @example HTTP probe every 30 minutes
  * ```typescript

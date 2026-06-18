@@ -207,7 +207,9 @@ export type DeviceCustomProfile = Resource<
  * are replaced via their dedicated endpoints. Deleting the resource
  * deletes the profile; matched devices fall back to the account's default
  * profile.
- *
+ * @resource
+ * @product Devices
+ * @category Cloudflare One (Zero Trust)
  * @section Creating a profile
  * @example Profile for a user group
  * ```typescript

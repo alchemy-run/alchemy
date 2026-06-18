@@ -10,6 +10,7 @@ export interface GetResourcePolicyRequest extends Omit<
   "ResourceARN"
 > {}
 
+/** @binding */
 export class GetResourcePolicy extends Binding.Service<
   GetResourcePolicy,
   (

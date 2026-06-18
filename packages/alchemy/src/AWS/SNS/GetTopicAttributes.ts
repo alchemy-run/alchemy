@@ -10,6 +10,7 @@ export interface GetTopicAttributesRequest extends Omit<
   "TopicArn"
 > {}
 
+/** @binding */
 export class GetTopicAttributes extends Binding.Service<
   GetTopicAttributes,
   (

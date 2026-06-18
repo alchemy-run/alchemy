@@ -12,6 +12,7 @@ export interface DeleteMessageBatchRequest extends Omit<
   "QueueUrl"
 > {}
 
+/** @binding */
 export class DeleteMessageBatch extends Binding.Service<
   DeleteMessageBatch,
   (

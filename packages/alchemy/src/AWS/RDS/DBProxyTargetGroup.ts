@@ -50,6 +50,7 @@ export interface DBProxyTargetGroup extends Resource<
 /**
  * The proxy target group that registers Aurora clusters or instances behind an
  * RDS Proxy.
+ * @resource
  */
 export const DBProxyTargetGroup = Resource<DBProxyTargetGroup>(
   "AWS.RDS.DBProxyTargetGroup",

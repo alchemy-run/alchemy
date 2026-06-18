@@ -129,6 +129,8 @@ export const dnsWriteClient = (
  * into the Worker so runtime code can authenticate.
  *
  * @binding
+ * @product DNS
+ * @category Domains & DNS
  *
  * @section Mutating DNS records at runtime
  * @example Create, update, and delete records from inside a Worker

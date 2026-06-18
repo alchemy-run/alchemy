@@ -13,6 +13,7 @@ export interface PutEventsRequest extends Omit<
   Entries: Array<Omit<eventbridge.PutEventsRequestEntry, "EventBusName">>;
 }
 
+/** @binding */
 export class PutEvents extends Binding.Service<
   PutEvents,
   (

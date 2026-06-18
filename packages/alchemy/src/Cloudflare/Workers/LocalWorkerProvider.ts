@@ -12,6 +12,7 @@ import {
 } from "@distilled.cloud/cloudflare-runtime";
 import {
   Ai,
+  AiSearch,
   AnalyticsEngine,
   Artifacts,
   Assets,
@@ -237,12 +238,14 @@ export const LocalWorkerProvider = () =>
         props: WorkerPropsWithDev;
         bindings: ResourceBinding<Worker["Binding"]>[];
       }) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
         const name = yield* createWorkerName(id, props.name);
         const compatibility = getCompatibility(props);
         const workerBindings: BindingHook<BindingServices>[] = [
           Text.local("ALCHEMY_PHASE", "runtime"),
           Text.local("ALCHEMY_STACK_NAME", stack.name),
           Text.local("ALCHEMY_STAGE", stack.stage),
+          Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
           ...Object.entries(props.env ?? {}).map(([key, value]) => {
             const unredacted = Redacted.isRedacted(value)
               ? Redacted.value(value)
@@ -619,7 +622,7 @@ export const LocalWorkerProvider = () =>
     }),
   );
 
-const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
+export const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
   const unsupported = () =>
     new WorkerValidationError({
       message: `${b.type} bindings are not supported in local mode`,
@@ -628,6 +631,10 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
   switch (b.type) {
     case "ai":
       return Ai.remote(b.name);
+    case "ai_search":
+      return AiSearch.remote(b.name, b.instanceName);
+    case "ai_search_namespace":
+      return AiSearch.remoteNamespace(b.name, b.namespace);
     case "analytics_engine":
       return AnalyticsEngine.local(b.name, b.dataset);
     case "artifacts":
@@ -699,7 +706,11 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
         allowedSenderAddresses: b.allowedSenderAddresses,
       });
     case "service":
-      return Service.local({ binding: b.name, scriptName: b.service });
+      return Service.local({
+        binding: b.name,
+        scriptName: b.service,
+        entrypoint: b.entrypoint,
+      });
     case "text_blob":
       return Data.local(b.name, Buffer.from(b.part));
     case "vectorize":

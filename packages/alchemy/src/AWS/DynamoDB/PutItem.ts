@@ -10,6 +10,7 @@ export interface PutItemRequest extends Omit<
   "TableName"
 > {}
 
+/** @binding */
 export class PutItem extends Binding.Service<
   PutItem,
   <T extends Table>(

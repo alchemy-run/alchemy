@@ -85,7 +85,9 @@ export type ApiShieldConfiguration = Resource<
  *
  * Requires an API Shield entitlement (Enterprise) — on other plans every
  * operation fails with Cloudflare's `NotEntitled` error (code 10403).
- *
+ * @resource
+ * @product API Shield
+ * @category Application Security
  * @section Configuring session identifiers
  * @example Identify sessions by an Authorization header
  * ```typescript

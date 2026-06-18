@@ -252,7 +252,9 @@ export type RealtimeKitPreset = Resource<
  * the preset to a different app forces a replacement. The create API
  * requires the full config / UI / permissions objects, so the resource fills
  * unspecified sections with sensible defaults.
- *
+ * @resource
+ * @product Realtime Kit
+ * @category Media
  * @section Creating a Preset
  * @example Default group-call preset
  * ```typescript

@@ -26,6 +26,8 @@ import { DurableObjectState } from "./DurableObjectState.ts";
  * :::
  *
  * @binding
+ * @product Workers
+ * @category Workers & Compute
  *
  * @section Wiring it into a chat-backing DO
  * @example Persisted chat history per DO instance

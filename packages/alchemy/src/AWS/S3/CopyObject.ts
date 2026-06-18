@@ -12,6 +12,7 @@ export interface CopyObjectRequest extends Omit<
   "Bucket"
 > {}
 
+/** @binding */
 export class CopyObject extends Binding.Service<
   CopyObject,
   (

@@ -153,7 +153,9 @@ export type TurnstileWidget = Resource<
  * embed in HTML) and produces a `secret` used server-side against the
  * `/turnstile/v0/siteverify` endpoint. Name, domains, mode, and clearance
  * settings are all mutable in place; only `region` forces a replacement.
- *
+ * @resource
+ * @product Turnstile
+ * @category Application Security
  * @section Creating a Widget
  * @example Managed widget
  * ```typescript

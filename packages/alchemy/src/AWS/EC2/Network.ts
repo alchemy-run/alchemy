@@ -102,7 +102,7 @@ export type Network = Effect.Success<ReturnType<typeof Network>>;
  *
  * The helper still returns the underlying canonical resources so callers can
  * keep composing with raw `AWS.EC2.*` APIs when they need more control.
- *
+ * @resource
  * @example Minimal network
  * ```typescript
  * const network = yield* AWS.EC2.Network("AppNetwork", {

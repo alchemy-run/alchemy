@@ -128,7 +128,9 @@ export type AccountMember = Resource<
  * state, `read` scans the account for an existing membership with the same
  * email and reports it as `Unowned`, so the engine refuses to take it over
  * unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Accounts
+ * @category Account & Identity
  * @section Inviting a member
  * @example Invite with a role looked up by name
  * ```typescript

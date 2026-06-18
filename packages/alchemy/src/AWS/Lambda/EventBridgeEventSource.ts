@@ -32,7 +32,7 @@ export const isEventBridgeEvent = (
  *    rule targeting the current Lambda function.
  * 2. At runtime it filters incoming Lambda events against the original event
  *    pattern and forwards matching events into the supplied `Stream`.
- *
+ * @binding
  * @section Subscribing To The Default Bus
  * @example Match User Events On The Default Bus
  * ```typescript

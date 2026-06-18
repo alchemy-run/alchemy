@@ -222,7 +222,9 @@ export type PipelineSink = Resource<
  * sink gets a fresh name before the old one is deleted); with an
  * explicit `name` the create-before-delete replacement collides, so
  * prefer generated names.
- *
+ * @resource
+ * @product Pipelines
+ * @category Storage & Databases
  * @section Creating a Sink
  * @example R2 sink with JSON output
  * The S3-compatible credentials are derived from a Cloudflare API token:

@@ -88,7 +88,9 @@ export type AddressingPrefix = Resource<
  *
  * Only `description` is mutable; `cidr`, `asn`, and the LOA settings force
  * a replacement.
- *
+ * @resource
+ * @product Addressing
+ * @category Network
  * @section Creating a Prefix
  * @example Onboard a prefix with a pre-uploaded LOA
  * ```typescript

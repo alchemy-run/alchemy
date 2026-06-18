@@ -7,6 +7,7 @@ import { isFunction } from "../Lambda/Function.ts";
 export interface ListEventBusesRequest
   extends eventbridge.ListEventBusesRequest {}
 
+/** @binding */
 export class ListEventBuses extends Binding.Service<
   ListEventBuses,
   () => Effect.Effect<

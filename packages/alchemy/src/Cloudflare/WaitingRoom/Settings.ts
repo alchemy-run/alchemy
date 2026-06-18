@@ -62,7 +62,9 @@ export type WaitingRoomSettings = Resource<
  * (Business/Enterprise) every PUT fails with the typed `ZoneNotEntitled`
  * error (Cloudflare code 1034). Reads work on every plan, and a no-op
  * reconcile (desired equals observed) skips the API call entirely.
- *
+ * @resource
+ * @product Waiting Rooms
+ * @category Performance & Reliability
  * @section Managing settings
  * @example Let search engine crawlers bypass waiting rooms
  * ```typescript

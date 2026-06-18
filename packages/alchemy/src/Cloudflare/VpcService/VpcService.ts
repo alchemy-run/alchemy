@@ -97,7 +97,9 @@ export type VpcService = Resource<
 /**
  * A Cloudflare VPC service that exposes a private host (IP or hostname)
  * reachable through a Cloudflare Tunnel for Workers VPC.
- *
+ * @resource
+ * @product Workers VPC
+ * @category Network
  * @section Creating a VPC Service
  * @example Hostname through a tunnel
  * ```typescript

@@ -113,7 +113,9 @@ export type NotificationPolicy = Resource<
  * A notification policy connects an alert type (the event Cloudflare
  * watches for) to one or more destinations — email addresses, webhook
  * destinations, or PagerDuty services — optionally narrowed by filters.
- *
+ * @resource
+ * @product Alerting
+ * @category Observability & Analytics
  * @section Creating a policy
  * @example Email notifications for Universal SSL events
  * ```typescript

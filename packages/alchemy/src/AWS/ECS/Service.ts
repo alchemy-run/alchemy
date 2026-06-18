@@ -1,6 +1,7 @@
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
@@ -8,7 +9,7 @@ import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import type { Providers } from "../Providers.ts";
-import { createInternalTags } from "../../Tags.ts";
+import { createInternalTags, diffTags } from "../../Tags.ts";
 import type { AccountID } from "../Environment.ts";
 import type { RegionID } from "../Region.ts";
 import type { ClusterArn } from "./Cluster.ts";
@@ -47,11 +48,13 @@ export interface ServiceProps {
   /**
    * Name of the ECS service.
    * If omitted, a unique name will be generated.
+   *
+   * Changing this replaces the service (delete-first).
    */
   serviceName?: string;
 
   /**
-   * Desired number of running tasks.
+   * Desired number of running tasks. Updated in place.
    * @default 1
    */
   desiredCount?: number;
@@ -62,25 +65,59 @@ export interface ServiceProps {
   vpcId: string;
 
   /**
-   * Subnets used by the service's awsvpc network configuration.
+   * Subnets used by the service's awsvpc network configuration. Updated in
+   * place via `updateService`.
    */
   subnets: string[];
 
   /**
    * Security groups attached to the service ENIs and, when `public: true`, the
-   * generated Application Load Balancer.
+   * generated Application Load Balancer. Updated in place.
    */
   securityGroups?: string[];
 
   /**
-   * Whether the service ENIs should receive public IPs.
+   * Whether the service ENIs should receive public IPs. Updated in place.
    * @default false
    */
   assignPublicIp?: boolean;
 
   /**
+   * Launch type for the service. Mutually exclusive with
+   * {@link capacityProviderStrategy}. Switching between launch type and
+   * capacity-provider strategy replaces the service.
+   * @default "FARGATE"
+   */
+  launchType?: ecs.LaunchType;
+
+  /**
+   * Capacity provider strategy for the service (e.g. `FARGATE`/`FARGATE_SPOT`
+   * weights, or a custom ASG-backed provider). Mutually exclusive with
+   * {@link launchType}. Switching to/from a launch type replaces the service;
+   * weight/base changes apply in place.
+   */
+  capacityProviderStrategy?: ecs.CapacityProviderStrategyItem[];
+
+  /**
+   * Load balancer target groups to wire to the service. **User-supplied** —
+   * Alchemy does NOT create these. Each entry references an existing ELBv2
+   * target group (or CLB) plus the container/port that receives traffic.
+   * Updated in place for rolling deployments.
+   *
+   * For an Alchemy-managed public ALB instead, set {@link public} to `true`.
+   */
+  loadBalancers?: ecs.LoadBalancer[];
+
+  /**
+   * Cloud Map service registries (service discovery) to associate with the
+   * service.
+   */
+  serviceRegistries?: ecs.ServiceRegistry[];
+
+  /**
    * Whether Alchemy should provision a public Application Load Balancer and
-   * listener in front of the service.
+   * listener in front of the service. When set, the generated target group is
+   * appended to {@link loadBalancers}.
    * @default false
    */
   public?: boolean;
@@ -104,23 +141,88 @@ export interface ServiceProps {
   healthCheckPath?: string;
 
   /**
-   * Fargate platform version for the service.
+   * Fargate platform version for the service. Updated in place.
    */
   platformVersion?: string;
 
   /**
-   * Raw ECS deployment configuration overrides.
+   * Raw ECS deployment configuration (rolling update percentages, circuit
+   * breaker, deployment strategy, alarms). Updated in place.
    */
   deploymentConfiguration?: ecs.DeploymentConfiguration;
 
   /**
-   * Grace period before ECS starts evaluating target health checks.
+   * Deployment controller (`ECS`, `CODE_DEPLOY`, `EXTERNAL`). The controller
+   * type is immutable — changing it replaces the service.
+   */
+  deploymentController?: ecs.DeploymentController;
+
+  /**
+   * Placement constraints (`distinctInstance` / `memberOf`). Updated in place.
+   */
+  placementConstraints?: ecs.PlacementConstraint[];
+
+  /**
+   * Placement strategy (`random` / `spread` / `binpack`). Updated in place.
+   */
+  placementStrategy?: ecs.PlacementStrategy[];
+
+  /**
+   * Scheduling strategy. `REPLICA` runs and maintains `desiredCount` copies;
+   * `DAEMON` runs one task per eligible instance. Immutable — changing it
+   * replaces the service.
+   * @default "REPLICA"
+   */
+  schedulingStrategy?: ecs.SchedulingStrategy;
+
+  /**
+   * Whether to enable ECS Exec on the service tasks. Updated in place.
+   * @default false
+   */
+  enableExecuteCommand?: boolean;
+
+  /**
+   * Whether to enable ECS managed tags. Immutable post-create.
+   * @default true
+   */
+  enableECSManagedTags?: boolean;
+
+  /**
+   * How to propagate tags to tasks (`TASK_DEFINITION`, `SERVICE`, `NONE`).
+   * Updated in place.
+   */
+  propagateTags?: ecs.PropagateTags;
+
+  /**
+   * Availability zone rebalancing behavior. Updated in place.
+   */
+  availabilityZoneRebalancing?: ecs.AvailabilityZoneRebalancing;
+
+  /**
+   * ECS Service Connect configuration. Updated in place.
+   */
+  serviceConnectConfiguration?: ecs.ServiceConnectConfiguration;
+
+  /**
+   * Service-managed volume configurations. Updated in place.
+   */
+  volumeConfigurations?: ecs.ServiceVolumeConfiguration[];
+
+  /**
+   * IAM role for the ELB integration (only for non-awsvpc / CLB services).
+   * Immutable — changing it replaces the service.
+   */
+  role?: string;
+
+  /**
+   * Grace period before ECS starts evaluating target health checks. Updated in
+   * place.
    */
   healthCheckGracePeriodSeconds?: number;
 
   /**
    * User-defined tags to apply to the ECS service and generated ingress
-   * resources.
+   * resources. Reconciled in place against observed service tags.
    */
   tags?: Record<string, string>;
 }
@@ -180,26 +282,22 @@ export interface Service extends Resource<
 > {}
 
 /**
- * An ECS Fargate service for running long-lived tasks.
+ * An ECS service for running long-lived tasks.
  *
- * `Service` turns a bundled `AWS.ECS.Task` into a continuously running Fargate
- * deployment with awsvpc networking. Phase 1 focuses on the public HTTP path,
- * so the resource can optionally provision an Application Load Balancer,
- * target group, and listener when `public: true`.
+ * `Service` keeps a registered task definition running with awsvpc networking.
+ * Load balancing is **explicit**: pass user-supplied `loadBalancers` target
+ * groups, or set `public: true` to have Alchemy provision a public ALB +
+ * listener + target group as a convenience. Launch behavior is controlled via
+ * `launchType` (default `FARGATE`) or a `capacityProviderStrategy`.
  *
+ * Most configuration is updated **in place** via `updateService`
+ * (desiredCount, task definition, network, deployment config, placement,
+ * exec, load balancers, tags). Only truly-immutable aspects — `serviceName`,
+ * `cluster`, launchType↔capacityProviderStrategy switch, `deploymentController`
+ * type, `schedulingStrategy`, `enableECSManagedTags`, `role` — replace the
+ * service.
+ * @resource
  * @section Creating Services
- * @example Public HTTP Service
- * ```typescript
- * const service = yield* Service("ApiService", {
- *   cluster,
- *   task: apiTask,
- *   vpcId: vpc.vpcId,
- *   subnets: [publicSubnet1.subnetId, publicSubnet2.subnetId],
- *   securityGroups: [serviceSecurityGroup.groupId],
- *   public: true,
- * });
- * ```
- *
  * @example Internal Service
  * ```typescript
  * const service = yield* Service("WorkerService", {
@@ -212,23 +310,7 @@ export interface Service extends Resource<
  * });
  * ```
  *
- * @section Public Ingress
- * @example HTTPS Service
- * ```typescript
- * const service = yield* Service("SecureApiService", {
- *   cluster,
- *   task: apiTask,
- *   vpcId: vpc.vpcId,
- *   subnets: [publicSubnet1.subnetId, publicSubnet2.subnetId],
- *   securityGroups: [serviceSecurityGroup.groupId],
- *   public: true,
- *   certificateArn,
- *   healthCheckPath: "/health",
- * });
- * ```
- *
- * @section Deployment
- * @example Rolling Update Configuration
+ * @example Public HTTP Service (Alchemy-managed ALB)
  * ```typescript
  * const service = yield* Service("ApiService", {
  *   cluster,
@@ -237,10 +319,57 @@ export interface Service extends Resource<
  *   subnets: [publicSubnet1.subnetId, publicSubnet2.subnetId],
  *   securityGroups: [serviceSecurityGroup.groupId],
  *   public: true,
+ * });
+ * ```
+ *
+ * @section Load Balancing
+ * @example Manual (User-Supplied) Target Group
+ * ```typescript
+ * const service = yield* Service("ApiService", {
+ *   cluster,
+ *   task: apiTask,
+ *   vpcId: vpc.vpcId,
+ *   subnets: [subnet1.subnetId, subnet2.subnetId],
+ *   loadBalancers: [
+ *     {
+ *       targetGroupArn,
+ *       containerName: apiTask.containerName,
+ *       containerPort: apiTask.port,
+ *     },
+ *   ],
+ * });
+ * ```
+ *
+ * @section Capacity & Placement
+ * @example FARGATE_SPOT Capacity Provider Strategy
+ * ```typescript
+ * const service = yield* Service("WorkerService", {
+ *   cluster,
+ *   task: workerTask,
+ *   vpcId: vpc.vpcId,
+ *   subnets: [subnet.subnetId],
+ *   capacityProviderStrategy: [
+ *     { capacityProvider: "FARGATE_SPOT", weight: 4 },
+ *     { capacityProvider: "FARGATE", weight: 1, base: 1 },
+ *   ],
+ *   placementStrategy: [{ type: "spread", field: "attribute:ecs.availability-zone" }],
+ * });
+ * ```
+ *
+ * @section Deployment
+ * @example Rolling Update with Circuit Breaker
+ * ```typescript
+ * const service = yield* Service("ApiService", {
+ *   cluster,
+ *   task: apiTask,
+ *   vpcId: vpc.vpcId,
+ *   subnets: [subnet1.subnetId, subnet2.subnetId],
  *   desiredCount: 3,
+ *   enableExecuteCommand: true,
  *   deploymentConfiguration: {
  *     minimumHealthyPercent: 100,
  *     maximumPercent: 200,
+ *     deploymentCircuitBreaker: { enable: true, rollback: true },
  *   },
  *   healthCheckGracePeriodSeconds: 30,
  * });
@@ -362,61 +491,95 @@ export const ServiceProvider = () =>
         };
       });
 
-      const serviceInput = (
+      const networkConfigurationOf = (news: ServiceProps) => ({
+        awsvpcConfiguration: {
+          subnets: news.subnets,
+          securityGroups: news.securityGroups,
+          assignPublicIp: (news.assignPublicIp ? "ENABLED" : "DISABLED") as
+            | "ENABLED"
+            | "DISABLED",
+        },
+      });
+
+      // load balancers passed to create/update: explicit user-supplied list
+      // plus the Alchemy-managed ingress target group (when `public: true`).
+      const loadBalancersOf = (
         news: ServiceProps,
-        output?: Service["Attributes"],
-      ) => ({
-        cluster: clusterArnOf(news.cluster),
-        service: output?.serviceName,
-        serviceName: output?.serviceName,
+        ingress: { targetGroupArn?: string } | undefined,
+      ): ecs.LoadBalancer[] | undefined => {
+        const managed: ecs.LoadBalancer[] =
+          ingress?.targetGroupArn && news.public
+            ? [
+                {
+                  targetGroupArn: ingress.targetGroupArn,
+                  containerName: news.task.containerName,
+                  containerPort: news.task.port ?? 3000,
+                },
+              ]
+            : [];
+        const all = [...(news.loadBalancers ?? []), ...managed];
+        return all.length > 0 ? all : undefined;
+      };
+
+      // In-place mutable fields shared by createService and updateService.
+      const mutableInput = (news: ServiceProps) => ({
         taskDefinition: news.task.taskDefinitionArn,
         desiredCount: news.desiredCount ?? 1,
-        launchType: "FARGATE" as const,
         platformVersion: news.platformVersion,
         deploymentConfiguration: news.deploymentConfiguration,
         healthCheckGracePeriodSeconds: news.healthCheckGracePeriodSeconds,
-        networkConfiguration: {
-          awsvpcConfiguration: {
-            subnets: news.subnets,
-            securityGroups: news.securityGroups,
-            assignPublicIp: news.assignPublicIp ? "ENABLED" : "DISABLED",
-          },
-        },
+        networkConfiguration: networkConfigurationOf(news),
+        capacityProviderStrategy: news.capacityProviderStrategy,
+        placementConstraints: news.placementConstraints,
+        placementStrategy: news.placementStrategy,
+        enableExecuteCommand: news.enableExecuteCommand,
+        propagateTags: news.propagateTags,
+        availabilityZoneRebalancing: news.availabilityZoneRebalancing,
+        serviceConnectConfiguration: news.serviceConnectConfiguration,
+        volumeConfigurations: news.volumeConfigurations,
+        // launchType and capacityProviderStrategy are mutually exclusive;
+        // only send launchType when no strategy is provided.
+        launchType: news.capacityProviderStrategy
+          ? undefined
+          : (news.launchType ?? "FARGATE"),
       });
 
       return {
         stables: ["serviceArn", "serviceName", "clusterArn"],
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
+          // serviceName change → delete-first replace (name is the identity).
           if (
             (yield* toServiceName(id, olds ?? {})) !==
             (yield* toServiceName(id, news ?? {}))
           ) {
             return { action: "replace", deleteFirst: true } as const;
           }
+          // cluster change → replace (a service can't move clusters).
+          if (clusterArnOf(olds.cluster) !== clusterArnOf(news.cluster)) {
+            return { action: "replace", deleteFirst: true } as const;
+          }
+          // Truly-immutable post-create fields. Everything else (desiredCount,
+          // taskDefinition, network, deployment config, placement, loadBalancers,
+          // exec, tags, …) is applied in place by `updateService`.
           if (
             !deepEqual(
               {
-                cluster: olds.cluster,
-                vpcId: olds.vpcId,
-                subnets: olds.subnets,
-                securityGroups: olds.securityGroups ?? [],
-                assignPublicIp: olds.assignPublicIp ?? false,
-                public: olds.public ?? false,
-                listenerPort: olds.listenerPort,
-                certificateArn: olds.certificateArn,
-                healthCheckPath: olds.healthCheckPath,
+                // launchType ↔ capacityProviderStrategy switch is immutable.
+                usesStrategy: !!olds.capacityProviderStrategy,
+                schedulingStrategy: olds.schedulingStrategy ?? "REPLICA",
+                deploymentControllerType:
+                  olds.deploymentController?.type ?? "ECS",
+                enableECSManagedTags: olds.enableECSManagedTags ?? true,
+                role: olds.role,
               },
               {
-                cluster: news.cluster,
-                vpcId: news.vpcId,
-                subnets: news.subnets,
-                securityGroups: news.securityGroups ?? [],
-                assignPublicIp: news.assignPublicIp ?? false,
-                public: news.public ?? false,
-                listenerPort: news.listenerPort,
-                certificateArn: news.certificateArn,
-                healthCheckPath: news.healthCheckPath,
+                usesStrategy: !!news.capacityProviderStrategy,
+                schedulingStrategy: news.schedulingStrategy ?? "REPLICA",
+                deploymentControllerType:
+                  news.deploymentController?.type ?? "ECS",
+                enableECSManagedTags: news.enableECSManagedTags ?? true,
+                role: news.role,
               },
             )
           ) {
@@ -571,25 +734,22 @@ export const ServiceProvider = () =>
             : undefined;
 
           if (!observed?.serviceArn) {
+            // Provision Alchemy-managed ALB ingress only when requested.
             if (news.public && !ingress) {
               ingress = yield* createIngress({ id, news });
             }
 
             const created = yield* ecs.createService({
-              ...serviceInput(news),
+              ...mutableInput(news),
               serviceName,
               cluster: clusterArn,
-              loadBalancers: ingress
-                ? [
-                    {
-                      targetGroupArn: ingress.targetGroupArn!,
-                      containerName: news.task.containerName,
-                      containerPort: news.task.port ?? 3000,
-                    },
-                  ]
-                : undefined,
+              loadBalancers: loadBalancersOf(news, ingress),
+              serviceRegistries: news.serviceRegistries,
+              deploymentController: news.deploymentController,
+              schedulingStrategy: news.schedulingStrategy,
+              role: news.role,
               tags: toEcsTags(desiredTags),
-              enableECSManagedTags: true,
+              enableECSManagedTags: news.enableECSManagedTags ?? true,
             });
             const service = created.service;
             if (!service?.serviceArn) {
@@ -611,25 +771,58 @@ export const ServiceProvider = () =>
             };
           }
 
-          // Sync — apply mutable fields (taskDefinition, desiredCount,
-          // network, deployment) via updateService with a forced new
-          // deployment.
-          const updated = yield* ecs.updateService({
-            ...serviceInput(news, output),
-            service: serviceName,
-            cluster: clusterArn,
-            loadBalancers: ingress?.targetGroupArn
-              ? [
-                  {
-                    targetGroupArn: ingress.targetGroupArn,
-                    containerName: news.task.containerName,
-                    containerPort: news.task.port ?? 3000,
-                  },
-                ]
-              : undefined,
-            forceNewDeployment: true,
-          });
+          // Sync — apply in-place mutable fields via updateService. Force a new
+          // deployment so a changed task definition (same revision-less ARN) or
+          // load-balancer wiring rolls out.
+          const updated = yield* ecs
+            .updateService({
+              ...mutableInput(news),
+              service: serviceName,
+              cluster: clusterArn,
+              loadBalancers: loadBalancersOf(news, ingress),
+              enableExecuteCommand: news.enableExecuteCommand,
+              forceNewDeployment: true,
+            })
+            .pipe(
+              // The service may still be transitioning (e.g. a prior
+              // deployment settling). updateService rejects with
+              // ServiceNotActiveException until it returns to ACTIVE — retry
+              // bounded.
+              Effect.retry({
+                while: (e) => e._tag === "ServiceNotActiveException",
+                schedule: Schedule.spaced("5 seconds").pipe(
+                  Schedule.both(Schedule.recurs(8)),
+                ),
+              }),
+            );
           const service = updated.service;
+
+          // Sync tags — diff observed service tags against desired.
+          const observedTags = Object.fromEntries(
+            (observed.tags ?? [])
+              .filter(
+                (t): t is { key: string; value: string } =>
+                  typeof t.key === "string" && typeof t.value === "string",
+              )
+              .map((t) => [t.key, t.value]),
+          );
+          const { removed: removedTags, upsert: upsertTags } = diffTags(
+            observedTags,
+            desiredTags,
+          );
+          if (upsertTags.length > 0) {
+            yield* ecs.tagResource({
+              resourceArn: observed.serviceArn,
+              tags: upsertTags.map((t) => ({ key: t.Key, value: t.Value })),
+            });
+          }
+          if (removedTags.length > 0) {
+            yield* ecs.untagResource({
+              resourceArn: observed.serviceArn,
+              tagKeys: removedTags,
+            });
+          }
+
           yield* session.note(observed.serviceArn);
           return {
             serviceArn: observed.serviceArn as ServiceArn,
@@ -648,6 +841,10 @@ export const ServiceProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
+          // Scale to zero first so `deleteService` has no running tasks to
+          // drain. If the service is mid-transition (`ServiceNotActiveException`)
+          // we skip the scale-down — `deleteService({ force: true })` below
+          // tears it down regardless.
           yield* ecs
             .updateService({
               cluster: output.clusterArn,
@@ -657,6 +854,7 @@ export const ServiceProvider = () =>
             .pipe(
               Effect.catchTag("ServiceNotFoundException", () => Effect.void),
               Effect.catchTag("ClusterNotFoundException", () => Effect.void),
+              Effect.catchTag("ServiceNotActiveException", () => Effect.void),
             );
 
           yield* ecs

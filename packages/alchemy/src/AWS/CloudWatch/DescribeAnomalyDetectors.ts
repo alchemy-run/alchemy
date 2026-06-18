@@ -9,6 +9,7 @@ export interface DescribeAnomalyDetectorsRequest
 
 /**
  * Runtime binding for `cloudwatch:DescribeAnomalyDetectors`.
+ * @binding
  */
 export class DescribeAnomalyDetectors extends Binding.Service<
   DescribeAnomalyDetectors,

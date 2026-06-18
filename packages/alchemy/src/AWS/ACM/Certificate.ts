@@ -110,7 +110,7 @@ export interface Certificate extends Resource<
  * region required for CloudFront viewer certificates. When `hostedZoneId` is
  * provided for DNS validation, the provider creates or updates the Route 53
  * validation records and waits for the certificate to be issued.
- *
+ * @resource
  * @section Requesting Certificates
  * @example DNS-Validated Certificate
  * ```typescript

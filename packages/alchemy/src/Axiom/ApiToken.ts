@@ -34,7 +34,7 @@ export type ApiToken = Resource<
  * {@link Redacted}) on initial create and persisted in resource state.
  * Treat resource state as sensitive — anyone with read access can recover
  * the token. Pair with a secret store for downstream consumption.
- *
+ * @resource
  * @see https://axiom.co/docs/reference/tokens
  *
  * @section Creating an API Token

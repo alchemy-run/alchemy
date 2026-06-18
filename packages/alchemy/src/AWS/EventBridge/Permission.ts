@@ -36,7 +36,7 @@ export interface PermissionProps {
  * `Permission` manages a single `PutPermission` / `RemovePermission` lifecycle
  * entry on an event bus so helper surfaces can safely grant publishers access
  * without requiring callers to hand-write raw bus policies.
- *
+ * @resource
  * @section Granting Access
  * @example Allow Another Account To Publish
  * ```typescript

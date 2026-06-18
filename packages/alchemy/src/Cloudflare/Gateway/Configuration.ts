@@ -147,7 +147,9 @@ export type GatewayConfiguration = Resource<
  * before Alchemy managed them cannot be restored (Cloudflare's API has no
  * way to unset a block) — destroy leaves the last managed value and logs
  * a warning.
- *
+ * @resource
+ * @product Gateway
+ * @category Cloudflare One (Zero Trust)
  * @section Managing Gateway settings
  * @example Enable activity logging and TLS decryption
  * ```typescript

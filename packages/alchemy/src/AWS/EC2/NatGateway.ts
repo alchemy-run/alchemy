@@ -159,6 +159,81 @@ export interface NatGateway extends Resource<
   never,
   Providers
 > {}
+/**
+ * A NAT gateway that lets instances in a private subnet reach the internet
+ * (and other AWS services) while preventing unsolicited inbound connections.
+ *
+ * The gateway lives in the subnet given by `subnetId`, and its
+ * `connectivityType` decides how it connects: a `"public"` gateway must sit in a
+ * *public* subnet and requires an Elastic IP via `allocationId`, while a
+ * `"private"` gateway has no public address and is used for VPC-to-VPC routing.
+ * A NAT gateway only carries traffic once a `Route` sends `0.0.0.0/0` from the
+ * private subnet's route table to it. Core properties (`subnetId`,
+ * `connectivityType`, `allocationId`) are immutable, so changing them replaces
+ * the gateway.
+ *
+ * @resource
+ * @section Public NAT Gateways
+ * Public gateways translate private addresses to a stable public IP, so they
+ * must be placed in a public subnet (one with a route to an internet gateway)
+ * and given an Elastic IP allocation.
+ * @example Public NAT Gateway with an Elastic IP
+ * ```typescript
+ * const eip = yield* AWS.EC2.EIP("NatEip", {});
+ *
+ * const natGateway = yield* AWS.EC2.NatGateway("NatGateway", {
+ *   subnetId: publicSubnet.subnetId,
+ *   allocationId: eip.allocationId,
+ *   connectivityType: "public",
+ *   tags: { Name: "production-nat" },
+ * });
+ * ```
+ * Allocating the EIP first and passing its `allocationId` gives the gateway a
+ * fixed public IP. `connectivityType` defaults to `"public"`, so it can be
+ * omitted; this is the standard way to give private instances outbound internet
+ * access.
+ *
+ * @section Private NAT Gateways
+ * Private gateways have no public IP and route traffic between VPCs or to
+ * on-premises networks without exposing it to the internet.
+ * @example Private NAT Gateway with a Fixed Private IP
+ * ```typescript
+ * const natGateway = yield* AWS.EC2.NatGateway("PrivateNat", {
+ *   subnetId: privateSubnet.subnetId,
+ *   connectivityType: "private",
+ *   privateIpAddress: "10.0.10.10",
+ * });
+ * ```
+ * Omitting `allocationId` and setting `connectivityType: "private"` creates a
+ * gateway with no public address; `privateIpAddress` pins it to a specific
+ * address in the subnet instead of letting AWS choose one automatically.
+ *
+ * @example Private NAT Gateway with Secondary Addresses
+ * ```typescript
+ * const natGateway = yield* AWS.EC2.NatGateway("ScaledNat", {
+ *   subnetId: privateSubnet.subnetId,
+ *   connectivityType: "private",
+ *   secondaryPrivateIpAddressCount: 3,
+ * });
+ * ```
+ * Secondary private addresses — via `secondaryPrivateIpAddressCount`,
+ * `secondaryPrivateIpAddresses`, or `secondaryAllocationIds` — raise the number
+ * of simultaneous connections a private gateway can sustain to busy
+ * destinations, which is only valid for private gateways.
+ *
+ * @section Routing Private Traffic
+ * @example Default Route Through the NAT Gateway
+ * ```typescript
+ * const natRoute = yield* AWS.EC2.Route("NatRoute", {
+ *   routeTableId: privateRouteTable.routeTableId,
+ *   destinationCidrBlock: "0.0.0.0/0",
+ *   natGatewayId: natGateway.natGatewayId,
+ * });
+ * ```
+ * Without a route the gateway is inert; this entry sends all outbound traffic
+ * from the private subnet's route table through the gateway so private instances
+ * can reach the internet.
+ */
 export const NatGateway = Resource<NatGateway>("AWS.EC2.NatGateway");
 
 export const NatGatewayProvider = () =>

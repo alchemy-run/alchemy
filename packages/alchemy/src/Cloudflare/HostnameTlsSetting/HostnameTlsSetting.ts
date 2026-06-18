@@ -118,7 +118,9 @@ export type HostnameTlsSetting = Resource<
  * state, `read` scans the setting's hostname list and reports an existing
  * override as `Unowned`, so the engine refuses to take it over unless
  * `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Hostname TLS Settings
+ * @category SSL/TLS & Certificates
  * @section Minimum TLS version
  * @example Require TLS 1.2 for a single hostname
  * ```typescript

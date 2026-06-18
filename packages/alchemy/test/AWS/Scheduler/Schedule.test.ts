@@ -6,7 +6,6 @@ import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import * as Sched from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -19,60 +18,52 @@ test.provider("list enumerates the deployed schedule", (stack) =>
   Effect.gen(function* () {
     yield* stack.destroy();
 
-    const deployed = yield* stack
-      .deploy(
-        Effect.gen(function* () {
-          const queue = yield* Queue("ListScheduleQueue", {
-            queueName: "alchemy-test-schedule-list-queue",
-          });
+    // The Schedule provider internally retries the "execution role must allow
+    // EventBridge Scheduler to assume the role" ValidationException until the
+    // freshly-created IAM role propagates, so the deploy needs no retry here.
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        const queue = yield* Queue("ListScheduleQueue", {
+          queueName: "alchemy-test-schedule-list-queue",
+        });
 
-          const role = yield* Role("ListScheduleRole", {
-            roleName: "alchemy-test-schedule-list-role",
-            assumeRolePolicyDocument: {
+        const role = yield* Role("ListScheduleRole", {
+          roleName: "alchemy-test-schedule-list-role",
+          assumeRolePolicyDocument: {
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Principal: { Service: "scheduler.amazonaws.com" },
+                Action: ["sts:AssumeRole"],
+              },
+            ],
+          },
+          inlinePolicies: {
+            ScheduleTarget: {
               Version: "2012-10-17",
               Statement: [
                 {
                   Effect: "Allow",
-                  Principal: { Service: "scheduler.amazonaws.com" },
-                  Action: ["sts:AssumeRole"],
+                  Action: ["sqs:SendMessage"],
+                  Resource: [queue.queueArn],
                 },
               ],
             },
-            inlinePolicies: {
-              ScheduleTarget: {
-                Version: "2012-10-17",
-                Statement: [
-                  {
-                    Effect: "Allow",
-                    Action: ["sqs:SendMessage"],
-                    Resource: [queue.queueArn],
-                  },
-                ],
-              },
-            },
-          });
+          },
+        });
 
-          return yield* Schedule("ListSchedule", {
-            name: "alchemy-test-schedule-list",
-            scheduleExpression: "rate(1 hour)",
-            flexibleTimeWindow: { Mode: "OFF" },
-            target: {
-              Arn: queue.queueArn,
-              RoleArn: role.roleArn,
-            },
-          });
-        }),
-      )
-      .pipe(
-        // Scheduler validates that the target role is assumable; a freshly
-        // created IAM role can take a few seconds to propagate, surfacing as a
-        // ValidationException. Retry the deploy until propagation completes.
-        Effect.retry({
-          while: (e) => e._tag === "ValidationException",
-          schedule: Sched.exponential("2 seconds"),
-          times: 1,
-        }),
-      );
+        return yield* Schedule("ListSchedule", {
+          name: "alchemy-test-schedule-list",
+          scheduleExpression: "rate(1 hour)",
+          flexibleTimeWindow: { Mode: "OFF" },
+          target: {
+            Arn: queue.queueArn,
+            RoleArn: role.roleArn,
+          },
+        });
+      }),
+    );
 
     const provider = yield* Provider.findProvider(Schedule);
     const all = yield* provider.list();

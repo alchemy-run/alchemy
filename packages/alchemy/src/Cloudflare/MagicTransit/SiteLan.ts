@@ -153,7 +153,9 @@ export type MagicSiteLan = Resource<
  *
  * `siteId` and `haLink` are create-only — changing either triggers a
  * replacement. Everything else is updated in place.
- *
+ * @resource
+ * @product Magic Transit
+ * @category Network
  * @section Creating a LAN
  * @example Untagged LAN with DHCP
  * ```typescript

@@ -47,7 +47,7 @@ export interface Group extends Resource<
 
 /**
  * A group in the IAM Identity Center identity store.
- *
+ * @resource
  * @section Creating Groups
  * @example Platform Engineers
  * ```typescript

@@ -65,7 +65,9 @@ export type Container = {
  * See the {@link https://alchemy.run/concepts/platform | Platform
  * concept} page for how this fits into the async / effect / layer
  * progression.
- *
+ * @resource
+ * @product Containers
+ * @category Workers & Compute
  * @section Container Layer
  * Define the class and `.make()` in separate files. The class
  * declares the container's identity, configuration, and typed

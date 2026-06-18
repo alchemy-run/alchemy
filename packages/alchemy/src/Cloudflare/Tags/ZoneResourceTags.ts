@@ -118,7 +118,9 @@ export type ZoneResourceTags = Resource<
  * a non-empty tag set on the target resource is reported as `Unowned`, and
  * the engine refuses to take it over (i.e. clobber the existing tags)
  * unless `--adopt` or `adopt(true)` is set.
- *
+ * @resource
+ * @product Resource Tagging
+ * @category Account & Identity
  * @section Tagging a resource
  * @example Tag a DNS record
  * ```typescript

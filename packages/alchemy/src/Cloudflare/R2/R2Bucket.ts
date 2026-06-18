@@ -154,7 +154,9 @@ export type R2Bucket = Resource<
  *
  * R2 provides zero-egress-fee object storage. Create a bucket as a resource,
  * then bind it to a Worker to read and write objects at runtime.
- *
+ * @resource
+ * @product R2
+ * @category Storage & Databases
  * @section Creating a Bucket
  * @example Basic R2 bucket
  * ```typescript
@@ -737,7 +739,11 @@ export const R2BucketProvider = () =>
           if (oldStorageClass !== (news.storageClass ?? "Standard")) {
             return {
               action: "update",
-              stables: oldName === name ? ["bucketName"] : undefined,
+              // `accountId` is always stable across an update (a name/account
+              // change is a `replace`); keep it now that `diff.stables`
+              // overrides `provider.stables` rather than merging with it.
+              stables:
+                oldName === name ? ["bucketName", "accountId"] : ["accountId"],
             } as const;
           }
           if (!deepEqual(olds.domains, news.domains)) {

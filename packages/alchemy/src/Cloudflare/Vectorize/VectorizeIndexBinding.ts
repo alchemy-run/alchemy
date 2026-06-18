@@ -39,6 +39,11 @@ export interface VectorizeIndexClient {
   getByIds: (ids: string[]) => Effect.Effect<runtime.VectorizeVector[]>;
 }
 
+/**
+ * @binding
+ * @product Vectorize
+ * @category AI
+ */
 export class VectorizeIndexBinding extends Binding.Service<
   VectorizeIndexBinding,
   (index: VectorizeIndex) => Effect.Effect<VectorizeIndexClient>

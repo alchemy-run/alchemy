@@ -125,7 +125,9 @@ export type RegistrarDomain = Resource<
  * Note: updating registrar settings requires an API token with Registrar
  * write permission; without it the update fails with the typed
  * `RegistrarUpdateNotAllowed` error.
- *
+ * @resource
+ * @product Registrar
+ * @category Domains & DNS
  * @section Managing a registered domain
  * @example Pin auto-renew and the transfer lock
  * ```typescript

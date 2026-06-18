@@ -41,7 +41,9 @@ export type EmailAddress = Resource<
  * Destination addresses are account-scoped (not zone-scoped). They are used
  * as forwarding targets in `EmailRule` actions and can also serve as the
  * `destinationAddress` on a `send_email` Worker binding.
- *
+ * @resource
+ * @product Email
+ * @category Email
  * @section Registering an Address
  * @example Register a destination address
  * ```typescript

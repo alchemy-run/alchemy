@@ -91,7 +91,9 @@ export type OriginTlsClientAuthCertificate = Resource<
  * property triggers a replacement. Deployment is asynchronous — the
  * certificate starts in `pending_deployment` and becomes `active` within a
  * few minutes; deletion likewise passes through `pending_deletion`.
- *
+ * @resource
+ * @product Origin TLS Client Auth
+ * @category SSL/TLS & Certificates
  * @section Uploading a certificate
  * @example Zone client certificate
  * ```typescript

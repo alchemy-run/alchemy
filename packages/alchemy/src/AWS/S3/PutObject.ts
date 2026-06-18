@@ -14,7 +14,7 @@ export interface PutObjectRequest extends Omit<S3.PutObjectRequest, "Bucket"> {}
  *
  * Bind this operation to a bucket to get a callable that writes objects without
  * manually supplying the bucket name on every request.
- *
+ * @binding
  * @section Writing Objects
  * @example Put an Object
  * ```typescript

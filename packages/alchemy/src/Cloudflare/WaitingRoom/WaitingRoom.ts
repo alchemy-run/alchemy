@@ -256,7 +256,9 @@ export type WaitingRoom = Resource<
  * Waiting rooms carry no ownership markers, so when state is lost `read`
  * matches by name and reports the room as `Unowned` — the engine refuses
  * to take it over unless `--adopt` (or `adopt(true)`) is set.
- *
+ * @resource
+ * @product Waiting Rooms
+ * @category Performance & Reliability
  * @section Creating a Waiting Room
  * @example Basic waiting room on a host
  * ```typescript

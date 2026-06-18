@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { isResolved } from "../../Diff.ts";
 import type { Input } from "../../Input.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
@@ -46,6 +47,14 @@ export interface DistributionOrigin {
    */
   s3Origin?: boolean;
   /**
+   * Explicit S3 origin settings (legacy Origin Access Identity, read timeout).
+   * When set, the origin is treated as an S3 origin regardless of `s3Origin`.
+   */
+  s3OriginConfig?: {
+    originAccessIdentity?: string;
+    originReadTimeout?: number;
+  };
+  /**
    * Optional custom origin settings.
    */
   customOriginConfig?: {
@@ -55,7 +64,50 @@ export interface DistributionOrigin {
     originReadTimeout?: number;
     originKeepaliveTimeout?: number;
     originSslProtocols?: cloudfront.SslProtocol[];
+    /**
+     * IP address type CloudFront uses to connect to the origin.
+     */
+    ipAddressType?: cloudfront.IpAddressType;
+    /**
+     * Mutual TLS configuration for the origin connection.
+     */
+    originMtlsConfig?: {
+      clientCertificateArn: string;
+    };
   };
+  /**
+   * Route this origin through a VPC origin (private ALB/NLB/EC2). Mutually
+   * exclusive with `s3Origin`/`s3OriginConfig`/`customOriginConfig`.
+   */
+  vpcOriginConfig?: {
+    vpcOriginId: Input<string>;
+    originReadTimeout?: number;
+    originKeepaliveTimeout?: number;
+    ownerAccountId?: string;
+  };
+  /**
+   * Custom headers CloudFront adds to every request it sends to the origin.
+   */
+  customHeaders?: Record<string, string>;
+  /**
+   * Origin Shield configuration.
+   */
+  originShield?: {
+    enabled: boolean;
+    originShieldRegion?: string;
+  };
+  /**
+   * Number of times CloudFront attempts to connect to the origin (1-3).
+   */
+  connectionAttempts?: number;
+  /**
+   * Seconds CloudFront waits when trying to establish a connection (1-10).
+   */
+  connectionTimeout?: number;
+  /**
+   * Seconds CloudFront waits for the origin to deliver a complete response.
+   */
+  responseCompletionTimeout?: number;
 }
 
 export interface DistributionBehavior {
@@ -80,6 +132,32 @@ export interface DistributionBehavior {
     eventType: cloudfront.EventType;
     includeBody?: boolean;
   }[];
+  /**
+   * CloudFront KeyGroup IDs whose public keys gate signed URLs/cookies.
+   */
+  trustedKeyGroups?: Input<string[]>;
+  /**
+   * Legacy trusted signer AWS account numbers for signed URLs/cookies.
+   */
+  trustedSigners?: string[];
+  /**
+   * Field-level encryption configuration ID.
+   */
+  fieldLevelEncryptionId?: string;
+  /**
+   * ARN of a real-time log configuration to attach.
+   */
+  realtimeLogConfigArn?: string;
+  /**
+   * Whether Microsoft Smooth Streaming is enabled for this behavior.
+   */
+  smoothStreaming?: boolean;
+  /**
+   * gRPC configuration for this behavior.
+   */
+  grpcConfig?: {
+    enabled: boolean;
+  };
 }
 
 export interface DistributionViewerCertificate {
@@ -87,6 +165,68 @@ export interface DistributionViewerCertificate {
   acmCertificateArn?: string;
   sslSupportMethod?: cloudfront.SSLSupportMethod;
   minimumProtocolVersion?: cloudfront.MinimumProtocolVersion;
+  /**
+   * Legacy IAM certificate ID.
+   */
+  iamCertificateId?: string;
+  /**
+   * Legacy certificate identifier (IAM/ACM raw value).
+   */
+  certificate?: string;
+  /**
+   * Source of the legacy certificate.
+   */
+  certificateSource?: cloudfront.CertificateSource;
+}
+
+export interface DistributionGeoRestriction {
+  /**
+   * Restriction mode. `none` disables geo restriction.
+   */
+  restrictionType: cloudfront.GeoRestrictionType;
+  /**
+   * Two-letter ISO 3166-1 country codes the restriction applies to.
+   */
+  locations?: string[];
+}
+
+export interface DistributionLogging {
+  /**
+   * Whether access logging is enabled.
+   * @default true
+   */
+  enabled?: boolean;
+  /**
+   * Whether cookies are included in access logs.
+   */
+  includeCookies?: boolean;
+  /**
+   * S3 bucket (domain name) that receives access logs.
+   */
+  bucket?: string;
+  /**
+   * Prefix applied to access log object keys.
+   */
+  prefix?: string;
+}
+
+export interface DistributionOriginGroup {
+  /**
+   * Origin group identifier (target it from a cache behavior).
+   */
+  id: string;
+  /**
+   * Member origin IDs in failover order (primary first, secondary second).
+   */
+  members: string[];
+  /**
+   * HTTP status codes that trigger failover to the next member.
+   */
+  failoverStatusCodes: number[];
+  /**
+   * How CloudFront selects the origin within the group.
+   */
+  selectionCriteria?: cloudfront.OriginGroupSelectionCriteria;
 }
 
 const isFunctionAssociationPending = (error: cloudfront.InvalidArgument) => {
@@ -160,6 +300,32 @@ export interface DistributionProps {
    */
   isIpv6Enabled?: boolean;
   /**
+   * Geographic distribution restrictions. Defaults to no restriction.
+   */
+  geoRestriction?: DistributionGeoRestriction;
+  /**
+   * Standard access logging configuration.
+   */
+  logging?: DistributionLogging;
+  /**
+   * Origin failover groups. Target a group id from a cache behavior's
+   * `targetOriginId`.
+   */
+  originGroups?: Input<DistributionOriginGroup[]>;
+  /**
+   * Continuous deployment policy ID for blue/green deployments.
+   */
+  continuousDeploymentPolicyId?: string;
+  /**
+   * Whether this is a staging distribution for blue/green deployments.
+   * Create-only — changing it forces a replacement.
+   */
+  staging?: boolean;
+  /**
+   * Anycast static IP list ID to associate with the distribution.
+   */
+  anycastIpListId?: string;
+  /**
    * User-defined tags to apply to the distribution.
    */
   tags?: Record<string, string>;
@@ -228,7 +394,7 @@ export interface Distribution extends Resource<
  * `Distribution` manages the CDN layer for static sites and HTTP origins such
  * as Lambda Function URLs and ALBs. It exposes the distribution domain and
  * hosted zone ID needed for Route 53 alias records.
- *
+ * @resource
  * @section Creating Distributions
  * @example Private S3 Origin
  * ```typescript
@@ -449,6 +615,16 @@ export const DistributionProvider = () =>
           "domainName",
           "hostedZoneId",
         ],
+        // `Staging` is create-only at the CloudFront API level; toggling it
+        // requires a fresh distribution. Everything else updates in place via
+        // the whole-config `updateDistribution` PUT.
+        diff: Effect.fn(function* ({ olds, news: _news }) {
+          if (!isResolved(_news)) return undefined;
+          const news = _news as DistributionProps;
+          if ((olds?.staging ?? false) !== (news.staging ?? false)) {
+            return { action: "replace" } as const;
+          }
+        }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.distributionId) {
             return undefined;
@@ -854,6 +1030,26 @@ const toBehavior = (
   MinTTL: behavior.minTtl,
   DefaultTTL: behavior.defaultTtl,
   MaxTTL: behavior.maxTtl,
+  TrustedKeyGroups: behavior.trustedKeyGroups
+    ? {
+        Enabled: (behavior.trustedKeyGroups as string[]).length > 0,
+        Quantity: (behavior.trustedKeyGroups as string[]).length,
+        Items: behavior.trustedKeyGroups as string[],
+      }
+    : undefined,
+  TrustedSigners: behavior.trustedSigners
+    ? {
+        Enabled: behavior.trustedSigners.length > 0,
+        Quantity: behavior.trustedSigners.length,
+        Items: behavior.trustedSigners,
+      }
+    : undefined,
+  FieldLevelEncryptionId: behavior.fieldLevelEncryptionId,
+  RealtimeLogConfigArn: behavior.realtimeLogConfigArn,
+  SmoothStreaming: behavior.smoothStreaming,
+  GrpcConfig: behavior.grpcConfig
+    ? { Enabled: behavior.grpcConfig.enabled }
+    : undefined,
   FunctionAssociations: behavior.functionAssociations
     ? {
         Quantity: behavior.functionAssociations.length,
@@ -875,30 +1071,83 @@ const toBehavior = (
     : undefined,
 });
 
-const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => ({
-  Id: origin.id,
-  DomainName: origin.domainName as string,
-  OriginPath: origin.originPath as string | undefined,
-  OriginAccessControlId: origin.originAccessControlId as string | undefined,
-  S3OriginConfig: origin.s3Origin ? { OriginAccessIdentity: "" } : undefined,
-  CustomOriginConfig: origin.s3Origin
-    ? undefined
-    : {
-        HTTPPort: origin.customOriginConfig?.httpPort ?? 80,
-        HTTPSPort: origin.customOriginConfig?.httpsPort ?? 443,
-        OriginProtocolPolicy:
-          origin.customOriginConfig?.originProtocolPolicy ?? "https-only",
-        OriginSslProtocols: {
-          Quantity: (
-            origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"]
-          ).length,
-          Items: origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"],
-        },
-        OriginReadTimeout: origin.customOriginConfig?.originReadTimeout,
-        OriginKeepaliveTimeout:
-          origin.customOriginConfig?.originKeepaliveTimeout,
-      },
-});
+const toOrigin = (origin: DistributionOrigin): cloudfront.Origin => {
+  // Exactly one of the three origin-config shapes may be set. A VPC origin
+  // wins, then an explicit/legacy S3 origin, otherwise a custom origin.
+  const isVpcOrigin = origin.vpcOriginConfig !== undefined;
+  const isS3Origin =
+    !isVpcOrigin &&
+    (origin.s3Origin === true || origin.s3OriginConfig !== undefined);
+
+  return {
+    Id: origin.id,
+    DomainName: origin.domainName as string,
+    OriginPath: origin.originPath as string | undefined,
+    OriginAccessControlId: origin.originAccessControlId as string | undefined,
+    CustomHeaders: origin.customHeaders
+      ? {
+          Quantity: Object.keys(origin.customHeaders).length,
+          Items: Object.entries(origin.customHeaders).map(([name, value]) => ({
+            HeaderName: name,
+            HeaderValue: value,
+          })),
+        }
+      : undefined,
+    OriginShield: origin.originShield
+      ? {
+          Enabled: origin.originShield.enabled,
+          OriginShieldRegion: origin.originShield.originShieldRegion,
+        }
+      : undefined,
+    ConnectionAttempts: origin.connectionAttempts,
+    ConnectionTimeout: origin.connectionTimeout,
+    ResponseCompletionTimeout: origin.responseCompletionTimeout,
+    VpcOriginConfig: isVpcOrigin
+      ? {
+          VpcOriginId: origin.vpcOriginConfig!.vpcOriginId as string,
+          OwnerAccountId: origin.vpcOriginConfig!.ownerAccountId,
+          OriginReadTimeout: origin.vpcOriginConfig!.originReadTimeout,
+          OriginKeepaliveTimeout:
+            origin.vpcOriginConfig!.originKeepaliveTimeout,
+        }
+      : undefined,
+    S3OriginConfig: isS3Origin
+      ? {
+          OriginAccessIdentity:
+            origin.s3OriginConfig?.originAccessIdentity ?? "",
+          OriginReadTimeout: origin.s3OriginConfig?.originReadTimeout,
+        }
+      : undefined,
+    CustomOriginConfig:
+      isVpcOrigin || isS3Origin
+        ? undefined
+        : {
+            HTTPPort: origin.customOriginConfig?.httpPort ?? 80,
+            HTTPSPort: origin.customOriginConfig?.httpsPort ?? 443,
+            OriginProtocolPolicy:
+              origin.customOriginConfig?.originProtocolPolicy ?? "https-only",
+            OriginSslProtocols: {
+              Quantity: (
+                origin.customOriginConfig?.originSslProtocols ?? ["TLSv1.2"]
+              ).length,
+              Items: origin.customOriginConfig?.originSslProtocols ?? [
+                "TLSv1.2",
+              ],
+            },
+            OriginReadTimeout: origin.customOriginConfig?.originReadTimeout,
+            OriginKeepaliveTimeout:
+              origin.customOriginConfig?.originKeepaliveTimeout,
+            IpAddressType: origin.customOriginConfig?.ipAddressType,
+            OriginMtlsConfig: origin.customOriginConfig?.originMtlsConfig
+              ? {
+                  ClientCertificateArn:
+                    origin.customOriginConfig.originMtlsConfig
+                      .clientCertificateArn,
+                }
+              : undefined,
+          },
+  };
+};
 
 const toConfig = (
   callerReference: string,
@@ -937,6 +1186,27 @@ const toConfig = (
         ) as cloudfront.CacheBehavior[],
       }
     : undefined,
+  OriginGroups: props.originGroups
+    ? {
+        Quantity: (props.originGroups as DistributionOriginGroup[]).length,
+        Items: (props.originGroups as DistributionOriginGroup[]).map(
+          (group) => ({
+            Id: group.id,
+            FailoverCriteria: {
+              StatusCodes: {
+                Quantity: group.failoverStatusCodes.length,
+                Items: group.failoverStatusCodes,
+              },
+            },
+            Members: {
+              Quantity: group.members.length,
+              Items: group.members.map((originId) => ({ OriginId: originId })),
+            },
+            SelectionCriteria: group.selectionCriteria,
+          }),
+        ),
+      }
+    : undefined,
   CustomErrorResponses: props.customErrorResponses
     ? {
         Quantity: (
@@ -946,12 +1216,23 @@ const toConfig = (
       }
     : undefined,
   Comment: props.comment ?? "",
+  Logging: props.logging
+    ? {
+        Enabled: props.logging.enabled ?? true,
+        IncludeCookies: props.logging.includeCookies ?? false,
+        Bucket: props.logging.bucket ?? "",
+        Prefix: props.logging.prefix ?? "",
+      }
+    : undefined,
   Enabled: props.enabled ?? true,
   ViewerCertificate: props.viewerCertificate
     ? {
         CloudFrontDefaultCertificate: (
           props.viewerCertificate as DistributionViewerCertificate
         ).cloudFrontDefaultCertificate,
+        IAMCertificateId: (
+          props.viewerCertificate as DistributionViewerCertificate
+        ).iamCertificateId,
         ACMCertificateArn: (
           props.viewerCertificate as DistributionViewerCertificate
         ).acmCertificateArn,
@@ -961,22 +1242,38 @@ const toConfig = (
         MinimumProtocolVersion: (
           props.viewerCertificate as DistributionViewerCertificate
         ).minimumProtocolVersion,
+        Certificate: (props.viewerCertificate as DistributionViewerCertificate)
+          .certificate,
+        CertificateSource: (
+          props.viewerCertificate as DistributionViewerCertificate
+        ).certificateSource,
       }
     : props.aliases && props.aliases.length > 0
       ? undefined
       : {
           CloudFrontDefaultCertificate: true,
         },
-  Restrictions: {
-    GeoRestriction: {
-      RestrictionType: "none",
-      Quantity: 0,
-    },
-  },
+  Restrictions: props.geoRestriction
+    ? {
+        GeoRestriction: {
+          RestrictionType: props.geoRestriction.restrictionType,
+          Quantity: props.geoRestriction.locations?.length ?? 0,
+          Items: props.geoRestriction.locations,
+        },
+      }
+    : {
+        GeoRestriction: {
+          RestrictionType: "none",
+          Quantity: 0,
+        },
+      },
   PriceClass: props.priceClass,
   WebACLId: props.webAclId,
   HttpVersion: props.httpVersion ?? "http2",
   IsIPV6Enabled: props.isIpv6Enabled ?? true,
+  ContinuousDeploymentPolicyId: props.continuousDeploymentPolicyId,
+  Staging: props.staging,
+  AnycastIpListId: props.anycastIpListId,
 });
 
 const toAttrs = (

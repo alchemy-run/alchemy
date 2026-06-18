@@ -87,7 +87,9 @@ export type QueueConsumer = Resource<
  * consumers can coexist). The reconciler enforces this: if the queue
  * already has a Worker consumer pointing at a different script, the
  * deploy fails with a clear error rather than silently adopting it.
- *
+ * @resource
+ * @product Queues
+ * @category Storage & Databases
  * @section Registering a Consumer
  * @example Basic consumer
  * ```typescript
@@ -234,7 +236,9 @@ export const QueueConsumerProviderLive = () =>
     reconcile: Effect.fn(function* ({ news, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
-      const queueId = output?.queueId ?? (news.queueId as unknown as string);
+      // Only use `output.queueId` if it's a live ID (i.e. no `dev:` prefix).
+      // Otherwise, the lookup will fail because the request is malformed.
+      const queueId = isLiveId(output?.queueId) ? output.queueId : news.queueId;
 
       // Observe — prefer the cached consumerId, then fall back to
       // listConsumers (paginated) to recover from out-of-band

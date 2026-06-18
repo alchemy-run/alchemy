@@ -61,7 +61,9 @@ export type IamUserGroupMembership = Resource<
  *
  * Account-scoped IAM (user groups and their members) is an Enterprise
  * feature.
- *
+ * @resource
+ * @product IAM
+ * @category Account & Identity
  * @section Adding a Member
  * @example Add an account member to a user group
  * ```typescript

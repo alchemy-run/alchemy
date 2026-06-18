@@ -56,6 +56,8 @@ export interface SendEmailClient {
  * A typed runtime accessor for a Cloudflare `send_email` Worker binding.
  *
  * @binding
+ * @product Email
+ * @category Email
  */
 export class SendEmailBinding extends Binding.Service<
   SendEmailBinding,

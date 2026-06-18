@@ -65,6 +65,7 @@ export interface ScalingPolicy extends Resource<
 
 /**
  * A target-tracking scaling policy for an Auto Scaling Group.
+ * @resource
  */
 export const ScalingPolicy = Resource<ScalingPolicy>(
   "AWS.AutoScaling.ScalingPolicy",

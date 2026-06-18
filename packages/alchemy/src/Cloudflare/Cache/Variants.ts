@@ -92,7 +92,9 @@ export type Variants = Resource<
  * Only one `Variants` resource per zone makes sense — the setting is a
  * zone singleton, and two instances managing the same zone would fight
  * over it.
- *
+ * @resource
+ * @product Cache
+ * @category Performance & Reliability
  * @section Managing Variants
  * @example Serve WebP for JPEG URLs
  * ```typescript

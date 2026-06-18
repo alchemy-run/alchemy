@@ -35,6 +35,7 @@ export interface ConnectOptions {
 /**
  * Runtime binding that resolves connection settings for an Aurora cluster,
  * proxy, or proxy endpoint using a Secrets Manager secret.
+ * @binding
  */
 export class Connect extends Binding.Service<
   Connect,

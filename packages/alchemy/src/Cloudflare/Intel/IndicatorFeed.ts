@@ -107,7 +107,9 @@ export type IndicatorFeed = Resource<
  * adopts an existing feed with the same name instead of creating a
  * duplicate.
  * :::
- *
+ * @resource
+ * @product Intel
+ * @category Observability & Analytics
  * @section Creating a Feed
  * @example Basic feed
  * ```typescript

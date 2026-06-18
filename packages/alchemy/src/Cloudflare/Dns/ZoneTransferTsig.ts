@@ -67,7 +67,9 @@ export type ZoneTransferTsig = Resource<
  * Requires the Secondary DNS (zone transfer) entitlement on the
  * account. All fields are mutable in place; the secret is redacted and
  * never persisted in attributes.
- *
+ * @resource
+ * @product DNS
+ * @category Domains & DNS
  * @section Creating a TSIG
  * @example HMAC-SHA512 key
  * ```typescript

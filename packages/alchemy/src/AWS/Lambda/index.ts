@@ -1,3 +1,4 @@
+export * from "./Alias.ts";
 export * from "./BucketEventSource.ts";
 export * from "./EventBridgeEventSource.ts";
 export * from "./EventSourceMapping.ts";

@@ -83,7 +83,9 @@ export type ApiShieldUserSchema = Resource<
  *
  * For current zone-level schema validation (v2), prefer the
  * `Cloudflare.SchemaValidation` resources.
- *
+ * @resource
+ * @product API Shield
+ * @category Application Security
  * @section Uploading a Schema
  * @example Upload an OpenAPI v3 schema
  * ```typescript
