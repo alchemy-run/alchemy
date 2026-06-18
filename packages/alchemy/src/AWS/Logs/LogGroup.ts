@@ -75,16 +75,6 @@ export interface LogGroup extends Resource<
  */
 export const LogGroup = Resource<LogGroup>("AWS.Logs.LogGroup");
 
-const retryLogGroupMutation = Effect.retry({
-  while: (
-    error: logs.OperationAbortedException | logs.ServiceUnavailableException,
-  ) =>
-    error._tag === "OperationAbortedException" ||
-    error._tag === "ServiceUnavailableException",
-  schedule: Schedule.exponential(100),
-  times: 8,
-});
-
 export const LogGroupProvider = () =>
   Provider.effect(
     LogGroup,
@@ -227,7 +217,13 @@ export const LogGroupProvider = () =>
                 deletionProtectionEnabled: news.deletionProtectionEnabled,
               })
               .pipe(
-                retryLogGroupMutation,
+                Effect.retry({
+                  while: (error) =>
+                    error._tag === "OperationAbortedException" ||
+                    error._tag === "ServiceUnavailableException",
+                  schedule: Schedule.exponential(100),
+                  times: 8,
+                }),
                 Effect.catchTag(
                   "ResourceAlreadyExistsException",
                   () => Effect.void,
@@ -249,7 +245,13 @@ export const LogGroupProvider = () =>
             if (news.kmsKeyId === undefined) {
               if (observedKmsKeyId !== undefined) {
                 yield* logs.disassociateKmsKey({ logGroupName }).pipe(
-                  retryLogGroupMutation,
+                  Effect.retry({
+                    while: (error) =>
+                      error._tag === "OperationAbortedException" ||
+                      error._tag === "ServiceUnavailableException",
+                    schedule: Schedule.exponential(100),
+                    times: 8,
+                  }),
                   Effect.catchTag(
                     "ResourceNotFoundException",
                     () => Effect.void,
@@ -262,7 +264,15 @@ export const LogGroupProvider = () =>
                   logGroupName,
                   kmsKeyId: news.kmsKeyId,
                 })
-                .pipe(retryLogGroupMutation);
+                .pipe(
+                  Effect.retry({
+                    while: (error) =>
+                      error._tag === "OperationAbortedException" ||
+                      error._tag === "ServiceUnavailableException",
+                    schedule: Schedule.exponential(100),
+                    times: 8,
+                  }),
+                );
             }
           }
 
@@ -278,7 +288,15 @@ export const LogGroupProvider = () =>
                 logGroupIdentifier: logGroupName,
                 deletionProtectionEnabled: desiredDeletionProtection,
               })
-              .pipe(retryLogGroupMutation);
+              .pipe(
+                Effect.retry({
+                  while: (error) =>
+                    error._tag === "OperationAbortedException" ||
+                    error._tag === "ServiceUnavailableException",
+                  schedule: Schedule.exponential(100),
+                  times: 8,
+                }),
+              );
           }
 
           // Sync retention - observed to desired.
@@ -290,7 +308,13 @@ export const LogGroupProvider = () =>
                   logGroupName,
                 })
                 .pipe(
-                  retryLogGroupMutation,
+                  Effect.retry({
+                    while: (error) =>
+                      error._tag === "OperationAbortedException" ||
+                      error._tag === "ServiceUnavailableException",
+                    schedule: Schedule.exponential(100),
+                    times: 8,
+                  }),
                   Effect.catchTag(
                     "ResourceNotFoundException",
                     () => Effect.void,
@@ -302,7 +326,15 @@ export const LogGroupProvider = () =>
                   logGroupName,
                   retentionInDays: news.retentionInDays,
                 })
-                .pipe(retryLogGroupMutation);
+                .pipe(
+                  Effect.retry({
+                    while: (error) =>
+                      error._tag === "OperationAbortedException" ||
+                      error._tag === "ServiceUnavailableException",
+                    schedule: Schedule.exponential(100),
+                    times: 8,
+                  }),
+                );
             }
           }
 
@@ -331,7 +363,14 @@ export const LogGroupProvider = () =>
                   upsert.map((tag) => [tag.Key, tag.Value]),
                 ),
               })
-              .pipe(retryLogGroupMutation);
+              .pipe(
+                Effect.retry({
+                  while: (error) =>
+                    error._tag === "ServiceUnavailableException",
+                  schedule: Schedule.exponential(100),
+                  times: 8,
+                }),
+              );
           }
           if (removed.length > 0) {
             yield* logs
@@ -339,7 +378,14 @@ export const LogGroupProvider = () =>
                 resourceArn: arn,
                 tagKeys: removed,
               })
-              .pipe(retryLogGroupMutation);
+              .pipe(
+                Effect.retry({
+                  while: (error) =>
+                    error._tag === "ServiceUnavailableException",
+                  schedule: Schedule.exponential(100),
+                  times: 8,
+                }),
+              );
           }
 
           yield* session.note(arn);
@@ -361,7 +407,13 @@ export const LogGroupProvider = () =>
               deletionProtectionEnabled: false,
             })
             .pipe(
-              retryLogGroupMutation,
+              Effect.retry({
+                while: (error) =>
+                  error._tag === "OperationAbortedException" ||
+                  error._tag === "ServiceUnavailableException",
+                schedule: Schedule.exponential(100),
+                times: 8,
+              }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
           yield* logs
@@ -369,7 +421,13 @@ export const LogGroupProvider = () =>
               logGroupName: output.logGroupName,
             })
             .pipe(
-              retryLogGroupMutation,
+              Effect.retry({
+                while: (error) =>
+                  error._tag === "OperationAbortedException" ||
+                  error._tag === "ServiceUnavailableException",
+                schedule: Schedule.exponential(100),
+                times: 8,
+              }),
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             );
         }),
