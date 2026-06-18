@@ -275,3 +275,15 @@ test(
   }),
   { timeout: 180_000 },
 );
+
+test(
+  "EffectWorker fetches a URL in a sandbox",
+  Effect.gen(function* () {
+    const { effectWorker } = yield* stack;
+    const url = effectWorker!;
+    const response = yield* HttpClient.get(new URL("/sandbox", url));
+    expect(response.status).toBe(200);
+    const body = (yield* response.text) as string;
+    expect(body).toBe("Hello from Sandbox container!");
+  }),
+);

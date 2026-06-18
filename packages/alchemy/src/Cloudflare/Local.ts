@@ -2,6 +2,7 @@ import * as Layer from "effect/Layer";
 import * as RpcServer from "../Local/RpcServer.ts";
 import { CloudflareAuth } from "./Auth/AuthProvider.ts";
 import * as CloudflareEnvironment from "./CloudflareEnvironment.ts";
+import { LocalContainerProvider } from "./Container/LocalContainerProvider.ts";
 import * as Credentials from "./Credentials.ts";
 import { localRuntimeServices } from "./LocalRuntime.ts";
 import { QueueProviderLocal } from "./Queue/Queue.ts";
@@ -18,6 +19,7 @@ const cloudflareServices = Layer.provide(
 
 Layer.mergeAll(
   LocalWorkerProvider(),
+  LocalContainerProvider(),
   QueueProviderLocal(),
   QueueConsumerProviderLocal(),
 ).pipe(

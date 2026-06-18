@@ -52,5 +52,5 @@ export default Alchemy.Stack(
       secondaryApiUrl: secondaryApi.url.as<string>(),
       deployedAt: announcement.deployedAt,
     };
-  }).pipe(Effect.provide(WorkerTagLive), Effect.provide(SecondaryApiLive)),
+  }).pipe(Effect.provide([WorkerTagLive, SecondaryApiLive])),
 );

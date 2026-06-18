@@ -1,4 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
+import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import type * as Config from "effect/Config";
@@ -372,7 +373,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   },
   {
     bindings?: WorkerBinding[];
-    containers?: { className: string }[];
+    containers?: { className: string; dev: ContainerImage | undefined }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<HyperdriveDevOrigin>>;
   },

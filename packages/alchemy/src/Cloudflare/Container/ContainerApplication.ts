@@ -1,23 +1,18 @@
+import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
-import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import * as Bundle from "../../Bundle/Bundle.ts";
 import {
   dockerBuild,
   materializeDockerfile,
   pushImage,
   writeContextFiles,
 } from "../../Bundle/Docker.ts";
-import {
-  findCwdForBundle,
-  getStableContextDir,
-} from "../../Bundle/TempRoot.ts";
+import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
-import { createPhysicalName } from "../../PhysicalName.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import {
   type Main,
   type PlatformProps,
@@ -25,15 +20,20 @@ import {
 } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import { Self } from "../../Self.ts";
 import * as Server from "../../Server/index.ts";
-import { Stack } from "../../Stack.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { isLiveId } from "../LocalRuntime.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import { Container, ContainerTypeId } from "./Container.ts";
+import {
+  buildFinalDockerfile,
+  bundleContainerProgram,
+  createContainerApplicationName,
+} from "./ContainerBundle.ts";
+import { LocalContainerProvider } from "./LocalContainerProvider.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
@@ -543,6 +543,7 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
     hash?: {
       image: string;
     };
+    dev: ContainerImage | undefined;
   },
   {
     /**
@@ -620,26 +621,20 @@ export const retryForContainerApplicationReadiness = <A, E, R>(
   );
 
 export const ContainerProvider = () =>
+  ProviderLayer.select({
+    live: () => LiveContainerProvider(),
+    local: () => LocalContainerProvider(),
+  });
+
+export const LiveContainerProvider = () =>
   Provider.effect(
     Container,
     Effect.gen(function* () {
-      const stack = yield* Stack;
       const { dotAlchemy } = yield* AlchemyContext;
-      const fs = yield* FileSystem.FileSystem;
-      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
 
       const telemetry = yield* CloudflareLogs;
 
-      const createApplicationName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          return (
-            name ??
-            (yield* createPhysicalName({
-              id,
-              lowercase: true,
-            }))
-          );
-        });
+      const createApplicationName = createContainerApplicationName;
 
       const findApplicationByName = Effect.fnUntraced(function* (name: string) {
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -697,7 +692,7 @@ export const ContainerProvider = () =>
         const { accountId } = yield* yield* CloudflareEnvironment;
 
         const runtime = props.runtime ?? "bun";
-        const { files, hash: bundleHash } = yield* bundleProgram({
+        const { files, hash: bundleHash } = yield* bundleContainerProgram({
           id,
           main,
           runtime,
@@ -724,178 +719,6 @@ export const ContainerProvider = () =>
 
         return { files, imageRef, imageHash };
       });
-
-      const bundleProgram = Effect.fnUntraced(function* ({
-        main,
-        runtime,
-        handler = "default",
-        isExternal = false,
-        external = [],
-      }: {
-        id: string;
-        main: string;
-        runtime: "bun" | "node";
-        handler: string | undefined;
-        isExternal?: boolean;
-        external?: string[];
-      }) {
-        const realMain = yield* fs.realPath(main);
-        const cwd = yield* findCwdForBundle(realMain);
-
-        const buildBundle = Effect.fnUntraced(function* (
-          entry: string,
-          plugins?: rolldown.RolldownPluginOption,
-        ) {
-          return yield* Bundle.build(
-            {
-              input: entry,
-              cwd,
-              external: [
-                "cloudflare:workers",
-                "cloudflare:workflows",
-                ...(runtime === "bun" ? ["bun", "bun:*"] : []),
-                ...external,
-              ],
-              platform: "node",
-              resolve: {
-                conditionNames:
-                  runtime === "bun"
-                    ? ["bun", "import", "module", "default"]
-                    : ["node", "import", "module", "default"],
-              },
-              plugins,
-              treeshake: true,
-            },
-            {
-              format: "esm",
-              sourcemap: false,
-              minify: true,
-              entryFileNames: "index.js",
-            },
-          );
-        });
-
-        const bundleOutput = isExternal
-          ? yield* buildBundle(realMain)
-          : yield* buildBundle(
-              realMain,
-              virtualEntryPlugin(
-                (importPath) => `
-${
-  runtime === "bun"
-    ? `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-const HttpServer = BunHttpServer;
-`
-    : `
-import { NodeServices } from "@effect/platform-node";
-import { NodeHttpServer } from "alchemy/Http";
-const HttpServer = NodeHttpServer;
-`
-}
-import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer } from "alchemy/Runtime";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Context from "effect/Context";
-import { MinimumLogLevel } from "effect/References";
-
-import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
-
-const tag = Context.Service("${Self.key}")
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  ${runtime === "bun" ? "BunServices.layer" : "NodeServices.layer"},
-  FetchHttpClient.layer,
-  // TODO(sam): wire this up to telemetry more directly
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.succeed(Stack, {
-  name: ${JSON.stringify(stack.name)},
-  stage: ${JSON.stringify(stack.stage)},
-  bindings: {},
-  resources: {}
-});
-
-const serverEffect = tag.pipe(
-  Effect.flatMap(func => func.RuntimeContext.exports),
-  Effect.flatMap(exports => exports.default),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(HttpServer()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          MinimumLogLevel,
-          process.env.DEBUG ? "Debug" : "Info",
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Container bootstrap starting...");
-await Effect.runPromise(serverEffect).catch((err) => {
-  console.error("Container bootstrap failed:", err);
-  process.exit(1);
-})`,
-              ),
-            );
-
-        // Rolldown can emit multiple chunk files (entry + shared chunks).
-        // Return every file so downstream code can materialize all of them
-        // into the Docker build context — dropping any of them produces a
-        // `Cannot find module './chunk-XXX.js'` runtime crash inside the
-        // container (with zero stdout, because it crashes before any user
-        // code runs).
-        const files = bundleOutput.files.map((f) => ({
-          path: f.path,
-          content:
-            typeof f.content === "string"
-              ? new TextEncoder().encode(f.content)
-              : f.content,
-        }));
-
-        return { files, hash: bundleOutput.hash };
-      });
-
-      const buildFinalDockerfile = (
-        userDockerfile: string | undefined,
-        runtime: "bun" | "node",
-        external: string[] = [],
-        autoInstallExternals = true,
-      ): string => {
-        const base =
-          userDockerfile?.trim() ??
-          (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
-        const runtimeBin = runtime === "bun" ? "bun" : "node";
-        const installCmd = runtime === "bun" ? "bun add" : "npm install";
-        const installStep =
-          autoInstallExternals && external.length > 0
-            ? `RUN ${installCmd} ${external.join(" ")}`
-            : "";
-        return [
-          base,
-          "",
-          "WORKDIR /app",
-          ...(installStep ? [installStep, ""] : []),
-          "COPY index.mjs /app/index.mjs",
-          // Copy any additional rolldown chunks (`chunk-XXX.js`,
-          // `BunServices-YYY.js`, …). The glob matches zero or more files;
-          // non-trivial bundles always emit at least one chunk, minimal
-          // bundles emit none and the COPY no-ops.
-          "COPY *.js /app/",
-          `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
-          "",
-        ].join("\n");
-      };
 
       const buildAndPushImage = Effect.fnUntraced(function* (
         id: string,
@@ -1232,7 +1055,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
       };
 
       return Container.Provider.of({
-        stables: ["applicationId", "accountId"],
+        stables: ["accountId", "applicationId"],
         diff: Effect.fnUntraced(function* ({
           id,
           olds = {},
@@ -1268,6 +1091,14 @@ await Effect.runPromise(serverEffect).catch((err) => {
 
           if (!output) {
             return undefined;
+          }
+
+          // A `dev:` applicationId means the resource only exists locally and
+          // the real application has never been created. Promote it by forcing
+          // an update so reconcile creates the live application.
+          if (!isLiveId(output.applicationId)) {
+            // Override stables to only include the accountId because the applicationId is going to change.
+            return { action: "update", stables: ["accountId"] } as const;
           }
 
           const { imageHash } = yield* computeImageHash(id, news);
@@ -1333,7 +1164,10 @@ await Effect.runPromise(serverEffect).catch((err) => {
           // so we can recover from out-of-band deletes or partial state
           // persistence failures.
           let existing: ContainerApplication["Attributes"] | undefined;
-          if (output?.applicationId) {
+          // A `dev:` applicationId never exists on Cloudflare — skip the
+          // cached-id fetch and fall through to the name lookup / create path
+          // so we promote the local resource to a real application.
+          if (output?.applicationId && isLiveId(output.applicationId)) {
             existing = yield* Containers.getContainerApplication({
               accountId: output.accountId,
               applicationId: output.applicationId,
@@ -1453,6 +1287,9 @@ await Effect.runPromise(serverEffect).catch((err) => {
           };
         }),
         delete: Effect.fnUntraced(function* ({ output }) {
+          // A `dev:` applicationId only exists locally — there is no live
+          // application to delete on Cloudflare.
+          if (!isLiveId(output.applicationId)) return;
           yield* Effect.logInfo(
             `Cloudflare Container delete: deleting ${output.applicationName}`,
           );
@@ -1483,6 +1320,12 @@ await Effect.runPromise(serverEffect).catch((err) => {
             });
 
           let attrs: ContainerApplication["Attributes"] | undefined;
+          // A `dev:` applicationId never exists on Cloudflare — look the
+          // application up by its (deterministic) name instead of hitting the
+          // API with a fake id.
+          if (output?.applicationId && !isLiveId(output.applicationId)) {
+            return yield* readByName(output.applicationName);
+          }
           if (output?.applicationId) {
             yield* Effect.logInfo(
               `Cloudflare Container read: checking ${output.applicationName}`,
@@ -1586,4 +1429,5 @@ const toAttributes = (
     | undefined,
   createdAt: application.createdAt,
   version: application.version,
+  dev: undefined,
 });
