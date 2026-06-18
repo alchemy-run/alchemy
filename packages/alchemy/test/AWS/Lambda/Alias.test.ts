@@ -12,7 +12,7 @@ const timeoutHandlerPath = new URL("./timeout-handler.ts", import.meta.url)
 const { test } = Test.make({ providers: AWS.providers() });
 
 test.provider(
-  "create, update, list, delete alias",
+  "create, update, list, replace, delete alias",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -23,6 +23,7 @@ test.provider(
       }: {
         envVersion: string;
         alias?: {
+          aliasName: string;
           functionVersion: string;
           description?: string;
           routingConfig?: Lambda.AliasRoutingConfiguration;
@@ -43,7 +44,7 @@ test.provider(
             ? yield* AWS.Lambda.Alias("LiveAlias", {
                 functionName: fn.functionName,
                 functionVersion: alias.functionVersion,
-                aliasName: "live",
+                aliasName: alias.aliasName,
                 description: alias.description,
                 routingConfig: alias.routingConfig,
               })
@@ -58,10 +59,12 @@ test.provider(
         "version 1",
       );
 
+      // --- create ---
       const created = yield* stack.deploy(
         program({
           envVersion: "1",
           alias: {
+            aliasName: "live",
             functionVersion: version1,
             description: "live v1",
           },
@@ -73,17 +76,23 @@ test.provider(
       expect(createdAlias.functionVersion).toBe(version1);
       expect(createdAlias.invokeArn).toContain(createdAlias.aliasArn);
 
-      const liveV1 = yield* Lambda.getAlias({
-        FunctionName: created.fn.functionName,
-        Name: "live",
-      });
-      expect(liveV1.FunctionVersion).toBe(version1);
-      expect(liveV1.Description).toBe("live v1");
+      // Assert the alias actually exists in the cloud.
+      const liveV1 = yield* getAliasOrUndefined(
+        created.fn.functionName,
+        "live",
+      );
+      expect(liveV1).toBeDefined();
+      expect(liveV1!.AliasArn).toBe(createdAlias.aliasArn);
+      expect(liveV1!.FunctionVersion).toBe(version1);
+      expect(liveV1!.Description).toBe("live v1");
+      expect(liveV1!.RoutingConfig?.AdditionalVersionWeights ?? {}).toEqual({});
 
+      // --- update (function version + weighted routing + description) ---
       const updatedFunction = yield* stack.deploy(
         program({
           envVersion: "2",
           alias: {
+            aliasName: "live",
             functionVersion: version1,
             description: "live v1",
           },
@@ -98,6 +107,7 @@ test.provider(
         program({
           envVersion: "2",
           alias: {
+            aliasName: "live",
             functionVersion: version2,
             description: "weighted live",
             routingConfig: {
@@ -110,6 +120,7 @@ test.provider(
       );
       const updatedAlias = updated.live!;
 
+      // Updating in place must keep the same ARN (not a replacement).
       expect(updatedAlias.aliasArn).toBe(createdAlias.aliasArn);
       expect(updatedAlias.functionVersion).toBe(version2);
       expect(updatedAlias.description).toBe("weighted live");
@@ -119,10 +130,25 @@ test.provider(
         },
       });
 
+      // Assert the cloud reflects the update.
+      const liveV2 = yield* getAliasOrUndefined(
+        updated.fn.functionName,
+        "live",
+      );
+      expect(liveV2).toBeDefined();
+      expect(liveV2!.AliasArn).toBe(createdAlias.aliasArn);
+      expect(liveV2!.FunctionVersion).toBe(version2);
+      expect(liveV2!.Description).toBe("weighted live");
+      expect(liveV2!.RoutingConfig?.AdditionalVersionWeights).toEqual({
+        [version1]: 0.25,
+      });
+
+      // --- update (clear description + routing) ---
       const cleared = yield* stack.deploy(
         program({
           envVersion: "2",
           alias: {
+            aliasName: "live",
             functionVersion: version2,
           },
         }),
@@ -134,21 +160,94 @@ test.provider(
       expect(clearedAlias.description).toBeUndefined();
       expect(clearedAlias.routingConfig).toBeUndefined();
 
+      // Assert the cloud cleared description and routing.
+      const liveCleared = yield* getAliasOrUndefined(
+        cleared.fn.functionName,
+        "live",
+      );
+      expect(liveCleared).toBeDefined();
+      expect(liveCleared!.Description ?? "").toBe("");
+      expect(
+        liveCleared!.RoutingConfig?.AdditionalVersionWeights ?? {},
+      ).toEqual({});
+
+      // --- replace (rename the alias) ---
+      // The provider's `diff` flags an aliasName change as a replacement, so a
+      // brand new alias is created and the old one deleted.
+      const replaced = yield* stack.deploy(
+        program({
+          envVersion: "2",
+          alias: {
+            aliasName: "stable",
+            functionVersion: version2,
+            description: "renamed",
+          },
+        }),
+      );
+      const replacedAlias = replaced.live!;
+
+      expect(replacedAlias.aliasName).toBe("stable");
+      // A replacement must mint a new ARN.
+      expect(replacedAlias.aliasArn).not.toBe(createdAlias.aliasArn);
+      expect(replacedAlias.functionVersion).toBe(version2);
+      expect(replacedAlias.description).toBe("renamed");
+
+      // The new alias exists in the cloud...
+      const stableAlias = yield* getAliasOrUndefined(
+        replaced.fn.functionName,
+        "stable",
+      );
+      expect(stableAlias).toBeDefined();
+      expect(stableAlias!.AliasArn).toBe(replacedAlias.aliasArn);
+      expect(stableAlias!.FunctionVersion).toBe(version2);
+      expect(stableAlias!.Description).toBe("renamed");
+
+      // ...and the old one was deleted as part of the replacement.
+      const oldLive = yield* getAliasOrUndefined(
+        replaced.fn.functionName,
+        "live",
+      );
+      expect(oldLive).toBeUndefined();
+
+      // --- list ---
       const provider = yield* Provider.findProvider(AWS.Lambda.Alias);
       const aliases = yield* provider.list();
       expect(
         aliases.some(
           (alias) =>
-            alias.functionName === updated.fn.functionName &&
-            alias.aliasName === "live",
+            alias.functionName === replaced.fn.functionName &&
+            alias.aliasName === "stable",
         ),
       ).toBe(true);
+
+      // --- delete ---
+      yield* stack.destroy();
+
+      const afterDestroy = yield* getAliasOrUndefined(
+        replaced.fn.functionName,
+        "stable",
+      );
+      expect(afterDestroy).toBeUndefined();
     }).pipe(
       Effect.tap(() => stack.destroy()),
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
   { timeout: 360_000 },
 );
+
+const getAliasOrUndefined = Effect.fn(function* (
+  functionName: string,
+  name: string,
+) {
+  return yield* Lambda.getAlias({
+    FunctionName: functionName,
+    Name: name,
+  }).pipe(
+    Effect.catchTag("ResourceNotFoundException", () =>
+      Effect.succeed(undefined),
+    ),
+  );
+});
 
 const publishVersion = Effect.fn(function* (
   functionName: string,
