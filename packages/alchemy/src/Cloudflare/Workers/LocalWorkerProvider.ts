@@ -238,12 +238,14 @@ export const LocalWorkerProvider = () =>
         props: WorkerPropsWithDev;
         bindings: ResourceBinding<Worker["Binding"]>[];
       }) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
         const name = yield* createWorkerName(id, props.name);
         const compatibility = getCompatibility(props);
         const workerBindings: BindingHook<BindingServices>[] = [
           Text.local("ALCHEMY_PHASE", "runtime"),
           Text.local("ALCHEMY_STACK_NAME", stack.name),
           Text.local("ALCHEMY_STAGE", stack.stage),
+          Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", accountId),
           ...Object.entries(props.env ?? {}).map(([key, value]) => {
             const unredacted = Redacted.isRedacted(value)
               ? Redacted.value(value)

@@ -63,9 +63,9 @@ const expectDescription = (
 ) =>
   getNamespace(accountId, name).pipe(
     Effect.repeat({
-      schedule: Schedule.spaced("1 second"),
+      schedule: Schedule.spaced("2 seconds"),
       until: (ns) => (ns.description ?? undefined) === expected,
-      times: 15,
+      times: 30,
     }),
     Effect.map((ns) => expect(ns.description ?? undefined).toEqual(expected)),
   );
@@ -190,6 +190,31 @@ test.provider(
       yield* stack.destroy();
     }).pipe(logLevel),
   { timeout: 240_000 },
+);
+
+test.provider(
+  "adopts the reserved default namespace without deleting it on teardown",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      // The account-provided `default` namespace always exists; adopting it
+      // is bindable but must never be created or torn down.
+      const adopted = yield* stack.deploy(program({ name: "default" }));
+      expect(adopted.namespace.name).toEqual("default");
+
+      const live = yield* getNamespace(accountId, "default");
+      expect(live.name).toEqual("default");
+
+      yield* stack.destroy();
+
+      // Destroy is a no-op for the default namespace — it must still exist.
+      const stillThere = yield* getNamespace(accountId, "default");
+      expect(stillThere.name).toEqual("default");
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );
 
 test.provider(

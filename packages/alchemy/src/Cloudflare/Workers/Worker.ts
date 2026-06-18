@@ -141,7 +141,8 @@ export type WorkerServices =
   | Worker
   | Request
   | WorkerExecutionContext
-  | WorkerEnvironment;
+  | WorkerEnvironment
+  | CloudflareEnvironment;
 
 export type WorkerShape = Main<WorkerServices>;
 
@@ -1477,6 +1478,11 @@ export const LiveWorkerProvider = () =>
             type: "plain_text",
             name: "ALCHEMY_STAGE",
             text: stack.stage,
+          },
+          {
+            type: "plain_text",
+            name: "ALCHEMY_CLOUDFLARE_ACCOUNT_ID",
+            text: accountId,
           },
         );
         // Add environment variables as metadata bindings

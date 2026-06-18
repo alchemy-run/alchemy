@@ -208,7 +208,7 @@ test.provider(
       expect(deployed.instance.tokenId).toEqual(deployed.token.id);
 
       const live = yield* aisearch
-        .readInstance({ accountId, id: deployed.instance.id })
+        .readInstance({ accountId, id: deployed.instance.instanceId })
         .pipe(
           Effect.retry({
             while: (e) => e._tag === "Forbidden",

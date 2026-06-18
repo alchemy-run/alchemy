@@ -6,8 +6,8 @@ import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import { isAiGateway } from "../AiGateway/AiGateway.ts";
-import { isAiSearchInstance } from "../AiSearch/Instance.ts";
-import { isAiSearchNamespace } from "../AiSearch/Namespace.ts";
+import { isAiSearchInstance } from "../AiSearch/AiSearchInstance.ts";
+import { isAiSearchNamespace } from "../AiSearch/AiSearchNamespace.ts";
 import { isAnalyticsEngineDataset } from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
 import { isArtifacts } from "../Artifacts/Artifacts.ts";
 import { isBrowser } from "../Browser/Browser.ts";
@@ -196,7 +196,7 @@ const toBinding = (
     return {
       type: "ai_search",
       name: bindingName,
-      instanceName: binding.id,
+      instanceName: binding.instanceId,
       namespace: binding.namespace,
     };
   } else if (isAiSearchNamespace(binding)) {

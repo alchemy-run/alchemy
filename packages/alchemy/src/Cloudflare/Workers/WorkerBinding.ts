@@ -7,8 +7,8 @@ import * as Binding from "../../Binding.ts";
 import type { Rpc } from "../../Rpc.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
 import type { AiGateway } from "../AiGateway/AiGateway.ts";
-import type { AiSearchInstance } from "../AiSearch/Instance.ts";
-import type { AiSearchNamespace } from "../AiSearch/Namespace.ts";
+import type { AiSearchInstance } from "../AiSearch/AiSearchInstance.ts";
+import type { AiSearchNamespace } from "../AiSearch/AiSearchNamespace.ts";
 import { AnalyticsEngineDataset } from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
 import { Artifacts } from "../Artifacts/Artifacts.ts";
 import { Browser } from "../Browser/Browser.ts";
@@ -26,8 +26,8 @@ import type { VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { Assets } from "./Assets.ts";
 import type { DurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
 import type { DynamicWorkerLoader } from "./DynamicWorkerLoader.ts";
-import type { VersionMetadata } from "./VersionMetadata.ts";
 import { makeRpcStub } from "./Rpc.ts";
+import type { VersionMetadata } from "./VersionMetadata.ts";
 import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
 
 export type WorkerBinding = Exclude<

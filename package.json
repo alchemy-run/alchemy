@@ -43,7 +43,7 @@
     "logs:otel": "doppler run -c dev --project alchemy-v2 -- bun alchemy logs ./stacks/otel.ts",
     "nuke:aws:run": "bash scripts/nuke-aws.sh --no-dry-run --no-prompt --prompt-delay 3",
     "nuke:aws": "bash scripts/nuke-aws.sh",
-    "nuke": "bun alchemy unsafe nuke ./stacks/nuke.ts  --exclude 'Cloudflare.Zone*' --exclude 'Cloudflare.Account' --exclude 'Cloudflare.Account.Member' --exclude 'Cloudflare.Dns*' --exclude 'Cloudflare.AccountApiToken' --exclude 'Cloudflare.Secret*'  --profile testing  --concurrency 32 --filter 'resource.Type === \"Cloudflare.Worker\" && resource.workerName?.startsWith(\"alchemy-state\") || resource.workerName === \"Api\"'",
+    "nuke": "bun alchemy unsafe nuke ./stacks/nuke.ts  --exclude 'Cloudflare.Zone*' --exclude 'Cloudflare.Account' --exclude 'Cloudflare.Account.Member' --exclude 'Cloudflare.Dns*' --exclude 'Cloudflare.AccountApiToken' --exclude 'Cloudflare.Secret*' --exclude 'Cloudflare.Organization'  --profile testing  --concurrency 32 --filter 'resource.Type === \"Cloudflare.Worker\" && resource.workerName?.startsWith(\"alchemy-state\") || resource.workerName === \"Api\"'",
     "opencode": "OPENCODE_EXPERIMENTAL_OXFMT=true opencode",
     "prepare": "husky",
     "publish:npm": "bun run build && bun run --filter alchemy publish:npm",
