@@ -1,4 +1,5 @@
 import { AlchemyContext } from "@/AlchemyContext.ts";
+import { ArtifactStore, createArtifactStore } from "@/Artifacts.ts";
 import { InstanceId } from "@/InstanceId.ts";
 import * as RpcProvider from "@/Local/RpcProvider.ts";
 import type { ProviderService } from "@/Provider.ts";
@@ -167,6 +168,7 @@ const useProvider = <A, E, R>(
         Layer.mergeAll(
           Layer.succeed(Stack, defaultStack),
           Layer.succeed(Stage, defaultStack.stage),
+          Layer.sync(ArtifactStore, createArtifactStore),
           Layer.succeed(AlchemyContext, {
             dotAlchemy: "/tmp/.alchemy",
             dev: false,
