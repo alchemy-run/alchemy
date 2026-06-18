@@ -12,6 +12,7 @@ import {
 } from "@distilled.cloud/cloudflare-runtime";
 import {
   Ai,
+  AiSearch,
   AnalyticsEngine,
   Artifacts,
   Assets,
@@ -555,7 +556,7 @@ export const LocalWorkerProvider = () =>
     }),
   );
 
-const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
+export const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
   const unsupported = () =>
     new WorkerValidationError({
       message: `${b.type} bindings are not supported in local mode`,
@@ -564,6 +565,10 @@ const toRuntimeBinding = Effect.fnUntraced(function* (b: WorkerBinding) {
   switch (b.type) {
     case "ai":
       return Ai.remote(b.name);
+    case "ai_search":
+      return AiSearch.remote(b.name, b.instanceName);
+    case "ai_search_namespace":
+      return AiSearch.remoteNamespace(b.name, b.namespace);
     case "analytics_engine":
       return AnalyticsEngine.local(b.name, b.dataset);
     case "artifacts":
