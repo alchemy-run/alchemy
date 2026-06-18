@@ -1479,6 +1479,11 @@ export const LiveWorkerProvider = () =>
             name: "ALCHEMY_STAGE",
             text: stack.stage,
           },
+          {
+            type: "plain_text",
+            name: "ALCHEMY_CLOUDFLARE_ACCOUNT_ID",
+            text: accountId,
+          },
         );
         // Add environment variables as metadata bindings
         if (news.env) {
