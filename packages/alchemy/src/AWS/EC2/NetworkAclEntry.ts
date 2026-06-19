@@ -1,6 +1,7 @@
 import type * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { isResolved } from "../../Diff.ts";
@@ -373,17 +374,31 @@ export const NetworkAclEntryProvider = () =>
             );
           }
 
-          // Re-read final state.
+          // Re-read final state. A freshly created/replaced entry can lag
+          // `describeNetworkAcls` by a moment (EC2 eventual consistency), so
+          // poll until it appears, bounded.
           const entry = yield* findEntry(
             news.networkAclId as string,
             news.ruleNumber,
             news.egress ?? false,
+          ).pipe(
+            Effect.flatMap((e) =>
+              e
+                ? Effect.succeed(e)
+                : Effect.fail({ _tag: "EntryNotYetVisible" } as const),
+            ),
+            Effect.retry({
+              while: (e) => e._tag === "EntryNotYetVisible",
+              schedule: Schedule.exponential("500 millis").pipe(
+                Schedule.both(Schedule.recurs(8)),
+              ),
+            }),
+            Effect.catchTag("EntryNotYetVisible", () =>
+              Effect.fail(
+                new Error("Network ACL Entry not found after reconcile"),
+              ),
+            ),
           );
-          if (!entry) {
-            return yield* Effect.fail(
-              new Error("Network ACL Entry not found after reconcile"),
-            );
-          }
           return toAttrs(news, entry);
         }),
 

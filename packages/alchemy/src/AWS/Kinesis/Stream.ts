@@ -363,9 +363,22 @@ const readStream = Effect.fn(function* ({
   }
 
   const summary = response.StreamDescriptionSummary;
-  const tagsResponse = yield* kinesis.listTagsForResource({
-    ResourceARN: summary.StreamARN,
-  });
+  // The stream can vanish between the describe above and these follow-up
+  // calls (e.g. another test tears its stream down while `list` hydrates) —
+  // a `ResourceNotFoundException` here just means it's gone, so report it as
+  // missing rather than failing the whole enumeration.
+  const tagsResponse = yield* kinesis
+    .listTagsForResource({
+      ResourceARN: summary.StreamARN,
+    })
+    .pipe(
+      Effect.catchTag("ResourceNotFoundException", () =>
+        Effect.succeed(undefined),
+      ),
+    );
+  if (!tagsResponse) {
+    return undefined;
+  }
   const policyResponse = yield* kinesis
     .getResourcePolicy({
       ResourceARN: summary.StreamARN,

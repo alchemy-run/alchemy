@@ -333,7 +333,14 @@ export const TableProvider = () =>
         error._tag === "InternalServerError" ||
         error._tag === "LimitExceededException" ||
         error._tag === "ResourceInUseException" ||
-        error._tag === "ResourceNotFoundException";
+        error._tag === "ResourceNotFoundException" ||
+        // Throttling: DynamoDB's control-plane API limits are low and the
+        // blanket SDK retry (10 attempts) is easily exhausted when the whole
+        // suite hammers create/update/describe concurrently. Give it the
+        // provider's much larger budget too.
+        error._tag === "ThrottlingException" ||
+        error._tag === "ProvisionedThroughputExceededException" ||
+        error._tag === "RequestLimitExceeded";
 
       const waitForControlPlaneConvergence = Schedule.fixed("1 second").pipe(
         Schedule.both(Schedule.recurs(120)),
@@ -649,7 +656,12 @@ export const TableProvider = () =>
       // resource" signal). Only retry on transient control-plane errors.
       const isRetryableReadError = (error: { _tag?: string }) =>
         error._tag === "InternalServerError" ||
-        error._tag === "LimitExceededException";
+        error._tag === "LimitExceededException" ||
+        // See `isRetryableControlPlaneError`: read-path describes throttle too
+        // under full-suite concurrency, so ride them out generously.
+        error._tag === "ThrottlingException" ||
+        error._tag === "ProvisionedThroughputExceededException" ||
+        error._tag === "RequestLimitExceeded";
 
       const readTableState = (tableName: string) =>
         Effect.gen(function* () {

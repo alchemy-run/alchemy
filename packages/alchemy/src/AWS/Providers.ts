@@ -612,11 +612,57 @@ export const providers = () =>
     Layer.orDie,
   );
 
+// Node socket-level error codes that indicate a transient network failure.
+const TRANSIENT_NETWORK_CODES = new Set([
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "EPIPE",
+  "ENETUNREACH",
+  "ENETDOWN",
+  "EHOSTUNREACH",
+  "EAI_AGAIN",
+]);
+// Transport-termination signatures that undici/node surface as plain messages
+// (e.g. a `fetch` whose socket dies mid-body throws `TypeError: terminated`).
+const TRANSIENT_NETWORK_PATTERN =
+  /terminated|socket hang up|other side closed|fetch failed|read ETIMEDOUT|ECONNRESET|ETIMEDOUT/i;
+
+// Walk an error's cause chain looking for a transient transport failure. Used
+// to tell a Decode/EmptyBody error caused by a dropped connection (retryable)
+// apart from one caused by a genuinely malformed body (permanent).
+const hasTransientNetworkCause = (cause: unknown, depth = 0): boolean => {
+  if (cause == null || depth > 8) return false;
+  if (typeof cause === "string") return TRANSIENT_NETWORK_PATTERN.test(cause);
+  if (typeof cause !== "object") return false;
+  const code = (cause as { code?: unknown }).code;
+  if (typeof code === "string" && TRANSIENT_NETWORK_CODES.has(code)) {
+    return true;
+  }
+  const message = (cause as { message?: unknown }).message;
+  if (typeof message === "string" && TRANSIENT_NETWORK_PATTERN.test(message)) {
+    return true;
+  }
+  const nested = (cause as { cause?: unknown }).cause;
+  return nested !== undefined && nested !== cause
+    ? hasTransientNetworkCause(nested, depth + 1)
+    : false;
+};
+
 // TODO(sam): remove this once it's upstreamed to distilled
 const isHttpTransportError = (error: unknown): boolean => {
   if (!HttpClientError.isHttpClientError(error)) return false;
-  const tag = error.reason._tag;
+  const reason = error.reason;
+  const tag = reason._tag;
   if (tag === "TransportError") return true;
+  // A Decode/EmptyBody error is only transient when its underlying cause is a
+  // terminated/reset connection (e.g. a `read ETIMEDOUT` while streaming the
+  // body surfaces as a `DecodeError`). A genuine malformed-body decode is
+  // permanent — retrying it would only waste the budget and mask the bug — so
+  // gate on the cause chain rather than the tag.
+  if (tag === "DecodeError" || tag === "EmptyBodyError") {
+    return hasTransientNetworkCause(reason);
+  }
   if (
     tag === "StatusCodeError" &&
     "response" in error.reason &&

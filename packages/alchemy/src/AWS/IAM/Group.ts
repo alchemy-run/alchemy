@@ -204,7 +204,7 @@ export const GroupProvider = () =>
                 Array.from(chunk).flatMap((page) => page.Groups ?? []),
               ),
             );
-            return yield* Effect.forEach(
+            const hydrated = yield* Effect.forEach(
               groups,
               (group) =>
                 Effect.gen(function* () {
@@ -222,9 +222,18 @@ export const GroupProvider = () =>
                     managedPolicyArns,
                     inlinePolicies,
                   };
-                }),
+                }).pipe(
+                  // A group can be deleted between `listGroups` and this
+                  // per-group hydration (e.g. a sibling test tearing its group
+                  // down) — `NoSuchEntityException` here just means it's gone,
+                  // so drop it rather than failing the whole enumeration.
+                  Effect.catchTag("NoSuchEntityException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                ),
               { concurrency: 10 },
             );
+            return hydrated.filter((g) => g !== undefined);
           }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;

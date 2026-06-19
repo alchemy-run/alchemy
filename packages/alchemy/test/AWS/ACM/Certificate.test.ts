@@ -3,7 +3,9 @@ import { Certificate } from "@/AWS/ACM/Certificate.ts";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -29,7 +31,23 @@ test.provider(
       expect(cert.certificateArn).toBeDefined();
 
       const provider = yield* Provider.findProvider(Certificate);
-      const all = yield* provider.list();
+      // ACM `ListCertificates` is eventually consistent — a freshly requested
+      // certificate can take a few seconds to surface in the paginated
+      // listing. Poll until our ARN appears, bounded.
+      const all = yield* Effect.gen(function* () {
+        const result = yield* provider.list();
+        if (!result.some((c) => c.certificateArn === cert.certificateArn)) {
+          return yield* Effect.fail(new CertificateNotListed());
+        }
+        return result;
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "CertificateNotListed",
+          schedule: Schedule.fixed("3 seconds").pipe(
+            Schedule.both(Schedule.recurs(20)),
+          ),
+        }),
+      );
 
       expect(all.some((c) => c.certificateArn === cert.certificateArn)).toBe(
         true,
@@ -39,3 +57,5 @@ test.provider(
     }),
   { timeout: 120_000 },
 );
+
+class CertificateNotListed extends Data.TaggedError("CertificateNotListed") {}
