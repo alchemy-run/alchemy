@@ -321,15 +321,19 @@ describe("DynamoDB Bindings", () => {
             ),
           );
 
-          const response = yield* HttpClient.execute(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/batch-execute-statement`),
-              {
-                first: { pk: "batch-statement#1", sk: "item" },
-                second: { pk: "batch-statement#2", sk: "item" },
-              },
-            ),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* fetchUntil(
+            HttpClient.execute(
+              HttpClientRequest.bodyJsonUnsafe(
+                HttpClientRequest.post(`${baseUrl}/batch-execute-statement`),
+                {
+                  first: { pk: "batch-statement#1", sk: "item" },
+                  second: { pk: "batch-statement#2", sk: "item" },
+                },
+              ),
+            ).pipe(Effect.flatMap((r) => r.json)),
+            (body) =>
+              Array.isArray(body?.responses) && body.responses.length === 2,
+          );
 
           expect((response as any).responses).toHaveLength(2);
         }),
@@ -442,33 +446,37 @@ describe("DynamoDB Bindings", () => {
             ),
           );
 
-          const response = yield* HttpClient.execute(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/transact-get`),
-              {
-                TransactItems: [
-                  {
-                    Get: {
-                      Table: sourceTableId,
-                      Key: {
-                        pk: { S: "transact-get#1" },
-                        sk: { S: "item" },
+          const response = yield* fetchUntil(
+            HttpClient.execute(
+              HttpClientRequest.bodyJsonUnsafe(
+                HttpClientRequest.post(`${baseUrl}/transact-get`),
+                {
+                  TransactItems: [
+                    {
+                      Get: {
+                        Table: sourceTableId,
+                        Key: {
+                          pk: { S: "transact-get#1" },
+                          sk: { S: "item" },
+                        },
                       },
                     },
-                  },
-                  {
-                    Get: {
-                      Table: sourceTableId,
-                      Key: {
-                        pk: { S: "transact-get#2" },
-                        sk: { S: "item" },
+                    {
+                      Get: {
+                        Table: sourceTableId,
+                        Key: {
+                          pk: { S: "transact-get#2" },
+                          sk: { S: "item" },
+                        },
                       },
                     },
-                  },
-                ],
-              },
-            ),
-          ).pipe(Effect.flatMap((r) => r.json));
+                  ],
+                },
+              ),
+            ).pipe(Effect.flatMap((r) => r.json)),
+            (body) =>
+              Array.isArray(body?.responses) && body.responses.length === 2,
+          );
 
           expect((response as any).responses).toHaveLength(2);
         }),

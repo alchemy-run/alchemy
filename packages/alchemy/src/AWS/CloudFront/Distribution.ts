@@ -658,6 +658,21 @@ export const DistributionProvider = () =>
               summaries,
               (summary) =>
                 getCurrent(summary.Id).pipe(
+                  // Hydrating every distribution fires three read calls each
+                  // (getDistribution + getDistributionConfig +
+                  // listTagsForResource). Across a busy account that trips
+                  // CloudFront's low read throttle, so ride it out.
+                  Effect.retry({
+                    while: (error) => error._tag === "ThrottlingException",
+                    // Steady, capped backoff: CloudFront's read throttle
+                    // resets quickly, so a fixed cadence drains far faster
+                    // than an exponential whose tail delay can balloon past
+                    // the test budget on a busy account.
+                    schedule: Schedule.spaced("1 second").pipe(
+                      Schedule.jittered,
+                      Schedule.both(Schedule.recurs(30)),
+                    ),
+                  }),
                   Effect.map((current) =>
                     current
                       ? toAttrs(

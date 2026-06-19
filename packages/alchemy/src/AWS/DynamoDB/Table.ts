@@ -959,15 +959,29 @@ export const TableProvider = () =>
               names,
               (tableName) =>
                 readTableState(tableName).pipe(
-                  // Hydrating every table fires four describe calls each;
-                  // across a busy account that trips DynamoDB's read throttle.
+                  // Hydrating every table fires four describe calls each.
+                  // Across a busy account this trips DynamoDB's read throttle,
+                  // and a table that isn't ACTIVE yet (a peer mid-create)
+                  // transiently rejects the continuous-backups/TTL describes
+                  // with ValidationException. Both are transient — retry to
+                  // converge so a table that *is* ours still hydrates fully.
                   Effect.retry({
-                    while: (e) => e._tag === "ThrottlingException",
+                    while: (e) =>
+                      e._tag === "ThrottlingException" ||
+                      e._tag === "ValidationException",
                     schedule: Schedule.exponential(250).pipe(
                       Schedule.jittered,
                       Schedule.both(Schedule.recurs(12)),
                     ),
                   }),
+                  // Last resort: if a foreign table never settles within the
+                  // retry budget (e.g. a peer is still mid-create/delete when
+                  // we give up), skip it rather than failing the whole
+                  // enumeration. Our own table is ACTIVE by the time list()
+                  // runs, so it always hydrates via the retry above.
+                  Effect.catchTag("ValidationException", () =>
+                    Effect.succeed(undefined),
+                  ),
                 ),
               { concurrency: 8 },
             );

@@ -367,7 +367,10 @@ test.provider(
       yield* stack.destroy();
       yield* assertQueueDeleted(source.queueUrl);
     }),
-  { timeout: 120_000 },
+  // Two deploy cycles plus two bounded (~40s each) SQS attribute-propagation
+  // waits and teardown can exceed 120s under full-suite load. The waits are
+  // bounded; give the end-to-end run headroom.
+  { timeout: 180_000 },
 );
 
 test.provider(
@@ -590,7 +593,10 @@ const waitForQueueAttributeMatch = Effect.fn(function* (
     }
   }).pipe(
     Effect.retry({
-      while: (e) => e._tag === "QueueAttributesNotReady",
+      // SQS is eventually consistent: a freshly-created queue can briefly
+      // 400 with `QueueDoesNotExist` on getQueueAttributes before it settles.
+      while: (e) =>
+        e._tag === "QueueAttributesNotReady" || e._tag === "QueueDoesNotExist",
       schedule: Schedule.fixed("500 millis").pipe(
         Schedule.both(Schedule.recurs(40)),
       ),
@@ -613,7 +619,10 @@ const waitForQueueAttributePredicate = Effect.fn(function* (
     }
   }).pipe(
     Effect.retry({
-      while: (e) => e._tag === "QueueAttributesNotReady",
+      // See `waitForQueueAttributeMatch`: ride out the brief post-create
+      // `QueueDoesNotExist` window as well as the predicate-not-yet-true case.
+      while: (e) =>
+        e._tag === "QueueAttributesNotReady" || e._tag === "QueueDoesNotExist",
       schedule: Schedule.fixed("1 second").pipe(
         Schedule.both(Schedule.recurs(40)),
       ),

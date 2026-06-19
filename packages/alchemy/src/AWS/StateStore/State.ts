@@ -359,9 +359,15 @@ export const createStateBucketName = (accountId: string, region: string) =>
  */
 const ensureStateBucket = (bucket: string, region: string) =>
   Effect.gen(function* () {
+    // An absent bucket surfaces as either `NotFound` (the HEAD 404) or
+    // `NoSuchBucket` depending on the namespace/path — treat both as "create
+    // it". Catching only `NotFound` let a deleted state bucket (e.g. after a
+    // nuke) escape as an uncaught `NoSuchBucket` instead of being recreated.
     const exists = yield* s3.headBucket({ Bucket: bucket }).pipe(
       Effect.map(() => true),
-      Effect.catchTag("NotFound", () => Effect.succeed(false)),
+      Effect.catchTag(["NotFound", "NoSuchBucket"], () =>
+        Effect.succeed(false),
+      ),
     );
     if (exists) {
       return;

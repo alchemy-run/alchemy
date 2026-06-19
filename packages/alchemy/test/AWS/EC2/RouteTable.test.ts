@@ -13,29 +13,36 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-test.provider("list enumerates the deployed RouteTable", (stack) =>
-  Effect.gen(function* () {
-    yield* stack.destroy();
+test.provider(
+  "list enumerates the deployed RouteTable",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
 
-    const { routeTable } = yield* stack.deploy(
-      Effect.gen(function* () {
-        const vpc = yield* Vpc("ListRouteTableVpc", {
-          cidrBlock: "10.0.0.0/16",
-        });
-        const routeTable = yield* RouteTable("ListRouteTable", {
-          vpcId: vpc.vpcId,
-        });
-        return { vpc, routeTable };
-      }),
-    );
+      const { routeTable } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const vpc = yield* Vpc("ListRouteTableVpc", {
+            cidrBlock: "10.0.0.0/16",
+          });
+          const routeTable = yield* RouteTable("ListRouteTable", {
+            vpcId: vpc.vpcId,
+          });
+          return { vpc, routeTable };
+        }),
+      );
 
-    const provider = yield* Provider.findProvider(RouteTable);
-    const all = yield* provider.list();
+      const provider = yield* Provider.findProvider(RouteTable);
+      const all = yield* provider.list();
 
-    expect(all.some((x) => x.routeTableId === routeTable.routeTableId)).toBe(
-      true,
-    );
+      expect(all.some((x) => x.routeTableId === routeTable.routeTableId)).toBe(
+        true,
+      );
 
-    yield* stack.destroy();
-  }).pipe(logLevel),
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  // VPC + RouteTable create, an account-wide DescribeRouteTables, then two
+  // destroys (with VPC dependency-ordered teardown) can exceed the default
+  // 120s under full-suite EC2 throttling load. All waits are bounded; give
+  // the end-to-end run headroom.
+  { timeout: 180_000 },
 );

@@ -536,18 +536,30 @@ export const SecurityGroupProvider = () =>
           // Ensure — create the SG when missing.
           if (sg === undefined) {
             yield* session.note(`Creating Security Group: ${groupName}`);
-            const result = yield* ec2.createSecurityGroup({
-              GroupName: groupName,
-              Description: news.description ?? "Managed by Alchemy",
-              VpcId: news.vpcId as string,
-              TagSpecifications: [
-                {
-                  ResourceType: "security-group",
-                  Tags: createTagsList(desiredTags),
-                },
-              ],
-              DryRun: false,
-            });
+            const result = yield* ec2
+              .createSecurityGroup({
+                GroupName: groupName,
+                Description: news.description ?? "Managed by Alchemy",
+                VpcId: news.vpcId as string,
+                TagSpecifications: [
+                  {
+                    ResourceType: "security-group",
+                    Tags: createTagsList(desiredTags),
+                  },
+                ],
+                DryRun: false,
+              })
+              .pipe(
+                // A just-created VPC can lag visibility to the SG service
+                // (EC2 eventual consistency), so the create races with
+                // `InvalidVpcID.NotFound`. Retry, bounded.
+                Effect.retry({
+                  while: (e) => e._tag === "InvalidVpcID.NotFound",
+                  schedule: Schedule.fixed("1 second").pipe(
+                    Schedule.both(Schedule.recurs(15)),
+                  ),
+                }),
+              );
             const newGroupId = result.GroupId! as SecurityGroupId;
             yield* session.note(`Security Group created: ${newGroupId}`);
             sg = yield* describeSecurityGroup(newGroupId);

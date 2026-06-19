@@ -29,35 +29,50 @@ const findZoneIdByName = route53.listHostedZones.pages({}).pipe(
 );
 
 // The hosted zone is a *standing* fixture — created once and reused across
-// runs (Route53 keys public-zone creation on `CallerReference`, so re-running
-// returns `HostedZoneAlreadyExists` and we look the existing zone up by name).
-// We deliberately do NOT delete the zone on teardown: deleting it would keep
-// the `CallerReference` claimed for a long propagation window, during which
-// `createHostedZone` returns `HostedZoneAlreadyExists` while `listHostedZones`
-// shows nothing — poisoning every subsequent run. A short retry absorbs the
-// brief list eventual-consistency right after a first-time create.
+// runs (we look it up by name first and only create on a genuine miss). We
+// deliberately do NOT delete the zone on teardown. A short retry absorbs the
+// brief list eventual-consistency right after a first-time create, when a
+// create can race ahead of the zone appearing in `listHostedZones`.
 const zoneNotYetListable =
   "hosted zone not found after HostedZoneAlreadyExists";
 
-const ensureZone = route53
-  .createHostedZone({ Name: zoneName, CallerReference: callerReference })
-  .pipe(
-    Effect.map((response) => normalizeId(response.HostedZone.Id)),
-    Effect.catchTag("HostedZoneAlreadyExists", () =>
-      findZoneIdByName.pipe(
-        Effect.flatMap((id) =>
-          id !== undefined
-            ? Effect.succeed(normalizeId(id))
-            : Effect.fail(new Error(zoneNotYetListable)),
-        ),
-      ),
-    ),
-    Effect.retry({
-      while: (e) => e instanceof Error && e.message === zoneNotYetListable,
-      schedule: Schedule.spaced("3 seconds"),
-      times: 10,
-    }),
-  );
+// List first, create only on a genuine miss. The previous create-first design
+// got permanently poisoned whenever the standing zone was deleted (e.g. by a
+// nuke): the stable `CallerReference` stays claimed during a long propagation
+// window, so `createHostedZone` keeps returning `HostedZoneAlreadyExists` while
+// `listHostedZones` still shows nothing. Looking the zone up first (and only
+// creating with a *fresh* CallerReference when it's truly absent) sidesteps
+// that trap — an absent/poisoned zone always re-creates cleanly, and a present
+// zone is reused without ever hitting the conflict path.
+const ensureZone = findZoneIdByName.pipe(
+  Effect.flatMap((existing) =>
+    existing !== undefined
+      ? Effect.succeed(normalizeId(existing))
+      : route53
+          .createHostedZone({
+            Name: zoneName,
+            CallerReference: `${callerReference}-${crypto.randomUUID()}`,
+          })
+          .pipe(
+            Effect.map((response) => normalizeId(response.HostedZone.Id)),
+            // A concurrent attempt won the race — fall back to the lookup.
+            Effect.catchTag("HostedZoneAlreadyExists", () =>
+              findZoneIdByName.pipe(
+                Effect.flatMap((id) =>
+                  id !== undefined
+                    ? Effect.succeed(normalizeId(id))
+                    : Effect.fail(new Error(zoneNotYetListable)),
+                ),
+              ),
+            ),
+          ),
+  ),
+  Effect.retry({
+    while: (e) => e instanceof Error && e.message === zoneNotYetListable,
+    schedule: Schedule.spaced("5 seconds"),
+    times: 24,
+  }),
+);
 
 // Create/delete the record set out of band. The Alchemy engine's own deploy
 // path is currently blocked by a distilled schema bug (see the file footer),

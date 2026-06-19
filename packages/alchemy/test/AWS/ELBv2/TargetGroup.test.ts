@@ -5,6 +5,7 @@ import * as Test from "@/Test/Vitest";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -20,10 +21,27 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const vpcResult = yield* EC2.describeVpcs({});
-      const vpcId =
-        vpcResult.Vpcs?.find((v) => v.IsDefault)?.VpcId ??
-        vpcResult.Vpcs?.[0]?.VpcId!;
+      // Parallel EC2 suites churn VPCs in the shared account/region, so a
+      // single describeVpcs can momentarily come back empty. Retry until at
+      // least one VPC is visible (prefer the default) before continuing.
+      const vpcId = yield* Effect.gen(function* () {
+        const vpcResult = yield* EC2.describeVpcs({});
+        const id =
+          vpcResult.Vpcs?.find((v) => v.IsDefault)?.VpcId ??
+          vpcResult.Vpcs?.[0]?.VpcId;
+        if (!id) {
+          return yield* Effect.fail(new Error("no VPC available yet"));
+        }
+        return id;
+      }).pipe(
+        Effect.retry({
+          while: (e) =>
+            e instanceof Error && e.message === "no VPC available yet",
+          schedule: Schedule.spaced("3 seconds").pipe(
+            Schedule.both(Schedule.recurs(10)),
+          ),
+        }),
+      );
       expect(vpcId).toBeDefined();
 
       const deployed = yield* stack.deploy(
