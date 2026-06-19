@@ -695,6 +695,10 @@ const awsRetryFactory: RetryFactory = (lastError) => ({
     ),
     capped(Duration.seconds(5)),
     jittered,
-    Schedule.both(Schedule.recurs(10)),
+    // Transient transport failures (e.g. a sustained `read ETIMEDOUT` blip
+    // against a control-plane endpoint) can outlast a 10-attempt budget. With
+    // the 5s cap above, the extra attempts add bounded backoff while making
+    // the network-flake recovery materially more robust.
+    Schedule.both(Schedule.recurs(15)),
   ),
 });

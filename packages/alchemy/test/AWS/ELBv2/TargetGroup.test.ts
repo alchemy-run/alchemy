@@ -24,7 +24,7 @@ test.provider(
       // Parallel EC2 suites churn VPCs in the shared account/region, so a
       // single describeVpcs can momentarily come back empty. Retry until at
       // least one VPC is visible (prefer the default) before continuing.
-      const vpcId = yield* Effect.gen(function* () {
+      const selectVpc = Effect.gen(function* () {
         const vpcResult = yield* EC2.describeVpcs({});
         const id =
           vpcResult.Vpcs?.find((v) => v.IsDefault)?.VpcId ??
@@ -42,18 +42,37 @@ test.provider(
           ),
         }),
       );
-      expect(vpcId).toBeDefined();
 
-      const deployed = yield* stack.deploy(
-        Effect.gen(function* () {
-          const targetGroup = yield* TargetGroup("ListTargetGroup", {
-            vpcId,
-            port: 80,
-            protocol: "HTTP",
-            targetType: "ip",
-          });
+      // Select a VPC and deploy against it as one unit, retrying the pair on a
+      // `ValidationError`: a non-default VPC chosen above can be deleted by a
+      // parallel EC2 suite before createTargetGroup uses it, which AWS rejects
+      // with a `ValidationError`. Re-selecting a fresh VPC and redeploying
+      // (idempotent against the scratch state) rides out the churn.
+      const deployed = yield* Effect.gen(function* () {
+        const vpcId = yield* selectVpc;
+        expect(vpcId).toBeDefined();
+        return yield* stack.deploy(
+          Effect.gen(function* () {
+            const targetGroup = yield* TargetGroup("ListTargetGroup", {
+              vpcId,
+              port: 80,
+              protocol: "HTTP",
+              targetType: "ip",
+            });
 
-          return { targetGroup };
+            return { targetGroup };
+          }),
+        );
+      }).pipe(
+        Effect.retry({
+          while: (e) =>
+            typeof e === "object" &&
+            e !== null &&
+            "_tag" in e &&
+            e._tag === "ValidationError",
+          schedule: Schedule.spaced("3 seconds").pipe(
+            Schedule.both(Schedule.recurs(8)),
+          ),
         }),
       );
 
