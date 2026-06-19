@@ -29,8 +29,8 @@ test(
   Effect.gen(function* () {
     const plan = yield* Effect.gen(function* () {
       yield* GitHub.Secrets({
-        owner: "alchemy-run",
-        repository: "alchemy-effect",
+        owner,
+        repository,
         secrets: {
           ALCHEMY_CONFIG_SECRET: Config.succeed("hunter2"),
         },
