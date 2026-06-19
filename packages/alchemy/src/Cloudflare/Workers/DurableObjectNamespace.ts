@@ -11,6 +11,7 @@ import type { Input } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { MainRpc, PlatformServices } from "../../Platform.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
 import { DurableObjectState } from "./DurableObjectState.ts";
@@ -100,7 +101,8 @@ export type DurableObjectServices =
   | DurableObjectState
   | WorkerServices
   | WorkerEnvironment
-  | PlatformServices;
+  | PlatformServices
+  | RuntimeContext;
 
 export interface DurableObjectNamespaceProps {
   /**

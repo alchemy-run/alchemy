@@ -5,7 +5,6 @@ import { Sandbox } from "./Sandbox.ts";
 
 export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
   "Agents",
-  // @ts-expect-error
   Effect.gen(function* () {
     const sandbox = yield* Cloudflare.Container.bind(Sandbox);
 

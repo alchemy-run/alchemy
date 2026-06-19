@@ -14,6 +14,7 @@ import type { Dependencies } from "./Dependencies.ts";
 import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
+import type { Named } from "./Named.ts";
 import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
@@ -50,13 +51,13 @@ export type Main<InitServices = never> = void | {
 
 export interface MainRpc<InitServices = never> {
   [key: string]:
-    | Effect.Effect<any, never, InitServices | PlatformServices>
-    | Stream.Stream<any, never, InitServices | PlatformServices>
+    | Effect.Effect<any, any, InitServices | PlatformServices>
+    | Stream.Stream<any, any, InitServices | PlatformServices>
     | ((
         ...args: any[]
       ) =>
-        | Effect.Effect<any, never, InitServices | PlatformServices>
-        | Stream.Stream<any, never, InitServices | PlatformServices>);
+        | Effect.Effect<any, any, InitServices | PlatformServices>
+        | Stream.Stream<any, any, InitServices | PlatformServices>);
 }
 
 // services provided to the Resource
@@ -96,30 +97,28 @@ export interface Platform<
       Resource & Rpc<Self> & Dependencies<Deps>,
       never,
       Resource["Providers"] | PropsReq
-    > & {
-      "alchemy/Id": Id;
-      make<InitReq = never>(
-        impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
-      ): Layer.Layer<
-        Self,
-        never,
-        | Resource["Providers"]
-        | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
-      >;
-      new (_: never): MakeShape<Shape, BaseShape> & {
-        /** @internal */
-        "alchemy/Id": Id;
+    > &
+      Named<Id> & {
+        make<InitReq = never>(
+          impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+        ): Layer.Layer<
+          Self,
+          never,
+          | Resource["Providers"]
+          | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
+        >;
+        new (_: never): MakeShape<Shape, BaseShape> & Named<Id>;
+        of(shape: Shape & MainShape): MakeShape<Shape, BaseShape>;
       };
-      of(shape: Shape & MainShape): MakeShape<Shape, BaseShape>;
-    };
   };
   <Self>(): {
     <
+      const Id extends string,
       Shape extends MainShape,
       PropsReq = never,
       InitReq extends Services | PlatformServices | Resource = never,
     >(
-      id: string,
+      id: Id,
       props:
         | InputProps<Resource["Props"]>
         | Effect.Effect<Resource["Props"], ConfigError.ConfigError, PropsReq>,
@@ -130,11 +129,12 @@ export interface Platform<
       | Resource["Providers"]
       | PropsReq
       | Exclude<InitReq, Services | PlatformServices | Resource>
-    > & {
-      new (_: never): MakeShape<Shape, BaseShape>;
-    };
-    <Shape, PropsReq = never>(
-      id: string,
+    > &
+      Named<Id> & {
+        new (_: never): MakeShape<Shape, BaseShape> & Named<Id>;
+      };
+    <const Id extends string, Shape, PropsReq = never>(
+      id: Id,
       props:
         | InputProps<Resource["Props"]>
         | Effect.Effect<
@@ -146,17 +146,18 @@ export interface Platform<
       Resource & Rpc<Self>,
       never,
       Resource["Providers"] | PropsReq
-    > & {
-      make<InitReq extends Services | PlatformServices | Resource = never>(
-        impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
-      ): Layer.Layer<
-        Self,
-        never,
-        | Resource["Providers"]
-        | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
-      >;
-      new (_: never): MakeShape<Shape, BaseShape>;
-    } & (<InitReq extends Services | PlatformServices | Resource = never>(
+    > &
+      Named<Id> & {
+        make<InitReq extends Services | PlatformServices | Resource = never>(
+          impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
+        ): Layer.Layer<
+          Self,
+          never,
+          | Resource["Providers"]
+          | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
+        >;
+        new (_: never): MakeShape<Shape, BaseShape> & Named<Id>;
+      } & (<InitReq extends Services | PlatformServices | Resource = never>(
         impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
       ) => Effect.Effect<
         Resource & Rpc<Self>,
@@ -179,27 +180,42 @@ export interface Platform<
   //   | Exclude<InitReq, Services | PlatformServices>
   // >;
   <
+    const Id extends string,
     Shape extends MainShape,
     PropsReq = never,
     InitReq extends Services | PlatformServices = never,
   >(
-    id: string,
+    id: Id,
     props:
       | InputProps<Resource["Props"]>
       | Effect.Effect<InputProps<Resource["Props"]>, never, PropsReq>,
     impl: Effect.Effect<Shape, ConfigError.ConfigError, InitReq>,
   ): Effect.Effect<
-    Resource & Rpc<Shape>,
+    Resource & Rpc<Shape> & Named<Id>,
     never,
     | Resource["Providers"]
     | PropsReq
     | Exclude<InitReq, Services | PlatformServices>
-  >;
+  > &
+    Named<Id>;
 }
 
-type MakeShape<Shape, BaseShape> = Shape extends never | undefined | void
+// Strip `void`/`undefined`/`never` from `Shape` before intersecting it with
+// `BaseShape`. This matters when `Shape` fails its `extends MainShape`
+// constraint (e.g. a `fetch` handler that leaks an error): TS clamps `Shape`
+// to the constraint union `void | { fetch: ... }`, and a *distributive*
+// conditional would split that into `BaseShape | ({ fetch } & BaseShape)` — a
+// union. Feeding a union into the `new (_: never): ...` construct signature
+// makes the base class a union type, which surfaces as the cryptic
+// ts(2509) "Base constructor return type ... is not an object type" instead of
+// the real assignability error on the `impl` argument. Excluding `void` here
+// keeps the construct-sig return a single object type, so only the actionable
+// error remains.
+type MakeShape<Shape, BaseShape> = [Exclude<Shape, void | undefined>] extends [
+  never,
+]
   ? BaseShape
-  : Shape & BaseShape;
+  : Exclude<Shape, void | undefined> & BaseShape;
 
 export const Platform = <
   R extends ResourceLike<

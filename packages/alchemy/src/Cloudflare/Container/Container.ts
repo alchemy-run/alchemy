@@ -94,11 +94,7 @@ export declare namespace Container {
   export interface Bound<Shape>
     extends
       Container,
-      Effect.Effect<
-        Container.Running<Shape>,
-        never,
-        DurableObjectState | Container.Running<Shape>
-      > {
+      Effect.Effect<Container.Running<Shape>, never, DurableObjectState> {
     "alchemy/Id": string;
   }
 

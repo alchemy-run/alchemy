@@ -23,7 +23,10 @@ export default class EffectfulContainerWorker extends Cloudflare.Worker<Effectfu
         }
 
         if (url.pathname === "/hello") {
-          const text = yield* objects.getByName("default").hello();
+          const text = yield* objects
+            .getByName("default")
+            .hello()
+            .pipe(Effect.orDie);
           return HttpServerResponse.text(text);
         }
 

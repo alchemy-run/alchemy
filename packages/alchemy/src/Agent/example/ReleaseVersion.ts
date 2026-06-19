@@ -5,6 +5,8 @@ import * as Chat from "effect/unstable/ai/Chat";
 import * as Cloudflare from "../../Cloudflare/index.ts";
 import { DevBox } from "./DevBox.ts";
 import { ReleaseBlogger } from "./ReleaseBlogger.ts";
+import { EvalLive } from "./tools/Eval.ts";
+import { WriteFileDevBox } from "./tools/Fs.ts";
 import { GrepLive } from "./tools/Grep.ts";
 import { SqlDurableObjectLive } from "./tools/Sql.ts";
 
@@ -35,14 +37,17 @@ export class ReleaseVersion extends Cloudflare.DurableObjectNamespace<ReleaseVer
       };
     }).pipe(
       Effect.provide(
-        Layer.mergeAll(
-          SqlDurableObjectLive,
-          GrepLive,
-          Cloudflare.layerChatDurableObject,
-          Cloudflare.WorkerLoader.layer(workerLoader),
-          Cloudflare.Container.layer(devBox, {
-            enableInternet: true,
-          }),
+        SqlDurableObjectLive.pipe(
+          Layer.provideMerge(WriteFileDevBox),
+          Layer.provideMerge(GrepLive),
+          Layer.provideMerge(EvalLive),
+          Layer.provideMerge(Cloudflare.layerChatDurableObject),
+          Layer.provideMerge(Cloudflare.WorkerLoader.layer(workerLoader)),
+          Layer.provideMerge(
+            Cloudflare.Container.layer(devBox, {
+              enableInternet: true,
+            }),
+          ),
         ),
       ),
     );

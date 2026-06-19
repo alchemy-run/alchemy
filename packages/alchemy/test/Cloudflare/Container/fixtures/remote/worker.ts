@@ -23,7 +23,17 @@ export default class RemoteContainerWorker extends Cloudflare.Worker<RemoteConta
         }
 
         return HttpServerResponse.text("ok");
-      }),
+      }).pipe(
+        Effect.catchTag("HttpClientError", (err) =>
+          Effect.succeed(
+            err.response
+              ? HttpServerResponse.fromClientResponse(err.response)
+              : HttpServerResponse.text(err.message, {
+                  status: 500,
+                }),
+          ),
+        ),
+      ),
     };
   }),
 ) {}

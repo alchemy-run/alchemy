@@ -17,7 +17,7 @@ const _agentEff = Effect.gen(function* () {
 
 const _gen = Effect.gen(function* () {
   // bind the Sandbox Container to the Agent DO
-  const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+  const sandbox = yield* Cloudflare.Container.bind(Sandbox);
 
   return Effect.gen(function* () {
     const state = yield* Cloudflare.DurableObjectState;
@@ -40,7 +40,7 @@ export const Agent2 = Cloudflare.DurableObjectNamespace(
   "Agents",
   Effect.gen(function* () {
     // bind the Sandbox Container to the Agent DO
-    const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+    const sandbox = yield* Cloudflare.Container.bind(Sandbox);
 
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
@@ -64,7 +64,7 @@ export class Agent3 extends Cloudflare.DurableObjectNamespace<Agent3>()(
   "Agents",
   Effect.gen(function* () {
     // bind the Sandbox Container to the Agent DO
-    const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+    const sandbox = yield* Cloudflare.Container.bind(Sandbox);
 
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;
@@ -88,7 +88,7 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
   "Agents",
   Effect.gen(function* () {
     // bind the Sandbox Container to the Agent DO
-    const sandbox = yield* Cloudflare.bindContainer(Sandbox);
+    const sandbox = yield* Cloudflare.Container.bind(Sandbox);
 
     return Effect.gen(function* () {
       const state = yield* Cloudflare.DurableObjectState;

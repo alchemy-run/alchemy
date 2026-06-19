@@ -18,7 +18,10 @@ export default class ExternalContainerWorker extends Cloudflare.Worker<ExternalC
         const url = new URL(request.url, "http://x");
 
         if (url.pathname === "/hello") {
-          const text = yield* objects.getByName("default").hello();
+          const text = yield* objects
+            .getByName("default")
+            .hello()
+            .pipe(Effect.orDie);
           return HttpServerResponse.text(text);
         }
 
