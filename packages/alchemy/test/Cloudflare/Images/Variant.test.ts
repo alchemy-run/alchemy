@@ -22,8 +22,12 @@ const getVariant = (accountId: string, variantId: string) =>
   images.getV1Variant({ accountId, variantId }).pipe(
     Effect.retry({
       while: (e) => e._tag === "VariantNotFound",
-      schedule: Schedule.exponential("500 millis"),
-      times: 8,
+      // Bounded fixed spacing (~20s). An uncapped `Schedule.exponential`
+      // reaches a 64s single delay by the 8th retry (~128s total), which on
+      // its own blows the 120s test timeout when consistency is slow.
+      schedule: Schedule.fixed("2 seconds").pipe(
+        Schedule.both(Schedule.recurs(10)),
+      ),
     }),
   );
 
@@ -35,8 +39,10 @@ const expectGone = (accountId: string, variantId: string) =>
     Effect.catchTag("VariantNotFound", () => Effect.void),
     Effect.retry({
       while: (e) => e._tag === "VariantNotDeleted",
-      schedule: Schedule.exponential("500 millis").pipe(
-        Schedule.both(Schedule.recurs(10)),
+      // Bounded fixed spacing (~30s) — see `getVariant` on why the previous
+      // uncapped exponential could run past the test timeout.
+      schedule: Schedule.fixed("2 seconds").pipe(
+        Schedule.both(Schedule.recurs(15)),
       ),
     }),
   );

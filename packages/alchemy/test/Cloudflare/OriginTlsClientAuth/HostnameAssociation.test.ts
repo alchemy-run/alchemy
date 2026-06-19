@@ -233,13 +233,14 @@ describe.sequential("HostnameAssociation", () => {
               ? Effect.void
               : Effect.fail({ _tag: "AssociationNotVoided" } as const),
           ),
-          // Frequent, bounded spaced poll (~120s): voiding settles through
-          // edge propagation asynchronously, so check every 5s rather than
-          // backing off exponentially (whose late gaps overshoot the timeout).
+          // Frequent, bounded spaced poll (~240s): voiding settles through
+          // edge propagation asynchronously and can occasionally take well
+          // past two minutes, so poll every 5s with a generous bound rather
+          // than backing off exponentially (whose late gaps overshoot).
           Effect.retry({
             while: (e) => e._tag === "AssociationNotVoided",
             schedule: Schedule.spaced("5 seconds"),
-            times: 24,
+            times: 48,
           }),
           Effect.map(() => true),
         );
@@ -250,8 +251,8 @@ describe.sequential("HostnameAssociation", () => {
     // API. Under a full concurrent `./test/Cloudflare` run this zone's cert
     // mutations contend with the sibling Certificate/HostnameCertificate
     // suites (each create/delete bounded-retries the per-zone 409), then a
-    // ~120s spaced void poll — give real headroom while staying bounded.
-    { timeout: 300_000 },
+    // ~240s spaced void poll — give real headroom while staying bounded.
+    { timeout: 420_000 },
   );
 
   test.provider(

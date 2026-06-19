@@ -298,7 +298,12 @@ export const SchemaValidationSchemaProvider = () =>
                   ),
                 ),
               ),
-              Effect.catchTag("InvalidRoute", () =>
+              // Skip zones schema-validation can't enumerate: `InvalidRoute`
+              // (feature not available on the zone), `ZonePurged` (the
+              // account-wide zone listing can momentarily include a zone that
+              // has since been purged), and `Forbidden` (the scoped token /
+              // zone plan doesn't grant schema-validation access).
+              Effect.catchTag(["InvalidRoute", "ZonePurged", "Forbidden"], () =>
                 Effect.succeed<SchemaValidationSchemaAttributes[]>([]),
               ),
             ),
