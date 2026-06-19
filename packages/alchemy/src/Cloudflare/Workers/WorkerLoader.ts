@@ -1,130 +1,83 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import { SingleShotGen } from "effect/Utils";
+import * as Layer from "effect/Layer";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
+import { taggedFunction } from "../../Util/effect.ts";
+import { asEffect } from "../../Util/index.ts";
 import { fromCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { Worker, WorkerEnvironment } from "./Worker.ts";
 
-type DynamicWorkerTypeId = "Cloudflare.DynamicWorker";
-const DynamicWorkerTypeId: DynamicWorkerTypeId = "Cloudflare.DynamicWorker";
+import type { WorkerLoader as _WorkerLoader } from "@cloudflare/workers-types";
 
-/**
- * Options for loading a dynamic worker at runtime.
- */
-export interface DynamicWorkerLoadOptions {
-  /**
-   * Compatibility date for the dynamic worker runtime.
-   */
+type WorkerLoaderTypeId = "Cloudflare.DynamicWorker";
+const WorkerLoaderTypeId: WorkerLoaderTypeId = "Cloudflare.DynamicWorker";
+
+export interface WorkerLoaderWorkerCode {
   compatibilityDate: string;
-  /**
-   * Name of the main module entry point (must match a key in `modules`).
-   */
+  compatibilityFlags?: string[];
+  allowExperimental?: boolean;
+  limits?: workerdResourceLimits;
   mainModule: string;
-  /**
-   * Map of module names to source code strings.
-   */
-  modules: Record<string, string>;
-  /**
-   * Environment bindings to pass to the dynamic worker.
-   */
-  env?: Record<string, unknown>;
-  /**
-   * Controls outbound network access. Set to `null` to block all outbound
-   * fetch/connect calls. Pass an RPC stub to intercept them.
-   */
-  globalOutbound?: null | unknown;
+  modules: Record<string, WorkerLoaderModule | string>;
+  env?: any;
+  globalOutbound?: Fetcher | null;
+  tails?: Fetcher[];
+  streamingTails?: Fetcher[];
 }
 
-/**
- * An entrypoint stub on a loaded dynamic worker.
- * Extends `Fetcher` for Effect-native HTTP, and proxies arbitrary
- * RPC method calls as Effects.
- */
-export type DynamicWorkerEntrypoint<Shape = unknown> = Fetcher & {
+export type WorkerEntrypoint<Shape = unknown> = Fetcher & {
   [K in keyof Shape]: Shape[K];
 };
 
-/**
- * A loaded dynamic worker instance. Extends `Fetcher` for Effect-native
- * HTTP on the default entrypoint, plus `.getEntrypoint()` for named ones.
- */
-export interface DynamicWorkerInstance extends Fetcher {
-  /**
-   * Get a named entrypoint (or the default entrypoint if no name is given).
-   * Returns a Fetcher + RPC stub where every method call yields an Effect.
-   */
-  getEntrypoint<Shape = unknown>(name?: string): DynamicWorkerEntrypoint<Shape>;
+export interface WorkerStub extends Fetcher {
+  getEntrypoint<Shape = unknown>(name?: string): WorkerEntrypoint<Shape>;
 }
 
-/**
- * The runtime handle obtained by `yield* Cloudflare.DynamicWorkerLoader(name)`.
- * Provides a `.load()` method for spinning up isolated dynamic workers.
- */
-export interface DynamicWorkerLoaderHandle {
-  Type: DynamicWorkerTypeId;
+export type WorkerLoader = {
+  Type: WorkerLoaderTypeId;
   name: string;
-  /**
-   * Load a dynamic worker with the given options. The returned instance
-   * exposes `.getEntrypoint()` and `.fetch()` for calling into the worker.
-   */
-  load(options: DynamicWorkerLoadOptions): DynamicWorkerInstance;
-}
+  get<Err = never, Req = never>(
+    name: string | null,
+    getCode: () =>
+      | WorkerLoaderWorkerCode
+      | Effect.Effect<WorkerLoaderWorkerCode, Err, Req>,
+  ): Effect.Effect<WorkerStub, Err, Req>;
+  load(
+    code: WorkerLoaderWorkerCode,
+  ): Effect.Effect<WorkerStub, never, RuntimeContext>;
+};
 
-/**
- * The native `worker_loader` runtime binding shape, as seen by an async
- * (non-Effect) Worker that declares the loader through `env`. `InferEnv` maps
- * a `DynamicWorkerLoader` marker in `env` to this type.
- */
-export interface DynamicWorkerLoaderBinding {
-  load(options: DynamicWorkerLoadOptions): {
-    getEntrypoint(name?: string): {
-      fetch(request: Request): Promise<Response>;
-      [method: string]: unknown;
-    };
-  };
-}
-
-/**
- * The Effect yielded when a `DynamicWorkerLoader` marker is used inside a
- * Worker init phase: it registers the `worker_loader` binding on the
- * surrounding Worker and resolves to a {@link DynamicWorkerLoaderHandle}.
- */
-type BindEffect = ReturnType<typeof bindLoader>;
-
-/**
- * Marker for a Cloudflare Worker Loader binding.
- *
- * It is a plain data structure (so it can be declared directly on a Worker's
- * `env`) that is **also** yieldable inside an Effect-native Worker. Yielding it
- * (`yield* Cloudflare.DynamicWorkerLoader(name)`) registers the binding on the
- * surrounding Worker and returns a {@link DynamicWorkerLoaderHandle} with
- * `.load()` — no separate `.bind(...)` step required.
- *
- * The divergence is achieved via `[Symbol.iterator]`: the object is
- * deliberately not an `Effect` (so `InferEnv` and the Worker `env` resolver
- * keep it as the native {@link DynamicWorkerLoaderBinding} rather than
- * `yield*`-ing it), but it is iterable as one when `yield*`-ed.
- */
-export interface DynamicWorkerLoader {
-  kind: DynamicWorkerTypeId;
+export interface WorkerLoaderEffect extends Effect.Effect<
+  WorkerLoader,
+  never,
+  WorkerEnvironment | Worker
+> {
+  "alchemy/Kind": WorkerLoaderTypeId;
   name: string;
-  asEffect(): BindEffect;
-  [Symbol.iterator](): SingleShotGen<BindEffect, DynamicWorkerLoaderHandle>;
 }
 
-export const isDynamicWorkerLoader = (
-  value: unknown,
-): value is DynamicWorkerLoader =>
+export const isWorkerLoader = (value: unknown): value is WorkerLoader =>
   typeof value === "object" &&
   value !== null &&
-  "kind" in value &&
-  (value as DynamicWorkerLoader).kind === DynamicWorkerTypeId;
+  "alchemy/Kind" in value &&
+  (value as WorkerLoaderEffect)["alchemy/Kind"] === WorkerLoaderTypeId;
+
+export interface WorkerLoaderClass extends Context.Service<
+  WorkerLoader,
+  WorkerLoader
+> {
+  (name?: string): WorkerLoaderEffect;
+  layer(loader: WorkerLoader): Layer.Layer<WorkerLoader>;
+  layer(id: string): Layer.Layer<WorkerLoader>;
+}
 
 /**
  * Load and run ephemeral Workers at runtime from inline JavaScript
  * modules.
  *
- * `DynamicWorkerLoader` registers a `worker_loader` binding on the
+ * `WorkerLoader` registers a `worker_loader` binding on the
  * parent Worker at deploy time. At runtime you call `.load()` with
  * inline module source code and get back a fully typed Worker
  * instance you can `fetch` or call RPC methods on. Each loaded
@@ -139,7 +92,7 @@ export const isDynamicWorkerLoader = (
  * @category Workers & Compute
  *
  * @section Creating a Loader
- * Yield `Cloudflare.DynamicWorkerLoader(name)` in your Worker's init
+ * Yield `Cloudflare.WorkerLoader(name)` in your Worker's init
  * phase to register the binding and get back a runtime handle. The
  * string argument becomes the binding name on the deployed Worker.
  *
@@ -157,7 +110,7 @@ export const isDynamicWorkerLoader = (
  *   Effect.gen(function* () {
  *     // Registers the `worker_loader` binding on this Worker and returns the
  *     // runtime handle in one step — no separate `.bind(...)`.
- *     const loader = yield* Cloudflare.DynamicWorkerLoader("LOADER");
+ *     const loader = yield* Cloudflare.WorkerLoader("LOADER");
  *
  *     return {
  *       fetch: Effect.gen(function* () {
@@ -165,7 +118,7 @@ export const isDynamicWorkerLoader = (
  *         const code = yield* request.text;
  *
  *         // Spin up an isolated, sandboxed Worker from inline source.
- *         const worker = loader.load({
+ *         const worker = yield* loader.load({
  *           compatibilityDate: "2026-01-28",
  *           mainModule: "worker.js",
  *           modules: {
@@ -196,7 +149,7 @@ export const isDynamicWorkerLoader = (
  * ```typescript
  * export const Worker = Cloudflare.Worker("Worker", {
  *   main: "./src/worker.ts",
- *   env: { LOADER: Cloudflare.DynamicWorkerLoader() },
+ *   env: { LOADER: Cloudflare.WorkerLoader() },
  * });
  *
  * export type WorkerEnv = Cloudflare.InferEnv<typeof Worker>;
@@ -273,57 +226,88 @@ export const isDynamicWorkerLoader = (
  * const greeting = yield* api.greet("world");
  * ```
  */
-export const DynamicWorkerLoader = (name = "LOADER"): DynamicWorkerLoader => {
-  const self: DynamicWorkerLoader = {
-    kind: DynamicWorkerTypeId,
-    name,
-    asEffect: () => bindLoader(name),
-    [Symbol.iterator]: () => new SingleShotGen(bindLoader(name)),
-  };
-  return self;
-};
+export const WorkerLoader: WorkerLoaderClass = Object.assign(
+  taggedFunction(
+    Context.Service()("Cloudflare.WorkerLoader"),
+    (name = "LOADER") =>
+      Object.assign(
+        Effect.gen(function* () {
+          yield* (yield* Worker).bind`${name}`({
+            bindings: [{ type: "worker_loader", name }],
+          });
 
-const bindLoader = Effect.fnUntraced(function* (name: string) {
-  const worker = yield* Worker;
+          const loader: _WorkerLoader = yield* Effect.all([
+            WorkerEnvironment,
+            ALCHEMY_PHASE,
+          ]).pipe(
+            Effect.flatMap(([env, phase]) => {
+              if (env === undefined || phase === "plan") {
+                return Effect.succeed(undefined as any);
+              }
+              const loader = env[name];
+              if (!loader) {
+                return Effect.die(
+                  new Error(`WorkerLoader '${name}' not found in env`),
+                );
+              }
+              return Effect.succeed(loader);
+            }),
+          );
 
-  yield* worker.bind`${name}`({
-    bindings: [{ type: "worker_loader", name } as any],
-  });
+          return {
+            Type: WorkerLoaderTypeId,
+            name,
+            load: (options) =>
+              Effect.sync(() =>
+                wrapWorkerStub(loader.load(unwrapWorkerLoader(options))),
+              ),
+            get: <Req = never, Err = never>(
+              name: string,
+              getCode: () => Effect.Effect<WorkerLoaderWorkerCode, Err, Req>,
+            ) =>
+              Effect.flatMap(Effect.context<Req>(), (context) =>
+                Effect.sync(() =>
+                  wrapWorkerEntrypoint(
+                    loader.get(name, () =>
+                      asEffect(getCode()).pipe(
+                        Effect.provide(context),
+                        Effect.map(unwrapWorkerLoader),
+                        Effect.runPromise,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          } satisfies WorkerLoader;
+        }),
+        {
+          kind: WorkerLoaderTypeId,
+          name,
+        },
+      ),
+  ),
+  {
+    layer: (loader: WorkerLoader) =>
+      Layer.succeed(Context.Service()("Cloudflare.WorkerLoader"), loader),
+  },
+) as any;
 
-  const binding = yield* Effect.all([WorkerEnvironment, ALCHEMY_PHASE]).pipe(
-    Effect.flatMap(([env, phase]) => {
-      if (env === undefined || phase === "plan") {
-        return Effect.succeed(undefined as any);
-      }
-      const loader = env[name];
-      if (!loader) {
-        return Effect.die(
-          new Error(`DynamicWorker '${name}' not found in env`),
-        );
-      }
-      return Effect.succeed(loader);
-    }),
-  );
-
-  const handle: DynamicWorkerLoaderHandle = {
-    Type: DynamicWorkerTypeId,
-    name,
-    load: (options: DynamicWorkerLoadOptions): DynamicWorkerInstance =>
-      wrapLoadedWorker(binding.load(options)),
-  };
-
-  return handle;
+const unwrapWorkerLoader = (loader: WorkerLoaderWorkerCode) => ({
+  ...loader,
+  globalOutbound: loader.globalOutbound?.raw,
+  tails: loader.tails?.map((t) => t.raw),
+  streamingTails: loader.streamingTails?.map((t) => t.raw),
 });
 
-const wrapEntrypoint = <Shape>(raw: any): DynamicWorkerEntrypoint<Shape> =>
+const wrapWorkerEntrypoint = <Shape>(raw: any): WorkerEntrypoint<Shape> =>
   Object.assign(makeRpcStub<any>(raw), fromCloudflareFetcher(raw));
 
-const wrapLoadedWorker = (raw: any): DynamicWorkerInstance => {
+const wrapWorkerStub = (raw: any): WorkerStub => {
   const defaultEntrypoint = fromCloudflareFetcher(raw.getEntrypoint());
   return {
     ...defaultEntrypoint,
     getEntrypoint: <Shape>(name?: string) =>
-      wrapEntrypoint<Shape>(
+      wrapWorkerEntrypoint<Shape>(
         name ? raw.getEntrypoint(name) : raw.getEntrypoint(),
       ),
   };

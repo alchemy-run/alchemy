@@ -726,18 +726,18 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * @section Dynamic Workers
- * `DynamicWorkerLoader` lets you spin up ephemeral Workers at runtime
+ * `WorkerLoader` lets you spin up ephemeral Workers at runtime
  * from inline JavaScript modules. This is useful for sandboxing
  * user-provided code or running untrusted scripts in isolation.
  *
  * @example Loading a dynamic Worker
  * ```typescript
  * // init
- * const loader = yield* Cloudflare.DynamicWorkerLoader("Loader");
+ * const loader = yield* Cloudflare.WorkerLoader("Loader");
  *
  * return {
  *   fetch: Effect.gen(function* () {
- *     const worker = loader.load({
+ *     const worker = yield* loader.load({
  *       compatibilityDate: "2026-01-28",
  *       mainModule: "worker.js",
  *       modules: {

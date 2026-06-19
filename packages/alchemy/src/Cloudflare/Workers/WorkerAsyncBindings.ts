@@ -25,11 +25,11 @@ import { isSecret } from "../SecretsStore/Secret.ts";
 import { isVectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isAssets } from "./Assets.ts";
 import { isDurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
-import { isDynamicWorkerLoader } from "./DynamicWorkerLoader.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import { isWorker, type Worker, type WorkerProps } from "./Worker.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
+import { isWorkerLoader } from "./WorkerLoader.ts";
 
 export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
   resource: Worker,
@@ -237,7 +237,7 @@ const toBinding = (
       type: "version_metadata",
       name: bindingName,
     };
-  } else if (isDynamicWorkerLoader(binding)) {
+  } else if (isWorkerLoader(binding)) {
     return {
       type: "worker_loader",
       name: bindingName,
