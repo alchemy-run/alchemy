@@ -25,10 +25,10 @@ import type { Secret } from "../SecretsStore/Secret.ts";
 import type { VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import type { Assets } from "./Assets.ts";
 import type { DurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
-import type { DynamicWorkerLoader } from "./DynamicWorkerLoader.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import type { VersionMetadata } from "./VersionMetadata.ts";
 import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
+import type { WorkerLoader } from "./WorkerLoader.ts";
 
 export type WorkerBinding = Exclude<
   workers.PutScriptRequest["metadata"]["bindings"],
@@ -65,7 +65,7 @@ export type WorkerBindingResource =
   | VectorizeIndex
   | Secret
   | Worker
-  | DynamicWorkerLoader
+  | WorkerLoader
   | VersionMetadata
   | DurableObjectNamespaceLike<any>;
 
