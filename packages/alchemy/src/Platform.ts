@@ -362,7 +362,7 @@ export const Platform = <
                           const key = sanitizeKey(
                             path.map((p) => p.toString()).join("_"),
                           );
-                          const node = yield* configProvider.get(path);
+                          const node = yield* configProvider.load(path);
                           if (phase === "plan" && node) {
                             // bind it to the RuntimeContext if running in plan phase
                             const output = Output.literal(
