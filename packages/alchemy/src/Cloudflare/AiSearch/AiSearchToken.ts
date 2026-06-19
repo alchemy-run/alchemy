@@ -260,14 +260,12 @@ export const AiSearchTokenProvider = () =>
           Effect.retry({
             while: (e) => e._tag === "TokenInUseByInstances",
             // The referencing instance tears down its managed Vectorize
-            // index asynchronously and can hold the token well past a
-            // minute. Cap the per-attempt delay at 5s and give it a
-            // generous overall budget (~2min) so the token delete waits
-            // out the instance instead of failing the teardown.
-            schedule: Schedule.exponential("1 second").pipe(
-              Schedule.either(Schedule.spaced("5 seconds")),
-            ),
-            times: 24,
+            // index asynchronously and can hold the token well past two
+            // minutes. Poll at a steady 5s and give it a generous overall
+            // budget (~5min) so the token delete reliably waits out the
+            // instance instead of racing the teardown and failing flakily.
+            schedule: Schedule.spaced("5 seconds"),
+            times: 60,
           }),
           Effect.catchTag("TokenNotFound", () => Effect.void),
         );

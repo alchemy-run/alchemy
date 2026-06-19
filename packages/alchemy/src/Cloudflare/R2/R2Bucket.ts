@@ -405,24 +405,35 @@ export const R2BucketProvider = () =>
       const listCustomDomains = Effect.fnUntraced(function* (
         bucketName: string,
         jurisdiction: R2Bucket.Jurisdiction,
+        // `NoSuchBucket` after a *create* is endpoint-consistency lag worth
+        // retrying. During *enumeration* (`list`), a bucket that 404s is one a
+        // parallel suite just deleted — it's genuinely gone, so retrying the
+        // consistency schedule only burns ~3s per churned bucket and is what
+        // pushes an account-wide `list` past its timeout. Default to retrying
+        // (the reconcile path); opt out for enumeration.
+        options?: { retryMissing?: boolean },
       ) {
         const { accountId } = yield* yield* CloudflareEnvironment;
-        return yield* r2
-          .listBucketDomainCustoms({
-            accountId,
-            bucketName,
-            jurisdiction,
-          })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "NoSuchBucket",
-              schedule: r2BucketEndpointConsistencySchedule,
-            }),
-            Effect.map((response) =>
-              response.domains.map(toCustomDomainAttributes),
-            ),
-            Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
-          );
+        const fetch = r2.listBucketDomainCustoms({
+          accountId,
+          bucketName,
+          jurisdiction,
+        });
+        return yield* (
+          options?.retryMissing === false
+            ? fetch
+            : fetch.pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "NoSuchBucket",
+                  schedule: r2BucketEndpointConsistencySchedule,
+                }),
+              )
+        ).pipe(
+          Effect.map((response) =>
+            response.domains.map(toCustomDomainAttributes),
+          ),
+          Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+        );
       });
 
       const reconcileCustomDomains = (
@@ -689,6 +700,9 @@ export const R2BucketProvider = () =>
                     (yield* listCustomDomains(
                       bucket.name,
                       bucket.jurisdiction,
+                      {
+                        retryMissing: false,
+                      },
                     )) ?? [];
                   const lifecycleRules = yield* r2
                     .getBucketLifecycle({
