@@ -142,7 +142,15 @@ describe.sequential("Setting", () => {
       const provider = yield* Provider.findProvider(
         Cloudflare.OriginTlsClientAuthSetting,
       );
-      const all = yield* provider.list();
+      // Ride out fresh-token 403 blips on the account-wide enumeration, like
+      // every other out-of-band call in this suite.
+      const all = yield* provider.list().pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+      );
 
       expect(all.length).toBeGreaterThan(0);
       expect(all.some((s) => s.zoneId === zoneId)).toBe(true);

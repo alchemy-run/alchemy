@@ -55,6 +55,25 @@ const getCertificate = (zoneId: string, certificateId: string) =>
     }),
   );
 
+// Re-uploading a PEM that collides with a not-yet-cleared tombstone (a prior
+// run's `pending_deletion` cert for the same PEM) resurrects it under the same
+// id, and the certificate can briefly read back as `pending_deletion` before
+// transitioning to a live status. Poll until it settles, bounded.
+const waitForLive = (zoneId: string, certificateId: string) =>
+  getCertificate(zoneId, certificateId).pipe(
+    Effect.flatMap((cert) =>
+      cert.status !== "pending_deletion" && cert.status !== "deleted"
+        ? Effect.succeed(cert)
+        : Effect.fail({ _tag: "CertificateNotLive" } as const),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "CertificateNotLive",
+      schedule: Schedule.spaced("3 seconds").pipe(
+        Schedule.both(Schedule.recurs(15)),
+      ),
+    }),
+  );
+
 // Cloudflare keeps deleted hostname client certificates readable by id as
 // `pending_deletion` / `deleted` tombstones, so "gone" means tombstoned or
 // 404.
@@ -134,7 +153,7 @@ test.provider(
       expect(cert.status).toBeDefined();
       expect(cert.issuer).toContain("Alchemy AOP Test Cert 3");
 
-      const actual = yield* getCertificate(zoneId, cert.certificateId);
+      const actual = yield* waitForLive(zoneId, cert.certificateId);
       expect(actual.id).toEqual(cert.certificateId);
       expect(actual.status).not.toEqual("deleted");
       expect(actual.status).not.toEqual("pending_deletion");

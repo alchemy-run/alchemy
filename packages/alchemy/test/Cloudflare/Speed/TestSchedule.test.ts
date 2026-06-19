@@ -14,6 +14,15 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
+// Cloudflare counts schedule *creations* against a per-day quota and does NOT
+// refund it on delete (Observatory docs: "Deleted tests are still counted as
+// part of the quota"), so neither the trailing `stack.destroy()` nor
+// `bun nuke` can reclaim budget. These tests each burn 1–2 creations per run
+// and exhaust `3/3` after ~1–2 same-day runs, so they are skipped by default.
+// Set RUN_SPEED_SCHEDULE_TESTS=1 to run them against an account/zone with
+// fresh daily budget.
+const runSpeedScheduleTests = !!process.env.RUN_SPEED_SCHEDULE_TESTS;
+
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
@@ -112,7 +121,7 @@ const logQuotaSkip = (what: string) =>
     `skipping ${what}: Cloudflare's daily schedule-creation quota for this URL is exhausted (TestScheduleQuotaReached)`,
   );
 
-test.provider(
+test.provider.skipIf(!runSpeedScheduleTests)(
   "create and delete a scheduled speed test",
   (stack) =>
     Effect.gen(function* () {
@@ -156,7 +165,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(!runSpeedScheduleTests)(
   "changing the frequency converges in place",
   (stack) =>
     Effect.gen(function* () {
@@ -221,7 +230,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(!runSpeedScheduleTests)(
   "changing the region triggers replacement",
   (stack) =>
     Effect.gen(function* () {
@@ -368,7 +377,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(!runSpeedScheduleTests)(
   "list enumerates the deployed schedule across zones",
   (stack) =>
     Effect.gen(function* () {

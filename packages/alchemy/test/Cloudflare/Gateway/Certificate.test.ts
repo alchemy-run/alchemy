@@ -12,6 +12,14 @@ import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
+// Cloudflare caps Zero Trust certificate *generation* at 3 per 24h per account
+// and does NOT refund that rolling counter on delete (it is separate from the
+// "10 active certificates" count limit), so neither `stack.destroy()` nor
+// `bun nuke` can reclaim budget. The replacement test mints two certificates
+// per run, so it exhausts the quota fastest — skip it by default. Set
+// RUN_GATEWAY_CERT_TESTS=1 to run it against an account with fresh daily budget.
+const runGatewayCertTests = !!process.env.RUN_GATEWAY_CERT_TESTS;
+
 const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
@@ -144,7 +152,7 @@ test.provider(
   { timeout: 120_000 },
 );
 
-test.provider(
+test.provider.skipIf(!runGatewayCertTests)(
   "changing the validity period replaces the certificate",
   (stack) =>
     Effect.gen(function* () {

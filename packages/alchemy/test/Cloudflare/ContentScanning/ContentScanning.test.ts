@@ -152,7 +152,17 @@ describe.sequential("ContentScanning", () => {
       const zoneId = yield* resolveZoneId;
 
       const provider = yield* Provider.findProvider(Cloudflare.ContentScanning);
-      const all = yield* provider.list();
+      // The freshly-minted scoped token propagates eventually-consistently, so
+      // the account-wide enumeration intermittently 403s (`Forbidden`) or 401s
+      // (`Unauthorized`). Both are transient here — ride out the blip like
+      // every other out-of-band call in this suite.
+      const all = yield* provider.list().pipe(
+        Effect.retry({
+          while: (e) => e._tag === "Forbidden" || e._tag === "Unauthorized",
+          schedule: forbiddenRetrySchedule,
+          times: 8,
+        }),
+      );
 
       expect(all.length).toBeGreaterThan(0);
       expect(all.some((s) => s.zoneId === zoneId)).toBe(true);

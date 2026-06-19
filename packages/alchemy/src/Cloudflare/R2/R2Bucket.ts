@@ -713,7 +713,16 @@ export const R2BucketProvider = () =>
                     domains,
                     lifecycleRules,
                   };
-                }),
+                }).pipe(
+                  // The custom-domain endpoint intermittently 500s ("Failed to
+                  // access or modify the bucket policy"). Ride out the transient
+                  // blip with a bounded retry rather than aborting the whole
+                  // enumeration.
+                  Effect.retry({
+                    while: (e) => e._tag === "InternalServerError",
+                    schedule: r2TransientServerErrorSchedule,
+                  }),
+                ),
               { concurrency: 10 },
             );
           }),
@@ -925,6 +934,13 @@ export const R2BucketProvider = () =>
 // treated as terminal for idempotent deletes.
 const r2BucketEndpointConsistencySchedule = Schedule.exponential(100).pipe(
   Schedule.both(Schedule.recurs(5)),
+);
+
+// R2 sub-resource reads (notably the custom-domain endpoint, which touches the
+// bucket's public-access policy) can return a transient 500 ("Failed to access
+// or modify the bucket policy"). Ride out the blip with a short bounded retry.
+const r2TransientServerErrorSchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.both(Schedule.recurs(6)),
 );
 
 // Distilled widened generated string enums to open unions (`string & {}`); the
