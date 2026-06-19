@@ -4,7 +4,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 
 /**
  * Effect-native Worker fixture for the Worker Loader binding. Yielding
- * `Cloudflare.DynamicWorkerLoader(name)` during Init registers the
+ * `Cloudflare.WorkerLoader(name)` during Init registers the
  * `worker_loader` binding on this Worker and returns the runtime handle in one
  * step — no separate `.bind(...)`. The fetch handler loads an isolated dynamic
  * Worker from inline source and proxies the request to it over Effect-native

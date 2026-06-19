@@ -77,7 +77,7 @@ export const fromCloudflareFetcher = (
     );
 
   return {
-    raw: fetcher,
+    raw: fetcher as cf.Fetcher,
     connect: (address, options) =>
       fromCloudflareSocket(fetcher.connect(address, options)),
     fetch: (

@@ -93,7 +93,7 @@ describe("Effectable: deliberate non-Effect binding markers", () => {
     ],
     ["Browser", Browser({})],
     ["VersionMetadata", VersionMetadata({})],
-    ["DynamicWorkerLoader", WorkerLoader()],
+    ["WorkerLoader", WorkerLoader()],
   ];
 
   for (const [name, marker] of markers) {

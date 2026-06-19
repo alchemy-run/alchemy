@@ -1,3 +1,54 @@
+## v2.0.0-beta.57
+
+### &nbsp;&nbsp;&nbsp;🚀 Features
+
+- **aws**:
+  - VpcOrigin, ListenerRule, TrustStore, HostedZone, HealthCheck &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/631 [<samp>(6f952)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6f9528ac)
+  - **kms**:
+    - Add key and alias resources &nbsp;-&nbsp; by **José Netto** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/641 [<samp>(28f7d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/28f7d3d0)
+  - **lambda**:
+    - Add alias resource &nbsp;-&nbsp; by **José Netto** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/625 [<samp>(a9e1c)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a9e1cc53)
+    - Support function concurrency &nbsp;-&nbsp; by **José Netto** in https://github.com/alchemy-run/alchemy-effect/issues/628 [<samp>(6857a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6857a3ee)
+  - **logs**:
+    - Support log group config &nbsp;-&nbsp; by **José Netto** and **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/630 [<samp>(63172)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/63172cb1)
+- **cli**:
+  - Support creating user api tokens &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(5d226)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/5d226b30)
+- **cloudflare**:
+  - Containers in alchemy dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/636 [<samp>(f3bf2)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/f3bf27c1)
+  - **ai-search**: AiSearch, AiSearchInstance and AiSearchNamespace &nbsp;-&nbsp; by **Sam Goodwin** in https://github.com/alchemy-run/alchemy-effect/issues/639 [<samp>(6831d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6831d0b1)
+
+### &nbsp;&nbsp;&nbsp;🐞 Bug Fixes
+
+- Upgrade to effect beta.84 and fix ConfigProvider.get -> .load &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(340e4)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/340e4109)
+- Upgrade effect beta 84 &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(06a6f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/06a6fffc)
+- **aws**:
+  - Fix Scheduler everntual consistency durability &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(763d1)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/763d1b71)
+  - Harden Distribution, Table, SecurityGrouip, Rule OIDCConnectionProvider, Policu, SAMLProvider, StreamConsumer and StateStore &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(affe6)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/affe67e3)
+  - Harden SQS Queue tests, SNS Topic, Provider network error retries, ELB Target Group tests &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(83b4a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/83b4a407)
+  - Harden SQS QUeue against DLQ eventual consistency &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(b2814)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/b2814e7e)
+- **build**:
+  - Handle relative and absolute paths in Build.Command &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(fd3c0)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/fd3c071e)
+- **bundle**:
+  - Avoid watching node_modules in alchemy dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/646 [<samp>(1d72a)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1d72aa44)
+- **cli**:
+  - Cloudflare create-token supports selecting permissions &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(1674d)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1674d2cd)
+- **cloudflare**:
+  - Malformed request promoting queue consumer from dev &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/647 [<samp>(a2787)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/a278763b)
+  - Harden PageRule, SchemaValidation SChema, Images Variant, OiriginPostQuantum, HostnameAssociation, Pages Project &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(e8e6f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/e8e6f059)
+  - Remove DispatchNamespaceScript &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(20371)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/20371abb)
+  - Retry MnnConfigMissing in MagicNetworkMonitoring Rule &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(75832)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/75832278)
+  - **workers**:
+    - Support local AI Search bindings &nbsp;-&nbsp; by **Jonathan Beckman** in https://github.com/alchemy-run/alchemy-effect/issues/642 [<samp>(3ee0f)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/3ee0fd3d)
+    - Preserve local service entrypoints &nbsp;-&nbsp; by **Jonathan Beckman** in https://github.com/alchemy-run/alchemy-effect/issues/643 [<samp>(6bbcb)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/6bbcb4b4)
+- **core**:
+  - Make diff.stables override provider.stables &nbsp;-&nbsp; by **John Royal** in https://github.com/alchemy-run/alchemy-effect/issues/635 [<samp>(470a5)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/470a5658)
+- **state**:
+  - Make writes in LocalState atomic &nbsp;-&nbsp; by **Sam Goodwin** [<samp>(1c596)</samp>](https://github.com/alchemy-run/alchemy-effect/commit/1c596afb)
+
+##### &nbsp;&nbsp;&nbsp;&nbsp;[View changes on GitHub](https://github.com/alchemy-run/alchemy-effect/compare/v2.0.0-beta.56...HEAD)
+
+---
+
 ## v2.0.0-beta.56
 
 ### &nbsp;&nbsp;&nbsp;🚀 Features
