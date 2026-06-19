@@ -9,7 +9,7 @@ import { Resource } from "../Resource.ts";
 import {
   buildImage,
   imageId,
-  inspectImage,
+  inspectImageInfo,
   pullImage,
   pushImageToRegistry,
   repositoryFromImageRef,
@@ -231,7 +231,7 @@ export const ImageProvider = () =>
     list: () => Effect.succeed([]),
     read: Effect.fnUntraced(function* ({ id, olds, output }) {
       const ref = output?.imageRef ?? localImageRef(id, olds);
-      const image = yield* inspectImage(ref);
+      const image = yield* inspectImageInfo(ref);
       if (!image) return undefined;
       return {
         kind: "Image" as const,
@@ -285,7 +285,7 @@ export const ImageProvider = () =>
       } else {
         const sourceRef = imageSourceRef(news.image);
         if (!isLocalImageSource(news.image)) {
-          const source = yield* inspectImage(sourceRef);
+          const source = yield* inspectImageInfo(sourceRef);
           if (!source) {
             yield* session.note(`Pulling Docker image: ${sourceRef}`);
             yield* pullImage(sourceRef);

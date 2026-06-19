@@ -446,22 +446,22 @@ export const inspectJson = <A>(
     ),
   );
 
-export const inspectVolume = (name: string) =>
+export const inspectVolumeInfo = (name: string) =>
   inspectJson<VolumeInfo[]>(["volume", "inspect", name]).pipe(
     Effect.map((volumes) => volumes?.[0]),
   );
 
-export const inspectNetwork = (name: string) =>
+export const inspectNetworkInfo = (name: string) =>
   inspectJson<NetworkInfo[]>(["network", "inspect", name]).pipe(
     Effect.map((networks) => networks?.[0]),
   );
 
-export const inspectContainer = (name: string) =>
+export const inspectContainerInfo = (name: string) =>
   inspectJson<ContainerInfo[]>(["container", "inspect", name]).pipe(
     Effect.map((containers) => containers?.[0]),
   );
 
-export const inspectImage = (imageRef: string) =>
+export const inspectImageInfo = (imageRef: string) =>
   inspectJson<ImageInspectInfo[]>(["image", "inspect", imageRef]).pipe(
     Effect.map((images) => images?.[0]),
   );

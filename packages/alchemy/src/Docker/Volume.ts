@@ -6,7 +6,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
   createVolume,
-  inspectVolume,
+  inspectVolumeInfo,
   normalizeLabels,
   removeVolume,
   type VolumeInfo,
@@ -118,7 +118,7 @@ export const VolumeProvider = () =>
     list: () => Effect.succeed([]),
     read: Effect.fnUntraced(function* ({ id, instanceId, olds, output }) {
       const name = yield* volumeName(id, olds ?? {}, instanceId);
-      const info = yield* inspectVolume(name);
+      const info = yield* inspectVolumeInfo(name);
       if (!info) return undefined;
       const attrs = toVolumeAttributes(info);
       return output ? attrs : Unowned(attrs);
@@ -150,7 +150,7 @@ export const VolumeProvider = () =>
     }) {
       const name =
         output?.name ?? (yield* volumeName(id, news ?? {}, instanceId));
-      const existing = yield* inspectVolume(name);
+      const existing = yield* inspectVolumeInfo(name);
       if (existing) {
         return toVolumeAttributes(existing);
       }
@@ -161,7 +161,7 @@ export const VolumeProvider = () =>
         driverOpts: news?.driverOpts,
         labels: normalizeLabels(news?.labels),
       });
-      const info = yield* inspectVolume(createdName);
+      const info = yield* inspectVolumeInfo(createdName);
       if (!info) {
         return yield* Effect.die(
           `Docker volume was created but could not be inspected: ${createdName}`,

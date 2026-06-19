@@ -1,5 +1,4 @@
 export * from "./Container.ts";
-export * from "./DockerApi.ts";
 export * from "./Image.ts";
 export * from "./Network.ts";
 export * from "./Providers.ts";

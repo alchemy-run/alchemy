@@ -6,7 +6,7 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
   createNetwork,
-  inspectNetwork,
+  inspectNetworkInfo,
   removeNetwork,
   type NetworkInfo,
 } from "./DockerApi.ts";
@@ -97,7 +97,7 @@ export const NetworkProvider = () =>
     list: () => Effect.succeed([]),
     read: Effect.fnUntraced(function* ({ id, instanceId, olds, output }) {
       const name = yield* networkName(id, olds ?? {}, instanceId);
-      const info = yield* inspectNetwork(name);
+      const info = yield* inspectNetworkInfo(name);
       if (!info) return undefined;
       const attrs = toNetworkAttributes(info);
       return output ? attrs : Unowned(attrs);
@@ -129,7 +129,7 @@ export const NetworkProvider = () =>
     }) {
       const name =
         output?.name ?? (yield* networkName(id, news ?? {}, instanceId));
-      const existing = yield* inspectNetwork(name);
+      const existing = yield* inspectNetworkInfo(name);
       if (existing) {
         return toNetworkAttributes(existing);
       }
@@ -146,7 +146,7 @@ export const NetworkProvider = () =>
           () => Effect.succeed(undefined),
         ),
       );
-      const info = yield* inspectNetwork(createdId ?? name);
+      const info = yield* inspectNetworkInfo(createdId ?? name);
       if (!info) {
         return yield* Effect.die(
           `Docker network could not be inspected: ${name}`,

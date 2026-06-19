@@ -11,7 +11,7 @@ import {
   disconnectNetwork,
   durationToNanoseconds,
   DockerCommandError,
-  inspectContainer,
+  inspectContainerInfo,
   normalizeDuration,
   removeContainer,
   startContainer,
@@ -28,6 +28,7 @@ import {
   type VolumeMapping,
 } from "./DockerApi.ts";
 
+export { DockerCommandError };
 export type {
   ContainerRuntimeInfo,
   ContainerStatus,
@@ -35,6 +36,7 @@ export type {
   HealthcheckConfig,
   NetworkMapping,
   PortMapping,
+  SecretString,
   VolumeMapping,
 };
 
@@ -86,12 +88,17 @@ export interface Container extends Resource<
   }
 > {}
 
-const inspectRuntime = (
-  container: string | { name: string },
+/**
+ * Inspect a Docker container by name and return normalized runtime details.
+ *
+ * This is a small public wrapper around Docker's raw inspect output. It returns
+ * the stable data Alchemy callers typically need, including bound host ports.
+ */
+export const inspectContainer = (
+  name: string,
 ): Effect.Effect<ContainerRuntimeInfo, DockerCommandError, any> =>
   Effect.gen(function* () {
-    const name = typeof container === "string" ? container : container.name;
-    const info = yield* inspectContainer(name);
+    const info = yield* inspectContainerInfo(name);
     if (!info) {
       return yield* Effect.fail(
         new DockerCommandError({
@@ -152,14 +159,10 @@ const inspectRuntime = (
  *   networks: [{ name: network.name, aliases: ["postgres"] }],
  *   start: true,
  * });
- * const runtime = yield* Docker.Container.inspect(postgresName);
+ * const runtime = yield* Docker.inspectContainer(postgresName);
  * ```
  */
-export const Container = Resource<Container>("Docker.Container")({
-  inspect: inspectRuntime,
-});
-
-export const inspect = inspectRuntime;
+export const Container = Resource<Container>("Docker.Container");
 
 const containerName = (id: string, props: ContainerProps, instanceId: string) =>
   props.name
@@ -373,7 +376,7 @@ const reconcileNetworksAndState = Effect.fn(function* (
   if (props.start === false && info.State.Status === "running") {
     yield* stopContainer(info.Id);
   }
-  return yield* inspectContainer(name);
+  return yield* inspectContainerInfo(name);
 });
 
 const createAndInspect = Effect.fn(function* (
@@ -398,7 +401,7 @@ const createAndInspect = Effect.fn(function* (
   if (props.start) {
     yield* startContainer(id);
   }
-  const info = yield* inspectContainer(name);
+  const info = yield* inspectContainerInfo(name);
   if (!info) {
     return yield* Effect.die(
       `Docker container was created but could not be inspected: ${name}`,
@@ -412,7 +415,7 @@ export const ContainerProvider = () =>
     list: () => Effect.succeed([]),
     read: Effect.fnUntraced(function* ({ id, instanceId, olds, output }) {
       const name = yield* containerName(id, olds, instanceId);
-      const info = yield* inspectContainer(name);
+      const info = yield* inspectContainerInfo(name);
       if (!info) return undefined;
       const attrs = toContainerAttributes(info, imageRefOf(olds.image));
       return output ? attrs : Unowned(attrs);
@@ -469,7 +472,7 @@ export const ContainerProvider = () =>
     }) {
       const name = yield* containerName(id, news, instanceId);
       const imageRef = imageRefOf(news.image);
-      const live = yield* inspectContainer(name);
+      const live = yield* inspectContainerInfo(name);
 
       if (live && shouldReplaceContainer(imageRef, news, live)) {
         yield* session.note(`Replacing Docker container: ${name}`);

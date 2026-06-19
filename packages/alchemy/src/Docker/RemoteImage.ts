@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { imageId, inspectImage, pullImage } from "./DockerApi.ts";
+import { imageId, inspectImageInfo, pullImage } from "./DockerApi.ts";
 
 export interface RemoteImageProps {
   /** Docker image name, without tag. */
@@ -74,7 +74,7 @@ export const RemoteImageProvider = () =>
     list: () => Effect.succeed([]),
     read: Effect.fnUntraced(function* ({ olds, output }) {
       const ref = output?.imageRef ?? remoteImageRef(olds);
-      const image = yield* inspectImage(ref);
+      const image = yield* inspectImageInfo(ref);
       if (!image) return undefined;
       return {
         kind: "RemoteImage" as const,

@@ -1,6 +1,6 @@
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Docker from "@/Docker";
-import { inspectContainer, runDockerCommand } from "@/Docker/DockerApi";
+import { inspectContainerInfo, runDockerCommand } from "@/Docker/DockerApi";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
 import * as Test from "@/Test/Vitest";
@@ -336,7 +336,7 @@ describe.sequential("Docker resources", () => {
           );
           expect(container.name).toBe(containerName);
           expect(container.state).toBe("running");
-          const runtime = yield* Docker.Container.inspect(container);
+          const runtime = yield* Docker.inspectContainer(container.name);
           expect(runtime.ports["80/tcp"]).toBe(hostPort);
         } finally {
           yield* stack.destroy().pipe(Effect.ignore);
@@ -373,7 +373,7 @@ describe.sequential("Docker resources", () => {
           const second = yield* deployWithAlias("new-alias");
           expect(second.id).toBe(first.id);
 
-          const info = yield* inspectContainer(containerName);
+          const info = yield* inspectContainerInfo(containerName);
           const aliases =
             info?.NetworkSettings.Networks?.[networkName]?.Aliases ?? [];
           expect(aliases).toContain("new-alias");
