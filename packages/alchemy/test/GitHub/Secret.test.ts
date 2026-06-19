@@ -1,9 +1,15 @@
 import * as GitHub from "@/GitHub";
+import * as Plan from "@/Plan";
 import * as Provider from "@/Provider";
 import { destroy } from "@/RemovalPolicy";
+import * as Stack from "@/Stack";
+import { inMemoryState } from "@/State";
+import { Stage } from "@/Stage";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 
@@ -17,6 +23,36 @@ const logLevel = Effect.provideService(
 // Deploying a secret needs an owner + repository the token can write to.
 const owner = process.env.GITHUB_TEST_OWNER ?? "";
 const repository = process.env.GITHUB_TEST_REPOSITORY ?? "";
+
+test(
+  "Secrets resolves Config values before wrapping them as Redacted",
+  Effect.gen(function* () {
+    const plan = yield* Effect.gen(function* () {
+      yield* GitHub.Secrets({
+        owner: "alchemy-run",
+        repository: "alchemy-effect",
+        secrets: {
+          ALCHEMY_CONFIG_SECRET: Config.succeed("hunter2"),
+        },
+      }) as Effect.Effect<any>;
+    }).pipe(
+      Stack.make({
+        name: "github-secret-test",
+        providers: Layer.empty,
+        state: inMemoryState(),
+      }),
+      Effect.provideService(Stage, "test"),
+      Effect.flatMap(Plan.make),
+      Effect.provide(GitHub.providers()),
+    ) as Effect.Effect<Plan.Plan<any>>;
+
+    const resource = Object.values(plan.resources)[0]! as any;
+    expect(resource.action).toBe("create");
+    const value = resource.props.value;
+    expect(Redacted.isRedacted(value)).toBe(true);
+    expect(Redacted.value(value)).toBe("hunter2");
+  }),
+);
 
 // `list()` for GitHub.Secret is non-listable (pattern (e) in
 // processes/list-support.md): secrets are keyed by their parent
