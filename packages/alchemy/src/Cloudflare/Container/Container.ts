@@ -437,7 +437,7 @@ export const Container: Platform<
       const className = namespace.name;
 
       yield* worker.bind`${container.LogicalId}`({
-        containers: [{ className }],
+        containers: [{ className, dev: container.dev }],
       });
 
       // TODO(sam): register this in the Container Execution Context
