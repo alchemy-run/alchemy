@@ -25,13 +25,8 @@ import * as Clank from "../../Util/Clank.ts";
 import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
 import { fileLogger } from "../../Util/FileLogger.ts";
 
-import {
-  envFile,
-  formatLocalTimestamp,
-  instrumentCommand,
-  parseSince,
-  profile,
-} from "./_shared.ts";
+import { formatLocalTimestamp } from "../../Tail.ts";
+import { envFile, instrumentCommand, parseSince, profile } from "./_shared.ts";
 
 /**
  * Build the Cloudflare auth + environment layer stack used by every

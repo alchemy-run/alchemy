@@ -14,9 +14,9 @@ import { fileLogger } from "../../Util/FileLogger.ts";
 
 import { AuthProviders } from "../../Auth/AuthProvider.ts";
 import { withProfileOverride } from "../../Auth/Profile.ts";
+import { TAIL_COLORS, TAIL_RESET, formatLocalTimestamp } from "../../Tail.ts";
 import {
   envFile,
-  formatLocalTimestamp,
   importStack,
   instrumentCommand,
   parseResourceFilter,
@@ -25,8 +25,6 @@ import {
   resourceFilter,
   script,
   stage,
-  TAIL_COLORS,
-  TAIL_RESET,
 } from "./_shared.ts";
 
 const logsLimit = Flag.integer("limit").pipe(
