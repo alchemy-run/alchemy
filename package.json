@@ -41,9 +41,7 @@
     "install:clean": "rm -rf node_modules examples/**/node_modules alchemy/node_modules && bun i",
     "logs:otel:prod": "bun logs:otel --profile prod --stage prod",
     "logs:otel": "doppler run -c dev --project alchemy-v2 -- bun alchemy logs ./stacks/otel.ts",
-    "nuke:aws:run": "bash scripts/nuke-aws.sh --no-dry-run --no-prompt --prompt-delay 3",
-    "nuke:aws": "bash scripts/nuke-aws.sh",
-    "nuke": "bun alchemy unsafe nuke ./stacks/nuke.ts  --exclude 'Cloudflare.Zone*' --exclude 'Cloudflare.Account' --exclude 'Cloudflare.Account.Member' --exclude 'Cloudflare.Dns*' --exclude 'Cloudflare.AccountApiToken' --exclude 'Cloudflare.Secret*' --exclude 'Cloudflare.Organization' --exclude 'AWS.IAM.User' --exclude 'AWS.IAM.SAMLProvider' --exclude 'AWS.IAM.OpenIDConnectProvider' --exclude 'AWS.IAM.AccountAlias' --exclude 'AWS.IAM.AccountPasswordPolicy' --exclude 'AWS.IAM.LoginProfile' --exclude 'AWS.IAM.AccessKey' --exclude 'AWS.Organizations.*'  --profile testing  --concurrency 32 --filter 'resource.Type === \"Cloudflare.Worker\" && resource.workerName?.startsWith(\"alchemy-state\") || resource.workerName === \"Api\"' --filter 'resource.Type === \"AWS.IAM.Role\" && ([\"alchemy-github-actions\", \"distilled-github-oidc-role\"].includes(resource.roleName) || resource.roleName?.startsWith(\"AWSReservedSSO\"))'",
+    "nuke": "bash scripts/nuke.sh",
     "opencode": "OPENCODE_EXPERIMENTAL_OXFMT=true opencode",
     "prepare": "husky",
     "publish:npm": "bun run build && bun run --filter alchemy publish:npm",
@@ -51,7 +49,8 @@
     "sync:submodules": "git submodule sync --recursive && git submodule update --init --recursive",
     "test:canary": "SMOKE_CANARY=1 bun test --only-failures ./test/smoke.test.ts",
     "test:examples": "bun run --filter ./examples/cloudflare-worker --filter ./examples/cloudflare-worker-auth --filter ./examples/cloudflare-worker-async --filter ./examples/cloudflare-tanstack --filter ./examples/cloudflare-tanstack-start-solid --filter ./examples/aws-lambda test && bun format",
-    "test": "cd ./packages/alchemy && bun vitest run "
+    "test": "cd ./packages/alchemy && bun vitest run",
+    "test:fast": "FAST=1 NO_SLOW_TESTS=1 cd ./packages/alchemy && bun vitest run"
   },
   "workspaces": {
     "packages": [
