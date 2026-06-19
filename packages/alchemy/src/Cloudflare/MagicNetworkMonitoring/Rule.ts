@@ -1,6 +1,7 @@
 import * as mnm from "@distilled.cloud/cloudflare/magic-network-monitoring";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 
 import { Unowned } from "../../AdoptPolicy.ts";
@@ -288,6 +289,16 @@ export const MagicNetworkMonitoringRuleProvider = () =>
             prefixMatch: news.prefixMatch,
           })
           .pipe(
+            // The account MNM config is a freshly-created dependency (the test
+            // and real deployments create it immediately before the rule).
+            // Cloudflare returns `MnmConfigMissing` (code 1004) until the new
+            // config has propagated, so ride out that consistency window.
+            Effect.retry({
+              while: (e) => e._tag === "MnmConfigMissing",
+              schedule: Schedule.exponential("500 millis").pipe(
+                Schedule.both(Schedule.recurs(8)),
+              ),
+            }),
             Effect.catchTag("DuplicateMnmRuleName", (error) =>
               findByName(accountId, name).pipe(
                 Effect.flatMap((existing) =>
