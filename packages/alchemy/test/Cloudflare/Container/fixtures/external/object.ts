@@ -5,7 +5,7 @@ import { ExternalContainer } from "./container.ts";
 
 /**
  * Durable Object that binds and starts the {@link ExternalContainer} and
- * proxies an HTTP request to the nginx server running on port 80 inside it.
+ * proxies an HTTP request to the nginx server running on port 8080 inside it.
  */
 export class ExternalContainerObject extends Cloudflare.DurableObjectNamespace<ExternalContainerObject>()(
   "ExternalContainerObject",
@@ -18,7 +18,7 @@ export class ExternalContainerObject extends Cloudflare.DurableObjectNamespace<E
       return {
         hello: () =>
           Effect.gen(function* () {
-            const { fetch } = yield* container.getTcpPort(80);
+            const { fetch } = yield* container.getTcpPort(8080);
             const response = yield* fetch(
               HttpClientRequest.get("http://container/"),
             );

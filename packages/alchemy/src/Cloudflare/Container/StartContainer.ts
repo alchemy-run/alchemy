@@ -38,10 +38,22 @@ export const start = Effect.fnUntraced(function* <Image extends Container>(
 
   yield* ensureRunning;
 
+  // Poll the container roughly every 2–3s while it cold-starts, but bound the
+  // total wait (~3 min) so an unreachable container surfaces a `ContainerError`
+  // instead of hanging the Durable Object request forever. Without this cap a
+  // container that never accepts connections on the requested port (e.g. it
+  // crash-loops, or the process never binds the port) would retry indefinitely
+  // and the worker request would never return.
   const startupBackoff = Schedule.exponential(100, 1.5).pipe(
     Schedule.modifyDelay((_, delay) =>
-      Effect.succeed(Duration.max(delay, Duration.seconds(2))),
+      Effect.succeed(
+        Duration.min(
+          Duration.max(delay, Duration.seconds(1)),
+          Duration.seconds(3),
+        ),
+      ),
     ),
+    Schedule.both(Schedule.recurs(75)),
   );
 
   const getTcpPort = (portNumber: number) =>

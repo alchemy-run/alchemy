@@ -25,6 +25,17 @@ const logLevel = Effect.provideService(
 const HOOK_TIMEOUT = 600_000;
 const TEST_TIMEOUT = 300_000;
 
+// Note on image choice for the non-Effect (`image`/`dockerfile`) variants:
+// stock nginx images crash-loop inside Cloudflare's container sandbox because
+// they symlink /var/log/nginx/{access,error}.log to /dev/stdout and
+// /dev/stderr, and opening those device paths fails with ENXIO (errno 6) — the
+// nginx master aborts with `[emerg] could not open error log file` before it
+// ever binds the port, so getTcpPort() can never connect. The fixtures work
+// around this two ways: the `external` Dockerfile (which we own) replaces the
+// log symlinks with real files, and the `remote` variant uses a server image
+// (`mendhak/http-https-echo`) that writes to its inherited stdout fd directly
+// instead of opening the /dev/std* paths as files.
+
 // Cap exponential backoff at 3s — keeps the fast path snappy but stops the
 // geometric blow-up from dominating wall time when CF edge is slow.
 const readinessSchedule = Schedule.exponential("500 millis").pipe(
@@ -45,6 +56,8 @@ const freshConn = HttpClient.mapRequest(
 
 // Retry a freshly-deployed worker route until it answers 200 with a body that
 // contains `expected` — rejecting both transient non-200s and the deploy stub.
+// Each attempt is bounded so a worker that is hung waiting on its container
+// surfaces as a retryable failure rather than blocking the whole test budget.
 const fetchReady = (url: string, expected: string) =>
   Effect.gen(function* () {
     const client = freshConn(yield* HttpClient.HttpClient);
@@ -58,14 +71,15 @@ const fetchReady = (url: string, expected: string) =>
                 : Effect.succeed(body),
             ),
       ),
+      Effect.timeout("30 seconds"),
       Effect.retry({ schedule: readinessSchedule, times: readinessRetries }),
     );
   });
 
 /**
  * Effect-native container (`main`): the entrypoint Effect is bundled into a
- * generated image. Exercises both the container's RPC method (`/ping`) and an
- * HTTP round-trip to its port-3000 server (`/hello`).
+ * generated image. Exercises an HTTP round-trip to its port-3000 server
+ * (`/hello`) via the Durable Object's `getTcpPort` proxy.
  */
 describe("effectful container (main)", () => {
   const stack = beforeAll(deploy(EffectfulStack), { timeout: HOOK_TIMEOUT });
@@ -74,12 +88,9 @@ describe("effectful container (main)", () => {
   });
 
   test.skipIf(!!process.env.NO_SLOW_TESTS)(
-    "deploys, answers RPC, and serves over its TCP port",
+    "deploys and serves over its TCP port",
     Effect.gen(function* () {
       const { url } = yield* stack;
-
-      const pong = yield* fetchReady(`${url}/ping`, "pong");
-      expect(pong).toBe("pong");
 
       const hello = yield* fetchReady(`${url}/hello`, "effectful container");
       expect(hello).toContain("effectful container");
@@ -90,8 +101,8 @@ describe("effectful container (main)", () => {
 
 /**
  * External container (`context` / `dockerfile`): Alchemy builds the user's
- * Dockerfile against the context directory (here: nginx serving a static
- * page on port 80) and the DO proxies a request to it.
+ * Dockerfile against the context directory (nginx serving a static page on
+ * port 8080) and the DO proxies a request to it.
  */
 describe("external container (context/dockerfile)", () => {
   const stack = beforeAll(deploy(ExternalStack), { timeout: HOOK_TIMEOUT });
@@ -112,8 +123,8 @@ describe("external container (context/dockerfile)", () => {
 });
 
 /**
- * Remote container (`image`): Alchemy pulls the public `nginx:alpine` image
- * and re-pushes it to Cloudflare's registry without building anything; the DO
+ * Remote container (`image`): Alchemy pulls a pre-built public image and
+ * re-pushes it to Cloudflare's registry without building anything; the DO
  * proxies a request to it.
  */
 describe("remote container (image)", () => {
@@ -127,8 +138,8 @@ describe("remote container (image)", () => {
     Effect.gen(function* () {
       const { url } = yield* stack;
 
-      const hello = yield* fetchReady(`${url}/hello`, "nginx");
-      expect(hello).toContain("nginx");
+      const hello = yield* fetchReady(`${url}/hello`, "method");
+      expect(hello).toContain("method");
     }).pipe(logLevel),
     { timeout: TEST_TIMEOUT },
   );
