@@ -197,6 +197,10 @@ export const BranchProvider = () =>
     stables: ["branchId", "projectId"],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       if (!isResolved(news)) return undefined;
+      const projectId = resolveProjectId(news.project as BranchSource);
+      if (output?.projectId !== undefined && output.projectId !== projectId) {
+        return { action: "replace" } as const;
+      }
       if (
         news.parentLsn !== undefined &&
         output?.parentLsn !== news.parentLsn
