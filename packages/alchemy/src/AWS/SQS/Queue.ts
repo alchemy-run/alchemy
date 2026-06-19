@@ -511,7 +511,7 @@ export const QueueProvider = () =>
               .createQueue({
                 QueueName: queueName,
                 Attributes: createAttrs,
-                tags: { ...internalTags, ...(news.tags ?? {}) },
+                tags: { ...internalTags, ...news.tags },
               })
               .pipe(
                 Effect.retry({
@@ -522,6 +522,17 @@ export const QueueProvider = () =>
                         `Queue was deleted recently, retrying... ${i + 1}s`,
                       ),
                     ),
+                  ),
+                }),
+                // A `RedrivePolicy` referencing a just-created dead-letter
+                // queue is transiently rejected with
+                // `InvalidParameterValueException` until that DLQ's ARN is
+                // visible to SQS. It's an eventual-consistency race, not a
+                // genuine validation failure, so retry on a bounded schedule.
+                Effect.retry({
+                  while: (e) => e._tag === "InvalidParameterValueException",
+                  schedule: Schedule.fixed(1000).pipe(
+                    Schedule.both(Schedule.recurs(30)),
                   ),
                 }),
                 Effect.catchTag("QueueNameExists", () =>
