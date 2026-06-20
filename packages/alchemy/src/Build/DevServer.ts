@@ -1,3 +1,4 @@
+import { exitHook } from "@alchemy.run/node-utils/exit-hook";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -12,6 +13,7 @@ import {
   ChildProcessSpawner,
   type ChildProcessHandle,
 } from "effect/unstable/process/ChildProcessSpawner";
+import { execSync } from "node:child_process";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { isResolved } from "../Diff.ts";
 import * as RpcProvider from "../Local/RpcProvider.ts";
@@ -181,6 +183,7 @@ export const LocalDevServerProvider = () =>
           hash: number;
           handle: ChildProcessHandle;
           scope: Scope.Closeable;
+          unregisterExitHook: () => void;
           /**
            * Resolves with the first URL found in the child's output. Stored
            * on the instance so that no-op reconciles (same hash, process
@@ -214,6 +217,9 @@ export const LocalDevServerProvider = () =>
             // terminal AND parse lines for the first URL.
           }),
         );
+        const unregisterExitHook = exitHook(() => {
+          killProcessGroup(handle.pid, "SIGKILL");
+        });
 
         // Mirror + extract on both streams, forked into the current scope so
         // they're interrupted when the instance scope closes.
@@ -224,7 +230,7 @@ export const LocalDevServerProvider = () =>
           Effect.forkScoped,
         );
 
-        return handle;
+        return { handle, unregisterExitHook };
       });
 
       const stop = Effect.fn(function* (id: string) {
@@ -232,6 +238,7 @@ export const LocalDevServerProvider = () =>
         if (existing) {
           yield* existing.handle.kill();
           yield* Scope.close(existing.scope, Exit.void);
+          yield* Effect.sync(existing.unregisterExitHook);
           instances.delete(id);
         }
       });
@@ -266,10 +273,17 @@ export const LocalDevServerProvider = () =>
 
           const scope = yield* Scope.fork(rootScope);
           const urlDeferred = yield* Deferred.make<string>();
-          const handle = yield* spawn(news, urlDeferred).pipe(
-            Scope.provide(scope),
-          );
-          instances.set(id, { hash, handle, scope, urlDeferred });
+          const { handle, unregisterExitHook } = yield* spawn(
+            news,
+            urlDeferred,
+          ).pipe(Scope.provide(scope));
+          instances.set(id, {
+            hash,
+            handle,
+            scope,
+            unregisterExitHook,
+            urlDeferred,
+          });
           const url = yield* awaitUrl(urlDeferred);
           return { url };
         }),
@@ -326,6 +340,18 @@ const mirrorAndExtract = (
       }),
     );
   });
+
+const killProcessGroup = (pid: number, signal: NodeJS.Signals) => {
+  try {
+    if (process.platform === "win32") {
+      execSync(`taskkill /pid ${pid} /T /F`);
+    } else {
+      process.kill(-pid, signal);
+    }
+  } catch {
+    // ignore errors during best-effort cleanup
+  }
+};
 
 /**
  * Selects the live or dev DevServer provider based on `AlchemyContext.dev`.

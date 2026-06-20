@@ -90,7 +90,7 @@ export const make = Effect.fnUntraced(function* ({
     );
     const handle = yield* spawner.spawn(command);
     const unregister = exitHook(() => {
-      killProcessGroup(handle.pid, "SIGKILL");
+      killProcessGroup(handle.pid, "SIGTERM");
     });
     const kill = handle
       .kill({ forceKillAfter: "500 millis" })
