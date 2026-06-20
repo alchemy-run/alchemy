@@ -1,7 +1,7 @@
 import * as Neon from "@/Neon";
-import type { BranchProps } from "@/Neon/Branch";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
+import { getProjectBranch } from "@distilled.cloud/neon";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -13,37 +13,52 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const callDiff = (olds: BranchProps, news: BranchProps, output?: unknown) =>
+test.provider("changing project replaces the branch", (stack) =>
   Effect.gen(function* () {
-    const provider = yield* Provider.findProvider(Neon.Branch);
-    return yield* provider.diff!({
-      id: "TestBranch",
-      instanceId: "test-branch",
-      olds,
-      news,
-      oldBindings: undefined as never,
-      newBindings: undefined as never,
-      output: output as never,
-    });
-  });
+    yield* stack.destroy();
 
-test.provider("diff: changing project forces replacement", () =>
-  Effect.gen(function* () {
-    const result = yield* callDiff(
-      { project: { projectId: "old-project" } },
-      { project: { projectId: "new-project" } },
-      {
-        branchId: "branch-id",
-        branchName: "test-branch",
-        projectId: "old-project",
-        protected: false,
-        expiresAt: undefined,
-        migrationsHashes: {},
-        importHashes: {},
-      },
+    const initial = yield* stack.deploy(
+      Effect.gen(function* () {
+        const projectA = yield* Neon.Project("ReplaceBranchProjectA");
+        const projectB = yield* Neon.Project("ReplaceBranchProjectB");
+        const branch = yield* Neon.Branch("ReplaceBranch", {
+          project: projectA,
+        });
+        return { projectA, projectB, branch };
+      }),
     );
-    expect(result).toEqual({ action: "replace" });
-  }),
+
+    const replaced = yield* stack.deploy(
+      Effect.gen(function* () {
+        const projectA = yield* Neon.Project("ReplaceBranchProjectA");
+        const projectB = yield* Neon.Project("ReplaceBranchProjectB");
+        const branch = yield* Neon.Branch("ReplaceBranch", {
+          project: projectB,
+        });
+        return { projectA, projectB, branch };
+      }),
+    );
+
+    expect(replaced.branch.projectId).toEqual(replaced.projectB.projectId);
+    expect(replaced.branch.branchId).not.toEqual(initial.branch.branchId);
+
+    const fetched = yield* getProjectBranch({
+      project_id: replaced.projectB.projectId,
+      branch_id: replaced.branch.branchId,
+    });
+    expect(fetched.branch.id).toEqual(replaced.branch.branchId);
+
+    const oldBranch = yield* getProjectBranch({
+      project_id: initial.projectA.projectId,
+      branch_id: initial.branch.branchId,
+    }).pipe(
+      Effect.as("found" as const),
+      Effect.catchTag("NotFound", () => Effect.succeed("not-found" as const)),
+    );
+    expect(oldBranch).toEqual("not-found");
+
+    yield* stack.destroy();
+  }).pipe(logLevel),
 );
 
 // Canonical `list()` test (parent fan-out): branches are scoped to a project
