@@ -12,7 +12,7 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
-import * as NodeChildProcess from "node:child_process";
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { httpServer } from "../Util/PlatformServices.ts";
 import {
@@ -79,7 +79,9 @@ export const make = Effect.fnUntraced(function* ({
       {
         stdout: "pipe",
         stderr: "inherit",
-        detached: false,
+        // Use the platform default. On Unix, Effect's child-process spawner
+        // defaults to a detached process group, which lets finalizers and the
+        // exit hook terminate the sidecar and any dev-server descendants.
         env: {
           [RPC_SERVER_ENVIRONMENT_KEY]: JSON.stringify(environment),
         },
@@ -186,7 +188,7 @@ const getRpcAddress = (stdout: Stream.Stream<Uint8Array, PlatformError>) =>
 const killProcessGroup = (pid: number, signal: NodeJS.Signals) => {
   try {
     if (process.platform === "win32") {
-      NodeChildProcess.execSync(`taskkill /pid ${pid} /T /F`);
+      execSync(`taskkill /pid ${pid} /T /F`);
     } else {
       process.kill(-pid, signal);
     }

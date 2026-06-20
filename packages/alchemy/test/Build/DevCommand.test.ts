@@ -15,16 +15,21 @@ const { test } = Test.make({
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixture");
 const fixtureScript = pathe.join(fixtureDir, "long-running.cjs");
+const parentWithChildScript = pathe.join(fixtureDir, "parent-with-child.cjs");
 const urlServerScript = pathe.join(fixtureDir, "url-server.cjs");
 
 // The provider runs `command.split(" ")` and uses `shell: false`, so the
 // fixture path must not contain spaces. The in-repo path doesn't, but a CI
 // clone under e.g. `C:\Program Files\...` would. Fail loudly with a clear
 // message instead of letting the test hang on a misparsed argv.
-if (fixtureScript.includes(" ") || urlServerScript.includes(" ")) {
+if (
+  fixtureScript.includes(" ") ||
+  parentWithChildScript.includes(" ") ||
+  urlServerScript.includes(" ")
+) {
   throw new Error(
     `DevServer test fixture path contains a space, which the provider's ` +
-      `argv split cannot represent: ${fixtureScript} / ${urlServerScript}`,
+      `argv split cannot represent: ${fixtureScript} / ${parentWithChildScript} / ${urlServerScript}`,
   );
 }
 
@@ -314,6 +319,37 @@ test.provider(
       yield* stack.destroy();
       yield* waitForDeath(pid);
       expect(yield* isAlive(pid)).toBe(false);
+    }),
+  { timeout: 30_000 },
+);
+
+test.provider(
+  "stops descendant processes on destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const parentPidFile = pathe.join(tmp, "parent-pid.json");
+      const childPidFile = pathe.join(tmp, "child-pid.json");
+
+      yield* stack.deploy(
+        DevServer("Dev", {
+          command: `node ${parentWithChildScript}`,
+          env: {
+            PARENT_PID_FILE: parentPidFile,
+            CHILD_PID_FILE: childPidFile,
+            MARKER: "tree",
+          },
+        }),
+      );
+      const parent = yield* waitForPidFile(parentPidFile, "tree");
+      const child = yield* waitForPidFile(childPidFile, "tree");
+      expect(yield* isAlive(parent.pid)).toBe(true);
+      expect(yield* isAlive(child.pid)).toBe(true);
+
+      yield* stack.destroy();
+      yield* waitForDeath(parent.pid);
+      yield* waitForDeath(child.pid);
     }),
   { timeout: 30_000 },
 );

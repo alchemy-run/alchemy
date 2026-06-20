@@ -59,7 +59,8 @@ export const devCommand = Command.make(
           [SPAWNER_URL_ENV_KEY]: spawner.url,
         },
         extendEnv: true,
-        detached: false,
+        // Use the platform default. On Unix, Effect starts a detached process
+        // group so interruption/finalization can clean up watched children.
       });
       yield* child.exitCode;
     },
