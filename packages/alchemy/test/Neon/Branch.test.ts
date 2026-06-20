@@ -1,7 +1,8 @@
 import * as Neon from "@/Neon";
 import * as Provider from "@/Provider";
+import type { ScopedPlanStatusSession } from "@/Cli/Cli.ts";
 import * as Test from "@/Test/Vitest";
-import { getProjectBranch } from "@distilled.cloud/neon";
+import { deleteProject, getProjectBranch } from "@distilled.cloud/neon";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -12,6 +13,10 @@ const logLevel = Effect.provideService(
   MinimumLogLevel,
   process.env.DEBUG ? "Debug" : "Info",
 );
+
+const stubSession = {
+  note: () => Effect.void,
+} as unknown as ScopedPlanStatusSession;
 
 test.provider("changing project replaces the branch", (stack) =>
   Effect.gen(function* () {
@@ -59,6 +64,47 @@ test.provider("changing project replaces the branch", (stack) =>
 
     yield* stack.destroy();
   }).pipe(logLevel),
+);
+
+test.provider(
+  "reconcile recreates a branch when cached project is gone",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const initial = yield* stack.deploy(
+        Effect.gen(function* () {
+          const projectA = yield* Neon.Project("StaleBranchProjectA");
+          const projectB = yield* Neon.Project("StaleBranchProjectB");
+          const branch = yield* Neon.Branch("StaleBranch", {
+            project: projectA,
+          });
+          return { projectA, projectB, branch };
+        }),
+      );
+
+      yield* deleteProject({ project_id: initial.projectA.projectId });
+
+      const provider = yield* Provider.findProvider(Neon.Branch);
+      const reconciled = yield* provider.reconcile({
+        id: "StaleBranch",
+        instanceId: "stale-branch",
+        news: { project: initial.projectB },
+        olds: { project: initial.projectA },
+        output: initial.branch,
+        session: stubSession,
+        bindings: [],
+      });
+
+      expect(reconciled.projectId).toEqual(initial.projectB.projectId);
+      expect(reconciled.branchId).not.toEqual(initial.branch.branchId);
+
+      const fetched = yield* getProjectBranch({
+        project_id: initial.projectB.projectId,
+        branch_id: reconciled.branchId,
+      });
+      expect(fetched.branch.id).toEqual(reconciled.branchId);
+    }).pipe(logLevel, Effect.ensuring(stack.destroy())),
 );
 
 // Canonical `list()` test (parent fan-out): branches are scoped to a project

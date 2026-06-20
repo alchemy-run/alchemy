@@ -311,6 +311,60 @@ export const BranchProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const newName = yield* createBranchName(id, news.name);
+      const createBranchInfo = Effect.gen(function* () {
+        const projectId = resolveProjectId(news.project as BranchSource);
+        const parentBranchId = yield* resolveParentBranchId(
+          news.parentBranch as ParentBranchSource | undefined,
+          projectId,
+        );
+        const created = yield* createProjectBranch({
+          project_id: projectId,
+          branch: {
+            name: newName,
+            parent_id: parentBranchId,
+            parent_lsn: news.parentLsn,
+            parent_timestamp: news.parentTimestamp,
+            init_source: news.initSource,
+            protected: news.protected,
+            expires_at: news.expiresAt,
+          },
+          endpoints: buildEndpoints(news.endpoints),
+        });
+        yield* waitForOperations(created.operations);
+
+        const db = created.databases[0];
+        if (!db) {
+          return yield* Effect.die(
+            `Neon branch ${created.branch.id} created with no databases`,
+          );
+        }
+        const conn = yield* fetchConnection(
+          projectId,
+          created.branch.id,
+          db.name,
+          db.owner_name,
+        );
+        return {
+          branchId: created.branch.id,
+          branchName: created.branch.name,
+          projectId: created.branch.project_id,
+          parentBranchId: created.branch.parent_id,
+          parentLsn: created.branch.parent_lsn,
+          parentTimestamp: created.branch.parent_timestamp,
+          initSource: created.branch.init_source as
+            | "schema-only"
+            | "parent-data"
+            | undefined,
+          protected: created.branch.protected,
+          default: created.branch.default,
+          expiresAt: created.branch.expires_at,
+          databaseName: db.name,
+          roleName: db.owner_name,
+          connectionUri: conn.uri,
+          pooledConnectionUri: conn.pooled,
+          origin: parsePostgresOrigin(conn.uri),
+        };
+      });
 
       // Ensure — when no prior output exists we create the branch;
       // otherwise sync the mutable scalar fields on the existing
@@ -342,61 +396,9 @@ export const BranchProvider = () =>
               pooledConnectionUri: output.pooledConnectionUri,
               origin: output.origin,
             })),
+            Effect.catchTag("NotFound", () => createBranchInfo),
           )
-        : yield* Effect.gen(function* () {
-            const projectId = resolveProjectId(news.project as BranchSource);
-            const parentBranchId = yield* resolveParentBranchId(
-              news.parentBranch as ParentBranchSource | undefined,
-              projectId,
-            );
-            const created = yield* createProjectBranch({
-              project_id: projectId,
-              branch: {
-                name: newName,
-                parent_id: parentBranchId,
-                parent_lsn: news.parentLsn,
-                parent_timestamp: news.parentTimestamp,
-                init_source: news.initSource,
-                protected: news.protected,
-                expires_at: news.expiresAt,
-              },
-              endpoints: buildEndpoints(news.endpoints),
-            });
-            yield* waitForOperations(created.operations);
-
-            const db = created.databases[0];
-            if (!db) {
-              return yield* Effect.die(
-                `Neon branch ${created.branch.id} created with no databases`,
-              );
-            }
-            const conn = yield* fetchConnection(
-              projectId,
-              created.branch.id,
-              db.name,
-              db.owner_name,
-            );
-            return {
-              branchId: created.branch.id,
-              branchName: created.branch.name,
-              projectId: created.branch.project_id,
-              parentBranchId: created.branch.parent_id,
-              parentLsn: created.branch.parent_lsn,
-              parentTimestamp: created.branch.parent_timestamp,
-              initSource: created.branch.init_source as
-                | "schema-only"
-                | "parent-data"
-                | undefined,
-              protected: created.branch.protected,
-              default: created.branch.default,
-              expiresAt: created.branch.expires_at,
-              databaseName: db.name,
-              roleName: db.owner_name,
-              connectionUri: conn.uri,
-              pooledConnectionUri: conn.pooled,
-              origin: parsePostgresOrigin(conn.uri),
-            };
-          });
+        : yield* createBranchInfo;
 
       const connectionUri = Redacted.make(branchInfo.connectionUri);
       const migrationsTable =
