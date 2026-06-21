@@ -65,6 +65,8 @@ export interface FunctionBuildOptions {
   readonly output?: Partial<rolldown.OutputOptions>;
 }
 
+export type FunctionArchitecture = "x86_64" | "arm64";
+
 export interface FunctionUrlConfig {
   /**
    * Authentication type for the Lambda function URL.
@@ -103,6 +105,12 @@ export interface FunctionProps extends PlatformProps {
   functionName?: string;
   // TODO(sam): use a Layer instead so we can manage Effect platform?
   runtime?: "nodejs22.x" | "nodejs24.x";
+  /**
+   * Instruction set architecture for the Lambda function.
+   *
+   * @default "x86_64"
+   */
+  architecture?: FunctionArchitecture;
   build?: FunctionBuildOptions;
   uploadSourceMap?: boolean;
   env?: Record<string, any>;
@@ -240,6 +248,14 @@ const normalizeFunctionUrl = (
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
  *   url: true,
+ * });
+ * ```
+ *
+ * @example Function using ARM64
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("ArmFunction", {
+ *   main: "./src/handler.ts",
+ *   architecture: "arm64",
  * });
  * ```
  *
@@ -1019,6 +1035,7 @@ export default await Effect.runPromise(handlerEffect)
           Role: roleArn,
           Code: codeLocation,
           Runtime: news.runtime ?? "nodejs22.x",
+          Architectures: [news.architecture ?? "x86_64"],
           Environment: runtimeEnv
             ? {
                 Variables: {
@@ -1316,6 +1333,11 @@ export default await Effect.runPromise(handlerEffect)
           }
           if (
             toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)
+          ) {
+            return { action: "update" };
+          }
+          if (
+            (olds.architecture ?? "x86_64") !== (news.architecture ?? "x86_64")
           ) {
             return { action: "update" };
           }
