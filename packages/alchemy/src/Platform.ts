@@ -40,29 +40,36 @@ export interface PlatformProps {
 }
 
 export type Main<InitServices = never> = void | {
-  fetch:
-    | HttpEffect<InitServices | PlatformServices>
+  fetch?:
+    | HttpEffect<InitServices | PlatformServices | RuntimeContext>
     | Effect.Effect<
-        HttpEffect<InitServices | PlatformServices>,
+        HttpEffect<InitServices | PlatformServices | RuntimeContext>,
         never,
         InitServices | PlatformServices
       >;
 };
 
-export interface MainRpc<InitServices = never> {
+export interface MainRpc<InitServices = RuntimeContext> {
   [key: string]:
-    | Effect.Effect<any, any, InitServices | PlatformServices>
-    | Stream.Stream<any, any, InitServices | PlatformServices>
+    | Effect.Effect<any, any, InitServices | PlatformServices | RuntimeContext>
+    | Stream.Stream<any, any, InitServices | PlatformServices | RuntimeContext>
     | ((
         ...args: any[]
       ) =>
-        | Effect.Effect<any, any, InitServices | PlatformServices>
-        | Stream.Stream<any, any, InitServices | PlatformServices>);
+        | Effect.Effect<
+            any,
+            any,
+            InitServices | PlatformServices | RuntimeContext
+          >
+        | Stream.Stream<
+            any,
+            any,
+            InitServices | PlatformServices | RuntimeContext
+          >);
 }
 
 // services provided to the Resource
 export type PlatformServices =
-  | RuntimeContext
   | ExecutionContext
   | HttpClient
   | PolicyLike

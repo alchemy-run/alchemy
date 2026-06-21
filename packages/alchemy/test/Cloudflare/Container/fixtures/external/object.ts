@@ -1,7 +1,15 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { ExternalContainer } from "./container.ts";
+import path from "node:path";
+
+class ExternalContainer extends Cloudflare.Container<ExternalContainer>()(
+  "ExternalContainer",
+  {
+    context: path.join(import.meta.dirname, "context"),
+    observability: { logs: { enabled: true } },
+  },
+) {}
 
 /**
  * Durable Object that binds and starts the {@link ExternalContainer} and
@@ -10,15 +18,15 @@ import { ExternalContainer } from "./container.ts";
 export class ExternalContainerObject extends Cloudflare.DurableObjectNamespace<ExternalContainerObject>()(
   "ExternalContainerObject",
   Effect.gen(function* () {
-    const bound = yield* Cloudflare.Container.bind(ExternalContainer);
+    const container = yield* ExternalContainer;
 
     return Effect.gen(function* () {
-      const container = yield* Cloudflare.start(bound);
+      const instance = yield* Cloudflare.start(container);
 
       return {
         hello: () =>
           Effect.gen(function* () {
-            const { fetch } = yield* container.getTcpPort(8080);
+            const { fetch } = yield* instance.getTcpPort(8080);
             const response = yield* fetch(
               HttpClientRequest.get("http://container/"),
             );

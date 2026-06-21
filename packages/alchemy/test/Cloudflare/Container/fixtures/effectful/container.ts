@@ -2,26 +2,26 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { Storage } from "./storage.ts";
 
-/**
- * Effect-native container (`main` variant): the entrypoint is an Effect
- * program that Alchemy bundles and bakes into a generated Docker image.
- * Exposes an RPC method (`ping`) plus an HTTP server on port 3000.
- */
-export class EffectfulContainer extends Cloudflare.Container<
-  EffectfulContainer,
+export class MyContainer extends Cloudflare.Container<
+  MyContainer,
   {
     ping: () => Effect.Effect<string>;
   }
->()("EffectfulContainer", {
-  main: import.meta.filename,
-}) {}
+>()("EffectfulContainer") {}
 
-export default EffectfulContainer.make(
+export default MyContainer.make(
+  {
+    main: import.meta.filename,
+  },
   Effect.gen(function* () {
-    return EffectfulContainer.of({
+    const bucket = yield* Cloudflare.R2.ReadWrite(Storage);
+
+    return {
       ping: () => Effect.succeed("pong"),
       fetch: Effect.gen(function* () {
+        bucket.get("test.txt");
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://container");
         if (url.pathname === "/health") {
@@ -29,6 +29,6 @@ export default EffectfulContainer.make(
         }
         return HttpServerResponse.text("hello from effectful container");
       }),
-    });
-  }),
+    };
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteHttp)),
 );

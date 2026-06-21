@@ -3,17 +3,18 @@ import * as Layer from "effect/Layer";
 import type * as AI from "../../Agent/index.ts";
 import type { DurableObjectServices } from "../Workers/DurableObjectNamespace.ts";
 
-export declare const Agent: {
+export declare const makeAgent: {
   <A extends AI.Agent<any, any, any>>(
     agent: A,
   ): {
     <
       Eff extends Effect.Effect<any, any, any>,
-      AReq extends DurableObjectServices,
+      AReq extends DurableObjectServices = never,
     >(
       f: (
         this: Layer.Layer<InstanceType<A>, never, AI.Services<A["refs"]>>,
-      ) => Generator<Eff, Layer.Layer<InstanceType<A>, never, AReq>, never>,
+        self: Layer.Layer<InstanceType<A>, never, AI.Services<A["refs"]>>,
+      ) => Layer.Layer<InstanceType<A>, never, AReq>,
     ): Layer.Layer<
       InstanceType<A>,
       [Eff] extends [never]

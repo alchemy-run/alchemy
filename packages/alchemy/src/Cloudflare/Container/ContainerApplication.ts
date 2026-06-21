@@ -357,6 +357,35 @@ export type ContainerShape = Main<ContainerServices>;
  * useful for adopting an existing application, while `handler` runs the named
  * `runWorker` export rather than the module's default.
  *
+ * @section Image Sources
+ * The image is resolved from exactly one of three props, checked in order:
+ * `main` (bundle an Effect program into a generated image), then `image`
+ * (pull and re-push a remote image), then `context` / `dockerfile` (build
+ * your own Dockerfile). Only `main` injects an Effect runtime; the other two
+ * ship an arbitrary image unchanged.
+ *
+ * @example Build your own Dockerfile (`context` / `dockerfile`)
+ * ```typescript
+ * export class Web extends Cloudflare.Container<Web>()("Web", {
+ *   context: `${import.meta.dirname}/context`,
+ *   dockerfile: "Dockerfile",
+ * }) {}
+ * ```
+ *
+ * Alchemy builds `dockerfile` against the `context` directory with no `main`
+ * bundling. `dockerfile` is resolved relative to `context` and defaults to
+ * `<context>/Dockerfile`.
+ *
+ * @example Remote image (`image`)
+ * ```typescript
+ * export class Echo extends Cloudflare.Container<Echo>()("Echo", {
+ *   image: "mendhak/http-https-echo:latest",
+ * }) {}
+ * ```
+ *
+ * Alchemy pulls the pre-built public image and re-pushes it to Cloudflare's
+ * managed registry instead of building anything.
+ *
  * @section Bundling & Dependencies
  * By default the entrypoint is bundled for the `bun` runtime. Use `runtime` to
  * switch to Node, `external` to keep native/precompiled packages out of the

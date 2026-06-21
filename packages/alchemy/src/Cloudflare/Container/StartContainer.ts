@@ -1,5 +1,6 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
@@ -12,14 +13,20 @@ import {
   type ContainerStartupOptions,
 } from "./Container.ts";
 
+export declare const layerContainer: {
+  <Image extends Container.Decl>(
+    container: Image,
+    options?: ContainerStartupOptions,
+  ): Layer.Layer<InstanceType<Image>>;
+};
+
 /**
  * Runs the Container in a Durable Object and monitors it, providing a durable fetch and RPC interface to it.
  */
-export const start = Effect.fnUntraced(function* <Image extends Container>(
-  containerEff: Container.Bound<Image>,
-  options?: ContainerStartupOptions,
-) {
-  const container = yield* containerEff;
+export const startContainer = Effect.fnUntraced(function* <
+  Image extends Container.Decl,
+>(containerEff: Image, options?: ContainerStartupOptions) {
+  const container: Container = yield* containerEff;
 
   const ensureRunning = Effect.gen(function* () {
     if (yield* container.running) return;
@@ -91,5 +98,5 @@ export const start = Effect.fnUntraced(function* <Image extends Container>(
     ...container,
     getTcpPort,
     fetch: getTcpPort(3000),
-  } as Container.Running<Image>;
+  } as Container.Instance<InstanceType<Image>>;
 });

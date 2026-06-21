@@ -1,6 +1,6 @@
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type * as Chat from "effect/unstable/ai/Chat";
+import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { ToolImpl } from "./Tool.ts";
 
 export type Services<Refs extends any[]> = Refs[number] extends infer A
@@ -30,7 +30,7 @@ export interface AgentService {
   send(request: {
     input: any;
     session?: string;
-  }): Effect.Effect<void, never, Chat.Persistence>;
+  }): Effect.Effect<void, never, RuntimeContext>;
 }
 
 export const Agent: {

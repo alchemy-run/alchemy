@@ -2,7 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as S from "effect/Schema";
 
-import * as Cloudflare from "../../../Cloudflare/index.ts";
+import * as Cloudflare from "@/Cloudflare";
+
 import * as Ai from "../../index.ts";
 import { DevBox } from "../DevBox.ts";
 
@@ -15,10 +16,22 @@ The contents of the file to write.`;
 export class WriteFile extends Ai.Tool<WriteFile>()("writeFile")`
 Create or overwrite a file at the given ${path} with the provided ${contents}.` {}
 
+export class Storage extends Cloudflare.R2Bucket<Storage>()("Storage") {}
+
+export const WriteFileR2 = Layer.effect(
+  WriteFile,
+  Effect.gen(function* () {
+    const bucket = yield* Cloudflare.R2.ReadWrite(Storage);
+
+    return ({ path, contents }) =>
+      bucket.put(path, contents).pipe(Effect.orDie);
+  }),
+);
+
 export const WriteFileDevBox = Layer.effect(
   WriteFile,
   Effect.gen(function* () {
-    const devBox = yield* Cloudflare.Container.running(DevBox);
+    const devBox = yield* DevBox;
 
     return ({ path, contents }) => devBox.writeFile(path, contents);
   }),

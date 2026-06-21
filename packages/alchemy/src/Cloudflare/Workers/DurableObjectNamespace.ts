@@ -101,8 +101,7 @@ export type DurableObjectServices =
   | DurableObjectState
   | WorkerServices
   | WorkerEnvironment
-  | PlatformServices
-  | RuntimeContext;
+  | PlatformServices;
 
 export interface DurableObjectNamespaceProps {
   /**
@@ -142,32 +141,24 @@ export interface DurableObjectNamespaceClass extends Effect.Effect<
           | Dependencies<Self>
           | Effect.Effect<Dependencies<Self>, never, Req>,
       ): Effect.Effect<DurableObjectNamespace<Self>, never, Worker | Req>;
-      make<InitReq = never>(
+      make(
         impl: Effect.Effect<
-          Effect.Effect<Shape, never, DurableObjectServices>,
+          Effect.Effect<Shape, never, RuntimeContext>,
           never,
-          InitReq
+          DurableObjectServices
         >,
-      ): Layer.Layer<
-        Self,
-        never,
-        Worker | Exclude<InitReq, DurableObjectServices>
-      >;
+      ): Layer.Layer<Self, never, Worker>;
     };
   };
   <Self>(): {
-    <Shape extends MainRpc<DurableObjectServices>, InitReq = never>(
+    <Shape extends MainRpc>(
       name: string,
       impl: Effect.Effect<
-        Effect.Effect<Shape, never, DurableObjectServices>,
+        Effect.Effect<Shape, never, RuntimeContext>,
         never,
-        InitReq
+        DurableObjectServices
       >,
-    ): Effect.Effect<
-      DurableObjectNamespace<Self>,
-      never,
-      Worker | Exclude<InitReq, DurableObjectServices>
-    > & {
+    ): Effect.Effect<DurableObjectNamespace<Self>, never, Worker> & {
       new (_: never): Shape;
     };
   };
@@ -177,11 +168,7 @@ export interface DurableObjectNamespaceClass extends Effect.Effect<
   ): DurableObjectNamespaceLike<Shape>;
   <Shape, InitReq = never>(
     name: string,
-    impl: Effect.Effect<
-      Effect.Effect<Shape, never, DurableObjectServices>,
-      never,
-      InitReq
-    >,
+    impl: Effect.Effect<Shape, never, DurableObjectServices | InitReq>,
   ): Effect.Effect<
     DurableObjectNamespace<Shape>,
     never,

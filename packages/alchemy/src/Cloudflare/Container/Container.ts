@@ -1,7 +1,5 @@
 import type * as cf from "@cloudflare/workers-types";
-import type { Id } from "@distilled.cloud/aws/apigatewayv2";
 import * as Config from "effect/Config";
-import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -16,20 +14,19 @@ import type { Named } from "../../Named.ts";
 import * as Output from "../../Output.ts";
 import { Platform } from "../../Platform.ts";
 import type { Rpc } from "../../Rpc.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import * as Server from "../../Server/index.ts";
+import type { Props } from "../../State/ResourceState.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
 import type { Providers } from "../Providers.ts";
 import { DurableObjectNamespace } from "../Workers/DurableObjectNamespace.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
-import { Worker } from "../Workers/Worker.ts";
+import { Worker, type WorkerShape } from "../Workers/Worker.ts";
 import type {
   ContainerApplication,
   ContainerApplicationProps,
-  ContainerServices,
-  ContainerShape,
 } from "./ContainerApplication.ts";
-import { start } from "./StartContainer.ts";
 
 export const ContainerTypeId = "Cloudflare.Container";
 export type ContainerTypeId = typeof ContainerTypeId;
@@ -47,58 +44,85 @@ export class ContainerError extends Data.TaggedError("ContainerError")<{
 
 export interface ContainerStartupOptions extends cf.ContainerStartupOptions {}
 
+/**
+ * Bundle an Effect-native program into a generated image. Alchemy bundles
+ * {@link main} and bakes it in as the container's entrypoint.
+ */
 export interface EffectfulContainerProps extends ContainerApplicationProps {
+  /** Entrypoint file for the Effect program, typically `import.meta.filename`. */
   main: string;
 }
+/**
+ * Build the container image from your own Dockerfile and build context — no
+ * Effect program is bundled. The image is shipped as-is.
+ */
 export interface ExternalContainerProps extends ContainerApplicationProps {
   /**
-   * The directory containing the Dockerfile and other files for the container.
+   * The build context directory containing the Dockerfile and any files it
+   * copies.
    *
    * @default `./`
    */
   context?: string;
   /**
-   * The Dockerfile to use for the container.
+   * The Dockerfile to build, resolved relative to {@link context}.
    *
-   * @default `./Dockerfile resolved relative to the {@link context} directory.
+   * @default `<context>/Dockerfile`
    */
   dockerfile?: string;
 }
+/**
+ * Deploy a pre-built remote image — Alchemy pulls it and re-pushes it to
+ * Cloudflare's managed registry without building anything.
+ */
 export interface RemoteContainerProps extends ContainerApplicationProps {
   /**
-   * The image to use for the container.
+   * The pre-built image to pull and re-push.
    *
    * E.g. `ghcr.io/alpine/alpine:latest`
    */
   image: string;
 }
 
-export type Container<Id extends string = string> = {
-  id: Id;
-  get running(): Effect.Effect<boolean>;
-  start(options?: ContainerStartupOptions): Effect.Effect<void>;
-  monitor(): Effect.Effect<void, ContainerError>;
-  destroy(error?: any): Effect.Effect<void>;
-  signal(signo: number): Effect.Effect<void>;
-  getTcpPort(port: number): Effect.Effect<Fetcher>;
-  setInactivityTimeout(durationMs: number | bigint): Effect.Effect<void>;
-  interceptOutboundHttp(addr: string, binding: Fetcher): Effect.Effect<void>;
-  interceptAllOutboundHttp(binding: Fetcher): Effect.Effect<void>;
+export type Container<Id extends string = string> = Named<Id> & {
+  get running(): Effect.Effect<boolean, never, RuntimeContext>;
+  start(
+    options?: ContainerStartupOptions,
+  ): Effect.Effect<void, never, RuntimeContext>;
+  monitor(): Effect.Effect<void, ContainerError, RuntimeContext>;
+  destroy(error?: any): Effect.Effect<void, never, RuntimeContext>;
+  signal(signo: number): Effect.Effect<void, never, RuntimeContext>;
+  getTcpPort(port: number): Effect.Effect<Fetcher, never, RuntimeContext>;
+  setInactivityTimeout(
+    durationMs: number | bigint,
+  ): Effect.Effect<void, never, RuntimeContext>;
+  interceptOutboundHttp(
+    addr: string,
+    binding: Fetcher,
+  ): Effect.Effect<void, never, RuntimeContext>;
+  interceptAllOutboundHttp(
+    binding: Fetcher,
+  ): Effect.Effect<void, never, RuntimeContext>;
 };
 
 export declare namespace Container {
-  export type Decl<Id extends string, Shape, Req = never> =
-    | (ContainerApplication & Rpc<Shape> & Named<Id>)
-    | (Effect.Effect<ContainerApplication & Rpc<Shape>, never, Req> &
-        Named<Id>);
-  export interface Bound<Shape>
+  export interface Decl<Self = any, Shape = any, Id extends string = string>
     extends
-      Container,
-      Effect.Effect<Container.Running<Shape>, never, DurableObjectState> {
-    "alchemy/Id": string;
+      Effect.Effect<Self, never, Providers | Self>,
+      Rpc<Shape>,
+      Named<Id> {
+    new (): Container<Id> & Shape;
+    make: <InitReq = never, WorkerReq = never>(
+      props: Props,
+      impl: Effect.Effect<
+        Shape & WorkerShape<WorkerReq>,
+        Config.ConfigError,
+        InitReq
+      >,
+    ) => Layer.Layer<Self, never, Providers>;
   }
 
-  export type Running<Shape = any> = Container &
+  export type Instance<Shape = any> = Container &
     Shape & {
       getTcpPort: (portNumber: number) => Effect.Effect<{
         fetch: {
@@ -184,6 +208,83 @@ export declare namespace Container {
  *     });
  *   }),
  * );
+ * ```
+ *
+ * @section Image Sources
+ * A container's image comes from one of three sources, picked by which
+ * prop you set:
+ *
+ * - `main` — bundle your Effect program into a generated image.
+ * - `context` (+ optional `dockerfile`) — build your own Dockerfile.
+ * - `image` — pull a pre-built remote image and re-push it.
+ *
+ * Only the `main` source bundles and injects an Effect runtime. The other
+ * two ship an arbitrary image as-is, so `.make()` just registers the
+ * container's identity (it has no Effect implementation to run).
+ *
+ * @example Effect-native image (`main`)
+ * ```typescript
+ * // Alchemy bundles this file's Effect program and bakes it into a
+ * // generated image as the entrypoint.
+ * export class Sandbox extends Cloudflare.Container<
+ *   Sandbox,
+ *   { ping: () => Effect.Effect<string> }
+ * >()("Sandbox", { main: import.meta.filename }) {}
+ *
+ * export default Sandbox.make(
+ *   Effect.gen(function* () {
+ *     return Sandbox.of({
+ *       ping: () => Effect.succeed("pong"),
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
+ *     });
+ *   }),
+ * );
+ * ```
+ *
+ * @example Build your own Dockerfile (`context` / `dockerfile`)
+ * ```typescript
+ * // Alchemy builds the Dockerfile against the context directory — no
+ * // Effect bundling. `dockerfile` defaults to `<context>/Dockerfile`.
+ * export class Web extends Cloudflare.Container<Web>()("Web", {
+ *   context: `${import.meta.dirname}/context`,
+ * }) {}
+ *
+ * // No Effect runtime to provide — `.make()` only registers identity.
+ * export default Web.make(Effect.succeed(undefined));
+ * ```
+ *
+ * @example Remote image (`image`)
+ * ```typescript
+ * // Alchemy pulls the public image and re-pushes it to Cloudflare's
+ * // registry — no build, no bundling.
+ * export class Echo extends Cloudflare.Container<Echo>()("Echo", {
+ *   image: "mendhak/http-https-echo:latest",
+ * }) {}
+ *
+ * export default Echo.make(Effect.succeed(undefined));
+ * ```
+ *
+ * @example Reaching an arbitrary image's port from a Durable Object
+ * ```typescript
+ * // `external` and `remote` images expose no RPC methods, so the DO
+ * // talks to them purely over their TCP port via `getTcpPort`.
+ * export class WebObject extends Cloudflare.DurableObjectNamespace<WebObject>()(
+ *   "WebObject",
+ *   Effect.gen(function* () {
+ *     const bound = yield* Cloudflare.Container.bind(Web);
+ *     return Effect.gen(function* () {
+ *       const container = yield* Cloudflare.start(bound);
+ *       return {
+ *         hello: () =>
+ *           Effect.gen(function* () {
+ *             const { fetch } = yield* container.getTcpPort(8080);
+ *             const res = yield* fetch(HttpClientRequest.get("http://container/"));
+ *             return yield* res.text;
+ *           }),
+ *       };
+ *     });
+ *   }),
+ * ) {}
  * ```
  *
  * @section Configuration
@@ -294,40 +395,19 @@ export declare namespace Container {
  * );
  * ```
  */
-export const Container: Platform<
-  ContainerApplication,
-  ContainerServices,
-  ContainerShape,
-  Server.ProcessContext,
-  Container
-> & {
-  (
-    id: string,
-    props: InputProps<
-      EffectfulContainerProps | ExternalContainerProps | RemoteContainerProps
-    >,
-  ): Effect.Effect<Container, never, Providers> & {
-    new (): {};
+export const Container: {
+  <Self>(): {
+    <
+      const Id extends string,
+      Props extends InputProps<ExternalContainerProps | RemoteContainerProps>,
+    >(
+      id: Id,
+      props: Props,
+    ): Container.Decl<Self, {}, Id>;
   };
-  /**
-   * Bind a Container to a Durable Object Namespace (during plan construction time).
-   */
-  bind: <Id extends string, Shape, Req = never>(
-    containerEff: Container.Decl<Id, Shape, Req>,
-  ) => Effect.Effect<Container.Bound<Shape>, never, Req>;
-  /**
-   * Take a dependency on a running Container within a Durable Object context.
-   */
-  running: <Shape, Req = never>(
-    containerEff: Container.Decl<Id, Shape, Req>,
-  ) => Container.Bound<Shape>;
-  /**
-   * Provide a Layer that starts a Container and makes it available to the Durable Object.
-   */
-  layer: <Shape>(
-    containerEff: Container.Bound<Shape>,
-    options?: ContainerStartupOptions,
-  ) => Layer.Layer<Container.Running<Shape>, never, DurableObjectState>;
+  <Self, Shape>(): {
+    <const Id extends string>(id: Id): Container.Decl<Self, Shape, Id>;
+  };
 } = Platform(
   "Cloudflare.Container",
   {
@@ -476,15 +556,5 @@ export const Container: Platform<
         } as unknown;
       });
     }),
-    running: (containerEff: Container.Decl<any, any>) =>
-      Context.Service()(`Container.Running<${containerEff["alchemy/Id"]}>`),
-    layer: <Image extends Container>(
-      containerEff: Container.Bound<Image>,
-      options?: ContainerStartupOptions,
-    ) =>
-      Layer.effect(
-        Context.Service()(`Container.Running<${containerEff["alchemy/Id"]}>`),
-        start(containerEff, options),
-      ),
   },
 );

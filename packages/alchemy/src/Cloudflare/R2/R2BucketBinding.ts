@@ -308,6 +308,12 @@ export const R2BucketBindingLive = Layer.effect(
   }),
 );
 
+export const ReadWriteBinding = R2BucketBindingLive;
+export const ReadBinding = R2BucketBindingLive;
+export const WriteBinding = R2BucketBindingLive;
+
+export const ReadWriteHttp = R2BucketBindingLive;
+
 export class R2BucketBindingPolicy extends Binding.Policy<
   R2BucketBindingPolicy,
   (bucket: R2Bucket) => Effect.Effect<void>

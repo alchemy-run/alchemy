@@ -145,7 +145,7 @@ export type WorkerServices =
   | WorkerEnvironment
   | CloudflareEnvironment;
 
-export type WorkerShape = Main<WorkerServices>;
+export type WorkerShape<Req = never> = Main<WorkerServices | Req>;
 
 export type WorkerEnv = Record<
   string,

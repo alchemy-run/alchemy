@@ -68,9 +68,13 @@ export const Tool: {
           | ((
               input: ToolParameters<Refs[number]>,
             ) => Effect.Effect<any, never, RuntimeContext>)
-          | ((
-              input: ToolParameters<Refs[number]>,
-            ) => Effect.Effect<Effect.Effect<any, never, RuntimeContext>>)
+          | Effect.Effect<
+              (
+                input: ToolParameters<Refs[number]>,
+              ) => Effect.Effect<any, never, RuntimeContext>,
+              never,
+              RuntimeContext
+            >
         >;
     };
   };

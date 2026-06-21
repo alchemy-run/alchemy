@@ -17,12 +17,13 @@ export class DevBox extends Cloudflare.Container<
       stderr: string;
     }>;
   }
->()("DevBox", {
-  main: import.meta.filename,
-  dockerfile: `FROM oven/bun:1.3`,
-}) {}
+>()("DevBox") {}
 
 export default DevBox.make(
+  {
+    main: import.meta.filename,
+    dockerfile: `FROM oven/bun:1.3`,
+  },
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const cp = yield* ChildProcessSpawner;

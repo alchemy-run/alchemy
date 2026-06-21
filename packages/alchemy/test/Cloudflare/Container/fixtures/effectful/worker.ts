@@ -2,15 +2,15 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { EffectfulContainerObject } from "./object.ts";
+import { Object } from "./object.ts";
 
-export default class EffectfulContainerWorker extends Cloudflare.Worker<EffectfulContainerWorker>()(
-  "EffectfulContainerWorker",
+export default Cloudflare.Worker(
+  "Worker",
   {
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const objects = yield* EffectfulContainerObject;
+    const objects = yield* Object;
 
     return {
       fetch: Effect.gen(function* () {
@@ -34,4 +34,4 @@ export default class EffectfulContainerWorker extends Cloudflare.Worker<Effectfu
       }),
     };
   }),
-) {}
+);

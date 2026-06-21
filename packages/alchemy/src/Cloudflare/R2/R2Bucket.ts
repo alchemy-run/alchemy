@@ -300,9 +300,12 @@ export type R2Bucket = Resource<
  * });
  * ```
  */
-export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket")({
-  bind: R2BucketBinding.bind,
-});
+export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket");
+
+export const bindR2 = R2BucketBinding.bind;
+export const ReadWrite = R2BucketBinding.bind;
+export const Read = R2BucketBinding.bind;
+export const Write = R2BucketBinding.bind;
 
 export declare namespace R2Bucket {
   export type StorageClass = "Standard" | "InfrequentAccess";

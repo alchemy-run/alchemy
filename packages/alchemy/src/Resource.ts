@@ -1,3 +1,4 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import * as Option from "effect/Option";
@@ -37,6 +38,18 @@ export type ResourceConstructor<R extends ResourceLike, Req = never> = {
     id: string,
     props: Effect.Effect<InputProps<R["Props"]>, never, PropsReq>,
   ): Effect.Effect<R, never, PropsReq | Req>;
+  <Self>(): {
+    <const Id extends string>(
+      id: Id,
+    ): Context.Service<Self, R> & {
+      new (): {};
+      make<PropsReq = never>(
+        props:
+          | Input<R["Props"]>
+          | Effect.Effect<InputProps<R["Props"]>, never, PropsReq>,
+      ): Effect.Effect<R, never, PropsReq | Req>;
+    };
+  };
 };
 
 export type ResourceClassWithMethods<

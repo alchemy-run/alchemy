@@ -1,7 +1,14 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import { RemoteContainer } from "./container.ts";
+
+export class RemoteContainer extends Cloudflare.Container<RemoteContainer>()(
+  "RemoteContainer",
+  {
+    image: "mendhak/http-https-echo:latest",
+    observability: { logs: { enabled: true } },
+  },
+) {}
 
 /**
  * Durable Object that binds and starts the {@link RemoteContainer} and
@@ -10,7 +17,7 @@ import { RemoteContainer } from "./container.ts";
 export class RemoteContainerObject extends Cloudflare.DurableObjectNamespace<RemoteContainerObject>()(
   "RemoteContainerObject",
   Effect.gen(function* () {
-    const bound = yield* Cloudflare.Container.bind(RemoteContainer);
+    const bound = yield* RemoteContainer;
 
     return Effect.gen(function* () {
       const container = yield* Cloudflare.start(bound);

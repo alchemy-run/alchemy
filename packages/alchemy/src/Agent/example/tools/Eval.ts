@@ -18,7 +18,7 @@ Evaluate JavaScript ${code}` {}
 export const EvalLive = Layer.effect(
   Eval,
   Effect.gen(function* () {
-    const vm = yield* Cloudflare.WorkerLoader;
+    const vm = yield* Cloudflare.WorkerLoader("Eval");
 
     return ({ code }) =>
       vm

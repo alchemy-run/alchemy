@@ -1,71 +1,96 @@
+import type { Types, Unify } from "effect";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Namespace from "./Namespace.ts";
+import type { Inspectable } from "effect/Inspectable";
+import * as Layer from "effect/Layer";
+import type { Pipeable } from "effect/Pipeable";
 
-/**
- * Create a reusable construct that composes child resources under a shared
- * namespace.
- *
- * `Construct.fn` wraps a generator function and automatically pushes the
- * construct `id` onto the current namespace so nested resources become stable
- * children of the construct.
- *
- * @section Creating Constructs
- * @example Simple Reusable Construct
- * ```typescript
- * import * as Construct from "alchemy/Construct";
- * import { Bucket } from "alchemy/AWS/S3";
- *
- * export const Logs = Construct.fn(function* (
- *   id: string,
- *   props: { forceDestroy?: boolean },
- * ) {
- *   const bucket = yield* Bucket("Bucket", {
- *     forceDestroy: props.forceDestroy,
- *   });
- *
- *   return { bucket };
- * });
- * ```
- *
- * @example Composing Website Resources
- * ```typescript
- * export const App = Construct.fn(function* (
- *   id: string,
- *   props: { sourcePath: string },
- * ) {
- *   const site = yield* StaticSite("Web", {
- *     sourcePath: props.sourcePath,
- *     cdn: false,
- *   });
- *
- *   const router = yield* Router("Router", {
- *     routes: {
- *       "/*": site.routeTarget,
- *     },
- *   });
- *
- *   return { site, router };
- * });
- * ```
- */
-export const fn: {
-  <Eff extends Effect.Effect<any, any, any>, AEff, Props extends object>(
-    body: (id: string, props: Props) => Generator<Eff, AEff, never>,
-  ): (
-    id: string,
-    props: Props,
-  ) => Effect.Effect<
+export const TypeId = "~alchemy/Construct";
+
+export interface Construct<out A, out E = never, out R = never, out I = never>
+  extends Pipeable, Inspectable {
+  readonly [TypeId]: Effect.Variance<A, E, R> & {
+    readonly Infra: Types.Covariant<I>;
+  };
+  [Symbol.iterator](): Effect.EffectIterator<Effect.Effect<A, E, R>>;
+  [Unify.typeSymbol]?: unknown;
+  [Unify.unifySymbol]?: Effect.EffectUnify<this>;
+  [Unify.ignoreSymbol]?: {};
+}
+
+export declare const gen: {
+  <
+    Eff extends Effect.Effect<any, any, any>,
+    AEff extends Effect.Effect<any, any, any>,
+  >(
+    body: () => Generator<Eff, AEff, never>,
+  ): Construct<
     AEff,
-    [Eff] extends [never]
+    [Eff | AEff] extends [never]
       ? never
       : [Eff] extends [Effect.Effect<infer _A, infer E, infer _R>]
         ? E
         : never,
-    [Eff] extends [never]
+    [Eff | AEff] extends [never]
       ? never
       : [Eff] extends [Effect.Effect<infer _A, infer _E, infer R>]
         ? R
         : never
   >;
-} = (body) => (id, props) =>
-  Effect.gen(() => body(id, props)).pipe(Namespace.push(id));
+};
+
+export declare const provide: {
+  <const Layers extends [Layer.Any, ...Array<Layer.Any>]>(
+    layers: Layers,
+    options?:
+      | {
+          readonly local?: boolean | undefined;
+        }
+      | undefined,
+  ): <A, E, R>(
+    self: Construct<A, E, R>,
+  ) => Construct<
+    A,
+    E | Layer.Error<Layers[number]>,
+    Layer.Services<Layers[number]> | Exclude<R, Layer.Success<Layers[number]>>
+  >;
+  <ROut, E2, RIn>(
+    layer: Layer.Layer<ROut, E2, RIn>,
+    options?:
+      | {
+          readonly local?: boolean | undefined;
+        }
+      | undefined,
+  ): <A, E, R>(
+    self: Construct<A, E, R>,
+  ) => Construct<A, E | E2, RIn | Exclude<R, ROut>>;
+  <R2>(
+    context: Context.Context<R2>,
+  ): <A, E, R>(self: Construct<A, E, R>) => Construct<A, E, Exclude<R, R2>>;
+  <A, E, R, const Layers extends [Layer.Any, ...Array<Layer.Any>]>(
+    self: Construct<A, E, R>,
+    layers: Layers,
+    options?:
+      | {
+          readonly local?: boolean | undefined;
+        }
+      | undefined,
+  ): Construct<
+    A,
+    E | Layer.Error<Layers[number]>,
+    Layer.Services<Layers[number]> | Exclude<R, Layer.Success<Layers[number]>>
+  >;
+  <A, E, R, ROut, E2, RIn>(
+    self: Construct<A, E, R>,
+    layer: Layer.Layer<ROut, E2, RIn>,
+    options?:
+      | {
+          readonly local?: boolean | undefined;
+        }
+      | undefined,
+  ): Construct<A, E | E2, RIn | Exclude<R, ROut>>;
+  <A, E, R, R2>(
+    self: Construct<A, E, R>,
+    context: Context.Context<R2>,
+  ): Construct<A, E, Exclude<R, R2>>;
+};

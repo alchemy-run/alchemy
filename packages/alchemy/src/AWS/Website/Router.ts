@@ -1,6 +1,5 @@
 import * as Effect from "effect/Effect";
 import { createHash } from "node:crypto";
-import * as Construct from "../../Construct.ts";
 import { toPath } from "../../FQN.ts";
 import type { Input } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
@@ -56,232 +55,237 @@ import type { RouterProps } from "./shared.ts";
  * });
  * ```
  */
-export const Router = Construct.fn(function* (id: string, props: RouterProps) {
-  const domain = props.domain;
+export const Router = (id: string, props: RouterProps) =>
+  Effect.gen(function* () {
+    const domain = props.domain;
 
-  if (domain && domain.dns === false && !domain.cert) {
-    return yield* Effect.die(
-      "Router domain configuration with `dns: false` requires `cert`.",
-    );
-  }
+    if (domain && domain.dns === false && !domain.cert) {
+      return yield* Effect.die(
+        "Router domain configuration with `dns: false` requires `cert`.",
+      );
+    }
 
-  const certificate =
-    !domain || domain.cert
-      ? domain?.cert
-        ? { certificateArn: domain.cert }
-        : undefined
-      : yield* Certificate("Certificate", {
-          domainName: domain.name,
-          subjectAlternativeNames: [
-            ...(domain.aliases ?? []),
-            ...(domain.redirects ?? []),
-          ],
-          hostedZoneId: domain.hostedZoneId,
-          tags: props.tags,
-        });
+    const certificate =
+      !domain || domain.cert
+        ? domain?.cert
+          ? { certificateArn: domain.cert }
+          : undefined
+        : yield* Certificate("Certificate", {
+            domainName: domain.name,
+            subjectAlternativeNames: [
+              ...(domain.aliases ?? []),
+              ...(domain.redirects ?? []),
+            ],
+            hostedZoneId: domain.hostedZoneId,
+            tags: props.tags,
+          });
 
-  const stack = yield* Stack;
-  const stage = yield* Stage;
-  const ns = yield* Namespace.CurrentNamespace;
-  const fqn = ns ? toPath(ns).join("/") : id;
-  const kvNamespace = createHash("md5")
-    .update(`${stack.name}-${stage}-${fqn}`)
-    .digest("hex")
-    .substring(0, 4);
+    const stack = yield* Stack;
+    const stage = yield* Stage;
+    const ns = yield* Namespace.CurrentNamespace;
+    const fqn = ns ? toPath(ns).join("/") : id;
+    const kvNamespace = createHash("md5")
+      .update(`${stack.name}-${stage}-${fqn}`)
+      .digest("hex")
+      .substring(0, 4);
 
-  const kvStore = yield* KeyValueStore("KvStore", {});
+    const kvStore = yield* KeyValueStore("KvStore", {});
 
-  const viewerRequest = yield* CloudFrontFunction("ViewerRequest", {
-    comment: `${id} viewer request`,
-    code: buildRouterRequestFunctionCode({
-      kvNamespace,
-      userInjection: props.edge?.viewerRequest?.injection,
-      blockCloudfrontUrl: !!domain,
-    }),
-    keyValueStoreArns: [kvStore.keyValueStoreArn],
-  });
+    const viewerRequest = yield* CloudFrontFunction("ViewerRequest", {
+      comment: `${id} viewer request`,
+      code: buildRouterRequestFunctionCode({
+        kvNamespace,
+        userInjection: props.edge?.viewerRequest?.injection,
+        blockCloudfrontUrl: !!domain,
+      }),
+      keyValueStoreArns: [kvStore.keyValueStoreArn],
+    });
 
-  const viewerResponse = props.edge?.viewerResponse
-    ? yield* CloudFrontFunction("ViewerResponse", {
-        comment: `${id} viewer response`,
-        code: buildRouterResponseFunctionCode(
-          props.edge.viewerResponse.injection,
-        ),
-        keyValueStoreArns: props.edge.viewerResponse.keyValueStoreArn
-          ? [props.edge.viewerResponse.keyValueStoreArn as any]
-          : undefined,
-      })
-    : undefined;
+    const viewerResponse = props.edge?.viewerResponse
+      ? yield* CloudFrontFunction("ViewerResponse", {
+          comment: `${id} viewer response`,
+          code: buildRouterResponseFunctionCode(
+            props.edge.viewerResponse.injection,
+          ),
+          keyValueStoreArns: props.edge.viewerResponse.keyValueStoreArn
+            ? [props.edge.viewerResponse.keyValueStoreArn as any]
+            : undefined,
+        })
+      : undefined;
 
-  const functionAssociations: DistributionBehavior["functionAssociations"] = [
-    {
-      eventType: "viewer-request" as const,
-      functionArn: viewerRequest.functionArn as any,
-    },
-    ...(viewerResponse
-      ? [
-          {
-            eventType: "viewer-response" as const,
-            functionArn: viewerResponse.functionArn as any,
-          },
-        ]
-      : []),
-  ];
+    const functionAssociations: DistributionBehavior["functionAssociations"] = [
+      {
+        eventType: "viewer-request" as const,
+        functionArn: viewerRequest.functionArn as any,
+      },
+      ...(viewerResponse
+        ? [
+            {
+              eventType: "viewer-response" as const,
+              functionArn: viewerResponse.functionArn as any,
+            },
+          ]
+        : []),
+    ];
 
-  const inlineRouteEntries: Record<string, Input<string>> = {};
+    const inlineRouteEntries: Record<string, Input<string>> = {};
 
-  if (props.routes) {
-    let routeIndex = 0;
-    for (const [pattern, route] of Object.entries(props.routes)) {
-      routeIndex++;
-      const routeNs = createHash("md5")
-        .update(`${stack.name}-${stage}-${fqn}:route:${routeIndex}`)
-        .digest("hex")
-        .substring(0, 4);
+    if (props.routes) {
+      let routeIndex = 0;
+      for (const [pattern, route] of Object.entries(props.routes)) {
+        routeIndex++;
+        const routeNs = createHash("md5")
+          .update(`${stack.name}-${stage}-${fqn}:route:${routeIndex}`)
+          .digest("hex")
+          .substring(0, 4);
 
-      if (typeof route === "string" || "url" in (route as any)) {
-        const url = typeof route === "string" ? route : (route as any).url;
-        const host = typeof url === "string" ? new URL(url).host : url;
-        inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(
-          host,
-          (resolvedHost) =>
-            JSON.stringify({
-              host: resolvedHost,
-              origin: (route as any).origin,
-              rewrite: (route as any).rewrite,
-            }),
-        );
-        yield* KvRoutesUpdate(`Route${routeIndex}`, {
-          store: kvStore.keyValueStoreArn as any,
-          namespace: kvNamespace,
-          key: "routes",
-          entry: `url,${routeNs},,${normalizePattern(pattern)}`,
-        });
-      } else {
-        const bucketRoute = route as any;
-        const bucketDomain =
-          typeof bucketRoute.bucket === "string"
-            ? bucketRoute.bucket
-            : bucketRoute.bucket.bucketRegionalDomainName;
-        inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(
-          bucketDomain,
-          (resolvedDomain) =>
-            JSON.stringify({
-              domain: resolvedDomain,
-              origin: bucketRoute.origin,
-              rewrite: bucketRoute.rewrite,
-            }),
-        );
-        yield* KvRoutesUpdate(`Route${routeIndex}`, {
-          store: kvStore.keyValueStoreArn as any,
-          namespace: kvNamespace,
-          key: "routes",
-          entry: `bucket,${routeNs},,${normalizePattern(pattern)}`,
-        });
+        if (typeof route === "string" || "url" in (route as any)) {
+          const url = typeof route === "string" ? route : (route as any).url;
+          const host = typeof url === "string" ? new URL(url).host : url;
+          inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(
+            host,
+            (resolvedHost) =>
+              JSON.stringify({
+                host: resolvedHost,
+                origin: (route as any).origin,
+                rewrite: (route as any).rewrite,
+              }),
+          );
+          yield* KvRoutesUpdate(`Route${routeIndex}`, {
+            store: kvStore.keyValueStoreArn as any,
+            namespace: kvNamespace,
+            key: "routes",
+            entry: `url,${routeNs},,${normalizePattern(pattern)}`,
+          });
+        } else {
+          const bucketRoute = route as any;
+          const bucketDomain =
+            typeof bucketRoute.bucket === "string"
+              ? bucketRoute.bucket
+              : bucketRoute.bucket.bucketRegionalDomainName;
+          inlineRouteEntries[`${routeNs}:metadata`] = stringifyResolvedString(
+            bucketDomain,
+            (resolvedDomain) =>
+              JSON.stringify({
+                domain: resolvedDomain,
+                origin: bucketRoute.origin,
+                rewrite: bucketRoute.rewrite,
+              }),
+          );
+          yield* KvRoutesUpdate(`Route${routeIndex}`, {
+            store: kvStore.keyValueStoreArn as any,
+            namespace: kvNamespace,
+            key: "routes",
+            entry: `bucket,${routeNs},,${normalizePattern(pattern)}`,
+          });
+        }
       }
     }
-  }
 
-  if (Object.keys(inlineRouteEntries).length > 0) {
-    yield* KvEntries("InlineRouteEntries", {
-      store: kvStore.keyValueStoreArn as any,
-      namespace: kvNamespace,
-      entries: inlineRouteEntries,
-    });
-  }
+    if (Object.keys(inlineRouteEntries).length > 0) {
+      yield* KvEntries("InlineRouteEntries", {
+        store: kvStore.keyValueStoreArn as any,
+        namespace: kvNamespace,
+        entries: inlineRouteEntries,
+      });
+    }
 
-  const distribution = yield* Distribution("Distribution", {
-    aliases: domain
-      ? [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])]
-      : undefined,
-    origins: [
-      {
-        id: "default",
-        domainName: "placeholder.sst.dev",
-        customOriginConfig: {
-          httpPort: 80,
-          httpsPort: 443,
-          originProtocolPolicy: "https-only",
-          originReadTimeout: 20,
-          originSslProtocols: ["TLSv1.2"],
+    const distribution = yield* Distribution("Distribution", {
+      aliases: domain
+        ? [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])]
+        : undefined,
+      origins: [
+        {
+          id: "default",
+          domainName: "placeholder.sst.dev",
+          customOriginConfig: {
+            httpPort: 80,
+            httpsPort: 443,
+            originProtocolPolicy: "https-only",
+            originReadTimeout: 20,
+            originSslProtocols: ["TLSv1.2"],
+          },
         },
-      },
-    ],
-    defaultCacheBehavior: {
-      targetOriginId: "default",
-      viewerProtocolPolicy: "redirect-to-https",
-      allowedMethods: [
-        "DELETE",
-        "GET",
-        "HEAD",
-        "OPTIONS",
-        "PATCH",
-        "POST",
-        "PUT",
       ],
-      cachedMethods: ["GET", "HEAD"],
-      compress: true,
-      cachePolicyId: MANAGED_CACHING_OPTIMIZED_POLICY_ID,
-      functionAssociations,
-    },
-    viewerCertificate: certificate
-      ? {
-          acmCertificateArn: (certificate as any).certificateArn,
-          sslSupportMethod: "sni-only",
-          minimumProtocolVersion: "TLSv1.2_2021",
-        }
-      : undefined,
-    tags: props.tags,
-  });
+      defaultCacheBehavior: {
+        targetOriginId: "default",
+        viewerProtocolPolicy: "redirect-to-https",
+        allowedMethods: [
+          "DELETE",
+          "GET",
+          "HEAD",
+          "OPTIONS",
+          "PATCH",
+          "POST",
+          "PUT",
+        ],
+        cachedMethods: ["GET", "HEAD"],
+        compress: true,
+        cachePolicyId: MANAGED_CACHING_OPTIMIZED_POLICY_ID,
+        functionAssociations,
+      },
+      viewerCertificate: certificate
+        ? {
+            acmCertificateArn: (certificate as any).certificateArn,
+            sslSupportMethod: "sni-only",
+            minimumProtocolVersion: "TLSv1.2_2021",
+          }
+        : undefined,
+      tags: props.tags,
+    });
 
-  const records =
-    domain?.hostedZoneId && domain.dns !== false
-      ? yield* Effect.forEach(
-          [domain.name, ...(domain.aliases ?? []), ...(domain.redirects ?? [])],
-          (name, index) =>
-            Route53Record(`AliasRecord${index + 1}`, {
-              hostedZoneId: domain.hostedZoneId!,
-              name,
-              type: "A",
-              aliasTarget: {
-                hostedZoneId: distribution.hostedZoneId,
-                dnsName: distribution.domainName,
-              },
-            }),
-          { concurrency: "unbounded" },
-        )
-      : [];
+    const records =
+      domain?.hostedZoneId && domain.dns !== false
+        ? yield* Effect.forEach(
+            [
+              domain.name,
+              ...(domain.aliases ?? []),
+              ...(domain.redirects ?? []),
+            ],
+            (name, index) =>
+              Route53Record(`AliasRecord${index + 1}`, {
+                hostedZoneId: domain.hostedZoneId!,
+                name,
+                type: "A",
+                aliasTarget: {
+                  hostedZoneId: distribution.hostedZoneId,
+                  dnsName: distribution.domainName,
+                },
+              }),
+            { concurrency: "unbounded" },
+          )
+        : [];
 
-  const invalidation =
-    props.invalidation === false || !props.invalidation
-      ? undefined
-      : yield* Invalidation("Invalidation", {
-          distributionId: distribution.distributionId,
-          version: createHash("sha256")
-            .update(JSON.stringify(inlineRouteEntries))
-            .digest("hex"),
-          wait: props.invalidation.wait,
-          paths:
-            props.invalidation.paths === "all" || !props.invalidation.paths
-              ? ["/*"]
-              : Array.isArray(props.invalidation.paths)
-                ? props.invalidation.paths
-                : ["/*"],
-        });
+    const invalidation =
+      props.invalidation === false || !props.invalidation
+        ? undefined
+        : yield* Invalidation("Invalidation", {
+            distributionId: distribution.distributionId,
+            version: createHash("sha256")
+              .update(JSON.stringify(inlineRouteEntries))
+              .digest("hex"),
+            wait: props.invalidation.wait,
+            paths:
+              props.invalidation.paths === "all" || !props.invalidation.paths
+                ? ["/*"]
+                : Array.isArray(props.invalidation.paths)
+                  ? props.invalidation.paths
+                  : ["/*"],
+          });
 
-  return {
-    certificate,
-    distribution,
-    records,
-    invalidation,
-    kvStoreArn: kvStore.keyValueStoreArn as Input<string>,
-    kvNamespace,
-    distributionId: distribution.distributionId as Input<string>,
-    url: domain
-      ? Output.interpolate`https://${domain.name}`
-      : Output.interpolate`https://${distribution.domainName}`,
-  };
-});
+    return {
+      certificate,
+      distribution,
+      records,
+      invalidation,
+      kvStoreArn: kvStore.keyValueStoreArn as Input<string>,
+      kvNamespace,
+      distributionId: distribution.distributionId as Input<string>,
+      url: domain
+        ? Output.interpolate`https://${domain.name}`
+        : Output.interpolate`https://${distribution.domainName}`,
+    };
+  }).pipe(Namespace.push(id));
 
 const buildRouterRequestFunctionCode = ({
   kvNamespace,
