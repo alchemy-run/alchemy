@@ -10,6 +10,7 @@ export interface DescribeTableRequest extends Omit<
   "TableName"
 > {}
 
+/** @binding */
 export class DescribeTable extends Binding.Service<
   DescribeTable,
   <T extends Table>(

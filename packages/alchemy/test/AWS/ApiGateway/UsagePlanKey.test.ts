@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -30,4 +31,33 @@ test.provider.skipIf(!runLive)(
 
       yield* stack.destroy();
     }),
+);
+
+test.provider("list enumerates the deployed usage plan key", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const { key, plan } = yield* stack.deploy(
+      Effect.gen(function* () {
+        const key = yield* AWS.ApiGateway.ApiKey("AgUpkListKey", {
+          generateDistinctId: true,
+        });
+        const plan = yield* AWS.ApiGateway.UsagePlan("AgUpkListPlan", {});
+        yield* AWS.ApiGateway.UsagePlanKey("AgUpkListLink", {
+          usagePlanId: plan.id,
+          keyId: key.id,
+        });
+        return { key, plan };
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(AWS.ApiGateway.UsagePlanKey);
+    const all = yield* provider.list();
+
+    expect(
+      all.some((x) => x.usagePlanId === plan.id && x.keyId === key.id),
+    ).toBe(true);
+
+    yield* stack.destroy();
+  }),
 );

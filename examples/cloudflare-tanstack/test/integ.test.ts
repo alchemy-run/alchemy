@@ -32,6 +32,7 @@ const KEYS = {
   binding: "integ:via-binding",
   fetch: "integ:via-fetch",
   rpc: "integ:via-rpc",
+  httpClient: "integ:via-http-client",
 };
 
 // Cold-start retry — fresh `workers.dev` URLs take a few seconds to start
@@ -115,6 +116,32 @@ test(
     const get = yield* client.get(route(websiteUrl, { key, via: "rpc" }));
     expect(get.status).toBe(200);
     expect(yield* get.text).toBe("hello-rpc");
+  }),
+  { timeout: 180_000 },
+);
+
+test(
+  "option 4 — service-binding HTTP client",
+  Effect.gen(function* () {
+    const { websiteUrl } = yield* stack;
+    const client = yield* HttpClient.HttpClient;
+    const key = KEYS.httpClient;
+
+    // Seed the bucket via option 1 (direct binding) so the RPC `hello`
+    // method has something to read.
+    const seed = yield* HttpClient.execute(
+      HttpClientRequest.put(
+        route(websiteUrl, { key, via: "http-client" }),
+      ).pipe(HttpClientRequest.bodyText("hello-http-client", "text/plain")),
+    ).pipe(coldStartRetry);
+    expect(seed.status).toBe(204);
+
+    // HTTP client GET reads through Backend.hello — exercises toPromiseApi.
+    const get = yield* client.get(
+      route(websiteUrl, { key, via: "http-client" }),
+    );
+    expect(get.status).toBe(200);
+    expect(yield* get.text).toBe("hello-http-client");
   }),
   { timeout: 180_000 },
 );

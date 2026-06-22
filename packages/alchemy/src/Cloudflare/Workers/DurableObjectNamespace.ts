@@ -227,6 +227,8 @@ export class DurableObjectNamespaceScope extends Context.Service<
  * - **Modular** — class and implementation in separate files for tree-shaking.
  *
  * @resource
+ * @product Workers
+ * @category Workers & Compute
  *
  * @section Inline Durable Objects
  * Pass the Effect implementation as the second argument. This is the

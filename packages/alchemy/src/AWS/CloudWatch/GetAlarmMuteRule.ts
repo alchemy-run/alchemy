@@ -12,6 +12,7 @@ export interface GetAlarmMuteRuleRequest extends Omit<
 
 /**
  * Runtime binding for `cloudwatch:GetAlarmMuteRule`.
+ * @binding
  */
 export class GetAlarmMuteRule extends Binding.Service<
   GetAlarmMuteRule,

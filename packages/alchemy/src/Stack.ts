@@ -13,10 +13,10 @@ import type { HttpClient } from "effect/unstable/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import type { ActionLike } from "./Action.ts";
 import { AlchemyContext, AlchemyContextLive } from "./AlchemyContext.ts";
-import { provideFreshArtifactStore } from "./Artifacts.ts";
+import { type ArtifactStore, provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
 import { CredentialsStore, CredentialsStoreLive } from "./Auth/Credentials.ts";
-import { Profile, ProfileLive } from "./Auth/Profile.ts";
+import { AlchemyProfile, ProfileLive } from "./Auth/Profile.ts";
 import { Cli } from "./Cli/Cli.ts";
 import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
@@ -38,7 +38,8 @@ export type StackServices =
   | HttpClient
   | ChildProcessSpawner
   | AuthProviders
-  | Profile
+  | AlchemyProfile
+  | ArtifactStore
   | CredentialsStore
   | Cli;
 
@@ -51,8 +52,9 @@ export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
   | AuthProviders
   | AlchemyContext
   | Cli
-  | Profile
+  | AlchemyProfile
   | CredentialsStore
+  | ArtifactStore
   | State
   | Req
 >;

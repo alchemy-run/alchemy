@@ -15,6 +15,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
+import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import {
   authorizeWith,
@@ -109,6 +110,8 @@ export const readClient = (token: TunnelToken): TunnelReadClient => {
  * `secret_text` binding) so runtime code can authenticate.
  *
  * @binding
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  *
  * @section Reading tunnels at runtime
  * @example Bind the read client
@@ -142,7 +145,7 @@ export const readClient = (token: TunnelToken): TunnelReadClient => {
  */
 export class TunnelRead extends Binding.Service<
   TunnelRead,
-  () => Effect.Effect<TunnelReadClient, never, Worker>
+  () => Effect.Effect<TunnelReadClient, never, Worker | CloudflareEnvironment>
 >()("Cloudflare.TunnelRead") {}
 
 /**
@@ -151,7 +154,7 @@ export class TunnelRead extends Binding.Service<
  */
 export class TunnelReadPolicy extends Binding.Policy<
   TunnelReadPolicy,
-  (token: AccountApiToken) => Effect.Effect<void>
+  (token: AccountApiToken) => Effect.Effect<void, never, CloudflareEnvironment>
 >()("Cloudflare.TunnelRead") {}
 
 /** Runtime layer for {@link TunnelRead}. */

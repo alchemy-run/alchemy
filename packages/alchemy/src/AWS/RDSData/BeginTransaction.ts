@@ -14,6 +14,7 @@ export interface BeginTransactionOptions {
 
 /**
  * Runtime binding for `rds-data:BeginTransaction`.
+ * @binding
  */
 export class BeginTransaction extends Binding.Service<
   BeginTransaction,

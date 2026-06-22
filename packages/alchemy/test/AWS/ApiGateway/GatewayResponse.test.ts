@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
@@ -84,4 +85,40 @@ test.provider.skipIf(!runLive)(
 
       yield* stack.destroy();
     }),
+);
+
+test.provider("list enumerates the deployed gateway response", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const { api } = yield* stack.deploy(
+      Effect.gen(function* () {
+        const api = yield* AWS.ApiGateway.RestApi("AgGwRespListApi", {
+          endpointConfiguration: { types: ["REGIONAL"] },
+        });
+        yield* AWS.ApiGateway.GatewayResponse("AgListDefault4xx", {
+          restApiId: api.restApiId,
+          responseType: "DEFAULT_4XX",
+          responseTemplates: {
+            "application/json": '{"message":"list"}',
+          },
+        });
+        return { api };
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(
+      AWS.ApiGateway.GatewayResponse,
+    );
+    const all = yield* provider.list();
+
+    expect(
+      all.some(
+        (g) =>
+          g.restApiId === api.restApiId && g.responseType === "DEFAULT_4XX",
+      ),
+    ).toBe(true);
+
+    yield* stack.destroy();
+  }),
 );

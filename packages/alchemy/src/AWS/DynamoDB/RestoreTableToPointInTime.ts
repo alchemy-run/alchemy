@@ -10,6 +10,7 @@ export interface RestoreTableToPointInTimeRequest extends Omit<
   "SourceTableArn" | "SourceTableName" | "TargetTableName"
 > {}
 
+/** @binding */
 export class RestoreTableToPointInTime extends Binding.Service<
   RestoreTableToPointInTime,
   <From extends Table, To extends Table>(

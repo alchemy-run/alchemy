@@ -8,6 +8,7 @@ import type {
 } from "./BucketNotifications.ts";
 import type { S3EventType } from "./S3Event.ts";
 
+/** @binding */
 export class BucketEventSource extends Binding.Service<
   BucketEventSource,
   BucketEventSourceService

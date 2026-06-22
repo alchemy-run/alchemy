@@ -8,6 +8,7 @@ import type { Table } from "./Table.ts";
 
 export interface QueryRequest extends Omit<DynamoDB.QueryInput, "TableName"> {}
 
+/** @binding */
 export class Query extends Binding.Service<
   Query,
   <T extends Table>(

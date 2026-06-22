@@ -1,5 +1,6 @@
 import * as iam from "@distilled.cloud/aws/iam";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { isResolved } from "../../Diff.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
 import * as Provider from "../../Provider.ts";
@@ -48,7 +49,7 @@ export interface Group extends Resource<
  *
  * `Group` manages a shared authorization container for IAM users, including
  * attached managed policies and embedded inline policies.
- *
+ * @resource
  * @section Creating IAM Groups
  * @example Group with an Inline Policy
  * ```typescript
@@ -192,6 +193,48 @@ export const GroupProvider = () =>
 
       return {
         stables: ["groupArn", "groupName", "groupId"],
+        // IAM is global (no region). Enumerate every group via the paginated
+        // `listGroups`, then hydrate each into the full `read` Attributes shape
+        // by reading its attached managed policies and embedded inline policies.
+        list: () =>
+          Effect.gen(function* () {
+            const groups = yield* iam.listGroups.pages({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) => page.Groups ?? []),
+              ),
+            );
+            const hydrated = yield* Effect.forEach(
+              groups,
+              (group) =>
+                Effect.gen(function* () {
+                  const [managedPolicyArns, inlinePolicies] = yield* Effect.all(
+                    [
+                      readManagedPolicies(group.GroupName),
+                      readInlinePolicies(group.GroupName),
+                    ],
+                  );
+                  return {
+                    groupArn: group.Arn,
+                    groupName: group.GroupName,
+                    groupId: group.GroupId,
+                    path: group.Path,
+                    managedPolicyArns,
+                    inlinePolicies,
+                  };
+                }).pipe(
+                  // A group can be deleted between `listGroups` and this
+                  // per-group hydration (e.g. a sibling test tearing its group
+                  // down) — `NoSuchEntityException` here just means it's gone,
+                  // so drop it rather than failing the whole enumeration.
+                  Effect.catchTag("NoSuchEntityException", () =>
+                    Effect.succeed(undefined),
+                  ),
+                ),
+              { concurrency: 10 },
+            );
+            return hydrated.filter((g) => g !== undefined);
+          }),
         diff: Effect.fn(function* ({ id, olds, news }) {
           if (!isResolved(news)) return;
           if (

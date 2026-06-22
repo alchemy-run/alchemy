@@ -44,6 +44,7 @@ interface EventDescriptor {
   props?: EventRouteProps;
 }
 
+/** @binding */
 export class EventSource extends Binding.Service<
   EventSource,
   EventSourceService

@@ -6,6 +6,7 @@ import { isFunction } from "../Lambda/Function.ts";
 
 export interface ListTablesRequest extends DynamoDB.ListTablesInput {}
 
+/** @binding */
 export class ListTables extends Binding.Service<
   ListTables,
   () => Effect.Effect<

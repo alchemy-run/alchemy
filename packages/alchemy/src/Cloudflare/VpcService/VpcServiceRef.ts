@@ -27,7 +27,9 @@ export type VpcServiceRef = VpcServiceAttributes;
 
 /**
  * Reference an existing Cloudflare VPC service without managing its lifecycle.
- *
+ * @resource
+ * @product Workers VPC
+ * @category Network
  * @example Reference by ID
  * ```typescript
  * const service = yield* Cloudflare.VpcServiceRef({
@@ -44,7 +46,7 @@ export type VpcServiceRef = VpcServiceAttributes;
  */
 export const VpcServiceRef = (props: VpcServiceRefProps) =>
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
     if ("name" in props) {
       const match = yield* connectivity.listDirectoryServices
         .items({ accountId })

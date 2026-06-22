@@ -11,6 +11,7 @@ export interface ListObjectsV2Request extends Omit<
   "Bucket"
 > {}
 
+/** @binding */
 export class ListObjectsV2 extends Binding.Service<
   ListObjectsV2,
   (

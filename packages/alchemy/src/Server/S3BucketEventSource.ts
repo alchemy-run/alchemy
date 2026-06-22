@@ -12,6 +12,7 @@ import * as SQS from "../AWS/SQS/index.ts";
 import * as Binding from "../Binding.ts";
 import { SQSQueueEventSource } from "./SQSQueueEventSource.ts";
 
+/** @binding */
 export const S3BucketEventSource = Layer.effect(
   S3.BucketEventSource,
   Effect.gen(function* () {

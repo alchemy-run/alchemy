@@ -31,6 +31,11 @@ export interface AnalyticsEngineDatasetClient {
   ): Effect.Effect<void, AnalyticsEngineDatasetError, RuntimeContext>;
 }
 
+/**
+ * @binding
+ * @product Analytics Engine
+ * @category Observability & Analytics
+ */
 export class AnalyticsEngineDatasetBinding extends Binding.Service<
   AnalyticsEngineDatasetBinding,
   (

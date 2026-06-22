@@ -11,6 +11,11 @@ import * as UrlParams from "effect/unstable/http/UrlParams";
 import * as Binding from "../../Binding.ts";
 import { isWorker, type Worker, WorkerEnvironment } from "./Worker.ts";
 
+/**
+ * @binding
+ * @product Workers
+ * @category Workers & Compute
+ */
 export class Fetch extends Binding.Service<
   Fetch,
   (

@@ -29,6 +29,7 @@ export interface Provider<
     DeleteReq = never,
     TailReq = never,
     LogsReq = never,
+    ListReq = never,
   >(
     service: Omit<
       ProviderService<
@@ -39,7 +40,8 @@ export interface Provider<
         ReconcileReq,
         DeleteReq,
         TailReq,
-        LogsReq
+        LogsReq,
+        ListReq
       >,
       "Type"
     >,
@@ -51,7 +53,8 @@ export interface Provider<
     ReconcileReq,
     DeleteReq,
     TailReq,
-    LogsReq
+    LogsReq,
+    ListReq
   >;
 }
 
@@ -91,6 +94,7 @@ export interface ProviderService<
   DeleteReq = never,
   TailReq = never,
   LogsReq = never,
+  ListReq = never,
 > {
   /**
    * The version of the provider.
@@ -98,6 +102,46 @@ export interface ProviderService<
    * @default 0
    */
   version?: number;
+  /**
+   * Account-wide teardown (`alchemy unsafe nuke`) behaviour. Providers whose
+   * resources can't meaningfully be deleted opt out here so nuke doesn't
+   * report an endless "deleted but still there" loop. `read`/import are
+   * unaffected.
+   */
+  nuke?: {
+    /**
+     * The resource is an account/zone **singleton setting** — always-present
+     * configuration (e.g. Bot Management, Email Routing, a zone's SSL
+     * settings) whose `delete` only *resets* it to defaults rather than
+     * removing a discrete resource. Skipped by nuke, since `list` always
+     * re-enumerates it and "deleting" it just resets config the operator
+     * never created.
+     */
+    singleton?: boolean;
+    /**
+     * The resource is skipped by nuke for any other reason — typically because
+     * it can never actually be deleted (no delete API, like RealtimeKit Apps;
+     * or a registration that is never released, like Registrar Domains). Unlike
+     * {@link singleton}, these are ordinary multi-instance resources.
+     */
+    skip?: boolean;
+  };
+  /**
+   * Enumerates every existing resource of this type in the ambient scope
+   * (account / region / zone resolved from the environment services), and
+   * returns the full {@link ProviderService} `Attributes` shape for each —
+   * the same shape {@link read} produces, so each item is directly usable
+   * with {@link delete} without a follow-up read.
+   *
+   * This powers account-wide operations such as `alchemy nuke`, which lists
+   * everything and then deletes it. It takes no input and must paginate
+   * exhaustively so the returned array is complete.
+   *
+   * Resources with no native enumeration API (account/zone singletons,
+   * existence-only resources, sub-resources keyed entirely by a parent)
+   * should return an empty array rather than throwing.
+   */
+  list(): Effect.Effect<Res["Attributes"][], any, ListReq>;
   /**
    * Returns a stream of log lines for a deployed resource.
    * Used by `alchemy tail` to stream real-time logs.
@@ -205,6 +249,7 @@ export const effect = <
   DeleteReq = never,
   TailReq = never,
   LogsReq = never,
+  ListReq = never,
 >(
   cls: ResourceClass<R> | Platform<R, any, any, any, any>,
   eff: Effect.Effect<
@@ -216,7 +261,8 @@ export const effect = <
       ReconcileReq,
       DeleteReq,
       TailReq,
-      LogsReq
+      LogsReq,
+      ListReq
     >,
     never,
     Req
@@ -225,7 +271,7 @@ export const effect = <
   Provider<R>,
   never,
   Exclude<
-    Req | ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq,
+    Req | ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq,
     LifecycleServices
   >
 > =>
@@ -241,6 +287,7 @@ export const succeed = <
   DeleteReq = never,
   TailReq = never,
   LogsReq = never,
+  ListReq = never,
 >(
   cls: ResourceClass<R> | Platform<R, any, any, any, any>,
   service: ProviderService<
@@ -251,13 +298,14 @@ export const succeed = <
     ReconcileReq,
     DeleteReq,
     TailReq,
-    LogsReq
+    LogsReq,
+    ListReq
   >,
 ): Layer.Layer<
   Provider<R>,
   never,
   Exclude<
-    ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq,
+    ReadReq | DiffReq | PrecreateReq | ReconcileReq | DeleteReq | ListReq,
     LifecycleServices
   >
 > =>
@@ -293,6 +341,13 @@ export interface ProviderCollectionService {
   get<Resource extends ResourceLike>(
     service: string,
   ): ProviderService<Resource> | undefined;
+  /**
+   * Every provider in this collection keyed by its resource type
+   * (e.g. `"Cloudflare.Worker"`). Used by account-wide operations such
+   * as `alchemy unsafe nuke` to enumerate and filter providers — the
+   * collection's closure-captured map would otherwise be unreachable.
+   */
+  readonly providers: Record<string, ProviderService>;
 }
 
 export const collection = <
@@ -333,6 +388,7 @@ export const collection = <
     return {
       kind: "ProviderCollection" as const,
       get: (service: string) => providers[service],
+      providers,
     };
   }) as any;
 
@@ -363,6 +419,22 @@ export const findProviderByType: {
       }),
     ),
   );
+
+/**
+ * Typed provider lookup by resource class (or {@link Platform} / {@link Policy})
+ * value. Infers `R` from the class so `provider.list()` / `provider.read(...)`
+ * return the resource's `Attributes` shape — prefer this over
+ * {@link findProviderByType}, which only takes the type string.
+ */
+export const findProvider: {
+  <R extends ResourceLike>(
+    resource: ResourceClass<R> | Platform<R, any, any, any, any>,
+  ): Effect.Effect<ProviderService<R>>;
+  <P extends Policy<any, any, any>>(
+    policy: P,
+  ): Effect.Effect<Effect.Success<P>>;
+} = (resource: { Type?: string; key?: string }) =>
+  findProviderByType((resource.Type ?? resource.key) as string) as any;
 
 export const tryFindProviderByType: {
   <R extends ResourceLike>(

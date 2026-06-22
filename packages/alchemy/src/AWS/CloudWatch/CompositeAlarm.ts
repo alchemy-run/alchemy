@@ -1,13 +1,13 @@
-import { Region } from "@distilled.cloud/aws/Region";
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { isResolved } from "../../Diff.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { hasAlchemyTags } from "../../Tags.ts";
-import type { Providers } from "../Providers.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import type { Providers } from "../Providers.ts";
 import type { AlarmArn } from "./Alarm.ts";
 import {
   createName,
@@ -49,7 +49,7 @@ export interface CompositeAlarm extends Resource<
 
 /**
  * A CloudWatch composite alarm.
- *
+ * @resource
  * @section Creating Composite Alarms
  * @example Composite Rule
  * ```typescript
@@ -66,14 +66,16 @@ export const CompositeAlarmProvider = () =>
   Provider.effect(
     CompositeAlarm,
     Effect.gen(function* () {
-      const region = yield* Region;
-      const { accountId } = yield* AWSEnvironment;
-
       const createAlarmName = (id: string, props: { name?: string } = {}) =>
         createName(id, props.name, 255);
 
       const alarmArn = (alarmName: string) =>
-        `arn:aws:cloudwatch:${region}:${accountId}:alarm:${alarmName}` as AlarmArn;
+        AWSEnvironment.current.pipe(
+          Effect.map(
+            (env) =>
+              `arn:aws:cloudwatch:${env.region}:${env.accountId}:alarm:${alarmName}` as AlarmArn,
+          ),
+        );
 
       const readCompositeAlarm = Effect.fn(function* (alarmName: string) {
         const described = yield* cloudwatch.describeAlarms({
@@ -146,12 +148,12 @@ export const CompositeAlarmProvider = () =>
           // observed.
           const tags = yield* updateResourceTags({
             id,
-            resourceArn: alarmArn(name),
+            resourceArn: yield* alarmArn(name),
             olds: olds?.tags ?? existing?.tags,
             news: news.tags,
           });
 
-          yield* session.note(alarmArn(name));
+          yield* session.note(yield* alarmArn(name));
 
           const state = yield* readCompositeAlarm(name);
           if (!state) {
@@ -172,6 +174,50 @@ export const CompositeAlarmProvider = () =>
             }),
           );
         }),
+        list: () =>
+          Effect.gen(function* () {
+            // Enumerate every composite alarm in the account/region by
+            // exhaustively paginating `describeAlarms` filtered to composite
+            // alarms (items live under the `CompositeAlarms` field).
+            const alarms = yield* cloudwatch.describeAlarms
+              .pages({ AlarmTypes: ["CompositeAlarm"] })
+              .pipe(
+                Stream.runCollect,
+                Effect.map((chunk) =>
+                  Array.from(chunk).flatMap((page) =>
+                    (page.CompositeAlarms ?? []).filter(
+                      (
+                        candidate,
+                      ): candidate is cloudwatch.CompositeAlarm & {
+                        AlarmName: string;
+                        AlarmArn: string;
+                      } =>
+                        candidate.AlarmName != null &&
+                        candidate.AlarmArn != null,
+                    ),
+                  ),
+                ),
+              );
+
+            return yield* Effect.forEach(
+              alarms,
+              (compositeAlarm) =>
+                readResourceTags(compositeAlarm.AlarmArn).pipe(
+                  Effect.catchTag("ResourceNotFoundException", () =>
+                    Effect.succeed({}),
+                  ),
+                  Effect.map((tags) => ({
+                    alarmName: compositeAlarm.AlarmName,
+                    alarmArn: compositeAlarm.AlarmArn as AlarmArn,
+                    stateValue: compositeAlarm.StateValue,
+                    stateReason: compositeAlarm.StateReason,
+                    compositeAlarm,
+                    tags,
+                  })),
+                ),
+              { concurrency: 10 },
+            );
+          }),
       };
     }),
   );

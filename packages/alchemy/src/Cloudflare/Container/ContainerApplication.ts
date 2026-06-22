@@ -1,23 +1,18 @@
+import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
-import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import * as Bundle from "../../Bundle/Bundle.ts";
 import {
   dockerBuild,
   materializeDockerfile,
   pushImage,
   writeContextFiles,
 } from "../../Bundle/Docker.ts";
-import {
-  findCwdForBundle,
-  getStableContextDir,
-} from "../../Bundle/TempRoot.ts";
+import { getStableContextDir } from "../../Bundle/TempRoot.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
-import { createPhysicalName } from "../../PhysicalName.ts";
+import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import {
   type Main,
   type PlatformProps,
@@ -25,15 +20,20 @@ import {
 } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
-import { Self } from "../../Self.ts";
 import * as Server from "../../Server/index.ts";
-import { Stack } from "../../Stack.ts";
 import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { isLiveId } from "../LocalRuntime.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
 import { Container, ContainerTypeId } from "./Container.ts";
+import {
+  buildFinalDockerfile,
+  bundleContainerProgram,
+  createContainerApplicationName,
+} from "./ContainerBundle.ts";
+import { LocalContainerProvider } from "./LocalContainerProvider.ts";
 
 export { Credentials } from "@distilled.cloud/cloudflare/Credentials";
 
@@ -251,31 +251,299 @@ export type ContainerServices =
 export type ContainerShape = Main<ContainerServices>;
 
 /**
+ * A Cloudflare Container Application — the deployed, scalable unit that runs a
+ * containerized program on Cloudflare's compute platform. Alchemy bundles the
+ * `main` entrypoint, builds a Docker image, pushes it to the Cloudflare
+ * registry, and reconciles the application's scaling and runtime configuration.
+ *
+ * This is the lower-level resource backing the {@link Container} platform
+ * binding; in application code you typically extend `Cloudflare.Container` to
+ * define and bind a container to a Durable Object rather than referencing this
+ * resource directly. The same props shape (`main`, `instanceType`, `instances`,
+ * etc.) is accepted by the `Cloudflare.Container(...)` class form shown below.
+ *
+ * @resource
+ * @product Containers
+ * @category Workers & Compute
  * @internal
+ * @section Defining a Container Application
+ * Point `main` at the container's entrypoint file; Alchemy bundles it and uses
+ * it as the image's entrypoint. The application name is derived deterministically
+ * from the stack, stage, and logical ID unless you set an explicit `name`, and
+ * `handler` selects which export to run when it isn't the default.
+ *
+ * @example Minimal container
+ * ```typescript
+ * import * as Cloudflare from "alchemy/Cloudflare";
+ *
+ * export class Sandbox extends Cloudflare.Container<Sandbox>()("Sandbox", {
+ *   main: import.meta.filename,
+ * }) {}
+ * ```
+ *
+ * The single `main` prop is enough to ship a container: Alchemy bundles the
+ * entrypoint, builds and pushes the image, and provisions an application with
+ * one instance. Reach for the other props only when you need to scale, expose
+ * ports, or customize the build.
+ *
+ * @example Named container with a non-default handler export
+ * ```typescript
+ * export class Worker extends Cloudflare.Container<Worker>()("Worker", {
+ *   main: import.meta.filename,
+ *   handler: "runWorker",
+ *   name: "background-worker",
+ * }) {}
+ * ```
+ *
+ * `name` pins a stable application name (instead of the generated one), which is
+ * useful for adopting an existing application, while `handler` runs the named
+ * `runWorker` export rather than the module's default.
+ *
+ * @section Bundling & Dependencies
+ * By default the entrypoint is bundled for the `bun` runtime. Use `runtime` to
+ * switch to Node, `external` to keep native/precompiled packages out of the
+ * bundle (auto-installed in the image unless `autoInstallExternals` is `false`),
+ * a custom `dockerfile` as the image base, and `registryId` to override the
+ * registry host.
+ *
+ * @example Node runtime with external native deps
+ * ```typescript
+ * export class ImageApi extends Cloudflare.Container<ImageApi>()("ImageApi", {
+ *   main: import.meta.filename,
+ *   runtime: "node",
+ *   external: ["sharp"],
+ *   autoInstallExternals: true,
+ * }) {}
+ * ```
+ *
+ * Marking `sharp` as `external` stops Rolldown from bundling the native module;
+ * because `autoInstallExternals` is `true`, Alchemy runs `npm install sharp`
+ * inside the image so the dependency is present at runtime.
+ *
+ * @example Custom Dockerfile base and registry
+ * ```typescript
+ * export class Custom extends Cloudflare.Container<Custom>()("Custom", {
+ *   main: import.meta.filename,
+ *   dockerfile: "FROM oven/bun:1\nRUN apt-get update && apt-get install -y ffmpeg",
+ *   autoInstallExternals: false,
+ *   registryId: "registry.cloudflare.com",
+ * }) {}
+ * ```
+ *
+ * Alchemy appends the program-copy and entrypoint steps to your `dockerfile`,
+ * so you control the base image and any system packages; `autoInstallExternals:
+ * false` skips the redundant install step when your Dockerfile already provides
+ * those packages.
+ *
+ * @section Scaling & Instance Types
+ * Control the desired and maximum instance counts with `instances`/`maxInstances`
+ * and pick a compute size with `instanceType`. For finer control, override
+ * `vcpu`, `memory`, and `disk` directly.
+ *
+ * @example Autoscaling with a larger instance type
+ * ```typescript
+ * export class Sandbox extends Cloudflare.Container<Sandbox>()("Sandbox", {
+ *   main: import.meta.filename,
+ *   instanceType: "standard-1",
+ *   instances: 1,
+ *   maxInstances: 5,
+ * }) {}
+ * ```
+ *
+ * The application keeps one instance running and may scale out to five under
+ * load, each on the `standard-1` size. Use a larger `instanceType` (or the
+ * explicit overrides below) when the default `dev` size is too small.
+ *
+ * @example Explicit CPU, memory, and disk overrides
+ * ```typescript
+ * export class Heavy extends Cloudflare.Container<Heavy>()("Heavy", {
+ *   main: import.meta.filename,
+ *   vcpu: 2,
+ *   memory: "4GB",
+ *   disk: { size: "10GB" },
+ * }) {}
+ * ```
+ *
+ * These props override the per-instance resource allocation independently of
+ * `instanceType`, which is handy when a workload needs, say, extra disk for
+ * scratch space without bumping every other dimension.
+ *
+ * @section Runtime Configuration
+ * Inject configuration with `environmentVariables` (plain values) and `secrets`
+ * (references to stored secrets), and override the image's `command` or
+ * `entrypoint`. `labels` attach metadata to the deployment.
+ *
+ * @example Environment variables, secrets, and a command override
+ * ```typescript
+ * export class Api extends Cloudflare.Container<Api>()("Api", {
+ *   main: import.meta.filename,
+ *   environmentVariables: [{ name: "LOG_LEVEL", value: "info" }],
+ *   secrets: [{ name: "API_KEY", type: "env", secret: "my-stored-secret" }],
+ *   command: ["bun", "run", "start"],
+ *   labels: [{ name: "team", value: "payments" }],
+ * }) {}
+ * ```
+ *
+ * `environmentVariables` are visible plain values, while `secrets` map a stored
+ * secret into the runtime as an env var without exposing it in config; `command`
+ * overrides the container's startup command and `labels` tag the deployment for
+ * organization.
+ *
+ * @example Passing env and selecting runtime exports
+ * ```typescript
+ * export class Job extends Cloudflare.Container<Job>()("Job", {
+ *   main: import.meta.filename,
+ *   env: { REGION: "wnam", FEATURE_FLAG: "on" },
+ *   exports: ["default"],
+ * }) {}
+ * ```
+ *
+ * `env` injects values into the bundled program's runtime context (as opposed to
+ * the deployment-level `environmentVariables`), and `exports` declares which
+ * symbols from the entrypoint module the runtime should wire up.
+ *
+ * @section Networking & Health Checks
+ * Configure outbound/inbound networking with `network` and `dns`, expose
+ * `ports`, and gate readiness with `checks`.
+ *
+ * @example Ports, network mode, DNS, and a health check
+ * ```typescript
+ * export class Web extends Cloudflare.Container<Web>()("Web", {
+ *   main: import.meta.filename,
+ *   ports: [{ name: "http", port: 8080 }],
+ *   network: { assignIpv4: "predefined", mode: "public" },
+ *   dns: { servers: ["1.1.1.1"], searches: ["internal"] },
+ *   checks: [{ name: "ready", type: "http", port: "8080", tls: false }],
+ * }) {}
+ * ```
+ *
+ * `ports` publishes the named port the program listens on, `network` controls IP
+ * assignment and public/private reachability, `dns` overrides resolver settings,
+ * and `checks` tells Cloudflare how to probe the container before routing
+ * traffic to it.
+ *
+ * @section Observability & Access
+ * Turn on log shipping with `observability` and install `sshPublicKeyIds` for
+ * interactive access to running instances.
+ *
+ * @example Enable logs and grant SSH access
+ * ```typescript
+ * export class Api extends Cloudflare.Container<Api>()("Api", {
+ *   main: import.meta.filename,
+ *   observability: { logs: { enabled: true } },
+ *   sshPublicKeyIds: ["ssh-key-id-123"],
+ * }) {}
+ * ```
+ *
+ * `observability.logs.enabled` streams the container's logs into Cloudflare's
+ * telemetry pipeline (queryable via the resource's `logs`/`tail` operations),
+ * and `sshPublicKeyIds` authorizes the listed keys to connect to instances for
+ * debugging.
+ *
+ * @section Scheduling & Placement
+ * Influence where and how Cloudflare schedules instances with `schedulingPolicy`,
+ * `constraints`, and `affinities`.
+ *
+ * @example Pin scheduling policy and placement
+ * ```typescript
+ * export class Edge extends Cloudflare.Container<Edge>()("Edge", {
+ *   main: import.meta.filename,
+ *   schedulingPolicy: "regional",
+ *   constraints: { tier: 1 },
+ *   affinities: { colocation: "datacenter" },
+ * }) {}
+ * ```
+ *
+ * `schedulingPolicy` selects the control-plane placement strategy,
+ * `constraints.tier` restricts which capacity tier instances may land on, and
+ * `affinities.colocation` keeps related instances in the same datacenter to
+ * reduce inter-instance latency.
+ *
+ * @section Rollouts
+ * When an update changes the configuration, `rollout` controls how the new
+ * version is rolled out across instances.
+ *
+ * @example Progressive rollout on update
+ * ```typescript
+ * export class Api extends Cloudflare.Container<Api>()("Api", {
+ *   main: import.meta.filename,
+ *   instances: 4,
+ *   maxInstances: 4,
+ *   rollout: { strategy: "rolling", stepPercentage: 25 },
+ * }) {}
+ * ```
+ *
+ * A `rolling` strategy with `stepPercentage: 25` replaces instances in 25%
+ * increments so the application stays available during the update; the default
+ * `immediate` strategy swaps everything at once.
  */
 export interface ContainerApplication<Shape = unknown> extends Resource<
   ContainerTypeId,
   ContainerApplicationProps,
   {
+    /**
+     * Cloudflare-assigned unique identifier of the container application.
+     */
     applicationId: string;
+    /**
+     * The resolved application name (either the provided `name` or the
+     * deterministic physical name derived from the stack, stage, and logical ID).
+     */
     applicationName: string;
+    /**
+     * The Cloudflare account ID that owns the application.
+     */
     accountId: string;
+    /**
+     * The scheduling policy in effect for the application's deployments.
+     */
     schedulingPolicy: ContainerApplication.SchedulingPolicy;
+    /**
+     * The current desired number of instances.
+     */
     instances: number;
+    /**
+     * The maximum number of instances the application may scale to.
+     */
     maxInstances: number;
+    /**
+     * Resource constraints applied to the application, if any.
+     */
     constraints: ContainerApplication.Constraints | undefined;
+    /**
+     * Scheduling affinity hints applied to the application, if any.
+     */
     affinities: ContainerApplication.Affinities | undefined;
+    /**
+     * The resolved deployment configuration (image, networking, secrets, ports,
+     * checks, etc.) currently applied to the application.
+     */
     configuration: ContainerApplication.Configuration;
+    /**
+     * The Durable Object namespace attached to the application, if it is bound
+     * to one.
+     */
     durableObjects:
       | {
           namespaceId: string;
         }
       | undefined;
+    /**
+     * ISO-8601 timestamp of when the application was created.
+     */
     createdAt: string;
+    /**
+     * The application's configuration version, incremented on each update.
+     */
     version: number;
+    /**
+     * Internal cache of the built image hash, used to skip rebuilds when the
+     * bundled program and Dockerfile are unchanged.
+     */
     hash?: {
       image: string;
     };
+    dev: DevContainerImage | undefined;
   },
   {
     /**
@@ -284,6 +552,9 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
     durableObjects?: {
       namespaceId: string;
     };
+    /**
+     * Environment variables injected into the container runtime via the binding.
+     */
     env?: Record<string, any>;
   },
   Providers
@@ -291,6 +562,8 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
   /** @internal phantom */
   Shape: Shape;
 }
+
+export type DevContainerImage = ContainerImage;
 
 const resolveDurableObjectApplicationRecovery = ({
   namespaceId,
@@ -350,42 +623,25 @@ export const retryForContainerApplicationReadiness = <A, E, R>(
   );
 
 export const ContainerProvider = () =>
+  ProviderLayer.select({
+    live: () => LiveContainerProvider(),
+    local: () => LocalContainerProvider(),
+  });
+
+export const LiveContainerProvider = () =>
   Provider.effect(
     Container,
     Effect.gen(function* () {
-      const stack = yield* Stack;
-      const { accountId } = yield* CloudflareEnvironment;
       const { dotAlchemy } = yield* AlchemyContext;
-      const fs = yield* FileSystem.FileSystem;
-      const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-      const createContainerApplication =
-        yield* Containers.createContainerApplication;
-      const updateContainerApplication =
-        yield* Containers.updateContainerApplication;
-      const deleteContainerApplication =
-        yield* Containers.deleteContainerApplication;
-      const getContainerApplication = yield* Containers.getContainerApplication;
-      const listContainerApplications =
-        yield* Containers.listContainerApplications;
-      const createContainerRegistryCredentials =
-        yield* Containers.createContainerRegistryCredentials;
-      const createContainerApplicationRollout =
-        yield* Containers.createContainerApplicationRollout;
+
       const telemetry = yield* CloudflareLogs;
 
-      const createApplicationName = (id: string, name: string | undefined) =>
-        Effect.gen(function* () {
-          return (
-            name ??
-            (yield* createPhysicalName({
-              id,
-              lowercase: true,
-            }))
-          );
-        });
+      const createApplicationName = createContainerApplicationName;
 
       const findApplicationByName = Effect.fnUntraced(function* (name: string) {
-        return yield* listContainerApplications({ accountId }).pipe(
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        return yield* Containers.listContainerApplications({ accountId }).pipe(
           Effect.map((apps) => apps.find((app) => app.name === name)),
         );
       });
@@ -393,7 +649,9 @@ export const ContainerProvider = () =>
       const findApplicationByNamespace = Effect.fnUntraced(function* (
         namespaceId: string,
       ) {
-        return yield* listContainerApplications({ accountId }).pipe(
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
+        return yield* Containers.listContainerApplications({ accountId }).pipe(
           Effect.map((apps) =>
             apps.find((app) => app.durableObjects?.namespaceId === namespaceId),
           ),
@@ -433,8 +691,10 @@ export const ContainerProvider = () =>
             new Error("Container requires a `main` entrypoint."),
           );
         }
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
         const runtime = props.runtime ?? "bun";
-        const { files, hash: bundleHash } = yield* bundleProgram({
+        const { files, hash: bundleHash } = yield* bundleContainerProgram({
           id,
           main,
           runtime,
@@ -462,178 +722,6 @@ export const ContainerProvider = () =>
         return { files, imageRef, imageHash };
       });
 
-      const bundleProgram = Effect.fnUntraced(function* ({
-        main,
-        runtime,
-        handler = "default",
-        isExternal = false,
-        external = [],
-      }: {
-        id: string;
-        main: string;
-        runtime: "bun" | "node";
-        handler: string | undefined;
-        isExternal?: boolean;
-        external?: string[];
-      }) {
-        const realMain = yield* fs.realPath(main);
-        const cwd = yield* findCwdForBundle(realMain);
-
-        const buildBundle = Effect.fnUntraced(function* (
-          entry: string,
-          plugins?: rolldown.RolldownPluginOption,
-        ) {
-          return yield* Bundle.build(
-            {
-              input: entry,
-              cwd,
-              external: [
-                "cloudflare:workers",
-                "cloudflare:workflows",
-                ...(runtime === "bun" ? ["bun", "bun:*"] : []),
-                ...external,
-              ],
-              platform: "node",
-              resolve: {
-                conditionNames:
-                  runtime === "bun"
-                    ? ["bun", "import", "module", "default"]
-                    : ["node", "import", "module", "default"],
-              },
-              plugins,
-              treeshake: true,
-            },
-            {
-              format: "esm",
-              sourcemap: false,
-              minify: true,
-              entryFileNames: "index.js",
-            },
-          );
-        });
-
-        const bundleOutput = isExternal
-          ? yield* buildBundle(realMain)
-          : yield* buildBundle(
-              realMain,
-              virtualEntryPlugin(
-                (importPath) => `
-${
-  runtime === "bun"
-    ? `
-import { BunServices } from "@effect/platform-bun";
-import { BunHttpServer } from "alchemy/Http";
-const HttpServer = BunHttpServer;
-`
-    : `
-import { NodeServices } from "@effect/platform-node";
-import { NodeHttpServer } from "alchemy/Http";
-const HttpServer = NodeHttpServer;
-`
-}
-import { Stack } from "alchemy/Stack";
-import { makeEntrypointLayer } from "alchemy/Runtime";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
-import * as Context from "effect/Context";
-import { MinimumLogLevel } from "effect/References";
-
-import ${handler === "default" ? "entrypoint" : `{ ${handler} as entrypoint }`} from ${JSON.stringify(importPath)};
-
-const tag = Context.Service("${Self.key}")
-const layer = makeEntrypointLayer(tag, entrypoint);
-
-const platform = Layer.mergeAll(
-  ${runtime === "bun" ? "BunServices.layer" : "NodeServices.layer"},
-  FetchHttpClient.layer,
-  // TODO(sam): wire this up to telemetry more directly
-  Logger.layer([Logger.consolePretty()]),
-);
-
-const stack = Layer.succeed(Stack, {
-  name: ${JSON.stringify(stack.name)},
-  stage: ${JSON.stringify(stack.stage)},
-  bindings: {},
-  resources: {}
-});
-
-const serverEffect = tag.pipe(
-  Effect.flatMap(func => func.RuntimeContext.exports),
-  Effect.flatMap(exports => exports.default),
-  Effect.provide(
-    layer.pipe(
-      Layer.provideMerge(stack),
-      Layer.provideMerge(HttpServer()),
-      Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          MinimumLogLevel,
-          process.env.DEBUG ? "Debug" : "Info",
-        )
-      ),
-    )
-  ),
-  Effect.scoped
-);
-
-console.log("Container bootstrap starting...");
-await Effect.runPromise(serverEffect).catch((err) => {
-  console.error("Container bootstrap failed:", err);
-  process.exit(1);
-})`,
-              ),
-            );
-
-        // Rolldown can emit multiple chunk files (entry + shared chunks).
-        // Return every file so downstream code can materialize all of them
-        // into the Docker build context — dropping any of them produces a
-        // `Cannot find module './chunk-XXX.js'` runtime crash inside the
-        // container (with zero stdout, because it crashes before any user
-        // code runs).
-        const files = bundleOutput.files.map((f) => ({
-          path: f.path,
-          content:
-            typeof f.content === "string"
-              ? new TextEncoder().encode(f.content)
-              : f.content,
-        }));
-
-        return { files, hash: bundleOutput.hash };
-      });
-
-      const buildFinalDockerfile = (
-        userDockerfile: string | undefined,
-        runtime: "bun" | "node",
-        external: string[] = [],
-        autoInstallExternals = true,
-      ): string => {
-        const base =
-          userDockerfile?.trim() ??
-          (runtime === "bun" ? "FROM oven/bun:1" : "FROM node:22-slim");
-        const runtimeBin = runtime === "bun" ? "bun" : "node";
-        const installCmd = runtime === "bun" ? "bun add" : "npm install";
-        const installStep =
-          autoInstallExternals && external.length > 0
-            ? `RUN ${installCmd} ${external.join(" ")}`
-            : "";
-        return [
-          base,
-          "",
-          "WORKDIR /app",
-          ...(installStep ? [installStep, ""] : []),
-          "COPY index.mjs /app/index.mjs",
-          // Copy any additional rolldown chunks (`chunk-XXX.js`,
-          // `BunServices-YYY.js`, …). The glob matches zero or more files;
-          // non-trivial bundles always emit at least one chunk, minimal
-          // bundles emit none and the COPY no-ops.
-          "COPY *.js /app/",
-          `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
-          "",
-        ].join("\n");
-      };
-
       const buildAndPushImage = Effect.fnUntraced(function* (
         id: string,
         props: ContainerApplicationProps,
@@ -641,6 +729,8 @@ await Effect.runPromise(serverEffect).catch((err) => {
         imageRef: string,
         session?: { note: (message: string) => Effect.Effect<void> },
       ) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
         const runtime = props.runtime ?? "bun";
 
         yield* Effect.logInfo(
@@ -687,12 +777,13 @@ await Effect.runPromise(serverEffect).catch((err) => {
         }
 
         const registryId = props.registryId ?? "registry.cloudflare.com";
-        const credentials = yield* createContainerRegistryCredentials({
-          accountId,
-          registryId,
-          permissions: ["pull", "push"],
-          expirationMinutes: 60,
-        });
+        const credentials =
+          yield* Containers.createContainerRegistryCredentials({
+            accountId,
+            registryId,
+            permissions: ["pull", "push"],
+            expirationMinutes: 60,
+          });
         const username = credentials.username ?? (credentials as any).user;
         if (!username) {
           return yield* Effect.fail(
@@ -718,6 +809,8 @@ await Effect.runPromise(serverEffect).catch((err) => {
         configuration: ContainerApplication.Configuration;
         rollout: ContainerApplication.Rollout | undefined;
       }) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
         const strategy = rollout?.strategy ?? "immediate";
         const stepPercentage =
           strategy === "immediate" ? 100 : (rollout?.stepPercentage ?? 25);
@@ -725,7 +818,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
         yield* retryForContainerApplicationReadiness(
           "rollout",
           applicationId,
-          createContainerApplicationRollout({
+          Containers.createContainerApplicationRollout({
             accountId,
             applicationId,
             description:
@@ -759,6 +852,8 @@ await Effect.runPromise(serverEffect).catch((err) => {
           | undefined;
         session: { note: (message: string) => Effect.Effect<void> };
       }) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
         const describeError = (error: unknown) => {
           if (error instanceof Error) {
             return JSON.stringify(
@@ -816,7 +911,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
           });
         });
 
-        const application = yield* createContainerApplication({
+        const application = yield* Containers.createContainerApplication({
           accountId,
           name,
           instances: news.instances ?? 1,
@@ -890,6 +985,8 @@ await Effect.runPromise(serverEffect).catch((err) => {
         existing: ContainerApplication["Attributes"];
         session: { note: (message: string) => Effect.Effect<void> };
       }) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+
         yield* Effect.logInfo(
           `Cloudflare Container update: preparing ${existing.applicationName}`,
         );
@@ -909,7 +1006,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
         const application = yield* retryForContainerApplicationReadiness(
           "update",
           existing.applicationId,
-          updateContainerApplication({
+          Containers.updateContainerApplication({
             accountId,
             applicationId: existing.applicationId,
             instances: news.instances ?? 1,
@@ -960,7 +1057,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
       };
 
       return Container.Provider.of({
-        stables: ["applicationId", "accountId"],
+        stables: ["accountId", "applicationId"],
         diff: Effect.fnUntraced(function* ({
           id,
           olds = {},
@@ -972,6 +1069,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
           if (!isResolved(news) || !isResolved(newBindings)) {
             return undefined;
           }
+          const { accountId } = yield* yield* CloudflareEnvironment;
 
           const name = yield* createApplicationName(id, news.name);
           const oldName = output?.applicationName
@@ -995,6 +1093,14 @@ await Effect.runPromise(serverEffect).catch((err) => {
 
           if (!output) {
             return undefined;
+          }
+
+          // A `dev:` applicationId means the resource only exists locally and
+          // the real application has never been created. Promote it by forcing
+          // an update so reconcile creates the live application.
+          if (!isLiveId(output.applicationId)) {
+            // Override stables to only include the accountId because the applicationId is going to change.
+            return { action: "update", stables: ["accountId"] } as const;
           }
 
           const { imageHash } = yield* computeImageHash(id, news);
@@ -1060,8 +1166,11 @@ await Effect.runPromise(serverEffect).catch((err) => {
           // so we can recover from out-of-band deletes or partial state
           // persistence failures.
           let existing: ContainerApplication["Attributes"] | undefined;
-          if (output?.applicationId) {
-            existing = yield* getContainerApplication({
+          // A `dev:` applicationId never exists on Cloudflare — skip the
+          // cached-id fetch and fall through to the name lookup / create path
+          // so we promote the local resource to a real application.
+          if (output?.applicationId && isLiveId(output.applicationId)) {
+            existing = yield* Containers.getContainerApplication({
               accountId: output.accountId,
               applicationId: output.applicationId,
             }).pipe(
@@ -1121,7 +1230,7 @@ await Effect.runPromise(serverEffect).catch((err) => {
             yield* session.note(
               `Recreating container application ${name} with durable object binding...`,
             );
-            yield* deleteContainerApplication({
+            yield* Containers.deleteContainerApplication({
               accountId: existing.accountId,
               applicationId: existing.applicationId,
             }).pipe(
@@ -1180,10 +1289,13 @@ await Effect.runPromise(serverEffect).catch((err) => {
           };
         }),
         delete: Effect.fnUntraced(function* ({ output }) {
+          // A `dev:` applicationId only exists locally — there is no live
+          // application to delete on Cloudflare.
+          if (!isLiveId(output.applicationId)) return;
           yield* Effect.logInfo(
             `Cloudflare Container delete: deleting ${output.applicationName}`,
           );
-          yield* deleteContainerApplication({
+          yield* Containers.deleteContainerApplication({
             accountId: output.accountId,
             applicationId: output.applicationId,
           }).pipe(
@@ -1210,11 +1322,17 @@ await Effect.runPromise(serverEffect).catch((err) => {
             });
 
           let attrs: ContainerApplication["Attributes"] | undefined;
+          // A `dev:` applicationId never exists on Cloudflare — look the
+          // application up by its (deterministic) name instead of hitting the
+          // API with a fake id.
+          if (output?.applicationId && !isLiveId(output.applicationId)) {
+            return yield* readByName(output.applicationName);
+          }
           if (output?.applicationId) {
             yield* Effect.logInfo(
               `Cloudflare Container read: checking ${output.applicationName}`,
             );
-            attrs = yield* getContainerApplication({
+            attrs = yield* Containers.getContainerApplication({
               accountId: output.accountId,
               applicationId: output.applicationId,
             }).pipe(
@@ -1239,6 +1357,23 @@ await Effect.runPromise(serverEffect).catch((err) => {
           // `OwnedBySomeoneElse` unless the caller opted in via `--adopt`.
           return Unowned(attrs);
         }),
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            // Account-scoped collection. `listContainerApplications` returns
+            // the full application objects in one (non-paginated) response, so
+            // each item already carries the complete `read` attributes shape —
+            // no per-item hydration is required.
+            return yield* Containers.listContainerApplications({
+              accountId,
+            }).pipe(
+              Effect.map((apps) => apps.map((app) => toAttributes(app))),
+              // Accounts without the containers product reject the route; treat
+              // a non-entitled account as an empty collection rather than an
+              // error.
+              Effect.catchTag("InvalidRoute", () => Effect.succeed([])),
+            );
+          }),
         tail: ({ output }) =>
           telemetry.tailStream({
             accountId: output.accountId,
@@ -1273,7 +1408,8 @@ const toAttributes = (
   application:
     | Containers.CreateContainerApplicationResponse
     | Containers.UpdateContainerApplicationResponse
-    | Containers.GetContainerApplicationResponse,
+    | Containers.GetContainerApplicationResponse
+    | Containers.ListContainerApplicationsResponse[number],
 ): ContainerApplication["Attributes"] => ({
   applicationId: application.id,
   applicationName: application.name,
@@ -1295,4 +1431,5 @@ const toAttributes = (
     | undefined,
   createdAt: application.createdAt,
   version: application.version,
+  dev: undefined,
 });

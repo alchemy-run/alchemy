@@ -17,7 +17,7 @@ import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
-import { isResolved } from "../../Diff.ts";
+import { deepEqual, isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
 import * as Output from "../../Output.ts";
 import { createPhysicalName } from "../../PhysicalName.ts";
@@ -65,6 +65,26 @@ export interface FunctionBuildOptions {
   readonly output?: Partial<rolldown.OutputOptions>;
 }
 
+export type FunctionArchitecture = "x86_64" | "arm64";
+
+export interface FunctionUrlConfig {
+  /**
+   * Authentication type for the Lambda function URL.
+   * `NONE` creates a public endpoint. `AWS_IAM` requires SigV4-signed callers.
+   * @default "NONE"
+   */
+  authType?: Lambda.FunctionUrlAuthType;
+  /**
+   * Cross-origin resource sharing configuration for the function URL.
+   */
+  cors?: Lambda.Cors;
+  /**
+   * Invocation mode for the function URL.
+   * @default "BUFFERED"
+   */
+  invokeMode?: Lambda.InvokeMode;
+}
+
 export interface FunctionProps extends PlatformProps {
   /**
    * Entry module for the bundled Lambda function.
@@ -76,13 +96,21 @@ export interface FunctionProps extends PlatformProps {
    */
   handler?: string;
   /**
-   * Whether to create a public Lambda function URL.
-   * @default false
+   * Whether to create a Lambda function URL, or its configuration.
+   * `true` creates a public Function URL with `authType: "NONE"`.
+   * Set `false` to disable the Function URL.
+   * @default true
    */
-  url?: boolean;
+  url?: boolean | FunctionUrlConfig;
   functionName?: string;
   // TODO(sam): use a Layer instead so we can manage Effect platform?
   runtime?: "nodejs22.x" | "nodejs24.x";
+  /**
+   * Instruction set architecture for the Lambda function.
+   *
+   * @default "x86_64"
+   */
+  architecture?: FunctionArchitecture;
   build?: FunctionBuildOptions;
   uploadSourceMap?: boolean;
   env?: Record<string, any>;
@@ -101,6 +129,11 @@ export interface FunctionProps extends PlatformProps {
    * @default 3 seconds (AWS Lambda default)
    */
   timeout?: Duration.Duration;
+  /**
+   * Maximum number of concurrent executions reserved for this function.
+   * Omit to remove the function-level reserved concurrency limit.
+   */
+  reservedConcurrentExecutions?: number;
 }
 
 /**
@@ -145,6 +178,7 @@ export interface Function extends Resource<
     code: {
       hash: string;
     };
+    reservedConcurrentExecutions?: number;
   },
   {
     env?: Record<string, any>;
@@ -153,9 +187,34 @@ export interface Function extends Resource<
   Providers
 > {}
 
-export type FunctionServices = Credentials | Region;
+export type FunctionServices = Credentials | Region | AWSEnvironment;
 
 export type FunctionShape = Main<FunctionServices>;
+
+interface NormalizedFunctionUrlConfig {
+  authType: Lambda.FunctionUrlAuthType;
+  cors?: Lambda.Cors;
+  invokeMode: Lambda.InvokeMode;
+}
+
+const normalizeFunctionUrl = (
+  url: FunctionProps["url"] = true,
+): NormalizedFunctionUrlConfig | undefined => {
+  if (url === false) {
+    return undefined;
+  }
+  if (url === true || url === undefined) {
+    return {
+      authType: "NONE",
+      invokeMode: "BUFFERED",
+    };
+  }
+  return {
+    authType: url.authType ?? "NONE",
+    cors: url.cors,
+    invokeMode: url.invokeMode ?? "BUFFERED",
+  };
+};
 
 /**
  * An AWS Lambda host resource that combines code bundling, IAM role
@@ -175,7 +234,7 @@ export type FunctionShape = Main<FunctionServices>;
  * for plain handler patterns, or the
  * {@link https://alchemy.run/guides/lambda | Effect Lambda Guide}
  * for the full Effect-based approach with bindings, event sources, and sinks.
- *
+ * @resource
  * @section Async Functions
  * Point `main` at a file that exports a standard Lambda handler. No
  * Effect runtime is included in the bundle. Useful when migrating
@@ -189,6 +248,14 @@ export type FunctionShape = Main<FunctionServices>;
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
  *   url: true,
+ * });
+ * ```
+ *
+ * @example Function using ARM64
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("ArmFunction", {
+ *   main: "./src/handler.ts",
+ *   architecture: "arm64",
  * });
  * ```
  *
@@ -237,6 +304,16 @@ export type FunctionShape = Main<FunctionServices>;
  * const func = yield* AWS.Lambda.Function("ApiFunction", {
  *   main: "./src/handler.ts",
  *   url: true,
+ * });
+ * ```
+ *
+ * @example Function URL with IAM auth
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("ApiFunction", {
+ *   main: "./src/handler.ts",
+ *   url: {
+ *     authType: "AWS_IAM",
+ *   },
  * });
  * ```
  *
@@ -456,6 +533,7 @@ export const Function: Platform<
           }
         }),
       serve: (handler: HttpEffect) =>
+        // @ts-ignore
         ctx.listen(makeFunctionHttpHandler(handler)),
       listen: ((
         handler:
@@ -500,8 +578,7 @@ export const FunctionProvider = () =>
     Function,
     Effect.gen(function* () {
       const stack = yield* Stack;
-      const { accountId } = yield* AWSEnvironment;
-      const region = yield* Region;
+
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
       const alchemyEnv = {
@@ -530,6 +607,7 @@ export const FunctionProvider = () =>
 
       const createNames = (id: string, functionName: string | undefined) =>
         Effect.gen(function* () {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const roleName = yield* createRoleName(id);
           const policyName = yield* createPolicyName(id);
           const fn = yield* createFunctionName(id, functionName);
@@ -663,7 +741,6 @@ export const FunctionProvider = () =>
         id: string,
         props: FunctionProps,
       ) {
-        const handler = props.handler ?? "default";
         const sourcemap = props.build?.output?.sourcemap ?? true;
         const uploadSourceMap = props.uploadSourceMap ?? true;
 
@@ -835,6 +912,61 @@ export default await Effect.runPromise(handlerEffect)
         };
       };
 
+      const retryFunctionMutation = Effect.retry({
+        while: (e: any) =>
+          e._tag === "ResourceConflictException" ||
+          e._tag === "TooManyRequestsException",
+        schedule: Schedule.exponential(100).pipe(
+          Schedule.both(Schedule.recurs(30)),
+        ),
+      }) as <A, R, Err>(
+        self: Effect.Effect<A, Err, R>,
+      ) => Effect.Effect<A, Err, R>;
+
+      const getReservedConcurrentExecutions = Effect.fnUntraced(function* (
+        functionName: string,
+      ) {
+        return yield* Lambda.getFunctionConcurrency({
+          FunctionName: functionName,
+        }).pipe(
+          Effect.map((config) => config.ReservedConcurrentExecutions),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed(undefined),
+          ),
+        );
+      });
+
+      const syncReservedConcurrentExecutions = Effect.fnUntraced(function* ({
+        functionName,
+        reservedConcurrentExecutions,
+      }: {
+        functionName: string;
+        reservedConcurrentExecutions: number | undefined;
+      }) {
+        const current = yield* getReservedConcurrentExecutions(functionName);
+        if (current === reservedConcurrentExecutions) {
+          return current;
+        }
+
+        if (reservedConcurrentExecutions === undefined) {
+          yield* Lambda.deleteFunctionConcurrency({
+            FunctionName: functionName,
+          }).pipe(
+            retryFunctionMutation,
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+          return undefined;
+        }
+
+        const updated = yield* Lambda.putFunctionConcurrency({
+          FunctionName: functionName,
+          ReservedConcurrentExecutions: reservedConcurrentExecutions,
+        }).pipe(retryFunctionMutation);
+        return (
+          updated.ReservedConcurrentExecutions ?? reservedConcurrentExecutions
+        );
+      });
+
       const createOrUpdateFunction = Effect.fnUntraced(function* ({
         id,
         news,
@@ -885,10 +1017,10 @@ export default await Effect.runPromise(handlerEffect)
           if (assets) {
             const key = yield* assets.uploadAsset(hash, archive);
             yield* Effect.logDebug(
-              `Using S3 for code: s3://${assets.bucketName}/${key}`,
+              `Using S3 for code: s3://${yield* assets.bucketName}/${key}`,
             );
             return {
-              S3Bucket: assets.bucketName,
+              S3Bucket: yield* assets.bucketName,
               S3Key: key,
             } as const;
           } else {
@@ -903,6 +1035,7 @@ export default await Effect.runPromise(handlerEffect)
           Role: roleArn,
           Code: codeLocation,
           Runtime: news.runtime ?? "nodejs22.x",
+          Architectures: [news.architecture ?? "x86_64"],
           Environment: runtimeEnv
             ? {
                 Variables: {
@@ -1025,78 +1158,118 @@ export default await Effect.runPromise(handlerEffect)
         }
       });
 
+      const publicUrlAccessStatementId = "FunctionURLAllowPublicAccess";
+      const publicUrlInvokeStatementId = "FunctionURLAllowPublicInvoke";
+
+      const removePublicFunctionUrlPermissions = Effect.fnUntraced(function* (
+        functionName: string,
+      ) {
+        yield* Effect.all(
+          [
+            Lambda.removePermission({
+              FunctionName: functionName,
+              StatementId: publicUrlAccessStatementId,
+            }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            ),
+            Lambda.removePermission({
+              FunctionName: functionName,
+              StatementId: publicUrlInvokeStatementId,
+            }).pipe(
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            ),
+          ],
+          { concurrency: "unbounded" },
+        );
+      });
+
+      const upsertPermission = (permission: Lambda.AddPermissionRequest) =>
+        Lambda.addPermission(permission).pipe(
+          Effect.catchTag("ResourceConflictException", () =>
+            Effect.gen(function* () {
+              yield* Lambda.removePermission({
+                FunctionName: permission.FunctionName,
+                StatementId: permission.StatementId,
+              }).pipe(
+                Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+              );
+              yield* Lambda.addPermission(permission);
+            }),
+          ),
+          retryFunctionMutation,
+        );
+
+      const upsertPublicFunctionUrlPermissions = Effect.fnUntraced(function* (
+        functionName: string,
+      ) {
+        yield* Effect.all(
+          [
+            upsertPermission({
+              FunctionName: functionName,
+              StatementId: publicUrlAccessStatementId,
+              Action: "lambda:InvokeFunctionUrl",
+              Principal: "*",
+              FunctionUrlAuthType: "NONE",
+            }),
+            upsertPermission({
+              FunctionName: functionName,
+              StatementId: publicUrlInvokeStatementId,
+              Action: "lambda:InvokeFunction",
+              Principal: "*",
+              InvokedViaFunctionUrl: true,
+            }),
+          ],
+          { concurrency: "unbounded" },
+        );
+      });
+
       const createOrUpdateFunctionUrl = Effect.fnUntraced(function* ({
         functionName,
-        url = true,
+        url,
         oldUrl,
+        currentFunctionUrl,
       }: {
         functionName: string;
         url: FunctionProps["url"];
         oldUrl?: FunctionProps["url"];
+        currentFunctionUrl?: string;
       }) {
-        // TODO(sam): support AWS_IAM
-        const authType = "NONE";
-        yield* Effect.logDebug(`creating function url config ${functionName}`);
-        if (url) {
+        const desired = normalizeFunctionUrl(url);
+        const previous = normalizeFunctionUrl(oldUrl);
+        const hadFunctionUrl = previous !== undefined || !!currentFunctionUrl;
+
+        if (desired) {
+          yield* Effect.logDebug(
+            `creating function url config ${functionName}`,
+          );
+          const shouldClearCors =
+            desired.cors === undefined && previous?.cors !== undefined;
           const config = {
             FunctionName: functionName,
-            AuthType: authType, // | AWS_IAM
-            // Cors: {
-            //   AllowCredentials: true,
-            //   AllowHeaders: ["*"],
-            //   AllowMethods: ["*"],
-            //   AllowOrigins: ["*"],
-            //   ExposeHeaders: ["*"],
-            //   MaxAge: 86400,
-            // },
-            InvokeMode: "BUFFERED", // | RESPONSE_STREAM
-            // Qualifier: "$LATEST"
+            AuthType: desired.authType,
+            Cors: desired.cors ?? (shouldClearCors ? {} : undefined),
+            InvokeMode: desired.invokeMode,
           } satisfies
             | Lambda.CreateFunctionUrlConfigRequest
             | Lambda.UpdateFunctionUrlConfigRequest;
-          const urlPermission = {
-            FunctionName: functionName,
-            StatementId: "FunctionURLAllowPublicAccess",
-            Action: "lambda:InvokeFunctionUrl",
-            Principal: "*",
-            FunctionUrlAuthType: "NONE",
-          } as const;
-          const invokePermission = {
-            FunctionName: functionName,
-            StatementId: "FunctionURLAllowPublicInvoke",
-            Action: "lambda:InvokeFunction",
-            Principal: "*",
-            InvokedViaFunctionUrl: true,
-          } as const;
-          const upsertPermission = (permission: Lambda.AddPermissionRequest) =>
-            Lambda.addPermission(permission).pipe(
-              Effect.catchTag("ResourceConflictException", () =>
-                Effect.gen(function* () {
-                  yield* Lambda.removePermission({
-                    FunctionName: functionName,
-                    StatementId: permission.StatementId,
-                  });
-                  yield* Lambda.addPermission(permission);
-                }),
-              ),
-            );
-          const [{ FunctionUrl }] = yield* Effect.all([
-            Lambda.createFunctionUrlConfig(config).pipe(
-              Effect.catchTag("ResourceConflictException", () =>
-                Lambda.updateFunctionUrlConfig(config),
-              ),
+          const { FunctionUrl } = yield* Lambda.createFunctionUrlConfig(
+            config,
+          ).pipe(
+            Effect.catchTag("ResourceConflictException", () =>
+              Lambda.updateFunctionUrlConfig(config),
             ),
-            authType === "NONE"
-              ? Effect.all([
-                  upsertPermission(urlPermission),
-                  upsertPermission(invokePermission),
-                ])
-              : // TODO(sam): support AWS_IAM
-                Effect.void,
-          ]);
+            retryFunctionMutation,
+          );
+
+          if (desired.authType === "NONE") {
+            yield* upsertPublicFunctionUrlPermissions(functionName);
+          } else {
+            yield* removePublicFunctionUrlPermissions(functionName);
+          }
+
           yield* Effect.logDebug(`created function url config ${functionName}`);
           return FunctionUrl;
-        } else if (oldUrl) {
+        } else if (hadFunctionUrl) {
           yield* Effect.logDebug(
             `deleting function url config ${functionName}`,
           );
@@ -1104,20 +1277,10 @@ export default await Effect.runPromise(handlerEffect)
             Lambda.deleteFunctionUrlConfig({
               FunctionName: functionName,
             }).pipe(
+              retryFunctionMutation,
               Effect.catchTag("ResourceNotFoundException", () => Effect.void),
             ),
-            Lambda.removePermission({
-              FunctionName: functionName,
-              StatementId: "FunctionURLAllowPublicAccess",
-            }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            ),
-            Lambda.removePermission({
-              FunctionName: functionName,
-              StatementId: "FunctionURLAllowPublicInvoke",
-            }).pipe(
-              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-            ),
+            removePublicFunctionUrlPermissions(functionName),
           ]);
           yield* Effect.logDebug(`deleted function url config ${functionName}`);
         }
@@ -1144,11 +1307,17 @@ export default await Effect.runPromise(handlerEffect)
           if (
             // function name changed
             output.functionName !==
-              (yield* createFunctionName(id, news.functionName)) ||
-            // url changed
-            (olds.url ?? true) !== news.url
+            (yield* createFunctionName(id, news.functionName))
           ) {
             return { action: "replace" };
+          }
+          if (
+            !deepEqual(
+              normalizeFunctionUrl(olds.url),
+              normalizeFunctionUrl(news.url),
+            )
+          ) {
+            return { action: "update" };
           }
           if (
             output.code.hash !==
@@ -1164,6 +1333,17 @@ export default await Effect.runPromise(handlerEffect)
           }
           if (
             toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)
+          ) {
+            return { action: "update" };
+          }
+          if (
+            (olds.architecture ?? "x86_64") !== (news.architecture ?? "x86_64")
+          ) {
+            return { action: "update" };
+          }
+          if (
+            olds.reservedConcurrentExecutions !==
+            news.reservedConcurrentExecutions
           ) {
             return { action: "update" };
           }
@@ -1204,6 +1384,8 @@ export default await Effect.runPromise(handlerEffect)
               Effect.succeed(undefined),
             ),
           );
+          const reservedConcurrentExecutions =
+            yield* getReservedConcurrentExecutions(fn.FunctionName);
           // Reuse the persisted output where we have it (e.g. code hash) so
           // diff doesn't see drift it can't reconstruct from the API.
           const attrs = {
@@ -1213,13 +1395,66 @@ export default await Effect.runPromise(handlerEffect)
             functionUrl,
             roleArn: fn.Role,
             roleName: output?.roleName ?? fn.Role.split("/").pop()!,
+            reservedConcurrentExecutions,
           } as any;
           return (yield* hasAlchemyTags(id, tagsResult))
             ? attrs
             : Unowned(attrs);
         }),
+        // Account/region collection: exhaustively paginate `listFunctions`
+        // (its `Functions` items are `FunctionConfiguration`s, the same shape
+        // `read` pulls from `getFunction().Configuration`), then hydrate each
+        // into the exact `read` Attributes shape with a bounded fan-out. The
+        // code hash is not recoverable from the API (it lives in persisted
+        // state), so it is left empty — `delete`/nuke only needs the
+        // function/role identifiers.
+        list: () =>
+          Effect.gen(function* () {
+            const configs = yield* Lambda.listFunctions.items({}).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) => Array.from(chunk)),
+            );
+            const rows = yield* Effect.forEach(
+              configs,
+              (fn) =>
+                Effect.gen(function* () {
+                  if (!fn.FunctionArn || !fn.FunctionName || !fn.Role) {
+                    return undefined;
+                  }
+                  const functionUrl = yield* Lambda.getFunctionUrlConfig({
+                    FunctionName: fn.FunctionName,
+                  }).pipe(
+                    Effect.map((f) => f.FunctionUrl),
+                    // No URL config (or the function vanished between the
+                    // list and the hydrate) — surface `undefined`, matching
+                    // `read`.
+                    Effect.catchTag("ResourceNotFoundException", () =>
+                      Effect.succeed(undefined),
+                    ),
+                  );
+                  const reservedConcurrentExecutions =
+                    yield* getReservedConcurrentExecutions(fn.FunctionName);
+                  return {
+                    functionArn: fn.FunctionArn,
+                    functionName: fn.FunctionName,
+                    functionUrl,
+                    roleArn: fn.Role,
+                    roleName: fn.Role.split("/").pop()!,
+                    code: { hash: "" },
+                    ...(reservedConcurrentExecutions === undefined
+                      ? {}
+                      : { reservedConcurrentExecutions }),
+                  } satisfies Function["Attributes"];
+                }),
+              { concurrency: 10 },
+            );
+            return rows.filter(
+              (row): row is Function["Attributes"] => row !== undefined,
+            );
+          }),
 
         precreate: Effect.fnUntraced(function* ({ id, news, session }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
           const { roleName, functionName, roleArn } = yield* createNames(
             id,
             news.functionName,
@@ -1305,10 +1540,17 @@ export default await Effect.runPromise(handlerEffect)
             session,
           });
 
+          const reservedConcurrentExecutions =
+            yield* syncReservedConcurrentExecutions({
+              functionName,
+              reservedConcurrentExecutions: news.reservedConcurrentExecutions,
+            });
+
           const functionUrl = yield* createOrUpdateFunctionUrl({
             functionName,
             url: news.url,
             oldUrl: olds?.url,
+            currentFunctionUrl: output?.functionUrl,
           });
 
           yield* session.note(summary({ code }));
@@ -1323,6 +1565,7 @@ export default await Effect.runPromise(handlerEffect)
             code: {
               hash,
             },
+            reservedConcurrentExecutions,
           };
         }),
         delete: Effect.fnUntraced(function* ({ output }) {
@@ -1381,9 +1624,10 @@ export default await Effect.runPromise(handlerEffect)
           return null as any;
         }),
         tail: ({ output }) => {
-          const logGroupArn = `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${output.functionName}`;
-
           const runTailSession = Effect.gen(function* () {
+            const { accountId, region } = yield* AWSEnvironment.current;
+
+            const logGroupArn = `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${output.functionName}`;
             const response = yield* logs.startLiveTail({
               logGroupIdentifiers: [logGroupArn],
             });

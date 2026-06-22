@@ -1,0 +1,226 @@
+import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
+import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
+
+import { isResolved } from "../../Diff.ts";
+import { createPhysicalName } from "../../PhysicalName.ts";
+import * as Provider from "../../Provider.ts";
+import { Resource } from "../../Resource.ts";
+import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { Providers } from "../Providers.ts";
+
+const DispatchNamespaceTypeId = "Cloudflare.Workers.DispatchNamespace" as const;
+type DispatchNamespaceTypeId = typeof DispatchNamespaceTypeId;
+
+export interface DispatchNamespaceProps {
+  /**
+   * Name of the dispatch namespace. Must be lowercase, alphanumeric, and
+   * contain no spaces or special characters except dashes. The name is the
+   * namespace's identity — there is no rename API, so changing it triggers
+   * a replacement. If omitted, a unique name is generated from the app,
+   * stage, and logical ID.
+   * @default ${app}-${id}-${stage}-${suffix}
+   */
+  name?: string;
+}
+
+export interface DispatchNamespaceAttributes {
+  /**
+   * API Resource UUID tag assigned by Cloudflare.
+   */
+  namespaceId: string;
+  /**
+   * Name of the dispatch namespace.
+   */
+  name: string;
+  /**
+   * The Cloudflare account the namespace belongs to.
+   */
+  accountId: string;
+  /**
+   * The current number of scripts in this dispatch namespace.
+   */
+  scriptCount: number;
+  /**
+   * Whether the Workers in the namespace are executed in a "trusted"
+   * manner (access to shared zone caches and `request.cf`).
+   */
+  trustedWorkers: boolean;
+  /**
+   * When the namespace was created.
+   */
+  createdOn: string | undefined;
+  /**
+   * When the namespace was last modified.
+   */
+  modifiedOn: string | undefined;
+}
+
+export type DispatchNamespace = Resource<
+  DispatchNamespaceTypeId,
+  DispatchNamespaceProps,
+  DispatchNamespaceAttributes,
+  never,
+  Providers
+>;
+
+/**
+ * A Workers for Platforms dispatch namespace — a container for customer
+ * ("user") Workers that a platform Worker dispatches to at runtime via a
+ * dynamic-dispatch binding.
+ *
+ * The namespace has no mutable properties: its `name` is its identity, so
+ * changing the name triggers a replacement. Deleting a namespace also
+ * deletes every script uploaded into it.
+ *
+ * Note: Workers for Platforms is a paid add-on. On accounts without the
+ * subscription, namespace creation fails with an entitlement error.
+ * @resource
+ * @product Workers for Platforms
+ * @category Workers & Compute
+ * @section Creating a Dispatch Namespace
+ * @example Namespace with a generated name
+ * ```typescript
+ * const namespace = yield* Cloudflare.DispatchNamespace("Customers", {});
+ * ```
+ *
+ * @example Namespace with an explicit name
+ * ```typescript
+ * const namespace = yield* Cloudflare.DispatchNamespace("Customers", {
+ *   name: "my-platform-customers",
+ * });
+ * ```
+ *
+ * @section Uploading user Workers
+ * @example Upload a customer script into the namespace
+ * ```typescript
+ * const script = yield* Cloudflare.DispatchNamespaceScript("CustomerA", {
+ *   namespace: namespace.name,
+ *   script: `export default { fetch() { return new Response("hi"); } }`,
+ * });
+ * ```
+ *
+ * @see https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/
+ */
+export const DispatchNamespace = Resource<DispatchNamespace>(
+  DispatchNamespaceTypeId,
+);
+
+/**
+ * Returns true if the given value is a DispatchNamespace resource.
+ */
+export const isDispatchNamespace = (
+  value: unknown,
+): value is DispatchNamespace =>
+  Predicate.hasProperty(value, "Type") &&
+  value.Type === DispatchNamespaceTypeId;
+
+export const DispatchNamespaceProvider = () =>
+  Provider.succeed(DispatchNamespace, {
+    stables: ["namespaceId", "name", "accountId", "createdOn"],
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      if (!isResolved(news)) return undefined;
+      if ((output?.accountId ?? accountId) !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // The name is the namespace's identity — no rename API. When `name`
+      // is omitted on both sides, the generated physical name is identical
+      // (same logical ID + instance ID), so an omitted name never diffs.
+      const oldName = output?.name ?? olds?.name;
+      const newName = news.name ?? olds?.name ?? oldName;
+      if (oldName !== undefined && oldName !== newName) {
+        return { action: "replace" } as const;
+      }
+      return undefined;
+    }),
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* wfp.listDispatchNamespaces.pages({ accountId }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) =>
+          Array.from(chunk).flatMap((page) =>
+            (page.result ?? []).map((ns) =>
+              toAttributes(ns, accountId, ns.namespaceName ?? ""),
+            ),
+          ),
+        ),
+      );
+    }),
+    read: Effect.fn(function* ({ id, output, olds }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const acct = output?.accountId ?? accountId;
+      // The name is the identity — a cold read (lost state) lands on the
+      // same deterministic name as reconcile would.
+      const name =
+        output?.name ??
+        olds?.name ??
+        (yield* createPhysicalName({ id, lowercase: true }));
+      const observed = yield* getNamespace(acct, name);
+      return observed ? toAttributes(observed, acct, name) : undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news, output }) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name =
+        news.name ?? (yield* createPhysicalName({ id, lowercase: true }));
+
+      // Observe — namespaces are looked up by name; `output` is only a
+      // cache of the same identity. A missing namespace falls through to
+      // the ensure step.
+      const observed = yield* getNamespace(
+        output?.accountId ?? accountId,
+        name,
+      );
+      if (observed) {
+        // Existence-only resource — nothing mutable to sync.
+        return toAttributes(observed, output?.accountId ?? accountId, name);
+      }
+
+      // Ensure — create, tolerating the already-exists race by re-reading.
+      const created = yield* wfp
+        .createDispatchNamespace({ accountId, name })
+        .pipe(
+          Effect.catchTag("DispatchNamespaceAlreadyExists", () =>
+            wfp.getDispatchNamespace({ accountId, dispatchNamespace: name }),
+          ),
+        );
+      return toAttributes(created, accountId, name);
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      // Deleting a namespace also deletes the scripts inside it.
+      yield* wfp
+        .deleteDispatchNamespace({
+          accountId: output.accountId,
+          dispatchNamespace: output.name,
+        })
+        .pipe(Effect.catchTag("DispatchNamespaceNotFound", () => Effect.void));
+    }),
+  });
+
+/**
+ * Read a namespace by name, mapping "gone" (`DispatchNamespaceNotFound`,
+ * Cloudflare error code 100119) to `undefined`.
+ */
+const getNamespace = (accountId: string, name: string) =>
+  wfp
+    .getDispatchNamespace({ accountId, dispatchNamespace: name })
+    .pipe(
+      Effect.catchTag("DispatchNamespaceNotFound", () =>
+        Effect.succeed(undefined),
+      ),
+    );
+
+const toAttributes = (
+  ns: wfp.GetDispatchNamespaceResponse | wfp.CreateDispatchNamespaceResponse,
+  accountId: string,
+  name: string,
+): DispatchNamespaceAttributes => ({
+  namespaceId: ns.namespaceId ?? "",
+  name: ns.namespaceName ?? name,
+  accountId,
+  scriptCount: ns.scriptCount ?? 0,
+  trustedWorkers: ns.trustedWorkers ?? false,
+  createdOn: ns.createdOn ?? undefined,
+  modifiedOn: ns.modifiedOn ?? undefined,
+});

@@ -10,6 +10,7 @@ export interface ConfirmSubscriptionRequest extends Omit<
   "TopicArn"
 > {}
 
+/** @binding */
 export class ConfirmSubscription extends Binding.Service<
   ConfirmSubscription,
   (

@@ -69,6 +69,8 @@ export const dnsReadClient = (
  * into the Worker so runtime code can authenticate.
  *
  * @binding
+ * @product DNS
+ * @category Domains & DNS
  *
  * @section Reading DNS records at runtime
  * @example Read records from inside a Worker

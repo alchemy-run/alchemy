@@ -1,6 +1,7 @@
-import * as ops from "@distilled.cloud/planetscale/Operations";
+import * as planetscale from "@distilled.cloud/planetscale";
 import * as Effect from "effect/Effect";
-import { pollUntil } from "../Util.ts";
+import * as Schedule from "effect/Schedule";
+import { pollUntil, waitForBranchReady } from "../Util.ts";
 
 /**
  * Available PlanetScale PostgreSQL cluster sizes.
@@ -55,6 +56,15 @@ export function toPostgresClusterSku(input: {
 }
 
 /**
+ * Schedule for polling branch change requests. Postgres cluster resizes
+ * routinely take longer than the default 10-minute polling budget, so
+ * give change requests a 60-minute budget (720 × 5s).
+ */
+const changeRequestSchedule = Schedule.spaced("5 seconds").pipe(
+  Schedule.both(Schedule.recurs(720)),
+);
+
+/**
  * Polls branch change requests until all visible changes are in a terminal
  * state (`completed` or `canceled`), or — if `changeId` is provided — until
  * that specific change reaches a terminal state.
@@ -67,7 +77,7 @@ export const waitForPendingPostgresChanges = Effect.fn(function* (
 ) {
   yield* pollUntil(
     `changes for branch "${branch}"`,
-    ops.listBranchChangeRequests({
+    planetscale.listBranchChangeRequests({
       organization,
       database,
       branch,
@@ -85,6 +95,7 @@ export const waitForPendingPostgresChanges = Effect.fn(function* (
 
       return page.data.every((change) => isTerminal(change.state));
     },
+    changeRequestSchedule,
   );
 });
 
@@ -98,7 +109,10 @@ export const ensurePostgresProductionBranchClusterSize = Effect.fn(function* (
   branch: string,
   expectedClusterSize: PostgresClusterSize,
 ) {
-  const data = yield* ops.getBranch({ organization, database, branch });
+  // A freshly-forked branch can't accept (or complete) change requests
+  // until it has finished provisioning — queueing a resize against it
+  // just leaves the change pending until the poll budget runs out.
+  const data = yield* waitForBranchReady(organization, database, branch);
 
   const sku = toPostgresClusterSku({
     size: expectedClusterSize,
@@ -110,7 +124,7 @@ export const ensurePostgresProductionBranchClusterSize = Effect.fn(function* (
     return;
   }
   yield* waitForPendingPostgresChanges(organization, database, branch);
-  const change = yield* ops.updateBranchChangeRequest({
+  const change = yield* planetscale.updateBranchChangeRequest({
     organization,
     database,
     branch,

@@ -11,6 +11,7 @@ export interface InvokeFunctionRequest extends Omit<
   "FunctionName"
 > {}
 
+/** @binding */
 export class InvokeFunction extends Binding.Service<
   InvokeFunction,
   (

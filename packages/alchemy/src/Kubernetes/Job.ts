@@ -37,7 +37,7 @@ export interface JobProps {
 
 /**
  * A Kubernetes job bound to an EKS cluster.
- *
+ * @resource
  * @example Run a one-shot job
  * ```typescript
  * const job = yield* Job("seed", {

@@ -78,7 +78,7 @@ export interface PodIdentityServiceAccountResources {
 
 /**
  * Creates a Kubernetes service account and binds it to EKS Pod Identity.
- *
+ * @resource
  * @example Service account with generated IAM role
  * ```typescript
  * const identity = yield* PodIdentityServiceAccount("ApiIdentity", {

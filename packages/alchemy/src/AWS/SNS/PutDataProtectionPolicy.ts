@@ -10,6 +10,7 @@ export interface PutDataProtectionPolicyRequest extends Omit<
   "ResourceArn"
 > {}
 
+/** @binding */
 export class PutDataProtectionPolicy extends Binding.Service<
   PutDataProtectionPolicy,
   (

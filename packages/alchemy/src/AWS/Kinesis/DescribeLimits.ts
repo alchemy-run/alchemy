@@ -6,6 +6,7 @@ import { isFunction } from "../Lambda/Function.ts";
 
 export interface DescribeLimitsRequest extends Kinesis.DescribeLimitsInput {}
 
+/** @binding */
 export class DescribeLimits extends Binding.Service<
   DescribeLimits,
   () => Effect.Effect<

@@ -29,7 +29,7 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 // credentials + account id the lookup needs inside a plain test body.
 const resolveZoneId = Core.withProviders(
   Effect.gen(function* () {
-    const { accountId } = yield* CloudflareEnvironment;
+    const { accountId } = yield* yield* CloudflareEnvironment;
     const zone = yield* findZoneByName({ accountId, name: zoneName });
     return zone?.id;
   }),

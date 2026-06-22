@@ -110,7 +110,7 @@ const serverUrlOf = (server: SsrSiteServerOrigin): Input<string> => {
       return Output.map((url: string | undefined) => {
         if (!url) {
           throw new Error(
-            "SsrSite lambda origins require a function created with `url: true`.",
+            "SsrSite lambda origins require a function created with `url` enabled.",
           );
         }
         return url;
@@ -139,7 +139,7 @@ const serverOriginOf = (server: SsrSiteServerOrigin): Input<string> =>
  *
  * `SsrSite` serves a dynamic origin behind CloudFront and can optionally split
  * immutable static assets into a private S3 bucket origin.
- *
+ * @resource
  * @section Creating SSR Sites
  * @example Lambda URL Origin
  * ```typescript

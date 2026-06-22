@@ -154,7 +154,9 @@ export type R2Bucket = Resource<
  *
  * R2 provides zero-egress-fee object storage. Create a bucket as a resource,
  * then bind it to a Worker to read and write objects at runtime.
- *
+ * @resource
+ * @product R2
+ * @category Storage & Databases
  * @section Creating a Bucket
  * @example Basic R2 bucket
  * ```typescript
@@ -354,24 +356,12 @@ export const R2BucketProvider = () =>
   Provider.effect(
     R2Bucket,
     Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const createBucket = yield* r2.createBucket;
-      const patchBucket = yield* r2.patchBucket;
-      const deleteBucket = yield* r2.deleteBucket;
-      const getBucket = yield* r2.getBucket;
-      const deleteObjects = yield* r2.deleteObjects;
-      const listBucketDomainCustoms = yield* r2.listBucketDomainCustoms;
-      const createBucketDomainCustom = yield* r2.createBucketDomainCustom;
-      const updateBucketDomainCustom = yield* r2.updateBucketDomainCustom;
-      const deleteBucketDomainCustom = yield* r2.deleteBucketDomainCustom;
-      const getBucketLifecycle = yield* r2.getBucketLifecycle;
-      const putBucketLifecycle = yield* r2.putBucketLifecycle;
-
-      const emptyBucket = (
+      const emptyBucket = Effect.fnUntraced(function* (
         bucketName: string,
         jurisdiction: R2Bucket.Jurisdiction,
-      ) =>
-        r2.listObjects
+      ) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        return yield* r2.listObjects
           .items({
             accountId,
             bucketName,
@@ -385,7 +375,7 @@ export const R2BucketProvider = () =>
             ),
             Stream.map((o) => o.key),
             Stream.runForEachArray((chunk) =>
-              deleteObjects({
+              r2.deleteObjects({
                 accountId,
                 bucketName,
                 cfR2Jurisdiction: jurisdiction,
@@ -394,6 +384,7 @@ export const R2BucketProvider = () =>
             ),
             Effect.catchTag("NoSuchBucket", () => Effect.void),
           );
+      });
 
       const createBucketName = (id: string, name: string | undefined) =>
         Effect.gen(function* () {
@@ -411,24 +402,39 @@ export const R2BucketProvider = () =>
         return location.toLowerCase() as R2Bucket.Location;
       };
 
-      const listCustomDomains = (
+      const listCustomDomains = Effect.fnUntraced(function* (
         bucketName: string,
         jurisdiction: R2Bucket.Jurisdiction,
-      ) =>
-        listBucketDomainCustoms({
+        // `NoSuchBucket` after a *create* is endpoint-consistency lag worth
+        // retrying. During *enumeration* (`list`), a bucket that 404s is one a
+        // parallel suite just deleted — it's genuinely gone, so retrying the
+        // consistency schedule only burns ~3s per churned bucket and is what
+        // pushes an account-wide `list` past its timeout. Default to retrying
+        // (the reconcile path); opt out for enumeration.
+        options?: { retryMissing?: boolean },
+      ) {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const fetch = r2.listBucketDomainCustoms({
           accountId,
           bucketName,
           jurisdiction,
-        }).pipe(
-          Effect.retry({
-            while: isNoSuchBucket,
-            schedule: r2BucketEndpointConsistencySchedule,
-          }),
+        });
+        return yield* (
+          options?.retryMissing === false
+            ? fetch
+            : fetch.pipe(
+                Effect.retry({
+                  while: (e) => e._tag === "NoSuchBucket",
+                  schedule: r2BucketEndpointConsistencySchedule,
+                }),
+              )
+        ).pipe(
           Effect.map((response) =>
             response.domains.map(toCustomDomainAttributes),
           ),
           Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
         );
+      });
 
       const reconcileCustomDomains = (
         bucketName: string,
@@ -437,6 +443,7 @@ export const R2BucketProvider = () =>
         previous: R2Bucket.CustomDomain[],
       ) =>
         Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
           const observed = yield* listCustomDomains(bucketName, jurisdiction);
           if (!observed) {
             return yield* Effect.fail(
@@ -458,17 +465,19 @@ export const R2BucketProvider = () =>
             (previousDomain) =>
               desiredDomains.has(previousDomain.domain)
                 ? Effect.void
-                : deleteBucketDomainCustom({
-                    accountId,
-                    bucketName,
-                    domain: previousDomain.domain,
-                    jurisdiction,
-                  }).pipe(
-                    Effect.catchIf(
-                      isMissingCustomDomainOrBucket,
-                      () => Effect.void,
+                : r2
+                    .deleteBucketDomainCustom({
+                      accountId,
+                      bucketName,
+                      domain: previousDomain.domain,
+                      jurisdiction,
+                    })
+                    .pipe(
+                      Effect.catchTag(
+                        ["DomainNotFound", "NoSuchBucket"],
+                        () => Effect.void,
+                      ),
                     ),
-                  ),
             { concurrency: "unbounded" },
           );
 
@@ -495,56 +504,62 @@ export const R2BucketProvider = () =>
                   // domain. This is not a duplicate of the stale-domain prune
                   // above: the hostname is still desired, so that prune skips it
                   // and this branch deletes only to recreate it in the new zone.
-                  yield* deleteBucketDomainCustom({
-                    accountId,
-                    bucketName,
-                    domain: domain.name,
-                    jurisdiction,
-                  }).pipe(
-                    Effect.catchIf(
-                      isMissingCustomDomainOrBucket,
-                      () => Effect.void,
-                    ),
-                  );
+                  yield* r2
+                    .deleteBucketDomainCustom({
+                      accountId,
+                      bucketName,
+                      domain: domain.name,
+                      jurisdiction,
+                    })
+                    .pipe(
+                      Effect.catchTag(
+                        ["DomainNotFound", "NoSuchBucket"],
+                        () => Effect.void,
+                      ),
+                    );
                 }
 
                 if (!observedDomain || observedDomain.zoneId !== zoneId) {
-                  const created = yield* createBucketDomainCustom({
-                    accountId,
-                    bucketName,
-                    jurisdiction,
-                    domain: domain.name,
-                    enabled: domain.enabled ?? true,
-                    zoneId,
-                    ciphers: domain.ciphers,
-                    minTLS: domain.minTLS,
-                  }).pipe(
-                    Effect.retry({
-                      while: isNoSuchBucket,
-                      schedule: r2BucketEndpointConsistencySchedule,
-                    }),
-                    Effect.retry({
-                      while: isDomainInUseConflict,
-                      schedule: r2CustomDomainConflictSchedule,
-                    }),
-                  );
+                  const created = yield* r2
+                    .createBucketDomainCustom({
+                      accountId,
+                      bucketName,
+                      jurisdiction,
+                      domain: domain.name,
+                      enabled: domain.enabled ?? true,
+                      zoneId,
+                      ciphers: domain.ciphers,
+                      minTLS: domain.minTLS,
+                    })
+                    .pipe(
+                      Effect.retry({
+                        while: (e) => e._tag === "NoSuchBucket",
+                        schedule: r2BucketEndpointConsistencySchedule,
+                      }),
+                      Effect.retry({
+                        while: (e) => e._tag === "CustomDomainInUse",
+                        schedule: r2CustomDomainConflictSchedule,
+                      }),
+                    );
                   return toCustomDomainAttributes({ ...created, zoneId });
                 }
 
-                const updated = yield* updateBucketDomainCustom({
-                  accountId,
-                  bucketName,
-                  domain: domain.name,
-                  jurisdiction,
-                  enabled: domain.enabled ?? true,
-                  ciphers: domain.ciphers,
-                  minTLS: domain.minTLS,
-                }).pipe(
-                  Effect.retry({
-                    while: isNoSuchBucket,
-                    schedule: r2BucketEndpointConsistencySchedule,
-                  }),
-                );
+                const updated = yield* r2
+                  .updateBucketDomainCustom({
+                    accountId,
+                    bucketName,
+                    domain: domain.name,
+                    jurisdiction,
+                    enabled: domain.enabled ?? true,
+                    ciphers: domain.ciphers,
+                    minTLS: domain.minTLS,
+                  })
+                  .pipe(
+                    Effect.retry({
+                      while: (e) => e._tag === "NoSuchBucket",
+                      schedule: r2BucketEndpointConsistencySchedule,
+                    }),
+                  );
                 return toCustomDomainAttributes({
                   ...updated,
                   enabled: updated.enabled ?? domain.enabled ?? true,
@@ -557,22 +572,69 @@ export const R2BucketProvider = () =>
           return applied.sort((a, b) => a.domain.localeCompare(b.domain));
         });
 
+      // R2's `listBuckets` is not modelled as paginated by distilled and its
+      // response omits a continuation cursor, so paginate exhaustively with the
+      // `startAfter` query param: keep fetching full pages (capped at 1000)
+      // until a short page signals the end.
+      const listBucketsInJurisdiction = (
+        accountId: string,
+        jurisdiction: R2Bucket.Jurisdiction,
+      ) =>
+        Effect.gen(function* () {
+          const all: {
+            name: string;
+            jurisdiction: R2Bucket.Jurisdiction;
+            storageClass: R2Bucket.StorageClass;
+            location: R2Bucket.Location | undefined;
+          }[] = [];
+          let startAfter: string | undefined = undefined;
+          const perPage = 1000;
+          for (;;) {
+            const response: r2.ListBucketsResponse = yield* r2.listBuckets({
+              accountId,
+              jurisdiction,
+              perPage,
+              startAfter,
+            });
+            const page = (response.buckets ?? []).filter(
+              (b): b is typeof b & { name: string } =>
+                typeof b.name === "string" && b.name !== "",
+            );
+            for (const b of page) {
+              all.push({
+                name: b.name,
+                jurisdiction: (b.jurisdiction ??
+                  jurisdiction) as R2Bucket.Jurisdiction,
+                storageClass: (b.storageClass ??
+                  "Standard") as R2Bucket.StorageClass,
+                location: normalizeLocation(b.location),
+              });
+            }
+            if (page.length < perPage) break;
+            startAfter = page[page.length - 1].name;
+          }
+          return all;
+        });
+
       const reconcileLifecycleRules = (
         bucketName: string,
         jurisdiction: R2Bucket.Jurisdiction,
         desired: R2BucketLifecycleRule[],
       ) =>
         Effect.gen(function* () {
-          const observed = yield* getBucketLifecycle({
-            accountId,
-            bucketName,
-            jurisdiction,
-          }).pipe(
-            Effect.retry({
-              while: isNoSuchBucket,
-              schedule: r2BucketEndpointConsistencySchedule,
-            }),
-          );
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const observed = yield* r2
+            .getBucketLifecycle({
+              accountId,
+              bucketName,
+              jurisdiction,
+            })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "NoSuchBucket",
+                schedule: r2BucketEndpointConsistencySchedule,
+              }),
+            );
 
           const observedRules = (observed.rules ?? []).map(toLifecycleRule);
           const desiredRules = desired.map(normalizeLifecycleRule);
@@ -581,25 +643,106 @@ export const R2BucketProvider = () =>
             return desiredRules;
           }
 
-          yield* putBucketLifecycle({
-            accountId,
-            bucketName,
-            jurisdiction,
-            rules: desired.map(toLifecyclePutPayload),
-          }).pipe(
-            Effect.retry({
-              while: isNoSuchBucket,
-              schedule: r2BucketEndpointConsistencySchedule,
-            }),
-          );
+          yield* r2
+            .putBucketLifecycle({
+              accountId,
+              bucketName,
+              jurisdiction,
+              rules: desired.map(toLifecyclePutPayload),
+            })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "NoSuchBucket",
+                schedule: r2BucketEndpointConsistencySchedule,
+              }),
+            );
 
           return desiredRules;
         });
 
       return {
         stables: ["bucketName", "accountId"],
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            // R2 buckets are account-scoped but partitioned by jurisdiction, so
+            // enumerate each jurisdiction. Accounts not entitled to a given
+            // jurisdiction (e.g. `fedramp`) reject the route — treat as empty.
+            const jurisdictions: R2Bucket.Jurisdiction[] = [
+              "default",
+              "eu",
+              "fedramp",
+            ];
+            const perJurisdiction = yield* Effect.forEach(
+              jurisdictions,
+              (jurisdiction) =>
+                listBucketsInJurisdiction(accountId, jurisdiction).pipe(
+                  // An account not entitled to a jurisdiction rejects the list
+                  // route with `Forbidden` ("Access Denied") or `InvalidRoute`
+                  // — there are simply no buckets there, so treat as empty.
+                  // @ts-expect-error
+                  Effect.catchTag(["InvalidRoute", "Forbidden"], () =>
+                    Effect.succeed([]),
+                  ),
+                ),
+              { concurrency: jurisdictions.length },
+            );
+            const buckets = perJurisdiction.flat();
+
+            // Hydrate each bucket into the exact `read` Attributes shape so the
+            // result is directly usable by `delete` (which needs `domains` to
+            // tear down custom domains).
+            return yield* Effect.forEach(
+              buckets,
+              (bucket) =>
+                Effect.gen(function* () {
+                  const domains =
+                    (yield* listCustomDomains(
+                      bucket.name,
+                      bucket.jurisdiction,
+                      {
+                        retryMissing: false,
+                      },
+                    )) ?? [];
+                  const lifecycleRules = yield* r2
+                    .getBucketLifecycle({
+                      accountId,
+                      bucketName: bucket.name,
+                      jurisdiction: bucket.jurisdiction,
+                    })
+                    .pipe(
+                      Effect.map((observed) =>
+                        (observed.rules ?? []).map(toLifecycleRule),
+                      ),
+                      Effect.catchTag("NoSuchBucket", () =>
+                        Effect.succeed([] as R2Bucket.LifecycleRule[]),
+                      ),
+                    );
+                  return {
+                    bucketName: bucket.name,
+                    storageClass: bucket.storageClass,
+                    jurisdiction: bucket.jurisdiction,
+                    location: bucket.location,
+                    accountId,
+                    domains,
+                    lifecycleRules,
+                  };
+                }).pipe(
+                  // The custom-domain endpoint intermittently 500s ("Failed to
+                  // access or modify the bucket policy"). Ride out the transient
+                  // blip with a bounded retry rather than aborting the whole
+                  // enumeration.
+                  Effect.retry({
+                    while: (e) => e._tag === "InternalServerError",
+                    schedule: r2TransientServerErrorSchedule,
+                  }),
+                ),
+              { concurrency: 10 },
+            );
+          }),
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           if (!isResolved(news)) return undefined;
+          const { accountId } = yield* yield* CloudflareEnvironment;
           const name = yield* createBucketName(id, news.name);
           const oldName = output?.bucketName
             ? output.bucketName
@@ -619,7 +762,11 @@ export const R2BucketProvider = () =>
           if (oldStorageClass !== (news.storageClass ?? "Standard")) {
             return {
               action: "update",
-              stables: oldName === name ? ["bucketName"] : undefined,
+              // `accountId` is always stable across an update (a name/account
+              // change is a `replace`); keep it now that `diff.stables`
+              // overrides `provider.stables` rather than merging with it.
+              stables:
+                oldName === name ? ["bucketName", "accountId"] : ["accountId"],
             } as const;
           }
           if (!deepEqual(olds.domains, news.domains)) {
@@ -630,6 +777,7 @@ export const R2BucketProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
           const name = yield* createBucketName(id, news.name);
           const acct = output?.accountId ?? accountId;
           const jurisdiction =
@@ -638,33 +786,46 @@ export const R2BucketProvider = () =>
           // Observe — fetch the bucket. R2 reports a deleted bucket as
           // `NoSuchBucket`; tolerate that so the reconciler falls
           // through to the create path.
-          let observed = yield* getBucket({
-            accountId: acct,
-            bucketName: name,
-            jurisdiction,
-          }).pipe(
-            Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
-          );
+          let observed = yield* r2
+            .getBucket({
+              accountId: acct,
+              bucketName: name,
+              jurisdiction,
+            })
+            .pipe(
+              Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+            );
 
           // Ensure — create if missing. R2 reports a concurrent create
           // (or partial state-persistence failure) as
           // `BucketAlreadyExists`; tolerate by re-fetching the bucket.
           if (!observed) {
-            observed = yield* createBucket({
-              accountId: acct,
-              name,
-              storageClass: news.storageClass,
-              jurisdiction: news.jurisdiction,
-              locationHint: news.locationHint,
-            }).pipe(
-              Effect.catchTag("BucketAlreadyExists", () =>
-                getBucket({
-                  accountId: acct,
-                  bucketName: name,
-                  jurisdiction: news.jurisdiction,
-                }),
-              ),
-            );
+            observed = yield* r2
+              .createBucket({
+                accountId: acct,
+                name,
+                storageClass: news.storageClass,
+                jurisdiction: news.jurisdiction,
+                locationHint: news.locationHint,
+              })
+              .pipe(
+                Effect.catchTag("BucketAlreadyExists", () =>
+                  r2
+                    .getBucket({
+                      accountId: acct,
+                      bucketName: name,
+                      jurisdiction: news.jurisdiction,
+                    })
+                    .pipe(
+                      // The create lost a race, but the winning create may not
+                      // be readable yet — ride out the consistency lag.
+                      Effect.retry({
+                        while: (e) => e._tag === "NoSuchBucket",
+                        schedule: r2BucketEndpointConsistencySchedule,
+                      }),
+                    ),
+                ),
+              );
           }
 
           // Sync — storage class is the only mutable property; location
@@ -674,12 +835,21 @@ export const R2BucketProvider = () =>
           const desiredStorageClass = news.storageClass ?? "Standard";
           const observedStorageClass = observed.storageClass ?? "Standard";
           if (observedStorageClass !== desiredStorageClass) {
-            observed = yield* patchBucket({
-              accountId: acct,
-              bucketName: observed.name!,
-              storageClass: desiredStorageClass,
-              jurisdiction: observed.jurisdiction ?? jurisdiction,
-            });
+            observed = yield* r2
+              .patchBucket({
+                accountId: acct,
+                bucketName: observed.name!,
+                storageClass: desiredStorageClass,
+                jurisdiction: observed.jurisdiction ?? jurisdiction,
+              })
+              .pipe(
+                // The patch endpoint can briefly 404 a freshly-created bucket
+                // even after `getBucket` already sees it.
+                Effect.retry({
+                  while: (e) => e._tag === "NoSuchBucket",
+                  schedule: r2BucketEndpointConsistencySchedule,
+                }),
+              );
           }
 
           const attrs = {
@@ -713,46 +883,60 @@ export const R2BucketProvider = () =>
           };
         }),
         delete: Effect.fn(function* ({ output }) {
-          for (const domain of output.domains ?? []) {
-            yield* deleteBucketDomainCustom({
+          yield* Effect.all(
+            (output.domains ?? []).map((domain) =>
+              r2
+                .deleteBucketDomainCustom({
+                  accountId: output.accountId,
+                  bucketName: output.bucketName,
+                  domain: domain.domain,
+                  jurisdiction: output.jurisdiction,
+                })
+                .pipe(
+                  Effect.catchTag(
+                    ["DomainNotFound", "NoSuchBucket"],
+                    () => Effect.void,
+                  ),
+                ),
+            ),
+            { concurrency: "unbounded" },
+          );
+
+          yield* emptyBucket(output.bucketName, output.jurisdiction);
+          yield* r2
+            .deleteBucket({
               accountId: output.accountId,
               bucketName: output.bucketName,
-              domain: domain.domain,
               jurisdiction: output.jurisdiction,
-            }).pipe(
-              Effect.catchIf(isMissingCustomDomainOrBucket, () => Effect.void),
-            );
-          }
-          yield* emptyBucket(output.bucketName, output.jurisdiction);
-          yield* deleteBucket({
-            accountId: output.accountId,
-            bucketName: output.bucketName,
-            jurisdiction: output.jurisdiction,
-          }).pipe(Effect.catchTag("NoSuchBucket", () => Effect.void));
+            })
+            .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void));
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
           const name =
             output?.bucketName ?? (yield* createBucketName(id, olds?.name));
           const acct = output?.accountId ?? accountId;
-          return yield* getBucket({
-            accountId: acct,
-            bucketName: name,
-            jurisdiction: output?.jurisdiction ?? olds?.jurisdiction,
-          }).pipe(
-            Effect.map((bucket) => ({
-              bucketName: bucket.name!,
-              // Distilled widened generated string enums to open unions.
-              storageClass: (bucket.storageClass ??
-                "Standard") as R2Bucket.StorageClass,
-              jurisdiction: (bucket.jurisdiction ??
-                "default") as R2Bucket.Jurisdiction,
-              location: normalizeLocation(bucket.location),
+          return yield* r2
+            .getBucket({
               accountId: acct,
-              domains: output?.domains ?? [],
-              lifecycleRules: output?.lifecycleRules ?? [],
-            })),
-            Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
-          );
+              bucketName: name,
+              jurisdiction: output?.jurisdiction ?? olds?.jurisdiction,
+            })
+            .pipe(
+              Effect.map((bucket) => ({
+                bucketName: bucket.name!,
+                // Distilled widened generated string enums to open unions.
+                storageClass: (bucket.storageClass ??
+                  "Standard") as R2Bucket.StorageClass,
+                jurisdiction: (bucket.jurisdiction ??
+                  "default") as R2Bucket.Jurisdiction,
+                location: normalizeLocation(bucket.location),
+                accountId: acct,
+                domains: output?.domains ?? [],
+                lifecycleRules: output?.lifecycleRules ?? [],
+              })),
+              Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+            );
         }),
       };
     }),
@@ -764,6 +948,13 @@ export const R2BucketProvider = () =>
 // treated as terminal for idempotent deletes.
 const r2BucketEndpointConsistencySchedule = Schedule.exponential(100).pipe(
   Schedule.both(Schedule.recurs(5)),
+);
+
+// R2 sub-resource reads (notably the custom-domain endpoint, which touches the
+// bucket's public-access policy) can return a transient 500 ("Failed to access
+// or modify the bucket policy"). Ride out the blip with a short bounded retry.
+const r2TransientServerErrorSchedule = Schedule.exponential("500 millis").pipe(
+  Schedule.both(Schedule.recurs(6)),
 );
 
 // Distilled widened generated string enums to open unions (`string & {}`); the
@@ -798,14 +989,6 @@ const sameCustomDomainConfig = (
   observed.enabled === (desired.enabled ?? true) &&
   deepEqual(observed.ciphers, desired.ciphers) &&
   observed.minTLS === desired.minTLS;
-
-const isMissingCustomDomainOrBucket = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  (("status" in error && (error as { status: unknown }).status === 404) ||
-    ("_tag" in error &&
-      ((error as { _tag: unknown })._tag === "DomainNotFound" ||
-        (error as { _tag: unknown })._tag === "NoSuchBucket")));
 
 type LifecycleRuleResponse = NonNullable<
   r2.GetBucketLifecycleResponse["rules"]
@@ -852,27 +1035,13 @@ const toLifecyclePutPayload = (
   storageClassTransitions: rule.storageClassTransitions,
 });
 
-const isNoSuchBucket = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  "_tag" in error &&
-  (error as { _tag: unknown })._tag === "NoSuchBucket";
-
 // Cloudflare keys a custom domain to a single bucket at the zone level. After a
 // domain is deleted, re-attaching the same hostname can transiently 409 with
-// "Domain already in use" until the prior association is fully released. Treat
-// that narrow conflict as eventual consistency and retry it on create.
-const isDomainInUseConflict = (error: unknown): boolean =>
-  typeof error === "object" &&
-  error !== null &&
-  "_tag" in error &&
-  (error as { _tag: unknown })._tag === "Conflict" &&
-  "message" in error &&
-  typeof (error as { message: unknown }).message === "string" &&
-  (error as { message: string }).message.toLowerCase().includes("in use");
-
-// Releasing a custom domain after delete can lag a few seconds, so give the
-// conflict a longer, bounded budget than the bucket-endpoint lag above.
+// "Domain already in use" (typed as `CustomDomainInUse`) until the prior
+// association is fully released. Treat that narrow conflict as eventual
+// consistency and retry it on create. Releasing a custom domain after delete
+// can lag a few seconds, so give the conflict a longer, bounded budget than
+// the bucket-endpoint lag above.
 const r2CustomDomainConflictSchedule = Schedule.spaced("2 seconds").pipe(
   Schedule.both(Schedule.recurs(8)),
 );

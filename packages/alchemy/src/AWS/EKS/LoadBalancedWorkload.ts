@@ -38,7 +38,7 @@ export interface LoadBalancedWorkloadProps extends Omit<
  *
  * This helper is the ergonomic path for the common "run a deployment and make
  * it reachable through the EKS-managed load balancer integration" flow.
- *
+ * @resource
  * @example Internet-facing workload
  * ```typescript
  * const app = yield* LoadBalancedWorkload("api", {

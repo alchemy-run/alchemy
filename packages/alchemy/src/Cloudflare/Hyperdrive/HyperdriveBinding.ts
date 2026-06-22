@@ -60,6 +60,8 @@ export interface HyperdriveBindingClient {
  * ```
  *
  * @binding
+ * @product Hyperdrive
+ * @category Storage & Databases
  */
 export class HyperdriveBinding extends Binding.Service<
   HyperdriveBinding,

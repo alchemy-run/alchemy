@@ -2,6 +2,7 @@ import * as workflows from "@distilled.cloud/cloudflare/workflows";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import { ExecutionContext } from "../../ExecutionContext.ts";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
@@ -235,6 +236,8 @@ export class WorkflowScope extends Context.Service<
  * ```
  *
  * @resource
+ * @product Workers
+ * @category Workers & Compute
  *
  * @section Defining a Workflow
  * @example Minimal workflow
@@ -491,13 +494,34 @@ export const WorkflowProvider = () =>
     WorkflowResource,
     Effect.gen(function* () {
       const ctx = yield* AlchemyContext;
-      const { accountId } = yield* CloudflareEnvironment;
-      const putWorkflow = yield* workflows.putWorkflow;
-      const deleteWorkflow = yield* workflows.deleteWorkflow;
 
       return WorkflowResource.Provider.of({
         // The `workflowId` is no longer marked as stable because if you start in dev mode, the ID will change on first deploy.
         stables: ["accountId"],
+        // Workflows are account-scoped. Enumerate every workflow in the account
+        // via the paginated list API and hydrate each into the same Attributes
+        // shape `reconcile` returns (id/name/className/scriptName are all on the
+        // list item, so no per-item get is needed).
+        list: () =>
+          Effect.gen(function* () {
+            const { accountId } = yield* yield* CloudflareEnvironment;
+            return yield* workflows.listWorkflows.pages({ accountId }).pipe(
+              Stream.runCollect,
+              Effect.map((chunk) =>
+                Array.from(chunk).flatMap((page) =>
+                  (page.result ?? []).map((wf) => ({
+                    workflowId: wf.id,
+                    workflowName: wf.name,
+                    // `className`/`scriptName` can be null/absent in the list
+                    // payload on some accounts — fall back so listing succeeds.
+                    className: wf.className ?? "",
+                    scriptName: wf.scriptName ?? "",
+                    accountId,
+                  })),
+                ),
+              ),
+            );
+          }),
         diff: Effect.fnUntraced(function* ({ output }) {
           // If the workflowId starts with "dev:", and we're not in dev mode, trigger an update so the workflow is created.
           if (output?.workflowId.startsWith("dev:") && !ctx.dev) {
@@ -505,6 +529,7 @@ export const WorkflowProvider = () =>
           }
         }),
         reconcile: Effect.fnUntraced(function* ({ news, output }) {
+          const { accountId } = yield* yield* CloudflareEnvironment;
           const acct = output?.accountId ?? accountId;
           yield* Effect.logInfo(
             `Cloudflare Workflow reconcile: ${news.workflowName}`,
@@ -522,7 +547,7 @@ export const WorkflowProvider = () =>
           // payloads converge to the same state and a missing workflow is
           // created on the spot. There is no separate observe step needed
           // — the API is naturally reconciler-shaped.
-          const result = yield* putWorkflow({
+          const result = yield* workflows.putWorkflow({
             accountId: acct,
             workflowName: news.workflowName,
             className: news.className,
@@ -540,10 +565,12 @@ export const WorkflowProvider = () =>
           yield* Effect.logInfo(
             `Cloudflare Workflow delete: ${output.workflowName}`,
           );
-          yield* deleteWorkflow({
-            accountId: output.accountId,
-            workflowName: output.workflowName,
-          }).pipe(Effect.catchTag("WorkflowNotFound", () => Effect.void));
+          yield* workflows
+            .deleteWorkflow({
+              accountId: output.accountId,
+              workflowName: output.workflowName,
+            })
+            .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.void));
         }),
       });
     }),

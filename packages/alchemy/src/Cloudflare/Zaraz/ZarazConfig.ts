@@ -11,6 +11,7 @@ import {
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { resolveZoneId, type ZoneReference } from "../Zone/index.ts";
+import { listAllZones } from "../Zone/lookup.ts";
 import { defineZarazEvents } from "./ZarazEventTypes.ts";
 
 export type ZarazWorkflow = zaraz.GetWorkflowResponse;
@@ -152,7 +153,9 @@ export type ZarazConfigAttributes = {
  * Destroy keeps the current Zaraz config by default to avoid wiping unrelated
  * zone-level analytics setup. Set `delete: true` to restore Cloudflare's
  * default Zaraz config on destroy.
- *
+ * @resource
+ * @product Zaraz
+ * @category Performance & Reliability
  * @section Managing Zaraz
  * @example Enable data layer compatibility
  * ```typescript
@@ -193,6 +196,119 @@ export const ZarazConfig = Object.assign(
     events: defineZarazEvents,
   },
 );
+
+export const ZarazConfigProvider = () =>
+  Provider.succeed(ZarazConfig, {
+    nuke: { singleton: true },
+    stables: ["zoneId"],
+    list: Effect.fn(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Zaraz config is a zone-level singleton with no account-wide list
+      // API — enumerate every zone and read its config (one per zone).
+      const allZones = yield* listAllZones(accountId);
+      const rows = yield* Effect.forEach(
+        allZones.map((zone) => zone.id),
+        (zoneId) =>
+          observe(zoneId).pipe(
+            // Best-effort account-wide fan-out: a zone where Zaraz isn't
+            // provisioned (rejects the route) or that the token can't read
+            // (missing permission / code-10000 auth blip surfaced as
+            // Unauthorized, or a 403/404) must be skipped, not fail the whole
+            // enumeration.
+            Effect.catchTag(
+              ["InvalidRoute", "Unauthorized", "Forbidden", "NotFound"],
+              () => Effect.succeed(undefined),
+            ),
+          ),
+        { concurrency: 10 },
+      );
+      return rows.filter(
+        (row): row is ZarazConfig["Attributes"] => row !== undefined,
+      );
+    }),
+    diff: Effect.fn(function* ({ olds, news, output }) {
+      if (!output) return undefined;
+      if (!isResolved(news)) return undefined;
+
+      const zoneId = yield* resolve(news.zone);
+      if (zoneId !== output.zoneId) {
+        return { action: "replace" } as const;
+      }
+
+      const outputConfig = fromAttributes(output);
+      const comparableOutput = configForCompare(outputConfig, olds, news);
+      const desired = desiredConfig(outputConfig, news);
+      const desiredWorkflow = news.workflow ?? output.workflow;
+      if (
+        desiredWorkflow !== output.workflow ||
+        !deepEqual(
+          comparableConfig(comparableOutput),
+          comparableConfig(desired),
+        )
+      ) {
+        return { action: "update" } as const;
+      }
+    }),
+    read: Effect.fn(function* ({ olds, output }) {
+      const zoneId =
+        output?.zoneId ?? (olds ? yield* resolve(olds.zone) : undefined);
+      if (!zoneId) return undefined;
+      return yield* observe(zoneId);
+    }),
+    reconcile: Effect.fn(function* ({ news, output }) {
+      const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
+      const observed = yield* observe(zoneId);
+      const observedConfig = fromAttributes(observed);
+      const desired = desiredConfig(observedConfig, news);
+      const desiredWorkflow = news.workflow ?? observed.workflow;
+
+      const updatedConfig = deepEqual(
+        comparableConfig(observedConfig),
+        comparableConfig(desired),
+      )
+        ? observedConfig
+        : yield* zaraz.putConfig(toPutConfig(zoneId, desired));
+      const updatedWorkflow =
+        desiredWorkflow === observed.workflow
+          ? observed.workflow
+          : yield* zaraz.putZaraz({
+              zoneId,
+              workflow: desiredWorkflow,
+            });
+
+      return toAttributes(zoneId, updatedConfig, updatedWorkflow);
+    }),
+    delete: Effect.fn(function* ({ output, olds }) {
+      if (olds.delete !== true) return;
+      const defaults = yield* zaraz.getDefault({ zoneId: output.zoneId });
+      yield* zaraz.putConfig(toPutConfig(output.zoneId, defaults));
+      if (olds.workflow !== undefined) {
+        yield* zaraz.putZaraz({
+          zoneId: output.zoneId,
+          workflow: "realtime",
+        });
+      }
+    }),
+  });
+
+const resolve = Effect.fnUntraced(function* (zone: ZoneReference) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  return yield* resolveZoneId({
+    accountId,
+    zone,
+    hostname: typeof zone === "string" ? zone : (zone.name ?? ""),
+  });
+});
+
+const observe = (zoneId: string) =>
+  Effect.all({
+    config: zaraz.getConfig({ zoneId }),
+    workflow: zaraz.getWorkflow({ zoneId }),
+  }).pipe(
+    Effect.map(({ config, workflow }) =>
+      toAttributes(zoneId, config, workflow),
+    ),
+  );
 
 type ConfigResponse =
   | zaraz.GetConfigResponse
@@ -302,102 +418,3 @@ const configForCompare = (
     variables: props.variables,
   };
 };
-
-export const ZarazConfigProvider = () =>
-  Provider.effect(
-    ZarazConfig,
-    Effect.gen(function* () {
-      const { accountId } = yield* CloudflareEnvironment;
-      const getConfig = yield* zaraz.getConfig;
-      const putConfig = yield* zaraz.putConfig;
-      const getDefault = yield* zaraz.getDefault;
-      const getWorkflow = yield* zaraz.getWorkflow;
-      // Cloudflare's OpenAPI operation name is `putZaraz`, but the endpoint
-      // updates the zone's Zaraz workflow mode.
-      const putWorkflow = yield* zaraz.putZaraz;
-
-      const resolve = (zone: ZoneReference) =>
-        resolveZoneId({
-          accountId,
-          zone,
-          hostname: typeof zone === "string" ? zone : (zone.name ?? ""),
-        });
-
-      const observe = (zoneId: string) =>
-        Effect.all({
-          config: getConfig({ zoneId }),
-          workflow: getWorkflow({ zoneId }),
-        }).pipe(
-          Effect.map(({ config, workflow }) =>
-            toAttributes(zoneId, config, workflow),
-          ),
-        );
-
-      return {
-        stables: ["zoneId"],
-        diff: Effect.fn(function* ({ olds, news, output }) {
-          if (!output) return undefined;
-          if (!isResolved(news)) return undefined;
-
-          const zoneId = yield* resolve(news.zone);
-          if (zoneId !== output.zoneId) {
-            return { action: "replace" } as const;
-          }
-
-          const outputConfig = fromAttributes(output);
-          const comparableOutput = configForCompare(outputConfig, olds, news);
-          const desired = desiredConfig(outputConfig, news);
-          const desiredWorkflow = news.workflow ?? output.workflow;
-          if (
-            desiredWorkflow !== output.workflow ||
-            !deepEqual(
-              comparableConfig(comparableOutput),
-              comparableConfig(desired),
-            )
-          ) {
-            return { action: "update" } as const;
-          }
-        }),
-        read: Effect.fn(function* ({ olds, output }) {
-          const zoneId =
-            output?.zoneId ?? (olds ? yield* resolve(olds.zone) : undefined);
-          if (!zoneId) return undefined;
-          return yield* observe(zoneId);
-        }),
-        reconcile: Effect.fn(function* ({ news, output }) {
-          const zoneId = output?.zoneId ?? (yield* resolve(news.zone));
-          const observed = yield* observe(zoneId);
-          const observedConfig = fromAttributes(observed);
-          const desired = desiredConfig(observedConfig, news);
-          const desiredWorkflow = news.workflow ?? observed.workflow;
-
-          const updatedConfig = deepEqual(
-            comparableConfig(observedConfig),
-            comparableConfig(desired),
-          )
-            ? observedConfig
-            : yield* putConfig(toPutConfig(zoneId, desired));
-          const updatedWorkflow =
-            desiredWorkflow === observed.workflow
-              ? observed.workflow
-              : yield* putWorkflow({
-                  zoneId,
-                  workflow: desiredWorkflow,
-                });
-
-          return toAttributes(zoneId, updatedConfig, updatedWorkflow);
-        }),
-        delete: Effect.fn(function* ({ output, olds }) {
-          if (olds.delete !== true) return;
-          const defaults = yield* getDefault({ zoneId: output.zoneId });
-          yield* putConfig(toPutConfig(output.zoneId, defaults));
-          if (olds.workflow !== undefined) {
-            yield* putWorkflow({
-              zoneId: output.zoneId,
-              workflow: "realtime",
-            });
-          }
-        }),
-      };
-    }),
-  );

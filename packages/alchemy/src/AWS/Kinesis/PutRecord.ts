@@ -11,6 +11,7 @@ export interface PutRecordRequest extends Omit<
   "StreamName"
 > {}
 
+/** @binding */
 export class PutRecord extends Binding.Service<
   PutRecord,
   (

@@ -76,6 +76,11 @@ export interface ImagesClient {
   ): Effect.Effect<ImageTransformerClient, never, RuntimeContext | R>;
 }
 
+/**
+ * @binding
+ * @product Images
+ * @category Media
+ */
 export class ImagesBinding extends Binding.Service<
   ImagesBinding,
   (images: ImagesLike) => Effect.Effect<ImagesClient>

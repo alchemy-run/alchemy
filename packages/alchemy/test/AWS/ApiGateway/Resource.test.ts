@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
@@ -31,6 +32,37 @@ test.provider.skipIf(!runLive)(
         resourceId: res.resourceId,
       });
       expect(remote.pathPart).toEqual("items");
+
+      yield* stack.destroy();
+    }),
+);
+
+test.provider.skipIf(!runLive)(
+  "list enumerates the deployed API Gateway resource",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { res } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const api = yield* AWS.ApiGateway.RestApi("AgResListApi", {
+            endpointConfiguration: { types: ["REGIONAL"] },
+          });
+          const res = yield* AWS.ApiGateway.Resource("AgListPath", {
+            restApi: api,
+            parentId: api.rootResourceId,
+            pathPart: "items",
+          });
+          return { res };
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        AWS.ApiGateway.GatewayResource,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((r) => r.resourceId === res.resourceId)).toBe(true);
 
       yield* stack.destroy();
     }),

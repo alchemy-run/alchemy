@@ -32,6 +32,8 @@ export const dnsReadWriteClient = (
  * binds its value into the Worker so runtime code can authenticate.
  *
  * @binding
+ * @product DNS
+ * @category Domains & DNS
  *
  * @section Managing DNS records at runtime
  * @example Full CRUD from inside a Worker

@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -9,7 +10,7 @@ const runLive = process.env.ALCHEMY_RUN_LIVE_AWS_APIGATEWAY_TESTS === "true";
 
 test.provider.skipIf(!runLive)("create and delete deployment", (stack) =>
   Effect.gen(function* () {
-    const { api, deployment } = yield* stack.deploy(
+    const { deployment } = yield* stack.deploy(
       Effect.gen(function* () {
         const api = yield* AWS.ApiGateway.RestApi("AgDepApi", {
           endpointConfiguration: { types: ["REGIONAL"] },
@@ -38,7 +39,7 @@ test.provider.skipIf(!runLive)(
   "deployment trigger change creates new deployment",
   (stack) =>
     Effect.gen(function* () {
-      const { api, d1 } = yield* stack.deploy(
+      const { d1 } = yield* stack.deploy(
         Effect.gen(function* () {
           const api = yield* AWS.ApiGateway.RestApi("AgTrigApi", {
             endpointConfiguration: { types: ["REGIONAL"] },
@@ -79,6 +80,44 @@ test.provider.skipIf(!runLive)(
       );
 
       expect(d2.deploymentId).not.toEqual(d1.deploymentId);
+
+      yield* stack.destroy();
+    }),
+);
+
+test.provider.skipIf(!runLive)(
+  "list enumerates the deployed deployment",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { deployment } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const api = yield* AWS.ApiGateway.RestApi("AgListApi", {
+            endpointConfiguration: { types: ["REGIONAL"] },
+          });
+          yield* AWS.ApiGateway.Method("AgListMock", {
+            restApi: api,
+            httpMethod: "GET",
+            authorizationType: "NONE",
+            integration: { type: "MOCK" },
+          });
+          const deployment = yield* AWS.ApiGateway.Deployment("AgListDep", {
+            restApi: api,
+            description: "alchemy-test-list-deployment",
+          });
+          return { api, deployment };
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        AWS.ApiGateway.DeploymentResource,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((d) => d.deploymentId === deployment.deploymentId)).toBe(
+        true,
+      );
 
       yield* stack.destroy();
     }),

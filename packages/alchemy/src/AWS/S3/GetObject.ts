@@ -8,6 +8,7 @@ import type { Bucket } from "./Bucket.ts";
 
 export interface GetObjectRequest extends Omit<S3.GetObjectRequest, "Bucket"> {}
 
+/** @binding */
 export class GetObject extends Binding.Service<
   GetObject,
   (

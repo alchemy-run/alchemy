@@ -11,6 +11,7 @@ export interface DeleteObjectRequest extends Omit<
   "Bucket"
 > {}
 
+/** @binding */
 export class DeleteObject extends Binding.Service<
   DeleteObject,
   (

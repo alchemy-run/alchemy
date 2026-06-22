@@ -11,6 +11,7 @@ export interface UploadPartRequest extends Omit<
   "Bucket"
 > {}
 
+/** @binding */
 export class UploadPart extends Binding.Service<
   UploadPart,
   (

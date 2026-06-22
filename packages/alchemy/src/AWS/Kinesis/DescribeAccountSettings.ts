@@ -7,6 +7,7 @@ import { isFunction } from "../Lambda/Function.ts";
 export interface DescribeAccountSettingsRequest
   extends Kinesis.DescribeAccountSettingsInput {}
 
+/** @binding */
 export class DescribeAccountSettings extends Binding.Service<
   DescribeAccountSettings,
   () => Effect.Effect<

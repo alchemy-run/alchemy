@@ -12,6 +12,7 @@ export interface GetMetricStreamRequest extends Omit<
 
 /**
  * Runtime binding for `cloudwatch:GetMetricStream`.
+ * @binding
  */
 export class GetMetricStream extends Binding.Service<
   GetMetricStream,

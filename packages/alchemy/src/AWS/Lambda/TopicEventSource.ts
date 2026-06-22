@@ -18,6 +18,7 @@ export const isSNSEvent = (event: any): event is lambda.SNSEvent =>
   Array.isArray(event?.Records) &&
   event.Records.some((record: any) => record.EventSource === "aws:sns");
 
+/** @binding */
 export const TopicEventSource = Layer.effect(
   SNSTopicEventSource,
   Effect.gen(function* () {

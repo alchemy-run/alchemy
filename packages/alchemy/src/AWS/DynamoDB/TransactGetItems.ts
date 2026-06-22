@@ -38,7 +38,7 @@ export interface TransactGetItemsRequest extends Omit<
  *
  * Bind this operation to one or more tables and identify each table in the
  * request with the bound table's `LogicalId`.
- *
+ * @binding
  * @section Reading Data
  * @example Read Items Transactionally
  * ```typescript

@@ -15,7 +15,9 @@ import { isWorker, isWorkerEvent } from "./Worker.ts";
  *
  * - **Runtime**: registers a `scheduled` listener on the Worker.
  * - **Deploy-time**: attaches the cron expression to the host Worker.
- *
+ * @binding
+ * @product Workers
+ * @category Workers & Compute
  * @example
  * ```typescript
  * yield* Cloudflare.cron("0 12 * * *").subscribe((controller) =>

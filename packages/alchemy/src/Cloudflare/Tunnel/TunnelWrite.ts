@@ -17,6 +17,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
+import type { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Worker } from "../Workers/Worker.ts";
 import {
   authorizeWith,
@@ -38,7 +39,7 @@ export type UpdateTunnelRequest = Omit<
 >;
 
 /** Tunnel configuration body, minus the account id and tunnel id (positional). */
-export type TunnelConfiguration = NonNullable<
+export type TunnelConfigurationBody = NonNullable<
   PutTunnelCloudflaredConfigurationRequest["config"]
 >;
 
@@ -75,7 +76,7 @@ export interface TunnelWriteClient {
   /** Replace the remotely-managed configuration (ingress rules) for a tunnel. */
   putConfiguration(
     tunnelId: string,
-    config: TunnelConfiguration,
+    config: TunnelConfigurationBody,
   ): Effect.Effect<
     PutTunnelCloudflaredConfigurationResponse,
     PutTunnelCloudflaredConfigurationError,
@@ -131,6 +132,8 @@ export const writeClient = (token: TunnelToken): TunnelWriteClient => {
  * `secret_text` binding) so runtime code can authenticate.
  *
  * @binding
+ * @product Tunnels
+ * @category Cloudflare One (Zero Trust)
  *
  * @section Mutating tunnels at runtime
  * @example Bind the write client
@@ -168,7 +171,7 @@ export const writeClient = (token: TunnelToken): TunnelWriteClient => {
  */
 export class TunnelWrite extends Binding.Service<
   TunnelWrite,
-  () => Effect.Effect<TunnelWriteClient, never, Worker>
+  () => Effect.Effect<TunnelWriteClient, never, Worker | CloudflareEnvironment>
 >()("Cloudflare.TunnelWrite") {}
 
 /**
@@ -177,7 +180,7 @@ export class TunnelWrite extends Binding.Service<
  */
 export class TunnelWritePolicy extends Binding.Policy<
   TunnelWritePolicy,
-  (token: AccountApiToken) => Effect.Effect<void>
+  (token: AccountApiToken) => Effect.Effect<void, never, CloudflareEnvironment>
 >()("Cloudflare.TunnelWrite") {}
 
 /** Runtime layer for {@link TunnelWrite}. */

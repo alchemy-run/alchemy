@@ -18,8 +18,8 @@ import * as Schedule from "effect/Schedule";
 import * as HttpClientError from "effect/unstable/http/HttpClientError";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { Command, CommandProvider } from "../Build/Command.ts";
-import * as Provider from "../Provider.ts";
 import { KeyPair, KeyPairProvider } from "../KeyPair.ts";
+import * as Provider from "../Provider.ts";
 import { Random, RandomProvider } from "../Random.ts";
 import * as ACM from "./ACM/index.ts";
 import * as ApiGateway from "./ApiGateway/index.ts";
@@ -40,6 +40,7 @@ import { Default as DefaultEnvironment } from "./Environment.ts";
 import * as EventBridge from "./EventBridge/index.ts";
 import * as IAM from "./IAM/index.ts";
 import * as IdentityCenter from "./IdentityCenter/index.ts";
+import * as KMS from "./KMS/index.ts";
 import * as Kinesis from "./Kinesis/index.ts";
 import * as Lambda from "./Lambda/index.ts";
 import * as Logs from "./Logs/index.ts";
@@ -96,6 +97,7 @@ export const providers = () =>
       CloudFront.OriginRequestPolicy,
       CloudFront.PublicKey,
       CloudFront.ResponseHeadersPolicy,
+      CloudFront.VpcOrigin,
       CloudWatch.Alarm,
       CloudWatch.AlarmMuteRule,
       CloudWatch.AnomalyDetector,
@@ -177,8 +179,10 @@ export const providers = () =>
       EKS.Cluster,
       EKS.PodIdentityAssociation,
       ELBv2.Listener,
+      ELBv2.ListenerRule,
       ELBv2.LoadBalancer,
       ELBv2.TargetGroup,
+      ELBv2.TrustStore,
       EventBridge.DescribeEventBusPolicy,
       EventBridge.DescribeRulePolicy,
       EventBridge.EventBus,
@@ -212,6 +216,8 @@ export const providers = () =>
       IdentityCenter.Group,
       IdentityCenter.Instance,
       IdentityCenter.PermissionSet,
+      KMS.Alias,
+      KMS.Key,
       Kinesis.DescribeAccountSettingsPolicy,
       Kinesis.DescribeLimitsPolicy,
       Kinesis.DescribeStreamConsumerPolicy,
@@ -230,6 +236,7 @@ export const providers = () =>
       Kinesis.StreamConsumer,
       Kinesis.StreamSinkPolicy,
       Kinesis.SubscribeToShardPolicy,
+      Lambda.Alias,
       Lambda.BucketEventSourcePolicy,
       Lambda.EventSourcePolicy,
       Lambda.EventSourceMapping,
@@ -267,6 +274,8 @@ export const providers = () =>
       RDSData.ExecuteSqlPolicy,
       RDSData.ExecuteStatementPolicy,
       RDSData.RollbackTransactionPolicy,
+      Route53.HealthCheck,
+      Route53.HostedZone,
       Route53.Record,
       S3.AbortMultipartUploadPolicy,
       S3.Bucket,
@@ -349,6 +358,7 @@ export const providers = () =>
         CloudFront.OriginRequestPolicyProvider(),
         CloudFront.PublicKeyProvider(),
         CloudFront.ResponseHeadersPolicyProvider(),
+        CloudFront.VpcOriginProvider(),
         CloudWatch.AlarmMuteRuleProvider(),
         CloudWatch.AlarmProvider(),
         CloudWatch.AnomalyDetectorProvider(),
@@ -430,8 +440,10 @@ export const providers = () =>
         EKS.ClusterProvider(),
         EKS.PodIdentityAssociationProvider(),
         ELBv2.ListenerProvider(),
+        ELBv2.ListenerRuleProvider(),
         ELBv2.LoadBalancerProvider(),
         ELBv2.TargetGroupProvider(),
+        ELBv2.TrustStoreProvider(),
         EventBridge.DescribeEventBusPolicyLive,
         EventBridge.DescribeRulePolicyLive,
         EventBridge.EventBusProvider(),
@@ -465,6 +477,8 @@ export const providers = () =>
         IdentityCenter.GroupProvider(),
         IdentityCenter.InstanceProvider(),
         IdentityCenter.PermissionSetProvider(),
+        KMS.AliasProvider(),
+        KMS.KeyProvider(),
         Kinesis.DescribeAccountSettingsPolicyLive,
         Kinesis.DescribeLimitsPolicyLive,
         Kinesis.DescribeStreamConsumerPolicyLive,
@@ -483,6 +497,7 @@ export const providers = () =>
         Kinesis.StreamProvider(),
         Kinesis.StreamSinkPolicyLive,
         Kinesis.SubscribeToShardPolicyLive,
+        Lambda.AliasProvider(),
         Lambda.BucketEventSourcePolicyLive,
         Lambda.EventSourceMappingProvider(),
         Lambda.EventSourcePolicyLive,
@@ -520,6 +535,8 @@ export const providers = () =>
         RDSData.ExecuteSqlPolicyLive,
         RDSData.ExecuteStatementPolicyLive,
         RDSData.RollbackTransactionPolicyLive,
+        Route53.HealthCheckProvider(),
+        Route53.HostedZoneProvider(),
         Route53.RecordProvider(),
         S3.AbortMultipartUploadPolicyLive,
         S3.BucketProvider(),
@@ -575,7 +592,7 @@ export const providers = () =>
         CommandProvider(),
         KeyPairProvider(),
         RandomProvider(),
-        Assets.AssetsProvider(),
+        Assets.AssetsLive,
       ),
     ),
     Layer.provideMerge(Region.fromEnvironment),
@@ -595,11 +612,57 @@ export const providers = () =>
     Layer.orDie,
   );
 
+// Node socket-level error codes that indicate a transient network failure.
+const TRANSIENT_NETWORK_CODES = new Set([
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "EPIPE",
+  "ENETUNREACH",
+  "ENETDOWN",
+  "EHOSTUNREACH",
+  "EAI_AGAIN",
+]);
+// Transport-termination signatures that undici/node surface as plain messages
+// (e.g. a `fetch` whose socket dies mid-body throws `TypeError: terminated`).
+const TRANSIENT_NETWORK_PATTERN =
+  /terminated|socket hang up|other side closed|fetch failed|read ETIMEDOUT|ECONNRESET|ETIMEDOUT/i;
+
+// Walk an error's cause chain looking for a transient transport failure. Used
+// to tell a Decode/EmptyBody error caused by a dropped connection (retryable)
+// apart from one caused by a genuinely malformed body (permanent).
+const hasTransientNetworkCause = (cause: unknown, depth = 0): boolean => {
+  if (cause == null || depth > 8) return false;
+  if (typeof cause === "string") return TRANSIENT_NETWORK_PATTERN.test(cause);
+  if (typeof cause !== "object") return false;
+  const code = (cause as { code?: unknown }).code;
+  if (typeof code === "string" && TRANSIENT_NETWORK_CODES.has(code)) {
+    return true;
+  }
+  const message = (cause as { message?: unknown }).message;
+  if (typeof message === "string" && TRANSIENT_NETWORK_PATTERN.test(message)) {
+    return true;
+  }
+  const nested = (cause as { cause?: unknown }).cause;
+  return nested !== undefined && nested !== cause
+    ? hasTransientNetworkCause(nested, depth + 1)
+    : false;
+};
+
 // TODO(sam): remove this once it's upstreamed to distilled
 const isHttpTransportError = (error: unknown): boolean => {
   if (!HttpClientError.isHttpClientError(error)) return false;
-  const tag = error.reason._tag;
+  const reason = error.reason;
+  const tag = reason._tag;
   if (tag === "TransportError") return true;
+  // A Decode/EmptyBody error is only transient when its underlying cause is a
+  // terminated/reset connection (e.g. a `read ETIMEDOUT` while streaming the
+  // body surfaces as a `DecodeError`). A genuine malformed-body decode is
+  // permanent — retrying it would only waste the budget and mask the bug — so
+  // gate on the cause chain rather than the tag.
+  if (tag === "DecodeError" || tag === "EmptyBodyError") {
+    return hasTransientNetworkCause(reason);
+  }
   if (
     tag === "StatusCodeError" &&
     "response" in error.reason &&
@@ -632,6 +695,10 @@ const awsRetryFactory: RetryFactory = (lastError) => ({
     ),
     capped(Duration.seconds(5)),
     jittered,
-    Schedule.both(Schedule.recurs(10)),
+    // Transient transport failures (e.g. a sustained `read ETIMEDOUT` blip
+    // against a control-plane endpoint) can outlast a 10-attempt budget. With
+    // the 5s cap above, the extra attempts add bounded backoff while making
+    // the network-flake recovery materially more robust.
+    Schedule.both(Schedule.recurs(15)),
   ),
 });

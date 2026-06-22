@@ -10,6 +10,7 @@ export interface AddPermissionRequest extends Omit<
   "TopicArn"
 > {}
 
+/** @binding */
 export class AddPermission extends Binding.Service<
   AddPermission,
   (

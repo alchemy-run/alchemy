@@ -10,6 +10,7 @@ export interface ListStreamConsumersRequest extends Omit<
   "StreamARN"
 > {}
 
+/** @binding */
 export class ListStreamConsumers extends Binding.Service<
   ListStreamConsumers,
   (

@@ -23,6 +23,7 @@ export type SocketAddress = cf.SocketAddress;
 export type SocketOptions = cf.SocketOptions;
 
 export interface Fetcher {
+  raw: cf.Fetcher;
   fetch(
     request: HttpClientRequest.HttpClientRequest,
   ): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError>;
@@ -65,15 +66,18 @@ export const toCloudflareFetcher = Effect.fnUntraced(function* (
   } satisfies cf.Fetcher;
 });
 
-export const fromCloudflareFetcher = (fetcher: cf.Fetcher): Fetcher => {
+export const fromCloudflareFetcher = (
+  fetcher: cf.Fetcher | globalThis.Fetcher,
+): Fetcher => {
   const fetch = (request: Request) =>
     Effect.promise((signal) =>
-      fetcher.fetch(request as any as cf.Request, {
-        signal: signal as cf.AbortSignal,
+      (fetcher as globalThis.Fetcher).fetch(request, {
+        signal: signal,
       }),
     );
 
   return {
+    raw: fetcher as cf.Fetcher,
     connect: (address, options) =>
       fromCloudflareSocket(fetcher.connect(address, options)),
     fetch: (
@@ -153,7 +157,9 @@ export const toHttpClient = (fetcher: {
     );
   });
 
-export const fromCloudflareSocket = (cfSocket: cf.Socket): Socket.Socket => {
+export const fromCloudflareSocket = (
+  cfSocket: globalThis.Socket | cf.Socket,
+): Socket.Socket => {
   const latch = Latch.makeUnsafe(false);
   let currentFiberSet: FiberSet.FiberSet<any, any> | undefined;
   let writerRef: WritableStreamDefaultWriter<Uint8Array> | undefined;

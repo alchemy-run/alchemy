@@ -10,8 +10,6 @@ import { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import path from "pathe";
 
-const main = path.resolve(import.meta.dirname, "handler.ts");
-
 export class KinesisApiFunction extends AWS.Lambda.Function<AWS.Lambda.Function>()(
   "KinesisApiFunction",
   {

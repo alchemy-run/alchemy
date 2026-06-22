@@ -66,7 +66,9 @@ export const isArtifacts = (value: unknown): value is Artifacts =>
  * Alchemy "resource" is a thin binding marker — there is nothing to provision
  * at deploy time. Repos themselves are typically created at runtime through
  * the bound `Artifacts` API.
- *
+ * @binding
+ * @product Artifacts
+ * @category Developer Platform
  * @section Declaring a Namespace
  * @example Default namespace (a unique physical name is generated)
  * ```typescript

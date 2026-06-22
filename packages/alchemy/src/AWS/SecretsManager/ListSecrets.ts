@@ -6,6 +6,7 @@ import { isFunction } from "../Lambda/Function.ts";
 
 /**
  * Runtime binding for `secretsmanager:ListSecrets`.
+ * @binding
  */
 export class ListSecrets extends Binding.Service<
   ListSecrets,

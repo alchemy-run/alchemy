@@ -10,6 +10,7 @@ export interface ListShardsRequest extends Omit<
   "StreamName" | "StreamARN"
 > {}
 
+/** @binding */
 export class ListShards extends Binding.Service<
   ListShards,
   (

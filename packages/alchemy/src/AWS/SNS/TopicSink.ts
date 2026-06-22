@@ -6,6 +6,7 @@ import { isFunction } from "../Lambda/Function.ts";
 import { PublishBatch } from "./PublishBatch.ts";
 import type { Topic } from "./Topic.ts";
 
+/** @binding */
 export class TopicSink extends Binding.Service<
   TopicSink,
   (

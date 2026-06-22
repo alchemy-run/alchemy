@@ -252,7 +252,6 @@ redeploys the function bundle.
 
 ```typescript
 // test/integ.test.ts
-import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
 import * as Test from "alchemy/Test/Bun";
 import { expect } from "bun:test";
@@ -263,7 +262,7 @@ import Stack from "../alchemy.run.ts";
 
 const { test, beforeAll, deploy } = Test.make({
   providers: AWS.providers(),
-  state: Alchemy.localState(),
+  state: AWS.state(),
 });
 
 const stack = beforeAll(deploy(Stack));

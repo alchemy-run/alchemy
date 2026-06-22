@@ -11,6 +11,7 @@ export interface HeadObjectRequest extends Omit<
   "Bucket"
 > {}
 
+/** @binding */
 export class HeadObject extends Binding.Service<
   HeadObject,
   (

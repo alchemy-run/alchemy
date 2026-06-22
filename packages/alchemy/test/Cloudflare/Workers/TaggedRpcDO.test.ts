@@ -2,6 +2,7 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Test from "@/Test/Vitest";
 import { poll } from "@/Util/poll.ts";
 import { expect } from "@effect/vitest";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
@@ -25,7 +26,9 @@ const logLevel = Effect.provideService(
   process.env.DEBUG ? "Debug" : "Info",
 );
 
-const testTimeout = 30_000;
+// Under a full-suite run the edge propagates fresh `*.workers.dev` URLs much
+// more slowly than in isolation — give each test ample room.
+const testTimeout = 120_000;
 const requestTimeout = "5 seconds";
 // Fresh `*.workers.dev` URLs propagate through the edge over a few seconds —
 // the first requests routinely return 404 / 500 before the script is
@@ -57,6 +60,45 @@ const requestUntilReady = (
     ),
     Effect.tapError(Effect.logError),
     Effect.retry(readinessRetry),
+  );
+
+// A response whose body is Cloudflare's "script not found" / workers.dev
+// placeholder page means the request never reached the Worker script at all —
+// no write could have committed, so retrying is safe even for non-idempotent
+// increments. Anything else non-2xx is ambiguous (the write may have
+// committed) and must fail the test instead of retrying.
+class EdgeNotReady extends Data.TaggedError("EdgeNotReady")<{
+  status: number;
+}> {}
+
+const looksLikeEdgePlaceholder = (body: string) =>
+  body.includes("There is nothing here yet") ||
+  body.includes("Script not found") ||
+  body.includes("cf-error-code");
+
+const postIncrementOnce = (
+  effect: Effect.Effect<HttpClientResponse, unknown, never>,
+) =>
+  effect.pipe(
+    Effect.timeout(requestTimeout),
+    Effect.flatMap(
+      Effect.fnUntraced(function* (res) {
+        if (res.status >= 200 && res.status < 300) {
+          return res;
+        }
+        const body = yield* res.text;
+        return looksLikeEdgePlaceholder(body)
+          ? yield* Effect.fail(new EdgeNotReady({ status: res.status }))
+          : yield* Effect.die(
+              new Error(`increment failed: ${res.status} ${body}`),
+            );
+      }),
+    ),
+    Effect.retry({
+      while: (e) => e instanceof EdgeNotReady,
+      schedule: readinessRetry.schedule,
+      times: readinessRetry.times,
+    }),
   );
 
 // Each test addresses its own DO instance via a unique counter key so the
@@ -241,18 +283,15 @@ test(
     yield* resetHttp(urlB, key);
 
     const httpClient = (yield* HttpClient.HttpClient).pipe(withCounterKey(key));
-    // These increments are non-idempotent: retrying a request whose write
-    // committed but whose response failed would over-count. The `resetHttp`
-    // above (retried) has already warmed WorkerB's edge, so run them once.
-    yield* httpClient
-      .post(`${urlB}/d1/increment`)
-      .pipe(Effect.timeout(requestTimeout));
-    yield* httpClient
-      .post(`${urlB}/d1/increment`)
-      .pipe(Effect.timeout(requestTimeout));
-    yield* httpClient
-      .post(`${urlB}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout));
+    // These increments are non-idempotent: blind retries on a request whose
+    // write committed but whose response failed would over-count. But edge
+    // propagation is not monotonic — a request can still land on a PoP that
+    // hasn't resolved the script yet (placeholder page), in which case no
+    // write happened and a retry is safe. `postIncrementOnce` retries exactly
+    // that case and dies on anything else ambiguous.
+    yield* postIncrementOnce(httpClient.post(`${urlB}/d1/increment`));
+    yield* postIncrementOnce(httpClient.post(`${urlB}/d1/increment`));
+    yield* postIncrementOnce(httpClient.post(`${urlB}/do/increment`));
 
     yield* withRpcA(
       urlA,
@@ -272,7 +311,7 @@ test(
           }),
           predicate: ({ d1, dox }) => d1.value === 2 && dox.value === 1,
           schedule: Schedule.spaced("2 seconds").pipe(
-            Schedule.both(Schedule.recurs(10)),
+            Schedule.both(Schedule.recurs(30)),
           ),
         });
         expect(d1.value).toBe(2);
@@ -304,10 +343,8 @@ test(
     );
 
     const httpClient = (yield* HttpClient.HttpClient).pipe(withCounterKey(key));
-    // Non-idempotent increment — run once (resetHttp above warmed the edge).
-    yield* httpClient
-      .post(`${urlB}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout));
+    // Non-idempotent increment — only the safe placeholder case is retried.
+    yield* postIncrementOnce(httpClient.post(`${urlB}/do/increment`));
 
     // WorkerA sees value 2 (its own + WorkerB's cross-script).
     yield* withRpcA(
@@ -327,15 +364,9 @@ test(
     expect((yield* fromC.json) as { value: number }).toEqual({ value: 0 });
 
     // Writes through WorkerC do not leak back to WorkerA either.
-    yield* httpClient
-      .post(`${urlC}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout));
-    yield* httpClient
-      .post(`${urlC}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout));
-    yield* httpClient
-      .post(`${urlC}/do/increment`)
-      .pipe(Effect.timeout(requestTimeout));
+    yield* postIncrementOnce(httpClient.post(`${urlC}/do/increment`));
+    yield* postIncrementOnce(httpClient.post(`${urlC}/do/increment`));
+    yield* postIncrementOnce(httpClient.post(`${urlC}/do/increment`));
 
     const cAfter = yield* httpClient
       .get(`${urlC}/do`)

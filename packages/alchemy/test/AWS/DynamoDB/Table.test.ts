@@ -1,6 +1,7 @@
 import { adopt } from "@/AdoptPolicy";
 import * as AWS from "@/AWS";
 import { Table } from "@/AWS/DynamoDB";
+import * as Provider from "@/Provider";
 import { State } from "@/State";
 import * as Test from "@/Test/Vitest";
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
@@ -41,6 +42,37 @@ describe.skipIf(!!process.env.NO_SLOW_TESTS)("AWS.DynamoDB.Table", () => {
 
       yield* assertTableIsDeleted(table.tableName);
     }),
+  );
+
+  test.provider(
+    "list enumerates the deployed table",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const table = yield* stack.deploy(
+          Effect.gen(function* () {
+            return yield* Table("ListTable", {
+              partitionKey: "id",
+              attributes: { id: "S" },
+            });
+          }),
+        );
+
+        const provider = yield* Provider.findProvider(Table);
+        const all = yield* provider.list();
+
+        const found = all.find((t) => t.tableName === table.tableName);
+        expect(found).toBeDefined();
+        expect(found?.tableArn).toEqual(table.tableArn);
+
+        yield* stack.destroy();
+        yield* assertTableIsDeleted(table.tableName);
+      }),
+    // The testing account accumulates many tables; hydrating each to full
+    // Attributes (describe + tags + PITR + TTL) under control-plane throttle
+    // limits needs more than the default per-test budget.
+    { timeout: 240_000 },
   );
 
   test.provider(

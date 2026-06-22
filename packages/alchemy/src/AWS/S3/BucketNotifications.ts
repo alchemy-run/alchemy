@@ -41,7 +41,7 @@ export interface NotificationsProps<Events extends S3EventType[]> {
  *
  * Returns an object with a `.subscribe(process)` method that receives a
  * `Stream<BucketNotification>` for processing events.
- *
+ * @binding
  * @section Subscribing to Events
  * @example Process all object creation events
  * ```typescript

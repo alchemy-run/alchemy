@@ -1,4 +1,5 @@
 import * as AWS from "@/AWS";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as ag from "@distilled.cloud/aws/api-gateway";
 import { expect } from "@effect/vitest";
@@ -40,6 +41,36 @@ test.provider.skipIf(!runLive || !targetArn)(
 
       const remote = yield* ag.getVpcLink({ vpcLinkId: link.vpcLinkId });
       expect(remote.description).toEqual("v2");
+
+      yield* stack.destroy();
+    }),
+);
+
+/**
+ * A VPC link requires an NLB target ARN, which is heavy to provision in CI,
+ * so this is gated behind the same env vars as the lifecycle test above.
+ */
+test.provider.skipIf(!runLive || !targetArn)(
+  "list enumerates the deployed VPC link",
+  (stack) =>
+    Effect.gen(function* () {
+      const arn = targetArn!;
+
+      yield* stack.destroy();
+
+      const link = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* AWS.ApiGateway.VpcLink("AgVpcLinkList", {
+            description: "list",
+            targetArns: [arn],
+          });
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(AWS.ApiGateway.VpcLink);
+      const all = yield* provider.list();
+
+      expect(all.some((v) => v.vpcLinkId === link.vpcLinkId)).toBe(true);
 
       yield* stack.destroy();
     }),

@@ -14,7 +14,7 @@ export interface ExecuteStatementRequest
  *
  * This binding scopes IAM to a specific table, but the statement text is still
  * user-provided. Statements must only reference the bound table or its indexes.
- *
+ * @binding
  * @section PartiQL
  * @example Execute a Statement Against One Table
  * ```typescript

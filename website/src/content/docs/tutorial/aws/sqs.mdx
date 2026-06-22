@@ -222,7 +222,7 @@ import Api from "./src/api.ts";
 
 export default Alchemy.Stack(
   "MyApp",
-  { providers: AWS.providers(), state: Alchemy.localState() },
+  { providers: AWS.providers(), state: AWS.state() },
   Effect.gen(function* () {
     const api = yield* Api;
 +    yield* Worker;

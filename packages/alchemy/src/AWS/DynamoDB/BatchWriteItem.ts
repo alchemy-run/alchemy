@@ -32,7 +32,7 @@ export interface BatchWriteItemRequest extends Omit<
  *
  * Bind this operation to one or more tables and key the request by each bound
  * table's `LogicalId`.
- *
+ * @binding
  * @section Writing Data
  * @example Write Items Across Multiple Tables
  * ```typescript

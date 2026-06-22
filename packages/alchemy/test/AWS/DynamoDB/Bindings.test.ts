@@ -321,15 +321,19 @@ describe("DynamoDB Bindings", () => {
             ),
           );
 
-          const response = yield* HttpClient.execute(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/batch-execute-statement`),
-              {
-                first: { pk: "batch-statement#1", sk: "item" },
-                second: { pk: "batch-statement#2", sk: "item" },
-              },
-            ),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* fetchUntil(
+            HttpClient.execute(
+              HttpClientRequest.bodyJsonUnsafe(
+                HttpClientRequest.post(`${baseUrl}/batch-execute-statement`),
+                {
+                  first: { pk: "batch-statement#1", sk: "item" },
+                  second: { pk: "batch-statement#2", sk: "item" },
+                },
+              ),
+            ).pipe(Effect.flatMap((r) => r.json)),
+            (body) =>
+              Array.isArray(body?.responses) && body.responses.length === 2,
+          );
 
           expect((response as any).responses).toHaveLength(2);
         }),
@@ -354,9 +358,13 @@ describe("DynamoDB Bindings", () => {
             ),
           );
 
-          const response = yield* HttpClient.execute(
-            HttpClientRequest.post(`${baseUrl}/execute-transaction`),
-          ).pipe(Effect.flatMap((r) => r.json));
+          const response = yield* fetchUntil(
+            HttpClient.execute(
+              HttpClientRequest.post(`${baseUrl}/execute-transaction`),
+            ).pipe(Effect.flatMap((r) => r.json)),
+            (body) =>
+              Array.isArray(body?.responses) && body.responses.length === 2,
+          );
 
           expect((response as any).responses).toHaveLength(2);
         }),
@@ -438,33 +446,37 @@ describe("DynamoDB Bindings", () => {
             ),
           );
 
-          const response = yield* HttpClient.execute(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/transact-get`),
-              {
-                TransactItems: [
-                  {
-                    Get: {
-                      Table: sourceTableId,
-                      Key: {
-                        pk: { S: "transact-get#1" },
-                        sk: { S: "item" },
+          const response = yield* fetchUntil(
+            HttpClient.execute(
+              HttpClientRequest.bodyJsonUnsafe(
+                HttpClientRequest.post(`${baseUrl}/transact-get`),
+                {
+                  TransactItems: [
+                    {
+                      Get: {
+                        Table: sourceTableId,
+                        Key: {
+                          pk: { S: "transact-get#1" },
+                          sk: { S: "item" },
+                        },
                       },
                     },
-                  },
-                  {
-                    Get: {
-                      Table: sourceTableId,
-                      Key: {
-                        pk: { S: "transact-get#2" },
-                        sk: { S: "item" },
+                    {
+                      Get: {
+                        Table: sourceTableId,
+                        Key: {
+                          pk: { S: "transact-get#2" },
+                          sk: { S: "item" },
+                        },
                       },
                     },
-                  },
-                ],
-              },
-            ),
-          ).pipe(Effect.flatMap((r) => r.json));
+                  ],
+                },
+              ),
+            ).pipe(Effect.flatMap((r) => r.json)),
+            (body) =>
+              Array.isArray(body?.responses) && body.responses.length === 2,
+          );
 
           expect((response as any).responses).toHaveLength(2);
         }),
@@ -573,12 +585,24 @@ describe("DynamoDB Bindings", () => {
   describe("ListTables", () => {
     test.provider("lists the deployed table", (_stack) =>
       Effect.gen(function* () {
-        const described = yield* HttpClient.get(
-          `${baseUrl}/describe-table`,
-        ).pipe(Effect.flatMap((r) => r.json));
+        // DescribeTable can momentarily return an empty body on a freshly
+        // provisioned table; poll until the table description is populated.
+        const described = yield* fetchUntil(
+          HttpClient.get(`${baseUrl}/describe-table`).pipe(
+            Effect.flatMap((r) => r.json),
+          ),
+          (body) => Boolean(body?.table?.TableName),
+        );
 
-        const response = yield* HttpClient.get(`${baseUrl}/list-tables`).pipe(
-          Effect.flatMap((r) => r.json),
+        // ListTables is eventually consistent and a new table can lag its
+        // appearance in the account-wide listing by a few seconds.
+        const response = yield* fetchUntil(
+          HttpClient.get(`${baseUrl}/list-tables`).pipe(
+            Effect.flatMap((r) => r.json),
+          ),
+          (body) =>
+            Array.isArray(body?.tableNames) &&
+            body.tableNames.includes((described as any).table.TableName),
         );
 
         expect((response as any).tableNames).toContain(
@@ -608,12 +632,18 @@ describe("DynamoDB Bindings", () => {
       "returns a structured error when point-in-time recovery is unavailable",
       (_stack) =>
         Effect.gen(function* () {
-          const response = yield* HttpClient.execute(
-            HttpClientRequest.bodyJsonUnsafe(
-              HttpClientRequest.post(`${baseUrl}/restore-table`),
-              {},
-            ),
-          ).pipe(Effect.flatMap((r) => r.json));
+          // The route always returns a structured `{ ok, ... }` body; a
+          // missing `ok` means the request hit a not-yet-ready instance, so
+          // poll until the binding produces its structured result.
+          const response = yield* fetchUntil(
+            HttpClient.execute(
+              HttpClientRequest.bodyJsonUnsafe(
+                HttpClientRequest.post(`${baseUrl}/restore-table`),
+                {},
+              ),
+            ).pipe(Effect.flatMap((r) => r.json)),
+            (body) => typeof body?.ok === "boolean",
+          );
 
           expect((response as any).ok).toBe(false);
           expect([
@@ -646,3 +676,29 @@ describe("DynamoDB Bindings", () => {
 });
 
 class QueryNotConsistent extends Data.TaggedError("QueryNotConsistent") {}
+
+// A request hit a Lambda instance that hadn't fully converged yet (cold
+// secondary instance, IAM propagation lag, control-plane eventual
+// consistency), so the bound call returned a not-yet-populated shape. Retry.
+class BindingNotConsistent extends Data.TaggedError("BindingNotConsistent") {}
+
+// Poll an HTTP-driven binding call until its parsed body satisfies `ready`.
+// Control-plane reads (ListTables/DescribeTable) and PartiQL transactions can
+// briefly observe stale/empty state right after the table is provisioned.
+const fetchUntil = <A>(
+  fetch: Effect.Effect<unknown, any, HttpClient.HttpClient>,
+  ready: (body: any) => boolean,
+) =>
+  fetch.pipe(
+    Effect.flatMap((body) =>
+      ready(body)
+        ? Effect.succeed(body as A)
+        : Effect.fail(new BindingNotConsistent()),
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "BindingNotConsistent",
+      schedule: Schedule.fixed("2 seconds").pipe(
+        Schedule.both(Schedule.recurs(20)),
+      ),
+    }),
+  );

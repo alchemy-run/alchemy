@@ -1,18 +1,19 @@
 import type { PutScriptRequest } from "@distilled.cloud/cloudflare/workers";
-import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import type { InputProps } from "../../Input.ts";
 import * as Output from "../../Output.ts";
 import type { ResourceBinding } from "../../Resource.ts";
 import { isYieldableEffectLike } from "../../Util/effect.ts";
-import { asEffect } from "../../Util/types.ts";
 import { isAiGateway } from "../AiGateway/AiGateway.ts";
+import { isAiSearchInstance } from "../AiSearch/AiSearchInstance.ts";
+import { isAiSearchNamespace } from "../AiSearch/AiSearchNamespace.ts";
 import { isAnalyticsEngineDataset } from "../AnalyticsEngine/AnalyticsEngineDataset.ts";
 import { isArtifacts } from "../Artifacts/Artifacts.ts";
 import { isBrowser } from "../Browser/Browser.ts";
 import { isD1Database } from "../D1/D1Database.ts";
 import { isSendEmail } from "../Email/SendEmail.ts";
+import { isFlagshipApp } from "../Flagship/App.ts";
 import { isHyperdrive } from "../Hyperdrive/Hyperdrive.ts";
 import { getHyperdriveDevOrigin } from "../Hyperdrive/HyperdriveBinding.ts";
 import { isImages } from "../Images/Images.ts";
@@ -24,11 +25,11 @@ import { isSecret } from "../SecretsStore/Secret.ts";
 import { isVectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
 import { isAssets } from "./Assets.ts";
 import { isDurableObjectNamespaceLike } from "./DurableObjectNamespace.ts";
-import { isDynamicWorkerLoader } from "./DynamicWorkerLoader.ts";
 import { isVersionMetadata } from "./VersionMetadata.ts";
 import type { WorkerBindingProps } from "./Worker.ts";
 import { isWorker, type Worker, type WorkerProps } from "./Worker.ts";
 import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
+import { isWorkerLoader } from "./WorkerLoader.ts";
 
 export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
   resource: Worker,
@@ -51,8 +52,10 @@ export const bindWorkerAsyncBindings = Effect.fnUntraced(function* (
           : bindingEff
       ) as WorkerBindingResource;
 
-      const bindingMeta: InputProps<WorkerBinding> | undefined =
-        yield* asEffect(toBinding(bindingName, binding));
+      const bindingMeta: InputProps<WorkerBinding> | undefined = toBinding(
+        bindingName,
+        binding,
+      );
 
       if (bindingMeta) {
         yield* resource.bind`${bindingName}`({
@@ -75,20 +78,14 @@ type BindingSpec = InputProps<
 const toBinding = (
   bindingName: string,
   binding: WorkerBindingResource,
-): BindingSpec | Effect.Effect<BindingSpec> | undefined => {
-  // narrowing to Config<unknown> doesn't work for us, we need any
-  const isConfig: (a: any) => a is Config.Config<any> = Config.isConfig;
-  // narrowing to Redacted<unknown> doesn't work for us, we need any
-  const isRedacted: (a: any) => a is Redacted.Redacted<any> =
-    Redacted.isRedacted;
-
+): BindingSpec => {
   if (typeof binding === "string") {
     return {
       type: "plain_text",
       name: bindingName,
       text: binding,
     };
-  } else if (isRedacted(binding)) {
+  } else if (Redacted.isRedacted(binding)) {
     const val = Redacted.value(binding);
     if (typeof val === "string") {
       return {
@@ -103,14 +100,6 @@ const toBinding = (
         text: JSON.stringify(val),
       };
     }
-  } else if (isConfig(binding)) {
-    return binding.pipe(
-      Effect.flatMap((json) => {
-        const b = toBinding(bindingName, json)!;
-        return Effect.isEffect(b) ? b : Effect.succeed(b);
-      }),
-      Effect.orDie,
-    );
   } else if (isAssets(binding)) {
     return {
       type: "assets",
@@ -131,6 +120,12 @@ const toBinding = (
     return {
       type: "browser",
       name: bindingName,
+    };
+  } else if (isFlagshipApp(binding)) {
+    return {
+      type: "flagship",
+      name: bindingName,
+      appId: binding.appId,
     };
   } else if (isAnalyticsEngineDataset(binding)) {
     return {
@@ -194,6 +189,24 @@ const toBinding = (
       type: "ai",
       name: bindingName,
     };
+  } else if (isAiSearchInstance(binding)) {
+    // Single-instance binding: `env.NAME` is the instance itself. The
+    // `namespace` qualifies which namespace the instance lives in (the
+    // account-provided `default` when unspecified).
+    return {
+      type: "ai_search",
+      name: bindingName,
+      instanceName: binding.instanceId,
+      namespace: binding.namespace,
+    };
+  } else if (isAiSearchNamespace(binding)) {
+    // Namespace binding: `env.NAME.get(instanceName)` selects an instance
+    // within the namespace at runtime.
+    return {
+      type: "ai_search_namespace",
+      name: bindingName,
+      namespace: binding.name,
+    };
   } else if (isHyperdrive(binding)) {
     return {
       type: "hyperdrive",
@@ -224,11 +237,11 @@ const toBinding = (
       type: "version_metadata",
       name: bindingName,
     };
-  } else if (isDynamicWorkerLoader(binding)) {
+  } else if (isWorkerLoader(binding)) {
     return {
       type: "worker_loader",
       name: bindingName,
-    } as any;
+    };
   } else {
     return {
       type: "json",

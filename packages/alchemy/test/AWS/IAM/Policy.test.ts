@@ -1,5 +1,6 @@
 import * as AWS from "@/AWS";
 import { Policy } from "@/AWS/IAM";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import * as IAM from "@distilled.cloud/aws/iam";
 import { expect } from "@effect/vitest";
@@ -73,5 +74,35 @@ test.provider("create, update, and delete managed policy", (stack) =>
       PolicyArn: policy.policyArn,
     }).pipe(Effect.option);
     expect(deleted._tag).toBe("None");
+  }),
+);
+
+test.provider("list enumerates the deployed policy", (stack) =>
+  Effect.gen(function* () {
+    yield* stack.destroy();
+
+    const deployed = yield* stack.deploy(
+      Effect.gen(function* () {
+        return yield* Policy("ListPolicy", {
+          policyDocument: {
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Action: ["s3:ListBucket"],
+                Resource: ["*"],
+              },
+            ],
+          },
+        });
+      }),
+    );
+
+    const provider = yield* Provider.findProvider(Policy);
+    const all = yield* provider.list();
+
+    expect(all.some((p) => p.policyArn === deployed.policyArn)).toBe(true);
+
+    yield* stack.destroy();
   }),
 );

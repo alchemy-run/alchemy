@@ -8,6 +8,7 @@ export interface PutMetricDataRequest extends cloudwatch.PutMetricDataInput {}
 
 /**
  * Runtime binding for `cloudwatch:PutMetricData`.
+ * @binding
  */
 export class PutMetricData extends Binding.Service<
   PutMetricData,

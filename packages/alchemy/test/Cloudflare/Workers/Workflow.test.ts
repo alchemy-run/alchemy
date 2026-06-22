@@ -1,4 +1,5 @@
 import * as Cloudflare from "@/Cloudflare";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -6,6 +7,7 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import Stack from "./fixtures/workflow/stack.ts";
+import WorkflowTestWorker from "./fixtures/workflow/workflow-worker.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -100,4 +102,48 @@ test(
     expect(lastStatus.output?.envBindingCount).toBeGreaterThan(0);
   }).pipe(logLevel),
   { timeout: 30_000 },
+);
+
+// Canonical `list()` test (account collection): deploy the worker+workflow
+// fixture (which creates a `WorkflowResource` named "TestWorkflow"), then
+// enumerate every workflow in the account via the typed provider and assert the
+// deployed one is present. Bracket with destroy so the test is isolated.
+//
+// SKIP-GATED on a distilled response-schema mismatch.
+// `list()` itself works — the account-scoped `listWorkflows` API returns 200 —
+// but decoding fails because pre-existing foreign workflows in the test account
+// report `class_name: null`, while distilled's `ListWorkflowsResponse` declares
+// `result[].className: Schema.String` (non-nullable). This surfaces as:
+//   CloudflareHttpError: {"success":true,...,"result":[{...,"class_name":null,...}]}
+// thrown during response decode in distilled client.ts.
+//
+// NEEDED DISTILLED PATCH (workflows service): make
+// `ListWorkflowsResponse.result[].className` nullable
+// (`Schema.Union([Schema.String, Schema.Null])`, surfaced as `string | null`).
+// This is a response-schema fix (not an error-tag patch), so it must be made
+// in the workflows generator/spec by the service owner, then regenerated. Once
+// applied, drop the skipIf gate (`CLOUDFLARE_TEST_WORKFLOW_LIST`) and this test
+// passes unchanged.
+test.provider.skipIf(!process.env.CLOUDFLARE_TEST_WORKFLOW_LIST)(
+  "list enumerates the deployed workflow",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* WorkflowTestWorker;
+        }),
+      );
+
+      const provider = yield* Provider.findProvider(
+        Cloudflare.WorkflowResource,
+      );
+      const all = yield* provider.list();
+
+      expect(all.some((w) => w.workflowName === "TestWorkflow")).toBe(true);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { timeout: 120_000 },
 );

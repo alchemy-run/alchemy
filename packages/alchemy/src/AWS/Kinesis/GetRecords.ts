@@ -7,6 +7,7 @@ import type { Stream } from "./Stream.ts";
 
 export interface GetRecordsRequest extends Kinesis.GetRecordsInput {}
 
+/** @binding */
 export class GetRecords extends Binding.Service<
   GetRecords,
   (

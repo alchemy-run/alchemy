@@ -8,6 +8,7 @@ export type StreamRecord<Data> = TableRecord<Data>;
 
 export type StreamEvent<Data> = TableEvent<Data>;
 
+/** @binding */
 export class TableEventSource extends Binding.Service<
   TableEventSource,
   TableEventSourceService

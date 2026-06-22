@@ -10,6 +10,7 @@ export interface GetSubscriptionAttributesRequest extends Omit<
   "SubscriptionArn"
 > {}
 
+/** @binding */
 export class GetSubscriptionAttributes extends Binding.Service<
   GetSubscriptionAttributes,
   (
