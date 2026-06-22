@@ -17,7 +17,6 @@ import {
 } from "./Cli/Cli.ts";
 import type { ApplyStatus } from "./Cli/Event.ts";
 import { havePropsChanged } from "./Diff.ts";
-import { toFqn } from "./FQN.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId, InstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -1445,6 +1444,7 @@ const collectGarbage = Effect.fnUntraced(function* (
         ): node is Delete => "action" in node;
 
         const {
+          fqn,
           logicalId,
           namespace,
           resourceType,
@@ -1455,6 +1455,13 @@ const collectGarbage = Effect.fnUntraced(function* (
           provider,
         } = isDeleteNode(node)
           ? {
+              // Use the persisted FQN verbatim — never recompute it from
+              // `toFqn(namespace, logicalId)`. A logical ID may legitimately
+              // contain the FQN separator (`/`), in which case `parseFqn`
+              // truncated it and a recomputed key would miss the real state
+              // row (the row would then resurface as an orphan on every
+              // subsequent destroy, never getting deleted).
+              fqn: node.resource.FQN,
               logicalId: node.resource.LogicalId,
               namespace: node.resource.Namespace,
               resourceType: node.resource.Type,
@@ -1465,6 +1472,7 @@ const collectGarbage = Effect.fnUntraced(function* (
               provider: node.provider,
             }
           : {
+              fqn: node.fqn,
               logicalId: node.logicalId,
               namespace: node.namespace,
               resourceType: node.old.resourceType,
@@ -1475,7 +1483,6 @@ const collectGarbage = Effect.fnUntraced(function* (
               provider: yield* findProviderByType(node.old.resourceType),
             };
 
-        const fqn = toFqn(namespace, logicalId);
         const nextAncestors = new Set(ancestors).add(fqn);
 
         const commit = <S extends ResourceState>(value: Omit<S, "namespace">) =>
@@ -1663,7 +1670,9 @@ const collectGarbage = Effect.fnUntraced(function* (
       ...(first ? plan.deletions : {}),
       ...Object.fromEntries(
         remainingReplacedResources.map((replaced) => [
-          toFqn(replaced.namespace, replaced.logicalId),
+          // Key by the persisted FQN (not a recomputed one) so logical IDs
+          // containing the FQN separator round-trip correctly.
+          replaced.fqn,
           replaced,
         ]),
       ),
