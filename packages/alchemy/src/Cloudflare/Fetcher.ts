@@ -23,6 +23,7 @@ export type SocketAddress = cf.SocketAddress;
 export type SocketOptions = cf.SocketOptions;
 
 export interface Fetcher {
+  raw: cf.Fetcher;
   fetch(
     request: HttpClientRequest.HttpClientRequest,
   ): Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError>;
@@ -76,6 +77,7 @@ export const fromCloudflareFetcher = (
     );
 
   return {
+    raw: fetcher as cf.Fetcher,
     connect: (address, options) =>
       fromCloudflareSocket(fetcher.connect(address, options)),
     fetch: (

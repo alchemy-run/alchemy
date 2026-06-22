@@ -1,5 +1,4 @@
 import type * as cf from "@cloudflare/workers-types";
-import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as zones from "@distilled.cloud/cloudflare/zones";
 import type * as Config from "effect/Config";
@@ -26,6 +25,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource, type ResourceBinding } from "../../Resource.ts";
 import { Stack } from "../../Stack.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import type { DevContainerImage } from "../Container/ContainerApplication.ts";
 import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import type { Providers } from "../Providers.ts";
@@ -373,7 +373,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   },
   {
     bindings?: WorkerBinding[];
-    containers?: { className: string; dev: ContainerImage | undefined }[];
+    containers?: { className: string; dev: DevContainerImage | undefined }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<HyperdriveDevOrigin>>;
   },
@@ -726,18 +726,18 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * @section Dynamic Workers
- * `DynamicWorkerLoader` lets you spin up ephemeral Workers at runtime
+ * `WorkerLoader` lets you spin up ephemeral Workers at runtime
  * from inline JavaScript modules. This is useful for sandboxing
  * user-provided code or running untrusted scripts in isolation.
  *
  * @example Loading a dynamic Worker
  * ```typescript
  * // init
- * const loader = yield* Cloudflare.DynamicWorkerLoader("Loader");
+ * const loader = yield* Cloudflare.WorkerLoader("Loader");
  *
  * return {
  *   fetch: Effect.gen(function* () {
- *     const worker = loader.load({
+ *     const worker = yield* loader.load({
  *       compatibilityDate: "2026-01-28",
  *       mainModule: "worker.js",
  *       modules: {

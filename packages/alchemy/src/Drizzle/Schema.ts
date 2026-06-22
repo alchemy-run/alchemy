@@ -1,17 +1,29 @@
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
+import { ChildProcess } from "effect/unstable/process";
 import * as crypto from "node:crypto";
 import * as Artifacts from "../Artifacts.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
+import { exec } from "../Util/exec.ts";
 import type { Providers } from "./Providers.ts";
 
 export type Dialect = "postgres" | "mysql" | "sqlite";
 
 type DrizzleSnapshot = {
   id?: string;
+};
+
+type DrizzleKitApi = {
+  generateDrizzleJson?: (
+    imports: Record<string, unknown>,
+    prevId?: string,
+    schemaFilters?: string[],
+  ) => Promise<unknown>;
+  generateMigration?: (prev: unknown, cur: unknown) => Promise<string[]>;
 };
 
 export type SchemaProps = {
@@ -129,33 +141,112 @@ export const SchemaProvider = () =>
         path.resolve(process.cwd(), p.schema);
 
       const loadSchemaModule = (p: SchemaProps) =>
-        Effect.tryPromise({
-          try: () =>
-            import(/* @vite-ignore */ resolveSchema(p)) as Promise<
-              Record<string, unknown>
-            >,
-          catch: (cause) =>
-            new Error(`Failed to import schema at ${p.schema}: ${cause}`),
+        Effect.gen(function* () {
+          const schemaPath = resolveSchema(p);
+          return yield* Effect.tryPromise({
+            try: () =>
+              import(/* @vite-ignore */ schemaPath) as Promise<
+                Record<string, unknown>
+              >,
+            catch: (cause) =>
+              new Error(`Failed to import schema at ${p.schema}: ${cause}`),
+          });
         });
 
       const loadKit = (dialect: Dialect) =>
         Effect.tryPromise({
           try: () =>
-            import(/* @vite-ignore */ dialectModule(dialect)) as Promise<{
-              generateDrizzleJson: (
-                imports: Record<string, unknown>,
-                prevId?: string,
-                schemaFilters?: string[],
-              ) => Promise<unknown>;
-              generateMigration: (
-                prev: unknown,
-                cur: unknown,
-              ) => Promise<string[]>;
-            }>,
+            import(
+              /* @vite-ignore */ dialectModule(dialect)
+            ) as Promise<DrizzleKitApi>,
           catch: (cause) =>
             new Error(
               `Failed to load drizzle-kit/${dialect} (is drizzle-kit installed?): ${cause}`,
             ),
+        });
+
+      const drizzleKitBin = (dialect: Dialect) =>
+        Effect.gen(function* () {
+          const apiUrl = yield* Effect.try({
+            try: () => import.meta.resolve(dialectModule(dialect)),
+            catch: (cause) =>
+              new Error(`Failed to resolve drizzle-kit/${dialect}: ${cause}`),
+          });
+          const apiFileUrl = yield* Effect.try({
+            try: () => new URL(apiUrl),
+            catch: (cause) =>
+              new Error(`Failed to parse drizzle-kit/${dialect} URL: ${cause}`),
+          });
+          const apiPath = yield* path.fromFileUrl(apiFileUrl);
+          return path.join(path.dirname(apiPath), "bin.cjs");
+        });
+
+      const runDrizzleGenerate = (props: SchemaProps, out: string) =>
+        Effect.gen(function* () {
+          const dialect = props.dialect ?? "postgres";
+          const bin = yield* drizzleKitBin(dialect);
+          const schemaPath = resolveSchema(props);
+          const nodeExecPath = yield* Effect.sync(() => process.execPath);
+          const nodeModulesPath = path.join(process.cwd(), "node_modules");
+
+          const args = [
+            bin,
+            "generate",
+            "--dialect",
+            dialect === "postgres" ? "postgresql" : dialect,
+            "--schema",
+            schemaPath,
+            "--out",
+            out,
+          ];
+
+          const commandOptions = {
+            cwd: process.cwd(),
+            env: { NODE_PATH: nodeModulesPath },
+            extendEnv: true,
+          };
+
+          const interactive =
+            !process.env.CI &&
+            process.stdin.isTTY &&
+            process.stdout.isTTY &&
+            process.stderr.isTTY;
+
+          if (interactive) {
+            const handle = yield* ChildProcess.make(nodeExecPath, args, {
+              ...commandOptions,
+              stdin: "inherit",
+              stdout: "inherit",
+              stderr: "inherit",
+            }).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new Error(`drizzle-kit generate failed: ${String(cause)}`),
+              ),
+            );
+            const exitCode = yield* handle.exitCode;
+            if (exitCode !== 0) {
+              return yield* Effect.fail(
+                new Error(`drizzle-kit generate failed with exit ${exitCode}`),
+              );
+            }
+            return;
+          }
+
+          const result = yield* exec(
+            ChildProcess.make(nodeExecPath, args, commandOptions),
+          ).pipe(
+            Effect.mapError(
+              (cause) =>
+                new Error(`drizzle-kit generate failed: ${String(cause)}`),
+            ),
+          );
+          const output = `${result.stdout}\n${result.stderr}`;
+          if (result.exitCode !== 0 || /^Error:/m.test(output)) {
+            return yield* Effect.fail(
+              new Error(`drizzle-kit generate failed: ${output}`),
+            );
+          }
         });
 
       // List `<ts>_*` migration directories under `out`, sorted by numeric
@@ -184,6 +275,42 @@ export const SchemaProvider = () =>
           return undefined;
         });
 
+      const detectDriftWithCli = (props: SchemaProps) =>
+        Effect.gen(function* () {
+          const out = resolveOut(props);
+          const tmpOut = yield* fs.makeTempDirectory({
+            prefix: "alchemy-drizzle-generate-",
+          });
+
+          return yield* Effect.gen(function* () {
+            const outExists = yield* fs.exists(out);
+            if (outExists) yield* copyDirectory(out, tmpOut);
+
+            const before = yield* listMigrationDirs(tmpOut);
+            yield* runDrizzleGenerate(props, tmpOut);
+
+            const after = yield* listMigrationDirs(tmpOut);
+            const latest = yield* readLatestSnapshot(tmpOut);
+            const changed = after.some((dir) => !before.includes(dir));
+
+            const prevEntry = outExists
+              ? yield* readLatestSnapshot(out)
+              : undefined;
+
+            return {
+              mode: "cli" as const,
+              out,
+              cur: latest?.snapshot,
+              prevEntry,
+              changed,
+            };
+          }).pipe(
+            Effect.ensuring(
+              fs.remove(tmpOut, { recursive: true }).pipe(Effect.ignore),
+            ),
+          );
+        });
+
       /**
        * Run drizzle-kit's diff against the latest stored snapshot and
        * return whether any SQL statements would be emitted. Used by both
@@ -194,12 +321,20 @@ export const SchemaProvider = () =>
         Effect.gen(function* () {
           const out = resolveOut(props);
           const dialect = props.dialect ?? "postgres";
+
           const kit = yield* loadKit(dialect);
+          if (!kit.generateDrizzleJson || !kit.generateMigration) {
+            return yield* detectDriftWithCli(props);
+          }
+
+          const generateDrizzleJson = kit.generateDrizzleJson;
+          const generateMigration = kit.generateMigration;
+
           const schemaModule = yield* loadSchemaModule(props);
           const prevEntry = yield* readLatestSnapshot(out);
           const cur = yield* Effect.tryPromise({
             try: () =>
-              kit.generateDrizzleJson(schemaModule, prevEntry?.snapshot.id),
+              generateDrizzleJson(schemaModule, prevEntry?.snapshot.id),
             catch: (cause) =>
               new Error(`drizzle-kit generateDrizzleJson failed: ${cause}`),
           });
@@ -210,18 +345,24 @@ export const SchemaProvider = () =>
           const prev =
             prevEntry?.snapshot ??
             (yield* Effect.tryPromise({
-              try: () => kit.generateDrizzleJson({}),
+              try: () => generateDrizzleJson({}),
               catch: (cause) =>
                 new Error(
                   `drizzle-kit generateDrizzleJson (empty baseline) failed: ${cause}`,
                 ),
             }));
           const sqlStatements = yield* Effect.tryPromise({
-            try: () => kit.generateMigration(prev, cur),
+            try: () => generateMigration(prev, cur),
             catch: (cause) =>
               new Error(`drizzle-kit generateMigration failed: ${cause}`),
           });
-          return { out, cur, prevEntry, sqlStatements };
+          return {
+            mode: "programmatic" as const,
+            out,
+            cur,
+            prevEntry,
+            sqlStatements,
+          };
         }).pipe(Artifacts.cached("detectDrift"));
 
       /**
@@ -230,7 +371,24 @@ export const SchemaProvider = () =>
        */
       const regenerate = (props: SchemaProps) =>
         Effect.gen(function* () {
-          const { out, cur, sqlStatements } = yield* detectDrift(props);
+          const drift = yield* detectDrift(props);
+
+          if (drift.mode === "cli") {
+            if (drift.changed) {
+              yield* runDrizzleGenerate(props, drift.out);
+            }
+
+            const migrations = yield* listMigrationDirs(drift.out);
+            const latest = yield* readLatestSnapshot(drift.out);
+            const snapshotHash = latest?.hash ?? sha(JSON.stringify(drift.cur));
+            return {
+              out: relativeOut(drift.out),
+              snapshotHash,
+              migrations,
+            };
+          }
+
+          const { out, cur, sqlStatements } = drift;
 
           if (sqlStatements.length > 0) {
             yield* fs.makeDirectory(out, { recursive: true });
@@ -248,9 +406,10 @@ export const SchemaProvider = () =>
 
           const migrations = yield* listMigrationDirs(out);
           const latest = yield* readLatestSnapshot(out);
+          const snapshotHash = latest?.hash ?? sha(JSON.stringify(cur));
           return {
             out: relativeOut(out),
-            snapshotHash: latest?.hash ?? sha(JSON.stringify(cur)),
+            snapshotHash,
             migrations,
           };
         });
@@ -268,11 +427,15 @@ export const SchemaProvider = () =>
           // otherwise downstream resources (e.g. Neon.Branch) would see
           // `schema.out` as an unresolved Output during plan and cascade
           // into spurious updates of their own.
-          const { sqlStatements } = yield* detectDrift(news);
+          const drift = yield* detectDrift(news);
+          const changed =
+            drift.mode === "cli"
+              ? drift.changed
+              : drift.sqlStatements.length > 0;
           // Originally `output.out` was an absolute path, which is not portable.
           // So, we trigger an update to migrate existing resources.
           // This is safe because `regenerate` is idempotent.
-          return sqlStatements.length > 0 || path.isAbsolute(output.out)
+          return changed || path.isAbsolute(output.out)
             ? { action: "update" }
             : undefined;
         }),
@@ -302,3 +465,27 @@ export const SchemaProvider = () =>
       };
     }),
   );
+
+const copyDirectory = (
+  from: string,
+  to: string,
+): Effect.Effect<void, PlatformError, Path.Path | FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const path = yield* Path.Path;
+    const fs = yield* FileSystem.FileSystem;
+
+    yield* fs.makeDirectory(to, { recursive: true });
+    const entries = yield* fs.readDirectory(from);
+
+    for (const entry of entries) {
+      const source = path.join(from, entry);
+      const target = path.join(to, entry);
+      const stat = yield* fs.stat(source);
+      if (stat.type === "Directory") {
+        yield* copyDirectory(source, target);
+      } else {
+        const contents = yield* fs.readFile(source);
+        yield* fs.writeFile(target, contents);
+      }
+    }
+  });
