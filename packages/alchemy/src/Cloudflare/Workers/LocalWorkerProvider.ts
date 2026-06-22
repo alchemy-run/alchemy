@@ -72,7 +72,7 @@ import { WorkerBundle, type WorkerBundleOptions } from "./WorkerBundle.ts";
 import { createWorkerName } from "./WorkerName.ts";
 
 type WorkerPropsWithDev = Omit<WorkerProps, "dev"> & {
-  dev: Exclude<WorkerProps["dev"], false | string>;
+  dev: Extract<WorkerProps["dev"], { mode?: "worker" }>;
 };
 
 export class WorkerValidationError extends Schema.TaggedErrorClass<WorkerValidationError>()(
@@ -528,14 +528,13 @@ export const LocalWorkerProvider = () =>
           }
           const { accountId } = yield* yield* CloudflareEnvironment;
           const url =
-            news.dev === false
-              ? undefined
-              : typeof news.dev === "string"
-                ? news.dev
-                : yield* maybeStartProxy(id, {
-                    ...news.dev,
-                    port: news.dev?.port ?? 1337,
-                  }).pipe(Effect.map((proxy) => proxy.url.toString()));
+            news.dev?.mode === "external"
+              ? // news.dev.url may be an unresolved output; avoid trying to resolve it here.
+                undefined
+              : yield* maybeStartProxy(id, {
+                  ...news.dev,
+                  port: news.dev?.port ?? 1337,
+                }).pipe(Effect.map((proxy) => proxy.url.toString()));
           return {
             workerId: name,
             workerName: name,
@@ -556,7 +555,7 @@ export const LocalWorkerProvider = () =>
           // serving requests. Tear down any prior instance and return a
           // stub Attributes; the resource exists in state but has no
           // running workerd / proxy behind it.
-          if (news.dev === false || typeof news.dev === "string") {
+          if (news.dev?.mode === "external") {
             const { accountId } = yield* yield* CloudflareEnvironment;
             const existing = instances.get(id);
             if (existing) {
@@ -569,7 +568,7 @@ export const LocalWorkerProvider = () =>
               workerId: name,
               workerName: name,
               logpush: undefined,
-              url: news.dev || undefined,
+              url: news.dev.url,
               tags: [],
               durableObjectNamespaces: {},
               accountId,
