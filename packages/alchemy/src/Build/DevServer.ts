@@ -210,8 +210,8 @@ export const LocalDevServerProvider = () =>
               ),
             },
             stdin: "inherit",
-            // Leave stdout/stderr piped so we can both mirror to the parent
-            // terminal AND parse lines for the first URL.
+            // On posix, Effect starts a detached process, which we don't want.
+            detached: false,
           }),
         );
 
