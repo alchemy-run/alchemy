@@ -355,9 +355,7 @@ export interface WorkerProps<
       }
     | {
         /**
-         * Don't start a local Worker; an external dev server is serving this
-         * content instead. Distinguished from `"worker"` mode by a literal
-         * tag so it can be matched without interpolating Worker outputs.
+         * Don't start a local Worker; an external dev server is running instead.
          */
         mode: "external";
         /**
