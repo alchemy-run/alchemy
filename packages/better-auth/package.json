@@ -13,7 +13,7 @@
     "src"
   ],
   "scripts": {
-    "build": "tsgo -b"
+    "build": "tsc -b"
   },
   "exports": {
     ".": {

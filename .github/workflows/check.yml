@@ -37,5 +37,5 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
 
       - run: bun install
-      - run: bun tsgo -b
+      - run: bun tsc -b
       - run: bun run docs:check
