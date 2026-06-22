@@ -25,10 +25,7 @@ import type { Providers } from "./Providers.ts";
 
 const DEFAULT_MIGRATIONS_TABLE = "neon_migrations";
 
-export type BranchSource =
-  | Project
-  | { projectId: string }
-  | { project: Project };
+export type BranchSource = Project | { projectId: string };
 
 export type ParentBranchSource =
   | Branch
@@ -196,6 +193,21 @@ export const BranchProvider = () =>
   Provider.succeed(Branch, {
     stables: ["branchId", "projectId"],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
+      // Normally we short-circuit on `isResolved(news)` at the beginning.
+      // However, this wouldn't detect an upstream project change, causing an update when what we really want is a replace.
+      // So, we check the project first before short-circuiting. `projectId` is a stable attribute of `Project`, so the
+      // planning engine resolves `news.project` to a plain object carrying that stable id (even when the project is being
+      // updated in place). An unchanged project therefore resolves to the same string; a changed/replaced project resolves
+      // to either a different string or an unresolved output, so `oldProjectId !== newProjectId` evaluates correctly.
+      const oldProjectId =
+        output?.projectId ?? resolveProjectId(olds.project as BranchSource);
+      const newProjectId =
+        "project" in news
+          ? maybeResolveProjectId(news.project as BranchSource)
+          : undefined;
+      if (oldProjectId !== newProjectId) {
+        return { action: "replace" } as const;
+      }
       if (!isResolved(news)) return undefined;
       if (
         news.parentLsn !== undefined &&
@@ -461,9 +473,7 @@ const listAllProjects = Effect.gen(function* () {
   const projects: ListProjectsOutput["projects"][number][] = [];
   let cursor: string | undefined;
   while (true) {
-    const page = yield* listProjects({
-      ...(cursor !== undefined ? { cursor } : {}),
-    });
+    const page = yield* listProjects(cursor !== undefined ? { cursor } : {});
     projects.push(...page.projects);
     const nextCursor = page.pagination?.cursor;
     // Neon returns a `pagination.cursor` on every response (the `created_at`
@@ -567,15 +577,18 @@ const findBranchByName = (projectId: string, name: string) =>
     return matches;
   });
 
-const resolveProjectId = (source: BranchSource): string => {
+const maybeResolveProjectId = (source: BranchSource): string | undefined => {
   if ("projectId" in source && source.projectId) {
     return source.projectId as unknown as string;
   }
-  if ("project" in source && source.project) {
-    return source.project.projectId as unknown as string;
-  }
+  return undefined;
+};
+
+const resolveProjectId = (source: BranchSource): string => {
+  const projectId = maybeResolveProjectId(source);
+  if (projectId) return projectId;
   throw new Error(
-    "Invalid Neon project source: must be a Project, { projectId }, or { project }",
+    "Invalid Neon project source: must be a Project or { projectId }",
   );
 };
 
