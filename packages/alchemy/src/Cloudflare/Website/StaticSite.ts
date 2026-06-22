@@ -236,7 +236,7 @@ const makeStaticSite = <
           }).pipe(
             Effect.map((d) =>
               Output.map(d.url, (url) => ({
-                url: url ?? props.dev?.url ?? (false as const),
+                url: url ?? props.dev?.url,
               })),
             ),
           )
@@ -272,7 +272,7 @@ const makeStaticSite = <
       // Opt out of the local Worker in dev when the external DevCommand
       // is serving the content. The Worker resource still exists in
       // state with a stub Attributes shape.
-      dev: dev ? dev.url : undefined,
+      dev: dev ? { mode: "external", url: dev.url } : undefined,
       script: fallbackScript ?? props.script,
     });
   }).pipe(Namespace.push(id));
