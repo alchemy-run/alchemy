@@ -15,7 +15,6 @@ import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
@@ -208,9 +207,6 @@ type ProjectAttributes = Project["Attributes"];
  * @see https://neon.tech/docs/manage/projects/
  */
 export const Project = Resource<Project>("Neon.Project");
-
-export const isProject = (value: unknown): value is Project =>
-  Predicate.hasProperty(value, "Type") && value.Type === "Neon.Project";
 
 export const ProjectProvider = () =>
   Provider.succeed(Project, {
