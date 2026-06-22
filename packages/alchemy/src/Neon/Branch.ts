@@ -13,16 +13,14 @@ import {
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
-import type { InputProps } from "../Input.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { listSqlFiles, readSqlFile } from "../Sql/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
-import { asEffect } from "../Util/types.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
-import { isProject, type Project, waitForOperations } from "./Project.ts";
+import { type Project, waitForOperations } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 const DEFAULT_MIGRATIONS_TABLE = "neon_migrations";
@@ -189,30 +187,7 @@ export type Branch = Resource<
  *
  * @see https://neon.tech/docs/manage/branches/
  */
-export const Branch = new Proxy(Resource<Branch>("Neon.Branch"), {
-  apply: (target, thisArg, argumentsList) => {
-    const [id, propsEffect] = argumentsList as [
-      string,
-      InputProps<BranchProps> | Effect.Effect<InputProps<BranchProps>>,
-    ];
-    return target.apply(thisArg, [
-      id,
-      asEffect(propsEffect).pipe(
-        Effect.map((props) => ({
-          ...props,
-          // The project may not be resolved in its entirety, but all we care about is the project ID.
-          // Extracting here ensures a stable value for the diff, so a project that's updated in place
-          // doesn't trigger a replace of the branch.
-          project: isProject(props.project)
-            ? {
-                projectId: props.project.projectId,
-              }
-            : props.project,
-        })),
-      ),
-    ]);
-  },
-});
+export const Branch = Resource<Branch>("Neon.Branch");
 
 export const BranchProvider = () =>
   Provider.succeed(Branch, {
@@ -220,9 +195,10 @@ export const BranchProvider = () =>
     diff: Effect.fn(function* ({ id, olds, news, output }) {
       // Normally we short-circuit on `isResolved(news)` at the beginning.
       // However, this wouldn't detect an upstream project change, causing an update when what we really want is a replace.
-      // So, we check the project first before short-circuiting. An unchanged project resolves to the same string because
-      // of the transform above; a changed project resolves to either a different string or an unresolved output,
-      // so `oldProjectId !== newProjectId` evaluates correctly regardless.
+      // So, we check the project first before short-circuiting. `projectId` is a stable attribute of `Project`, so the
+      // planning engine resolves `news.project` to a plain object carrying that stable id (even when the project is being
+      // updated in place). An unchanged project therefore resolves to the same string; a changed/replaced project resolves
+      // to either a different string or an unresolved output, so `oldProjectId !== newProjectId` evaluates correctly.
       const oldProjectId =
         output?.projectId ?? resolveProjectId(olds.project as BranchSource);
       const newProjectId =
