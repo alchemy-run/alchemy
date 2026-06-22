@@ -1,6 +1,7 @@
 import type * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { RuntimeContext } from "../RuntimeContext.ts";
+import { effectClass } from "../Util/effect.ts";
 import type { ToolImpl } from "./Tool.ts";
 
 export type Services<Refs extends any[]> = Refs[number] extends infer A
@@ -15,9 +16,10 @@ export interface Agent<
   Name extends string = string,
   Refs extends any[] = any[],
   Service = AgentService,
+  Req = never,
 > {
   [Symbol.iterator](): Effect.EffectIterator<
-    Effect.Effect<Service, never, this["req"]>
+    Effect.Effect<Service, never, Req>
   >;
   "alchemy/Kind": "Agent";
   name: Name;
@@ -41,7 +43,7 @@ export const Agent: {
       <const Refs extends any[]>(
         template: TemplateStringsArray,
         ...refs: Refs
-      ): Agent<Name, Refs, Self>;
+      ): Agent<Name, Refs, Self, Services<Refs>>;
     };
   };
   <Name extends string>(
@@ -50,7 +52,7 @@ export const Agent: {
     <Refs extends any[]>(
       template: TemplateStringsArray,
       ...refs: Refs
-    ): Agent<Name, Refs>;
+    ): Agent<Name, Refs, AgentService, Services<Refs>>;
   };
 } = ((name?: string) =>
   name
@@ -61,9 +63,16 @@ export const Agent: {
           makeAgent(name, template, refs)) as any;
 
 const makeAgent = (name: string, template: TemplateStringsArray, refs: any[]) =>
-  Object.assign(class {}, {
-    "alchemy/Kind": "Agent",
-    "alchemy/Name": name,
-    refs,
-    template,
-  }) as any;
+  Object.assign(
+    effectClass(
+      Effect.gen(function* () {
+        // TODO(sam): implement the agent
+      }),
+    ),
+    {
+      "alchemy/Kind": "Agent",
+      "alchemy/Name": name,
+      refs,
+      template,
+    },
+  ) as any;

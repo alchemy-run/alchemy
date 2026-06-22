@@ -14,7 +14,11 @@ import type { MainRpc, PlatformServices } from "../../Platform.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { asEffect } from "../../Util/types.ts";
-import { DurableObjectState } from "./DurableObjectState.ts";
+import type { Container } from "../Container/Container.ts";
+import {
+  DurableObjectState,
+  fromDurableObjectState,
+} from "./DurableObjectState.ts";
 import { makeRpcStub } from "./Rpc.ts";
 import { type DurableWebSocket } from "./WebSocket.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
@@ -151,14 +155,21 @@ export interface DurableObjectNamespaceClass extends Effect.Effect<
     };
   };
   <Self>(): {
-    <Shape extends MainRpc>(
+    <
+      Shape extends MainRpc,
+      Req extends DurableObjectServices | Container.Application<any> = never,
+    >(
       name: string,
       impl: Effect.Effect<
         Effect.Effect<Shape, never, RuntimeContext>,
         never,
-        DurableObjectServices
+        Req
       >,
-    ): Effect.Effect<DurableObjectNamespace<Self>, never, Worker> & {
+    ): Effect.Effect<
+      DurableObjectNamespace<Self>,
+      never,
+      Worker | Extract<Req, Container.Application<any>>
+    > & {
       new (_: never): Shape;
     };
   };
@@ -858,7 +869,19 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
       } else if (Effect.isEffect(propsOrImpl)) {
         // inline Effect DO
         return effectClass(
-          Effect.tap(binding(), () => make(propsOrImpl as any)),
+          Effect.tap(binding(), () =>
+            make(propsOrImpl as any).pipe(
+              Effect.provideService(
+                DurableObjectState,
+                fromDurableObjectState(
+                  // everything is lazy, so this should build a proper mock
+                  {
+                    storage: {},
+                  } as any,
+                ),
+              ),
+            ),
+          ),
         );
       } else {
         // Tagged Effect DO. Yielding the class resolves the `tag`, which

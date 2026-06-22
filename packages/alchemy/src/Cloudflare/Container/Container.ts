@@ -3,30 +3,21 @@ import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
-import { HttpServer, type HttpEffect } from "../../Http.ts";
 import type { InputProps } from "../../Input.ts";
 import type { Named } from "../../Named.ts";
-import * as Output from "../../Output.ts";
-import { Platform } from "../../Platform.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import * as Server from "../../Server/index.ts";
 import type { Props } from "../../State/ResourceState.ts";
+import { effectClass } from "../../Util/effect.ts";
 import type { Fetcher } from "../Fetcher.ts";
-import { fromCloudflareFetcher, toCloudflareFetcher } from "../Fetcher.ts";
 import type { Providers } from "../Providers.ts";
-import { DurableObjectNamespace } from "../Workers/DurableObjectNamespace.ts";
-import { DurableObjectState } from "../Workers/DurableObjectState.ts";
-import { Worker, type WorkerShape } from "../Workers/Worker.ts";
-import type {
-  ContainerApplication,
-  ContainerApplicationProps,
-} from "./ContainerApplication.ts";
+import { type WorkerShape } from "../Workers/Worker.ts";
+import type { ContainerApplicationProps } from "./ContainerApplication.ts";
+import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 export const ContainerTypeId = "Cloudflare.Container";
 export type ContainerTypeId = typeof ContainerTypeId;
@@ -104,38 +95,6 @@ export type Container<Id extends string = string> = Named<Id> & {
     binding: Fetcher,
   ): Effect.Effect<void, never, RuntimeContext>;
 };
-
-export declare namespace Container {
-  export interface Decl<Self = any, Shape = any, Id extends string = string>
-    extends
-      Effect.Effect<Self, never, Providers | Self>,
-      Rpc<Shape>,
-      Named<Id> {
-    new (): Container<Id> & Shape;
-    make: <InitReq = never, WorkerReq = never>(
-      props: Props,
-      impl: Effect.Effect<
-        Shape & WorkerShape<WorkerReq>,
-        Config.ConfigError,
-        InitReq
-      >,
-    ) => Layer.Layer<Self, never, Providers>;
-  }
-
-  export type Instance<Shape = any> = Container &
-    Shape & {
-      getTcpPort: (portNumber: number) => Effect.Effect<{
-        fetch: {
-          (
-            request: HttpClientRequest.HttpClientRequest,
-          ): Effect.Effect<HttpClientResponse.HttpClientResponse>;
-          (
-            request: HttpServerRequest.HttpServerRequest,
-          ): Effect.Effect<HttpServerResponse.HttpServerResponse>;
-        };
-      }>;
-    };
-}
 
 /**
  * A Cloudflare Container that runs a long-lived process alongside a
@@ -396,6 +355,10 @@ export declare namespace Container {
  * ```
  */
 export const Container: {
+  <const Id extends string>(
+    id: Id,
+    props: InputProps<ExternalContainerProps | RemoteContainerProps>,
+  ): Container.Decl<Container<Id>, {}, Id, never>;
   <Self>(): {
     <
       const Id extends string,
@@ -408,153 +371,75 @@ export const Container: {
   <Self, Shape>(): {
     <const Id extends string>(id: Id): Container.Decl<Self, Shape, Id>;
   };
-} = Platform(
-  "Cloudflare.Container",
-  {
-    createRuntimeContext: (id: string): Server.ProcessContext => {
-      const runners: Effect.Effect<void, never, any>[] = [];
-      const env: Record<string, any> = {};
-
-      const serve = <Req = never>(handler: HttpEffect<Req>) =>
-        Effect.sync(() => {
-          runners.push(
-            Effect.gen(function* () {
-              const httpServer = yield* Effect.serviceOption(HttpServer).pipe(
-                Effect.map(Option.getOrUndefined),
-              );
-              if (httpServer) {
-                yield* httpServer.serve(handler);
-                yield* Effect.never;
-              } else {
-                // this should only happen at plantime, validate?
-              }
-            }).pipe(Effect.orDie),
-          );
+} = ((...args: any[]) => {
+  if (args.length === 0) {
+    return (...args: any[]) => {
+      if (args.length === 1) {
+        const [id] = args as [string];
+        const tag = ContainerPlatform()(id);
+        // for containers, we want the `yield* ContainerTag` to act as the Binding
+        const eff = ContainerPlatform.bind(tag);
+        return Object.assign(effectClass(eff), {
+          "~alchemy/Id": id,
+          make: (props: any, impl: any) => tag.make(props, impl),
+          // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
+          Application: tag,
         });
+      } else {
+        return Container(...(args as [string, any]));
+      }
+    };
+  } else {
+    const [id, props] = args as [string, any];
+    const resource = ContainerPlatform(id, props);
+    // for containers, we want the `yield* ContainerTag` to act as the Binding
+    const eff = ContainerPlatform.bind(resource);
+    return Object.assign(eff, {
+      "~alchemy/Id": id,
+      // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
+      Application: resource,
+    });
+  }
+}) as any;
 
-      return {
-        Type: ContainerTypeId,
-        LogicalId: id,
-        id,
-        env,
-        set: (bindingId: string, output: Output.Output) =>
-          Effect.sync(() => {
-            const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-            env[key] = output.pipe(
-              Output.map((value) => JSON.stringify(value)),
-            );
-            return key;
-          }),
-        get: <T>(key: string) =>
-          Config.string(key)
+export declare namespace Container {
+  export interface Decl<
+    Self = any,
+    Shape = any,
+    Id extends string = string,
+    Req = Self,
+  >
+    extends
+      Effect.Effect<Self, never, Providers | Req | Application<Self>>,
+      Rpc<Shape>,
+      Named<Id> {
+    new (): Container<Id> & Shape;
+    make: <InitReq = never, WorkerReq = never>(
+      props: Props,
+      impl: Effect.Effect<
+        Shape & WorkerShape<WorkerReq>,
+        Config.ConfigError,
+        InitReq
+      >,
+    ) => Layer.Layer<Application<Self>, never, Providers>;
+  }
 
-            .pipe(
-              Effect.flatMap((value) =>
-                Effect.try({
-                  try: () => JSON.parse(value) as T,
-                  catch: (error) => error as Error,
-                }),
-              ),
-              Effect.catch((cause) =>
-                Effect.die(
-                  new Error(`Failed to get environment variable: ${key}`, {
-                    cause,
-                  }),
-                ),
-              ),
-            ),
-        run: ((effect: Effect.Effect<void, never, any>) =>
-          Effect.sync(() => {
-            runners.push(effect);
-          })) as unknown as Server.ProcessContext["run"],
-        serve,
-        exports: Effect.sync(() => ({
-          default: Effect.all(
-            runners.map((eff) =>
-              Effect.forever(
-                eff.pipe(
-                  // Log and ignore errors (daemon mode, it should just re-run)
-                  Effect.tapError((err) => Effect.logError(err)),
-                  Effect.ignore,
-                  // TODO(sam): ignore cause? for now, let that actually kill the server
-                  // Effect.ignoreCause
-                ),
-              ),
-            ),
-            {
-              concurrency: "unbounded",
-            },
-          ),
-        })),
-      } as Server.ProcessContext;
-    },
-  },
-  {
-    bind: Effect.fnUntraced(function* <Shape, Req = never>(
-      containerEff:
-        | (ContainerApplication & Rpc<Shape>)
-        | Effect.Effect<ContainerApplication & Rpc<Shape>, never, Req>,
-    ) {
-      const namespace = yield* DurableObjectNamespace;
+  export interface Application<Self> {
+    "~alchemy/Kind": "ContainerApplication";
+    "~alchemy/Self": Self;
+  }
 
-      const container = Effect.isEffect(containerEff)
-        ? yield* containerEff as unknown as Effect.Effect<
-            ContainerApplication & Rpc<Shape>
-          >
-        : containerEff;
-
-      yield* container.bind`${namespace}`({
-        durableObjects: {
-          namespaceId: namespace.namespaceId,
-        },
-      });
-
-      const worker = yield* Worker;
-      const className = namespace.name;
-
-      yield* worker.bind`${container.LogicalId}`({
-        containers: [{ className, dev: container.dev }],
-      });
-
-      // TODO(sam): register this in the Container Execution Context
-      // const _httpEffect = yield* init;
-      return Effect.gen(function* () {
-        const state = yield* DurableObjectState;
-        return {
-          id: container.LogicalId,
-          running: Effect.sync(() => state.container!.running ?? false),
-          destroy: (error?: any) =>
-            Effect.promise(() => state.container!.destroy(error)),
-          signal: (signo: number) =>
-            Effect.sync(() => state.container!.signal(signo)),
-          getTcpPort: (port: number) =>
-            Effect.sync(() =>
-              fromCloudflareFetcher(state.container!.getTcpPort(port)),
-            ),
-          setInactivityTimeout: (durationMs: number | bigint) =>
-            Effect.sync(() =>
-              state.container!.setInactivityTimeout(durationMs),
-            ),
-          interceptOutboundHttp: (addr: string, binding: Fetcher) =>
-            toCloudflareFetcher(binding).pipe(
-              Effect.map((binding) =>
-                state.container!.interceptOutboundHttp(addr, binding),
-              ),
-            ),
-          interceptAllOutboundHttp: (binding: Fetcher) =>
-            toCloudflareFetcher(binding).pipe(
-              Effect.map((binding) =>
-                state.container!.interceptAllOutboundHttp(binding),
-              ),
-            ),
-          monitor: () =>
-            Effect.promise(
-              () => state.container?.monitor() ?? Promise.resolve(),
-            ),
-          start: (options?: ContainerStartupOptions) =>
-            Effect.sync(() => state.container!.start(options)),
-        } as unknown;
-      });
-    }),
-  },
-);
+  export type Instance<Shape = any> = Container &
+    Shape & {
+      getTcpPort: (portNumber: number) => Effect.Effect<{
+        fetch: {
+          (
+            request: HttpClientRequest.HttpClientRequest,
+          ): Effect.Effect<HttpClientResponse.HttpClientResponse>;
+          (
+            request: HttpServerRequest.HttpServerRequest,
+          ): Effect.Effect<HttpServerResponse.HttpServerResponse>;
+        };
+      }>;
+    };
+}

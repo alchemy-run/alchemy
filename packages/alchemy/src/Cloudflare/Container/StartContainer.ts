@@ -1,3 +1,4 @@
+import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -6,6 +7,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import { ALCHEMY_PHASE } from "../../Phase.ts";
 import { type Fetcher } from "../Fetcher.ts";
 import {
   type Container,
@@ -13,17 +15,23 @@ import {
   type ContainerStartupOptions,
 } from "./Container.ts";
 
-export declare const layerContainer: {
-  <Image extends Container.Decl>(
-    container: Image,
-    options?: ContainerStartupOptions,
-  ): Layer.Layer<InstanceType<Image>>;
+export const layerContainer = <Image extends Container.Decl>(
+  container: Image,
+  options?: ContainerStartupOptions,
+): Layer.Layer<InstanceType<Image>> => {
+  //
+  const id = container["~alchemy/Id"];
+  class Tag extends Context.Service<
+    InstanceType<Image>,
+    Container.Instance<InstanceType<Image>>
+  >()(`Container<${id}>`) {}
+  return Layer.effect(Tag, startContainer(container, options));
 };
 
 /**
  * Runs the Container in a Durable Object and monitors it, providing a durable fetch and RPC interface to it.
  */
-export const startContainer = Effect.fnUntraced(function* <
+export const startContainer = Effect.fn(function* <
   Image extends Container.Decl,
 >(containerEff: Image, options?: ContainerStartupOptions) {
   const container: Container = yield* containerEff;
@@ -42,8 +50,6 @@ export const startContainer = Effect.fnUntraced(function* <
       ),
     );
   });
-
-  yield* ensureRunning;
 
   // Poll the container roughly every 2–3s while it cold-starts, but bound the
   // total wait (~3 min) so an unreachable container surfaces a `ContainerError`
@@ -93,6 +99,13 @@ export const startContainer = Effect.fnUntraced(function* <
         ): Effect.Effect<HttpServerResponse.HttpServerResponse>;
       },
     });
+
+  const phase = yield* ALCHEMY_PHASE;
+
+  if (phase === "runtime") {
+    // eagerly start the container when in runtime, no-op during planning
+    yield* ensureRunning;
+  }
 
   return {
     ...container,

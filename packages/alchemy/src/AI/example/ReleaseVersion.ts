@@ -16,6 +16,7 @@ export class ReleaseVersion extends Cloudflare.DurableObjectNamespace<ReleaseVer
 
     return Effect.gen(function* () {
       const sockets = yield* state.getWebSockets();
+
       return {
         generateBlog: Effect.fn(function* (request: { input: any }) {
           const isStarted = yield* state.storage.get<boolean>("isStarted");

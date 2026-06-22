@@ -94,7 +94,5 @@ const makeTool = (name: string, template: TemplateStringsArray, refs: any[]) =>
       "alchemy/Name": name,
       refs,
       template,
-      // @ts-expect-error
-      impl,
     },
   ) as any;

@@ -6,6 +6,7 @@ import {
   PersistenceError,
   type BackingPersistenceStore,
 } from "effect/unstable/persistence/Persistence";
+import { RuntimeContext } from "../../RuntimeContext.ts";
 import { DurableObjectState } from "./DurableObjectState.ts";
 
 /**
@@ -87,13 +88,17 @@ export const DurableObjectChatPersistence = Layer.effect(BackingPersistence)(
 
     return BackingPersistence.of({
       make: (storeId) =>
+        // @ts-expect-error - this is a test
         Effect.sync(() => {
           const prefixed = (k: string) => `${storeId}:${k}`;
           return {
             get: (key) =>
               storage
                 .get<object>(prefixed(key))
-                .pipe(Effect.mapError(wrapErr("get", key))),
+                .pipe(
+                  Effect.mapError(wrapErr("get", key)),
+                  Effect.provide(RuntimeContext.phantom),
+                ),
             getMany: (keys) =>
               storage.get<object>(keys.map(prefixed)).pipe(
                 Effect.mapError(wrapErr("getMany")),

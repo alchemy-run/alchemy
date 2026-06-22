@@ -218,7 +218,7 @@ export const providers = () =>
       CloudforceOne.CloudforceOneScanConfig,
       Command,
       Connectivity.DirectoryService,
-      Containers.Container,
+      Containers.ContainerPlatform,
       ContentScanning.ContentScanning,
       ContentScanning.ContentScanningExpression,
       CustomCertificates.CustomCertificate,

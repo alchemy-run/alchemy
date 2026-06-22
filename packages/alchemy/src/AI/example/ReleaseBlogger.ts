@@ -1,15 +1,10 @@
-import * as Layer from "effect/Layer";
-import * as Cloudflare from "../../Cloudflare/index.ts";
-import { DevBox } from "./DevBox.ts";
+import * as Alchemy from "../../index.ts";
 import { Bash } from "./tools/Bash.ts";
-import { EvalLive } from "./tools/Eval.ts";
-import { EditFile, ReadFile, WriteFile, WriteFileDevBox } from "./tools/Fs.ts";
-import { Grep, GrepLive } from "./tools/Grep.ts";
-import { Sql, SqlDurableObjectLive } from "./tools/Sql.ts";
+import { EditFile, ReadFile, WriteFile } from "./tools/Fs.ts";
+import { Grep } from "./tools/Grep.ts";
+import { Sql } from "./tools/Sql.ts";
 
-export class ReleaseBloggerCloudflare extends Cloudflare.Agent<ReleaseBloggerCloudflare>()(
-  "Blogger",
-)`
+export class ReleaseBlogger extends Alchemy.Agent<ReleaseBlogger>()("Blogger")`
 You are the Release Blogger. Your job is to turn a merged pull request into a
 release blog post under website/src/content/docs/blog/.
 
@@ -30,17 +25,3 @@ To do your job:
 6. Use the ${Sql} tool to execute the SQL query to read and update the database.
 
 Always write in the voice of the existing beta posts. Keep it tight.` {}
-
-export default ReleaseBloggerCloudflare.make(
-  SqlDurableObjectLive.pipe(
-    Layer.provideMerge(WriteFileDevBox),
-    Layer.provideMerge(GrepLive),
-    Layer.provideMerge(EvalLive),
-    Layer.provideMerge(Cloudflare.layerChatDurableObject),
-    Layer.provideMerge(
-      Cloudflare.layerContainer(DevBox, {
-        enableInternet: true,
-      }),
-    ),
-  ),
-);

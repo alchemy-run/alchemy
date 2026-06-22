@@ -17,9 +17,11 @@ import { type ArtifactStore, provideFreshArtifactStore } from "./Artifacts.ts";
 import { AuthProviders } from "./Auth/AuthProvider.ts";
 import { CredentialsStore, CredentialsStoreLive } from "./Auth/Credentials.ts";
 import { AlchemyProfile, ProfileLive } from "./Auth/Profile.ts";
+import type { PolicyLike } from "./Binding.ts";
 import { Cli } from "./Cli/Cli.ts";
 import type { Input, InputProps } from "./Input.ts";
 import * as Output from "./Output.ts";
+import type { ProviderCollectionLike } from "./Provider.ts";
 import type { ResourceBinding, ResourceLike } from "./Resource.ts";
 import { Stage } from "./Stage.ts";
 import type { State } from "./State/State.ts";
@@ -41,6 +43,8 @@ export type StackServices =
   | AlchemyProfile
   | ArtifactStore
   | CredentialsStore
+  | ProviderCollectionLike
+  | PolicyLike
   | Cli;
 
 export type StackEffect<A, Err = never, Req = never> = Effect.Effect<
@@ -65,7 +69,11 @@ export type Stack = Context.ServiceClass.Shape<
 >;
 
 export interface StackProps<Req> {
-  providers: Layer.Layer<NoInfer<Req>, never, StackServices>;
+  providers: Layer.Layer<
+    NoInfer<Exclude<Req, StackServices>>,
+    never,
+    StackServices
+  >;
   state: Layer.Layer<State, never, StackServices>;
 }
 
@@ -109,10 +117,10 @@ export const Stack: Context.ServiceClass<
       };
     };
   };
-  <A, Req>(
+  <A, Req extends StackServices = never>(
     stackName: string,
-    options: StackProps<NoInfer<Req>>,
-    eff: Effect.Effect<A, ConfigError, Req | StackServices>,
+    options: StackProps<Req>,
+    eff: Effect.Effect<A, ConfigError, Req>,
   ): Effect.Effect<CompiledStack<A>, ConfigError>;
 } = Object.assign(
   taggedFunction(
@@ -135,11 +143,14 @@ export const Stack: Context.ServiceClass<
               make: <Req = never>(
                 options: StackProps<NoInfer<Req>>,
                 eff: Effect.Effect<A, ConfigError, Req>,
-              ) => Stack(stackName, options, eff),
+              ) =>
+                // @ts-expect-error
+                Stack(stackName, options, eff),
             },
           );
       }
       return eff!.pipe(
+        // @ts-expect-error
         make({
           name: stackName,
           ...options!,

@@ -9,7 +9,6 @@ import { sha256Object } from "../../Util/sha256.ts";
 import { normalizeNulls } from "../../Util/stable.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { generateLocalId, LOCAL_ENTRY_URL } from "../LocalRuntime.ts";
-import { Container } from "./Container.ts";
 import type {
   ContainerApplication,
   ContainerApplicationProps,
@@ -19,6 +18,7 @@ import {
   bundleContainerProgram,
   createContainerApplicationName,
 } from "./ContainerBundle.ts";
+import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 /**
  * Local (dev) provider for Cloudflare Container applications.
@@ -36,7 +36,7 @@ import {
  */
 export const LocalContainerProvider = () =>
   RpcProvider.effect(
-    Container,
+    ContainerPlatform,
     LOCAL_ENTRY_URL,
     Effect.gen(function* () {
       const { dotAlchemy } = yield* AlchemyContext;

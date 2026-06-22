@@ -476,6 +476,16 @@
         "vite": "catalog:",
       },
     },
+    "examples/cloudflare-agent": {
+      "name": "cloudflare-agent",
+      "version": "0.0.0",
+      "dependencies": {
+        "@effect/platform-bun": "catalog:",
+        "@effect/platform-node": "catalog:",
+        "alchemy": "workspace:*",
+        "effect": "catalog:",
+      },
+    },
     "examples/cloudflare-dev": {
       "name": "cloudflare-dev",
       "version": "0.0.0",
@@ -2513,6 +2523,8 @@
     "cli-truncate": ["cli-truncate@5.2.0", "", { "dependencies": { "slice-ansi": "^8.0.0", "string-width": "^8.2.0" } }, "sha512-xRwvIOMGrfOAnM1JYtqQImuaNtDEv9v6oIYAs4LIHwTiKee8uwvIi363igssOC0O5U04i4AlENs79LQLu9tEMw=="],
 
     "cliui": ["cliui@8.0.1", "", { "dependencies": { "string-width": "^4.2.0", "strip-ansi": "^6.0.1", "wrap-ansi": "^7.0.0" } }, "sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ=="],
+
+    "cloudflare-agent": ["cloudflare-agent@workspace:examples/cloudflare-agent"],
 
     "cloudflare-dev": ["cloudflare-dev@workspace:examples/cloudflare-dev"],
 

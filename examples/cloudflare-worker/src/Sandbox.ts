@@ -23,8 +23,9 @@ export class Sandbox extends Cloudflare.Container<
       PlatformError
     >;
   }
->()(
-  "Sandbox",
+>()("Sandbox") {}
+
+export const SandboxLive = /* @__PURE__ */ Sandbox.make(
   Stack.useSync((stack) => ({
     main: import.meta.filename,
     instanceType: stack.stage === "prod" ? "standard-1" : "dev",
@@ -34,9 +35,6 @@ export class Sandbox extends Cloudflare.Container<
       },
     },
   })),
-) {}
-
-export const SandboxLive = /* @__PURE__ */ Sandbox.make(
   Effect.gen(function* () {
     //
     const cp = yield* ChildProcessSpawner;
