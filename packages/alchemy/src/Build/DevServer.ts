@@ -243,17 +243,17 @@ export const LocalDevServerProvider = () =>
         );
 
       return DevServer.Provider.of({
-        diff: Effect.fn(function* ({ id, news }) {
+        diff: Effect.fn(function* ({ instanceId, news }) {
           if (!isResolved(news)) return undefined;
           const hash = Hash.structure(news);
-          if (instances.get(id)?.hash === hash) {
+          if (instances.get(instanceId)?.hash === hash) {
             return { action: "noop" };
           }
           return { action: "update" };
         }),
-        reconcile: Effect.fn(function* ({ id, news }) {
+        reconcile: Effect.fn(function* ({ instanceId, news }) {
           const hash = Hash.structure(news);
-          const existing = instances.get(id);
+          const existing = instances.get(instanceId);
 
           if (existing) {
             if (existing.hash === hash && (yield* existing.handle.isRunning)) {
@@ -261,7 +261,7 @@ export const LocalDevServerProvider = () =>
               return { url };
             }
 
-            yield* stop(id);
+            yield* stop(instanceId);
           }
 
           const scope = yield* Scope.fork(rootScope);
@@ -269,12 +269,12 @@ export const LocalDevServerProvider = () =>
           const handle = yield* spawn(news, urlDeferred).pipe(
             Scope.provide(scope),
           );
-          instances.set(id, { hash, handle, scope, urlDeferred });
+          instances.set(instanceId, { hash, handle, scope, urlDeferred });
           const url = yield* awaitUrl(urlDeferred);
           return { url };
         }),
-        delete: Effect.fn(function* ({ id }) {
-          yield* stop(id);
+        delete: Effect.fn(function* ({ instanceId }) {
+          yield* stop(instanceId);
         }),
         // Non-listable: a DevServer is a local dev-server child process, not a
         // cloud resource. There is no remote enumeration API. The in-memory
