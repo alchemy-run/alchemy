@@ -1,5 +1,4 @@
 import type * as cf from "@cloudflare/workers-types";
-import type { ContainerImage } from "@distilled.cloud/cloudflare-runtime/Docker";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import type * as Config from "effect/Config";
 import type { ConfigError } from "effect/Config";
@@ -20,6 +19,7 @@ import { Resource, type ResourceClass } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Container/Container.ts";
+import type { DevContainerImage } from "../Container/ContainerApplication.ts";
 import type { HyperdriveDevOrigin } from "../Hyperdrive/Hyperdrive.ts";
 import type { Providers } from "../Providers.ts";
 import { type Assets, type AssetsProps } from "./Assets.ts";
@@ -348,7 +348,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
   },
   {
     bindings?: WorkerBinding[];
-    containers?: { className: string; dev: ContainerImage | undefined }[];
+    containers?: { className: string; dev: DevContainerImage | undefined }[];
     crons?: string[];
     hyperdrives?: Record<string, Required<HyperdriveDevOrigin>>;
   },

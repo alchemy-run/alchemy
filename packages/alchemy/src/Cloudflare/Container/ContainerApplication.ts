@@ -580,7 +580,7 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
     hash?: {
       image: string;
     };
-    dev: ContainerImage | undefined;
+    dev: DevContainerImage | undefined;
   },
   {
     /**
@@ -599,6 +599,12 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
   /** @internal phantom */
   Shape: Shape;
 }
+
+// `DevContainerImage` stays here (consumed by the Attrs `dev` field above and
+// imported by Worker.ts). The provider helpers that previously lived here
+// (resolveDurableObjectApplicationRecovery, the readiness schedule/retry, etc.)
+// were extracted to ContainerProvider.ts on this branch.
+export type DevContainerImage = ContainerImage;
 
 export const ContainerProvider = () =>
   ProviderLayer.select({
