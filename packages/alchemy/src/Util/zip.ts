@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 export interface ZipFile {
   path: string;
   content: string | Uint8Array<ArrayBufferLike>;
+  mode?: number;
 }
 
 export const zipCode = Effect.fn(function* (
@@ -14,7 +15,10 @@ export const zipCode = Effect.fn(function* (
   const date = new Date("1980-01-01T00:00:00.000Z");
   zip.file("index.mjs", content, { date });
   for (const file of files ?? []) {
-    zip.file(file.path, file.content, { date });
+    zip.file(file.path, file.content, {
+      date,
+      unixPermissions: file.mode,
+    });
   }
 
   return yield* Effect.promise(() =>

@@ -7,10 +7,17 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as HttpClient from "effect/unstable/http/HttpClient";
+import { fileURLToPath } from "node:url";
 import { TestFunction, TestFunctionLive } from "./handler.ts";
 
 const timeoutHandlerPath = new URL("./timeout-handler.ts", import.meta.url)
   .pathname;
+const nativePackagesHandlerPath = fileURLToPath(
+  new URL(
+    "../../Bundle/fixtures/external-packages-bun/handler.mjs",
+    import.meta.url,
+  ),
+);
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -143,6 +150,57 @@ test.provider(
       Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
     ),
   { timeout: 360_000 },
+);
+
+test.provider.skipIf(process.env.ALCHEMY_TEST_LAMBDA_EXTERNAL_PACKAGES !== "1")(
+  "runs Sharp and FFmpeg in an ARM64 Lambda",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const fn = yield* stack.deploy(
+        AWS.Lambda.Function<{}>()("NativePackagesArm64Fn", {
+          main: nativePackagesHandlerPath,
+          handler: "handler",
+          isExternal: true,
+          url: true,
+          runtime: "nodejs22.x",
+          architecture: "arm64",
+          build: {
+            externalPackages: ["sharp", "ffmpeg-static"],
+          },
+        }),
+      );
+
+      const response = yield* HttpClient.get(fn.functionUrl!).pipe(
+        Effect.flatMap((response) =>
+          response.status === 200
+            ? Effect.succeed(response)
+            : Effect.fail(
+                new Error(`Function URL returned ${response.status}`),
+              ),
+        ),
+        Effect.retry({
+          schedule: Schedule.exponential(500).pipe(
+            Schedule.both(Schedule.recurs(8)),
+          ),
+        }),
+      );
+      const result = JSON.parse(yield* response.text) as {
+        architecture: string;
+        imageBytes: number;
+        ffmpegStatus: number;
+        ffmpegVersion: string;
+      };
+      expect(result.architecture).toBe("arm64");
+      expect(result.imageBytes).toBeGreaterThan(0);
+      expect(result.ffmpegStatus).toBe(0);
+      expect(result.ffmpegVersion).toContain("ffmpeg version");
+    }).pipe(
+      Effect.tap(() => stack.destroy()),
+      Effect.onError(() => stack.destroy().pipe(Effect.ignore)),
+    ),
+  { timeout: 120_000 },
 );
 
 test.provider(

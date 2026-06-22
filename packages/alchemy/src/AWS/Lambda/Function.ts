@@ -13,9 +13,12 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import path from "node:path";
 import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
+import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
+import * as ExternalPackages from "../../Bundle/ExternalPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
@@ -63,6 +66,17 @@ export const isFunction = (value: any): value is Function => {
 export interface FunctionBuildOptions {
   readonly input?: Partial<rolldown.InputOptions>;
   readonly output?: Partial<rolldown.OutputOptions>;
+  /**
+   * Runtime packages to exclude from the Rolldown bundle and include under
+   * `node_modules` in the Lambda deployment package.
+   *
+   * Packages are installed in Docker for the function's Linux architecture
+   * using the nearest `bun.lock` or `package-lock.json`. Each package must be
+   * declared in this function package's dependencies or optionalDependencies.
+   *
+   * @default []
+   */
+  readonly externalPackages?: readonly string[];
 }
 
 export type FunctionArchitecture = "x86_64" | "arm64";
@@ -256,6 +270,18 @@ const normalizeFunctionUrl = (
  * const func = yield* AWS.Lambda.Function("ArmFunction", {
  *   main: "./src/handler.ts",
  *   architecture: "arm64",
+ * });
+ * ```
+ *
+ * @example Function with native dependencies
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("ImageProcessor", {
+ *   main: "./src/handler.ts",
+ *   runtime: "nodejs22.x",
+ *   architecture: "arm64",
+ *   build: {
+ *     externalPackages: ["sharp", "ffmpeg-static"],
+ *   },
  * });
  * ```
  *
@@ -578,6 +604,7 @@ export const FunctionProvider = () =>
     Function,
     Effect.gen(function* () {
       const stack = yield* Stack;
+      const { dotAlchemy } = yield* AlchemyContext;
 
       const fs = yield* FileSystem.FileSystem;
       const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
@@ -740,12 +767,19 @@ export const FunctionProvider = () =>
       const bundleCode = Effect.fnUntraced(function* (
         id: string,
         props: FunctionProps,
+        session?: { note: (note: string) => Effect.Effect<void> },
       ) {
         const sourcemap = props.build?.output?.sourcemap ?? true;
         const uploadSourceMap = props.uploadSourceMap ?? true;
 
         const realMain = yield* fs.realPath(props.main);
         const cwd = yield* TempRoot.findCwdForBundle(realMain);
+        const externalPackages =
+          yield* ExternalPackages.normalizeExternalPackageNames(
+            props.build?.externalPackages ?? [],
+          );
+        const managedExternal =
+          ExternalPackages.externalPackagePredicate(externalPackages);
 
         const rolldownSourcemap = sourcemap;
 
@@ -753,15 +787,38 @@ export const FunctionProvider = () =>
           entry: string,
           plugins?: rolldown.RolldownPluginOption,
         ) {
+          const userExternal = props.build?.input?.external;
+          const defaultExternal: Array<string | RegExp> = [/^@aws-sdk\//];
+          const external: rolldown.ExternalOption =
+            typeof userExternal === "function"
+              ? (moduleId, parentId, isResolved) =>
+                  managedExternal(moduleId) ||
+                  defaultExternal.some((item) =>
+                    typeof item === "string"
+                      ? item === moduleId
+                      : item.test(moduleId),
+                  ) ||
+                  userExternal(moduleId, parentId, isResolved)
+              : [
+                  ...defaultExternal,
+                  ...externalPackages.map(
+                    (packageName) =>
+                      new RegExp(
+                        `^${packageName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:/|$)`,
+                      ),
+                  ),
+                  ...(Array.isArray(userExternal)
+                    ? userExternal
+                    : userExternal
+                      ? [userExternal]
+                      : []),
+                ];
           return yield* Bundle.build(
             {
               ...props.build?.input,
               input: entry,
               cwd,
-              external: [
-                /^@aws-sdk\//,
-                ...((props.build?.input?.external as string[]) ?? []),
-              ],
+              external,
               platform: "node",
               plugins: [props.build?.input?.plugins, plugins],
             },
@@ -863,7 +920,7 @@ export default await Effect.runPromise(handlerEffect)
         const includeSourceMaps =
           uploadSourceMap && (sourcemap === true || sourcemap === "hidden");
 
-        const extraFiles = bundleOutput.files
+        const bundledExtraFiles = bundleOutput.files
           .slice(1)
           .filter(
             (f: Bundle.BundleFile) =>
@@ -874,14 +931,58 @@ export default await Effect.runPromise(handlerEffect)
             content: f.content,
           }));
 
+        const external =
+          externalPackages.length > 0
+            ? yield* ExternalPackages.materializeExternalPackages({
+                packageRoot: cwd,
+                packages: externalPackages,
+                runtime: props.runtime ?? "nodejs22.x",
+                architecture: props.architecture ?? "x86_64",
+                cacheDirectory: path.join(
+                  dotAlchemy,
+                  "cache",
+                  "lambda-external-packages",
+                ),
+                bunVersion: process.versions.bun,
+                note: session?.note,
+              })
+            : undefined;
+        const extraFiles = [...bundledExtraFiles, ...(external?.files ?? [])];
+        const uncompressedSize =
+          code.byteLength +
+          extraFiles.reduce(
+            (total, file) =>
+              total +
+              (typeof file.content === "string"
+                ? new TextEncoder().encode(file.content).byteLength
+                : file.content.byteLength),
+            0,
+          );
+        yield* ExternalPackages.validateLambdaPackageSize({
+          uncompressedSize,
+          compressedSize: 0,
+          hasAssets: true,
+        });
+
         const archive = yield* zipCode(
           code,
           extraFiles.length > 0 ? extraFiles : undefined,
         );
+        const hash = ExternalPackages.hashLambdaDeploymentCode({
+          bundleHash: bundleOutput.hash,
+          externalHash: external?.hash,
+          runtime: props.runtime ?? "nodejs22.x",
+          architecture: props.architecture ?? "x86_64",
+        });
+        if (external && session) {
+          yield* session.note(
+            `Packaged ${externalPackages.join(", ")} (${(external.size / 1024 / 1024).toFixed(2)} MiB)`,
+          );
+        }
         return {
           archive,
           code,
-          hash: bundleOutput.hash,
+          hash,
         };
       });
 
@@ -1012,6 +1113,11 @@ export default await Effect.runPromise(handlerEffect)
         const assets = (yield* Effect.serviceOption(Assets)).pipe(
           Option.getOrUndefined,
         );
+        yield* ExternalPackages.validateLambdaPackageSize({
+          uncompressedSize: 0,
+          compressedSize: archive.byteLength,
+          hasAssets: assets !== undefined,
+        });
 
         const codeLocation = yield* Effect.gen(function* () {
           if (assets) {
@@ -1324,6 +1430,9 @@ export default await Effect.runPromise(handlerEffect)
             (yield* bundleCode(id, {
               main: news.main,
               handler: news.handler,
+              isExternal: news.isExternal,
+              runtime: news.runtime,
+              architecture: news.architecture,
               build: news.build,
               uploadSourceMap: news.uploadSourceMap,
             })).hash
@@ -1523,7 +1632,7 @@ export default await Effect.runPromise(handlerEffect)
             bindings,
           });
 
-          const { archive, code, hash } = yield* bundleCode(id, news);
+          const { archive, code, hash } = yield* bundleCode(id, news, session);
 
           yield* createOrUpdateFunction({
             id,
