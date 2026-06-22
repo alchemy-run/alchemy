@@ -119,6 +119,42 @@ test.provider(
 );
 
 test.provider(
+  "runs multiple distinct dev servers concurrently",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFileA = pathe.join(tmp, "pid-a.json");
+      const pidFileB = pathe.join(tmp, "pid-b.json");
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* DevServer("Alpha", {
+            command: `node ${fixtureScript}`,
+            env: { PID_FILE: pidFileA, MARKER: "alpha" },
+          });
+          yield* DevServer("Beta", {
+            command: `node ${fixtureScript}`,
+            env: { PID_FILE: pidFileB, MARKER: "beta" },
+          });
+        }),
+      );
+
+      const alpha = yield* waitForPidFile(pidFileA, "alpha");
+      const beta = yield* waitForPidFile(pidFileB, "beta");
+
+      expect(alpha.pid).not.toBe(beta.pid);
+      expect(yield* isAlive(alpha.pid)).toBe(true);
+      expect(yield* isAlive(beta.pid)).toBe(true);
+
+      yield* stack.destroy();
+      yield* waitForDeath(alpha.pid);
+      yield* waitForDeath(beta.pid);
+    }),
+  { timeout: 30_000 },
+);
+
+test.provider(
   "keeps the process running across an unchanged update",
   (stack) =>
     Effect.gen(function* () {
