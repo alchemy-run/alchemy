@@ -13,22 +13,21 @@ import {
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { isResolved } from "../Diff.ts";
+import type { InputProps } from "../Input.ts";
 import { createPhysicalName } from "../PhysicalName.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { listSqlFiles, readSqlFile } from "../Sql/SqlFile.ts";
 import { recordsEqual } from "../Util/equal.ts";
+import { asEffect } from "../Util/types.ts";
 import { applyMigrations, runSql } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
-import { type Project, waitForOperations } from "./Project.ts";
+import { isProject, type Project, waitForOperations } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 
 const DEFAULT_MIGRATIONS_TABLE = "neon_migrations";
 
-export type BranchSource =
-  | Project
-  | { projectId: string }
-  | { project: Project };
+export type BranchSource = Project | { projectId: string };
 
 export type ParentBranchSource =
   | Branch
@@ -190,17 +189,50 @@ export type Branch = Resource<
  *
  * @see https://neon.tech/docs/manage/branches/
  */
-export const Branch = Resource<Branch>("Neon.Branch");
+export const Branch = new Proxy(Resource<Branch>("Neon.Branch"), {
+  apply: (target, thisArg, argumentsList) => {
+    const [id, propsEffect] = argumentsList as [
+      string,
+      InputProps<BranchProps> | Effect.Effect<InputProps<BranchProps>>,
+    ];
+    return target.apply(thisArg, [
+      id,
+      asEffect(propsEffect).pipe(
+        Effect.map((props) => ({
+          ...props,
+          // The project may not be resolved in its entirety, but all we care about is the project ID.
+          // Extracting here ensures a stable value for the diff, so a project that's updated in place
+          // doesn't trigger a replace of the branch.
+          project: isProject(props.project)
+            ? {
+                projectId: props.project.projectId,
+              }
+            : props.project,
+        })),
+      ),
+    ]);
+  },
+});
 
 export const BranchProvider = () =>
   Provider.succeed(Branch, {
     stables: ["branchId", "projectId"],
     diff: Effect.fn(function* ({ id, olds, news, output }) {
-      if (!isResolved(news)) return undefined;
-      const projectId = resolveProjectId(news.project as BranchSource);
-      if (output?.projectId !== undefined && output.projectId !== projectId) {
+      // Normally we short-circuit on `isResolved(news)` at the beginning.
+      // However, this wouldn't detect an upstream project change, causing an update when what we really want is a replace.
+      // So, we check the project first before short-circuiting. An unchanged project resolves to the same string because
+      // of the transform above; a changed project resolves to either a different string or an unresolved output,
+      // so `oldProjectId !== newProjectId` evaluates correctly regardless.
+      const oldProjectId =
+        output?.projectId ?? resolveProjectId(olds.project as BranchSource);
+      const newProjectId =
+        "project" in news
+          ? maybeResolveProjectId(news.project as BranchSource)
+          : undefined;
+      if (oldProjectId !== newProjectId) {
         return { action: "replace" } as const;
       }
+      if (!isResolved(news)) return undefined;
       if (
         news.parentLsn !== undefined &&
         output?.parentLsn !== news.parentLsn
@@ -311,60 +343,6 @@ export const BranchProvider = () =>
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const newName = yield* createBranchName(id, news.name);
-      const createBranchInfo = Effect.gen(function* () {
-        const projectId = resolveProjectId(news.project as BranchSource);
-        const parentBranchId = yield* resolveParentBranchId(
-          news.parentBranch as ParentBranchSource | undefined,
-          projectId,
-        );
-        const created = yield* createProjectBranch({
-          project_id: projectId,
-          branch: {
-            name: newName,
-            parent_id: parentBranchId,
-            parent_lsn: news.parentLsn,
-            parent_timestamp: news.parentTimestamp,
-            init_source: news.initSource,
-            protected: news.protected,
-            expires_at: news.expiresAt,
-          },
-          endpoints: buildEndpoints(news.endpoints),
-        });
-        yield* waitForOperations(created.operations);
-
-        const db = created.databases[0];
-        if (!db) {
-          return yield* Effect.die(
-            `Neon branch ${created.branch.id} created with no databases`,
-          );
-        }
-        const conn = yield* fetchConnection(
-          projectId,
-          created.branch.id,
-          db.name,
-          db.owner_name,
-        );
-        return {
-          branchId: created.branch.id,
-          branchName: created.branch.name,
-          projectId: created.branch.project_id,
-          parentBranchId: created.branch.parent_id,
-          parentLsn: created.branch.parent_lsn,
-          parentTimestamp: created.branch.parent_timestamp,
-          initSource: created.branch.init_source as
-            | "schema-only"
-            | "parent-data"
-            | undefined,
-          protected: created.branch.protected,
-          default: created.branch.default,
-          expiresAt: created.branch.expires_at,
-          databaseName: db.name,
-          roleName: db.owner_name,
-          connectionUri: conn.uri,
-          pooledConnectionUri: conn.pooled,
-          origin: parsePostgresOrigin(conn.uri),
-        };
-      });
 
       // Ensure — when no prior output exists we create the branch;
       // otherwise sync the mutable scalar fields on the existing
@@ -396,9 +374,61 @@ export const BranchProvider = () =>
               pooledConnectionUri: output.pooledConnectionUri,
               origin: output.origin,
             })),
-            Effect.catchTag("NotFound", () => createBranchInfo),
           )
-        : yield* createBranchInfo;
+        : yield* Effect.gen(function* () {
+            const projectId = resolveProjectId(news.project as BranchSource);
+            const parentBranchId = yield* resolveParentBranchId(
+              news.parentBranch as ParentBranchSource | undefined,
+              projectId,
+            );
+            const created = yield* createProjectBranch({
+              project_id: projectId,
+              branch: {
+                name: newName,
+                parent_id: parentBranchId,
+                parent_lsn: news.parentLsn,
+                parent_timestamp: news.parentTimestamp,
+                init_source: news.initSource,
+                protected: news.protected,
+                expires_at: news.expiresAt,
+              },
+              endpoints: buildEndpoints(news.endpoints),
+            });
+            yield* waitForOperations(created.operations);
+
+            const db = created.databases[0];
+            if (!db) {
+              return yield* Effect.die(
+                `Neon branch ${created.branch.id} created with no databases`,
+              );
+            }
+            const conn = yield* fetchConnection(
+              projectId,
+              created.branch.id,
+              db.name,
+              db.owner_name,
+            );
+            return {
+              branchId: created.branch.id,
+              branchName: created.branch.name,
+              projectId: created.branch.project_id,
+              parentBranchId: created.branch.parent_id,
+              parentLsn: created.branch.parent_lsn,
+              parentTimestamp: created.branch.parent_timestamp,
+              initSource: created.branch.init_source as
+                | "schema-only"
+                | "parent-data"
+                | undefined,
+              protected: created.branch.protected,
+              default: created.branch.default,
+              expiresAt: created.branch.expires_at,
+              databaseName: db.name,
+              roleName: db.owner_name,
+              connectionUri: conn.uri,
+              pooledConnectionUri: conn.pooled,
+              origin: parsePostgresOrigin(conn.uri),
+            };
+          });
 
       const connectionUri = Redacted.make(branchInfo.connectionUri);
       const migrationsTable =
@@ -467,9 +497,7 @@ const listAllProjects = Effect.gen(function* () {
   const projects: ListProjectsOutput["projects"][number][] = [];
   let cursor: string | undefined;
   while (true) {
-    const page = yield* listProjects({
-      ...(cursor !== undefined ? { cursor } : {}),
-    });
+    const page = yield* listProjects(cursor !== undefined ? { cursor } : {});
     projects.push(...page.projects);
     const nextCursor = page.pagination?.cursor;
     // Neon returns a `pagination.cursor` on every response (the `created_at`
@@ -573,15 +601,18 @@ const findBranchByName = (projectId: string, name: string) =>
     return matches;
   });
 
-const resolveProjectId = (source: BranchSource): string => {
+const maybeResolveProjectId = (source: BranchSource): string | undefined => {
   if ("projectId" in source && source.projectId) {
     return source.projectId as unknown as string;
   }
-  if ("project" in source && source.project) {
-    return source.project.projectId as unknown as string;
-  }
+  return undefined;
+};
+
+const resolveProjectId = (source: BranchSource): string => {
+  const projectId = maybeResolveProjectId(source);
+  if (projectId) return projectId;
   throw new Error(
-    "Invalid Neon project source: must be a Project, { projectId }, or { project }",
+    "Invalid Neon project source: must be a Project or { projectId }",
   );
 };
 

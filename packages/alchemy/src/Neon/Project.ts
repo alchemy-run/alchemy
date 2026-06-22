@@ -15,6 +15,7 @@ import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { isResolved } from "../Diff.ts";
@@ -208,6 +209,9 @@ type ProjectAttributes = Project["Attributes"];
  */
 export const Project = Resource<Project>("Neon.Project");
 
+export const isProject = (value: unknown): value is Project =>
+  Predicate.hasProperty(value, "Type") && value.Type === "Neon.Project";
+
 export const ProjectProvider = () =>
   Provider.succeed(Project, {
     stables: ["projectId", "defaultBranchId"],
@@ -236,9 +240,9 @@ export const ProjectProvider = () =>
         : yield* createProjectName(id, olds.name);
       if (
         oldName !== name ||
-        (news.region ?? DEFAULT_REGION) !==
+        (news.region ?? output?.region ?? DEFAULT_REGION) !==
           (output?.region ?? olds.region ?? DEFAULT_REGION) ||
-        (news.pgVersion ?? DEFAULT_PG_VERSION) !==
+        (news.pgVersion ?? output?.pgVersion ?? DEFAULT_PG_VERSION) !==
           (output?.pgVersion ?? olds.pgVersion ?? DEFAULT_PG_VERSION) ||
         (news.defaultBranchName ?? output?.defaultBranchName) !==
           output?.defaultBranchName
