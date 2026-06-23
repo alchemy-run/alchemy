@@ -1,4 +1,5 @@
 // @ts-check
+import { unified } from "@astrojs/markdown-remark";
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
@@ -6,7 +7,7 @@ import starlight from "@astrojs/starlight";
 import tailwindcss from "@tailwindcss/vite";
 import astroBrokenLinksChecker from "astro-broken-links-checker";
 import { defineConfig } from "astro/config";
-import { promises as fs, readFileSync } from "node:fs";
+import { promises as fs, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import starlightBlog from "starlight-blog";
@@ -21,23 +22,136 @@ import { pagefindIgnoreNoise } from "./plugins/pagefind-ignore-noise.mjs";
  * from the directory tree so the docs still build.
  */
 function providersSidebarEntry() {
-  try {
-    const json = readFileSync(
-      fileURLToPath(
-        new URL("./src/generated/providers-sidebar.json", import.meta.url),
-      ),
-      "utf8",
-    );
-    // Expanded one level deep: the Providers group shows its providers
-    // (AWS, Cloudflare, …) on load; everything below stays collapsed.
-    return { label: "Providers", collapsed: false, items: JSON.parse(json) };
-  } catch {
-    return {
-      label: "Providers",
-      collapsed: false,
-      autogenerate: { directory: "providers", collapsed: true },
-    };
+  const json = readFileSync(
+    fileURLToPath(
+      new URL("./src/generated/providers-sidebar.json", import.meta.url),
+    ),
+    "utf8",
+  );
+  // Expanded one level deep: the Providers group shows its providers
+  // (AWS, Cloudflare, …) on load; everything below stays collapsed.
+  return { label: "Providers", collapsed: false, items: JSON.parse(json) };
+}
+
+const DOCS_ROOT = fileURLToPath(
+  new URL("./src/content/docs/", import.meta.url),
+);
+
+/**
+ * Minimal YAML front-matter reader. Extracts only the fields the sidebar cares
+ * about: top-level `title` and the nested `sidebar.order` / `sidebar.label`.
+ * Avoids pulling in a full YAML parser for the handful of scalar values we use.
+ *
+ * @param {string} source raw file contents
+ * @returns {{ title?: string, order?: number, label?: string }}
+ */
+function readFrontmatter(source) {
+  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) return {};
+  const lines = match[1].split(/\r?\n/);
+  /** @type {{ title?: string, order?: number, label?: string }} */
+  const result = {};
+  let inSidebar = false;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const indent = line.length - line.trimStart().length;
+    if (indent === 0) {
+      inSidebar = false;
+      const top = line.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+      if (!top) continue;
+      const [, key, rawValue] = top;
+      if (key === "sidebar" && rawValue.trim() === "") {
+        inSidebar = true;
+      } else if (key === "title") {
+        result.title = unquote(rawValue);
+      }
+      continue;
+    }
+    if (!inSidebar) continue;
+    const nested = line.trim().match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    if (!nested) continue;
+    const [, key, rawValue] = nested;
+    if (key === "order") {
+      const num = Number(unquote(rawValue));
+      if (!Number.isNaN(num)) result.order = num;
+    } else if (key === "label") {
+      result.label = unquote(rawValue);
+    }
   }
+  return result;
+}
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function unquote(value) {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+/**
+ * Replacement for Starlight's removed `autogenerate` sidebar option. Reads a
+ * directory under `src/content/docs`, parses each entry's front matter for its
+ * `title` and `sidebar.order`, and produces a Starlight `items` array.
+ *
+ * Sorting mirrors Starlight: ascending by `sidebar.order` (unset sorts last),
+ * ties broken alphabetically by label. Subdirectories become collapsed groups.
+ *
+ * @param {string} directory directory relative to `src/content/docs`
+ * @returns {Array<{ label: string, link: string } | { label: string, collapsed: boolean, items: any[] }>}
+ */
+function autogenerate(directory) {
+  const absDir = path.join(DOCS_ROOT, directory);
+  const entries = readdirSync(absDir, { withFileTypes: true });
+
+  /** @type {Array<{ order: number, label: string, entry: any }>} */
+  const items = [];
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const childDir = `${directory}/${entry.name}`;
+      items.push({
+        order: Number.MAX_VALUE,
+        label: entry.name,
+        entry: {
+          label: entry.name,
+          collapsed: true,
+          items: autogenerate(childDir),
+        },
+      });
+      continue;
+    }
+    const ext = path.extname(entry.name).toLowerCase();
+    if (ext !== ".md" && ext !== ".mdx") continue;
+    const slug = entry.name.slice(0, entry.name.length - ext.length);
+    if (slug.toLowerCase() === "index") continue;
+
+    const source = readFileSync(path.join(absDir, entry.name), "utf8");
+    const { title, order, label } = readFrontmatter(source);
+    const displayLabel = label ?? title ?? slug;
+    // Starlight lowercases doc URLs, so build links from the lowercased path.
+    const link = `/${directory}/${slug}`.toLowerCase();
+    items.push({
+      order: order ?? Number.MAX_VALUE,
+      label: displayLabel,
+      entry: { label: displayLabel, link },
+    });
+  }
+
+  items.sort((a, b) =>
+    a.order !== b.order
+      ? a.order - b.order
+      : a.label.localeCompare(b.label, "en", { numeric: true }),
+  );
+
+  return items.map((item) => item.entry);
 }
 
 /**
@@ -194,6 +308,14 @@ export default defineConfig({
   site: "https://v2.alchemy.run",
   prefetch: true,
   trailingSlash: "ignore",
+  // Astro 7 switched the default Markdown processor to Sätteri (native), which
+  // does not run remark/rehype plugins. Starlight and Expressive Code register
+  // such plugins (heading anchors, asides/directives, code highlighting), so we
+  // keep the unified() pipeline as the processor or those features silently
+  // stop running. See https://docs.astro.build/en/guides/upgrade-to/v7/.
+  markdown: {
+    processor: unified(),
+  },
   integrations: [
     react(),
     pagefindIgnoreNoise(),
@@ -248,23 +370,23 @@ export default defineConfig({
             { label: "Part 5: CI/CD", link: "/tutorial/part-5" },
             {
               label: "Cloudflare",
-              autogenerate: { directory: "tutorial/cloudflare" },
               collapsed: true,
+              items: autogenerate("tutorial/cloudflare"),
             },
             {
               label: "AWS",
-              autogenerate: { directory: "tutorial/aws" },
               collapsed: true,
+              items: autogenerate("tutorial/aws"),
             },
           ],
         },
         {
           label: "Concepts",
-          autogenerate: { directory: "concepts" },
+          items: autogenerate("concepts"),
         },
         {
           label: "Guides",
-          autogenerate: { directory: "guides" },
+          items: autogenerate("guides"),
         },
         providersSidebarEntry(),
       ],
