@@ -125,8 +125,8 @@ export const BuildProvider = () =>
             action: Equal.equals(newOutput, output) ? "noop" : "update",
           };
         }),
-        reconcile: ({ news }) =>
-          run(news).pipe(Effect.andThen(makeOutput(news))),
+        reconcile: ({ news, session }) =>
+          run(news, session).pipe(Effect.andThen(makeOutput(news))),
         delete: Effect.fn(function* ({ output }) {
           const outdir = path.resolve(output.outdir);
           if (!(yield* fs.exists(outdir))) return;

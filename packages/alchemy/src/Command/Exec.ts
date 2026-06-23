@@ -57,8 +57,8 @@ export const ExecProvider = () =>
             action: newHash === output.hash.input ? "noop" : "update",
           };
         }),
-        reconcile: Effect.fn(function* ({ news }) {
-          yield* run(news);
+        reconcile: Effect.fn(function* ({ news, session }) {
+          yield* run(news, session);
           return {
             hash: {
               input: news.memo

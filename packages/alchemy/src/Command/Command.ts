@@ -1,13 +1,15 @@
-import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { flow } from "effect/Function";
 import * as Path from "effect/Path";
 import type { PlatformError, SystemError } from "effect/PlatformError";
 import { BadArgument } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
+import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
+import type { ScopedPlanStatusSession } from "../Cli/Cli.ts";
 import { isNonInteractive } from "../Util/interactive.ts";
 
 export interface CommandProps {
@@ -77,8 +79,15 @@ export const Command = (module: string) =>
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const pipe = (
       stream: Stream.Stream<Uint8Array, PlatformError>,
-      tap: (text: string) => Effect.Effect<void>,
-    ) => stream.pipe(Stream.decodeText, Stream.tap(tap), Stream.mkString);
+      tap: (chunk: string) => Effect.Effect<void>,
+    ) =>
+      stream.pipe(
+        Stream.decodeText,
+        Stream.tapSink(
+          Sink.make<string>()(flow(Stream.splitLines, Stream.runForEach(tap))),
+        ),
+        Stream.mkString,
+      );
     const mapPlatformError = (command: string) =>
       Effect.mapError((error: PlatformError | CommandError) =>
         error._tag === "CommandError"
@@ -140,14 +149,14 @@ export const Command = (module: string) =>
 
     return {
       spawn,
-      run: (props: CommandProps) =>
+      run: (props: CommandProps, session: ScopedPlanStatusSession) =>
         spawn(props).pipe(
           Effect.flatMap((child) =>
             Effect.all(
               {
                 exitCode: child.exitCode,
-                stdout: pipe(child.stdout, Console.log),
-                stderr: pipe(child.stderr, Console.error),
+                stdout: pipe(child.stdout, session.note),
+                stderr: pipe(child.stderr, session.note),
               },
               { concurrency: "unbounded" },
             ).pipe(mapPlatformError(props.command)),
