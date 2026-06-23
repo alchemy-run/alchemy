@@ -10,6 +10,7 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { getRawStream } from "../../Util/Stream.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { R2Bucket } from "./R2Bucket.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface R2Object extends Omit<runtime.R2Object, "writeHttpMetadata"> {
   writeHttpMetadata(headers: Headers): Effect.Effect<void>;
@@ -316,7 +317,8 @@ export const ReadWriteHttp = R2BucketBindingLive;
 
 export class R2BucketBindingPolicy extends Binding.Policy<
   R2BucketBindingPolicy,
-  (bucket: R2Bucket) => Effect.Effect<void>
+  (bucket: R2Bucket) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.R2Bucket") {}
 
 export const R2BucketBindingPolicyLive = R2BucketBindingPolicy.layer.succeed(

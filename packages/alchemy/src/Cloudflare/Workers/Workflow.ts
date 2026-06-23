@@ -9,6 +9,7 @@ import { ALCHEMY_PHASE } from "../../Phase.ts";
 import type { PlatformServices } from "../../Platform.ts";
 import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { effectClass, taggedFunction } from "../../Util/effect.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
@@ -115,7 +116,10 @@ export type WorkflowRunServices =
   | WorkerServices
   | ExecutionContext;
 
-export type WorkflowServices = WorkflowRunServices | PlatformServices;
+export type WorkflowServices =
+  | WorkflowRunServices
+  | PlatformServices
+  | RuntimeContext;
 
 /**
  * Metadata stored in the worker export map to distinguish workflow exports

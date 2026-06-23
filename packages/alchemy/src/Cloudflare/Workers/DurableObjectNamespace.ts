@@ -2,6 +2,7 @@ import type * as cf from "@cloudflare/workers-types";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type { Scope } from "effect/Scope";
 import type { HttpServerError } from "effect/unstable/http/HttpServerError";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -84,7 +85,7 @@ export interface DurableObjectNamespace<
 }
 
 export interface DurableObjectShape {
-  fetch?: HttpEffect<DurableObjectState>;
+  fetch?: HttpEffect<DurableObjectState | RuntimeContext>;
   alarm?: (
     alarmInfo?: AlarmInvocationInfo,
   ) => Effect.Effect<void, never, never>;
@@ -145,23 +146,31 @@ export interface DurableObjectNamespaceClass extends Effect.Effect<
           | Dependencies<Self>
           | Effect.Effect<Dependencies<Self>, never, Req>,
       ): Effect.Effect<DurableObjectNamespace<Self>, never, Worker | Req>;
-      make(
+      make<Req = never>(
         impl: Effect.Effect<
-          Effect.Effect<Shape, never, RuntimeContext>,
+          Effect.Effect<
+            Shape,
+            never,
+            RuntimeContext | DurableObjectState | Scope
+          >,
           never,
-          DurableObjectServices
+          DurableObjectServices | Req
         >,
-      ): Layer.Layer<Self, never, Worker>;
+      ): Layer.Layer<Self, never, Worker | Req>;
     };
   };
   <Self>(): {
     <
-      Shape extends MainRpc,
+      Shape extends MainRpc<DurableObjectState>,
       Req extends DurableObjectServices | Container.Application<any> = never,
     >(
       name: string,
       impl: Effect.Effect<
-        Effect.Effect<Shape, never, RuntimeContext>,
+        Effect.Effect<
+          Shape,
+          never,
+          RuntimeContext | DurableObjectState | Scope
+        >,
         never,
         Req
       >,

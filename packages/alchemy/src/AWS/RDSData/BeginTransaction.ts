@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface BeginTransactionOptions {
   secret: Secret;
@@ -58,7 +59,8 @@ export const BeginTransactionLive = Layer.effect(
 
 export class BeginTransactionPolicy extends Binding.Policy<
   BeginTransactionPolicy,
-  (cluster: DBCluster, options: BeginTransactionOptions) => Effect.Effect<void>
+  (cluster: DBCluster, options: BeginTransactionOptions) => Effect.Effect<void>,
+  Providers
 >()("AWS.RDSData.BeginTransaction") {}
 
 export const BeginTransactionPolicyLive = BeginTransactionPolicy.layer.succeed(

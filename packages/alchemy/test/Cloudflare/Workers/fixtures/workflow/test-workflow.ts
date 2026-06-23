@@ -14,7 +14,6 @@ export default class TestWorkflow extends Cloudflare.Workflow<TestWorkflow>()(
   "TestWorkflow",
   Effect.gen(function* () {
     return Effect.fn(function* (input: { value: string }) {
-      console.log("greeted");
       const env = yield* Cloudflare.WorkerEnvironment;
 
       const greeted = yield* Cloudflare.task(

@@ -300,7 +300,9 @@ export type R2Bucket = Resource<
  * });
  * ```
  */
-export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket");
+export const R2Bucket = Resource<R2Bucket>("Cloudflare.R2Bucket")({
+  bind: R2BucketBinding.bind,
+});
 
 export const bindR2 = R2BucketBinding.bind;
 export const ReadWrite = R2BucketBinding.bind;

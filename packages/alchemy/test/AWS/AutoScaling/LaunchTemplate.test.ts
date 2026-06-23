@@ -42,7 +42,7 @@ test.provider.skipIf(!process.env.ALCHEMY_TEST_LAUNCH_TEMPLATE_LIST)(
 
       const template = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* LaunchTemplate<{}>()("ListLaunchTemplate", {
+          return yield* LaunchTemplate("ListLaunchTemplate", {
             launchTemplateName: "alchemy-test-lt-list",
             imageId,
             instanceType: "t3.micro",

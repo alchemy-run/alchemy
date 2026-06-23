@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
+import type { Providers } from "../Providers.ts";
 import { WorkerEnvironment } from "../Workers/Worker.ts";
 import type { D1Database } from "./D1Database.ts";
 import { DatabaseBinding } from "./D1DatabaseBinding.ts";
@@ -168,7 +169,8 @@ export const D1ConnectionLive = Layer.effect(
 
 export class D1ConnectionPolicy extends Binding.Policy<
   D1ConnectionPolicy,
-  (database: D1Database) => Effect.Effect<void>
+  (database: D1Database) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.D1.Connection") {}
 
 export const D1ConnectionPolicyLive =

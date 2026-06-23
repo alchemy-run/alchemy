@@ -6,6 +6,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface CopyObjectRequest extends Omit<
   S3.CopyObjectRequest,
@@ -45,7 +46,8 @@ export const CopyObjectLive = Layer.effect(
 
 export class CopyObjectPolicy extends Binding.Policy<
   CopyObjectPolicy,
-  (bucket: Bucket) => Effect.Effect<void>
+  (bucket: Bucket) => Effect.Effect<void>,
+  Providers
 >()("AWS.S3.CopyObject") {}
 
 export const CopyObjectPolicyLive = CopyObjectPolicy.layer.succeed(

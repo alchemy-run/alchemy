@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Stream } from "./Stream.ts";
 import type { StreamConsumer } from "./StreamConsumer.ts";
+import type { Providers } from "../Providers.ts";
 
 type TaggableResource = Stream | StreamConsumer;
 
@@ -52,7 +53,8 @@ export const ListTagsForResourceLive = Layer.effect(
 
 export class ListTagsForResourcePolicy extends Binding.Policy<
   ListTagsForResourcePolicy,
-  (resource: TaggableResource) => Effect.Effect<void>
+  (resource: TaggableResource) => Effect.Effect<void>,
+  Providers
 >()("AWS.Kinesis.ListTagsForResource") {}
 
 export const ListTagsForResourcePolicyLive =

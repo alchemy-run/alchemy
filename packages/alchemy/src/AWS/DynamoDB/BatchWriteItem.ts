@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
+import type { Providers } from "../Providers.ts";
 
 type BatchWriteItemTables = [Table, ...Table[]];
 
@@ -116,7 +117,8 @@ export const BatchWriteItemLive = Layer.effect(
 
 export class BatchWriteItemPolicy extends Binding.Policy<
   BatchWriteItemPolicy,
-  (...tables: BatchWriteItemTables) => Effect.Effect<void>
+  (...tables: BatchWriteItemTables) => Effect.Effect<void>,
+  Providers
 >()("AWS.DynamoDB.BatchWriteItem") {}
 
 export const BatchWriteItemPolicyLive = BatchWriteItemPolicy.layer.succeed(

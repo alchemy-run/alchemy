@@ -13,6 +13,7 @@ import * as DurationUtil from "../../Util/Duration.ts";
 import { isWorker, isWorkerEvent } from "../Workers/Worker.ts";
 import type { Queue } from "./Queue.ts";
 import { QueueConsumer } from "./QueueConsumer.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * Subscriber settings — the same shape Cloudflare's `QueueConsumer`
@@ -150,7 +151,8 @@ export class QueueEventSource extends Context.Service<
  */
 export class QueueEventSourcePolicy extends Binding.Policy<
   QueueEventSourcePolicy,
-  (queue: Queue, props: MessagesProps) => Effect.Effect<void>
+  (queue: Queue, props: MessagesProps) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.Queue.QueueEventSource") {}
 
 export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.succeed(

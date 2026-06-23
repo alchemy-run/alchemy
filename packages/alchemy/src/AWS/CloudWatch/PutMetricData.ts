@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface PutMetricDataRequest extends cloudwatch.PutMetricDataInput {}
 
@@ -39,7 +40,8 @@ export const PutMetricDataLive = Layer.effect(
 
 export class PutMetricDataPolicy extends Binding.Policy<
   PutMetricDataPolicy,
-  () => Effect.Effect<void>
+  () => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.PutMetricData") {}
 
 export const PutMetricDataPolicyLive = PutMetricDataPolicy.layer.succeed(

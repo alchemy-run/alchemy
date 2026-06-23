@@ -9,6 +9,7 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { AiSearchInstance } from "./AiSearchInstance.ts";
 import type { AiSearchNamespace } from "./AiSearchNamespace.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * Error raised by AI Search runtime binding operations.
@@ -182,7 +183,8 @@ export const AiSearchInstanceBindingLive = Layer.effect(
  */
 export class AiSearchInstanceBindingPolicy extends Binding.Policy<
   AiSearchInstanceBindingPolicy,
-  (instance: AiSearchInstance) => Effect.Effect<void>
+  (instance: AiSearchInstance) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.AiSearch.InstanceBinding") {}
 
 /**
@@ -309,7 +311,8 @@ export const AiSearchNamespaceBindingLive = Layer.effect(
  */
 export class AiSearchNamespaceBindingPolicy extends Binding.Policy<
   AiSearchNamespaceBindingPolicy,
-  (namespace: AiSearchNamespace) => Effect.Effect<void>
+  (namespace: AiSearchNamespace) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.AiSearch.NamespaceBinding") {}
 
 /**

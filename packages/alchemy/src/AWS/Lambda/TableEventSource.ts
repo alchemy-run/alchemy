@@ -14,6 +14,7 @@ import {
 import type { Table } from "../DynamoDB/Table.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export const isDynamoDBStreamEvent = (
   event: any,
@@ -66,7 +67,8 @@ export const TableEventSource = Layer.effect(
 
 export class TableEventSourcePolicy extends Binding.Policy<
   TableEventSourcePolicy,
-  (table: Table, props: StreamsProps) => Effect.Effect<void>
+  (table: Table, props: StreamsProps) => Effect.Effect<void>,
+  Providers
 >()("AWS.DynamoDB.TableEventSource") {}
 
 export const TableEventSourcePolicyLive = TableEventSourcePolicy.layer.effect(

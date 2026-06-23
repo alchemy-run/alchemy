@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import type { Function } from "./Function.ts";
 import { isFunction } from "./Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface InvokeFunctionRequest extends Omit<
   Lambda.InvocationRequest,
@@ -44,7 +45,8 @@ export const InvokeFunctionLive = Layer.effect(
 
 export class InvokeFunctionPolicy extends Binding.Policy<
   InvokeFunctionPolicy,
-  (func: Function) => Effect.Effect<void>
+  (func: Function) => Effect.Effect<void>,
+  Providers
 >()("AWS.Lambda.InvokeFunction") {}
 
 export const InvokeFunctionPolicyLive = InvokeFunctionPolicy.layer.succeed(

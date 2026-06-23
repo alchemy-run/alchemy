@@ -43,6 +43,7 @@ export { inMemoryState, localState } from "./State/index.ts";
 export { AuthProviders } from "./Auth/AuthProvider.ts";
 export { Cli } from "./Cli/Cli.ts";
 export type { Dependencies } from "./Dependencies.ts";
+export type { Named } from "./Named.ts";
 export type * from "./Platform.ts";
 export { Platform } from "./Platform.ts";
 export type { ProviderCollectionLike } from "./Provider.ts";

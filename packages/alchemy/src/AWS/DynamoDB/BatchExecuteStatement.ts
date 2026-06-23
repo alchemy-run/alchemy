@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
+import type { Providers } from "../Providers.ts";
 
 type BatchExecuteStatementTables = [Table, ...Table[]];
 
@@ -76,7 +77,8 @@ export const BatchExecuteStatementLive = Layer.effect(
 
 export class BatchExecuteStatementPolicy extends Binding.Policy<
   BatchExecuteStatementPolicy,
-  (...tables: BatchExecuteStatementTables) => Effect.Effect<void>
+  (...tables: BatchExecuteStatementTables) => Effect.Effect<void>,
+  Providers
 >()("AWS.DynamoDB.BatchExecuteStatement") {}
 
 export const BatchExecuteStatementPolicyLive =

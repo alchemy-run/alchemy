@@ -21,6 +21,7 @@ export interface QueueSender {
 }
 
 import * as Data from "effect/Data";
+import type { Providers } from "../Providers.ts";
 
 export class QueueSendError extends Data.TaggedError("QueueSendError")<{
   message: string;
@@ -122,7 +123,8 @@ export const QueueBindingLive = Layer.effect(
 
 export class QueueBindingPolicy extends Binding.Policy<
   QueueBindingPolicy,
-  (queue: Queue) => Effect.Effect<void>
+  (queue: Queue) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.Queue") {}
 
 export const QueueBindingPolicyLive = QueueBindingPolicy.layer.succeed(

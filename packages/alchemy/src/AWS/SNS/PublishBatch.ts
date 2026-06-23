@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Topic } from "./Topic.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface PublishBatchRequest extends Omit<
   sns.PublishBatchInput,
@@ -43,7 +44,8 @@ export const PublishBatchLive = Layer.effect(
 
 export class PublishBatchPolicy extends Binding.Policy<
   PublishBatchPolicy,
-  (topic: Topic) => Effect.Effect<void>
+  (topic: Topic) => Effect.Effect<void>,
+  Providers
 >()("AWS.SNS.PublishBatch") {}
 
 export const PublishBatchPolicyLive = PublishBatchPolicy.layer.succeed(

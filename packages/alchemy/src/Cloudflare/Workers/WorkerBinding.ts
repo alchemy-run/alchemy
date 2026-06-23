@@ -29,6 +29,7 @@ import { makeRpcStub } from "./Rpc.ts";
 import type { VersionMetadata } from "./VersionMetadata.ts";
 import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
+import type { Providers } from "../Providers.ts";
 
 export type WorkerBinding = Exclude<
   workers.PutScriptRequest["metadata"]["bindings"],
@@ -110,7 +111,8 @@ export const bindWorker = Effect.fnUntraced(function* <Shape, Req = never>(
  */
 export class BindWorkerPolicy extends Binding.Policy<
   BindWorkerPolicy,
-  (worker: Worker) => Effect.Effect<void>
+  (worker: Worker) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.Worker.Bind") {}
 
 export const BindWorkerPolicyLive = BindWorkerPolicy.layer.succeed(

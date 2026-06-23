@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Subscription } from "./Subscription.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface GetSubscriptionAttributesRequest extends Omit<
   sns.GetSubscriptionAttributesInput,
@@ -46,7 +47,8 @@ export const GetSubscriptionAttributesLive = Layer.effect(
 
 export class GetSubscriptionAttributesPolicy extends Binding.Policy<
   GetSubscriptionAttributesPolicy,
-  (subscription: Subscription) => Effect.Effect<void>
+  (subscription: Subscription) => Effect.Effect<void>,
+  Providers
 >()("AWS.SNS.GetSubscriptionAttributes") {}
 
 export const GetSubscriptionAttributesPolicyLive =

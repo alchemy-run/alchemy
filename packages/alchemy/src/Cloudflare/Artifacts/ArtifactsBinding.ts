@@ -6,6 +6,7 @@ import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import { type Artifacts as ArtifactsLike } from "./Artifacts.ts";
+import type { Providers } from "../Providers.ts";
 
 export class ArtifactsError extends Data.TaggedError("ArtifactsError")<{
   message: string;
@@ -138,7 +139,8 @@ export const ArtifactsBindingLive = Layer.effect(
 
 export class ArtifactsBindingPolicy extends Binding.Policy<
   ArtifactsBindingPolicy,
-  (artifacts: ArtifactsLike) => Effect.Effect<void>
+  (artifacts: ArtifactsLike) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.Artifacts.Binding") {}
 
 export const ArtifactsBindingPolicyLive = ArtifactsBindingPolicy.layer.succeed(

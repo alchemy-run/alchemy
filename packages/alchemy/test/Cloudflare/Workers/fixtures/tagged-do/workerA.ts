@@ -8,13 +8,13 @@ import { Counter, CounterLive } from "./object.ts";
 // Tag
 export class WorkerA extends Cloudflare.Worker<WorkerA, {}, Counter>()(
   "WorkerA",
-  {
-    main: import.meta.filename,
-  },
 ) {}
 
 // Layer
 export default WorkerA.make(
+  {
+    main: import.meta.filename,
+  },
   Effect.gen(function* () {
     const counter = yield* Counter;
 

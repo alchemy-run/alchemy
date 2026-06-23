@@ -1,4 +1,3 @@
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import * as Option from "effect/Option";
@@ -38,19 +37,27 @@ export type ResourceConstructor<R extends ResourceLike, Req = never> = {
     id: string,
     props: Effect.Effect<InputProps<R["Props"]>, never, PropsReq>,
   ): Effect.Effect<R, never, PropsReq | Req>;
-  <Self>(): {
-    <const Id extends string>(
-      id: Id,
-    ): Context.Service<Self, R> & {
-      new (): {};
-      make<PropsReq = never>(
-        props:
-          | Input<R["Props"]>
-          | Effect.Effect<InputProps<R["Props"]>, never, PropsReq>,
-      ): Effect.Effect<R, never, PropsReq | Req>;
-    };
-  };
 };
+
+export interface ResourceClassLike<R extends ResourceLike> {
+  Type: R["Type"];
+  Props: R["Props"];
+  Self: Self<R>;
+  Provider: Provider<R>;
+}
+
+export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
+  R,
+  R["Providers"] extends undefined ? Provider<R> : R["Providers"]
+> &
+  Effect.Effect<ResourceConstructor<R>> & {
+    Self: Self<R>;
+    Provider: Provider<R>;
+    ref(
+      id: string,
+      options?: { stage?: string; stack?: string },
+    ): Effect.Effect<R>;
+  };
 
 export type ResourceClassWithMethods<
   R extends ResourceLike,
@@ -67,19 +74,6 @@ export type ResourceClassWithMethods<
       options?: { stage?: string; stack?: string },
     ): Effect.Effect<R>;
   } & Methods;
-
-export type ResourceClass<R extends ResourceLike> = ResourceConstructor<
-  R,
-  R["Providers"] extends undefined ? Provider<R> : R["Providers"]
-> &
-  Effect.Effect<ResourceConstructor<R>> & {
-    Self: Self<R>;
-    Provider: Provider<R>;
-    ref(
-      id: string,
-      options?: { stage?: string; stack?: string },
-    ): Effect.Effect<R>;
-  };
 
 export type LogicalId = string;
 

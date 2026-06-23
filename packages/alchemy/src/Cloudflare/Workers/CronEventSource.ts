@@ -7,6 +7,7 @@ import type { ResourceLike } from "../../Resource.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import type { FunctionContext } from "../../Serverless/Function.ts";
 import { isWorker, isWorkerEvent } from "./Worker.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * Subscribe to Cloudflare Cron Triggers with an Effect handler.
@@ -47,7 +48,8 @@ export class CronEventSource extends Context.Service<
 
 export class CronEventSourcePolicy extends Binding.Policy<
   CronEventSourcePolicy,
-  (expression: string) => Effect.Effect<void>
+  (expression: string) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.Workers.CronEventSource") {}
 
 export const CronEventSourcePolicyLive = CronEventSourcePolicy.layer.succeed(

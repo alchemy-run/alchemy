@@ -4,18 +4,23 @@ import type * as Config from "effect/Config";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
+import type { Dependencies } from "../../Dependencies.ts";
 import type { InputProps } from "../../Input.ts";
-import type { Named } from "../../Named.ts";
+import type { Named, Tag } from "../../Named.ts";
 import {
   Platform,
   type Main,
+  type MainRpc,
+  type MakeShape,
   type PlatformProps,
   type PlatformServices,
 } from "../../Platform.ts";
-import { Resource, type ResourceClass } from "../../Resource.ts";
+import { Resource, type ResourceClassLike } from "../../Resource.ts";
+import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Container } from "../Container/Container.ts";
@@ -120,7 +125,8 @@ export type WorkerServices =
   | CloudflareEnvironment
   | Container.Application<any>;
 
-export type WorkerShape<Req = never> = Main<WorkerServices | Req>;
+export type WorkerShape<Req = never> = Main<WorkerServices | Req> &
+  MainRpc<WorkerServices | Req>;
 
 export type WorkerEnv = Record<
   string,
@@ -730,12 +736,59 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * };
  * ```
  */
-export const Worker: ResourceClass<Worker> &
+export const Worker: ResourceClassLike<Worker> &
   Effect.Effect<
     Worker & WorkerRuntimeContext & RuntimeContext,
     never,
     Worker
   > & {
+    <Self, Shape extends WorkerShape, Deps = never>(): {
+      <const Id extends string>(
+        id: Id,
+      ): Effect.Effect<
+        Worker & Rpc<Self> & Dependencies<Deps>,
+        never,
+        Self | Extract<Deps, Container.Application<any>> | Providers
+      > &
+        Named<Id> & {
+          new (_: never): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
+          of(shape: Shape & WorkerShape): MakeShape<Shape, WorkerShape>;
+          make<PropsReq = never, InitReq = never>(
+            props:
+              | InputProps<WorkerProps>
+              | Effect.Effect<InputProps<WorkerProps>, ConfigError, PropsReq>,
+            impl: Effect.Effect<Shape, ConfigError, InitReq>,
+          ): Layer.Layer<
+            Self,
+            never,
+            | Extract<Deps, Container.Application<any>>
+            | Providers
+            | Exclude<InitReq, Self | WorkerServices>
+          >;
+        };
+    };
+    <Self>(): {
+      <
+        const Id extends string,
+        Shape extends WorkerShape,
+        Req extends
+          | WorkerServices
+          | Container.Application<any>
+          | PlatformServices
+          | Tag,
+      >(
+        id: Id,
+        props: InputProps<WorkerProps>,
+        impl: Effect.Effect<Shape, ConfigError, Req>,
+      ): Effect.Effect<
+        Worker & Rpc<Self>,
+        never,
+        Extract<Req, Container.Application<any>> | Providers
+      > &
+        Named<Id> & {
+          new (): MakeShape<Shape, WorkerShape> & Named<Id> & Tag;
+        };
+    };
     <
       const Bindings extends WorkerBindingProps = {},
       const Assets extends WorkerAssetsConfig | undefined = undefined,
@@ -755,22 +808,24 @@ export const Worker: ResourceClass<Worker> &
           Bindings,
           Assets
         >]: NormalizedBindings<Bindings, Assets>[binding];
-      }>,
+      }> &
+        Rpc<{}>,
       never,
       Req | Providers
     >;
     <
-      Id extends string,
+      const Id extends string,
+      Shape extends WorkerShape,
       Req extends
         | WorkerServices
         | Container.Application<any>
         | PlatformServices,
     >(
       id: string,
-      options: InputProps<WorkerProps>,
-      impl: Effect.Effect<WorkerShape, ConfigError, Req>,
+      props: InputProps<WorkerProps>,
+      impl: Effect.Effect<Shape, ConfigError, Req>,
     ): Effect.Effect<
-      Worker,
+      Worker & Rpc<Shape>,
       never,
       Extract<Req, Container.Application<any>> | Providers
     > &

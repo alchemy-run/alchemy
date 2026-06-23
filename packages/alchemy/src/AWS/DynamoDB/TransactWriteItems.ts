@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
+import type { Providers } from "../Providers.ts";
 
 type TransactWriteItemsTables = [Table, ...Table[]];
 
@@ -182,7 +183,8 @@ export const TransactWriteItemsLive = Layer.effect(
 
 export class TransactWriteItemsPolicy extends Binding.Policy<
   TransactWriteItemsPolicy,
-  (...tables: TransactWriteItemsTables) => Effect.Effect<void>
+  (...tables: TransactWriteItemsTables) => Effect.Effect<void>,
+  Providers
 >()("AWS.DynamoDB.TransactWriteItems") {}
 
 export const TransactWriteItemsPolicyLive =

@@ -6,15 +6,10 @@ import { Sandbox } from "./Sandbox.ts";
 export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
   "Agents",
   Effect.gen(function* () {
-    const sandbox = yield* Cloudflare.Container.bind(Sandbox);
+    const container = yield* Sandbox;
+    const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
-
-      const container = yield* Cloudflare.start(sandbox, {
-        enableInternet: true,
-      });
-
       const sessions = new Map<string, Cloudflare.DurableWebSocket>();
 
       for (const socket of yield* state.getWebSockets()) {
@@ -77,5 +72,11 @@ export default class Agent extends Cloudflare.DurableObjectNamespace<Agent>()(
         }),
       };
     });
-  }),
+  }).pipe(
+    Effect.provide(
+      Cloudflare.layerContainer(Sandbox, {
+        enableInternet: true,
+      }),
+    ),
+  ),
 ) {}

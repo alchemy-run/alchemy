@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DescribeAnomalyDetectorsRequest
   extends cloudwatch.DescribeAnomalyDetectorsInput {}
@@ -42,7 +43,8 @@ export const DescribeAnomalyDetectorsLive = Layer.effect(
 
 export class DescribeAnomalyDetectorsPolicy extends Binding.Policy<
   DescribeAnomalyDetectorsPolicy,
-  () => Effect.Effect<void>
+  () => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.DescribeAnomalyDetectors") {}
 
 export const DescribeAnomalyDetectorsPolicyLive =

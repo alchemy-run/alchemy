@@ -46,7 +46,6 @@ export const Worker = Cloudflare.Worker("Worker", {
     Bucket,
     Queue,
     Counter,
-    ClaudeCode,
   },
 });
 

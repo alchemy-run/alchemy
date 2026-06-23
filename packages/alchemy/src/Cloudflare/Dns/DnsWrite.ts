@@ -27,6 +27,7 @@ import {
   makeDnsClient,
   makeDnsPolicyLive,
 } from "./DnsBinding.ts";
+import type { Providers } from "../Providers.ts";
 
 /** Create-record request, minus the zone id (bound at `.bind(zone)` time). */
 export type CreateRecordRequestInput = Omit<CreateRecordRequest, "zoneId">;
@@ -194,7 +195,8 @@ export class DnsWrite extends Binding.Service<
  */
 export class DnsWritePolicy extends Binding.Policy<
   DnsWritePolicy,
-  (token: AccountApiToken, zone: Zone) => Effect.Effect<void>
+  (token: AccountApiToken, zone: Zone) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.DnsWrite") {}
 
 /** Runtime layer for {@link DnsWrite}. */

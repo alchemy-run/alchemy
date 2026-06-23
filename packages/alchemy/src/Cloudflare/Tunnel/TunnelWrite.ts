@@ -25,6 +25,7 @@ import {
   makeTunnelPolicyLive,
   type TunnelToken,
 } from "./TunnelBinding.ts";
+import type { Providers } from "../Providers.ts";
 
 /** Create-tunnel request, minus the account id (supplied by the binding). */
 export type CreateTunnelRequest = Omit<
@@ -180,7 +181,8 @@ export class TunnelWrite extends Binding.Service<
  */
 export class TunnelWritePolicy extends Binding.Policy<
   TunnelWritePolicy,
-  (token: AccountApiToken) => Effect.Effect<void, never, CloudflareEnvironment>
+  (token: AccountApiToken) => Effect.Effect<void, never, CloudflareEnvironment>,
+  Providers
 >()("Cloudflare.TunnelWrite") {}
 
 /** Runtime layer for {@link TunnelWrite}. */

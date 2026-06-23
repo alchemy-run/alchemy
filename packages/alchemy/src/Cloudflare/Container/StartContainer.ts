@@ -8,6 +8,7 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
+import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { type Fetcher } from "../Fetcher.ts";
 import {
   type Container,
@@ -15,7 +16,7 @@ import {
   type ContainerStartupOptions,
 } from "./Container.ts";
 
-export const layerContainer = <Image extends Container.Decl>(
+export const layerContainer = <Image extends Container.Decl.Any>(
   container: Image,
   options?: ContainerStartupOptions,
 ): Layer.Layer<InstanceType<Image>> => {
@@ -23,18 +24,26 @@ export const layerContainer = <Image extends Container.Decl>(
   const id = container["~alchemy/Id"];
   class Tag extends Context.Service<
     InstanceType<Image>,
-    Container.Instance<InstanceType<Image>>
+    Effect.Effect<
+      Container.Instance<InstanceType<Image>>,
+      never,
+      RuntimeContext
+    >
   >()(`Container<${id}>`) {}
-  return Layer.effect(Tag, startContainer(container, options));
+  return Layer.effect(Tag, Effect.succeed(startContainer(container, options)));
 };
 
 /**
  * Runs the Container in a Durable Object and monitors it, providing a durable fetch and RPC interface to it.
  */
 export const startContainer = Effect.fn(function* <
-  Image extends Container.Decl,
+  Image extends Container.Decl.Any,
 >(containerEff: Image, options?: ContainerStartupOptions) {
-  const container: Container = yield* containerEff;
+  const container: Container = yield* containerEff as any as Effect.Effect<
+    any,
+    never,
+    never
+  >;
 
   const ensureRunning = Effect.gen(function* () {
     if (yield* container.running) return;

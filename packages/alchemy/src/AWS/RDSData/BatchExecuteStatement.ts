@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface BatchExecuteStatementOptions {
   secret: Secret;
@@ -69,7 +70,8 @@ export class BatchExecuteStatementPolicy extends Binding.Policy<
   (
     cluster: DBCluster,
     options: BatchExecuteStatementOptions,
-  ) => Effect.Effect<void>
+  ) => Effect.Effect<void>,
+  Providers
 >()("AWS.RDSData.BatchExecuteStatement") {}
 
 export const BatchExecuteStatementPolicyLive =

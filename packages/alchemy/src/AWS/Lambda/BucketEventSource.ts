@@ -16,6 +16,7 @@ import type {
 import type { S3EventType } from "../S3/S3Event.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * Connects an S3 bucket notification stream to the current Lambda function.
@@ -101,7 +102,8 @@ export class BucketEventSourcePolicy extends Binding.Policy<
   (
     bucket: Bucket,
     props?: NotificationsProps<S3EventType[]>,
-  ) => Effect.Effect<void>
+  ) => Effect.Effect<void>,
+  Providers
 >()("AWS.S3.BucketEventSource") {}
 
 export const BucketEventSourcePolicyLive = BucketEventSourcePolicy.layer.effect(

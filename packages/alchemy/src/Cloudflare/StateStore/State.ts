@@ -21,6 +21,7 @@ import { ALCHEMY_PROFILE, ProfileLive } from "../../Auth/Profile.ts";
 import * as Cloudflare from "../../Cloudflare/Providers.ts";
 import { deploy } from "../../Deploy.ts";
 import * as Output from "../../Output.ts";
+import { RandomProvider } from "../../Random.ts";
 import * as Alchemy from "../../Stack.ts";
 import { StateApi } from "../../State/HttpStateApi.ts";
 import {
@@ -325,7 +326,7 @@ const deployStateStore = ({
       stack: Alchemy.Stack(
         "CloudflareStateStore",
         {
-          providers: Cloudflare.providers(),
+          providers: Layer.mergeAll(Cloudflare.providers(), RandomProvider()),
           state: stateLayer,
         },
         Effect.gen(function* () {

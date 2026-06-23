@@ -17,15 +17,14 @@ export class RemoteContainer extends Cloudflare.Container<RemoteContainer>()(
 export class RemoteContainerObject extends Cloudflare.DurableObjectNamespace<RemoteContainerObject>()(
   "RemoteContainerObject",
   Effect.gen(function* () {
-    const bound = yield* RemoteContainer;
+    const container = yield* RemoteContainer;
 
     return Effect.gen(function* () {
-      const container = yield* Cloudflare.start(bound);
+      const { fetch } = yield* container.getTcpPort(8080);
 
       return {
         hello: () =>
           Effect.gen(function* () {
-            const { fetch } = yield* container.getTcpPort(8080);
             const response = yield* fetch(
               HttpClientRequest.get("http://container/"),
             );
@@ -33,5 +32,11 @@ export class RemoteContainerObject extends Cloudflare.DurableObjectNamespace<Rem
           }),
       };
     });
-  }),
+  }).pipe(
+    Effect.provide(
+      Cloudflare.layerContainer(RemoteContainer, {
+        enableInternet: true,
+      }),
+    ),
+  ),
 ) {}

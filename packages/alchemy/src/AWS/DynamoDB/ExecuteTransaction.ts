@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ExecuteTransactionRequest
   extends DynamoDB.ExecuteTransactionInput {}
@@ -42,7 +43,8 @@ export const ExecuteTransactionLive = Layer.effect(
 
 export class ExecuteTransactionPolicy extends Binding.Policy<
   ExecuteTransactionPolicy,
-  (...tables: ExecuteTransactionTables) => Effect.Effect<void>
+  (...tables: ExecuteTransactionTables) => Effect.Effect<void>,
+  Providers
 >()("AWS.DynamoDB.ExecuteTransaction") {}
 
 export const ExecuteTransactionPolicyLive =

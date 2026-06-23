@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Stream } from "./Stream.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ListShardsRequest extends Omit<
   Kinesis.ListShardsInput,
@@ -43,7 +44,8 @@ export const ListShardsLive = Layer.effect(
 
 export class ListShardsPolicy extends Binding.Policy<
   ListShardsPolicy,
-  (stream: Stream) => Effect.Effect<void>
+  (stream: Stream) => Effect.Effect<void>,
+  Providers
 >()("AWS.Kinesis.ListShards") {}
 
 export const ListShardsPolicyLive = ListShardsPolicy.layer.succeed(

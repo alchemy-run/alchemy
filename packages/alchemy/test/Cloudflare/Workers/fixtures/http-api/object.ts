@@ -31,9 +31,9 @@ export class TaskDOApi extends HttpApi.make("TaskDOApi").add(TasksDOGroup) {}
 export default class TasksObject extends Cloudflare.DurableObjectNamespace<TasksObject>()(
   "TasksObject",
   Effect.gen(function* () {
-    const eff = Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
+    const state = yield* Cloudflare.DurableObjectState;
 
+    return Effect.gen(function* () {
       const tasksGroup = HttpApiBuilder.group(
         TaskDOApi,
         "TasksDO",
@@ -65,7 +65,5 @@ export default class TasksObject extends Cloudflare.DurableObjectNamespace<Tasks
         ),
       };
     });
-
-    return eff;
   }),
 ) {}

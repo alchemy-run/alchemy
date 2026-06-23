@@ -23,6 +23,7 @@ import {
   makeTunnelPolicyLive,
   type TunnelToken,
 } from "./TunnelBinding.ts";
+import type { Providers } from "../Providers.ts";
 
 /** List-tunnels request, minus the account id (supplied by the binding). */
 export type ListTunnelsRequest = Omit<
@@ -154,7 +155,8 @@ export class TunnelRead extends Binding.Service<
  */
 export class TunnelReadPolicy extends Binding.Policy<
   TunnelReadPolicy,
-  (token: AccountApiToken) => Effect.Effect<void, never, CloudflareEnvironment>
+  (token: AccountApiToken) => Effect.Effect<void, never, CloudflareEnvironment>,
+  Providers
 >()("Cloudflare.TunnelRead") {}
 
 /** Runtime layer for {@link TunnelRead}. */

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface DescribeLimitsRequest extends Kinesis.DescribeLimitsInput {}
 
@@ -36,7 +37,8 @@ export const DescribeLimitsLive = Layer.effect(
 
 export class DescribeLimitsPolicy extends Binding.Policy<
   DescribeLimitsPolicy,
-  () => Effect.Effect<void>
+  () => Effect.Effect<void>,
+  Providers
 >()("AWS.Kinesis.DescribeLimits") {}
 
 export const DescribeLimitsPolicyLive = DescribeLimitsPolicy.layer.succeed(

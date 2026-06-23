@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import { PublishBatch } from "./PublishBatch.ts";
 import type { Topic } from "./Topic.ts";
+import type { Providers } from "../Providers.ts";
 
 /** @binding */
 export class TopicSink extends Binding.Service<
@@ -38,7 +39,8 @@ export const TopicSinkLive = Layer.effect(
 
 export class TopicSinkPolicy extends Binding.Policy<
   TopicSinkPolicy,
-  (topic: Topic) => Effect.Effect<void>
+  (topic: Topic) => Effect.Effect<void>,
+  Providers
 >()("AWS.SNS.TopicSink") {}
 
 export const TopicSinkPolicyLive = TopicSinkPolicy.layer.succeed(

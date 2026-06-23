@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface CommitTransactionOptions {
   secret: Secret;
@@ -62,7 +63,11 @@ export const CommitTransactionLive = Layer.effect(
 
 export class CommitTransactionPolicy extends Binding.Policy<
   CommitTransactionPolicy,
-  (cluster: DBCluster, options: CommitTransactionOptions) => Effect.Effect<void>
+  (
+    cluster: DBCluster,
+    options: CommitTransactionOptions,
+  ) => Effect.Effect<void>,
+  Providers
 >()("AWS.RDSData.CommitTransaction") {}
 
 export const CommitTransactionPolicyLive =

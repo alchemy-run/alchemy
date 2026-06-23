@@ -1,4 +1,4 @@
-import type { Shape } from "@distilled.cloud/aws/lex-runtime-v2";
+import type { NodeServices } from "@effect/platform-node/NodeServices";
 import * as ConfigError from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
@@ -10,12 +10,13 @@ import * as Redacted from "effect/Redacted";
 import type { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { HttpClient } from "effect/unstable/http/HttpClient";
+import type { HttpServerRequest } from "effect/unstable/http/HttpServerRequest";
 import type { PolicyLike } from "./Binding.ts";
 import type { Dependencies } from "./Dependencies.ts";
 import type { ExecutionContext } from "./ExecutionContext.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
-import type { Named } from "./Named.ts";
+import type { Named, Tag } from "./Named.ts";
 import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
@@ -42,35 +43,61 @@ export interface PlatformProps {
 
 export type Main<InitServices = never> = void | {
   fetch?:
-    | HttpEffect<InitServices | PlatformServices | RuntimeContext>
+    | HttpEffect<InitServices | PlatformServices | RuntimeContext | Scope>
     | Effect.Effect<
-        HttpEffect<InitServices | PlatformServices | RuntimeContext>,
+        HttpEffect<InitServices | PlatformServices | RuntimeContext | Scope>,
         never,
         InitServices | PlatformServices
       >;
 };
 
-export interface MainRpc<InitServices = RuntimeContext> {
+export interface MainRpc<Req = never> {
   [key: string]:
-    | Effect.Effect<any, any, InitServices | PlatformServices | RuntimeContext>
-    | Stream.Stream<any, any, InitServices | PlatformServices | RuntimeContext>
+    | Effect.Effect<
+        any,
+        any,
+        PlatformServices | RuntimeContext | HttpServerRequest | Scope | Req
+      >
+    | Stream.Stream<
+        any,
+        any,
+        PlatformServices | RuntimeContext | HttpServerRequest | Scope | Req
+      >
     | ((
         ...args: any[]
       ) =>
         | Effect.Effect<
             any,
             any,
-            InitServices | PlatformServices | RuntimeContext
+            PlatformServices | RuntimeContext | Scope | Req
           >
         | Stream.Stream<
             any,
             any,
-            InitServices | PlatformServices | RuntimeContext
+            PlatformServices | RuntimeContext | Scope | Req
           >);
 }
 
+// Strip `void`/`undefined`/`never` from `Shape` before intersecting it with
+// `BaseShape`. This matters when `Shape` fails its `extends MainShape`
+// constraint (e.g. a `fetch` handler that leaks an error): TS clamps `Shape`
+// to the constraint union `void | { fetch: ... }`, and a *distributive*
+// conditional would split that into `BaseShape | ({ fetch } & BaseShape)` — a
+// union. Feeding a union into the `new (_: never): ...` construct signature
+// makes the base class a union type, which surfaces as the cryptic
+// ts(2509) "Base constructor return type ... is not an object type" instead of
+// the real assignability error on the `impl` argument. Excluding `void` here
+// keeps the construct-sig return a single object type, so only the actionable
+// error remains.
+export type MakeShape<Shape, BaseShape> = [
+  Exclude<Shape, void | undefined>,
+] extends [never]
+  ? Exclude<BaseShape, void | undefined>
+  : Exclude<Shape, void | undefined> & Exclude<BaseShape, void | undefined>;
+
 // services provided to the Resource
 export type PlatformServices =
+  | NodeServices
   | ExecutionContext
   | HttpClient
   | PolicyLike
@@ -115,7 +142,9 @@ export interface Platform<
           | Resource["Providers"]
           | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
         >;
-        new (_: never): MakeShape<Shape, BaseShape> & Named<Id>;
+        new (
+          _: never,
+        ): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
         of(shape: Shape & MainShape): MakeShape<Shape, BaseShape>;
       };
   };
@@ -135,11 +164,13 @@ export interface Platform<
       Resource & Rpc<Self>,
       never,
       | Resource["Providers"]
-      | PropsReq
+      | Exclude<PropsReq, Services | PlatformServices | Resource>
       | Exclude<InitReq, Services | PlatformServices | Resource>
     > &
       Named<Id> & {
-        new (_: never): MakeShape<Shape, BaseShape> & Named<Id>;
+        new (
+          _: never,
+        ): MakeShape<Shape, BaseShape> & Named<Id> & Tag<Resource["Type"]>;
       };
 
     <const Id extends string>(
@@ -164,8 +195,7 @@ export interface Platform<
           | Resource["Providers"]
           | Exclude<PropsReq | InitReq, Services | PlatformServices | Resource>
         >;
-        new (_: never): BaseShape & Named<Id>;
-        Shape: Shape;
+        new (_: never): BaseShape & Named<Id> & Tag<Resource["Type"]>;
       };
   };
   <PropsReq = never, InitReq extends Services | PlatformServices = never>(
@@ -200,23 +230,6 @@ export interface Platform<
   > &
     Named<Id>;
 }
-
-// Strip `void`/`undefined`/`never` from `Shape` before intersecting it with
-// `BaseShape`. This matters when `Shape` fails its `extends MainShape`
-// constraint (e.g. a `fetch` handler that leaks an error): TS clamps `Shape`
-// to the constraint union `void | { fetch: ... }`, and a *distributive*
-// conditional would split that into `BaseShape | ({ fetch } & BaseShape)` — a
-// union. Feeding a union into the `new (_: never): ...` construct signature
-// makes the base class a union type, which surfaces as the cryptic
-// ts(2509) "Base constructor return type ... is not an object type" instead of
-// the real assignability error on the `impl` argument. Excluding `void` here
-// keeps the construct-sig return a single object type, so only the actionable
-// error remains.
-type MakeShape<Shape, BaseShape> = [Exclude<Shape, void | undefined>] extends [
-  never,
-]
-  ? BaseShape
-  : Exclude<Shape, void | undefined> & BaseShape;
 
 export const Platform = <
   R extends ResourceLike<

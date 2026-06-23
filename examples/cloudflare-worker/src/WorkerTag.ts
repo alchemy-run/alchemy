@@ -5,7 +5,9 @@ import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 // Tagged Worker DX: declare the class first (lightweight identifier),
 // then provide the runtime implementation in a second `.make()` call.
 // This mirrors the pattern in the README/docstring on Cloudflare.Worker.
-export class WorkerTag extends Cloudflare.Worker<WorkerTag>()("WorkerTag") {}
+export class WorkerTag extends Cloudflare.Worker<WorkerTag, {}>()(
+  "WorkerTag",
+) {}
 
 export default WorkerTag.make(
   {

@@ -9,6 +9,7 @@ import type * as HttpServerRequest from "effect/unstable/http/HttpServerRequest"
 import type * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import type { InputProps } from "../../Input.ts";
 import type { Named } from "../../Named.ts";
+import type { ResourceClassLike } from "../../Resource.ts";
 import type { Rpc } from "../../Rpc.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import type { Props } from "../../State/ResourceState.ts";
@@ -16,7 +17,10 @@ import { effectClass } from "../../Util/effect.ts";
 import type { Fetcher } from "../Fetcher.ts";
 import type { Providers } from "../Providers.ts";
 import { type WorkerShape } from "../Workers/Worker.ts";
-import type { ContainerApplicationProps } from "./ContainerApplication.ts";
+import type {
+  ContainerApplication,
+  ContainerApplicationProps,
+} from "./ContainerApplication.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 export const ContainerTypeId = "Cloudflare.Container";
@@ -354,11 +358,11 @@ export type Container<Id extends string = string> = Named<Id> & {
  * );
  * ```
  */
-export const Container: {
+export const Container: ResourceClassLike<ContainerApplication> & {
   <const Id extends string>(
     id: Id,
     props: InputProps<ExternalContainerProps | RemoteContainerProps>,
-  ): Container.Decl<Container<Id>, {}, Id, never>;
+  ): Container.Decl<Container<Id>, {}, Id>;
   <Self>(): {
     <
       const Id extends string,
@@ -369,7 +373,9 @@ export const Container: {
     ): Container.Decl<Self, {}, Id>;
   };
   <Self, Shape>(): {
-    <const Id extends string>(id: Id): Container.Decl<Self, Shape, Id>;
+    <const Id extends string>(
+      id: Id,
+    ): Container.Decl<Self, Shape, Id, Container.Application<Self>>;
   };
 } = ((...args: any[]) => {
   if (args.length === 0) {
@@ -407,12 +413,9 @@ export declare namespace Container {
     Self = any,
     Shape = any,
     Id extends string = string,
-    Req = Self,
+    Req = never,
   >
-    extends
-      Effect.Effect<Self, never, Providers | Req | Application<Self>>,
-      Rpc<Shape>,
-      Named<Id> {
+    extends Effect.Effect<Self, never, Providers | Req>, Rpc<Shape>, Named<Id> {
     new (): Container<Id> & Shape;
     make: <InitReq = never, WorkerReq = never>(
       props: Props,
@@ -422,6 +425,10 @@ export declare namespace Container {
         InitReq
       >,
     ) => Layer.Layer<Application<Self>, never, Providers>;
+    of(shape: Shape & WorkerShape): Shape;
+  }
+  export namespace Decl {
+    export type Any = Decl<any, any, string, any>;
   }
 
   export interface Application<Self> {

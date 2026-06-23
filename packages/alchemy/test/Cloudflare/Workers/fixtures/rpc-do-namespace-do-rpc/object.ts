@@ -16,8 +16,9 @@ export default class RpcCounterObject extends Cloudflare.RpcDurableObjectNamespa
   "RpcCounterObject",
   { schema: CounterRpcs },
   Effect.gen(function* () {
+    const state = yield* Cloudflare.DurableObjectState;
+
     return Effect.gen(function* () {
-      const state = yield* Cloudflare.DurableObjectState;
       let count = (yield* state.storage.get<number>("count")) ?? 0;
 
       const handlers = CounterRpcs.toLayer({

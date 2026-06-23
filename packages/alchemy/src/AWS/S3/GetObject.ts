@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Bucket } from "./Bucket.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface GetObjectRequest extends Omit<S3.GetObjectRequest, "Bucket"> {}
 
@@ -42,7 +43,8 @@ export const GetObjectLive = Layer.effect(
 
 export class GetObjectPolicy extends Binding.Policy<
   GetObjectPolicy,
-  (bucket: Bucket) => Effect.Effect<void>
+  (bucket: Bucket) => Effect.Effect<void>,
+  Providers
 >()("AWS.S3.GetObject") {}
 
 export const GetObjectPolicyLive = GetObjectPolicy.layer.succeed(

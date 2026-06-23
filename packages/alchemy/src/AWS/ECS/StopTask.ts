@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import { isTask } from "./Task.ts";
 import type { Cluster } from "./Cluster.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface StopTaskRequest extends Omit<ECS.StopTaskRequest, "cluster"> {}
 
@@ -41,7 +42,8 @@ export const StopTaskLive = Layer.effect(
 
 export class StopTaskPolicy extends Binding.Policy<
   StopTaskPolicy,
-  (cluster: Cluster) => Effect.Effect<void>
+  (cluster: Cluster) => Effect.Effect<void>,
+  Providers
 >()("AWS.ECS.StopTask") {}
 
 export const StopTaskPolicyLive = StopTaskPolicy.layer.succeed(

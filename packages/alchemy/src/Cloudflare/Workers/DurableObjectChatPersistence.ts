@@ -88,7 +88,6 @@ export const DurableObjectChatPersistence = Layer.effect(BackingPersistence)(
 
     return BackingPersistence.of({
       make: (storeId) =>
-        // @ts-expect-error - this is a test
         Effect.sync(() => {
           const prefixed = (k: string) => `${storeId}:${k}`;
           return {
@@ -108,21 +107,32 @@ export const DurableObjectChatPersistence = Layer.effect(BackingPersistence)(
                       object | undefined
                     >,
                 ),
+                Effect.provide(RuntimeContext.phantom),
               ),
             set: (key, value, _ttl) =>
               storage
                 .put(prefixed(key), value)
-                .pipe(Effect.mapError(wrapErr("set", key))),
+                .pipe(
+                  Effect.mapError(wrapErr("set", key)),
+                  Effect.provide(RuntimeContext.phantom),
+                ),
             setMany: (entries) =>
               storage
                 .put(
                   Object.fromEntries(entries.map(([k, v]) => [prefixed(k), v])),
                 )
-                .pipe(Effect.mapError(wrapErr("setMany"))),
+                .pipe(
+                  Effect.mapError(wrapErr("setMany")),
+                  Effect.provide(RuntimeContext.phantom),
+                ),
             remove: (key) =>
               storage
                 .delete(prefixed(key))
-                .pipe(Effect.asVoid, Effect.mapError(wrapErr("remove", key))),
+                .pipe(
+                  Effect.asVoid,
+                  Effect.mapError(wrapErr("remove", key)),
+                  Effect.provide(RuntimeContext.phantom),
+                ),
             clear: storage.list({ prefix: `${storeId}:` }).pipe(
               Effect.flatMap((map) => {
                 const ks = [...map.keys()];
@@ -130,6 +140,7 @@ export const DurableObjectChatPersistence = Layer.effect(BackingPersistence)(
                 return Effect.asVoid(storage.delete(ks));
               }),
               Effect.mapError(wrapErr("clear")),
+              Effect.provide(RuntimeContext.phantom),
             ),
           } satisfies BackingPersistenceStore;
         }),

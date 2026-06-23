@@ -7,7 +7,6 @@ import { ReleaseVersion } from "./ReleaseVersion.ts";
 export default Cloudflare.Worker(
   "ReleaseService",
   { main: import.meta.filename },
-  //
   Effect.gen(function* () {
     const versions = yield* ReleaseVersion;
 
@@ -20,11 +19,6 @@ export default Cloudflare.Worker(
       const isRelease =
         event.payload.ref === "refs/heads/main" &&
         title.startsWith("chore(release):");
-
-      // map.set(
-      //   event.payload.head_commit!.id,
-      //   event.payload.head_commit!.id,
-      // );
 
       return isRelease
         ? versions.getByName(event.payload.head_commit!.id).generateBlog({
@@ -45,13 +39,3 @@ export default Cloudflare.Worker(
     };
   }).pipe(Effect.provide(Cloudflare.GitHubRepositoryEventSourceLive)),
 );
-
-const __ = Cloudflare.Worker(
-  "ReleaseService",
-  { main: import.meta.filename },
-  Effect.gen(function* () {
-    const versions = yield* ReleaseVersion;
-  }),
-);
-
-type __S = Effect.Services<typeof __>;

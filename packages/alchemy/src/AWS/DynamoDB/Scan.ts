@@ -5,6 +5,7 @@ import * as Binding from "../../Binding.ts";
 import * as Output from "../../Output.ts";
 import { isFunction } from "../Lambda/Function.ts";
 import type { Table } from "./Table.ts";
+import type { Providers } from "../Providers.ts";
 
 export interface ScanRequest extends Omit<DynamoDB.ScanInput, "TableName"> {}
 
@@ -42,7 +43,8 @@ export const ScanLive = Layer.effect(
 
 export class ScanPolicy extends Binding.Policy<
   ScanPolicy,
-  <T extends Table>(table: T) => Effect.Effect<void>
+  <T extends Table>(table: T) => Effect.Effect<void>,
+  Providers
 >()("AWS.DynamoDB.Scan") {}
 
 export const ScanPolicyLive = ScanPolicy.layer.succeed(

@@ -7,6 +7,7 @@ import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { KVNamespace } from "./KVNamespace.ts";
+import type { Providers } from "../Providers.ts";
 
 export class KVNamespaceError extends Data.TaggedError("KVNamespaceError")<{
   message: string;
@@ -281,7 +282,8 @@ export const KVNamespaceBindingLive = Layer.effect(
 
 export class KVNamespaceBindingPolicy extends Binding.Policy<
   KVNamespaceBindingPolicy,
-  (bucket: KVNamespace) => Effect.Effect<void>
+  (bucket: KVNamespace) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.KVNamespace") {}
 
 export const KVNamespaceBindingPolicyLive =

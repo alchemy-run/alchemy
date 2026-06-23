@@ -7,6 +7,7 @@ import type { ResourceLike } from "../../Resource.ts";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { isWorker, WorkerEnvironment } from "../Workers/Worker.ts";
 import type { SendEmail } from "./SendEmail.ts";
+import type { Providers } from "../Providers.ts";
 
 /**
  * Email body shape for the builder-form `send` call. Either `text`, `html`,
@@ -102,7 +103,8 @@ export const SendEmailBindingLive = Layer.effect(
 
 export class SendEmailBindingPolicy extends Binding.Policy<
   SendEmailBindingPolicy,
-  (sender: SendEmail) => Effect.Effect<void>
+  (sender: SendEmail) => Effect.Effect<void>,
+  Providers
 >()("Cloudflare.SendEmail.Binding") {}
 
 export const SendEmailBindingPolicyLive = SendEmailBindingPolicy.layer.succeed(

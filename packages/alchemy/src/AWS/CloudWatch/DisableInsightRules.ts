@@ -7,6 +7,7 @@ import {
   sortInsightRuleResources,
   type InsightRuleResource,
 } from "./binding-common.ts";
+import type { Providers } from "../Providers.ts";
 
 type InsightRules = [InsightRuleResource, ...InsightRuleResource[]];
 
@@ -47,7 +48,8 @@ export const DisableInsightRulesLive = Layer.effect(
 
 export class DisableInsightRulesPolicy extends Binding.Policy<
   DisableInsightRulesPolicy,
-  (...rules: InsightRules) => Effect.Effect<void>
+  (...rules: InsightRules) => Effect.Effect<void>,
+  Providers
 >()("AWS.CloudWatch.DisableInsightRules") {}
 
 export const DisableInsightRulesPolicyLive =

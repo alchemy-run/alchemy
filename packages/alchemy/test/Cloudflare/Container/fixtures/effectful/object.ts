@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { MyContainer } from "./container.ts";
-import { Storage, StorageLive } from "./storage.ts";
+import { Storage } from "./storage.ts";
 
 export class Object extends Cloudflare.DurableObjectNamespace<Object>()(
   "Object",
@@ -39,7 +39,6 @@ export class Object extends Cloudflare.DurableObjectNamespace<Object>()(
         Cloudflare.layerContainer(MyContainer, {
           enableInternet: true,
         }),
-        StorageLive,
       ),
     ),
   ),
