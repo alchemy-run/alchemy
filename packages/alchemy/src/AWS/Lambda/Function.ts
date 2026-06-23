@@ -111,6 +111,7 @@ export interface FunctionProps extends PlatformProps {
    * @default "x86_64"
    */
   architecture?: FunctionArchitecture;
+  memorySize?: number;
   build?: FunctionBuildOptions;
   uploadSourceMap?: boolean;
   env?: Record<string, any>;
@@ -1036,6 +1037,7 @@ export default await Effect.runPromise(handlerEffect)
           Code: codeLocation,
           Runtime: news.runtime ?? "nodejs22.x",
           Architectures: [news.architecture ?? "x86_64"],
+          MemorySize: news.memorySize,
           Environment: runtimeEnv
             ? {
                 Variables: {
