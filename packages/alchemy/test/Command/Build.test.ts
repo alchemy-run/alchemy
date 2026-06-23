@@ -33,7 +33,6 @@ test.provider(
         stack.deploy(
           Command.Build("test-build", {
             command: "bash build.sh",
-            shell: true,
             cwd: fixture.cwd,
             outdir: "dist",
           }),
@@ -112,7 +111,6 @@ test.provider("rebuilds memoized output if outdir is missing", (stack) =>
       stack.deploy(
         Command.Build("test-build", {
           command: "bash build.sh",
-          shell: true,
           cwd: fixture.cwd,
           outdir: "dist",
         }),
