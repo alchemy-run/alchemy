@@ -389,7 +389,6 @@ export const Platform = <
                       }) ?? Effect.die("No serve handler"))
                     : Effect.void,
                 ),
-
                 Effect.provide(
                   Layer.effect(
                     ConfigProvider.ConfigProvider,

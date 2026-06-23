@@ -5,8 +5,8 @@ export type Parameter<
   Schema extends S.Top = S.Top,
   Refs extends any[] = any[],
 > = {
-  "alchemy/Kind": "Param";
-  "alchemy/Name": Name;
+  "~alchemy/Kind": "Param";
+  "~alchemy/Name": Name;
   schema: Schema;
   template: TemplateStringsArray;
   refs: Refs;
@@ -49,8 +49,8 @@ const makeParameter = (
   refs: any[],
 ) =>
   Object.assign(function () {}, {
-    "alchemy/Kind": "Param",
-    "alchemy/Name": name,
+    "~alchemy/Kind": "Param",
+    "~alchemy/Name": name,
     schema,
     template,
     refs,

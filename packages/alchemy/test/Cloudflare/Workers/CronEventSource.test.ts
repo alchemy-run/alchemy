@@ -20,7 +20,7 @@ const logLevel = Effect.provideService(
 const stack = beforeAll(deploy(Stack));
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
-test.skipIf(!!process.env.NO_SLOW_TESTS || !!process.env.FAST)(
+test.skipIf(!!process.env.FAST)(
   "deployed worker fires the scheduled handler on its cron trigger",
   Effect.gen(function* () {
     const { url, crons } = yield* stack;

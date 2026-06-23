@@ -4,7 +4,7 @@ import type { RuntimeContext } from "../RuntimeContext.ts";
 import type { Parameter } from "./Parameter.ts";
 
 export type ToolParameters<Refs> = {
-  [toolName in Extract<Refs, Parameter>["alchemy/Name"]]: Extract<
+  [toolName in Extract<Refs, Parameter>["~alchemy/Name"]]: Extract<
     Refs,
     Parameter
   >["schema"]["Type"];
@@ -14,8 +14,8 @@ export interface Tool<
   Name extends string = string,
   Refs extends any[] = any[],
 > {
-  "alchemy/Kind": "Tool";
-  "alchemy/Name": Name;
+  "~alchemy/Kind": "Tool";
+  "~alchemy/Name": Name;
   refs: Refs;
   template: TemplateStringsArray;
   params: {
@@ -40,7 +40,7 @@ export interface ToolImpl<
   Err = any,
   Req = any,
 > {
-  "alchemy/Kind": "ToolImpl";
+  "~alchemy/Kind": "ToolImpl";
   tool: T;
   impl: (props: T["params"]) => Effect.Effect<any, Err, Req>;
   new (): {};
@@ -90,8 +90,8 @@ const makeTool = (name: string, template: TemplateStringsArray, refs: any[]) =>
   Object.assign(
     function (impl: (props: any) => Effect.Effect<any, any, any>) {},
     {
-      "alchemy/Kind": "Tool",
-      "alchemy/Name": name,
+      "~alchemy/Kind": "Tool",
+      "~alchemy/Name": name,
       refs,
       template,
     },

@@ -30,7 +30,7 @@ export default class HttpApiTestWorker extends Cloudflare.Worker<HttpApiTestWork
     main: import.meta.filename,
   },
   Effect.gen(function* () {
-    const tasks = yield* Cloudflare.R2Bucket.bind(Bucket);
+    const tasks = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
     const tasksDO = yield* TasksObject;
 
     const getTaskDO = (id: string = "default") =>

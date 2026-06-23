@@ -14,14 +14,15 @@ export class MyContainer extends Cloudflare.Container<
 export default MyContainer.make(
   {
     main: import.meta.filename,
+    dockerfile: "FROM oven/bun:latest",
   },
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.ReadWrite(Storage);
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Storage);
 
     return {
       ping: () => Effect.succeed("pong"),
       fetch: Effect.gen(function* () {
-        bucket.get("test.txt");
+        yield* bucket.get("test.txt").pipe(Effect.orDie);
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://container");
         if (url.pathname === "/health") {
@@ -30,5 +31,5 @@ export default MyContainer.make(
         return HttpServerResponse.text("hello from effectful container");
       }),
     };
-  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteHttp)),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketHttp)),
 );

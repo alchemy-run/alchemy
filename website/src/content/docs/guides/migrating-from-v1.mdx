@@ -155,7 +155,7 @@ import { Bucket } from "./bucket.ts";
 +export default Cloudflare.Worker("Worker",
 +  { main: import.meta.filename },
 +  Effect.gen(function* () {
-+    const bucket = yield* Cloudflare.R2Bucket.bind(Bucket);
++    const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
 +
 +    return {
 +      fetch: Effect.gen(function* () {

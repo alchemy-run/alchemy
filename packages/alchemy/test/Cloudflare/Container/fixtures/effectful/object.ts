@@ -8,17 +8,16 @@ import { Storage } from "./storage.ts";
 export class Object extends Cloudflare.DurableObjectNamespace<Object>()(
   "Object",
   Effect.gen(function* () {
-    const bucket = yield* Cloudflare.R2.ReadWrite(Storage);
+    const bucket = yield* Cloudflare.R2.ReadWriteBucket(Storage);
     const container = yield* MyContainer;
     const state = yield* Cloudflare.DurableObjectState;
 
     return Effect.gen(function* () {
-      const conn = yield* container.getTcpPort(3000);
-      yield* state.getWebSockets();
-
       yield* state.storage.sql.exec(
         "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY, name TEXT)",
       );
+
+      const conn = yield* container.getTcpPort(3000);
 
       return {
         get: (key: string) => bucket.get(key),
@@ -35,7 +34,7 @@ export class Object extends Cloudflare.DurableObjectNamespace<Object>()(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Cloudflare.R2.ReadWriteBinding,
+        Cloudflare.R2.ReadWriteBucketBinding,
         Cloudflare.layerContainer(MyContainer, {
           enableInternet: true,
         }),

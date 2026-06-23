@@ -21,7 +21,7 @@ export interface Agent<
   [Symbol.iterator](): Effect.EffectIterator<
     Effect.Effect<Service, never, Req>
   >;
-  "alchemy/Kind": "Agent";
+  "~alchemy/Kind": "Agent";
   name: Name;
   refs: Refs;
   req: Services<Refs>;
@@ -70,8 +70,8 @@ const makeAgent = (name: string, template: TemplateStringsArray, refs: any[]) =>
       }),
     ),
     {
-      "alchemy/Kind": "Agent",
-      "alchemy/Name": name,
+      "~alchemy/Kind": "Agent",
+      "~alchemy/Name": name,
       refs,
       template,
     },

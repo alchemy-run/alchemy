@@ -87,7 +87,7 @@ describe("effectful container (main)", () => {
     timeout: HOOK_TIMEOUT,
   });
 
-  test.skipIf(!!process.env.NO_SLOW_TESTS)(
+  test.skipIf(!!process.env.FAST)(
     "deploys and serves over its TCP port",
     Effect.gen(function* () {
       const { url } = yield* stack;
@@ -110,7 +110,7 @@ describe("external container (context/dockerfile)", () => {
     timeout: HOOK_TIMEOUT,
   });
 
-  test.skipIf(!!process.env.NO_SLOW_TESTS)(
+  test.skipIf(!!process.env.FAST)(
     "builds the user Dockerfile and serves it over its TCP port",
     Effect.gen(function* () {
       const { url } = yield* stack;
@@ -133,7 +133,7 @@ describe("remote container (image)", () => {
     timeout: HOOK_TIMEOUT,
   });
 
-  test.skipIf(!!process.env.NO_SLOW_TESTS)(
+  test.skipIf(!!process.env.FAST)(
     "pulls and re-pushes the remote image and serves it over its TCP port",
     Effect.gen(function* () {
       const { url } = yield* stack;

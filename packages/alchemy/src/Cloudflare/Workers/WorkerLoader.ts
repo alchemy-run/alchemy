@@ -54,15 +54,15 @@ export interface WorkerLoaderEffect extends Effect.Effect<
   never,
   WorkerEnvironment | Worker
 > {
-  "alchemy/Kind": WorkerLoaderTypeId;
+  "~alchemy/Kind": WorkerLoaderTypeId;
   name: string;
 }
 
 export const isWorkerLoader = (value: unknown): value is WorkerLoader =>
   typeof value === "object" &&
   value !== null &&
-  "alchemy/Kind" in value &&
-  (value as WorkerLoaderEffect)["alchemy/Kind"] === WorkerLoaderTypeId;
+  "~alchemy/Kind" in value &&
+  (value as WorkerLoaderEffect)["~alchemy/Kind"] === WorkerLoaderTypeId;
 
 export interface WorkerLoaderClass extends Context.Service<
   WorkerLoader,
@@ -281,8 +281,8 @@ export const WorkerLoader: WorkerLoaderClass = Object.assign(
           } satisfies WorkerLoader;
         }),
         {
-          kind: WorkerLoaderTypeId,
-          name,
+          "~alchemy/Name": name,
+          "~alchemy/Kind": WorkerLoaderTypeId,
         },
       ),
   ),

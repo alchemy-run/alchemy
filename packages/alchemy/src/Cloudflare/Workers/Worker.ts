@@ -603,7 +603,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * @example Binding and using R2
  * ```typescript
  * // init
- * const bucket = yield* Cloudflare.R2Bucket.bind(MyBucket);
+ * const bucket = yield* Cloudflare.R2.ReadWrite(MyBucket);
  *
  * return {
  *   fetch: Effect.gen(function* () {

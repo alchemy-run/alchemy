@@ -399,7 +399,7 @@ export const Container: ResourceClassLike<ContainerApplication> & {
     const [id, props] = args as [string, any];
     const resource = ContainerPlatform(id, props);
     // for containers, we want the `yield* ContainerTag` to act as the Binding
-    const eff = ContainerPlatform.bind(resource);
+    const eff = effectClass(ContainerPlatform.bind(resource));
     return Object.assign(eff, {
       "~alchemy/Id": id,
       // yield* MyContainer.Application to get the ContainerApplication Resource Outputs
