@@ -255,22 +255,26 @@ export const CertificateProvider = () =>
       });
 
       const waitForChange = Effect.fn(function* (changeId: string) {
-        return yield* route53.getChange({ Id: changeId }).pipe(
-          Effect.map((response) => response.ChangeInfo),
-          Effect.flatMap((changeInfo) =>
-            changeInfo.Status === "INSYNC"
-              ? Effect.succeed(changeInfo)
-              : Effect.fail(new Error("Route53ChangePending")),
-          ),
-          Effect.retry({
-            while: (error) =>
-              error instanceof Error &&
-              error.message === "Route53ChangePending",
-            schedule: Schedule.fixed("2 seconds").pipe(
-              Schedule.both(Schedule.recurs(60)),
+        return yield* route53
+          .getChange({
+            Id: changeId.replace(/^\/change\//, ""),
+          })
+          .pipe(
+            Effect.map((response) => response.ChangeInfo),
+            Effect.flatMap((changeInfo) =>
+              changeInfo.Status === "INSYNC"
+                ? Effect.succeed(changeInfo)
+                : Effect.fail(new Error("Route53ChangePending")),
             ),
-          }),
-        );
+            Effect.retry({
+              while: (error) =>
+                error instanceof Error &&
+                error.message === "Route53ChangePending",
+              schedule: Schedule.fixed("2 seconds").pipe(
+                Schedule.both(Schedule.recurs(60)),
+              ),
+            }),
+          );
       });
 
       const upsertValidationRecords = Effect.fn(function* (
