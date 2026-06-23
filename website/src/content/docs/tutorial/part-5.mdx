@@ -250,7 +250,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install
       - name: Deploy
-        run: bun alchemy deploy --stage ${{ env.STAGE }}
+        run: bun alchemy deploy --stage ${{ env.STAGE }} --yes
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -275,7 +275,7 @@ jobs:
             exit 1
           fi
       - name: Destroy Preview
-        run: bun alchemy destroy --stage ${{ env.STAGE }}
+        run: bun alchemy destroy --stage ${{ env.STAGE }} --yes
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
