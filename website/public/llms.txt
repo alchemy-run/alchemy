@@ -301,11 +301,6 @@ Per-resource API reference, generated from JSDoc on the source `.ts` files via `
 - [View](https://v2.alchemy.run/providers/axiom/view) — An Axiom saved view — a named, shareable APL query. Useful for building starter dashboards, providing canned \"open in Axiom\" links from your app, or pinning common investigations the team revisits.
 - [VirtualField](https://v2.alchemy.run/providers/axiom/virtualfield) — An Axiom virtual field — a saved APL expression that appears as a derived column on a dataset at query time. Use these to standardise common computations (status classes, latency buckets, parsed JSON paths) so dashboards and monitors don't have to redefine them.
 
-### Build
-
-- [Command](https://v2.alchemy.run/providers/build/command) — A Build resource that runs a shell command and produces an output asset. Input files are hashed using globs to avoid redundant rebuilds.
-- [DevServer](https://v2.alchemy.run/providers/build/devserver) — A long-lived shell process scoped to a stack instance, started during `alchemy dev` and restarted when inputs change. During deploy this is a no-op — `DevServer` resources only run in dev mode.
-
 ### Cloudflare
 
 - [AccessApplication](https://v2.alchemy.run/providers/cloudflare/access/accessapplication) — A Cloudflare Zero Trust Access application.
@@ -580,6 +575,12 @@ Per-resource API reference, generated from JSDoc on the source `.ts` files via `
 - [ZoneTransferOutgoing](https://v2.alchemy.run/providers/cloudflare/dns/zonetransferoutgoing) — The outgoing zone-transfer configuration of a primary zone (`/zones/{zone_id}/secondary_dns/outgoing`) — links the zone to the {@link ZoneTransferPeer | peers} Cloudflare NOTIFYs and serves AXFR/IXFR to, and toggles transfers on or off via the dedicated enable/disable endpoints.
 - [ZoneTransferPeer](https://v2.alchemy.run/providers/cloudflare/dns/zonetransferpeer) — A Secondary DNS zone-transfer peer (`/accounts/{account_id}/secondary_dns/peers`) — an external nameserver Cloudflare exchanges zone transfers with. Link peers to a zone via {@link ZoneTransferIncoming} (secondary zones) or {@link ZoneTransferOutgoing} (primary zones).
 - [ZoneTransferTsig](https://v2.alchemy.run/providers/cloudflare/dns/zonetransfertsig) — A Secondary DNS TSIG key (`/accounts/{account_id}/secondary_dns/tsigs`) — shared-secret authentication for zone transfers between Cloudflare and external nameservers. Reference it from a {@link ZoneTransferPeer} via `tsigId`.
+
+### Command
+
+- [Build](https://v2.alchemy.run/providers/command/build) — A `Build` runs a shell command that produces an output asset (a file or directory) and tracks that asset in state. Unlike `Exec`, a `Build` has an output contract: `reconcile` verifies the command actually produced `outdir` and exposes its location so downstream resources (e.g. a `Cloudflare.Worker`'s static assets) can consume it.
+- [Dev](https://v2.alchemy.run/providers/command/dev) — A long-lived shell process scoped to a stack instance, started during `alchemy dev` and restarted when its inputs change. During `alchemy deploy` this is a no-op — `Dev` resources only run in dev mode.
+- [Exec](https://v2.alchemy.run/providers/command/exec) — An `Exec` runs a shell command purely for its side effects — it has no output contract. Unlike `Build`, it does not produce or track an output asset; `reconcile` runs the command and the resource succeeds as long as the command exits with code `0` (a non-zero exit fails with a `CommandError`).
 
 ### Drizzle
 

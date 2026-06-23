@@ -14,9 +14,9 @@ import * as Stream from "effect/Stream";
 import * as crypto from "node:crypto";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Artifacts from "../../Artifacts.ts";
-import { hashDirectory, type MemoOptions } from "../../Build/Memo.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import type { ScopedPlanStatusSession } from "../../Cli/Cli.ts";
+import { hashDirectory, type MemoOptions } from "../../Command/Memo.ts";
 import { isResolved } from "../../Diff.ts";
 import type { InputProps } from "../../Input.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
@@ -325,7 +325,7 @@ export interface WorkerProps<
    * Each Worker is served on its own port.
    *
    * Use `{ mode: "external" }` to skip starting a local Worker entirely —
-   * useful when an external dev server (e.g. one spawned via `Build.DevServer`)
+   * useful when an external dev server (e.g. one spawned via `Command.Dev`)
    * is serving the content this Worker would otherwise host.
    */
   dev?:
@@ -1416,7 +1416,7 @@ export const LiveWorkerProvider = () =>
           skipAssetsRead: prebuiltAssets?.skip,
         });
         // When the caller supplied a precomputed hash (e.g. via
-        // `Build.Command`), store *that* hash in output state so the
+        // `Command.Build`), store *that* hash in output state so the
         // next diff can short-circuit by comparing it directly. The
         // hash that `readAssets` produces is the manifest-derived
         // hash, which is shaped differently from any upstream
@@ -1876,7 +1876,7 @@ export const LiveWorkerProvider = () =>
         }
         // We deliberately don't read the assets directory during diff.
         // For `AssetsWithHash` (the documented contract) the upstream
-        // `Build.Command` already gave us an authoritative hash — we
+        // `Command.Build` already gave us an authoritative hash — we
         // just compare strings. Reading the directory here would
         // (a) hash the same tree twice per apply (`putWorker` reads
         // again when an upload is actually required), and (b) crash
