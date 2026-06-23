@@ -47,8 +47,11 @@ const program = Effect.gen(function* () {
     .pipe(Effect.flatMap((res) => res.text));
 
   const session = newWebSocketRpcSession<RpcProxyApi>(wsUrl);
-  const wrapped = yield* Effect.promise(() =>
-    session.getProvider("Build.DevServer"),
+  const wrapped = yield* Effect.promise(
+    () =>
+      session.getProvider("Build.DevServer") as ReturnType<
+        RpcProxyApi["getProvider"]
+      >,
   );
   const provider = unwrapRpcHandlers(wrapped, []);
 
@@ -62,7 +65,7 @@ const program = Effect.gen(function* () {
     olds: undefined,
     output: undefined,
     session: {} as never,
-    bindings: {},
+    bindings: [],
   });
 
   const pid = yield* Effect.sync(() => {

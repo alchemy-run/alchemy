@@ -8,7 +8,6 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ALCHEMY_PHASE } from "../../Phase.ts";
-import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { type Fetcher } from "../Fetcher.ts";
 import {
   type Container,
@@ -24,13 +23,9 @@ export const layerContainer = <Image extends Container.Decl.Any>(
   const id = container["~alchemy/Id"];
   class Tag extends Context.Service<
     InstanceType<Image>,
-    Effect.Effect<
-      Container.Instance<InstanceType<Image>>,
-      never,
-      RuntimeContext
-    >
+    Container.Instance<InstanceType<Image>>
   >()(`Container<${id}>`) {}
-  return Layer.effect(Tag, Effect.succeed(startContainer(container, options)));
+  return Layer.effect(Tag, startContainer(container, options));
 };
 
 /**
@@ -111,9 +106,10 @@ export const startContainer = Effect.fn(function* <
 
   const phase = yield* ALCHEMY_PHASE;
 
+  // eagerly start the container when in runtime, no-op during planning
   if (phase === "runtime") {
-    // eagerly start the container when in runtime, no-op during planning
-    yield* ensureRunning;
+    // erase the RuntimeContext color (we are applying it eagerly as an optimization only during runtime)
+    yield* ensureRunning as Effect.Effect<void>;
   }
 
   return {
