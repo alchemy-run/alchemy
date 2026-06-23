@@ -11,6 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError, SystemError } from "effect/PlatformError";
 import { BadArgument } from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
@@ -98,6 +99,9 @@ export class CommandError extends Data.TaggedError("CommandError")<{
     return `Failed to execute command "${this.command}": ${this.reason.message}`;
   }
 }
+
+export const isCommandError = (error: unknown): error is CommandError =>
+  Predicate.isTagged(error, "CommandError");
 
 /**
  * Represents when a command exits unexpectedly.

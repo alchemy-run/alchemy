@@ -379,8 +379,8 @@ test.provider("errors when the command fails in first 5 seconds", (stack) =>
         }),
       )
       .pipe(Effect.flip);
-    assert(error instanceof Command.CommandError);
-    assert(error.reason instanceof Command.UnexpectedExit);
+    assert(Command.isCommandError(error));
+    assert(error.reason._tag === "UnexpectedExit");
     expect(error.reason.exitCode).toBe(1);
     expect(error.reason.stderr).toContain("I'm not feeling it...");
   }),
