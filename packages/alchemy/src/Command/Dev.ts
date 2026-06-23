@@ -95,6 +95,7 @@ export const DevProvider = () =>
 export const DevProviderLive = () =>
   Provider.succeed(Dev, {
     list: () => Effect.succeed([]),
+    diff: () => Effect.succeed({ action: "noop" }),
     reconcile: () => Effect.succeed({ url: undefined }),
     delete: () => Effect.void,
   });
