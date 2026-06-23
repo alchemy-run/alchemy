@@ -1,4 +1,4 @@
-import { DevServer, DevServerProvider } from "@/Build/DevServer.ts";
+import * as Command from "@/Command/index.ts";
 import * as Provider from "@/Provider.ts";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
@@ -10,7 +10,7 @@ import * as pathe from "pathe";
 const { test } = Test.make({
   // DevServer is provider-agnostic — register it directly without dragging
   // in a cloud provider's auth chain.
-  providers: DevServerProvider(),
+  providers: Command.providers(),
   dev: true,
 });
 
@@ -87,7 +87,7 @@ test.provider(
       // DevServer is a local dev-server child process, not a cloud resource —
       // there is no remote enumeration API, so list() is the non-listable
       // pattern and always returns []. No deploy is needed to observe this.
-      const provider = yield* Provider.findProvider(DevServer);
+      const provider = yield* Provider.findProvider(Command.Dev);
       const all = yield* provider.list();
       expect(all).toEqual([]);
     }),
@@ -103,7 +103,7 @@ test.provider(
       const pidFile = pathe.join(tmp, "pid.json");
 
       yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${fixtureScript}`,
           env: { PID_FILE: pidFile, MARKER: "start" },
         }),
@@ -129,11 +129,11 @@ test.provider(
 
       yield* stack.deploy(
         Effect.gen(function* () {
-          yield* DevServer("Alpha", {
+          yield* Command.Dev("Alpha", {
             command: `node ${fixtureScript}`,
             env: { PID_FILE: pidFileA, MARKER: "alpha" },
           });
-          yield* DevServer("Beta", {
+          yield* Command.Dev("Beta", {
             command: `node ${fixtureScript}`,
             env: { PID_FILE: pidFileB, MARKER: "beta" },
           });
@@ -162,7 +162,7 @@ test.provider(
       const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
       const pidFile = pathe.join(tmp, "pid.json");
 
-      const program = DevServer("Dev", {
+      const program = Command.Dev("Dev", {
         command: `node ${fixtureScript}`,
         env: { PID_FILE: pidFile, MARKER: "stable" },
       });
@@ -195,7 +195,7 @@ test.provider(
       const pidFile = pathe.join(tmp, "pid.json");
 
       yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${fixtureScript}`,
           env: { PID_FILE: pidFile, MARKER: "v1" },
         }),
@@ -206,7 +206,7 @@ test.provider(
       // Change the env (and therefore the hash) — provider should kill the
       // running process and spawn a fresh one with the new marker.
       yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${fixtureScript}`,
           env: { PID_FILE: pidFile, MARKER: "v2" },
         }),
@@ -232,7 +232,7 @@ test.provider(
       const pidFile = pathe.join(tmp, "pid.json");
 
       const output = yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${urlServerScript}`,
           env: {
             PID_FILE: pidFile,
@@ -260,7 +260,7 @@ test.provider(
       const pidFile = pathe.join(tmp, "pid.json");
 
       const output = yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${urlServerScript}`,
           env: {
             PID_FILE: pidFile,
@@ -295,7 +295,7 @@ test.provider(
       const line = `  ➜  ${ansi("32", "Local:")}   ${ansi("36", "http://localhost:5173/")}`;
 
       const output = yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${urlServerScript}`,
           env: {
             PID_FILE: pidFile,
@@ -323,7 +323,7 @@ test.provider(
       const pidFile = pathe.join(tmp, "pid.json");
 
       const output = yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${urlServerScript}`,
           env: {
             PID_FILE: pidFile,
@@ -354,7 +354,7 @@ test.provider(
       const pidFile = pathe.join(tmp, "pid.json");
 
       yield* stack.deploy(
-        DevServer("Dev", {
+        Command.Dev("Dev", {
           command: `node ${fixtureScript}`,
           env: { PID_FILE: pidFile, MARKER: "stop" },
         }),

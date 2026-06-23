@@ -1,13 +1,11 @@
-import * as AWS from "@/AWS";
-import * as Build from "@/Build";
+import * as Command from "@/Command";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import * as pathe from "pathe";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = Test.make({ providers: Command.providers() });
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixture");
 
@@ -26,8 +24,9 @@ test.provider(
 
       const build1 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Build.Command("test-build", {
+          return yield* Command.Build("test-build", {
             command: "bash build.sh",
+            shell: true,
             cwd: fixtureDir,
             outdir: "dist",
           });
@@ -37,9 +36,10 @@ test.provider(
       // `outdir` is persisted relative to `process.cwd()` for portability;
       // resolve it back to an absolute path before comparing.
       expect(pathe.resolve(build1.outdir)).toBe(distDir);
-      expect(build1.hash).toBeDefined();
-      expect(typeof build1.hash).toBe("string");
-      expect(build1.hash.length).toBeGreaterThan(0);
+      expect(build1.hash).toMatchObject({
+        input: expect.any(String),
+        output: expect.any(String),
+      });
 
       const distExists = yield* fs.exists(distDir);
       expect(distExists).toBe(true);
@@ -55,15 +55,16 @@ test.provider(
 
       const build2 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Build.Command("test-build", {
+          return yield* Command.Build("test-build", {
             command: "bash build.sh",
+            shell: true,
             cwd: fixtureDir,
             outdir: "dist",
           });
         }),
       );
 
-      expect(build2.hash).toBe(build1.hash);
+      expect(build2.hash).toMatchObject(build1.hash);
 
       const secondBuildOutput = yield* fs.readFileString(
         pathe.join(distDir, "output.txt"),
@@ -77,15 +78,16 @@ test.provider(
 
       const build3 = yield* stack.deploy(
         Effect.gen(function* () {
-          return yield* Build.Command("test-build", {
+          return yield* Command.Build("test-build", {
             command: "bash build.sh",
+            shell: true,
             cwd: fixtureDir,
             outdir: "dist",
           });
         }),
       );
 
-      expect(build3.hash).not.toBe(build1.hash);
+      expect(build3.hash).not.toMatchObject(build1.hash);
 
       const thirdBuildOutput = yield* fs.readFileString(
         pathe.join(distDir, "output.txt"),

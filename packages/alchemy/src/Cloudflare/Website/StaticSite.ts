@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
-import { Command, type CommandProps } from "../../Build/Command.ts";
-import { DevServer } from "../../Build/DevServer.ts";
+import * as Command from "../../Command/index.ts";
 import type { Input, InputProps } from "../../Input.ts";
 import * as Namespace from "../../Namespace.ts";
 import * as Output from "../../Output.ts";
@@ -21,7 +20,7 @@ import {
 export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
   extends
     Omit<WorkerProps<Bindings, WorkerAssetsConfig>, "assets" | "dev">,
-    Omit<CommandProps, "env"> {
+    Omit<Command.BuildProps, "env"> {
   /**
    * Optional configuration for static asset routing behavior.
    * Supports `runWorkerFirst`, `htmlHandling`, `notFoundHandling`, etc.
@@ -227,7 +226,7 @@ const makeStaticSite = <
     // skip the build, and tell Worker not to start a local instance.
     const dev =
       ctx.dev && props.dev
-        ? yield* DevServer("Dev", {
+        ? yield* Command.Dev("Dev", {
             command: props.dev.command,
             cwd:
               props.dev.cwd ??
@@ -242,15 +241,25 @@ const makeStaticSite = <
           )
         : undefined;
 
-    const build = dev
+    const assets = dev
       ? undefined
-      : yield* Command("Build", {
+      : yield* Command.Build("Build", {
           command: props.command,
           cwd: props.cwd,
           memo: props.memo,
           outdir: props.outdir,
           env: serializeEnv(props.env),
-        });
+        }).pipe(
+          Effect.map((build) =>
+            Output.all(build.outdir, build.hash).pipe(
+              Output.map(([directory, hash]) => ({
+                directory,
+                hash: hash.output,
+                ...props.assets,
+              })),
+            ),
+          ),
+        );
 
     // Pure-static sites don't need a custom Worker entrypoint —
     // delegate every request straight to the ASSETS binding. Only
@@ -262,13 +271,7 @@ const makeStaticSite = <
 
     return yield* Worker<Bindings, WorkerAssetsConfig, Req>("Worker", {
       ...props,
-      assets: build
-        ? {
-            directory: build.outdir,
-            hash: build.hash,
-            ...props.assets,
-          }
-        : undefined,
+      assets,
       // Opt out of the local Worker in dev when the external DevCommand
       // is serving the content. The Worker resource still exists in
       // state with a stub Attributes shape.

@@ -90,11 +90,11 @@
       "worker": "./src/AWS/Lambda/*.ts",
       "import": "./lib/AWS/Lambda/*.js"
     },
-    "./Build": {
-      "types": "./lib/Build/index.d.ts",
-      "bun": "./src/Build/index.ts",
-      "worker": "./src/Build/index.ts",
-      "import": "./lib/Build/index.js"
+    "./Command": {
+      "types": "./lib/Command/index.d.ts",
+      "bun": "./src/Command/index.ts",
+      "worker": "./src/Command/index.ts",
+      "import": "./lib/Command/index.js"
     },
     "./Construct": {
       "types": "./lib/Construct/index.d.ts",

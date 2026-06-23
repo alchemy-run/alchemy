@@ -1,6 +1,5 @@
-import * as AWS from "@/AWS";
-import * as Build from "@/Build";
 import type { ScopedPlanStatusSession } from "@/Cli/Cli.ts";
+import * as Command from "@/Command";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
 import { expect } from "@effect/vitest";
@@ -8,7 +7,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as pathe from "pathe";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test } = Test.make({ providers: Command.providers() });
 
 // A dedicated fixture (not shared with Build.test.ts): the suite mutates
 // `src/main.ts` and rebuilds `dist`, and the runner executes files in parallel
@@ -29,7 +28,7 @@ test.provider(
     Effect.gen(function* () {
       // Build.Command is a local build/exec step with no remote enumeration
       // API, so list() is the non-listable pattern: always returns [].
-      const provider = yield* Provider.findProvider(Build.Command);
+      const provider = yield* Provider.findProvider(Command.Build);
       const all = yield* provider.list();
       expect(all).toEqual([]);
     }),
@@ -44,7 +43,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const provider = yield* Provider.findProvider(Build.Command);
+      const provider = yield* Provider.findProvider(Command.Build);
       const original = yield* fs.readFileString(mainFile);
 
       const cleanDist = fs
@@ -54,8 +53,9 @@ test.provider(
       const deployWith = (cwd: string) =>
         stack.deploy(
           Effect.gen(function* () {
-            return yield* Build.Command("test-build", {
+            return yield* Command.Build("test-build", {
               command: "bash build.sh",
+              shell: true,
               cwd,
               outdir: "dist",
             });
@@ -113,8 +113,9 @@ test.provider(
       // ── 4) Legacy absolute outdir persisted in state ──────────────────────
       // Re-deploy from a clean baseline so the live dist matches `news`.
       const baseline = yield* deployWith(fixtureDir);
-      const news = {
+      const news: Command.BuildProps = {
         command: "bash build.sh",
+        shell: true,
         cwd: fixtureDir,
         outdir: "dist",
       };
