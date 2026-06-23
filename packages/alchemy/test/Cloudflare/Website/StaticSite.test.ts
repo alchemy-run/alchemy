@@ -312,6 +312,68 @@ test.provider(
   { timeout: 360_000 },
 );
 
+test.provider(
+  "StaticSite: rebuilds when the build output is missing despite unchanged inputs",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+
+      yield* stack.destroy();
+
+      const cwd = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-staticsite-missing-output-",
+        entries: ["src", "build.sh", ".gitignore"],
+      });
+      const marker = `staticsite-missing-output-${Date.now()}`;
+      yield* fs.writeFileString(
+        path.join(cwd, "src", "index.html"),
+        htmlPage(marker),
+      );
+      const outdir = path.join(cwd, "dist");
+
+      const deploy = () =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.StaticSite(
+              "MissingOutputStaticSite",
+              staticSiteProps(cwd),
+            );
+          }),
+        );
+
+      const v1 = yield* deploy();
+      expect(v1.hash?.assets).toBeDefined();
+      expect(yield* fs.exists(outdir)).toBe(true);
+      yield* expectUrlContains(`${v1.url!}/index.html`, marker, {
+        timeout: "120 seconds",
+        label: "v1 marker",
+      });
+
+      // Blow away the build output without touching any inputs. The input
+      // hash is unchanged, so memoization alone would skip the rebuild — but
+      // the Build provider also detects the missing output and forces an
+      // update, otherwise the Worker would have no assets to publish.
+      yield* fs.remove(outdir, { recursive: true });
+      expect(yield* fs.exists(outdir)).toBe(false);
+
+      const v2 = yield* deploy();
+      // The build re-ran: the output directory is back and the asset hash is
+      // identical (same source content reproduced the same manifest).
+      expect(yield* fs.exists(outdir)).toBe(true);
+      expect(v2.hash?.assets).toEqual(v1.hash?.assets);
+      yield* expectUrlContains(`${v2.url!}/index.html`, marker, {
+        timeout: "60 seconds",
+        label: "v2 marker (output rebuilt)",
+      });
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+    }).pipe(logLevel),
+  { timeout: 360_000 },
+);
+
 // ─────────────────────────────────────────────────────────────────────
 // Legacy state migration
 //
