@@ -9,8 +9,8 @@ import * as RpcProvider from "../Local/RpcProvider.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
-  Command,
   CommandError,
+  CommandExecutor,
   UnexpectedExit,
   type CommandProps,
 } from "./Command.ts";
@@ -31,6 +31,12 @@ export interface Dev extends Resource<
 
 export const Dev = Resource<Dev>("Command.Dev");
 
+export const DevProvider = () =>
+  ProviderLayer.select({
+    live: DevProviderLive,
+    local: DevProviderLocal,
+  });
+
 export const DevProviderLive = () =>
   Provider.succeed(Dev, {
     list: () => Effect.succeed([]),
@@ -38,29 +44,15 @@ export const DevProviderLive = () =>
     delete: () => Effect.void,
   });
 
-// Matches the first plain http(s) URL. Stops at whitespace and at a small
-// set of punctuation typically used to wrap URLs in log output.
-const URL_REGEX = /https?:\/\/[^\s)\],"'`]+/;
-
-// ECMA-262 ANSI/VT100 escape sequences — `Vite`, `Next`, etc. surround the
-// URL with color codes that would otherwise be eaten by the URL regex.
-// eslint-disable-next-line no-control-regex
-const ANSI_REGEX = /\x1b\[[0-9;]*m/g;
-
-const extractUrl = (text: string) =>
-  text.replaceAll(ANSI_REGEX, "").match(URL_REGEX)?.[0];
-
 export const DevProviderLocal = () =>
   RpcProvider.effect(
     Dev,
     import.meta.resolve(
-      // See LocalWorkerProvider — must match the on-disk extension of the
-      // sidecar entry file.
       import.meta.url.endsWith(".ts") ? "./Local.ts" : "./Local.js",
       import.meta.url,
     ),
     Effect.gen(function* () {
-      const { spawn } = yield* Command("Command.Dev");
+      const { spawn } = yield* CommandExecutor;
       const map = yield* FiberMap.make();
       const hashes = new Map<string, number>();
 
@@ -158,8 +150,14 @@ export const DevProviderLocal = () =>
     }),
   );
 
-export const DevProvider = () =>
-  ProviderLayer.select({
-    live: DevProviderLive,
-    local: DevProviderLocal,
-  });
+// Matches the first plain http(s) URL. Stops at whitespace and at a small
+// set of punctuation typically used to wrap URLs in log output.
+const URL_REGEX = /https?:\/\/[^\s)\],"'`]+/;
+
+// ECMA-262 ANSI/VT100 escape sequences — `Vite`, `Next`, etc. surround the
+// URL with color codes that would otherwise be eaten by the URL regex.
+// eslint-disable-next-line no-control-regex
+const ANSI_REGEX = /\x1b\[[0-9;]*m/g;
+
+const extractUrl = (text: string) =>
+  text.replaceAll(ANSI_REGEX, "").match(URL_REGEX)?.[0];

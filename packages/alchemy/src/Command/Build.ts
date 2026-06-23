@@ -6,9 +6,9 @@ import { havePropsChanged, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import {
-  Command,
   CommandError,
-  OutdirNotFound,
+  CommandExecutor,
+  OutputNotFound,
   type CommandProps,
 } from "./Command.ts";
 import { hashDirectory, type MemoOptions } from "./Memo.ts";
@@ -66,7 +66,7 @@ export const BuildProvider = () =>
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
-      const { run } = yield* Command("Command.Build");
+      const { run } = yield* CommandExecutor;
 
       const makeOutput = Effect.fn(function* (props: BuildProps) {
         const cwd = path.resolve(props.cwd ?? process.cwd());
@@ -74,7 +74,7 @@ export const BuildProvider = () =>
         if (!(yield* fs.exists(outdir))) {
           return yield* new CommandError({
             command: props.command,
-            reason: new OutdirNotFound({
+            reason: new OutputNotFound({
               outdir: props.outdir,
             }),
           });
@@ -117,7 +117,7 @@ export const BuildProvider = () =>
           const newOutput = yield* makeOutput(news).pipe(
             Effect.catchReason(
               "CommandError",
-              "OutdirNotFound",
+              "OutputNotFound",
               () => Effect.undefined,
             ),
           );

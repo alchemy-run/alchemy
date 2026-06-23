@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import { havePropsChanged, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Command, type CommandProps } from "./Command.ts";
+import { CommandExecutor, type CommandProps } from "./Command.ts";
 import { hashDirectory, type MemoOptions } from "./Memo.ts";
 
 export interface ExecProps extends CommandProps {
@@ -36,7 +36,7 @@ export const ExecProvider = () =>
   Provider.effect(
     Exec,
     Effect.gen(function* () {
-      const { run } = yield* Command("Command.Exec");
+      const { run } = yield* CommandExecutor;
 
       return {
         list: () => Effect.succeed([]),
