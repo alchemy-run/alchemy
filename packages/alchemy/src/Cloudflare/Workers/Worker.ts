@@ -325,7 +325,7 @@ export interface WorkerProps<
    * Each Worker is served on its own port.
    *
    * Use `{ mode: "external" }` to skip starting a local Worker entirely —
-   * useful when an external dev server (e.g. one spawned via `Build.DevServer`)
+   * useful when an external dev server (e.g. one spawned via `Command.Dev`)
    * is serving the content this Worker would otherwise host.
    */
   dev?:
