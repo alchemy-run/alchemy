@@ -27,7 +27,7 @@ import { Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 export interface DurableObjectExport {
   readonly kind: "durableObject";
   readonly constructor: Effect.Effect<
-    DurableObjectShape,
+    Effect.Effect<DurableObjectShape, never, RuntimeContext>,
     never,
     DurableObjectState
   >;
@@ -845,7 +845,9 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
 
       const make = Effect.fnUntraced(function* (
         impl: Effect.Effect<
-          Effect.Effect<DurableObjectShape, never, DurableObjectState>
+          Effect.Effect<DurableObjectShape>,
+          never,
+          DurableObjectState
         >,
       ) {
         // Register the local DO binding (no `scriptName`) and obtain the
@@ -854,12 +856,29 @@ export const DurableObjectNamespace: DurableObjectNamespaceClass =
         // and also return it so a `Layer.effect(tag, make(impl))` Layer
         // resolves the tag to a concrete namespace value.
         const self = yield* binding();
+        const phase = yield* ALCHEMY_PHASE;
+        const constructor = impl.pipe(
+          Effect.provide(
+            Layer.succeed(DurableObjectNamespaceScope, self as any),
+          ),
+        );
+        if (phase === "plan") {
+          // during plan time, we evaluate the constructor with a mock DurableObjectState
+          // to trigger discovery of bindings
+          yield* constructor.pipe(
+            Effect.provide(
+              Layer.succeed(
+                DurableObjectState,
+                // mock during plan time
+                fromDurableObjectState({ storage: {} } as any),
+              ),
+            ),
+          );
+        }
         yield* (yield* Worker).export(namespace, {
           kind: "durableObject",
           // initialize the object's constructor (apply infra dependencies)
-          constructor: yield* impl.pipe(
-            Effect.provideService(DurableObjectNamespaceScope, self as any),
-          ),
+          constructor,
           // grab the object's infra dependencies so we can apply them when calling the instance's methods
           services: yield* Effect.context<Effect.Services<typeof impl>>(),
         } satisfies DurableObjectExport);

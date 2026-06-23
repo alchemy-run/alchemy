@@ -64,17 +64,19 @@ export const makeDurableObjectBridge =
 
         this.#instance = state.blockConcurrencyWhile(() =>
           this.#exported.pipe(
-            Effect.flatMap(({ constructor, services }) =>
-              constructor.pipe(
-                Effect.provide(
-                  Layer.succeed(
-                    DurableObjectState,
-                    fromDurableObjectState(this.#state),
-                  ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+            Effect.flatMap(({ constructor, services }) => {
+              const context = Layer.succeed(
+                DurableObjectState,
+                fromDurableObjectState(this.#state),
+              ).pipe(Layer.provideMerge(Layer.succeedContext(services)));
+              return constructor.pipe(
+                Effect.provide(context),
+                Effect.flatMap((instance) =>
+                  instance.pipe(Effect.provide(context)),
                 ),
                 Effect.map((instance) => ({ instance, services })),
-              ),
-            ),
+              );
+            }),
             Effect.provide(this.#globalContext),
             Effect.runPromise,
           ),
