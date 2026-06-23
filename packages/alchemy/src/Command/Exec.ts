@@ -32,10 +32,9 @@ export interface Exec extends Resource<
 
 /**
  * An `Exec` runs a shell command purely for its side effects — it has no
- * output contract. Unlike {@link Build}, it does not produce or track an
- * output asset; `reconcile` runs the command and the resource succeeds as long
- * as the command exits with code `0` (a non-zero exit fails with a
- * {@link CommandError}).
+ * output contract. Unlike `Build`, it does not produce or track an output
+ * asset; `reconcile` runs the command and the resource succeeds as long as the
+ * command exits with code `0` (a non-zero exit fails with a `CommandError`).
  *
  * Use it for one-off setup steps — running migrations, seeding data, code
  * generation, or any command whose result lives outside Alchemy's state. When

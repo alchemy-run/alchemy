@@ -578,9 +578,9 @@ Per-resource API reference, generated from JSDoc on the source `.ts` files via `
 
 ### Command
 
-- [Build](https://v2.alchemy.run/providers/command/build) — A `Build` runs a shell command that produces an output asset (a file or directory) and tracks that asset in state. Unlike {@link Exec}, a `Build` has an output contract: `reconcile` verifies the command actually produced `outdir` and exposes its location so downstream resources (e.g. a `Cloudflare.Worker`'s static assets) can consume it.
+- [Build](https://v2.alchemy.run/providers/command/build) — A `Build` runs a shell command that produces an output asset (a file or directory) and tracks that asset in state. Unlike `Exec`, a `Build` has an output contract: `reconcile` verifies the command actually produced `outdir` and exposes its location so downstream resources (e.g. a `Cloudflare.Worker`'s static assets) can consume it.
 - [Dev](https://v2.alchemy.run/providers/command/dev) — A long-lived shell process scoped to a stack instance, started during `alchemy dev` and restarted when its inputs change. During `alchemy deploy` this is a no-op — `Dev` resources only run in dev mode.
-- [Exec](https://v2.alchemy.run/providers/command/exec) — An `Exec` runs a shell command purely for its side effects — it has no output contract. Unlike {@link Build}, it does not produce or track an output asset; `reconcile` runs the command and the resource succeeds as long as the command exits with code `0` (a non-zero exit fails with a {@link CommandError}).
+- [Exec](https://v2.alchemy.run/providers/command/exec) — An `Exec` runs a shell command purely for its side effects — it has no output contract. Unlike `Build`, it does not produce or track an output asset; `reconcile` runs the command and the resource succeeds as long as the command exits with code `0` (a non-zero exit fails with a `CommandError`).
 
 ### Drizzle
 

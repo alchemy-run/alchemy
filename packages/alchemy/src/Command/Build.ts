@@ -60,10 +60,10 @@ export interface Build extends Resource<
 
 /**
  * A `Build` runs a shell command that produces an output asset (a file or
- * directory) and tracks that asset in state. Unlike {@link Exec}, a `Build`
- * has an output contract: `reconcile` verifies the command actually produced
- * `outdir` and exposes its location so downstream resources (e.g. a
- * `Cloudflare.Worker`'s static assets) can consume it.
+ * directory) and tracks that asset in state. Unlike `Exec`, a `Build` has an
+ * output contract: `reconcile` verifies the command actually produced `outdir`
+ * and exposes its location so downstream resources (e.g. a `Cloudflare.Worker`'s
+ * static assets) can consume it.
  *
  * When `memo` is enabled the input files are content-hashed so an unchanged
  * project skips the rebuild entirely.
