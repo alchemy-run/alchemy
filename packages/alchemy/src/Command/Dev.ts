@@ -2,11 +2,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FiberMap from "effect/FiberMap";
 import * as Hash from "effect/Hash";
-import * as Option from "effect/Option";
-import * as Scope from "effect/Scope";
-import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import type * as ChildProcessSpawner from "effect/unstable/process/ChildProcessSpawner";
 import { isResolved } from "../Diff.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as RpcProvider from "../Local/RpcProvider.ts";
@@ -67,67 +63,64 @@ export const DevProviderLocal = () =>
       const { spawn } = yield* Command("Command.Dev");
       const map = yield* FiberMap.make();
       const hashes = new Map<string, number>();
-      const scope = yield* Effect.scope;
-
-      const mirror = (
-        child: ChildProcessSpawner.ChildProcessHandle,
-        sink: "stdout" | "stderr",
-      ) =>
-        child[sink].pipe(
-          Stream.tap((chunk) => Effect.sync(() => process[sink].write(chunk))),
-          Stream.runDrain,
-          Effect.forkScoped,
-        );
-
-      const awaitUrl = (child: ChildProcessSpawner.ChildProcessHandle) =>
-        child.stdout.pipe(
-          Stream.decodeText,
-          Stream.run(Sink.find((text) => !!extractUrl(text))),
-          Effect.map(Option.map(extractUrl)),
-          Effect.timeoutOrElse({
-            duration: "5 seconds",
-            orElse: () => Effect.succeedNone,
-          }),
-          Effect.map(Option.getOrUndefined),
-        );
-
-      const awaitError = (child: ChildProcessSpawner.ChildProcessHandle) =>
-        child.stderr.pipe(
-          Stream.decodeText,
-          Stream.runFold(
-            () => "",
-            (acc, text) => acc + text,
-          ),
-          Effect.zip(child.exitCode),
-          Effect.flatMap(([stderr, exitCode]) =>
-            Effect.fail(
-              new UnexpectedExit({
-                exitCode,
-                stderr,
-              }),
-            ),
-          ),
-        );
 
       const spawnAndExtractResult = Effect.fn(function* (
         props: DevProps,
-        deferred: Deferred.Deferred<string | undefined, CommandError>,
+        urlDeferred: Deferred.Deferred<string | undefined, CommandError>,
       ) {
         const child = yield* spawn(props);
-        yield* mirror(child, "stdout");
-        yield* mirror(child, "stderr");
-        yield* Effect.raceAllFirst([awaitUrl(child), awaitError(child)]).pipe(
-          Effect.mapError(
-            (error) =>
-              new CommandError({
-                command: props.command,
-                reason: error._tag === "UnexpectedExit" ? error : error.reason,
+
+        let buffer = "";
+        const deferred = yield* Deferred.make<string>();
+
+        const mirror = (sink: "stdout" | "stderr") =>
+          child[sink].pipe(
+            Stream.tap((chunk) =>
+              Effect.sync(() => process[sink].write(chunk)),
+            ),
+            Stream.decodeText,
+            Stream.tap((text) =>
+              Effect.sync(() => {
+                if (Deferred.isDoneUnsafe(deferred)) return;
+                buffer += text;
+                const url = extractUrl(buffer);
+                if (url) {
+                  Deferred.doneUnsafe(deferred, Effect.succeed(url));
+                }
               }),
+            ),
+            Stream.runDrain,
+            Effect.forkScoped,
+          );
+
+        yield* mirror("stdout");
+        yield* mirror("stderr");
+        yield* Effect.raceAllFirst([
+          Deferred.await(deferred).pipe(
+            Effect.timeoutOrElse({
+              duration: "5 seconds",
+              orElse: () => Effect.undefined,
+            }),
           ),
-          Deferred.into(deferred),
-        );
+          child.exitCode.pipe(
+            Effect.mapError(
+              (error) =>
+                new CommandError({
+                  command: props.command,
+                  reason: error.reason,
+                }),
+            ),
+            Effect.flatMap(
+              (exitCode) =>
+                new CommandError({
+                  command: props.command,
+                  reason: new UnexpectedExit({ exitCode, stderr: buffer }),
+                }),
+            ),
+          ),
+        ]).pipe(Deferred.into(urlDeferred));
         return yield* child.exitCode;
-      }, Scope.provide(scope));
+      }, Effect.scoped);
 
       return {
         list: () => Effect.succeed([]),

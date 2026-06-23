@@ -1,7 +1,7 @@
 import * as Command from "@/Command/index.ts";
 import * as Provider from "@/Provider.ts";
 import * as Test from "@/Test/Vitest";
-import { expect } from "@effect/vitest";
+import { assert, expect } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
@@ -17,6 +17,7 @@ const { test } = Test.make({
 const fixtureDir = pathe.resolve(import.meta.dirname, "fixture");
 const fixtureScript = pathe.join(fixtureDir, "long-running.cjs");
 const urlServerScript = pathe.join(fixtureDir, "url-server.cjs");
+const dieScript = pathe.join(fixtureDir, "die.cjs");
 
 // The provider runs `command.split(" ")` and uses `shell: false`, so the
 // fixture path must not contain spaces. The in-repo path doesn't, but a CI
@@ -367,4 +368,20 @@ test.provider(
       expect(yield* isAlive(pid)).toBe(false);
     }),
   { timeout: 30_000 },
+);
+
+test.provider("errors when the command fails in first 5 seconds", (stack) =>
+  Effect.gen(function* () {
+    const error = yield* stack
+      .deploy(
+        Command.Dev("Dev", {
+          command: `node ${dieScript}`,
+        }),
+      )
+      .pipe(Effect.flip);
+    assert(error instanceof Command.CommandError);
+    assert(error.reason instanceof Command.UnexpectedExit);
+    expect(error.reason.exitCode).toBe(1);
+    expect(error.reason.stderr).toContain("I'm not feeling it...");
+  }),
 );

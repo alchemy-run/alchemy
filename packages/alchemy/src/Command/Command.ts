@@ -29,6 +29,7 @@ export interface CommandProps {
    */
   env?: Record<string, string | Redacted.Redacted<string>>;
 }
+
 export class UnexpectedExit extends Data.TaggedError("UnexpectedExit")<{
   exitCode: number;
   stderr: string;
@@ -94,7 +95,10 @@ export const Command = (module: string) =>
       if (props.shell) {
         return Effect.succeed({ bin: props.command, args: [] });
       }
-      const [bin, ...args] = props.command.split(/(\s+)/);
+      const [bin, ...args] = props.command
+        .split(/(\s+)/)
+        .filter((part) => !!part.trim());
+
       if (!bin) {
         return Effect.fail(
           new CommandError({

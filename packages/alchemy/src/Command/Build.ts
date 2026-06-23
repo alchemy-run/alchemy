@@ -68,25 +68,25 @@ export const BuildProvider = () =>
       const fs = yield* FileSystem.FileSystem;
       const { run } = yield* Command("Command.Build");
 
-      const makeOutput = Effect.fn(function* (news: BuildProps) {
-        const cwd = path.resolve(news.cwd ?? process.cwd());
-        const outdir = path.resolve(cwd, news.outdir);
+      const makeOutput = Effect.fn(function* (props: BuildProps) {
+        const cwd = path.resolve(props.cwd ?? process.cwd());
+        const outdir = path.resolve(cwd, props.outdir);
         if (!(yield* fs.exists(outdir))) {
           return yield* new CommandError({
-            command: news.command,
+            command: props.command,
             reason: new OutdirNotFound({
-              outdir: news.outdir,
+              outdir: props.outdir,
             }),
           });
         }
         return {
-          outdir: path.relative(cwd, outdir),
-          hash: news.memo
+          outdir: path.relative(process.cwd(), outdir),
+          hash: props.memo
             ? yield* Effect.all(
                 {
                   input: hashDirectory({
                     cwd,
-                    memo: news.memo === true ? {} : news.memo,
+                    memo: props.memo === true ? {} : props.memo,
                   }),
                   output: hashDirectory({
                     cwd: outdir,
@@ -127,8 +127,8 @@ export const BuildProvider = () =>
         }),
         reconcile: ({ news }) =>
           run(news).pipe(Effect.andThen(makeOutput(news))),
-        delete: Effect.fn(function* ({ olds, output }) {
-          const outdir = path.resolve(olds.cwd ?? process.cwd(), output.outdir);
+        delete: Effect.fn(function* ({ output }) {
+          const outdir = path.resolve(output.outdir);
           if (!(yield* fs.exists(outdir))) return;
           yield* fs.remove(outdir, { recursive: true });
         }),

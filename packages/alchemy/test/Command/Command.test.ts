@@ -127,22 +127,19 @@ test.provider(
       };
       expect(pathe.isAbsolute(legacyOutput.outdir)).toBe(true);
 
-      // read() must re-anchor the absolute path against the current cwd and
-      // hand back a relative outdir — this is what stops a downstream consumer
-      // (e.g. a Worker) from reading a foreign-machine path.
-      const refreshed = yield* provider.read!({
+      // diff() must return "update" because the output is stale.
+      const refreshed = yield* provider.diff!({
         id: "test-build",
         instanceId: "legacy",
         olds: news,
+        news,
+        oldBindings: [],
+        newBindings: [],
         output: legacyOutput,
       });
-      expect(refreshed).toBeDefined();
-      expect(pathe.isAbsolute(refreshed!.outdir)).toBe(false);
-      expect(pathe.resolve(refreshed!.outdir)).toBe(distDir);
+      expect(refreshed).toStrictEqual({ action: "update" });
 
-      // reconcile() must treat the absolute cached artifact as reusable (hash
-      // matches, directory exists) — no crash, no spurious rebuild — and still
-      // converge the stored outdir to a relative path.
+      // reconcile() must rebuild and return a new output.
       const reconciled = yield* provider.reconcile({
         id: "test-build",
         instanceId: "legacy",
@@ -152,7 +149,7 @@ test.provider(
         session: stubSession,
         bindings: [],
       });
-      expect(reconciled.hash).toBe(baseline.hash);
+      expect(reconciled.hash).toStrictEqual(baseline.hash);
       expect(pathe.isAbsolute(reconciled.outdir)).toBe(false);
       expect(pathe.resolve(reconciled.outdir)).toBe(distDir);
 
