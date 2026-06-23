@@ -1,13 +1,55 @@
 import * as AWS from "@/AWS";
-import { Certificate } from "@/AWS/ACM/Certificate.ts";
+import { Certificate, waitForRoute53Change } from "@/AWS/ACM/Certificate.ts";
+import { HostedZone } from "@/AWS/Route53";
 import * as Provider from "@/Provider";
 import * as Test from "@/Test/Vitest";
+import * as route53 from "@distilled.cloud/aws/route-53";
 import { expect } from "@effect/vitest";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+test.provider(
+  "polls Route53 validation changes returned with resource-path IDs",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const zone = yield* stack.deploy(
+        HostedZone("CertificateValidationZone", {
+          name: "alchemy-certificate-change-id.alchemy.",
+          forceDestroy: true,
+        }),
+      );
+
+      const change = yield* route53.changeResourceRecordSets({
+        HostedZoneId: zone.id.replace(/^\/hostedzone\//, ""),
+        ChangeBatch: {
+          Comment: "ACM Route53 change ID regression test",
+          Changes: [
+            {
+              Action: "UPSERT",
+              ResourceRecordSet: {
+                Name: `_validation.${zone.name}`,
+                Type: "TXT",
+                TTL: 60,
+                ResourceRecords: [{ Value: '"alchemy"' }],
+              },
+            },
+          ],
+        },
+      });
+
+      expect(change.ChangeInfo.Id).toMatch(/^\/change\//);
+      const completed = yield* waitForRoute53Change(change.ChangeInfo.Id);
+      expect(completed.Status).toBe("INSYNC");
+
+      yield* stack.destroy();
+    }),
+  { timeout: 180_000 },
+);
 
 // Canonical `list()` test (AWS account/region-scoped collection): request a
 // real ACM certificate (no DNS validation, stays PENDING_VALIDATION), resolve
