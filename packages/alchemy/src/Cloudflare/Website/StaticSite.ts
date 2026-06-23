@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { cast } from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import { AlchemyContext } from "../../AlchemyContext.ts";
 import * as Command from "../../Command/index.ts";
@@ -242,7 +243,7 @@ const makeStaticSite = <
           )
         : undefined;
 
-    const assets = dev
+    const build = dev
       ? undefined
       : yield* Command.Build("Build", {
           command: props.command,
@@ -250,17 +251,7 @@ const makeStaticSite = <
           memo: props.memo,
           outdir: props.outdir,
           env: serializeEnv(props.env),
-        }).pipe(
-          Effect.map((build) =>
-            Output.all(build.outdir, build.hash).pipe(
-              Output.map(([directory, hash]) => ({
-                directory,
-                hash: hash.output,
-                ...props.assets,
-              })),
-            ),
-          ),
-        );
+        });
 
     // Pure-static sites don't need a custom Worker entrypoint —
     // delegate every request straight to the ASSETS binding. Only
@@ -272,7 +263,13 @@ const makeStaticSite = <
 
     return yield* Worker<Bindings, WorkerAssetsConfig, Req>("Worker", {
       ...props,
-      assets,
+      assets: build
+        ? cast({
+            directory: build.outdir,
+            hash: build.hash,
+            ...props.assets,
+          })
+        : undefined,
       // Opt out of the local Worker in dev when the external DevCommand
       // is serving the content. The Worker resource still exists in
       // state with a stub Attributes shape.

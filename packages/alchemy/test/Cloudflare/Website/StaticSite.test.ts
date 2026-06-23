@@ -310,8 +310,10 @@ test.provider(
   { timeout: 360_000 },
 );
 
-const staticSiteProps = (cwd: string) => ({
+const staticSiteProps = (cwd: string): Cloudflare.StaticSiteProps => ({
   command: "bash build.sh",
+  shell: true,
+  memo: true,
   cwd,
   outdir: "dist",
   main: workerEntry,
