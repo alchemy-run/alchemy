@@ -29,6 +29,61 @@ export interface Dev extends Resource<
   }
 > {}
 
+/**
+ * A long-lived shell process scoped to a stack instance, started during
+ * `alchemy dev` and restarted when its inputs change. During `alchemy deploy`
+ * this is a no-op — `Dev` resources only run in dev mode.
+ *
+ * The child process runs inside the dev sidecar (see `Command/Local.ts`) so it
+ * survives user-code HMR — Alchemy's user process can restart without killing
+ * your `npm run dev` server. Its stdout/stderr are mirrored to the terminal
+ * (preserving colored output) and each line is scanned for the first
+ * `http(s)://…` URL, which is exposed as the `url` output attribute — useful
+ * for surfacing a dev server's local URL back out to whatever resource
+ * declared this `Dev`.
+ *
+ * @resource
+ *
+ * @section Basic Usage
+ * Pass a shell command that starts a long-lived dev server. Alchemy
+ * runs it in the background and extracts the first URL it prints.
+ *
+ * @example Start a Vite dev server
+ * ```typescript
+ * const dev = yield* Dev("Frontend", {
+ *   command: "npm run dev",
+ * });
+ * yield* Console.log(dev.url); // e.g. "http://localhost:5173"
+ * ```
+ *
+ * @section Working Directory
+ * Use `cwd` to run the command in a subdirectory — useful in
+ * monorepos where each package has its own dev server.
+ *
+ * @example Monorepo package
+ * ```typescript
+ * const dev = yield* Dev("Web", {
+ *   command: "npm run dev",
+ *   cwd: "apps/web",
+ * });
+ * ```
+ *
+ * @section Environment Variables
+ * Extra environment variables are merged on top of `process.env`.
+ * Sensitive values can be wrapped in `Redacted` to keep them out
+ * of logs and state files.
+ *
+ * @example Custom port and env
+ * ```typescript
+ * const dev = yield* Dev("Api", {
+ *   command: "npm run dev",
+ *   env: {
+ *     PORT: "4000",
+ *     DATABASE_URL: Redacted.make("postgres://..."),
+ *   },
+ * });
+ * ```
+ */
 export const Dev = Resource<Dev>("Command.Dev");
 
 export const DevProvider = () =>

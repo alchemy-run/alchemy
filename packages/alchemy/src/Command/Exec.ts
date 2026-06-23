@@ -7,9 +7,9 @@ import { hashDirectory, type MemoOptions } from "./Memo.ts";
 
 export interface ExecProps extends CommandProps {
   /**
-   * Controls which files are hashed to decide whether the build should re-run.
-   * By default every non-gitignored file in `cwd` is hashed, plus the nearest
-   * lockfile. Provide explicit globs to narrow the scope.
+   * Controls which files are hashed to decide whether the command should
+   * re-run. By default every non-gitignored file in `cwd` is hashed, plus the
+   * nearest lockfile. Provide explicit globs to narrow the scope.
    *
    * @see {@link MemoOptions}
    * @default false
@@ -30,6 +30,48 @@ export interface Exec extends Resource<
   }
 > {}
 
+/**
+ * An `Exec` runs a shell command purely for its side effects — it has no
+ * output contract. Unlike {@link Build}, it does not produce or track an
+ * output asset; `reconcile` runs the command and the resource succeeds as long
+ * as the command exits with code `0` (a non-zero exit fails with a
+ * {@link CommandError}).
+ *
+ * Use it for one-off setup steps — running migrations, seeding data, code
+ * generation, or any command whose result lives outside Alchemy's state. When
+ * `memo` is enabled the input files are content-hashed so the command only
+ * re-runs when its inputs change.
+ *
+ * @resource
+ * @section Running a Command
+ * @example Run a One-Off Command
+ * ```typescript
+ * yield* Exec("codegen", {
+ *   command: "npm run codegen",
+ *   cwd: "./packages/api",
+ * });
+ * ```
+ *
+ * @section Running with Custom Environment
+ * @example Run Database Migrations
+ * ```typescript
+ * yield* Exec("migrate", {
+ *   command: "npm run db:migrate",
+ *   env: {
+ *     DATABASE_URL: Redacted.make("postgres://..."),
+ *   },
+ * });
+ * ```
+ *
+ * @section Memoizing Re-Runs
+ * @example Only Re-Run When Inputs Change
+ * ```typescript
+ * yield* Exec("codegen", {
+ *   command: "npm run codegen",
+ *   memo: { include: ["schema/**"] },
+ * });
+ * ```
+ */
 export const Exec = Resource<Exec>("Command.Exec");
 
 export const ExecProvider = () =>

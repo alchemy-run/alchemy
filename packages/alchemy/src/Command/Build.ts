@@ -58,6 +58,54 @@ export interface Build extends Resource<
   }
 > {}
 
+/**
+ * A `Build` runs a shell command that produces an output asset (a file or
+ * directory) and tracks that asset in state. Unlike {@link Exec}, a `Build`
+ * has an output contract: `reconcile` verifies the command actually produced
+ * `outdir` and exposes its location so downstream resources (e.g. a
+ * `Cloudflare.Worker`'s static assets) can consume it.
+ *
+ * When `memo` is enabled the input files are content-hashed so an unchanged
+ * project skips the rebuild entirely.
+ *
+ * @resource
+ * @section Building a Vite App
+ * @example Basic Vite Build
+ * ```typescript
+ * const build = yield* Build("vite-build", {
+ *   command: "npm run build",
+ *   cwd: "./frontend",
+ *   outdir: "dist",
+ * });
+ * yield* Console.log(build.outdir); // path to the dist directory, relative to process.cwd()
+ * yield* Console.log(build.hash.output); // hash of the output files (when memo is enabled)
+ * ```
+ *
+ * @section Building with Custom Environment
+ * @example Build with Environment Variables
+ * ```typescript
+ * const build = yield* Build("production-build", {
+ *   command: "npm run build",
+ *   cwd: "./app",
+ *   outdir: "dist",
+ *   env: {
+ *     NODE_ENV: "production",
+ *     API_URL: "https://api.example.com",
+ *   },
+ * });
+ * ```
+ *
+ * @section Customizing Memoization
+ * @example Customize Memoization
+ * ```typescript
+ * const build = yield* Build("custom-build", {
+ *   command: "npm run build",
+ *   cwd: "./app",
+ *   outdir: "dist",
+ *   memo: { include: ["src/**", "package.json"], exclude: ["node_modules", "dist"] },
+ * });
+ * ```
+ */
 export const Build = Resource<Build>("Command.Build");
 
 export const BuildProvider = () =>

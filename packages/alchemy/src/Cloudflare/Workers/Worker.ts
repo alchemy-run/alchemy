@@ -1416,7 +1416,7 @@ export const LiveWorkerProvider = () =>
           skipAssetsRead: prebuiltAssets?.skip,
         });
         // When the caller supplied a precomputed hash (e.g. via
-        // `Build.Command`), store *that* hash in output state so the
+        // `Command.Build`), store *that* hash in output state so the
         // next diff can short-circuit by comparing it directly. The
         // hash that `readAssets` produces is the manifest-derived
         // hash, which is shaped differently from any upstream
@@ -1876,7 +1876,7 @@ export const LiveWorkerProvider = () =>
         }
         // We deliberately don't read the assets directory during diff.
         // For `AssetsWithHash` (the documented contract) the upstream
-        // `Build.Command` already gave us an authoritative hash — we
+        // `Command.Build` already gave us an authoritative hash — we
         // just compare strings. Reading the directory here would
         // (a) hash the same tree twice per apply (`putWorker` reads
         // again when an upload is actually required), and (b) crash
