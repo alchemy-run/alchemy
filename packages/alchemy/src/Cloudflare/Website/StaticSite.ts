@@ -52,7 +52,7 @@ export interface StaticSiteProps<Bindings extends WorkerBindingProps = {}>
     command: string;
     /**
      * Working directory for {@link command}. Defaults to
-     * {@link Command.CommandProps.cwd} (the build command's `cwd`), or
+     * {@link Command.BuildProps.cwd} (the build command's `cwd`), or
      * `process.cwd()` if neither is set.
      */
     cwd?: string;
