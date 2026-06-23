@@ -69,6 +69,7 @@ export * from "./Images/index.ts";
 export * from "./Intel/index.ts";
 export * from "./KeylessCertificate/index.ts";
 export * from "./KV/index.ts";
+export * as KV from "./KV/index.ts";
 export * from "./LeakedCredentialCheck/index.ts";
 export * from "./LoadBalancer/index.ts";
 export * from "./Logpush/index.ts";

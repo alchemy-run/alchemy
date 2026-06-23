@@ -279,7 +279,7 @@ export class WorkflowScope extends Context.Service<
  *
  * ```typescript
  * Effect.gen(function* () {
- *   const kv = yield* Cloudflare.KVNamespace.bind(KV);
+ *   const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
  *
  *   return Effect.fn(function* (input: { roomId: string; message: string }) {
  *     const { roomId, message } = input;

@@ -373,7 +373,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```typescript
  * Effect.gen(function* () {
  *   // Phase 1: bind resources (runs at deploy time)
- *   const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
+ *   const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
  *
  *   return {
  *     // Phase 2: runtime handlers (runs on each request)
@@ -454,7 +454,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  *   { main: import.meta.filename },
  *   Effect.gen(function* () {
  *     // init: bind resources
- *     const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
+ *     const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
  *
  *     return {
  *       // runtime: use them
@@ -492,7 +492,7 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * export default WorkerB.make(
  *   Effect.gen(function* () {
  *     // init: bind resources
- *     const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
+ *     const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
  *
  *     return {
  *       // runtime: use them
@@ -624,14 +624,14 @@ export type Worker<Bindings extends WorkerBindings = any> = Resource<
  * ```
  *
  * @section KV Namespace
- * Bind a KV namespace with `Cloudflare.KVNamespace.bind`. KV provides
+ * Bind a KV namespace with `Cloudflare.KV.ReadWriteNamespace`. KV provides
  * eventually-consistent, low-latency key-value reads replicated
  * globally across Cloudflare's edge.
  *
  * @example Binding and using KV
  * ```typescript
  * // init
- * const kv = yield* Cloudflare.KVNamespace.bind(MyKV);
+ * const kv = yield* Cloudflare.KV.ReadWriteNamespace(MyKV);
  *
  * return {
  *   fetch: Effect.gen(function* () {

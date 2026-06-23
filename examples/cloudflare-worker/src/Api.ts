@@ -40,7 +40,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
     const notifier = yield* NotifyWorkflow;
     const loader = yield* Cloudflare.WorkerLoader("Loader");
     const bucket = yield* Cloudflare.R2.ReadWriteBucket(Bucket);
-    const kv = yield* Cloudflare.KVNamespace.bind(KV);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
     const queueResource = yield* Queue;
     const queue = yield* Cloudflare.Queues.WriteQueue(queueResource);
     const repos = yield* Cloudflare.Artifacts.bind(Repos);
@@ -446,8 +446,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Cloudflare.R2BucketBindingLive,
-        Cloudflare.KVNamespaceBindingLive,
+        Cloudflare.R2.ReadWriteBucketBinding,
+        Cloudflare.KV.ReadWriteNamespaceBinding,
         Cloudflare.Queues.WriteQueueBinding,
         Cloudflare.QueueEventSourceLive,
         Cloudflare.ArtifactsBindingLive,

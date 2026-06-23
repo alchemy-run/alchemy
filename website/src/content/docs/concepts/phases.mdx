@@ -140,7 +140,7 @@ The init/runtime split lets you write code that:
 Effect.gen(function* () {
   // Init: runs once per cold start
   const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
-  const kv = yield* Cloudflare.KVNamespace.bind(KV);
+  const kv = yield* Cloudflare.KV.ReadWriteNamespace(KV);
 
   return {
     // Runtime: runs per request

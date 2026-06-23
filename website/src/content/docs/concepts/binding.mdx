@@ -119,7 +119,7 @@ KV, D1, Durable Object…) instead of an IAM policy:
 
 ```typescript
 const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
-const kv = yield* Cloudflare.KVNamespace.bind(Sessions);
+const kv = yield* Cloudflare.KV.ReadWriteNamespace(Sessions);
 ```
 
 The runtime API is identical to the AWS counterpart — code that

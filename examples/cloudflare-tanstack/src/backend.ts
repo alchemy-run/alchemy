@@ -61,5 +61,5 @@ export default class Backend extends Cloudflare.Worker<Backend>()(
         ),
       ),
     };
-  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}

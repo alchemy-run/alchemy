@@ -25,8 +25,8 @@ export interface HandlerOptions extends AliasParserOptions {
 }
 
 const bindings = Layer.mergeAll(
-  Cloudflare.R2BucketBindingLive,
-  Cloudflare.KVNamespaceBindingLive,
+  Cloudflare.R2.ReadWriteBucketBinding,
+  Cloudflare.KV.ReadWriteNamespaceBinding,
   Cloudflare.SecretBindingLive,
 );
 
@@ -53,7 +53,7 @@ const bindings = Layer.mergeAll(
 export const handler = (options: HandlerOptions = {}) =>
   Effect.gen(function* () {
     const r2 = yield* Cloudflare.R2.ReadWriteBucket(yield* Bucket);
-    const kv = yield* Cloudflare.KVNamespace.bind(yield* TagIndex);
+    const kv = yield* Cloudflare.KV.ReadWriteNamespace(yield* TagIndex);
     const authToken = yield* Cloudflare.Secret.bind(yield* AuthToken);
     const packages = yield* PackageStore;
 

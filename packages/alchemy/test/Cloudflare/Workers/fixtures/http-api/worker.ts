@@ -94,5 +94,5 @@ export default class HttpApiTestWorker extends Cloudflare.Worker<HttpApiTestWork
         HttpRouter.toHttpEffect,
       ),
     };
-  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}

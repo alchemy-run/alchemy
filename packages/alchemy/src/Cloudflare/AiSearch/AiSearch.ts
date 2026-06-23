@@ -4,7 +4,7 @@ import * as Namespace from "../../Namespace.ts";
 import { isResource } from "../../Resource.ts";
 import { AccountApiToken } from "../ApiToken/AccountApiToken.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import type { R2Bucket } from "../R2/R2Bucket.ts";
+import type { R2Bucket } from "../R2/Bucket.ts";
 import {
   AiSearchInstance,
   type AiSearchInstanceProps,

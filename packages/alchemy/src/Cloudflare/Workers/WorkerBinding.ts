@@ -17,9 +17,10 @@ import { SendEmail } from "../Email/SendEmail.ts";
 import type { FlagshipApp } from "../Flagship/App.ts";
 import { Hyperdrive } from "../Hyperdrive/Hyperdrive.ts";
 import { Images } from "../Images/Images.ts";
-import type { KVNamespace } from "../KV/KVNamespace.ts";
+import type { KVNamespace } from "../KV/Namespace.ts";
+import type { Providers } from "../Providers.ts";
 import type { Queue } from "../Queue/Queue.ts";
-import type { R2Bucket } from "../R2/R2Bucket.ts";
+import type { R2Bucket } from "../R2/Bucket.ts";
 import type { RateLimit } from "../RateLimit/RateLimit.ts";
 import type { Secret } from "../SecretsStore/Secret.ts";
 import type { VectorizeIndex } from "../Vectorize/VectorizeIndex.ts";
@@ -29,7 +30,6 @@ import { makeRpcStub } from "./Rpc.ts";
 import type { VersionMetadata } from "./VersionMetadata.ts";
 import { isWorker, Worker, WorkerEnvironment } from "./Worker.ts";
 import type { WorkerLoader } from "./WorkerLoader.ts";
-import type { Providers } from "../Providers.ts";
 
 export type WorkerBinding = Exclude<
   workers.PutScriptRequest["metadata"]["bindings"],

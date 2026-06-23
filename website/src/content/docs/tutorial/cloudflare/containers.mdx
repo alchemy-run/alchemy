@@ -254,7 +254,7 @@ that lives in `Sandbox.runtime.ts` and Rolldown tree-shakes it out.
 ## Bind the container in the outer phase
 
 `Cloudflare.Container.bind(Sandbox)` registers the binding the
-same way `R2Bucket.bind` or `KVNamespace.bind` do. It belongs in
+same way `R2.ReadWriteBucket` or `KV.ReadWriteNamespace` do. It belongs in
 the **outer** init phase — that runs once when the DO class is
 wired to its Worker. If you put it in the inner phase, every new
 DO instance would re-bind, which is wasteful and wrong.

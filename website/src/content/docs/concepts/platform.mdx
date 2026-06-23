@@ -61,7 +61,7 @@ syntax `yield* SomeResource.bind(target)` does three things at once:
 
 ```typescript
 const bucket = yield* Cloudflare.R2.ReadWrite(Bucket);
-const kv = yield* Cloudflare.KVNamespace.bind(Sessions);
+const kv = yield* Cloudflare.KV.ReadWriteNamespace(Sessions);
 
 // Inside fetch:
 yield* bucket.put("key", "value");

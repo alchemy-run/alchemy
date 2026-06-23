@@ -68,7 +68,7 @@ export default Cloudflare.Worker(
     return { fetch: Effect.gen(function* () { return new Response("ok"); }) };
   }).pipe(
     Effect.provide(Cloudflare.Queues.WriteQueueBinding),
-    Effect.provide(Cloudflare.R2BucketBindingLive),
+    Effect.provide(Cloudflare.R2.ReadWriteBucketBinding),
   ),
 );
 ```
@@ -153,7 +153,7 @@ alongside the other binding lives.
   }).pipe(
 +   Effect.provide(Cloudflare.QueueEventSourceLive),
     Effect.provide(Cloudflare.Queues.WriteQueueBinding),
-    Effect.provide(Cloudflare.R2BucketBindingLive),
+    Effect.provide(Cloudflare.R2.ReadWriteBucketBinding),
   ),
 ```
 

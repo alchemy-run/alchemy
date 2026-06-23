@@ -298,7 +298,6 @@ export const providers = () =>
       KeylessCertificate.KeylessCertificate,
       KeyPair,
       KV.KVNamespace,
-      KV.KVNamespaceBindingPolicy,
       LeakedCredentialCheck.LeakedCredentialCheck,
       LeakedCredentialCheck.LeakedCredentialDetection,
       LoadBalancer.LoadBalancer,
@@ -460,7 +459,6 @@ export const providers = () =>
         Hyperdrive.HyperdriveBindingPolicyLive,
         Hyperdrive.HyperdriveProvider(),
         Images.ImagesBindingPolicyLive,
-        KV.KVNamespaceBindingPolicyLive,
         KV.KVNamespaceProvider(),
         Queue.QueueConsumerProvider(),
         Queue.QueueEventSourcePolicyLive,
@@ -631,7 +629,6 @@ export const providers = () =>
         ),
         Layer.mergeAll(
           KeylessCertificate.KeylessCertificateProvider(),
-          KV.KVNamespaceBindingPolicyLive,
           KV.KVNamespaceProvider(),
           LeakedCredentialCheck.LeakedCredentialCheckProvider(),
           LeakedCredentialCheck.LeakedCredentialDetectionProvider(),

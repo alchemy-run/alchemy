@@ -136,7 +136,7 @@ export default Cloudflare.Worker(
 ```
 
 We'll provide the runtime side of this binding
-(`Cloudflare.R2BucketBindingLive`) in step 3c when we wire up the
+(`Cloudflare.R2.ReadWriteBucketBinding`) in step 3c when we wire up the
 `fetch` handler.
 
 ### 3b. Construct the handlers inside Init
@@ -266,7 +266,7 @@ export default Cloudflare.Worker(
         Effect.provide(RpcSerialization.layerJson),
       ),
     };
-  }).pipe(Effect.provide(Cloudflare.R2BucketBindingLive)),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 );
 ```
 
