@@ -16,6 +16,7 @@ import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
+import { installExternalPackages } from "../../Bundle/ExternalPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
@@ -61,6 +62,10 @@ export const isFunction = (value: any): value is Function => {
 };
 
 export interface FunctionBuildOptions {
+  /**
+   * Rolldown input options. String package entries in `external` are installed
+   * into the Lambda artifact for Linux and the function's architecture.
+   */
   readonly input?: Partial<rolldown.InputOptions>;
   readonly output?: Partial<rolldown.OutputOptions>;
 }
@@ -257,6 +262,19 @@ const normalizeFunctionUrl = (
  * const func = yield* AWS.Lambda.Function("ArmFunction", {
  *   main: "./src/handler.ts",
  *   architecture: "arm64",
+ * });
+ * ```
+ *
+ * @example Function with an external native package
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("ImageProcessor", {
+ *   main: "./src/handler.ts",
+ *   architecture: "arm64",
+ *   build: {
+ *     input: {
+ *       external: ["sharp"],
+ *     },
+ *   },
  * });
  * ```
  *
@@ -754,15 +772,25 @@ export const FunctionProvider = () =>
           entry: string,
           plugins?: rolldown.RolldownPluginOption,
         ) {
+          const configuredExternal = props.build?.input?.external;
           return yield* Bundle.build(
             {
               ...props.build?.input,
               input: entry,
               cwd,
-              external: [
-                /^@aws-sdk\//,
-                ...((props.build?.input?.external as string[]) ?? []),
-              ],
+              external:
+                typeof configuredExternal === "function"
+                  ? (moduleId, parentId, isResolved) =>
+                      moduleId.startsWith("@aws-sdk/") ||
+                      configuredExternal(moduleId, parentId, isResolved)
+                  : [
+                      /^@aws-sdk\//,
+                      ...(Array.isArray(configuredExternal)
+                        ? configuredExternal
+                        : configuredExternal === undefined
+                          ? []
+                          : [configuredExternal]),
+                    ],
               platform: "node",
               plugins: [props.build?.input?.plugins, plugins],
             },
@@ -875,14 +903,24 @@ export default await Effect.runPromise(handlerEffect)
             content: f.content,
           }));
 
+        const externalPackageFiles = yield* installExternalPackages({
+          cwd,
+          external: props.build?.input?.external,
+          architecture: props.architecture ?? "x86_64",
+        });
+        const archiveFiles = [...extraFiles, ...externalPackageFiles];
+
         const archive = yield* zipCode(
           code,
-          extraFiles.length > 0 ? extraFiles : undefined,
+          archiveFiles.length > 0 ? archiveFiles : undefined,
         );
         return {
           archive,
           code,
-          hash: bundleOutput.hash,
+          hash:
+            externalPackageFiles.length > 0
+              ? yield* sha256(archive)
+              : bundleOutput.hash,
         };
       });
 
@@ -1289,13 +1327,13 @@ export default await Effect.runPromise(handlerEffect)
         return undefined;
       });
 
-      const summary = ({ code }: { code: Uint8Array<ArrayBufferLike> }) =>
+      const summary = ({ archive }: { archive: Uint8Array<ArrayBufferLike> }) =>
         `${
-          code.length >= 1024 * 1024
-            ? `${(code.length / (1024 * 1024)).toFixed(2)}MB`
-            : code.length >= 1024
-              ? `${(code.length / 1024).toFixed(2)}KB`
-              : `${code.length}B`
+          archive.length >= 1024 * 1024
+            ? `${(archive.length / (1024 * 1024)).toFixed(2)}MB`
+            : archive.length >= 1024
+              ? `${(archive.length / 1024).toFixed(2)}KB`
+              : `${archive.length}B`
         }`;
 
       return {
@@ -1321,15 +1359,7 @@ export default await Effect.runPromise(handlerEffect)
           ) {
             return { action: "update" };
           }
-          if (
-            output.code.hash !==
-            (yield* bundleCode(id, {
-              main: news.main,
-              handler: news.handler,
-              build: news.build,
-              uploadSourceMap: news.uploadSourceMap,
-            })).hash
-          ) {
+          if (output.code.hash !== (yield* bundleCode(id, news)).hash) {
             // code changed
             return { action: "update" };
           }
@@ -1525,7 +1555,7 @@ export default await Effect.runPromise(handlerEffect)
             bindings,
           });
 
-          const { archive, code, hash } = yield* bundleCode(id, news);
+          const { archive, hash } = yield* bundleCode(id, news);
 
           yield* createOrUpdateFunction({
             id,
@@ -1555,7 +1585,7 @@ export default await Effect.runPromise(handlerEffect)
             currentFunctionUrl: output?.functionUrl,
           });
 
-          yield* session.note(summary({ code }));
+          yield* session.note(summary({ archive }));
 
           return {
             ...output,
