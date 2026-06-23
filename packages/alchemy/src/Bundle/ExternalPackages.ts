@@ -1,4 +1,5 @@
 import * as Data from "effect/Data";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import fg from "fast-glob";
 import { execFile } from "node:child_process";
@@ -14,6 +15,7 @@ import {
   realpath,
   rename,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
@@ -426,6 +428,106 @@ export const collectExternalPackageFiles = (
           }),
   });
 
+export const renderExternalPackageCollector = (packages: readonly string[]) =>
+  `import { cp, mkdir, readFile, realpath } from "node:fs/promises";
+import path from "node:path";
+
+const selectedPackages = ${JSON.stringify([...packages].sort())};
+const installRoot = await realpath(path.resolve(process.argv[2]));
+const outputRoot = path.resolve(process.argv[3]);
+const nodeModulesRoot = path.join(installRoot, "node_modules");
+const visitedPackages = new Set();
+
+function isWithin(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+async function packageExists(directory) {
+  try {
+    await readFile(path.join(directory, "package.json"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function findInstalledPackage(fromPackage, packageName) {
+  let current = fromPackage;
+  while (isWithin(installRoot, current)) {
+    const candidate = path.join(current, "node_modules", packageName);
+    if (await packageExists(candidate)) return candidate;
+    if (current === installRoot) break;
+    current = path.dirname(current);
+  }
+  return undefined;
+}
+
+async function copyPackage(packageDirectory) {
+  const canonical = await realpath(packageDirectory);
+  if (!isWithin(installRoot, canonical)) {
+    throw new Error("Package resolves outside install root: " + packageDirectory);
+  }
+  if (visitedPackages.has(canonical)) return;
+  visitedPackages.add(canonical);
+
+  const relative = path.relative(installRoot, packageDirectory);
+  const destination = path.join(outputRoot, relative);
+  await mkdir(path.dirname(destination), { recursive: true });
+  await cp(packageDirectory, destination, {
+    recursive: true,
+    dereference: true,
+    filter: async (source) => {
+      if (source !== packageDirectory && path.basename(source) === "node_modules") {
+        return false;
+      }
+      const canonicalSource = await realpath(source);
+      if (!isWithin(installRoot, canonicalSource)) {
+        throw new Error("Package path resolves outside install root: " + source);
+      }
+      return true;
+    },
+  });
+
+  const manifest = JSON.parse(await readFile(path.join(packageDirectory, "package.json"), "utf8"));
+  const bundled = Array.isArray(manifest.bundledDependencies)
+    ? manifest.bundledDependencies
+    : Array.isArray(manifest.bundleDependencies)
+      ? manifest.bundleDependencies
+      : [];
+  const required = new Set([
+    ...Object.keys(manifest.dependencies ?? {}),
+    ...Object.keys(manifest.peerDependencies ?? {}).filter(
+      (name) => !manifest.peerDependenciesMeta?.[name]?.optional,
+    ),
+    ...bundled,
+  ]);
+  const optional = new Set([
+    ...Object.keys(manifest.optionalDependencies ?? {}),
+    ...Object.keys(manifest.peerDependencies ?? {}).filter(
+      (name) => manifest.peerDependenciesMeta?.[name]?.optional,
+    ),
+  ]);
+
+  for (const dependency of [...required, ...optional].sort()) {
+    const installed = await findInstalledPackage(packageDirectory, dependency);
+    if (installed) await copyPackage(installed);
+    else if (required.has(dependency)) {
+      throw new Error("Required dependency is missing: " + dependency);
+    }
+  }
+}
+
+await mkdir(outputRoot, { recursive: true });
+for (const packageName of selectedPackages) {
+  const packageDirectory = path.join(nodeModulesRoot, packageName);
+  if (!(await packageExists(packageDirectory))) {
+    throw new Error("Selected package is missing: " + packageName);
+  }
+  await copyPackage(packageDirectory);
+}
+`;
+
 export const renderExternalPackageDockerfile = (options: {
   readonly manager: "bun" | "npm";
   readonly runtime: "nodejs22.x" | "nodejs24.x";
@@ -461,9 +563,10 @@ export const renderExternalPackageDockerfile = (options: {
     "WORKDIR /workspace",
     "COPY . .",
     ...install,
+    "RUN node /workspace/alchemy-external-package-collector.mjs /workspace /workspace/.alchemy-external",
     "",
     "FROM scratch AS export",
-    "COPY --from=dependencies /workspace/node_modules /node_modules",
+    "COPY --from=dependencies /workspace/.alchemy-external/node_modules /node_modules",
     "",
   ].join("\n");
 };
@@ -531,13 +634,22 @@ export const prepareExternalPackageBuildContext = (options: {
       const canonicalLockRoot = await realpath(options.project.lockRoot);
 
       await mkdir(options.directory, { recursive: true });
+      const collector = renderExternalPackageCollector(packages);
+      const dockerfile = renderExternalPackageDockerfile({
+        manager: options.project.manager,
+        runtime: options.runtime,
+        packages,
+        bunVersion: options.bunVersion,
+      });
       const fingerprintInputs: Array<string | Uint8Array> = [
-        "lambda-external-packages-v1",
+        "lambda-external-packages-v2",
         options.project.manager,
         options.runtime,
         options.architecture,
         options.bunVersion,
         JSON.stringify(packages),
+        collector,
+        dockerfile,
       ];
       for (const relative of manifestRelatives) {
         const source = path.resolve(options.project.lockRoot, relative);
@@ -573,14 +685,10 @@ export const prepareExternalPackageBuildContext = (options: {
         lockContent,
       );
       await writeFile(
-        path.join(options.directory, "Dockerfile"),
-        renderExternalPackageDockerfile({
-          manager: options.project.manager,
-          runtime: options.runtime,
-          packages,
-          bunVersion: options.bunVersion,
-        }),
+        path.join(options.directory, "alchemy-external-package-collector.mjs"),
+        collector,
       );
+      await writeFile(path.join(options.directory, "Dockerfile"), dockerfile);
 
       return {
         fingerprint: digest(fingerprintInputs),
@@ -685,6 +793,17 @@ export interface MaterializedExternalPackages {
   readonly cacheHit: boolean;
 }
 
+export interface ExternalPackageBuildRequest {
+  readonly platform: string;
+  readonly contextDirectory: string;
+  readonly outputDirectory: string;
+}
+
+const inFlightMaterializations = new Map<
+  string,
+  Deferred.Deferred<MaterializedExternalPackages, ExternalPackageError>
+>();
+
 const installedBunVersion = Effect.tryPromise({
   try: () =>
     new Promise<string>((resolve, reject) => {
@@ -701,6 +820,42 @@ const installedBunVersion = Effect.tryPromise({
 });
 
 const bunVersionPattern = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+const staleBuildAgeMs = 10 * 60 * 1000;
+
+const processIsRunning = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (cause) {
+    return (cause as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+};
+
+const cleanupStaleBuildDirectories = async (cacheDirectory: string) => {
+  for (const entry of await readdir(cacheDirectory, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith("build-")) continue;
+    try {
+      const directory = path.join(cacheDirectory, entry.name);
+      let ownerIsRunning = false;
+      try {
+        const owner = JSON.parse(
+          await readFile(path.join(directory, "owner.json"), "utf8"),
+        ) as { readonly pid?: number };
+        ownerIsRunning =
+          typeof owner.pid === "number" && processIsRunning(owner.pid);
+      } catch {
+        const info = await stat(directory);
+        if (Date.now() - info.mtimeMs < staleBuildAgeMs) continue;
+      }
+      if (!ownerIsRunning) {
+        await rm(directory, { recursive: true, force: true });
+      }
+    } catch {
+      // Cleanup is best-effort: another planner may have removed the same
+      // abandoned directory after we listed it.
+    }
+  }
+};
 
 export const materializeExternalPackages = Effect.fnUntraced(
   function* (options: {
@@ -711,6 +866,9 @@ export const materializeExternalPackages = Effect.fnUntraced(
     readonly cacheDirectory: string;
     readonly bunVersion: string | undefined;
     readonly note?: (message: string) => Effect.Effect<void>;
+    readonly build?: (
+      request: ExternalPackageBuildRequest,
+    ) => Effect.Effect<void, ExternalPackageError>;
   }) {
     const packages = yield* normalizeExternalPackageNames(options.packages);
     const project = yield* discoverExternalPackageProject(
@@ -734,7 +892,10 @@ export const materializeExternalPackages = Effect.fnUntraced(
     bunVersion ??= "not-used";
 
     yield* Effect.tryPromise({
-      try: () => mkdir(options.cacheDirectory, { recursive: true }),
+      try: async () => {
+        await mkdir(options.cacheDirectory, { recursive: true });
+        await cleanupStaleBuildDirectories(options.cacheDirectory);
+      },
       catch: (cause) =>
         new ExternalPackageError({
           message: `Failed to create external package cache ${options.cacheDirectory}`,
@@ -744,7 +905,16 @@ export const materializeExternalPackages = Effect.fnUntraced(
 
     return yield* Effect.acquireUseRelease(
       Effect.tryPromise({
-        try: () => mkdtemp(path.join(options.cacheDirectory, "build-")),
+        try: async () => {
+          const directory = await mkdtemp(
+            path.join(options.cacheDirectory, "build-"),
+          );
+          await writeFile(
+            path.join(directory, "owner.json"),
+            `${JSON.stringify({ pid: process.pid, startedAt: Date.now() })}\n`,
+          );
+          return directory;
+        },
         catch: (cause) =>
           new ExternalPackageError({
             message: "Failed to create external package build directory.",
@@ -780,98 +950,130 @@ export const materializeExternalPackages = Effect.fnUntraced(
             return { ...cached, cacheHit: true };
           }
 
-          yield* Effect.tryPromise({
-            try: () => rm(cacheDirectory, { recursive: true, force: true }),
-            catch: (cause) =>
-              new ExternalPackageError({
-                message: "Failed to remove an invalid Lambda package cache.",
-                cause,
-              }),
-          });
-
-          if (options.note) {
-            yield* options.note(
-              `Installing Lambda packages for ${prepared.platform}: ${packages.join(", ")}`,
-            );
+          const inFlight = inFlightMaterializations.get(cacheDirectory);
+          if (inFlight) {
+            return yield* Deferred.await(inFlight);
           }
-          const outputDirectory = path.join(temporaryDirectory, "output");
-          yield* Effect.tryPromise({
-            try: () => mkdir(outputDirectory, { recursive: true }),
-            catch: (cause) =>
-              new ExternalPackageError({
-                message: "Failed to create Docker package output directory.",
-                cause,
-              }),
-          });
-          yield* runDockerCommand(
-            [
-              "build",
-              "--platform",
-              prepared.platform,
-              "--target",
-              "export",
-              "--output",
-              `type=local,dest=${outputDirectory}`,
-              contextDirectory,
-            ],
-            { env: { DOCKER_BUILDKIT: "1" } },
-          ).pipe(
-            Effect.mapError(
-              (cause) =>
+          const deferred = Deferred.makeUnsafe<
+            MaterializedExternalPackages,
+            ExternalPackageError
+          >();
+          inFlightMaterializations.set(cacheDirectory, deferred);
+
+          return yield* Effect.gen(function* () {
+            yield* Effect.tryPromise({
+              try: () => rm(cacheDirectory, { recursive: true, force: true }),
+              catch: (cause) =>
                 new ExternalPackageError({
-                  message:
-                    "Failed to build external Lambda packages with Docker. Ensure Docker with BuildKit and the target architecture emulator are available.",
+                  message: "Failed to remove an invalid Lambda package cache.",
                   cause,
                 }),
-            ),
-            Effect.tapError((error) =>
-              options.note
-                ? options.note(
-                    `Lambda package installation failed: ${error.message}`,
-                  )
-                : Effect.void,
-            ),
-          );
+            });
 
-          const files = yield* collectExternalPackageFiles(
-            path.join(outputDirectory, "node_modules"),
-            packages,
-          );
-          const stagingCache = path.join(
-            options.cacheDirectory,
-            `.staging-${prepared.fingerprint}-${randomUUID()}`,
-          );
-          const manifest = yield* Effect.tryPromise({
-            try: () => writeExternalPackageCache(stagingCache, files),
-            catch: (cause) =>
-              new ExternalPackageError({
-                message: "Failed to write external Lambda package cache.",
-                cause,
-              }),
-          });
-          yield* Effect.tryPromise({
-            try: async () => {
-              try {
-                await rename(stagingCache, cacheDirectory);
-              } catch (cause) {
-                if (!(await exists(cacheDirectory))) {
-                  throw cause;
+            if (options.note) {
+              yield* options.note(
+                `Installing Lambda packages for ${prepared.platform}: ${packages.join(", ")}`,
+              );
+            }
+            const outputDirectory = path.join(temporaryDirectory, "output");
+            yield* Effect.tryPromise({
+              try: () => mkdir(outputDirectory, { recursive: true }),
+              catch: (cause) =>
+                new ExternalPackageError({
+                  message: "Failed to create Docker package output directory.",
+                  cause,
+                }),
+            });
+            const buildRequest = {
+              platform: prepared.platform,
+              contextDirectory,
+              outputDirectory,
+            } satisfies ExternalPackageBuildRequest;
+            yield* (
+              options.build
+                ? options.build(buildRequest)
+                : runDockerCommand(
+                    [
+                      "build",
+                      "--platform",
+                      buildRequest.platform,
+                      "--target",
+                      "export",
+                      "--output",
+                      `type=local,dest=${buildRequest.outputDirectory}`,
+                      buildRequest.contextDirectory,
+                    ],
+                    { env: { DOCKER_BUILDKIT: "1" } },
+                  ).pipe(
+                    Effect.asVoid,
+                    Effect.mapError(
+                      (cause) =>
+                        new ExternalPackageError({
+                          message:
+                            "Failed to build external Lambda packages with Docker. Ensure Docker with BuildKit and the target architecture emulator are available.",
+                          cause,
+                        }),
+                    ),
+                  )
+            ).pipe(
+              Effect.tapError((error) =>
+                options.note
+                  ? options.note(
+                      `Lambda package installation failed: ${error.message}`,
+                    )
+                  : Effect.void,
+              ),
+            );
+
+            const files = yield* collectExternalPackageFiles(
+              path.join(outputDirectory, "node_modules"),
+              packages,
+            );
+            const stagingCache = path.join(
+              options.cacheDirectory,
+              `.staging-${prepared.fingerprint}-${randomUUID()}`,
+            );
+            const manifest = yield* Effect.tryPromise({
+              try: () => writeExternalPackageCache(stagingCache, files),
+              catch: (cause) =>
+                new ExternalPackageError({
+                  message: "Failed to write external Lambda package cache.",
+                  cause,
+                }),
+            });
+            yield* Effect.tryPromise({
+              try: async () => {
+                try {
+                  await rename(stagingCache, cacheDirectory);
+                } catch (cause) {
+                  if (!(await exists(cacheDirectory))) {
+                    throw cause;
+                  }
+                  await rm(stagingCache, { recursive: true, force: true });
                 }
-                await rm(stagingCache, { recursive: true, force: true });
-              }
-            },
-            catch: (cause) =>
-              new ExternalPackageError({
-                message: "Failed to publish external Lambda package cache.",
-                cause,
+              },
+              catch: (cause) =>
+                new ExternalPackageError({
+                  message: "Failed to publish external Lambda package cache.",
+                  cause,
+                }),
+            });
+            return {
+              files,
+              hash: manifest.hash,
+              size: manifest.size,
+              cacheHit: false,
+            } satisfies MaterializedExternalPackages;
+          }).pipe(
+            Effect.onExit((exit) => Deferred.done(deferred, exit)),
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (inFlightMaterializations.get(cacheDirectory) === deferred) {
+                  inFlightMaterializations.delete(cacheDirectory);
+                }
               }),
-          });
-          return {
-            files,
-            hash: manifest.hash,
-            size: manifest.size,
-            cacheHit: false,
-          } satisfies MaterializedExternalPackages;
+            ),
+          );
         }),
       (temporaryDirectory) =>
         Effect.tryPromise(() =>

@@ -8,6 +8,7 @@ import {
   materializeExternalPackages,
   normalizeExternalPackageNames,
   prepareExternalPackageBuildContext,
+  renderExternalPackageCollector,
   renderExternalPackageDockerfile,
   validateLambdaPackageSize,
 } from "@/Bundle/ExternalPackages";
@@ -16,6 +17,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { spawnSync } from "node:child_process";
 import {
+  access,
   chmod,
   mkdtemp,
   mkdir,
@@ -23,6 +25,7 @@ import {
   rm,
   symlink,
   unlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -250,6 +253,65 @@ describe("external Lambda packages", () => {
     }
   });
 
+  it("prunes a hoisted install to the selected runtime closure before export", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "alchemy-external-prune-"));
+    try {
+      const nodeModules = path.join(root, "node_modules");
+      const output = path.join(root, "output");
+      const selected = path.join(nodeModules, "selected");
+      const runtime = path.join(nodeModules, "runtime");
+      const devOnly = path.join(nodeModules, "dev-only");
+      const unrelated = path.join(nodeModules, "unrelated");
+      await Promise.all(
+        [selected, runtime, devOnly, unrelated].map((directory) =>
+          mkdir(directory, { recursive: true }),
+        ),
+      );
+      await writeFile(
+        path.join(selected, "package.json"),
+        JSON.stringify({
+          dependencies: { runtime: "1.0.0" },
+          devDependencies: { "dev-only": "1.0.0" },
+        }),
+      );
+      await writeFile(path.join(selected, "index.js"), "selected");
+      await writeFile(path.join(runtime, "package.json"), "{}");
+      await writeFile(path.join(runtime, "index.js"), "runtime");
+      await writeFile(path.join(devOnly, "package.json"), "{}");
+      await writeFile(path.join(unrelated, "package.json"), "{}");
+      await writeFile(path.join(unrelated, "large.bin"), new Uint8Array(1024));
+
+      const collector = path.join(root, "collector.mjs");
+      await writeFile(collector, renderExternalPackageCollector(["selected"]));
+      const result = spawnSync(process.execPath, [collector, root, output], {
+        encoding: "utf8",
+      });
+
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(
+        await readFile(
+          path.join(output, "node_modules/selected/index.js"),
+          "utf8",
+        ),
+      ).toBe("selected");
+      expect(
+        await readFile(
+          path.join(output, "node_modules/runtime/index.js"),
+          "utf8",
+        ),
+      ).toBe("runtime");
+      await expect(
+        access(path.join(output, "node_modules/dev-only")),
+      ).rejects.toThrow();
+      await expect(
+        access(path.join(output, "node_modules/unrelated")),
+      ).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects package symlinks that escape the install root", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "alchemy-external-link-"));
     const outside = await mkdtemp(
@@ -364,6 +426,103 @@ describe("external Lambda packages", () => {
       await expect(readFile(path.join(context, ".npmrc"))).rejects.toThrow();
       expect(prepared.platform).toBe("linux/arm64");
       expect(prepared.fingerprint).toHaveLength(64);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("coalesces concurrent materializations for the same cache key", async () => {
+    const root = await mkdtemp(
+      path.join(tmpdir(), "alchemy-external-concurrent-"),
+    );
+    try {
+      await writeFile(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { selected: "1.0.0" } }),
+      );
+      await writeFile(path.join(root, "bun.lock"), "{}\n");
+      let builds = 0;
+      const options = {
+        packageRoot: root,
+        packages: ["selected"],
+        runtime: "nodejs22.x" as const,
+        architecture: "arm64" as const,
+        cacheDirectory: path.join(root, "cache"),
+        bunVersion: "1.3.14",
+        build: ({ outputDirectory }: { outputDirectory: string }) =>
+          Effect.promise(async () => {
+            builds += 1;
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            const selected = path.join(
+              outputDirectory,
+              "node_modules/selected",
+            );
+            await mkdir(selected, { recursive: true });
+            await writeFile(path.join(selected, "package.json"), "{}");
+            await writeFile(path.join(selected, "index.js"), "selected");
+          }),
+      };
+
+      const [first, second] = await Effect.runPromise(
+        Effect.all(
+          [
+            materializeExternalPackages(options),
+            materializeExternalPackages(options),
+          ],
+          { concurrency: "unbounded" },
+        ).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+      );
+      expect(builds).toBe(1);
+      expect(first.hash).toBe(second.hash);
+
+      const cached = await Effect.runPromise(
+        materializeExternalPackages(options).pipe(
+          Effect.provide(NodeServices.layer),
+          Effect.scoped,
+        ),
+      );
+      expect(builds).toBe(1);
+      expect(cached.cacheHit).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("removes abandoned external-package build directories", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "alchemy-external-stale-"));
+    try {
+      const cacheDirectory = path.join(root, "cache");
+      const abandoned = path.join(cacheDirectory, "build-abandoned");
+      await mkdir(abandoned, { recursive: true });
+      const old = new Date(Date.now() - 60 * 60 * 1000);
+      await utimes(abandoned, old, old);
+      await writeFile(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { selected: "1.0.0" } }),
+      );
+      await writeFile(path.join(root, "bun.lock"), "{}\n");
+
+      await Effect.runPromise(
+        materializeExternalPackages({
+          packageRoot: root,
+          packages: ["selected"],
+          runtime: "nodejs22.x",
+          architecture: "arm64",
+          cacheDirectory,
+          bunVersion: "1.3.14",
+          build: ({ outputDirectory }) =>
+            Effect.promise(async () => {
+              const selected = path.join(
+                outputDirectory,
+                "node_modules/selected",
+              );
+              await mkdir(selected, { recursive: true });
+              await writeFile(path.join(selected, "package.json"), "{}");
+            }),
+        }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
+      );
+
+      await expect(access(abandoned)).rejects.toThrow();
     } finally {
       await rm(root, { recursive: true, force: true });
     }
