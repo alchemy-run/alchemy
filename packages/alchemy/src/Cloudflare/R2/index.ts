@@ -1,5 +1,4 @@
 export * from "./Bucket.ts";
-export * from "./BucketBinding.ts";
 export * from "./BucketEventNotification.ts";
 export * from "./BucketRead.ts";
 export * from "./BucketReadBinding.ts";

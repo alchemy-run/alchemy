@@ -25,7 +25,7 @@ const R2_HTTP_PERMISSION_GROUPS: ApiTokenPermissionGroupRef[] = [
 
 type PermissionGroup = (typeof R2_HTTP_PERMISSION_GROUPS)[number];
 
-export const makeBucketHttp = <Client>(options: {
+export const makeHttpBucketBinding = <Client>(options: {
   permissionGroups: PermissionGroup[];
   makeClient: (
     token: R2HttpToken,

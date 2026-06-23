@@ -1,7 +1,7 @@
 import * as Cloudflare from "@/Cloudflare";
 import * as Alchemy from "@/index.ts";
 import * as Effect from "effect/Effect";
-import Container from "./container.ts";
+import MyContainerLive from "./container.ts";
 import Worker from "./worker.ts";
 
 export default Alchemy.Stack(
@@ -12,8 +12,10 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const worker = yield* Worker;
+    // yield* MyContainer.Application
+
     return {
       url: worker.url.as<string>(),
     };
-  }).pipe(Effect.provide(Container)),
+  }).pipe(Effect.provide(MyContainerLive)),
 );

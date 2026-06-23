@@ -5,7 +5,7 @@ import * as Stream from "effect/Stream";
 import { authorizeWith } from "../HttpClientUtils.ts";
 import {
   baseObject,
-  makeBucketHttp,
+  makeHttpBucketBinding,
   makeR2HttpScope,
   readHttpMetadata,
   toBody,
@@ -23,7 +23,7 @@ import { BucketWrite, type WriteBucketClient } from "./BucketWrite.ts";
 export const WriteBucketHttp = Layer.effect(
   BucketWrite,
   Effect.suspend(() =>
-    makeBucketHttp({
+    makeHttpBucketBinding({
       permissionGroups: ["Workers R2 Storage Write"],
       makeClient: makeWriteR2HttpClient,
     }),

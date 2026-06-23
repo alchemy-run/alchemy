@@ -199,7 +199,7 @@ export const QueueEventSourcePolicyLive = QueueEventSourcePolicy.layer.succeed(
  * `Cloudflare.QueueConsumer` resource.
  *
  * Provide alongside other Cloudflare runtime layers (e.g.
- * `QueueBindingLive`) on the Worker effect.
+ * `WriteQueueBinding`) on the Worker effect.
  */
 export const QueueEventSourceLive = Layer.effect(
   QueueEventSource,

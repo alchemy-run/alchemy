@@ -102,7 +102,7 @@ export default class EffectWorker extends Cloudflare.Worker<EffectWorker>()(
   }).pipe(
     Effect.provide([
       Cloudflare.KVNamespaceBindingLive,
-      Cloudflare.QueueBindingLive,
+      Cloudflare.Queues.WriteQueueBinding,
       Cloudflare.QueueEventSourceLive,
     ]),
   ),

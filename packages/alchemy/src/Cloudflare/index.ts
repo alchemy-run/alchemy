@@ -89,6 +89,7 @@ export * from "./PageShield/index.ts";
 export * from "./Pipelines/index.ts";
 export * from "./Providers.ts";
 export * from "./Queue/index.ts";
+export * as Queues from "./Queue/index.ts";
 export * from "./R2/index.ts";
 export * as R2 from "./R2/index.ts";
 export * from "./R2DataCatalog/index.ts";

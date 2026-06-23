@@ -9,7 +9,7 @@ import * as Provider from "../../Provider.ts";
 import { Resource } from "../../Resource.ts";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
-import type { R2Bucket } from "./R2Bucket.ts";
+import type { R2Bucket } from "./Bucket.ts";
 
 const R2BucketSippyTypeId = "Cloudflare.R2.BucketSippy" as const;
 type R2BucketSippyTypeId = typeof R2BucketSippyTypeId;

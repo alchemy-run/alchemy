@@ -11,9 +11,10 @@ import type { WriteBucketClient } from "./BucketWrite.ts";
  */
 export class BucketReadWrite extends Binding.Service<
   BucketReadWrite,
-  (bucket: R2Bucket) => Effect.Effect<ReadWriteClient>
+  (bucket: R2Bucket) => Effect.Effect<ReadWriteBucketClient>
 >()("Cloudflare.R2Bucket") {}
 
 export const ReadWriteBucket = BucketReadWrite.bind;
 
-export interface ReadWriteClient extends ReadBucketClient, WriteBucketClient {}
+export interface ReadWriteBucketClient
+  extends ReadBucketClient, WriteBucketClient {}

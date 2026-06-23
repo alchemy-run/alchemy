@@ -1,8 +1,11 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { makeBucketHttp, type R2HttpToken } from "./BucketHttp.ts";
+import { makeHttpBucketBinding, type R2HttpToken } from "./BucketHttp.ts";
 import { makeReadR2HttpClient } from "./BucketReadHttp.ts";
-import { BucketReadWrite, type ReadWriteClient } from "./BucketReadWrite.ts";
+import {
+  BucketReadWrite,
+  type ReadWriteBucketClient,
+} from "./BucketReadWrite.ts";
 import { makeWriteR2HttpClient } from "./BucketWriteHttp.ts";
 
 /**
@@ -13,7 +16,7 @@ import { makeWriteR2HttpClient } from "./BucketWriteHttp.ts";
 export const ReadWriteBucketHttp = Layer.effect(
   BucketReadWrite,
   Effect.suspend(() =>
-    makeBucketHttp({
+    makeHttpBucketBinding({
       permissionGroups: ["Workers R2 Storage Read", "Workers R2 Storage Write"],
       makeClient: makeReadWriteR2HttpClient,
     }),
@@ -25,8 +28,8 @@ export const makeReadWriteR2HttpClient = (
   token: R2HttpToken,
   bucketName: Effect.Effect<string>,
   jurisdiction: Effect.Effect<string>,
-): ReadWriteClient =>
+): ReadWriteBucketClient =>
   ({
     ...makeReadR2HttpClient(token, bucketName, jurisdiction),
     ...makeWriteR2HttpClient(token, bucketName, jurisdiction),
-  }) satisfies ReadWriteClient;
+  }) satisfies ReadWriteBucketClient;

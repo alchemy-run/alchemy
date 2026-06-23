@@ -2,7 +2,7 @@ import * as Cloudflare from "alchemy/Cloudflare";
 
 /**
  * Queue resource used by the Api worker as a producer (via
- * `Cloudflare.QueueBinding.bind(Queue)`). Exercises the Queue + QueueBinding
+ * `Cloudflare.Queues.WriteQueue(Queue)`). Exercises the Queue + QueueWrite
  * resources end-to-end in the Effect-based example.
  *
  * The async example (`examples/cloudflare-worker-async`) demonstrates the

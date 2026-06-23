@@ -5,7 +5,7 @@ import * as Stream from "effect/Stream";
 import { authorizeWith } from "../HttpClientUtils.ts";
 import {
   baseObject,
-  makeBucketHttp,
+  makeHttpBucketBinding,
   makeR2HttpScope,
   toR2Error,
   type HttpMetadata,
@@ -27,7 +27,7 @@ import {
 export const ReadBucketHttp = Layer.effect(
   BucketRead,
   Effect.suspend(() =>
-    makeBucketHttp({
+    makeHttpBucketBinding({
       permissionGroups: ["Workers R2 Storage Read"],
       makeClient: makeReadR2HttpClient,
     }),
