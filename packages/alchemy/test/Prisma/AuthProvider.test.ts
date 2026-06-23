@@ -7,14 +7,14 @@ import {
 } from "@/Prisma/AuthProvider";
 import { AuthProviders, getAuthProvider } from "@/Auth/AuthProvider";
 import { CredentialsStore } from "@/Auth/Credentials";
-import { Profile } from "@/Auth/Profile";
+import { AlchemyProfile } from "@/Auth/Profile";
 import { describe, expect, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
-const fakeProfile: Profile["Service"] = {
+const fakeProfile: AlchemyProfile["Service"] = {
   readConfig: Effect.succeed({ version: 0, profiles: {} }),
   writeConfig: () => Effect.void,
   getProfile: () => Effect.succeed(undefined),
@@ -41,7 +41,7 @@ const testLayer = (
   const authRegistry = Layer.succeed(AuthProviders, authProviders);
   const base = Layer.mergeAll(
     authRegistry,
-    Layer.succeed(Profile, fakeProfile),
+    Layer.succeed(AlchemyProfile, fakeProfile),
     Layer.succeed(CredentialsStore, makeCredentialsStore(stored)),
     ConfigProvider.layer(ConfigProvider.fromUnknown(config)),
   );

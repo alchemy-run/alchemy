@@ -80,6 +80,9 @@ test.provider(
           const database = yield* Prisma.Database("Database", {
             project,
             name: "main",
+            dev: {
+              name: "alchemy-compute-dev-bind-env",
+            },
           });
           const connection = yield* Prisma.Connection("Connection", {
             database,
@@ -146,6 +149,9 @@ test.provider(
             project,
             name: "main",
             isDefault: true,
+            dev: {
+              name: "alchemy-compute-dev-owned-shapes",
+            },
           });
           const connection = yield* Prisma.Connection("Connection", {
             database,

@@ -94,6 +94,7 @@ const publicExports = [
   "updateComputeService",
   "deleteComputeService",
   "promoteComputeService",
+  "rollbackComputeService",
   "listComputeServiceDomains",
   "createComputeServiceDomain",
   "getCustomDomain",

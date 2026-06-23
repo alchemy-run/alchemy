@@ -1657,6 +1657,7 @@ export const ComputeProvider = () =>
       const client = yield* PrismaClient;
       return {
         stables: ["computeServiceId"],
+        list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (output?.local || isPrismaDevId(output?.computeServiceId)) {
@@ -2042,6 +2043,7 @@ export const ComputeDevProvider = () =>
       const ctx = yield* AlchemyContext;
       return {
         stables: ["computeServiceId"],
+        list: () => Effect.succeed([]),
         diff: Effect.fn(function* () {
           return { action: "update" } as const;
         }),

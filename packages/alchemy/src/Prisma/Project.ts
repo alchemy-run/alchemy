@@ -176,6 +176,7 @@ export const ProjectProvider = () =>
       const client = yield* PrismaClient;
       return {
         stables: ["projectId"],
+        list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ id, olds = {}, news = {}, output }) {
           if (isPrismaDevId(output?.projectId)) {
             return { action: "update" } as const;

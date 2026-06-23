@@ -256,6 +256,7 @@ export const ComputeVersionProvider = () =>
       const client = yield* PrismaClient;
       return {
         stables: ["computeVersionId"],
+        list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           const replacementContent = {

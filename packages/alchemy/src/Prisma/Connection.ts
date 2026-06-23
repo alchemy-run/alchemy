@@ -812,6 +812,7 @@ export const ConnectionProvider = () =>
       const client = yield* PrismaClient;
       return {
         stables: ["connectionId"],
+        list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.connectionId)) {

@@ -1,6 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import type * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import type { Scope } from "effect/Scope";
+import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AlchemyContext } from "../AlchemyContext.ts";
 import { AuthProviders } from "../Auth/AuthProvider.ts";
@@ -143,6 +146,7 @@ const devProviderLayer = () =>
   );
 
 type DevRecord = Record<string, unknown>;
+type PrismaDevDatabaseRequirements = ChildProcessSpawner | Path.Path | Scope;
 
 const isRecord = (value: unknown): value is DevRecord =>
   typeof value === "object" && value !== null;
@@ -158,6 +162,7 @@ const devProvider = <R extends ResourceLike>(
 ) =>
   Provider.succeed(resource, {
     stables,
+    list: () => Effect.succeed([]),
     diff: Effect.fn(function* () {
       return { action: "update" } as const;
     }),
@@ -221,8 +226,15 @@ const projectDevProvider = () =>
   }));
 
 const databaseDevProvider = () =>
-  Provider.succeed(Database, {
+  Provider.succeed<
+    Database,
+    never,
+    never,
+    never,
+    PrismaDevDatabaseRequirements
+  >(Database, {
     stables: ["databaseId"],
+    list: () => Effect.succeed([]),
     diff: Effect.fn(function* () {
       return { action: "update" } as const;
     }),

@@ -216,6 +216,96 @@ test.provider.skipIf(!runLive)(
   { timeout: 600_000 },
 );
 
+test.provider.skipIf(!runLive)(
+  "live rolls a Prisma Compute service back to an existing version",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const appDir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-rollback-",
+      });
+      yield* fs.writeFileString(
+        path.join(appDir, "package.json"),
+        ["{", '  "type": "module",', '  "main": "server.ts"', "}", ""].join(
+          "\n",
+        ),
+      );
+      yield* fs.writeFileString(
+        path.join(appDir, "server.ts"),
+        [
+          'const port = Number(process.env["PORT"] ?? "8080");',
+          "const server = Bun.serve({",
+          "  port,",
+          "  routes: {",
+          '    "/": new Response(process.env["GREETING"] ?? "missing"),',
+          '    "/health": Response.json({ ok: true }),',
+          "  },",
+          "});",
+          "console.log(`Listening on ${server.url}`);",
+          "export {};",
+          "",
+        ].join("\n"),
+      );
+
+      const suffix = yield* Effect.sync(() => Date.now().toString(36));
+      const name = `alchemy-rollback-${suffix}`;
+
+      yield* stack.destroy();
+
+      yield* Effect.gen(function* () {
+        const output = yield* stack.deploy(
+          Effect.gen(function* () {
+            const project = yield* Prisma.Project("Project", {
+              name,
+              createDatabase: false,
+            });
+            const app = yield* Prisma.Compute("App", {
+              project: project.projectId,
+              serviceName: name,
+              path: appDir,
+              entrypoint: "server.ts",
+              port: 8080,
+              env: { GREETING: "rollback target" },
+              timeoutSeconds: 240,
+              destroyOldVersion: false,
+            });
+            return { project, app };
+          }),
+        );
+
+        const serviceId = output.app.computeServiceId;
+        const versionId = output.app.computeVersionId;
+        expect(serviceId).toBeDefined();
+        expect(versionId).toBeDefined();
+
+        // Roll the service back to its currently-live version. The control
+        // plane accepts a roll to the live version (roll-forward / drift heal)
+        // and returns the stable service endpoint plus the number of custom
+        // domains reassigned (0 here, since none are attached). This drives
+        // the real POST /v1/compute-services/{id}/rollback contract.
+        const result = yield* Prisma.rollbackComputeService(
+          serviceId,
+          versionId!,
+        );
+        expect(typeof result.serviceEndpointDomain).toBe("string");
+        expect(result.serviceEndpointDomain.length).toBeGreaterThan(0);
+        expect(result.reassignedDomains).toBe(0);
+
+        const text = yield* fetchText(`${output.app.url}/`);
+        expect(text).toBe("rollback target");
+      }).pipe(
+        Effect.ensuring(
+          Effect.gen(function* () {
+            yield* stack.destroy().pipe(Effect.ignore);
+            yield* fs.remove(appDir, { recursive: true }).pipe(Effect.ignore);
+          }),
+        ),
+      );
+    }).pipe(logLevel),
+  { timeout: 600_000 },
+);
+
 const fetchText = (url: string) =>
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;

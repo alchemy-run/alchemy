@@ -39,6 +39,167 @@ describe("Prisma Compute auto-build", () => {
     }).pipe(Effect.provide(PlatformServices)),
   );
 
+  it.effect("builds a NestJS app from local CLI output", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-nest-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const nestBin = path.join(binDir, "nest");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { "@nestjs/core": "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(nestBin, "#!/usr/bin/env sh\nexit 0\n");
+      yield* fs.chmod(nestBin, 0o755);
+      yield* fs.makeDirectory(path.join(root, "dist"), { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "dist", "main.js"),
+        "console.log('nest server');",
+      );
+
+      const artifact = yield* runComputeAutoBuild({
+        appPath: root,
+        framework: "nestjs",
+      });
+
+      expect(artifact.entrypoint).toBe("dist/main.js");
+      expect(artifact.defaultPort).toBe(3000);
+      expect(
+        yield* fs.readFileString(path.join(artifact.directory, "dist/main.js")),
+      ).toContain("nest server");
+
+      yield* artifact.cleanup;
+      expect(yield* fs.exists(artifact.directory)).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect("auto-detects NestJS before the Bun fallback", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectory({
+        prefix: "alchemy-prisma-auto-nest-detect-",
+      });
+      const binDir = path.join(root, "node_modules", ".bin");
+      const nestBin = path.join(binDir, "nest");
+      yield* fs.makeDirectory(binDir, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(root, "package.json"),
+        JSON.stringify({ dependencies: { "@nestjs/core": "0.0.0-test" } }),
+      );
+      yield* fs.writeFileString(nestBin, "#!/usr/bin/env sh\nexit 0\n");
+      yield* fs.chmod(nestBin, 0o755);
+      yield* fs.makeDirectory(path.join(root, "dist", "src"), {
+        recursive: true,
+      });
+      yield* fs.writeFileString(
+        path.join(root, "dist", "src", "main.js"),
+        "console.log('auto nest');",
+      );
+
+      const artifact = yield* runComputeAutoBuild({ appPath: root });
+
+      expect(artifact.entrypoint).toBe("dist/src/main.js");
+
+      yield* artifact.cleanup;
+      expect(yield* fs.exists(artifact.directory)).toBe(false);
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+
+  it.effect(
+    "resolves NestJS config output and stages traced dependencies",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectory({
+          prefix: "alchemy-prisma-auto-nest-trace-",
+        });
+        const binDir = path.join(root, "node_modules", ".bin");
+        const nestBin = path.join(binDir, "nest");
+        yield* fs.makeDirectory(binDir, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(root, "package.json"),
+          JSON.stringify({ dependencies: { "@nestjs/core": "0.0.0-test" } }),
+        );
+        yield* fs.writeFileString(
+          path.join(root, "nest-cli.json"),
+          JSON.stringify({ sourceRoot: "app", entryFile: "bootstrap" }),
+        );
+        yield* fs.writeFileString(
+          path.join(root, "tsconfig.json"),
+          [
+            "{",
+            "  // Keep URLs with // intact while reading compiler options.",
+            '  "compilerOptions": {',
+            '    "outDir": "build",',
+            '    "sourceMappingURL": "https://example.com//maps"',
+            "  }",
+            "}",
+          ].join("\n"),
+        );
+        yield* fs.writeFileString(nestBin, "#!/usr/bin/env sh\nexit 0\n");
+        yield* fs.chmod(nestBin, 0o755);
+
+        const usedDep = path.join(root, "node_modules", "used-dep");
+        const unusedDep = path.join(root, "node_modules", "unused-dep");
+        yield* fs.makeDirectory(usedDep, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(usedDep, "package.json"),
+          JSON.stringify({ name: "used-dep", main: "index.js" }),
+        );
+        yield* fs.writeFileString(
+          path.join(usedDep, "index.js"),
+          "module.exports = 'used';",
+        );
+        yield* fs.makeDirectory(unusedDep, { recursive: true });
+        yield* fs.writeFileString(
+          path.join(unusedDep, "package.json"),
+          JSON.stringify({ name: "unused-dep", main: "index.js" }),
+        );
+        yield* fs.writeFileString(
+          path.join(unusedDep, "index.js"),
+          "module.exports = 'unused';",
+        );
+        yield* fs.makeDirectory(path.join(root, "build", "app"), {
+          recursive: true,
+        });
+        yield* fs.writeFileString(
+          path.join(root, "build", "app", "bootstrap.js"),
+          "const used = require('used-dep'); console.log(used);",
+        );
+
+        const artifact = yield* runComputeAutoBuild({
+          appPath: root,
+          framework: "nestjs",
+        });
+
+        expect(artifact.entrypoint).toBe("build/app/bootstrap.js");
+        expect(
+          yield* fs.exists(
+            path.join(
+              artifact.directory,
+              "node_modules",
+              "used-dep",
+              "index.js",
+            ),
+          ),
+        ).toBe(true);
+        expect(
+          yield* fs.exists(
+            path.join(artifact.directory, "node_modules", "unused-dep"),
+          ),
+        ).toBe(false);
+
+        yield* artifact.cleanup;
+        expect(yield* fs.exists(artifact.directory)).toBe(false);
+      }).pipe(Effect.provide(PlatformServices)),
+  );
+
   it.effect(
     "uses a project-local framework CLI and copies Next.js extras",
     () =>

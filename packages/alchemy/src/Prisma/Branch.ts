@@ -117,6 +117,7 @@ export const BranchProvider = () =>
       const client = yield* PrismaClient;
       return {
         stables: ["branchId"],
+        list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.branchId)) {

@@ -199,6 +199,7 @@ export const ComputeServiceProvider = () =>
       const client = yield* PrismaClient;
       return {
         stables: ["computeServiceId"],
+        list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.computeServiceId)) {

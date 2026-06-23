@@ -164,6 +164,8 @@ export const deleteComputeService = (id: string) =>
   withClient((client) => client.deleteComputeService(id));
 export const promoteComputeService = (id: string, versionId: string) =>
   withClient((client) => client.promoteComputeService(id, versionId));
+export const rollbackComputeService = (id: string, versionId: string) =>
+  withClient((client) => client.rollbackComputeService(id, versionId));
 export const listComputeServiceDomains = (computeServiceId: string) =>
   withClient((client) => client.listComputeServiceDomains(computeServiceId));
 export const createComputeServiceDomain = (

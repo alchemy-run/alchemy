@@ -387,6 +387,17 @@ export interface PromoteComputeServiceResult {
   reassignedDomains: number;
 }
 
+/**
+ * Result of rolling a Compute service back (or forward) to an existing
+ * version. Mirrors {@link PromoteComputeServiceResult}: rollback returns the
+ * stable service endpoint and the number of custom domains moved from the
+ * previously-live version to the rolled-to version.
+ */
+export interface RollbackComputeServiceResult {
+  serviceEndpointDomain: string;
+  reassignedDomains: number;
+}
+
 export type CustomDomainStatus =
   | "pending_dns"
   | "verifying"

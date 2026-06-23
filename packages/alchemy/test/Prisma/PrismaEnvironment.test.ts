@@ -1,6 +1,6 @@
 import { AuthProviders } from "@/Auth/AuthProvider";
 import { CredentialsStore } from "@/Auth/Credentials";
-import { Profile } from "@/Auth/Profile";
+import { AlchemyProfile } from "@/Auth/Profile";
 import {
   PrismaAuth,
   type PrismaStoredCredentials,
@@ -12,7 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
-const makeProfile = (method: "env" | "stored"): Profile["Service"] => ({
+const makeProfile = (method: "env" | "stored"): AlchemyProfile["Service"] => ({
   readConfig: Effect.succeed({ version: 0, profiles: {} }),
   writeConfig: () => Effect.void,
   getProfile: () => Effect.succeed(undefined),
@@ -51,7 +51,7 @@ const testLayer = (
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(Layer.succeed(AuthProviders, authProviders)),
     Layer.provideMerge(
-      Layer.succeed(Profile, makeProfile(options.method ?? "env")),
+      Layer.succeed(AlchemyProfile, makeProfile(options.method ?? "env")),
     ),
     Layer.provideMerge(
       Layer.succeed(

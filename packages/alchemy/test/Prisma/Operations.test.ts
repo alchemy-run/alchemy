@@ -56,6 +56,7 @@ const expectedOperationHelpers = [
   "updateComputeService",
   "deleteComputeService",
   "promoteComputeService",
+  "rollbackComputeService",
   "listComputeServiceDomains",
   "createComputeServiceDomain",
   "getCustomDomain",
@@ -185,6 +186,7 @@ describe("Prisma operation helpers", () => {
       });
       yield* Prisma.deleteComputeService("service-1");
       yield* Prisma.promoteComputeService("service-1", "version-1");
+      yield* Prisma.rollbackComputeService("service-1", "version-1");
       yield* Prisma.listComputeServiceDomains("service-1");
       yield* Prisma.createComputeServiceDomain("service-1", {
         hostname: "api.example.com",

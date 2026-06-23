@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import type { Server, ServerOptions } from "@prisma/dev";
@@ -24,6 +25,7 @@ interface PrismaDevDatabaseEntry {
 }
 
 const servers = new Map<string, PrismaDevDatabaseEntry>();
+const startMutex = Semaphore.makeUnsafe(1);
 
 const toError = (message: string) => (cause: unknown) =>
   cause instanceof Error ? cause : new Error(`${message}: ${String(cause)}`);
@@ -109,10 +111,15 @@ const startServer = Effect.fn(function* (
   options: ServerOptions,
 ) {
   const prismaDev = yield* importPrismaDev;
-  return yield* Effect.tryPromise({
-    try: () => prismaDev.startPrismaDevServer(options),
-    catch: toError(`Failed to start local Prisma database ${databaseId}`),
-  });
+  return yield* Semaphore.withPermits(
+    startMutex,
+    1,
+  )(
+    Effect.tryPromise({
+      try: () => prismaDev.startPrismaDevServer(options),
+      catch: toError(`Failed to start local Prisma database ${databaseId}`),
+    }),
+  );
 });
 
 const closeEntry = Effect.fn(function* (entry: PrismaDevDatabaseEntry) {

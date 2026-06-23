@@ -3,7 +3,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { getAuthProvider } from "../Auth/AuthProvider.ts";
-import { ALCHEMY_PROFILE, Profile } from "../Auth/Profile.ts";
+import { ALCHEMY_PROFILE, AlchemyProfile } from "../Auth/Profile.ts";
 import {
   PRISMA_AUTH_PROVIDER_NAME,
   type PrismaAuthConfig,
@@ -27,7 +27,7 @@ export const fromProfile = () =>
   Layer.effect(
     PrismaEnvironment,
     Effect.gen(function* () {
-      const profile = yield* Profile;
+      const profile = yield* AlchemyProfile;
       const auth = yield* getAuthProvider<
         PrismaAuthConfig,
         PrismaResolvedCredentials

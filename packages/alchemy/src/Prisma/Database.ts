@@ -325,6 +325,7 @@ export const DatabaseProvider = () =>
       const client = yield* PrismaClient;
       return {
         stables: ["databaseId"],
+        list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isInputObject(news)) return undefined;
           if (isPrismaDevId(output?.databaseId)) {

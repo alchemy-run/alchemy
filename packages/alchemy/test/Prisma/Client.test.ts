@@ -104,6 +104,7 @@ const expectedManagementApiRoutes = [
   "POST /v1/compute-services",
   "POST /v1/compute-services/{computeServiceId}/domains",
   "POST /v1/compute-services/{computeServiceId}/promote",
+  "POST /v1/compute-services/{computeServiceId}/rollback",
   "POST /v1/compute-services/{computeServiceId}/versions",
   "POST /v1/compute-services/versions/{versionId}/start",
   "POST /v1/compute-services/versions/{versionId}/stop",
@@ -248,6 +249,10 @@ const concreteRouteTemplates = new Map([
   [
     "POST /v1/compute-services/service-1/promote",
     "POST /v1/compute-services/{computeServiceId}/promote",
+  ],
+  [
+    "POST /v1/compute-services/service-1/rollback",
+    "POST /v1/compute-services/{computeServiceId}/rollback",
   ],
   [
     "POST /v1/compute-services/service-1/versions",
@@ -1223,6 +1228,7 @@ describe("PrismaClient", () => {
           });
           yield* client.deleteComputeService("service-1");
           yield* client.promoteComputeService("service-1", "version-1");
+          yield* client.rollbackComputeService("service-1", "version-1");
           yield* client.listComputeServiceDomains("service-1");
           yield* client.createComputeServiceDomain("service-1", {
             hostname: "api.example.com",
@@ -1342,6 +1348,7 @@ describe("PrismaClient", () => {
             ["PATCH", "/v1/compute-services/service-1"],
             ["DELETE", "/v1/compute-services/service-1"],
             ["POST", "/v1/compute-services/service-1/promote"],
+            ["POST", "/v1/compute-services/service-1/rollback"],
             ["GET", "/v1/compute-services/service-1/domains"],
             ["POST", "/v1/compute-services/service-1/domains"],
             ["GET", "/v1/domains/domain-1"],
@@ -1383,7 +1390,7 @@ describe("PrismaClient", () => {
           expect(routeInventoryFrom(captured)).toEqual(
             expectedManagementApiRoutes,
           );
-          expect(expectedManagementApiRoutes).toHaveLength(77);
+          expect(expectedManagementApiRoutes).toHaveLength(78);
           expect(captured[11]?.bodyJson).toEqual({
             recipientAccessToken: "recipient-token",
           });
@@ -1437,6 +1444,15 @@ describe("PrismaClient", () => {
               request.pathname === "/v1/compute-services/service-1/promote",
           );
           expect(promoteRequest?.bodyJson).toEqual({
+            versionId: "version-1",
+          });
+
+          const rollbackRequest = captured.find(
+            (request) =>
+              request.method === "POST" &&
+              request.pathname === "/v1/compute-services/service-1/rollback",
+          );
+          expect(rollbackRequest?.bodyJson).toEqual({
             versionId: "version-1",
           });
 

@@ -120,6 +120,7 @@ const operationOnlyRoutes = [
   "GET /v1/databases/{databaseId}/usage",
   "POST /v1/connections/{id}/rotate",
   "POST /v1/compute-services/{computeServiceId}/promote",
+  "POST /v1/compute-services/{computeServiceId}/rollback",
   "POST /v1/versions/{versionId}/start",
   "POST /v1/versions/{versionId}/stop",
   "POST /v1/compute-services/versions/{versionId}/start",
@@ -274,7 +275,7 @@ describe("Prisma Management API coverage", () => {
       if (!(yield* fs.exists(referenceApiPath))) return;
 
       const source = yield* fs.readFileString(referenceApiPath);
-      expect(expectedManagementApiRoutes).toHaveLength(77);
+      expect(expectedManagementApiRoutes).toHaveLength(78);
       expect(managementApiRoutesFromOpenApiTypes(source)).toEqual(
         expectedManagementApiRoutes,
       );

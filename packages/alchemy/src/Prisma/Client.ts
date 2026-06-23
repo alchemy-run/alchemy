@@ -48,6 +48,7 @@ import type {
   ProjectTransferInput,
   ProjectUpdateInput,
   PromoteComputeServiceResult,
+  RollbackComputeServiceResult,
   Region,
   RestoreDatabaseInput,
   ScmInstallIntent,
@@ -264,6 +265,13 @@ export interface PrismaManagementClient {
     versionId: string,
   ): Effect.Effect<
     PromoteComputeServiceResult,
+    PrismaApiError | PrismaApiDecodeError
+  >;
+  rollbackComputeService(
+    id: string,
+    versionId: string,
+  ): Effect.Effect<
+    RollbackComputeServiceResult,
     PrismaApiError | PrismaApiDecodeError
   >;
   listComputeServiceDomains(
@@ -534,7 +542,8 @@ const isMutation = (method: Method) => method !== "GET";
 const isRetryablePost = (path: string) =>
   path.endsWith("/start") ||
   path.endsWith("/stop") ||
-  path.endsWith("/promote");
+  path.endsWith("/promote") ||
+  path.endsWith("/rollback");
 
 const isRetryableRequest = (method: Method, path: string) =>
   method === "GET" ||
@@ -827,6 +836,12 @@ function makePrismaClient(): Effect.Effect<
         data<PromoteComputeServiceResult>(
           "POST",
           `/v1/compute-services/${id}/promote`,
+          { body: { versionId } },
+        ),
+      rollbackComputeService: (id, versionId) =>
+        data<RollbackComputeServiceResult>(
+          "POST",
+          `/v1/compute-services/${id}/rollback`,
           { body: { versionId } },
         ),
       listComputeServiceDomains: (computeServiceId) =>
