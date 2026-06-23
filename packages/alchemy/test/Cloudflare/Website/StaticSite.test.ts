@@ -313,7 +313,6 @@ test.provider(
 const staticSiteProps = (cwd: string): Cloudflare.StaticSiteProps => ({
   command: "bash build.sh",
   shell: true,
-  memo: true,
   cwd,
   outdir: "dist",
   main: workerEntry,

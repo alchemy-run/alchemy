@@ -36,7 +36,6 @@ test.provider(
             shell: true,
             cwd: fixture.cwd,
             outdir: "dist",
-            memo: true,
           }),
         );
 
@@ -116,7 +115,6 @@ test.provider("rebuilds memoized output if outdir is missing", (stack) =>
           shell: true,
           cwd: fixture.cwd,
           outdir: "dist",
-          memo: true,
         }),
       );
 

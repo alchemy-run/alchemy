@@ -23,10 +23,11 @@ export interface BuildProps extends CommandProps {
   /**
    * Controls which files are hashed to decide whether the build should re-run.
    * By default every non-gitignored file in `cwd` is hashed, plus the nearest
-   * lockfile. Provide explicit globs to narrow the scope.
+   * lockfile. Provide explicit globs to narrow the scope, or set `false` to
+   * disable memoization and rebuild on every deploy.
    *
    * @see {@link MemoOptions}
-   * @default false
+   * @default true
    */
   memo?: MemoOptions | boolean;
 }
@@ -65,8 +66,8 @@ export interface Build extends Resource<
  * and exposes its location so downstream resources (e.g. a `Cloudflare.Worker`'s
  * static assets) can consume it.
  *
- * When `memo` is enabled the input files are content-hashed so an unchanged
- * project skips the rebuild entirely.
+ * Inputs are content-hashed by default so an unchanged project skips the
+ * rebuild entirely; set `memo: false` to rebuild on every deploy.
  *
  * @resource
  * @section Building a Vite App
@@ -129,24 +130,25 @@ export const BuildProvider = () =>
         }
         return {
           outdir: path.relative(process.cwd(), outdir),
-          hash: props.memo
-            ? yield* Effect.all(
-                {
-                  input: hashDirectory({
-                    cwd,
-                    memo: props.memo === true ? {} : props.memo,
-                  }),
-                  output: hashDirectory({
-                    cwd: outdir,
-                    memo: {
-                      exclude: [],
-                      lockfile: false,
-                    },
-                  }),
-                },
-                { concurrency: "unbounded" },
-              )
-            : { input: undefined, output: undefined },
+          hash:
+            props.memo === false
+              ? { input: undefined, output: undefined }
+              : yield* Effect.all(
+                  {
+                    input: hashDirectory({
+                      cwd,
+                      memo: props.memo === true ? {} : props.memo,
+                    }),
+                    output: hashDirectory({
+                      cwd: outdir,
+                      memo: {
+                        exclude: [],
+                        lockfile: false,
+                      },
+                    }),
+                  },
+                  { concurrency: "unbounded" },
+                ),
         };
       });
 
@@ -156,7 +158,7 @@ export const BuildProvider = () =>
           if (!output || !isResolved(news)) return undefined;
 
           // Always update if memoization is disabled or hashes are not available.
-          if (!news.memo || !output.hash.input || !output.hash.output)
+          if (news.memo === false || !output.hash.input || !output.hash.output)
             return { action: "update" };
 
           // Optimization: short-circuit if props have changed to avoid unnecessary file system operations.

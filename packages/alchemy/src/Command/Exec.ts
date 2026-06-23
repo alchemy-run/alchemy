@@ -9,10 +9,11 @@ export interface ExecProps extends CommandProps {
   /**
    * Controls which files are hashed to decide whether the command should
    * re-run. By default every non-gitignored file in `cwd` is hashed, plus the
-   * nearest lockfile. Provide explicit globs to narrow the scope.
+   * nearest lockfile. Provide explicit globs to narrow the scope, or set
+   * `false` to disable memoization and re-run on every deploy.
    *
    * @see {@link MemoOptions}
-   * @default false
+   * @default true
    */
   memo?: MemoOptions | boolean;
 }
@@ -37,9 +38,10 @@ export interface Exec extends Resource<
  * command exits with code `0` (a non-zero exit fails with a `CommandError`).
  *
  * Use it for one-off setup steps — running migrations, seeding data, code
- * generation, or any command whose result lives outside Alchemy's state. When
- * `memo` is enabled the input files are content-hashed so the command only
- * re-runs when its inputs change.
+ * generation, or any command whose result lives outside Alchemy's state. By
+ * default the input files are content-hashed so the command only re-runs when
+ * its inputs (or `command`/`cwd`/`env`) change; set `memo: false` to re-run on
+ * every deploy.
  *
  * @resource
  * @section Running a Command
@@ -85,7 +87,8 @@ export const ExecProvider = () =>
           if (!output || !isResolved(news)) return undefined;
 
           // Always update if memoization is disabled or input hash is not available.
-          if (!news.memo || !output.hash.input) return { action: "update" };
+          if (news.memo === false || !output.hash.input)
+            return { action: "update" };
 
           // Optimization: short-circuit if props have changed to avoid unnecessary file system operations.
           if (havePropsChanged(olds, news)) return { action: "update" };
@@ -102,12 +105,13 @@ export const ExecProvider = () =>
           yield* run(news, session);
           return {
             hash: {
-              input: news.memo
-                ? yield* hashDirectory({
-                    cwd: news.cwd,
-                    memo: news.memo === true ? {} : news.memo,
-                  })
-                : undefined,
+              input:
+                news.memo === false
+                  ? undefined
+                  : yield* hashDirectory({
+                      cwd: news.cwd,
+                      memo: news.memo === true ? {} : news.memo,
+                    }),
             },
           };
         }),
