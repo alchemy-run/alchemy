@@ -36,25 +36,21 @@ export const producerRoutes = (
     switch (url.pathname) {
       case "/send": {
         const text = yield* request.text;
-        return yield* q
-          .send({ text })
-          .pipe(
-            Effect.matchCauseEffect({
-              onSuccess: () => accepted,
-              onFailure: failed,
-            }),
-          );
+        return yield* q.send({ text }).pipe(
+          Effect.matchCauseEffect({
+            onSuccess: () => accepted,
+            onFailure: failed,
+          }),
+        );
       }
       case "/send-text": {
         const text = yield* request.text;
-        return yield* q
-          .send(text, { contentType: "text" })
-          .pipe(
-            Effect.matchCauseEffect({
-              onSuccess: () => accepted,
-              onFailure: failed,
-            }),
-          );
+        return yield* q.send(text, { contentType: "text" }).pipe(
+          Effect.matchCauseEffect({
+            onSuccess: () => accepted,
+            onFailure: failed,
+          }),
+        );
       }
       case "/sendBatch":
         return yield* q
