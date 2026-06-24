@@ -17,13 +17,13 @@ import type * as rolldown from "rolldown";
 import { Unowned } from "../../AdoptPolicy.ts";
 import * as Bundle from "../../Bundle/Bundle.ts";
 import {
-  hashExternalPackageIdentity,
+  hashPackageInstallIdentity,
   installResolvedPackages,
-  type InstallExternalPackages,
   matchesPackageRoot,
-  resolveExternalPackageIdentity,
-  validateInstallExternalTargets,
-} from "../../Bundle/ExternalPackages.ts";
+  type PackageInstall,
+  resolvePackageInstallIdentity,
+  validateInstallTargets,
+} from "../../Bundle/InstalledPackages.ts";
 import * as TempRoot from "../../Bundle/TempRoot.ts";
 import { deepEqual, isResolved } from "../../Diff.ts";
 import type { HttpEffect } from "../../Http.ts";
@@ -68,26 +68,22 @@ export const isFunction = (value: any): value is Function => {
   );
 };
 
-export interface FunctionBuildOptions {
+export interface FunctionBuildOptions extends Partial<rolldown.InputOptions> {
   /**
    * Native or Node-only packages to install into the Lambda artifact with npm,
    * targeting Linux and the function's architecture.
    *
    * @example
    * ```typescript
-   * build: { installExternal: ["sharp"] }
+   * build: { install: ["sharp"] }
    * ```
    *
    * @example
    * ```typescript
-   * build: { installExternal: { sharp: "^0.33.5" } }
+   * build: { install: { sharp: "^0.33.5" } }
    * ```
    */
-  readonly installExternal?: InstallExternalPackages;
-  /**
-   * Rolldown input options.
-   */
-  readonly input?: Partial<rolldown.InputOptions>;
+  readonly install?: PackageInstall;
   readonly output?: Partial<rolldown.OutputOptions>;
 }
 
@@ -312,7 +308,7 @@ const matchesConfiguredExternal = (
  *   main: "./src/handler.ts",
  *   architecture: "arm64",
  *   build: {
- *     installExternal: ["sharp"],
+ *     install: ["sharp"],
  *   },
  * });
  * ```
@@ -799,7 +795,12 @@ export const FunctionProvider = () =>
         id: string,
         props: FunctionProps,
       ) {
-        const sourcemap = props.build?.output?.sourcemap ?? true;
+        const {
+          output: buildOutput,
+          install,
+          ...inputOptions
+        } = props.build ?? {};
+        const sourcemap = buildOutput?.sourcemap ?? true;
         const uploadSourceMap = props.uploadSourceMap ?? true;
 
         const realMain = yield* fs.realPath(props.main);
@@ -808,14 +809,12 @@ export const FunctionProvider = () =>
         const rolldownSourcemap = sourcemap;
         const architecture = props.architecture ?? "x86_64";
 
-        // Explicit installExternal roots are excluded from the bundle and
-        // installed into the deployment artifact. build.input.external stays a
-        // pure Rolldown escape hatch and is not installed by Alchemy.
-        const requested = yield* validateInstallExternalTargets(
-          props.build?.installExternal,
-        );
+        // Explicit install roots are excluded from the bundle and installed
+        // into the deployment artifact. build.external stays a pure Rolldown
+        // escape hatch and is not installed by Alchemy.
+        const requested = yield* validateInstallTargets(install);
         const installRoots = new Set(Object.keys(requested));
-        const configuredExternal = props.build?.input?.external;
+        const configuredExternal = inputOptions.external;
         const externalOption = (
           moduleId: string,
           parentId: string | undefined,
@@ -839,20 +838,20 @@ export const FunctionProvider = () =>
         ) {
           return yield* Bundle.build(
             {
-              ...props.build?.input,
+              ...inputOptions,
               input: entry,
               cwd,
               external: externalOption,
               platform: "node",
-              plugins: [props.build?.input?.plugins, plugins],
+              plugins: [inputOptions.plugins, plugins],
             },
             {
-              ...props.build?.output,
+              ...buildOutput,
               format: "esm",
               sourcemap: rolldownSourcemap,
-              minify: props.build?.output?.minify ?? false,
+              minify: buildOutput?.minify ?? false,
               entryFileNames: "index.js",
-              codeSplitting: props.build?.output?.codeSplitting ?? false,
+              codeSplitting: buildOutput?.codeSplitting ?? false,
             },
           );
         });
@@ -957,19 +956,19 @@ export default await Effect.runPromise(handlerEffect)
 
         // Resolve install versions without running npm so `diff` can compare a
         // stable identity hash. The archive build performs the install.
-        const installIdentity = yield* resolveExternalPackageIdentity({
+        const installIdentity = yield* resolvePackageInstallIdentity({
           cwd,
           requested,
         });
         const resolved = installIdentity.resolved;
-        const hasExternalPackages = Object.keys(resolved).length > 0;
+        const hasInstalledPackages = Object.keys(resolved).length > 0;
 
         // Identity hash drives change detection in `diff`. With native packages,
         // the installed bytes are not captured by the bundle hash, so fold the
         // resolved versions, package-manager lockfile, and architecture in
         // instead of installing.
-        const identityHash = hasExternalPackages
-          ? yield* hashExternalPackageIdentity({
+        const identityHash = hasInstalledPackages
+          ? yield* hashPackageInstallIdentity({
               bundleHash: bundleOutput.hash,
               identity: installIdentity,
               architecture,
@@ -977,10 +976,10 @@ export default await Effect.runPromise(handlerEffect)
           : bundleOutput.hash;
 
         const buildArchive = Effect.gen(function* () {
-          const externalPackageFiles = hasExternalPackages
+          const installedPackageFiles = hasInstalledPackages
             ? yield* installResolvedPackages({ resolved, architecture })
             : [];
-          const archiveFiles = [...extraFiles, ...externalPackageFiles];
+          const archiveFiles = [...extraFiles, ...installedPackageFiles];
           const archive = yield* zipCode(
             code,
             archiveFiles.length > 0 ? archiveFiles : undefined,
@@ -988,7 +987,7 @@ export default await Effect.runPromise(handlerEffect)
           // The S3 asset key is content-addressed, so the archive hash must be a
           // true hash of the bytes when native packages are present.
           const archiveHash =
-            externalPackageFiles.length > 0
+            installedPackageFiles.length > 0
               ? yield* sha256(archive)
               : bundleOutput.hash;
           return { archive, archiveHash };
